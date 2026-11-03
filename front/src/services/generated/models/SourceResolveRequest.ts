@@ -9,4 +9,3 @@ import type { Source } from './Source';
 export type SourceResolveRequest = {
     sources: Array<Source>;
 };
-

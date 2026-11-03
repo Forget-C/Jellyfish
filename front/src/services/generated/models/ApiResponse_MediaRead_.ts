@@ -21,4 +21,3 @@ export type ApiResponse_MediaRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

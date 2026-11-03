@@ -14,4 +14,3 @@ export type FileUpdate = {
      */
     usage?: (FileUsageWrite | null);
 };
-

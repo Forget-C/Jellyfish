@@ -12,4 +12,3 @@ export type PromptDirection_Input = {
     sound_strategy: Note_Input;
     prohibitions: Note_Input;
 };
-

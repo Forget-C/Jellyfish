@@ -9,4 +9,3 @@ export type ExperimentSessionCreate = {
     lab_type: 'text' | 'image' | 'video';
     title?: string;
 };
-

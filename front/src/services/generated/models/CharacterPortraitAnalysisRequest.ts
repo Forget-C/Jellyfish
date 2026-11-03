@@ -27,4 +27,3 @@ export type CharacterPortraitAnalysisRequest = {
      */
     character_description: string;
 };
-

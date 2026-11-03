@@ -27,4 +27,3 @@ export type PropInfoAnalysisRequest = {
      */
     prop_description: string;
 };
-

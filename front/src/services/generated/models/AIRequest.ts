@@ -12,4 +12,3 @@ export type AIRequest = {
     revision_id?: (string | null);
     expected_version?: (number | null);
 };
-

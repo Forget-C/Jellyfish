@@ -23,4 +23,3 @@ export type RevisionSnapshot_SequenceCut_ = {
     source_current?: boolean;
     content: SequenceCut_Output;
 };
-

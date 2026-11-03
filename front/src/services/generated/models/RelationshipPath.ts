@@ -11,4 +11,3 @@ export type RelationshipPath = {
     target: string;
     steps: Array<RelationshipEdge>;
 };
-

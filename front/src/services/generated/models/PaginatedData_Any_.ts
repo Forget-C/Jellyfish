@@ -13,4 +13,3 @@ export type PaginatedData_Any_ = {
      */
     pagination: Pagination;
 };
-

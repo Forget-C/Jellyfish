@@ -43,4 +43,3 @@ export type ActorUpdate = {
     style?: (ProjectStyle | null);
     visual_style?: (ProjectVisualStyle | null);
 };
-

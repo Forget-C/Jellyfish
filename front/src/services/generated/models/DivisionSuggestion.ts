@@ -10,4 +10,3 @@ export type DivisionSuggestion = {
     excerpt: string;
     purpose: string;
 };
-

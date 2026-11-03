@@ -14,4 +14,3 @@ export type PaginatedData_ChapterRead_ = {
      */
     pagination: Pagination;
 };
-

@@ -22,4 +22,3 @@ export type StagingActivity_Input = {
     narrative_support: Note_Input;
     end_state: Note_Input;
 };
-

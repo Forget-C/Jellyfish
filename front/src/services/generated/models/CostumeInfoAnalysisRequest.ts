@@ -27,4 +27,3 @@ export type CostumeInfoAnalysisRequest = {
      */
     costume_description: string;
 };
-

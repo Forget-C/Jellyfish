@@ -21,4 +21,3 @@ export type ApiResponse_ChapterSequences_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

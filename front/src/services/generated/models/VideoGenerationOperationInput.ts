@@ -11,4 +11,3 @@ export type VideoGenerationOperationInput = {
     seconds?: (number | null);
     seed?: (number | null);
 };
-

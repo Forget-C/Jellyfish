@@ -15,4 +15,3 @@ export type RelationshipNode = {
     shot_ids?: Array<string>;
     reason?: string;
 };
-

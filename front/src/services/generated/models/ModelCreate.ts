@@ -36,4 +36,3 @@ export type ModelCreate = {
      */
     id: string;
 };
-

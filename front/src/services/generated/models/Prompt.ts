@@ -15,4 +15,3 @@ export type Prompt = {
     decisions: Array<CompilationDecision>;
     sources: Array<Source>;
 };
-

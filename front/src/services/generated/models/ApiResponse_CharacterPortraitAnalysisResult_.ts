@@ -21,4 +21,3 @@ export type ApiResponse_CharacterPortraitAnalysisResult_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

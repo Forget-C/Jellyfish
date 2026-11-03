@@ -11,4 +11,3 @@ export type VideoFrameMediaReferences = {
     last?: (MediaReference | null);
     keys?: Array<MediaReference>;
 };
-

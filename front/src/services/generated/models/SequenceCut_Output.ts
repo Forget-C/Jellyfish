@@ -10,4 +10,3 @@ import type { PlannedCutItem } from './PlannedCutItem';
 export type SequenceCut_Output = {
     items: Array<(PlannedCutItem | MediaCutItem)>;
 };
-

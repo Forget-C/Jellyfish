@@ -10,4 +10,3 @@ export type ProductionPlan_Output = {
     design_revision_id: string;
     units: Array<GenerationUnit_Output>;
 };
-

@@ -12,4 +12,3 @@ export type MediaRead = {
     duration_ms: (number | null);
     thumbnail_url?: (string | null);
 };
-

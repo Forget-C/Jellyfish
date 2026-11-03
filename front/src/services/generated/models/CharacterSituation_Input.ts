@@ -12,4 +12,3 @@ export type CharacterSituation_Input = {
     situation: Note_Input;
     relationship: Note_Input;
 };
-

@@ -1,3 +1,4 @@
+import { StaticVisualDesignEditor } from './StaticVisualDesignEditor'
 import { ModelRenderer } from './ModelCardEditor'
 import { GuidanceDirectionEditor } from './GuidanceDirectionEditor'
 import { ConstraintDirectionEditor } from './ConstraintDirectionEditor'
@@ -32,6 +33,7 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'direction.activity': SpatialDirectionEditor,
   'direction.environment': SpatialDirectionEditor,
   'direction.style': VisualStyleEditor,
+  'direction.camera': StaticVisualDesignEditor, 'direction.lighting': StaticVisualDesignEditor, 'direction.focus': StaticVisualDesignEditor,
   'direction.composition': CompositionEditor,
   'direction.movement': MovementEditor,
   'direction.photography': PhotographyEditor,

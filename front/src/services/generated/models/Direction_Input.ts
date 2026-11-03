@@ -31,4 +31,3 @@ export type Direction_Input = {
     blocking_states: Array<BlockingState_Input>;
     shots: Array<ShotCoverage_Input>;
 };
-
