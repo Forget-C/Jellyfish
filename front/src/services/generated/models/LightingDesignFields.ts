@@ -2,14 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * Lighting owns only its declared design parameters.
  */
 export type LightingDesignFields = {
-    light_sources?: DesignField;
-    light_direction?: DesignField;
-    light_regions?: DesignField;
-    exposure_color?: DesignField;
-    color_relationship?: DesignField;
+    light_sources?: ReferenceDesignField;
+    light_direction?: ReferenceDesignField;
+    light_regions?: ReferenceDesignField;
+    exposure_color?: ReferenceDesignField;
+    color_relationship?: ReferenceDesignField;
 };

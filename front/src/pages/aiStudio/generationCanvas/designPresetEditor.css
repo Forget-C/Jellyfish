@@ -72,3 +72,15 @@
 
 .movement-design-phase { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--wb-inset); }
 .movement-design-phase > div { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+
+.design-reference-owner { display: contents; }
+.design-preset-candidates { flex: none; padding-bottom: 12px; }
+.design-field-candidates { margin: 0; align-items: center; }
+.design-reference-hint { color: var(--wb-muted); font-size: 11px; white-space: nowrap; padding-left: 4px; }
+.design-reference-inactive { position: absolute; top: 2px; right: 2px; background: var(--wb-surface); color: var(--wb-muted); font-size: 10px; }
+.design-source-inspect .ant-popover-inner { background: var(--wb-surface); color: var(--wb-text); }
+.design-source-inspect .ant-popover-inner-content > div { width: 280px; max-width: calc(100vw - 64px); }
+.design-preset-fields > div { min-width: 0; }
+.design-preset-fields > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.design-preset-fields .generation-prompt-editor { background: var(--wb-inset); min-height: 78px; max-height: 180px; overflow-y: auto; padding: 12px; font-size: 14px; line-height: 1.8; }
+@media (max-width: 700px) { .design-reference-hint { display: none; } }

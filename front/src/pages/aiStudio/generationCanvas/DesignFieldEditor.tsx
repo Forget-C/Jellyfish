@@ -1,5 +1,5 @@
 import { countDesignFields } from './designSummary'
-import { useContext } from 'react'
+import { useContext, type ReactNode } from 'react'
 import { DesignMetadataVisible } from './DesignEditorFrame'
 import { Input, Select, Space } from 'antd'
 import type { DesignField } from '../../../services/generated'
@@ -7,7 +7,7 @@ import type { DesignField } from '../../../services/generated'
 const states = [{ value: 'empty', label: '未填写' }, { value: 'not_applicable', label: '不适用' }, { value: 'absent', label: '明确没有' }, { value: 'undecided', label: '待确定' }, { value: 'proposal', label: '提议' }, { value: 'fact', label: '事实' }]
 
 /** 同语义字段共享状态控件；画面设计通过统一开关展示状态与来源，但不复制编辑值。 */
-export function DesignFieldEditor({ label, value, purpose = 'design', compact = false, onChange }: { label: string; value?: DesignField; purpose?: DesignField['purpose']; compact?: boolean; onChange: (field: DesignField) => void }) {
+export function DesignFieldEditor({ label, value, purpose = 'design', compact = false, onChange, editor }: { editor?: ReactNode; label: string; value?: DesignField; purpose?: DesignField['purpose']; compact?: boolean; onChange: (field: DesignField) => void }) {
   const metadataVisible = useContext(DesignMetadataVisible)
   const specialState = compact && value?.state && !['empty', 'proposal'].includes(value.state) ? states.find(item => item.value === value.state)?.label : undefined
   const field = value || { state: 'empty', text: '', purpose }
@@ -17,7 +17,7 @@ export function DesignFieldEditor({ label, value, purpose = 'design', compact = 
   </Space>
   const source = <Input aria-label={`${label}来源`} placeholder="来源定位（可选）" value={field.source_locator} onChange={event => onChange({ ...field, source_locator: event.target.value })} />
   return <section aria-label={label}><strong>{label}{specialState && <span className="design-field-state">{specialState}</span>}</strong>{!compact && controls}
-    <Input.TextArea aria-label={`${label}内容`} value={field.text} autoSize={{ minRows: 2, maxRows: 7 }} onChange={event => onChange({ ...field, text: event.target.value, state: field.state === 'empty' ? 'proposal' : field.state })} />
+    {editor ?? <Input.TextArea aria-label={`${label}内容`} value={field.text} autoSize={{ minRows: 2, maxRows: 7 }} onChange={event => onChange({ ...field, text: event.target.value, state: field.state === 'empty' ? 'proposal' : field.state })} />}
     {compact ? <div hidden={!metadataVisible} className="design-field-metadata">{controls}{source}</div> : source}
   </section>
 }

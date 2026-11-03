@@ -65,7 +65,7 @@ try {
   await page.locator('[data-card-id="move"]').getByRole('button',{name:/设计/}).click()
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await detail.getByRole('textbox',{name:'阶段 2 名称',exact:true}).inputValue(),'回望')
-  assert.equal(await detail.getByRole('textbox',{name:'阶段 1 画面内容',exact:true}).inputValue(),'最终停在窗边')
+  assert.equal(await detail.getByRole('textbox',{name:'阶段 1 画面内容',exact:true}).innerText(),'最终停在窗边')
   await detail.getByRole('button',{name:'删除阶段 1',exact:true}).click()
   await poll(state=>state.document.cards[0].phases.length===1)
   assert.equal((await read()).document.cards[0].phases[0].id,stable)

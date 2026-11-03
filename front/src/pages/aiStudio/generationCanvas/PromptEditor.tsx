@@ -31,11 +31,11 @@ function contentKey(document: PromptDocument) {
   return JSON.stringify((document.segments || []).map(segment => segment.kind === 'reference' ? reference(segment) : segment.kind === 'instruction' ? { ...segment, references: (segment.references || []).map(reference) } : segment))
 }
 
-/** 关联区与正文候选共用引用插入入口，持久来源仍只写入 input_bindings。 */
+/** 关联区与正文候选共用引用插入入口；模型通过绑定保存来源，设计宿主通过字段文档保存来源。 */
 export type PromptEditorHandle = { insertReference: (source: OutputIdentity) => void }
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates: incomingCandidates = [], referenceActionsRef }: { referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates: incomingCandidates = [], referenceActionsRef, fieldLabel = '模型正文', fieldPlaceholder, allReferences = false }: { fieldLabel?: string; fieldPlaceholder?: string; allReferences?: boolean; referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeKey, setActiveKey] = useState<string | null>()
   const stableCandidates = useRef(incomingCandidates)
@@ -43,11 +43,11 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
   const candidates = stableCandidates.current
   const [, refreshLabels] = useState(0)
   local.current = value
-  const imageMentions = card.type === 'model.image'
+  const imageMentions = card.type === 'model.image' || allReferences
   const [popupAnchor, setPopupAnchor] = useState({ left: 0, top: 0, height: 24, width: 320 })
   const listId = useId(), list = useRef<HTMLDivElement>(null), savedRange = useRef<Range>()
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
-  const placeholder = `描述你想生成的内容，关联参考用于补充上下文。回车发送，${isMac ? 'Command' : 'Ctrl'}＋回车换行`
+  const placeholder = fieldPlaceholder || `描述你想生成的内容，关联参考用于补充上下文。回车发送，${isMac ? 'Command' : 'Ctrl'}＋回车换行`
   const matching = (text: string) => candidates.filter(item => (imageMentions || item.available && (item.source.port_id === category || !!item.displayLabel && item.displayLabel !== item.token)) &&
     (text === '@' || item.token.startsWith(text) || item.displayLabel?.toLocaleLowerCase().includes(text.slice(1).toLocaleLowerCase()) || imageMentions && item.name?.toLocaleLowerCase().includes(text.slice(1).toLocaleLowerCase())))
   const matches = matching(query).sort((left, right) => Number(right.token === query) - Number(left.token === query))
@@ -290,7 +290,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} overlayClassName="canvas-workbench-dialog generation-prompt-popup" content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
       <span aria-hidden="true" style={{ position: 'fixed', pointerEvents: 'none', left: popupAnchor.left, top: popupAnchor.top, height: popupAnchor.height, width: 1 }} />
     </Popover>, window.document.body)}
-    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
+    <div ref={root} role="textbox" aria-label={fieldLabel} aria-multiline="true" aria-readonly={disabled} aria-disabled={disabled} aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
       onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); refreshLabels(previous => previous + 1); updateQuery(); if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm(false, incomingCandidates) }}
       onInput={() => {
         root.current?.querySelectorAll('[data-prompt-caret]').forEach(node => node.remove())
@@ -357,7 +357,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           range.insertNode(fragment); publish(read()); if (!segments) confirm()
         }
       }} />
-    {!imageMentions && (value.segments || []).filter(segment => segment.kind === 'text' && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
+    {(!imageMentions || allReferences) && (value.segments || []).filter(segment => segment.kind === 'text' && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
     {referencesIn(value).map(segment => referenceIssue(document, card, segment.source, candidates) && <small role="alert" key={segment.id} data-diagnostic-segment={segment.id}>{label(segment)}：{referenceIssue(document, card, segment.source, candidates)}</small>)}
   </>
 }

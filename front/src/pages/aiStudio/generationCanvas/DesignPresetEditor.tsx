@@ -1,8 +1,9 @@
+import { DesignReferenceContext } from './DesignReferenceEditor'
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ConfigProvider, Switch } from 'antd'
 import { ArrowLeftOutlined, SettingOutlined, UndoOutlined } from '@ant-design/icons'
-import type { DesignField } from '../../../services/generated'
+import type { DesignField, ReferenceDesignField } from '../../../services/generated'
 import { CanvasEditorFooter, CanvasEditorHeader } from './CanvasCardEditor'
 import { DesignMetadataVisible } from './DesignEditorFrame'
 import { PresetIllustration } from './VisualPresetPicker'
@@ -19,10 +20,11 @@ type Props = {
 }
 const states: Record<string, string> = { empty: '未填写', proposal: '提议', fact: '事实', undecided: '待确定', absent: '明确没有', not_applicable: '不适用' }
 const purposes: Record<string, string> = { background: '背景', design: '设计', constraint: '约束' }
-const describe = (value?: DesignField | null) => value ? `${value.text || '无正文'} · 状态：${states[value.state || 'empty']} · 用途：${purposes[value.purpose || ''] || '未指定'} · 来源：${value.source_locator || '未指定'}` : '未填写'
+const describe = (value?: ReferenceDesignField | null) => value ? `${value.text || '无正文'} · 状态：${states[value.state || 'empty']} · 用途：${purposes[value.purpose || ''] || '未指定'} · 来源：${value.source_locator || '未指定'}${value.document?.segments?.some(segment => segment.kind === 'reference') ? ' · 含引用（应用后替换）' : ''}` : '未填写'
 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
 export function DesignPresetEditor({ fields, labels, presets, children, candidates, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
+  const references = useContext(DesignReferenceContext)
   const header = useContext(CanvasEditorHeader), footer = useContext(CanvasEditorFooter)
   const [advanced, setAdvanced] = useState(false), [metadata, setMetadata] = useState(false)
   const [selected, setSelected] = useState<VisualPreset>(), [compare, setCompare] = useState<VisualPreset>()
@@ -32,22 +34,23 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
   const savedFields = JSON.stringify(fields)
   useEffect(() => { setNotice('') }, [savedFields])
   const changes = selected ? Object.entries(selected.fields).flatMap(([key, value]) => {
-    const before = fields[key], after = { ...before, ...value }
+    const before = fields[key] as ReferenceDesignField, after = { ...before, ...value, ...(before?.document ? { document: null } : {}) }
     return JSON.stringify(before || {}) === JSON.stringify(after) ? [] : [{ key, before, after, populated: !!before && (!!before.text?.trim() || before.state !== 'empty' && !!before.state || !!before.source_locator || before.purpose === 'constraint' || before.purpose === 'background') }]
   }) : []
   const overwritten = changes.filter(change => change.populated).length
   const matched = presets.find(preset => Object.keys(labels).every(key => {
-    const actual = fields[key], expected = preset.fields[key as keyof typeof preset.fields]
+    const actual = fields[key] as ReferenceDesignField, expected = preset.fields[key as keyof typeof preset.fields]
+    if (actual?.document?.segments?.some(segment => segment.kind === 'reference')) return false
     if (!expected) return !actual || !actual.text?.trim() && (!actual.state || actual.state === 'empty') && !actual.source_locator && !['constraint', 'background'].includes(actual.purpose || '')
     return Object.entries(expected).every(([name, value]) => actual?.[name as keyof DesignField] === value)
   }))
-  const mode = <ConfigProvider componentDisabled={false}><Button ref={modeButton} variant="quiet" icon={advanced ? <ArrowLeftOutlined /> : <SettingOutlined />} onClick={() => { setAdvanced(value => !value); requestAnimationFrame(() => modeButton.current?.focus({ preventScroll: true })) }}>{advanced ? '返回预设' : '高级设置'}</Button></ConfigProvider>
+  const mode = <ConfigProvider componentDisabled={false}><Button ref={modeButton} variant="quiet" icon={advanced ? <ArrowLeftOutlined /> : <SettingOutlined />} onClick={() => { setAdvanced(value => !value); references?.changeMode(); requestAnimationFrame(() => modeButton.current?.focus({ preventScroll: true })) }}>{advanced ? '返回预设' : '高级设置'}</Button></ConfigProvider>
   const actions = <ConfigProvider componentDisabled={false}><WorkbenchDialogActions secondary={<><Button variant="quiet" icon={<UndoOutlined />} disabled={disabled || !onUndo} onClick={() => { onUndo?.(); setNotice('已撤销上一次修改') }}>撤销</Button><span role="status" className="design-preset-status">{disabled ? '只读 · 可以预览与对比' : notice || (advanced ? '编辑沿用画布自动保存' : matched ? `已应用 · ${matched.name}` : current ? '自定义配置' : '选择一个预设开始')}</span></>}>
     {!advanced && <Button variant="primary" disabled={disabled || !selected || !changes.length} onClick={() => { if (selected && onApply(selected) !== false) setNotice(`已应用「${selected.name}」`) }}>{overwritten ? `覆盖 ${overwritten} 项并应用` : '应用此预设'}</Button>}
   </WorkbenchDialogActions></ConfigProvider>
   return <div className="design-preset-editor">
     {header ? editorOpen && createPortal(mode, header) : mode}
-    {candidates && <div className="design-preset-candidates">{candidates}</div>}
+    {(references || candidates) && <div className="design-preset-candidates">{references ? references.renderCandidates(advanced) : candidates}</div>}
     <div className="design-preset-layout" hidden={advanced}>
       <section className="design-preset-library"><h3>选择预设 <small>{presets.length} 个方案</small></h3><ConfigProvider componentDisabled={false}><div className="design-preset-grid">{presets.map(preset => <article key={preset.id} data-selected={selected?.id === preset.id}>
         <button type="button" className="design-preset-choice" aria-label={`预览 ${preset.name}`} aria-pressed={selected?.id === preset.id} onClick={() => { setSelected(preset); if (compare?.id === preset.id) setCompare(undefined); setNotice('') }}><PresetIllustration preset={preset} /><strong>{preset.name}{selected?.id === preset.id && <span aria-hidden="true"> ✓</span>}</strong><small>{preset.explanation}</small></button>

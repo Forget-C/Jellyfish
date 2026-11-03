@@ -2,12 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 明确画面阶段的稳定身份，不随名称和排序改变。
  */
 export type MovementPhase = {
     id: string;
     name?: string;
-    frame?: DesignField;
+    frame?: ReferenceDesignField;
 };

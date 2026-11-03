@@ -56,8 +56,16 @@ class CanvasOutputContext:
                        and edge.target_card == card_id and edge.target_port == binding.input_port for edge in self.incoming.get(card_id, ())):
                     adopted.extend(item for item in self.published_outputs(binding.source.card_id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
                         if identity_key(item.source) == identity_key(binding.source))
+        from app.services.generation_canvas.design_references import VISUAL_DESIGN_TYPES, resolve_design_card
+        media, issues = [], []
+        if card.type in VISUAL_DESIGN_TYPES:
+            card, media, issues = resolve_design_card(self, card, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
         outputs = card_outputs(document.id, card, adopted_inputs=tuple(adopted),
                                published_results=tuple((model_outputs or {}).get(card_id, [])))
+        for output in outputs:
+            if output.payload and output.payload.kind == 'design':
+                output.payload.material_references = media
+                output.payload.reference_issues = issues
         if isinstance(card, ObjectDescriptionCard) and not card.name.strip() and not allow_reference_drafts:
             return [item for item in outputs if item.source.port_id != 'object']
         return outputs
@@ -69,7 +77,8 @@ class CanvasOutputContext:
         document = self.document
         cards = self.cards
         receiver = cards.get(card_id)
-        retained = [ref.source for ref, _ in prompt_references(receiver)] if isinstance(receiver, ModelCard) else []
+        from app.services.generation_canvas.design_references import design_field_references
+        retained = [ref.source for ref, _ in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [ref.source for ref, _, _ in design_field_references(receiver)]
         result, seen, counts = [], set(), {}
         edges = self.edges
         for order in document.input_order.get(card_id, {}).values():

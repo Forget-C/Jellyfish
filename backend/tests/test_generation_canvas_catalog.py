@@ -32,7 +32,9 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     assert cards['direction.dialogue']['category'] == '声音设计'
     assert cards['direction.shot']['category'] == '叙事与镜头'
     inputs = {port['id'] for card in cards.values() for port in card['inputs']}
-    assert len({ 'effect_object' if port in ('attention_object', 'focus_object') else port for port in inputs }) == 28
+    assert {'text', 'image', 'video', 'audio', 'object'} <= inputs
+    for kind in ('style', 'camera', 'lighting', 'focus', 'composition', 'movement'):
+        assert {'text', 'image', 'video', 'audio', 'object'} <= {port['id'] for port in cards['direction.' + kind]['inputs']}
     effect = lambda card: next(port for port in cards[card]['inputs'] if port['id'] == 'effect_object')['accepts']
     assert 'shot' in effect('direction.fact') and 'shot' not in effect('direction.criterion')
     assert effect('direction.performance') == ['object_reference']

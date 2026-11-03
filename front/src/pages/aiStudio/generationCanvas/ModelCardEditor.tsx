@@ -1,5 +1,6 @@
-import { Alert, Select, Space, theme } from 'antd'
-import { FileTextOutlined, PictureOutlined, VideoCameraOutlined, SoundOutlined, ArrowUpOutlined, CheckCircleFilled, ExclamationCircleOutlined } from '@ant-design/icons'
+import { MaterialReferenceButton } from './MaterialReferenceButton'
+import { Alert, Select, Space } from 'antd'
+import { ArrowUpOutlined } from '@ant-design/icons'
 import type { CanvasResolvedOutput, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
@@ -20,12 +21,10 @@ import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CardComposer } from './CardComposer'
-import { buildFileDownloadUrl } from '../assets/utils'
 import './materialComposer.css'
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
 export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId }: CardRendererProps) {
-  const { token } = theme.useToken()
   const promptEditor = useRef<PromptEditorHandle>(null)
   const management = useRef<HTMLDetailsElement>(null)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
@@ -152,14 +151,10 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {sources.map(output => {
       const selected = adopted.some(binding => sourceKey(binding.source) === sourceKey(output.source))
       const name = labelFor(output)
-      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${displayLabel(output)} · ${selected ? '已采用' : '候选'}`} title={displayLabel(output) !== output.token ? displayLabel(output) : name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
+      return <MaterialReferenceButton output={output} label={displayLabel(output)} selected={selected} key={sourceKey(output.source)} aria-label={`${name} ${displayLabel(output)} · ${selected ? '已采用' : '候选'}`} title={displayLabel(output) !== output.token ? displayLabel(output) : name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
         onMouseDown={event => { if (card.type === 'model.image' && output.modality === 'image') event.preventDefault() }}
         onClick={() => { if (card.type === 'model.image' && output.modality === 'image') promptEditor.current?.insertReference(output.source); else inspectSource(output) }}>
-        {output.file_id && output.modality === 'image' ? <img alt="图片预览" src={buildFileDownloadUrl(output.file_id)} /> : output.file_id && output.modality === 'video' ? <video src={buildFileDownloadUrl(output.file_id)} muted playsInline preload="metadata" /> : <span aria-hidden="true">{output.modality === 'image' ? <PictureOutlined /> : output.modality === 'video' ? <VideoCameraOutlined /> : output.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />}</span>}
-        <small>{displayLabel(output)}</small>
-        {selected && <CheckCircleFilled style={{ color: token.colorSuccess }} className="generation-material-adopted" aria-label="已采用" />}
-        {(output.available === false || output.basis_current === false) && <ExclamationCircleOutlined style={{ color: token.colorWarning }} className="generation-material-reference-issue" aria-label={output.available === false ? '来源输出缺失' : '依据已变'} />}
-      </button>
+      </MaterialReferenceButton>
     })}
     <div className="generation-material-add">{sourceActions}</div>
   </div>

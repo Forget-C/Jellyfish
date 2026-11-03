@@ -1,3 +1,5 @@
+import { DesignReferenceEditor } from './DesignReferenceEditor'
+import { isVisualDesign } from './designFieldReferences'
 import { StaticVisualDesignCardSummary, type StaticVisualDesignCard } from './StaticVisualDesignEditor'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { TextContentEditor } from './TextContentEditor'
@@ -853,12 +855,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const [uploadText, setUploadText] = useState<string>()
   const [uploadLibrary, setUploadLibrary] = useState(false)
+  const sourcePorts = (card: GenerationCard) => isVisualDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio'].includes(port)) : capability(card)?.input_ports || []
   const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" overlayStyle={{ minWidth: 200 }} disabled={readonly} menu={{ items: [
     { key: 'upload', label: '上传参考素材', children: [
       { key: 'upload:text', label: '上传文本参考' },
-      ...(capability(card)?.input_ports || []).filter(port => port !== 'text').map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port)}素材` })),
+      ...sourcePorts(card).filter(port => port !== 'text').map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port)}素材` })),
     ] },
-    { key: 'library', label: '从素材库添加', disabled: !(capability(card)?.input_ports || []).some(port => port !== 'text'), children: (capability(card)?.input_ports || []).filter(port => port !== 'text').map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port)}素材` })) },
+    { key: 'library', label: '从素材库添加', disabled: !sourcePorts(card).some(port => port !== 'text'), children: sourcePorts(card).filter(port => port !== 'text').map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port)}素材` })) },
     { key: 'canvas', label: '从当前画布选择' },
   ], onClick: ({ key: action }) => {
     if (readonly) return
@@ -875,7 +878,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
     const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }
     if (connectDocument(next, edge, capability(card))) setUploadSource(source.id)
-  } }}><WorkbenchIconButton label="添加模型来源" icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
+  } }}><WorkbenchIconButton label={isVisualDesign(card) ? '添加设计来源' : '添加模型来源'} icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
   const sourceTargetCard = cards.find(card => card.id === sourceTarget)
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
@@ -945,7 +948,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       </div>
     </Modal>
     <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
-      <p>选择只建立候选，实际使用仍需明确采用。</p>
+      <p>{sourceTargetCard && isVisualDesign(sourceTargetCard) ? '选择只建立候选，在参数中引用后才使用。' : '选择只建立候选，实际使用仍需明确采用。'}</p>
       {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
         commitConnection(option, 'left'); setSourceTarget(undefined)
       }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)}</Button>))}
@@ -953,7 +956,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     <Modal title="上传文本参考" open={!!uploadTextCard} onCancel={() => setUploadText(undefined)} footer={null}>
       {uploadTextCard && <TextContentEditor card={uploadTextCard} disabled={readonly} onChange={next => edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })} />}
     </Modal>
-    <Modal title="上传模型来源" open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
+    <Modal title={cards.some(card => card.id === detailId && isVisualDesign(card)) ? "添加参考素材" : "上传模型来源"} open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
       {uploadSourceCard && <MediaContentEditor key={uploadSourceCard.id} initialLibrary={uploadLibrary} card={uploadSourceCard} projectId={document.project_id} disabled={readonly} onChange={next => {
         if ((latest.current.cards || []).some(card => card.id === next.id)) edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })
       }} />}
@@ -1234,13 +1237,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {!desktop && !['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.photography'].includes(detailCard.type || '') && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && !['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.photography'].includes(detailCard.type) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !['content.text', 'direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.photography'].includes(detailCard.type || '')} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} onDuplicateDesign={detailCard.type === 'direction.photography' ? () => {
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !['content.text', 'direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.photography'].includes(detailCard.type || '')} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} onDuplicateDesign={detailCard.type === 'direction.photography' ? () => {
           const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
           const result = operations.copyIncoming(latest.current, detailCard.id, copy)
           if (!result.document) { setReason(result.reason); return }
           edit(result.document); setDetailId(copy.id)
         } : undefined} initialEntry={newPhotographyEntry?.cardId === detailCard.id ? newPhotographyEntry.entry : undefined} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
-          capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></fieldset></ConfigProvider>}
+          capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer>
     })}
   </div>
@@ -1249,4 +1252,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
 export function GenerationCanvasGraph(props: ComponentProps<typeof GenerationCanvasGraphContent>) {
   return <CanvasCatalogProvider key={`${props.document.project_id}:${props.document.id}`} projectId={props.document.project_id} canvasId={props.document.id}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
+}
+
+function DesignReferenceBoundary({ children, ...props }: ComponentProps<typeof DesignReferenceEditor>) {
+  return isVisualDesign(props.card) ? <DesignReferenceEditor {...props}>{children}</DesignReferenceEditor> : <>{children}</>
 }

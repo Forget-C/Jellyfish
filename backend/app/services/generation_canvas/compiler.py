@@ -103,6 +103,12 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             return item.text + ('\n' + note if note else '')
         return item.text
     for item in result.used:
+        if isinstance(item.payload, DesignTextPayload):
+            for problem in item.payload.reference_issues:
+                result.diagnostics.append(CanvasDiagnostic(code=problem.code, message=problem.message, target={'card_id': item.source.card_id, 'segment_id': problem.reference_id, 'path': (['phases', problem.field_id[6:], 'frame', 'document'] if problem.field_id.startswith('phase:') else ['fields', problem.field_id, 'document'])}, blocks=['run']))
+            if item.payload.material_references:
+                issue('DESIGN_MEDIA_CARRY_NOT_READY', '该设计引用了媒体，接收模型尚未配置素材携带，请处理设计引用后再生成', item.source.card_id)
+    for item in result.used:
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
             # 明确没有对白无需虚构说话对象；文本分析允许不完整设计。
