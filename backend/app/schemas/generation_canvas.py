@@ -4,7 +4,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import CompositionDesignFields, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
+from app.core.contracts.generation_canvas import CompositionDesignFields, DesignFrameTarget, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
 from app.core.contracts.photography import PhotographyTextPayload, ImageFrameTarget
@@ -572,6 +572,7 @@ class CompositionCard(PerformanceDirectionCard):
     """独立景别与构图，仅整卡采用。"""
     type: Literal['direction.composition'] = Field(default='direction.composition', json_schema_extra={'enum': ['direction.composition']})
     fields: CompositionDesignFields = Field(default_factory=CompositionDesignFields)
+    frame_target: DesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
 class MovementCard(PerformanceDirectionCard):
     """独立运镜及稳定阶段，只有整卡设计出口。"""

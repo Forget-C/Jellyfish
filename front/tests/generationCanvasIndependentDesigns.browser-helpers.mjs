@@ -42,7 +42,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       await page.screenshot({path:join(output,'missing-design.png')})
       assert.ok((await (await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data.diagnostics.some(item=>item.code==='DESIGN_BASIS_MISSING'))
       await detail.getByRole('button',{name:'已处理缺失设计',exact:true}).click();await poll(s=>s.document.cards.find(c=>c.id==='model').missing_designs.length===0)
-      await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+      await page.keyboard.press('Escape');await detail.waitFor({state:'hidden'})
     }
     for(let i=0;i<types.length;i++){
       const kind=types[i], card=page.locator(`[data-card-id="${kind}"]`)

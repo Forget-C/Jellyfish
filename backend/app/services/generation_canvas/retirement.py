@@ -8,6 +8,8 @@ def retire_photography(value):
     """移除退役卡及明确依赖，保留无关正文并给接收模型留下待处理标记。"""
     if not isinstance(value, dict) or not isinstance(value.get('cards'), list):
         return value
+    if any(not isinstance(card, dict) for card in value['cards']):
+        return value
     removed = {card['id'] for card in value['cards'] if isinstance(card, dict) and card.get('type') == 'direction.photography' and 'id' in card}
     examples = any(isinstance(card, dict) and card.get('type') in VISUAL_DESIGNS and card.get('examples') for card in value['cards'])
     if not removed and not examples:
@@ -16,9 +18,26 @@ def retire_photography(value):
     removed_edges = {edge['id'] for edge in result.get('edges', []) if edge.get('source_card') in removed or edge.get('target_card') in removed}
     result['edges'] = [edge for edge in result.get('edges', []) if edge.get('id') not in removed_edges]
     result['cards'] = [card for card in result['cards'] if card.get('id') not in removed]
+    affected_designs = {}
     for card in result['cards']:
         if card.get('type') in VISUAL_DESIGNS:
             card.pop('examples', None)
+            fields = list(card.get('fields', {}).values()) + [phase.get('frame', {}) for phase in card.get('phases', [])]
+            for field in fields:
+                if not isinstance(field, dict):
+                    continue
+                document = field.get('document')
+                if not isinstance(document, dict):
+                    continue
+                segments = document.get('segments', [])
+                lost = {segment.get('source', {}).get('card_id') for segment in segments if segment.get('source', {}).get('card_id') in removed}
+                if lost:
+                    document['segments'] = [segment for segment in segments if segment.get('source', {}).get('card_id') not in removed]
+                    field['text'] = ''.join(segment.get('text', '') if segment.get('kind') == 'text' else '@引用' for segment in document['segments'])
+                    affected_designs.setdefault(card['id'], set()).update(lost)
+            if (card.get('frame_target') or {}).get('card_id') in removed:
+                affected_designs.setdefault(card['id'], set()).add(card['frame_target']['card_id'])
+                card.pop('frame_target')
         missing = set(card.get('missing_designs', []))
         bindings = card.get('input_bindings', [])
         dropped = {binding['id'] for binding in bindings if binding.get('source', {}).get('card_id') in removed}
@@ -41,6 +60,13 @@ def retire_photography(value):
             card['frame_targets'] = [target for target in card['frame_targets'] if target.get('binding_id') not in dropped]
         if card.get('type', '').startswith('model.') and missing:
             card['missing_designs'] = sorted(missing)
+    for card in result['cards']:
+        if card.get('type', '').startswith('model.'):
+            missing = set(card.get('missing_designs', []))
+            for binding in card.get('input_bindings', []):
+                missing.update(affected_designs.get(binding.get('source', {}).get('card_id'), set()))
+            if missing:
+                card['missing_designs'] = sorted(missing)
     result['input_order'] = {receiver: {port: [edge for edge in edges if edge not in removed_edges] for port, edges in ports.items()} for receiver, ports in result.get('input_order', {}).items() if receiver not in removed}
     for group in result.get('groups', []):
         group['card_ids'] = [identity for identity in group.get('card_ids', []) if identity not in removed]
