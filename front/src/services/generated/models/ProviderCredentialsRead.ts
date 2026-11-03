@@ -15,3 +15,4 @@ export type ProviderCredentialsRead = {
      */
     api_secret?: string;
 };
+

@@ -21,3 +21,4 @@ export type ApiResponse_ChapterRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

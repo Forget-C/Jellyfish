@@ -1,3 +1,4 @@
+import { visualDesignTypes } from './designFieldReferences'
 import { createContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -24,7 +25,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
-  const visualDesign = ['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus'].includes(cardType || '')
+  const visualDesign = visualDesignTypes.includes(cardType || '')
   const slot = useWorkbenchDetailsSlot(), slotId = useId(), selectSlot = slot?.select
   const slotSelected = !slot || slot.active === slotId
   const activated = useRef(false)
@@ -187,7 +188,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       else dismiss.current()
     }} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-preset-design={['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus'].includes(cardType || '')} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: ['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus'].includes(cardType || '') ? 'min(730px, calc(100dvh - 2 * var(--design-editor-top)))' : 'auto', maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-preset-design={visualDesign} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: 'min(730px, calc(100dvh - 2 * var(--design-editor-top)))', maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}

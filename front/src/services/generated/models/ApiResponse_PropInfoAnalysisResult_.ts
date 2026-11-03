@@ -21,3 +21,4 @@ export type ApiResponse_PropInfoAnalysisResult_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

@@ -10,3 +10,4 @@ export type ReviewDecisionRequest = {
     occurrence_id: string;
     reason: string;
 };
+

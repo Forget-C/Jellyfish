@@ -12,3 +12,4 @@ export type SceneUnitDesignPreview = {
     result: SceneUnitDesignResult;
     blockers?: Array<SceneUnitDesignBlocker>;
 };
+

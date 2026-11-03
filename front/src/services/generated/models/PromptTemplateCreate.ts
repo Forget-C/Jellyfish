@@ -36,3 +36,4 @@ export type PromptTemplateCreate = {
      */
     is_default?: boolean;
 };
+

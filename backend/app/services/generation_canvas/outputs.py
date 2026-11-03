@@ -25,7 +25,7 @@ class ContentOutputHandler:
             return publish_static_design(canvas_id, card, adopted_inputs)
         if isinstance(card, CompositionCard):
             from app.services.generation_canvas.composition import publish_composition
-            return publish_composition(canvas_id, card)
+            return publish_composition(canvas_id, card, adopted_inputs)
         if isinstance(card, MovementCard):
             from app.services.generation_canvas.movement import publish_movement
             return publish_movement(canvas_id, card, adopted_inputs)

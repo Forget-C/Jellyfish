@@ -39,3 +39,4 @@ export type SceneUpdate = {
      */
     color_palette?: (string | null);
 };
+

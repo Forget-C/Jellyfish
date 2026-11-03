@@ -21,3 +21,4 @@ export type ApiResponse_FileRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

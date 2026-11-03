@@ -15,3 +15,4 @@ export type ImageGenerationOperationInput = {
      */
     save_as_candidate?: boolean;
 };
+

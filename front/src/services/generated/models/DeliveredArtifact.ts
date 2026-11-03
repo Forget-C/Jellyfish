@@ -16,3 +16,4 @@ export type DeliveredArtifact = {
     publish_state: DeliveredArtifactPublishState;
     publish_error?: (string | null);
 };
+

@@ -122,7 +122,7 @@ async def prepare():
         db.add(Provider(id='canvas-image-provider', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
         db.add(Model(id='canvas-image-model', name='image-model', provider_id='canvas-image-provider', category='image'))
-        db.add(Model(id='canvas-video-model', name='video-model', provider_id='canvas-image-provider', category='video'))
+        db.add(Model(id='canvas-carried-video-model', name='video-model', provider_id='canvas-image-provider', category='video'))
         db.add(Model(id='canvas-subject-model', name='viduq2-pro', provider_id='canvas-video-provider', category='video'))
 
 

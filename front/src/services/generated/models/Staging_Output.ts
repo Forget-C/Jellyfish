@@ -12,3 +12,4 @@ export type Staging_Output = {
     environment: Note_Output;
     intentional_absence: Note_Output;
 };
+

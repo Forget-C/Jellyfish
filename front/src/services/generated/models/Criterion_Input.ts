@@ -10,3 +10,4 @@ export type Criterion_Input = {
     id: string;
     requirement: Note_Input;
 };
+

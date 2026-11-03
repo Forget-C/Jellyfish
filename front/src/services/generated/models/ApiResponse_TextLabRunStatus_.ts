@@ -21,3 +21,4 @@ export type ApiResponse_TextLabRunStatus_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

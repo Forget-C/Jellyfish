@@ -1,5 +1,6 @@
-import { Alert, Select } from 'antd'
-import type { CompositionCard, DesignField, MovementCard } from '../../../services/generated'
+import { VisualDesignRelations } from './VisualDesignRelations'
+import { Alert, Input, Select } from 'antd'
+import type { CompositionCard, ReferenceDesignField, MovementCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { DesignPresetEditor } from './DesignPresetEditor'
@@ -8,11 +9,11 @@ import { photographyRegions, shotSizeLabels } from './photographyDesign'
 import { designSummary } from './designSummary'
 
 /** 构图文字与结构化景别属于同一卡片；画面阶段关联由独立关系提供。 */
-export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document }: CardRendererProps) {
+export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs }: CardRendererProps) {
   const card = raw as CompositionCard, fields = card.fields || {}
   const movements = (document.cards || []).filter((item): item is MovementCard => item.type === 'direction.movement')
   const movement = movements.find(item => item.id === card.frame_target?.card_id)
-  const available = (value?: DesignField) => value && !['empty', 'not_applicable'].includes(value.state || 'empty') && !!value.text?.trim()
+  const available = (value?: ReferenceDesignField) => value && !['empty', 'not_applicable'].includes(value.state || 'empty') && (value.document ? value.document.segments?.some(segment => segment.kind === 'reference' || segment.text?.trim()) : !!value.text?.trim())
   const states = movement ? [
     ...(available(movement.fields?.movement_start) ? [{ value: 'field:movement_start', label: '起始画面' }] : []),
     ...(available(movement.fields?.end_frame) ? [{ value: 'field:end_frame', label: '结束画面' }] : []),
@@ -22,6 +23,13 @@ export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, o
   return <DesignPresetEditor fields={{ ...fields }} labels={photographyRegions.composition.fields} presets={photographyPresets.composition} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="design-preset-fields">{Object.entries(photographyRegions.composition.fields).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof typeof fields], ...value } } })} />)}</div>
     <label>结构化景别<Select aria-label="结构化景别" disabled={disabled} allowClear placeholder="可选" value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => onChange({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size, state: fields.shot_size?.state === 'empty' || !fields.shot_size?.state ? 'proposal' : fields.shot_size.state } } })} /></label>
+    <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
+    <div className="design-preset-fields static-design-scope">
+      <label>适用范围<Input aria-label="设计适用范围" value={card.scope?.description} onChange={event => onChange({ ...card, scope: { ...card.scope, description: event.target.value } })} /></label>
+      <label>制作阶段<Select aria-label="设计制作阶段" allowClear value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => onChange({ ...card, scope: { ...card.scope, phase: phase ?? null } })} /></label>
+      <label>适用条件<Input aria-label="设计适用条件" value={card.scope?.condition} onChange={event => onChange({ ...card, scope: { ...card.scope, condition: event.target.value } })} /></label>
+      <label>来源<Input aria-label="设计来源" value={card.source_locator} onChange={event => onChange({ ...card, source_locator: event.target.value })} /></label>
+    </div>
     <section aria-label="构图画面定位"><h3>画面定位（可选）</h3>
       <label>运镜卡<Select aria-label="关联运镜卡" disabled={disabled} allowClear placeholder={movements.length ? '选择同画布运镜卡' : '当前没有运镜卡'} value={card.frame_target?.card_id}
         options={[...movements.map(item => ({ value: item.id, label: `运镜卡 · ${item.id}` })), ...(card.frame_target && !movement ? [{ value: card.frame_target.card_id, label: `失效运镜卡 · ${card.frame_target.card_id}`, disabled: true }] : [])]}

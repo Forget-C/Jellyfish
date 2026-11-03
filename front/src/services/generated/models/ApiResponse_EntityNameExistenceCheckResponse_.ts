@@ -21,3 +21,4 @@ export type ApiResponse_EntityNameExistenceCheckResponse_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

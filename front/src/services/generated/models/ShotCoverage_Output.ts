@@ -20,3 +20,4 @@ export type ShotCoverage_Output = {
     visible_result: Note_Output;
     estimated_duration_ms?: (number | null);
 };
+

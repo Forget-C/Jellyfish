@@ -23,3 +23,4 @@ export type ScriptOptimizeRequest = {
      */
     consistency: Record<string, any>;
 };
+

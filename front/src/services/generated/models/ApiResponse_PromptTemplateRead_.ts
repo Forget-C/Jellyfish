@@ -21,3 +21,4 @@ export type ApiResponse_PromptTemplateRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

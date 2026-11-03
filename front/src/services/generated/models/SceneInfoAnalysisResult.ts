@@ -10,3 +10,4 @@ export type SceneInfoAnalysisResult = {
     issues?: Array<string>;
     suggestions?: Array<AssetFieldSuggestion>;
 };
+

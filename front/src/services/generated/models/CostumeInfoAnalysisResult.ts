@@ -10,3 +10,4 @@ export type CostumeInfoAnalysisResult = {
     issues?: Array<string>;
     suggestions?: Array<AssetFieldSuggestion>;
 };
+

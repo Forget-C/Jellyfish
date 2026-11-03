@@ -21,3 +21,4 @@ export type ApiResponse_ProjectCostumeLinkRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

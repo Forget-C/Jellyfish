@@ -109,7 +109,7 @@ try {
   const second=detail.getByRole('textbox',{name:'自定义说明内容',exact:true})
   assert.match(await second.innerText(),/@文本1/,'saved retained source survives reload')
   const color=detail.getByRole('textbox',{name:'色彩倾向内容',exact:true})
-  await color.fill('');await page.keyboard.type('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()
+  await color.fill('');await color.press('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()
   await poll(s=>s.document.cards.find(card=>card.id==='style').fields.colors.document?.segments.some(segment=>segment.kind==='reference'))
   const beforePreset=(await read()).document.cards.find(card=>card.id==='style').fields
   await detail.getByRole('button',{name:'返回预设',exact:true}).click()

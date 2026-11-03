@@ -10,3 +10,4 @@ export type PlanWrite = {
     kind: string;
     content: ProductionPlan_Input;
 };
+

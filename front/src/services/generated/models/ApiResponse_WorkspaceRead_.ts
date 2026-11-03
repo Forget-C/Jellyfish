@@ -21,3 +21,4 @@ export type ApiResponse_WorkspaceRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

@@ -31,3 +31,4 @@ export type PromptTemplateUpdate = {
      */
     is_default?: (boolean | null);
 };
+

@@ -14,3 +14,4 @@ export type PaginatedData_ProviderRead_ = {
      */
     pagination: Pagination;
 };
+

@@ -10,3 +10,4 @@ export type VideoSubjectMediaReference = {
     name: string;
     media?: Array<MediaReference>;
 };
+

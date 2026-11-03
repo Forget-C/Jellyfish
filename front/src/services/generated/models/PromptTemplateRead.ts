@@ -56,3 +56,4 @@ export type PromptTemplateRead = {
      */
     updated_at: string;
 };
+

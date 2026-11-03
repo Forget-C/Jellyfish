@@ -8,3 +8,4 @@
 export type ApplyDesignRequest = {
     task_id: string;
 };
+

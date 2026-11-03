@@ -31,3 +31,4 @@ export type FileDetailRead = {
     deleted?: boolean;
     usages?: Array<FileUsageRead>;
 };
+

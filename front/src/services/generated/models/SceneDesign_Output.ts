@@ -30,3 +30,4 @@ export type SceneDesign_Output = {
     sound: SoundDesign_Output;
     prompt: PromptDirection_Output;
 };
+

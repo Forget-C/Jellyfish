@@ -32,3 +32,4 @@ export type CameraShot_Input = {
     prohibitions: Note_Input;
     criterion_ids: Array<string>;
 };
+

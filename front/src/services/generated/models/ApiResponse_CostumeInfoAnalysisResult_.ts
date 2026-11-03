@@ -21,3 +21,4 @@ export type ApiResponse_CostumeInfoAnalysisResult_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

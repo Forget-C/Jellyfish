@@ -9,3 +9,4 @@ import type { MediaReference } from './MediaReference';
 export type ImageMediaInput = {
     references?: Array<MediaReference>;
 };
+

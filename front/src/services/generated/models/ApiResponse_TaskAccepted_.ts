@@ -21,3 +21,4 @@ export type ApiResponse_TaskAccepted_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

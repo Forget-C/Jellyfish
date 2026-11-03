@@ -128,12 +128,12 @@ class CanvasRuntime:
             for edge in context.incoming.get(card_id, ()):
                 if edge.source_card in stored:
                     await resolve(edge.source_card)
-            from app.services.generation_canvas.design_references import design_field_references
+            from app.services.generation_canvas.design_references import effective_design_references
             from app.services.generation_canvas.output_resolution import prompt_references
             for reference, _ in prompt_references(cards[card_id]):
                 design = cards.get(reference.source.card_id)
                 if design:
-                    for field_ref, _, _ in design_field_references(design, effective=True):
+                    for field_ref, _, _ in effective_design_references(design, cards):
                         if field_ref.source.canvas_id == document.id and field_ref.source.card_id in stored:
                             await resolve(field_ref.source.card_id)
             basis = await self._current_basis(canvas, card_id, result, context=context)

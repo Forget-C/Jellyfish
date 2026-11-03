@@ -21,3 +21,4 @@ export type ApiResponse_SceneInfoAnalysisResult_ = {
      */
     meta?: (Record<string, any> | null);
 };
+
