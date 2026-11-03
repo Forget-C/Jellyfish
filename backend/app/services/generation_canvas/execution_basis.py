@@ -91,7 +91,7 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
               'config': card.config.model_dump(), 'text': compiled.text,
               'used': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.used],
               'media': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.media]}
-    targets = [{'source': item.source.model_dump(), 'state': item.payload.frame_target_state.model_dump()}
+    targets = [{'source': item.source.model_dump(), 'state': item.payload.frame_target_state.model_dump(exclude={'label'})}
                for item in compiled.used if getattr(item.payload, 'frame_target_state', None)]
     if targets:
         actual['design_frame_targets'] = targets

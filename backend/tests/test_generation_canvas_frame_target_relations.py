@@ -159,6 +159,7 @@ async def test_target_basis_ignores_unrelated_movement_but_freezes_selected_stat
         await asyncio.gather(*worker.jobs.values())
         worker.text_pool.shutdown(wait=False)
     doc['cards'][0]['fields']['movement_path']['text'] = '又一个未采用的路径'
+    doc['cards'][0]['phases'][0]['name'] = '仅重命名保持定位'
     await save(6)
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert state['current_outputs']['image'][0]['basis_current']
