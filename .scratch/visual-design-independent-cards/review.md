@@ -58,3 +58,12 @@ Read-only review; repository remains clean. Three actionable findings; no unrequ
 3. **[P2] Advanced settings omit retained relationship controls.** Spec L103 above and L109 (“高级设置是本卡文本与必要结构控件”) require preserved structural configuration. `front/src/pages/aiStudio/generationCanvas/CompositionEditor.tsx:22` omits scope/source controls and existing object, shot and acceptance selectors; `MovementEditor.tsx:15` also omits those relationship selectors. These controls existed in the original photography editor and remain in `StaticVisualDesignEditor`; users cannot configure the corresponding declared inputs in the new editors.
 
 Evidence: `/private/tmp/jellyfish-spec-review/test_review.py` contains three public HTTP/worker reproductions; all three fail against this integration tip (2.14s). Run from backend with `PYTHONPATH=$PWD UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pytest /private/tmp/jellyfish-spec-review/test_review.py --rootdir=/private/tmp/jellyfish-spec-review --confcutdir=/private/tmp/jellyfish-spec-review -q -s`.
+
+## 最终独立复核
+
+复核集成提交：`69c26f9e`，基线：`cce0d11a`。
+
+- Standards：2 项规范问题与 1 项维护判断均已关闭；独立审计确认生成文件纯尾部空白差异为 0，索引和复用判定已核对。
+- Spec：3 项发现均已关闭；在最终集成工作区重新运行未修改的原始公开接口／worker 复现，3/3 通过（1.99 秒）；目标独占上游模型来源的固定快照回归另行复核，1/1 通过（0.38 秒）。关系真实页面日志、结果和桌面／窄屏截图已复核，复用其通过结果。
+- 九张票据均为 `Completion: resolved`，各票和五项集成验收清单无未完成项，票据链接有效。最终基线三点差异空白检查通过。
+- 独立复核记录：`/private/tmp/jellyfish-standards-verification.md`、`/private/tmp/jellyfish-spec-verification.md`。正式回归用例及稳定证据索引保留在本记录和票据中。
