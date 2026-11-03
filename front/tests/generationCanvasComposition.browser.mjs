@@ -37,7 +37,7 @@ try {
   const read = async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate=> { for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('composition save timeout') }
   await page.goto(`http://127.0.0.1:4404/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const card=page.locator('[data-card-id="composition"]');await card.getByRole('button',{name:'开始摄影设计',exact:true}).click()
+  const card=page.locator('[data-card-id="composition"]');await card.getByRole('button',{name:'开始设计',exact:true}).click()
   const detail=page.locator('.wb-details:not([hidden])');await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
   assert.equal(await detail.getByRole('tab').count(),0)
   await detail.getByRole('button',{name:/预览 /}).first().click();await detail.getByRole('button',{name:/应用/}).click()

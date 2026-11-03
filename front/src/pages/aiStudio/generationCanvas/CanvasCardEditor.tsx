@@ -24,7 +24,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
-  const visualDesign = ['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.photography'].includes(cardType || '')
+  const visualDesign = ['direction.movement', 'direction.composition', 'direction.style', 'direction.camera', 'direction.lighting', 'direction.focus'].includes(cardType || '')
   const slot = useWorkbenchDetailsSlot(), slotId = useId(), selectSlot = slot?.select
   const slotSelected = !slot || slot.active === slotId
   const activated = useRef(false)

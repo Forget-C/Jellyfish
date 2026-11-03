@@ -165,6 +165,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   </div>
   return <CardComposer associations={associations} parameters={modelParameters} status={status}
     submit={<WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={submitDisabled} onClick={submit} />}>
+    {!!card.missing_designs?.length && <Alert type="warning" message="旧摄影设计已移除，需要补充设计依据" description={<><p>缺失设计：{card.missing_designs.join('、')}</p><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, missing_designs: [] })}>已处理缺失设计</WorkbenchButton></>} />}
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}

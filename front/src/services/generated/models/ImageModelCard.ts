@@ -13,6 +13,7 @@ export type ImageModelCard = {
     id: string;
     type_version?: number;
     model_id?: (string | null);
+    missing_designs?: Array<string>;
     prompt?: PromptDocument;
     input_bindings?: Array<InputBinding>;
     type?: string;

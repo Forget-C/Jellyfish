@@ -122,9 +122,10 @@ async def test_style_fixed_examples_are_not_transitive_media_inputs(canvas_clien
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
     assert compiled['media'] == [] and image['id'] not in str(compiled['used'])
     document['cards'][2]['input_bindings'][0]['photography_scope'] = ['field:direction']
-    assert (await client.put(url, json={'request_id': 'partial', 'expected_revision': 1, 'document': document})).status_code == 200
-    invalid = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert not invalid['used'] and 'PHOTOGRAPHY_SCOPE_MISSING' in [row['code'] for row in invalid['diagnostics']]
+    assert (await client.put(url, json={'request_id': 'partial', 'expected_revision': 1, 'document': document})).status_code == 422
+    document['cards'][2]['input_bindings'][0].pop('photography_scope')
     document['cards'][1]['examples'][0]['file_id'] = 'not-a-project-file'
-    response = await client.put(url, json={'request_id': 'fake', 'expected_revision': 2, 'document': document})
-    assert response.status_code == 422
+    response = await client.put(url, json={'request_id': 'legacy-example', 'expected_revision': 1, 'document': document})
+    assert response.status_code == 200
+    reopened = (await client.get(url)).json()['data']['document']
+    assert not reopened['cards'][1]['examples'], 'old examples are removed instead of adopted'

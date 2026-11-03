@@ -1,6 +1,8 @@
-import type { DesignField, PhotographyFields, StyleDesignFields } from '../../../services/generated'
+import type { DesignField, CompositionDesignFields, CameraDesignFields, MovementDesignFields, LightingDesignFields, FocusDesignFields, StyleDesignFields } from '../../../services/generated'
 
-export type VisualPreset = { id: string; name: string; explanation: string; look: string; fields: Partial<PhotographyFields & StyleDesignFields>; video?: string }
+type VisualPresetFields = CompositionDesignFields & CameraDesignFields & MovementDesignFields & LightingDesignFields & FocusDesignFields & StyleDesignFields
+
+export type VisualPreset = { id: string; name: string; explanation: string; look: string; fields: Partial<VisualPresetFields>; video?: string }
 const field = (text: string): DesignField => ({ text, state: 'proposal', purpose: 'design', source_locator: '' })
 export const styleLabels: Record<keyof StyleDesignFields, string> = { direction: '风格方向', visual_features: '视觉特征', materials: '材质倾向', colors: '色彩倾向', notes: '自定义说明' }
 export const stylePresets: VisualPreset[] = [
@@ -28,6 +30,6 @@ export const photographyPresets: Record<string, VisualPreset[]> = {
     {id:'deep',name:'深景深',look:'deep',explanation:'前后景均保持可辨认的空间细节。',fields:{depth_focus:field('深景深，前景主体与背景空间保持清晰')}}],
 }
 /** 只修改预设所声明的字段；关系、示例、其他区域与自定义说明保持原值。 */
-export function applyPreset<T extends PhotographyFields | StyleDesignFields>(fields: T, preset: VisualPreset): T {
+export function applyPreset<T extends VisualPresetFields>(fields: T, preset: VisualPreset): T {
   return { ...fields, ...Object.fromEntries(Object.entries(preset.fields).map(([key, value]) => [key, { ...fields[key as keyof T], ...value }])) }
 }

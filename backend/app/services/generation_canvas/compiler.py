@@ -60,15 +60,6 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     """模型编译只接收本卡配置、直接输出与能力，不获得整张画布。"""
     card_id = card.id
     result = CanvasCompiledInput(card_id=card_id)
-    from app.services.generation_canvas.photography import project_photography
-    projected, invalid_scopes = [], []
-    for item in candidates:
-        binding = next((binding for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source)), None)
-        value, invalid = project_photography(item, binding.photography_scope if binding else None)
-        projected.append(value)
-        if invalid and binding:
-            invalid_scopes.append(binding.id)
-    candidates = projected
     by_source = {identity_key(item.source): item for item in candidates}
     refs = list(prompt_references(card))
     used_keys = {identity_key(ref.source) for ref, _ in refs}
@@ -82,8 +73,11 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     def issue(code, message, segment_id, path=None, warning=False):
         result.diagnostics.append(CanvasDiagnostic(code=code, message=message, severity='warning' if warning else 'error',
             target={'card_id': card_id, 'segment_id': segment_id, 'path': path or ['prompt', 'segments', segment_id]}, blocks=[] if warning else ['run']))
-    for binding_id in invalid_scopes:
-        issue('PHOTOGRAPHY_SCOPE_MISSING', '采用范围已失效，请替换或取消；不会回退旧内容', binding_id, ['input_bindings', binding_id, 'photography_scope'])
+    for item in result.used:
+        if item.payload and item.payload.kind == 'photography':
+            issue('LEGACY_DESIGN_OUTPUT', '旧摄影输出已不受支持，请重新配置独立设计', item.source.card_id)
+    for source_id in card.missing_designs:
+        issue('DESIGN_BASIS_MISSING', '旧摄影设计已移除，请补充设计或明确处理缺失依据', source_id, ['missing_designs'])
     for ref, path in refs:
         source = by_source.get(identity_key(ref.source))
         if ref.source.canvas_id != canvas_id:

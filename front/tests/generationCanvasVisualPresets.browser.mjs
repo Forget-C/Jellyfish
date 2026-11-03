@@ -34,7 +34,7 @@ try {
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
-  const document = { ...canvas.document, cards: [{ id: 'style', type: 'direction.style' }, { id: 'photo', type: 'direction.photography', fields: { light_sources: {text: '保留自定义灯光', state: 'fact'} } }, { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config:{count:3} }], edges: [{id:'e', source_card:'style',source_port:'text',target_card:'consumer',target_port:'text'}], input_order:{consumer:{text:['e']}} }
+  const document = { ...canvas.document, cards: [{ id: 'style', type: 'direction.style' }, { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config:{count:3} }], edges: [{id:'e', source_card:'style',source_port:'text',target_card:'consumer',target_port:'text'}], input_order:{consumer:{text:['e']}} }
   const seed = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok, await seed.text())
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
@@ -43,11 +43,6 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const open=async id=>{if(await detail.count()) await detail.getByRole('button',{name:'关闭详情',exact:true}).click();const card=page.locator(`[data-card-id="${id}"]`);await card.press('Enter');await detail.waitFor();await openModelInspection(page)}
   const close=()=>detail.getByRole('button',{name:'关闭详情',exact:true}).click()
-  const gallery=async()=>{
-    const toggle=detail.locator('.canvas-effect-current:visible')
-    if(!await toggle.getAttribute('open').then(v=>v!==null)) await toggle.locator('summary').click()
-    await detail.getByRole('button',{name:'浏览预设与对比',exact:true}).click()
-  }
   await open('style')
   assert.equal(await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).isVisible(),true,'style opens directly in presets')
   assert.equal(await detail.getByRole('tab').count(),0,'style has no parameter/reference tabs')
@@ -98,31 +93,6 @@ try {
   await open('style');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).fill(long)
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text===long)
-  await close();await open('photo')
-  const choices=[['景别与构图','特写景别'],['机位与视角','平视机位'],['运镜','缓慢推进'],['光影与色彩','侧光塑形'],['焦点与成像','浅景深']]
-  for(const [entry,preset] of choices){
-    await detail.getByRole('button',{name:entry,exact:true}).click();await gallery()
-    await detail.getByRole('button',{name:'预览 '+preset,exact:true}).click()
-    if(entry==='运镜'){
-      const video=detail.locator('video:visible');await video.evaluate(v=>v.play());await page.waitForFunction(()=>[...document.querySelectorAll('video')].some(v=>v.readyState>=2))
-      await detail.getByRole('region',{name:'运镜起止对照',exact:true}).waitFor()
-    }
-    await detail.getByRole('button',{name:'应用此预设',exact:true}).click()
-  }
-  await poll(s=>s.document.cards.find(c=>c.id==='photo').fields.depth_focus.text.includes('浅景深'))
-  const photo=(await read()).document.cards.find(c=>c.id==='photo')
-  assert.equal(photo.fields.light_sources.text,'保留自定义灯光','presets preserve undeclared fields')
-  assert.equal((await read()).document.cards.find(c=>c.id==='consumer').input_bindings.length,0,'connection is still a candidate')
-  await detail.getByRole('button',{name:'景别与构图',exact:true}).click();await gallery()
-  await detail.getByRole('button',{name:'预览 三分构图',exact:true}).click()
-  await detail.getByRole('button',{name:'机位与视角',exact:true}).click()
-  assert.equal(await detail.getByRole('button',{name:'应用此预设',exact:true}).count(),0,'inactive region cannot leave a portal action')
-  await detail.getByRole('button',{name:'景别与构图',exact:true}).click()
-  assert.equal(await detail.getByRole('button',{name:'预览 三分构图',exact:true}).getAttribute('aria-pressed'),'true')
-  await detail.getByRole('tab',{name:'参考与关联',exact:true}).click()
-  assert.equal(await detail.getByRole('button',{name:'应用此预设',exact:true}).count(),0,'references hide inactive preset actions')
-  await detail.getByRole('tab',{name:'设计参数',exact:true}).click()
-  await detail.getByRole('button',{name:'返回参数',exact:true}).click()
   await close();await open('style')
   for(const [width,height] of [[1440,960],[1280,640],[390,844]]){
     await page.setViewportSize({width,height})
