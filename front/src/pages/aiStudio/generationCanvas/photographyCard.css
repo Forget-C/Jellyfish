@@ -1,5 +1,5 @@
 /* A 方案：示意、有限摘要与常驻入口；表面与文字沿用工作台主题。 */
-.design-card-summary { height: 264px; min-height: 264px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.design-card-summary { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .design-purpose { position: relative; margin: 0; background: var(--wb-inset); border-radius: 8px; overflow: hidden; color: var(--wb-muted); }
 .design-purpose svg { display: block; width: 100%; height: 128px; }
 .design-purpose figcaption { padding: 0 10px 8px; color: var(--wb-muted); font-size: 10px; }
@@ -21,3 +21,6 @@
 .design-card-reference img { display: block; width: 100%; height: 128px; object-fit: contain; }
 .design-card-reference figcaption { padding: 4px 10px 8px; color: var(--wb-muted); font-size: 10px; }
 .generation-card[data-card-type="direction.photography"] .generation-card-body, .generation-card[data-card-type="direction.style"] .generation-card-body { max-height: none; }
+
+/* 卡面紧凑展示，编辑器中的用途预览保持原尺寸。 */
+.generation-card .design-purpose svg, .generation-card .design-purpose-style > div { height: 96px; }

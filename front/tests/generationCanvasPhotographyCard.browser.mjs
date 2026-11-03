@@ -51,6 +51,10 @@ try {
   await page.goto(`http://127.0.0.1:4494/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const photo = page.locator('[data-card-id="photo"]')
   await photo.waitFor()
+  const layoutKey=`jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
+  await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key)||'{}').sizes?.empty,layoutKey)
+  await page.evaluate(key=>{const view=JSON.parse(localStorage.getItem(key));for(const id of ['empty','style-empty'])view.sizes[id]={...view.sizes[id],height:700};localStorage.setItem(key,JSON.stringify(view))},layoutKey)
+  await page.reload();await photo.waitFor()
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   await photo.getByRole('button', { name: '编辑设计', exact: true }).waitFor()
   assert.ok((await photo.innerText()).includes('主体居右，留出行进空间'))
@@ -61,6 +65,12 @@ try {
   await empty.getByText('尚未填写摄影设计', { exact: true }).waitFor()
   const styleEmpty=page.locator('[data-card-id="style-empty"]')
   await styleEmpty.getByRole('button',{name:'设计画面风格',exact:true}).waitFor()
+  for(const card of [empty,styleEmpty]) {
+    const spacing=await card.evaluate(e=>{const body=e.querySelector('.generation-card-body'),summary=e.querySelector('.design-card-summary'),entry=e.querySelector('.design-card-entry'),scale=e.getBoundingClientRect().width/e.offsetWidth;return {height:body.offsetHeight,gap:(entry.getBoundingClientRect().top-summary.getBoundingClientRect().bottom)/scale,bottom:(body.getBoundingClientRect().bottom-entry.getBoundingClientRect().bottom)/scale,outer:e.offsetHeight,header:e.querySelector('header').offsetHeight}})
+    assert.ok(spacing.height<=270,'empty design card stays compact')
+    assert.ok(spacing.gap<=13&&spacing.bottom<=22,'entry follows content without a reserved empty footer')
+    assert.ok(spacing.outer<=spacing.height+spacing.header+2,'cached measurement does not retain an empty outer shell')
+  }
   const adoptedPreview=page.locator('[data-card-id="style-adopted"]').getByRole('img',{name:'图片预览',exact:true})
   await adoptedPreview.waitFor();assert.ok((await adoptedPreview.getAttribute('src')).includes(file),'explicitly associated image replaces the purpose diagram')
   assert.ok((await page.locator('[data-card-id="special"]').innerText()).includes('明确没有'))

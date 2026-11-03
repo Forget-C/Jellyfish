@@ -7,6 +7,11 @@ import { useWorkbenchDetailsSlot } from '../directing/ui/WorkbenchDetails'
 import { WorkbenchReadingContext } from '../directing/ui/WorkbenchReadingContext'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 
+/** 编辑器本体和独立菜单取消后使用同一可见焦点顺序。 */
+export function canvasEditorFocusTargets(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], [contenteditable="true"], summary, a[href]')].filter(item => item.getClientRects().length && getComputedStyle(item).visibility !== 'hidden')
+}
+
 /** 操作条位于滚动正文之外；复杂设计编辑器仍保留同一实例。 */
 export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
@@ -17,6 +22,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
+  const visualDesign = ['direction.style', 'direction.photography'].includes(cardType || '')
   const slot = useWorkbenchDetailsSlot(), slotId = useId(), selectSlot = slot?.select
   const slotSelected = !slot || slot.active === slotId
   const activated = useRef(false)
@@ -24,6 +30,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const [expanded, setExpanded] = useState(false)
   const [placement, setPlacement] = useState({ left: 16, top: 100, maxHeight: 360, width: 700 })
   const panel = useRef<HTMLElement>(null)
+  const menuAtMaskPress = useRef(false)
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const close = useRef(onClose); close.current = onClose
   const opener = useRef(trigger); opener.current = trigger
@@ -161,7 +168,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
         if (desktop && expanded && !forceModal) { setExpanded(false) } else dismiss.current()
       }
       if (modal && event.key === 'Tab' && node) {
-        const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], [contenteditable="true"], summary, a[href]')].filter(item => item.getClientRects().length)
+        const items = canvasEditorFocusTargets(node)
         const first = items[0], last = items[items.length-1]
         if (event.shiftKey && (document.activeElement === first || document.activeElement === node)) { event.preventDefault(); last?.focus() }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
@@ -171,12 +178,16 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     return () => { observer.disconnect(); if (node) node.inert = false; document.removeEventListener('keydown', keyboard); if (modal && workbench) workbench.inert = !!prior; if (node?.contains(document.activeElement)) opener.current?.focus({preventScroll:true}) }
   }, [visible, modal, expanded, forceModal, desktop])
   return createPortal(<>
-    {visible && modal && <div className="generation-editor-mask" onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
+    {visible && modal && <div className="generation-editor-mask" onPointerDown={() => { menuAtMaskPress.current = !!panel.current?.querySelector('[data-design-menu-open="true"]') }} onClick={() => {
+      if (menuAtMaskPress.current) { menuAtMaskPress.current = false; return }
+      if (desktop && expanded && !forceModal) setExpanded(false)
+      else dismiss.current()
+    }} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: 'auto', maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
-        {(!desktop || !material) && <WorkbenchIconButton style={!desktop && ['direction.style', 'direction.photography'].includes(cardType || '') ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
+        {(!desktop || !material) && <WorkbenchIconButton style={!desktop && visualDesign ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
       <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />

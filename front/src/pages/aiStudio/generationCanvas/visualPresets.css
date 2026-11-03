@@ -1,8 +1,8 @@
 /* A 方案：真实参数优先，预览与预设使用同一个编辑会话。 */
-.canvas-effect-editor { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; padding: 16px 0; align-items: start; }
+.canvas-effect-editor { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; padding: 12px 0; align-items: start; }
 .canvas-effect-editor [hidden] { display: none; }
 .canvas-effect-parameters, .canvas-effect-preview, .canvas-effect-comparison { min-width: 0; }
-.canvas-effect-preview { border-radius: 12px; padding: 16px; background: var(--wb-inset); }
+.canvas-effect-preview { padding: 0; }
 .canvas-effect-editor h3 { font-size: 15px; margin: 0 0 16px; }
 .canvas-effect-current > summary { color: var(--wb-muted); font-size: 12px; margin-bottom: 16px; cursor: pointer; }
 .canvas-effect-current h3 { margin-top: 16px; }
@@ -29,13 +29,13 @@
 .canvas-motion-endpoints figcaption { font-size: 12px; color: var(--wb-muted); padding-top: 4px; }
 .canvas-effect-apply { padding: 0; border-top: 0; }
 .canvas-effect-readonly { color: var(--wb-muted); font-size: 12px; }
-.canvas-effect-key-settings > section, .canvas-effect-professional > section { margin-bottom: 20px; }
+.canvas-effect-key-settings > section, .canvas-effect-professional > section { margin-bottom: 16px; }
 .canvas-effect-key-settings strong, .canvas-effect-professional strong { display: block; color: var(--wb-muted); font-size: 12px; font-weight: 400; margin-bottom: 8px; }
 .canvas-effect-key-settings details, .canvas-effect-professional section > details { font-size: 12px; color: var(--wb-muted); margin-top: 8px; }
-.canvas-effect-professional { border-top: 1px solid var(--wb-border); padding: 16px 0; }
+.canvas-effect-professional { padding: 8px 0; }
 .canvas-effect-professional > summary { cursor: pointer; color: var(--wb-muted); font-size: 12px; }
 .canvas-effect-professional[open] > summary { margin-bottom: 16px; }
-.design-region-navigation { display: flex; flex-wrap: wrap; gap: 8px; }
+.design-region-navigation { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 8px; background: var(--wb-inset); width: fit-content; max-width: 100%; }
 .design-editor-frame .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--wb-text); }
 .design-editor-frame .ant-tabs-ink-bar { background: var(--wb-strongBorder); }
 .design-editor-references { overflow-wrap: anywhere; }
@@ -48,3 +48,15 @@
   .canvas-effect-editor .wb-action, .design-region-navigation .wb-action, .design-editor-frame .wb-icon-action, .canvas-preset-choice { min-height: 44px; }
 }
 @media (max-width: 700px) { .canvas-effect-apply { --design-action-height: 44px; } }
+
+.design-editor-frame .ant-tabs-nav::before { border-bottom: 0; }
+.design-editor-frame .ant-tabs-nav { margin-bottom: 8px; }
+.design-metadata-toggle { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 12px; color: var(--wb-muted); font-size: 12px; cursor: pointer; }
+.design-field-state { margin-left: 8px; font-size: 11px; color: var(--wb-text); }
+.design-field-metadata { display: grid; gap: 8px; margin-top: 8px; }
+.design-field-metadata[hidden] { display: none; }
+.generation-card-editor[data-design-editor="true"] { --design-editor-top: min(64px, 8dvh); }
+@media (max-width: 700px) {
+  .generation-card-editor[data-design-editor="true"] { --design-editor-top: 8px; }
+  .design-metadata-toggle { min-height: 44px; }
+}

@@ -54,7 +54,7 @@ try {
   await detail.getByRole('textbox', { name: '机位位置内容', exact: true }).fill('门外低机位')
   await detail.getByRole('button', { name: '运镜', exact: true }).click()
   await detail.getByRole('textbox', { name: '起始画面内容', exact: true }).fill('门外全景')
-  await detail.locator('summary:visible').filter({hasText:'更多参数与来源'}).click()
+  await detail.locator('summary:visible').filter({hasText:'更多参数'}).click()
   await detail.getByRole('textbox', { name: '运动路径内容', exact: true }).fill('沿窗边平移')
   await detail.getByRole('textbox', { name: '结束画面内容', exact: true }).fill('窗边特写')
   await detail.getByRole('button', { name: '光影与色彩', exact: true }).click()

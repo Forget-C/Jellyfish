@@ -9,7 +9,7 @@ import { Alert, ConfigProvider, Input, Select } from 'antd'
 import { useState } from 'react'
 import type { PhotographyCard, PhotographyFields, PhotographyMediaExample, ObjectReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor } from './DesignFieldEditor'
+import { DesignFieldEditor, DesignMoreSummary } from './DesignFieldEditor'
 import { DesignMediaExamples } from './DesignMediaExamples'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
@@ -28,7 +28,7 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
   const bindings = card.input_bindings || [], phases = card.phases || []
   const update = (next: PhotographyCard) => onChange(next)
   const fields = card.fields || {}
-  return <DesignEditorFrame disabled={disabled} onDuplicate={onDuplicateDesign} references={<><details><summary>候选连接管理</summary>{references}</details>    <details className="canvas-effect-professional"><summary>对象关系、素材与已保存输出</summary>
+  return <DesignEditorFrame editorOpen={editorOpen} disabled={disabled} onDuplicate={onDuplicateDesign} references={<><details><summary>候选连接管理</summary>{references}</details>    <details className="canvas-effect-professional"><summary>对象关系、素材与已保存输出</summary>
     <section aria-label="摄影所属镜头"><h3>所属镜头（可选）</h3>{resolved.candidates.filter(item => item.payload?.kind === 'narrative_reference' && 'category' in item.payload && item.payload.category === 'shot').map(item => {
       const bound = bindings.find(binding => binding.input_port === 'shot' && sourceKey(binding.source) === sourceKey(item.source))
       const name = item.payload && 'name' in item.payload ? item.payload.name : item.source.object_id
@@ -52,11 +52,11 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
     </details>
 </>}>
 
-    <ConfigProvider componentDisabled={false}><nav className="design-region-navigation" aria-label="摄影设计分区">{Object.entries(photographyRegions).map(([key, value]) => <WorkbenchButton key={key} aria-pressed={activeRegion === key} onClick={() => setRegion(key as keyof typeof photographyRegions)}>{value.label}</WorkbenchButton>)}</nav></ConfigProvider>
+    <ConfigProvider componentDisabled={false}><nav className="design-region-navigation" aria-label="摄影设计分区">{Object.entries(photographyRegions).map(([key, value]) => <WorkbenchButton key={key} variant="quiet" aria-pressed={activeRegion === key} onClick={() => setRegion(key as keyof typeof photographyRegions)}>{value.label}</WorkbenchButton>)}</nav></ConfigProvider>
     {(Object.keys(photographyRegions) as (keyof typeof photographyRegions)[]).map(region => <section key={region} hidden={activeRegion !== region} aria-label={photographyRegions[region].label}>
       <VisualPresetPicker currentPreview={<DesignCardPreview examples={card.examples} />} active={activeRegion === region} editorOpen={editorOpen} fields={{...fields}} fieldLabels={photographyRegions[region].fields} label={photographyRegions[region].label} presets={photographyPresets[region]} currentName={designSummary([], Object.keys(photographyRegions[region].fields).map(key => fields[key as keyof PhotographyFields]))} disabled={disabled} onApply={preset => update({ ...card, fields: applyPreset(fields, preset) })}>
-        <section className="canvas-effect-key-settings" aria-label="关键设置"><h3>关键设置</h3>{Object.entries(photographyRegions[region].fields).slice(0,2).map(([key,label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({...card,fields:{...fields,[key]:{...fields[key as keyof PhotographyFields],...value}}})}/>)}</section>
-      <details className="canvas-effect-professional"><summary>更多参数与来源</summary>
+        <section className="canvas-effect-key-settings" aria-label="关键设置">{Object.entries(photographyRegions[region].fields).slice(0,2).map(([key,label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({...card,fields:{...fields,[key]:{...fields[key as keyof PhotographyFields],...value}}})}/>)}</section>
+      <details className="canvas-effect-professional"><DesignMoreSummary fields={Object.keys(photographyRegions[region].fields).slice(2).map(key => fields[key as keyof PhotographyFields])} additional={region === 'movement' ? phases.length : region === 'composition' && (fields.shot_size?.size || fields.shot_size?.target_id || fields.shot_size?.state_id) ? 1 : 0} />
       {Object.entries(photographyRegions[region].fields).slice(2).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof PhotographyFields], ...value } } })} />)}
       {region === 'composition' && <details><summary>明确景别硬要求</summary>
         <Select aria-label="结构化景别" allowClear value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size: size ?? null } } })} />
@@ -65,7 +65,7 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
       </details>}
       {region === 'movement' && <section aria-label="明确运镜阶段"><h3>明确运镜阶段</h3>
         {phases.map((phase, index) => <section key={phase.id}><Input aria-label="阶段名称" value={phase.name} onChange={event => update({ ...card, phases: phases.map(value => value.id === phase.id ? { ...value, name: event.target.value } : value) })} />
-          <DesignFieldEditor label="阶段画面" value={phase.frame} onChange={frame => update({ ...card, phases: phases.map(value => value.id === phase.id ? { ...value, frame } : value) })} />
+          <DesignFieldEditor compact label="阶段画面" value={phase.frame} onChange={frame => update({ ...card, phases: phases.map(value => value.id === phase.id ? { ...value, frame } : value) })} />
           <WorkbenchButton disabled={disabled || index === 0} onClick={() => { const next = [...phases]; [next[index-1],next[index]] = [next[index],next[index-1]]; update({ ...card, phases: next }) }}>前移阶段</WorkbenchButton>
           <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, phases: phases.filter(value => value.id !== phase.id) })}>删除阶段</WorkbenchButton>
         </section>)}
