@@ -91,6 +91,10 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
               'config': card.config.model_dump(), 'text': compiled.text,
               'used': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.used],
               'media': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.media]}
+    targets = [{'source': item.source.model_dump(), 'state': item.payload.frame_target_state.model_dump(exclude={'label'})}
+               for item in compiled.used if getattr(item.payload, 'frame_target_state', None)]
+    if targets:
+        actual['design_frame_targets'] = targets
     if card.type == 'model.video':
         actual['video_media'] = compiled.video_media.model_dump()
     return CanvasBasis(card, compiled, public, digest({'basis': actual, 'execution': model_context.execution_config}),
@@ -99,6 +103,8 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
 
 def restore_basis(snapshot: dict, card_id: str, dependency_outputs: dict[str, list[dict]]) -> CanvasBasis:
     """按旧格式恢复已受理依据；依赖须已由调用方确认成功，整组替换且不回退旧位置。"""
+    from app.services.generation_canvas.retirement import require_supported_snapshot
+    require_supported_snapshot(snapshot)
     outputs = {key: [CanvasResolvedOutput.model_validate(item) for item in values] for key, values in snapshot['outputs'].items()}
     for source in snapshot['dependencies']:
         outputs[source] = [CanvasResolvedOutput.model_validate(item) for item in dependency_outputs[source]]

@@ -1,4 +1,4 @@
-"""摄影独立强类型契约：声明的范围是唯一可用的选择入口。"""
+"""旧摄影历史输出的只读结构，以及接收图片的独立画面目标契约。"""
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from app.core.contracts.generation_canvas import CriterionReferencePayload, DesignField, DesignScope, ObjectReferencePayload, FrameState, NarrativeReferencePayload

@@ -196,18 +196,18 @@ async def test_renaming_copying_and_invalidating_story_sources_preserves_identit
     assert response.json()['detail']['target']['path'] == ['input_bindings', 'event']
 
 @pytest.mark.asyncio
-async def test_photography_can_select_one_shot_without_reading_its_design(canvas_client):
+async def test_camera_can_select_one_shot_without_reading_its_design(canvas_client):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '摄影所属镜头'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     source = {'canvas_id': canvas['id'], 'card_id': 'shot', 'port_id': 'shot', 'position': 0, 'object_id': 'reaction'}
     doc = canvas['document']
     doc.update(cards=[{'id': 'shot', 'type': 'direction.shot', 'shot_id': 'reaction', 'name': '反应镜头', 'visible_result': {'state': 'proposal', 'text': '不跨级传递的镜头全文'}},
-        {'id': 'photo', 'type': 'direction.photography', 'fields': {'composition': {'state': 'proposal', 'text': '人物居右'}}, 'input_bindings': [{'id': 'shot', 'input_port': 'shot', 'source': source}]}],
+        {'id': 'photo', 'type': 'direction.camera', 'fields': {'viewpoint': {'state': 'proposal', 'text': '人物居右'}}, 'input_bindings': [{'id': 'shot', 'input_port': 'shot', 'source': source}]}],
         edges=[{'id': 'edge', 'source_card': 'shot', 'source_port': 'shot', 'target_card': 'photo', 'target_port': 'shot'}], input_order={'photo': {'shot': ['edge']}})
     response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     output = (await canvas_client.get(url + '/cards/photo/outputs')).json()['data']['outputs'][0]
-    assert output['payload']['shot'] == {'kind': 'narrative_reference', 'category': 'shot', 'reference_id': 'reaction', 'name': '反应镜头'}
+    assert output['payload']['references'][0] == {'kind': 'narrative_reference', 'category': 'shot', 'reference_id': 'reaction', 'name': '反应镜头'}
     assert '所属镜头：反应镜头' in output['text'] and '不跨级' not in output['text']
     doc['cards'].insert(1, {'id': 'other', 'type': 'direction.shot', 'shot_id': 'other', 'name': '另一个镜头'})
     doc['cards'][2]['input_bindings'].append({'id': 'other', 'input_port': 'shot', 'source': {**source, 'card_id': 'other', 'object_id': 'other'}})

@@ -31,7 +31,6 @@ import type { NarrativeBeatCard } from './NarrativeBeatCard';
 import type { NarrativeEventCard } from './NarrativeEventCard';
 import type { NarrativeOverviewCard } from './NarrativeOverviewCard';
 import type { PerformanceRuleCard } from './PerformanceRuleCard';
-import type { PhotographyCard } from './PhotographyCard';
 import type { PlaceDescriptionCard } from './PlaceDescriptionCard';
 import type { PropDescriptionCard } from './PropDescriptionCard';
 import type { ShotDesignCard } from './ShotDesignCard';
@@ -52,7 +51,7 @@ export type CanvasDocument = {
     name: string;
     schema_version?: number;
     cover_file_id?: (string | null);
-    cards?: Array<(MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    cards?: Array<(MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;

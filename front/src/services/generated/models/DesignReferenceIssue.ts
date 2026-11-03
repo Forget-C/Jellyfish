@@ -7,7 +7,7 @@ import type { OutputIdentity } from './OutputIdentity';
  * An active field problem follows adopted design output to model diagnostics.
  */
 export type DesignReferenceIssue = {
-    source: OutputIdentity;
+    source?: (OutputIdentity | null);
     field_id: string;
     reference_id: string;
     code: string;

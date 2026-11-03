@@ -12,5 +12,4 @@ export type InputBinding = {
     input_port: string;
     subject_name?: (string | null);
     prompt_owned?: (boolean | null);
-    photography_scope?: (Array<string> | null);
 };

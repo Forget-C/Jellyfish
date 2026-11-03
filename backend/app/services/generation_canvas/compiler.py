@@ -60,15 +60,6 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     """模型编译只接收本卡配置、直接输出与能力，不获得整张画布。"""
     card_id = card.id
     result = CanvasCompiledInput(card_id=card_id)
-    from app.services.generation_canvas.photography import project_photography
-    projected, invalid_scopes = [], []
-    for item in candidates:
-        binding = next((binding for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source)), None)
-        value, invalid = project_photography(item, binding.photography_scope if binding else None)
-        projected.append(value)
-        if invalid and binding:
-            invalid_scopes.append(binding.id)
-    candidates = projected
     by_source = {identity_key(item.source): item for item in candidates}
     refs = list(prompt_references(card))
     used_keys = {identity_key(ref.source) for ref, _ in refs}
@@ -82,8 +73,11 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     def issue(code, message, segment_id, path=None, warning=False):
         result.diagnostics.append(CanvasDiagnostic(code=code, message=message, severity='warning' if warning else 'error',
             target={'card_id': card_id, 'segment_id': segment_id, 'path': path or ['prompt', 'segments', segment_id]}, blocks=[] if warning else ['run']))
-    for binding_id in invalid_scopes:
-        issue('PHOTOGRAPHY_SCOPE_MISSING', '采用范围已失效，请替换或取消；不会回退旧内容', binding_id, ['input_bindings', binding_id, 'photography_scope'])
+    for item in result.used:
+        if item.payload and item.payload.kind == 'photography':
+            issue('LEGACY_DESIGN_OUTPUT', '旧摄影输出已不受支持，请重新配置独立设计', item.source.card_id)
+    for source_id in card.missing_designs:
+        issue('DESIGN_BASIS_MISSING', '旧摄影设计已移除，请补充设计或明确处理缺失依据', source_id, ['missing_designs'])
     for ref, path in refs:
         source = by_source.get(identity_key(ref.source))
         if ref.source.canvas_id != canvas_id:
@@ -108,6 +102,9 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
                 result.diagnostics.append(CanvasDiagnostic(code=problem.code, message=problem.message, target={'card_id': item.source.card_id, 'segment_id': problem.reference_id, 'path': (['phases', problem.field_id[6:], 'frame', 'document'] if problem.field_id.startswith('phase:') else ['fields', problem.field_id, 'document'])}, blocks=['run']))
             if item.payload.material_references:
                 issue('DESIGN_MEDIA_CARRY_NOT_READY', '该设计引用了媒体，接收模型尚未配置素材携带，请处理设计引用后再生成', item.source.card_id)
+        target = getattr(item.payload, 'frame_target_state', None)
+        if target and not target.available:
+            result.diagnostics.append(CanvasDiagnostic(code='DESIGN_FRAME_TARGET_MISSING', message='构图定位的运镜画面已失效，请替换或取消定位', target={'card_id': item.source.card_id, 'path': ['frame_target']}, blocks=['run']))
     for item in result.used:
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
@@ -232,8 +229,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             if not capability.supports_duplicate_reference_images and len(files) != len(set(files)):
                 issue('DUPLICATE_MEDIA_UNSUPPORTED', '当前模型不支持不同来源使用同一图片文件', '', ['prompt'])
         result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
-    from app.services.generation_canvas.photography import validate_frame_requirements
-    validate_frame_requirements(card, result, issue)
+    from app.services.generation_canvas.composition import validate_composition_requirements
+    validate_composition_requirements(card, result, issue)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
 

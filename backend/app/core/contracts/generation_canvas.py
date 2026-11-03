@@ -56,7 +56,6 @@ class InputBinding(BaseModel):
     subject_name: str | None = None
     # 编辑来源不参与生成依据；正文独占的采用可随最后一处引用删除，独立采用仍保留。
     prompt_owned: bool | None = Field(default=None, exclude_if=lambda value: value is None)
-    photography_scope: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ObjectReferencePayload(BaseModel):
@@ -445,6 +444,22 @@ class StyleDesignFields(BaseModel):
     notes: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
 
+class DesignFrameTarget(BaseModel):
+    """构图显式定位同画布运镜的画面，不构成正文或媒体采用。"""
+    model_config = ConfigDict(extra='forbid')
+    card_id: str = Field(min_length=1, max_length=64)
+    state_id: str = Field(default='', max_length=128)
+
+
+class ResolvedDesignFrameTarget(BaseModel):
+    """只解析目标画面元信息，用于诊断和固定执行依据。"""
+    model_config = ConfigDict(extra='forbid')
+    target: DesignFrameTarget
+    available: bool
+    label: str = ''
+    frame: DesignField | None = None
+
+
 class CameraDesignFields(BaseModel):
     """Camera owns only its declared design parameters."""
     model_config = ConfigDict(extra='forbid')
@@ -520,6 +535,7 @@ class DesignTextPayload(BaseModel):
     reference_issues: list[DesignReferenceIssue] = Field(default_factory=list, exclude_if=lambda value: not value)
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
+    frame_target_state: ResolvedDesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)
     movement_phases: list[MovementPhase] = Field(default_factory=list, exclude_if=lambda value: not value)
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)

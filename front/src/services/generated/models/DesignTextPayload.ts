@@ -30,6 +30,7 @@ import type { NarrativeOverviewFields } from './NarrativeOverviewFields';
 import type { NarrativeReferencePayload } from './NarrativeReferencePayload';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PerformanceDesignFields } from './PerformanceDesignFields';
+import type { ResolvedDesignFrameTarget } from './ResolvedDesignFrameTarget';
 import type { ShotDesignFields } from './ShotDesignFields';
 import type { SoundDesignFields } from './SoundDesignFields';
 import type { SpaceRuleFields } from './SpaceRuleFields';
@@ -46,6 +47,7 @@ export type DesignTextPayload = {
     reference_issues?: Array<DesignReferenceIssue>;
     adoption?: 'whole_card';
     text: string;
+    frame_target_state?: (ResolvedDesignFrameTarget | null);
     movement_phases?: Array<MovementPhase>;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;

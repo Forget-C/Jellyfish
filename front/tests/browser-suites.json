@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-frame-targets": { "file": "generationCanvasFrameTargets.browser.mjs", "ports": [4669, 8669], "timeoutMs": 180000 },
     "generation-canvas-composition": { "file": "generationCanvasComposition.browser.mjs", "ports": [18044, 4404], "timeoutMs": 120000 },
     "generation-canvas-movement": { "file": "generationCanvasMovement.browser.mjs", "ports": [4653, 8653], "timeoutMs": 180000 },
     "generation-canvas-design-editor": { "file": "generationCanvasDesignEditor.browser.mjs", "ports": [4641, 8641], "timeoutMs": 120000 },
@@ -27,7 +28,7 @@
     "generation-canvas-card-status": { "file": "generationCanvasCardStatus.browser.mjs", "ports": [4573, 8573], "timeoutMs": 120000 },
     "generation-canvas-image-editor": { "file": "generationCanvasImageEditor.browser.mjs", "ports": [4560, 8560], "timeoutMs": 120000 },
     "generation-canvas-visual-b-states": { "file": "generationCanvasVisualBStates.browser.mjs", "ports": [4599, 8599], "timeoutMs": 120000 },
-    "generation-canvas-photography-card": { "file": "generationCanvasPhotographyCard.browser.mjs", "ports": [4494, 8494], "timeoutMs": 120000 },
+    "generation-canvas-photography-card": { "file": "generationCanvasPhotographyCard.browser.mjs", "ports": [8656, 4656], "timeoutMs": 120000 },
     "generation-canvas-material-composer": { "file": "generationCanvasMaterialComposer.browser.mjs", "ports": [4533, 8533], "timeoutMs": 120000 },
     "generation-canvas-filter-highlights": { "file": "generationCanvasFilterHighlights.browser.mjs", "ports": [4462, 8462], "timeoutMs": 90000 },
     "generation-canvas-stacks": { "file": "generationCanvasStacks.browser.mjs", "ports": [4460, 8460], "timeoutMs": 90000 },
@@ -62,7 +63,7 @@
     "generation-canvas-mixed": { "file": "generationCanvasMixed.browser.mjs", "ports": [4295, 8295], "timeoutMs": 180000 },
     "generation-canvas-spatial": { "file": "generationCanvasSpatial.browser.mjs", "ports": [4287, 8287], "timeoutMs": 180000 },
     "generation-canvas-sound": { "file": "generationCanvasSound.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
-    "generation-canvas-photography": { "file": "generationCanvasPhotography.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },
+    "generation-canvas-photography": { "file": "generationCanvasPhotography.browser.mjs", "ports": [8655, 4655], "timeoutMs": 180000 },
     "generation-canvas-performance": { "file": "generationCanvasPerformance.browser.mjs", "ports": [4285, 8285], "timeoutMs": 180000 },
     "generation-canvas-multi-view": { "file": "generationCanvasMultiView.browser.mjs", "ports": [4283, 8283], "timeoutMs": 180000 },
     "generation-canvas-named-references": { "file": "generationCanvasNamedReferences.browser.mjs", "ports": [4281, 8281], "timeoutMs": 180000 },
@@ -115,7 +116,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "canvas-design": ["generation-canvas-design-references", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
+    "canvas-design": ["generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
     "canvas-interaction": [
       "generation-canvas-editor-reveal",
       "generation-canvas-interaction-combinations","generation-canvas-interaction", "generation-canvas-interaction-rules", "generation-canvas-image-fit", "generation-canvas-model-card-shell", "generation-canvas-anchored-editor", "generation-canvas-stacks", "generation-canvas-organization", "generation-canvas-tools"],

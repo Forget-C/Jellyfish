@@ -34,12 +34,12 @@ async def test_acceptance_identity_references_are_selected_at_receivers_without_
     doc = canvas['document']
     doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '手部可见', 'standard': {'state': 'fact', 'text': '秘密验收标准：五指全部可见'}}] + [
         {'id': kind, 'type': 'direction.' + kind, **({'shot_id': 's', 'name': '反应'} if kind == 'shot' else {}),
-         'input_bindings': [{'id': 'criterion', 'input_port': 'acceptance_basis', 'source': source}]} for kind in ['shot', 'performance', 'photography']],
-        edges=[{'id': kind, 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': kind, 'target_port': 'acceptance_basis'} for kind in ['shot', 'performance', 'photography']],
-        input_order={kind: {'acceptance_basis': [kind]} for kind in ['shot', 'performance', 'photography']})
+         'input_bindings': [{'id': 'criterion', 'input_port': 'acceptance_basis', 'source': source}]} for kind in ['shot', 'performance', 'camera']],
+        edges=[{'id': kind, 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': kind, 'target_port': 'acceptance_basis'} for kind in ['shot', 'performance', 'camera']],
+        input_order={kind: {'acceptance_basis': [kind]} for kind in ['shot', 'performance', 'camera']})
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
-    for kind in ['shot', 'performance', 'photography']:
+    for kind in ['shot', 'performance', 'camera']:
         output = (await client.get(url + f'/cards/{kind}/outputs')).json()['data']['outputs'][0]
         assert '手部可见' in output['text'] and '秘密验收标准' not in output['text']
         assert output['payload']['acceptance_basis'] == [{'kind': 'criterion_reference', 'criterion_id': 'hand', 'name': '手部可见'}]

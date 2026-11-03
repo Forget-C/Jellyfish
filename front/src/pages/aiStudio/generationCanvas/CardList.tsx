@@ -18,9 +18,7 @@ export const cardCategories = [
 /** 左侧添加与右键菜单共用目录投影，包括摄影的独立创建入口。 */
 export function cardCategoryEntries(catalog: CanvasCatalog, category?: string): CardEntry[] {
   const cards = catalog.cards.filter(card => category === '基础卡' ? card.type.startsWith('content.') : category === '参考卡' ? card.type.startsWith('reference.') : category === '模型生成' ? card.group === category : card.category === category)
-  const entries = cards.flatMap<CardEntry>(card => card.type === 'direction.photography'
-    ? card.entries.filter(entry => !catalog.cards.some(type => type.type === 'direction.' + entry.id)).map(entry => ({ type: card.type, title: entry.label, entry: entry.id, modality: card.modality }))
-    : [{ type: card.type, title: card.title, entry: undefined, modality: card.modality }])
+  const entries: CardEntry[] = cards.map(card => ({ type: card.type, title: card.title, entry: undefined, modality: card.modality }))
   return category === '基础卡' ? [...entries.filter(entry => entry.modality === 'text'), ...entries.filter(entry => entry.modality !== 'text')] : entries
 }
 export const cardEntryIcon = (modality: string) => modality === 'image' ? <PictureOutlined /> : modality === 'video' ? <PlaySquareOutlined /> : modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />
