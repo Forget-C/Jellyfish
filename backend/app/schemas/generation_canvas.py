@@ -1,5 +1,5 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
-from app.core.contracts.generation_canvas import StyleDesignFields
+from app.core.contracts.generation_canvas import StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields
 from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
@@ -544,6 +544,30 @@ class VisualStyleCard(PerformanceDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
 
 
+class CameraCard(PerformanceDirectionCard):
+    """Independent camera design, adopted only as a whole."""
+    type: Literal['direction.camera'] = Field(default='direction.camera', json_schema_extra={'enum': ['direction.camera']})
+    fields: CameraDesignFields = Field(default_factory=CameraDesignFields)
+    examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis')
+
+
+class LightingCard(PerformanceDirectionCard):
+    """Independent lighting design, adopted only as a whole."""
+    type: Literal['direction.lighting'] = Field(default='direction.lighting', json_schema_extra={'enum': ['direction.lighting']})
+    fields: LightingDesignFields = Field(default_factory=LightingDesignFields)
+    examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis')
+
+
+class FocusCard(PerformanceDirectionCard):
+    """Independent focus design, adopted only as a whole."""
+    type: Literal['direction.focus'] = Field(default='direction.focus', json_schema_extra={'enum': ['direction.focus']})
+    fields: FocusDesignFields = Field(default_factory=FocusDesignFields)
+    examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'focus_object', 'shot', 'acceptance_basis')
+
+
 class NarrativeDirectionCard(PerformanceDirectionCard):
     """独立叙事设计，不要求完整场次计划。"""
     name: str = ''
@@ -661,7 +685,7 @@ class CanvasDocument(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
-    cards: list[VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)

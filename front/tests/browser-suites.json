@@ -53,6 +53,7 @@
     "generation-canvas-journey": { "file": "generationCanvasJourney.browser.mjs", "ports": [4303, 8303], "timeoutMs": 300000 },
     "generation-canvas-guidance": { "file": "generationCanvasGuidance.browser.mjs", "ports": [4301, 8301], "timeoutMs": 180000 },
     "generation-canvas-continuity": { "file": "generationCanvasContinuity.browser.mjs", "ports": [4299, 8299], "timeoutMs": 180000 },
+    "generation-canvas-static-designs": { "file": "generationCanvasStaticDesigns.browser.mjs", "ports": [4298, 8298], "timeoutMs": 180000 },
     "generation-canvas-visual-presets": { "file": "generationCanvasVisualPresets.browser.mjs", "ports": [4297, 8297], "timeoutMs": 180000 },
     "generation-canvas-narrative": { "file": "generationCanvasNarrative.browser.mjs", "ports": [4293, 8293], "timeoutMs": 180000 },
     "generation-canvas-mixed": { "file": "generationCanvasMixed.browser.mjs", "ports": [4295, 8295], "timeoutMs": 180000 },
@@ -111,7 +112,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "canvas-design": ["generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
+    "canvas-design": ["generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
     "canvas-interaction": [
       "generation-canvas-editor-reveal",
       "generation-canvas-interaction-combinations","generation-canvas-interaction", "generation-canvas-interaction-rules", "generation-canvas-image-fit", "generation-canvas-model-card-shell", "generation-canvas-anchored-editor", "generation-canvas-stacks", "generation-canvas-organization", "generation-canvas-tools"],

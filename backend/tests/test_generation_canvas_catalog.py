@@ -10,12 +10,18 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     response = await client.get(f"/canvases/p/{canvas['id']}/catalog")
     assert response.status_code == 200, response.text
     cards = {item['type']: item for item in response.json()['data']['cards']}
-    assert len(cards) == 37
+    assert len(cards) == 40
     assert cards['reference.character']['group'] == '基础内容' and cards['reference.character']['modality'] == 'image'
     photo = cards['direction.photography']
     assert photo['category'] == '画面设计' and len(photo['entries']) == 5
     assert photo['outputs'][0]['adoption'] == 'declared_scope'
     assert cards['direction.performance']['outputs'][0]['adoption'] == 'whole_card'
+    for kind, field in [('camera', 'viewpoint'), ('lighting', 'light_sources'), ('focus', 'depth_focus')]:
+        design = cards['direction.' + kind]
+        assert design['category'] == '画面设计' and not design['entries']
+        assert design['outputs'][0]['adoption'] == 'whole_card'
+        assert field in {item['id'] for item in design['fields']}
+        assert 'movement_type' not in {item['id'] for item in design['fields']}
     assert cards['direction.anchor']['category'] == '表演与调度'
     assert cards['direction.dialogue']['category'] == '声音设计'
     assert cards['direction.shot']['category'] == '叙事与镜头'
