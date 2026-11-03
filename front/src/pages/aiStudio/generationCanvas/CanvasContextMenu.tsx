@@ -31,6 +31,7 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
     for (const entry of entries) { if (entry.key === key) return entry; const child = entry.children && find(key, entry.children); if (child) return child }
   }
   const entries = narrow && path.length ? find(path[path.length - 1])?.children || [] : roots
+  const allDisabled = entries.every(entry => entry.reason)
   const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest(`.${sessionClass}`)
   const focusItem = useCallback((key?: string) => {
     const selector = key ? `[data-context-key="${CSS.escape(key)}"]` : '[role="menuitem"]:not([aria-disabled="true"])'
@@ -61,6 +62,7 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
     element.style.top = `${Math.max(8, Math.min(y, window.innerHeight - element.offsetHeight - 8))}px`
     const menu = element.querySelector<HTMLElement>('[role="menu"]')
     if (menu) menu.scrollTop = scrollPositions.current[path.join('/')] || 0
+    if (allDisabled) element.focus({ preventScroll: true })
     const key = returnFocus.current; returnFocus.current = undefined
     // rc-menu registers its items after layout; focus through its public API on the next frame.
     let frame = 0, attempts = 0
@@ -76,7 +78,7 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
     frame = requestAnimationFrame(ready)
     // Desktop submenus are portals and never alter these measurements.
     return () => cancelAnimationFrame(frame)
-  }, [x, y, card, path, focusItem])
+  }, [x, y, card, path, focusItem, allDisabled])
   useLayoutEffect(() => {
     // rc-menu puts custom attributes on the outer <li>; describe the actual focusable submenu title too.
     window.document.querySelectorAll<HTMLElement>(`.${sessionClass} [data-context-key]`).forEach(element => {
@@ -117,6 +119,14 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
         if (key && find(key)?.children) activate(key)
         return
       }
+      if (!inside(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); return }
+      // Menu handles Enter, but Space needs the same activation as a pointer click.
+      if (event.key === ' ' && event.target instanceof Element && event.target.closest('[data-context-key]')) {
+        event.preventDefault(); event.stopImmediatePropagation()
+        const item = event.target.closest<HTMLElement>('[role="menuitem"]')
+        if (!event.repeat && item?.getAttribute('aria-disabled') !== 'true') item?.click()
+        return
+      }
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', ' '].includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation()
       }
@@ -139,7 +149,7 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
     darkItemBg: workbenchTokens.raised, darkSubMenuItemBg: workbenchTokens.raised, darkItemColor: workbenchTokens.text,
     darkItemHoverBg: workbenchTokens.selected, darkItemSelectedBg: workbenchTokens.selected, darkItemDisabledColor: workbenchTokens.disabled,
   } } }}>
-    <div ref={host} className={`generation-context-host ${sessionClass}`} data-narrow={narrow} style={{ left: x, top: y }} onContextMenu={event => event.preventDefault()}>
+    <div ref={host} tabIndex={-1} className={`generation-context-host ${sessionClass}`} data-narrow={narrow} style={{ left: x, top: y }} onContextMenu={event => event.preventDefault()}>
       {narrow && path.length > 0 && <Button type="text" className="generation-context-back" aria-label="返回上一级" icon={<LeftOutlined />} onClick={back}>返回上一级<span>{find(path[path.length - 1])?.label}</span></Button>}
       <Menu ref={menuRef} theme="dark" mode="vertical" className="generation-context-menu" aria-label={card ? '卡片右键菜单' : '画布右键菜单'} selectable={false} items={items(entries)}
         openKeys={narrow ? [] : openKeys} onOpenChange={keys => setOpenKeys(keys)} onClick={({ key }) => activate(key)}
