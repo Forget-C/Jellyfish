@@ -86,7 +86,7 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   const nameOptions = nameCandidates.filter(item => sourceKey(item.source) !== boundNameKey).map(item => ({ value: sourceKey(item.source), label: item.payload && 'name' in item.payload ? item.payload.name || '' : '' }))
   if (boundNameKey) nameOptions.unshift({ value: boundNameKey, label: name || '未命名描述' })
   const parameters = <>
-    <EditorAttribute id={`${fieldId}-name`} label="参考名称" required value={card.name_binding ? `来源：${name}` : name} locked={!!card.name_binding} help="可输入名称，也可选择已有描述" error={selectionError || nameError}>
+    <EditorAttribute id={`${fieldId}-name`} label="参考名称" required readOnly={disabled} value={card.name_binding ? `来源：${name}` : name} locked={!!card.name_binding} help="可输入名称，也可选择已有描述" error={selectionError || nameError}>
     <span className="generation-reference-name">
       <CustomValueSelect id={`${fieldId}-name`} describedBy={`${fieldId}-name-hint`} placeholder="输入参考名称" label="参考名称" value={boundNameKey || name} options={nameOptions} disabled={disabled || !!card.name_binding} required allowClear={!card.name_binding} maxLength={255} status={nameError ? 'error' : undefined}
         onChange={(value, custom) => {

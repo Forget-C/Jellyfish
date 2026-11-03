@@ -30,7 +30,8 @@ try {
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4281, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+  page = await context.newPage()
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
@@ -180,5 +181,37 @@ with sqlite3.connect(sys.argv[1]) as db:
   await page.screenshot({path:join(output,'description-attributes-mobile.png')})
   const cached=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
   assert.deepEqual(cached.positions,positions);assert.deepEqual(cached.manuallyPlaced,['character'])
+  await poll(state=>state.document.cards.find(card=>card.id==='person').name===longName)
+  const beforeReadonly=await read()
+  const readonly=await context.newPage();readonly.setDefaultTimeout(12000)
+  await readonly.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
+  await readonly.goto(page.url())
+  await readonly.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'只读'}).waitFor()
+  for(const width of [1440,390]) {
+    await readonly.setViewportSize({width,height:844})
+    for(const id of ['person','costume']) {
+      await closeCanvasDetails(readonly)
+      await readonly.getByRole('button',{name:'适应全部',exact:true}).click();await openCanvasCard(readonly,id)
+      const panel=readonly.locator('.wb-details:visible'),control=panel.locator('.generation-attribute-control').first()
+      assert.equal(await control.locator('input').isDisabled(),true,'readonly name stays disabled')
+      await readonly.mouse.move(width-2,842)
+      await panel.getByRole('button',{name:width<1280?'关闭详情':'展开详情',exact:true}).focus()
+      let reached=false
+      for(let step=0;step<10;step++) {
+        await readonly.keyboard.press('Tab')
+        reached=await control.evaluate(el=>el===document.activeElement)
+        if(reached)break
+      }
+      assert.ok(reached,`${id} readonly name has a keyboard full-text entry at width ${width}`)
+      const tooltip=readonly.getByRole('tooltip',{name:longName,exact:true})
+      await tooltip.waitFor()
+      const box=await tooltip.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=width,'readonly full name fits the viewport')
+      await readonly.keyboard.press('x');await readonly.keyboard.press('Enter')
+      assert.equal(await control.locator('input').isDisabled(),true,'viewing full text never unlocks editing')
+      await readonly.keyboard.press('Tab');await tooltip.waitFor({state:'hidden'})
+    }
+  }
+  assert.deepEqual((await read()).document,beforeReadonly.document,'readonly keyboard viewing never modifies the document')
+  await readonly.close()
   console.log('PASS pure picture Select, custom name Select, canvas-only reference sources, legacy fixed files and adoption, conflict cleanup, picture import/library, four shared types and layout')
 } catch(error){if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error}finally{await cleanup()}
