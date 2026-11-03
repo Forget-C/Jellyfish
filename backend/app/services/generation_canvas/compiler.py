@@ -38,8 +38,8 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     card = context.cards[card_id]
     if not isinstance(card, ModelCard):
         return CanvasCompiledInput(card_id=card_id)
-    from app.services.generation_canvas.design_media import image_design_inputs
-    candidates, carried = image_design_inputs(context, card, context.resolve_outputs(card_id, model_outputs=model_outputs), model_outputs)
+    from app.services.generation_canvas.design_media import design_inputs
+    candidates, carried = design_inputs(context, card, context.resolve_outputs(card_id, model_outputs=model_outputs), model_outputs)
     result = compile_inputs(document.id, card, candidates, capability, carried=carried)
     for binding in card.input_bindings:
         source = context.cards.get(binding.source.card_id)
@@ -72,8 +72,14 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         result.used.sort(key=lambda item: order.index(identity_key(item.source)))
     result.used.extend(carried)
     result.media = [item for item in result.used if item.modality != 'text']
-    video = build_video_inputs(card, result.media) if card.type == 'model.video' else None
+    if card.type == 'model.video':
+        from app.services.generation_canvas.design_media import effective_video_bindings
+        card = card.model_copy(update={'input_bindings': effective_video_bindings(card, result.media)})
+    video = build_video_inputs(card, [item for item in result.media if item.available and item.file_id]) if card.type == 'model.video' else None
     def issue(code, message, segment_id, path=None, warning=False):
+        if path and path[0] == 'input_bindings' and len(path) > 1 and path[1].startswith('design-use:'):
+            segment_id = path[1].removeprefix('design-use:')
+            path = ['design_media_uses', segment_id, *path[2:]]
         result.diagnostics.append(CanvasDiagnostic(code=code, message=message, severity='warning' if warning else 'error',
             target={'card_id': card_id, 'segment_id': segment_id, 'path': path or ['prompt', 'segments', segment_id]}, blocks=[] if warning else ['run']))
     for item in result.used:
@@ -107,17 +113,22 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         if isinstance(item.payload, DesignTextPayload):
             for problem in item.payload.reference_issues:
                 result.diagnostics.append(CanvasDiagnostic(code=problem.code, message=problem.message, target={'card_id': item.source.card_id, 'segment_id': problem.reference_id, 'path': (['phases', problem.field_id[6:], 'frame', 'document'] if problem.field_id.startswith('phase:') else ['fields', problem.field_id, 'document'])}, blocks=['run']))
-            if item.payload.material_references and card.type != 'model.image':
+            if item.payload.material_references and card.type not in ('model.image', 'model.video'):
                 issue('DESIGN_MEDIA_CARRY_NOT_READY', '该设计引用了媒体，接收模型尚未配置素材携带，请处理设计引用后再生成', item.source.card_id)
         target = getattr(item.payload, 'frame_target_state', None)
         if target and not target.available:
             result.diagnostics.append(CanvasDiagnostic(code='DESIGN_FRAME_TARGET_MISSING', message='构图定位的运镜画面已失效，请替换或取消定位', target={'card_id': item.source.card_id, 'path': ['frame_target']}, blocks=['run']))
     for item in result.used:
-        if card.type == 'model.image' and item.design_sources:
-            if item.modality != 'image' or capability and 'image' not in capability.input_ports:
+        if card.type in ('model.image', 'model.video') and item.design_sources:
+            if card.type == 'model.image' and (item.modality != 'image' or capability and 'image' not in capability.input_ports):
                 issue('UNSUPPORTED_DESIGN_MEDIA', '当前图片模型不支持设计携带的素材类型', item.source.card_id, ['input_bindings'])
             if not item.available or not item.file_id:
                 issue('OUTPUT_MISSING', '设计引用的素材不可用，请处理来源', item.source.card_id, ['input_bindings'])
+        if card.type == 'model.video' and item.design_sources:
+            if item.modality not in ('image', 'video'):
+                issue('UNSUPPORTED_DESIGN_MEDIA', '视频用途不支持此设计素材类型，不提供隐式转换', item.source.card_id, ['design_media_uses'])
+            elif not any(identity_key(binding.source) == identity_key(item.source) for binding in card.input_bindings):
+                issue('DESIGN_MEDIA_PURPOSE_REQUIRED', '请为设计携带的素材选择视频用途', item.source.card_id, ['design_media_uses'])
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
             # 明确没有对白无需虚构说话对象；文本分析允许不完整设计。
@@ -130,7 +141,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         result.mapping.append(CanvasSourceMapping(token=item.token, source=item.source, media_position=media_position))
     if card.type in ('model.image', 'model.video'):
         for position, item in enumerate(result.media, 1):
-            if isinstance(item.payload, NamedImagePayload):
+            if isinstance(item.payload, NamedImagePayload) and item.available and item.file_id:
                 for obj in item.payload.objects:
                     purposes = [binding for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source)] if card.type == 'model.video' else [None]
                     for binding in purposes:
@@ -329,7 +340,7 @@ def build_video_inputs(card: ModelCard, media: list[CanvasResolvedOutput]) -> Vi
     for binding in card.input_bindings:
         ref = PromptReference(kind='reference', id=binding.id, source=binding.source)
         frame = reference(ref, len(result.frames.keys) if binding.input_port == 'key_frame' else 0)
-        if binding.input_port in ('subject_image', 'subject_video') and (binding.subject_name or '').strip():
+        if binding.input_port in ('subject_image', 'subject_video') and binding.source.port_id == binding.input_port.removeprefix('subject_') and (binding.subject_name or '').strip():
             add_subject(binding.subject_name.strip(), [ref])
         if frame and frame.media_kind == 'image':
             if binding.input_port in ('first_frame', 'last_frame'):

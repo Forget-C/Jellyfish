@@ -1,3 +1,4 @@
+import { DesignVideoMediaUses } from './DesignVideoMediaUses'
 import { MaterialReferenceButton } from './MaterialReferenceButton'
 import { Alert, Select, Space } from 'antd'
 import { ArrowUpOutlined } from '@ant-design/icons'
@@ -108,6 +109,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
           const field = cardDefinitions[design?.type || '']?.fields?.find(value => value.id === origin.field_id)?.label || phase?.name || '设计参数'
           return <WorkbenchButton variant="quiet" key={origin.source.card_id + ':' + origin.field_id} onClick={() => onLocateDesign?.(origin.source.card_id, origin.field_id)}>查看 {cardTitles[design?.type || ''] || '设计卡'} · {field}</WorkbenchButton>
         })}
+        {card.type === 'model.video' && <DesignVideoMediaUses card={card as VideoModelCard} output={item} label={labelFor(item)} capability={capability} disabled={disabled} onChange={onChange} />}
         {item.available === false && <small>来源已失效，请返回设计卡处理引用</small>}{item.basis_current === false && <small>来源依据已变，需重新生成</small>}
       </div>)}
     </section>

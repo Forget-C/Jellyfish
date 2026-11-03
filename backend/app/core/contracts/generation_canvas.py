@@ -58,6 +58,15 @@ class InputBinding(BaseModel):
     prompt_owned: bool | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
+class DesignMediaUse(BaseModel):
+    """视频接收端对设计实际携带素材的用途；不创建候选或采用关系。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    source: OutputIdentity
+    input_port: Literal['first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video']
+    subject_name: str | None = None
+
+
 class ObjectReferencePayload(BaseModel):
     """关系出口只携带对象身份，不传递描述、媒体或祖先内容。"""
     model_config = ConfigDict(extra='forbid')
