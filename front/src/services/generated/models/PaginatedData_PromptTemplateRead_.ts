@@ -14,3 +14,4 @@ export type PaginatedData_PromptTemplateRead_ = {
      */
     pagination: Pagination;
 };
+

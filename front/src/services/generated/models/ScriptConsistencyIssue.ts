@@ -32,3 +32,4 @@ export type ScriptConsistencyIssue = {
      */
     evidence?: Array<EvidenceSpan>;
 };
+

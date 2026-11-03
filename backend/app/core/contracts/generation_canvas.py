@@ -467,6 +467,16 @@ class DesignFrameTarget(BaseModel):
     state_id: str = Field(default='', max_length=128)
 
 
+class DesignFrameDependency(BaseModel):
+    """目标画面引用的固定来源事实；不是接收模型采用的媒体。"""
+    model_config = ConfigDict(extra='forbid')
+    source: OutputIdentity
+    file_id: str | None = None
+    result_set_id: str | None = None
+    available: bool
+    basis_current: bool = True
+
+
 class ResolvedDesignFrameTarget(BaseModel):
     """只解析目标画面元信息，用于诊断和固定执行依据。"""
     model_config = ConfigDict(extra='forbid')
@@ -474,6 +484,7 @@ class ResolvedDesignFrameTarget(BaseModel):
     available: bool
     label: str = ''
     frame: DesignField | None = None
+    dependencies: list[DesignFrameDependency] = Field(default_factory=list)
 
 
 class CameraDesignFields(BaseModel):

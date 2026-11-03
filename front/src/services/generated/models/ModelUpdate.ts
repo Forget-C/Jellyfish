@@ -28,3 +28,4 @@ export type ModelUpdate = {
      */
     description?: (string | null);
 };
+

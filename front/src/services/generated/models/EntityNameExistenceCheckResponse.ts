@@ -12,3 +12,4 @@ export type EntityNameExistenceCheckResponse = {
     scenes?: Array<EntityNameExistenceItem>;
     costumes?: Array<EntityNameExistenceItem>;
 };
+

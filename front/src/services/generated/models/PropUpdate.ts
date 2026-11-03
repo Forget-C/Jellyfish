@@ -39,3 +39,4 @@ export type PropUpdate = {
      */
     colors?: (string | null);
 };
+

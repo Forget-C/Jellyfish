@@ -20,3 +20,4 @@ export type GenerationSubmitRequest_Input = {
     asset_prompt_audit?: (AssetPromptAudit | null);
     operation_input: (TextChatInput | ScriptOperationInput | ImageGenerationOperationInput | VideoGenerationOperationInput);
 };
+

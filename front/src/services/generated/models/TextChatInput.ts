@@ -10,3 +10,4 @@ export type TextChatInput = {
     kind?: string;
     messages: Array<TextChatMessage>;
 };
+

@@ -36,3 +36,4 @@ export type ModelRead = {
      */
     id: string;
 };
+

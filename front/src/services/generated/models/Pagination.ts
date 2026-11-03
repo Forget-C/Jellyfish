@@ -23,3 +23,4 @@ export type Pagination = {
      */
     max_page: number;
 };
+

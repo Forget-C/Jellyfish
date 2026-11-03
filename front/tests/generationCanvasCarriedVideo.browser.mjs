@@ -41,7 +41,7 @@ try {
   const identity=id=>({canvas_id:canvas.id,card_id:id,port_id:id==='reference'?'image':'text',position:0})
   const document={...canvas.document,cards:[{id:'reference',type:'content.image',file_id:file},
     {id:'style',type:'direction.style',fields:{direction:{state:'proposal',document:{segments:[{id:'before',kind:'text',text:'参考人物：'},{id:'image',kind:'reference',source:identity('reference')}]}}}},
-    {id:'image',type:'model.video',model_id:'canvas-video-model',config:{ratio:'16:9'}}],
+    {id:'image',type:'model.video',model_id:'canvas-carried-video-model',config:{ratio:'16:9'}}],
     edges:[{id:'ref',source_card:'reference',source_port:'image',target_card:'style',target_port:'image'}, {id:'design',source_card:'style',source_port:'text',target_card:'image',target_port:'text'}],
     input_order:{style:{image:['ref']},image:{text:['design']}}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seed.ok,await seed.text())

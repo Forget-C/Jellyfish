@@ -12,3 +12,4 @@ export type CharacterSituation_Output = {
     situation: Note_Output;
     relationship: Note_Output;
 };
+

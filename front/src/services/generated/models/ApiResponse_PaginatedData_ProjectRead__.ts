@@ -21,3 +21,4 @@ export type ApiResponse_PaginatedData_ProjectRead__ = {
      */
     meta?: (Record<string, any> | null);
 };
+

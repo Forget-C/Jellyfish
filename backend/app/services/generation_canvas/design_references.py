@@ -26,13 +26,15 @@ def design_field_references(card, *, effective=False):
                 yield segment, key, path + ['document', 'segments', segment.id]
 
 
-def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=False, reference_tokens=None):
+def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=False, reference_tokens=None, field_ids=None):
     """Render each active field once; missing sources remain attributable placeholders."""
     candidates = context.resolve_outputs(card.id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
     by_source = {identity_key(item.source): item for item in candidates}
     media, issues, fields, phases, seen_media = [], [], {}, {}, set()
     basis_current = True
     for key, value, _ in design_fields(card):
+        if field_ids is not None and key not in field_ids:
+            continue
         if not value.document:
             continue
         effective = value.state not in ('empty', 'not_applicable')
@@ -69,3 +71,13 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
     if phases:
         updated = updated.model_copy(update={'phases': [phase.model_copy(update={'frame': phases.get(phase.id, phase.frame)}) for phase in card.phases]})
     return updated, media, issues, basis_current
+
+
+def effective_design_references(card, cards):
+    """本卡有效字段及显式定位的单个画面来源；不继承其余运镜正文。"""
+    yield from design_field_references(card, effective=True)
+    if card.type == 'direction.composition' and card.frame_target:
+        from app.services.generation_canvas.composition import frame_target_field
+        movement, _, _, key = frame_target_field(card.frame_target, cards)
+        if movement:
+            yield from (entry for entry in design_field_references(movement, effective=True) if entry[1] == key)

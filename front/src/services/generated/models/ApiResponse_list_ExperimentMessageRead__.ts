@@ -21,3 +21,4 @@ export type ApiResponse_list_ExperimentMessageRead__ = {
      */
     meta?: (Record<string, any> | null);
 };
+

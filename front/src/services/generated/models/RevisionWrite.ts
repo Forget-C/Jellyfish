@@ -15,3 +15,4 @@ export type RevisionWrite = {
     expected_version?: (number | null);
     parent_id?: (string | null);
 };
+

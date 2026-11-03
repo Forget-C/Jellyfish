@@ -43,3 +43,4 @@ export type ProjectRead = {
     stats?: Record<string, any>;
     id: string;
 };
+

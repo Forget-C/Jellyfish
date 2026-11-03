@@ -10,3 +10,4 @@ export type PropInfoAnalysisResult = {
     issues?: Array<string>;
     suggestions?: Array<AssetFieldSuggestion>;
 };
+

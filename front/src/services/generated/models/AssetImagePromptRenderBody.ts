@@ -45,3 +45,4 @@ export type AssetImagePromptRenderBody = {
      */
     additional_instruction?: string;
 };
+

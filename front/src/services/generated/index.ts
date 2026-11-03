@@ -272,6 +272,7 @@ export type { DesignField } from './models/DesignField';
 export type { DesignFieldDocument } from './models/DesignFieldDocument';
 export type { DesignFieldReference } from './models/DesignFieldReference';
 export type { DesignFieldText } from './models/DesignFieldText';
+export type { DesignFrameDependency } from './models/DesignFrameDependency';
 export type { DesignFrameTarget } from './models/DesignFrameTarget';
 export type { DesignMediaExample } from './models/DesignMediaExample';
 export type { DesignMediaOrigin } from './models/DesignMediaOrigin';

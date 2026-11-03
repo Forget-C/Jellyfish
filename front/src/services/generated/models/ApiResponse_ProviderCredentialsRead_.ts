@@ -21,3 +21,4 @@ export type ApiResponse_ProviderCredentialsRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

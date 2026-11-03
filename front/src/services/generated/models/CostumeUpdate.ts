@@ -39,3 +39,4 @@ export type CostumeUpdate = {
      */
     patterns_accessories?: (string | null);
 };
+

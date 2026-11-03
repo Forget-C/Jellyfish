@@ -23,3 +23,4 @@ export type EvidenceSpan = {
      */
     quote?: (string | null);
 };
+

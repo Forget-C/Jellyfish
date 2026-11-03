@@ -24,3 +24,4 @@ export type TaskResultRead = {
     error?: string;
     error_code?: (string | null);
 };
+

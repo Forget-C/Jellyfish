@@ -20,3 +20,4 @@ export type SequenceRead = {
     source_changed: boolean;
     is_current?: boolean;
 };
+

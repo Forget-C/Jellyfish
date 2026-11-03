@@ -18,3 +18,4 @@ export type ProjectUpdate = {
     default_video_ratio?: (string | null);
     stats?: (Record<string, any> | null);
 };
+

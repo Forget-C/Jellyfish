@@ -10,3 +10,4 @@ export type CharacterPortraitAnalysisResult = {
     issues?: Array<string>;
     suggestions?: Array<AssetFieldSuggestion>;
 };
+

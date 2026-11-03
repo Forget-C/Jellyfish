@@ -19,3 +19,4 @@ export type ScriptSimplifyRequest = {
      */
     script_text: string;
 };
+

@@ -1,7 +1,7 @@
 # 03: 独立运镜卡与稳定阶段
 
 Status: ready-for-agent
-Completion: complete
+Completion: resolved
 Blocked by: 01
 
 **What to build:** 创作者独立配置运镜方式、起始与结束画面、触发条件、路径、速度和明确阶段，并把完整运镜设计交给模型。

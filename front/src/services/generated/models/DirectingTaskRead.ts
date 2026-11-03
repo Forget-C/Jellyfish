@@ -32,3 +32,4 @@ export type DirectingTaskRead = {
     revision_application?: (ReviewRevisionApplication | null);
     image_file_ids?: Array<string>;
 };
+

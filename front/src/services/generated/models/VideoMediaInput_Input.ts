@@ -11,3 +11,4 @@ export type VideoMediaInput_Input = {
     frames?: VideoFrameMediaReferences;
     subjects?: Array<VideoSubjectMediaReference>;
 };
+

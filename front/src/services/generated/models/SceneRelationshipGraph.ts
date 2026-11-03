@@ -23,3 +23,4 @@ export type SceneRelationshipGraph = {
     issues?: Array<DesignScopeIssue>;
     preparation_issues?: Array<DesignScopeIssue>;
 };
+

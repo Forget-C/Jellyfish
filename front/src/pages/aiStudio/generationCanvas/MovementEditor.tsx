@@ -1,3 +1,4 @@
+import { VisualDesignRelations } from './VisualDesignRelations'
 import { Input, Select } from 'antd'
 import type { MovementCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -9,11 +10,12 @@ import { designSummary } from './designSummary'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 
 /** 运镜阶段身份由创建时确定；重命名和重排只改变展示，不改变引用目标。 */
-export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
+export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs }: CardRendererProps) {
   const card = raw as MovementCard, fields = card.fields || {}, phases = card.phases || []
   const labels = photographyRegions.movement.fields
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="design-preset-fields">{Object.entries(labels).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}</div>
+    <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
     <section aria-label="运镜范围与来源"><h3>范围与来源</h3>
       <Input aria-label="运镜适用范围" placeholder="适用范围" value={card.scope?.description} onChange={event => onChange({ ...card, scope: { ...card.scope, description: event.target.value } })} />
       <Select aria-label="运镜制作阶段" allowClear placeholder="制作阶段" value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => onChange({ ...card, scope: { ...card.scope, phase: phase ?? null } })} />

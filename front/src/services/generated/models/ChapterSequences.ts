@@ -16,3 +16,4 @@ export type ChapterSequences = {
     task_ids?: Array<string>;
     current_version?: (DivisionVersionRef | null);
 };
+

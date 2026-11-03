@@ -14,3 +14,4 @@ export type Beat_Output = {
     expected_change: Note_Output;
     must_show: Note_Output;
 };
+

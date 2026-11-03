@@ -21,3 +21,4 @@ export type ApiResponse_VideoGenerationOptionsRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
+

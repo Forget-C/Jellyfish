@@ -22,3 +22,4 @@ export type StagingActivity_Output = {
     narrative_support: Note_Output;
     end_state: Note_Output;
 };
+

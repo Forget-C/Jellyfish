@@ -21,3 +21,4 @@ export type ApiResponse_PaginatedData_dict_str__Any___ = {
      */
     meta?: (Record<string, any> | null);
 };
+

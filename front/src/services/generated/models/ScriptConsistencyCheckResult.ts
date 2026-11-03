@@ -20,3 +20,4 @@ export type ScriptConsistencyCheckResult = {
      */
     summary?: (string | null);
 };
+

@@ -70,8 +70,9 @@ class CanvasOutputContext:
         from app.schemas.generation_canvas import CompositionCard
         if isinstance(card, CompositionCard) and card.frame_target:
             from app.services.generation_canvas.composition import resolve_frame_target
-            target = resolve_frame_target(card, self.cards)
-            outputs = [item.model_copy(update={'payload': item.payload.model_copy(update={'frame_target_state': target})}) for item in outputs]
+            target = resolve_frame_target(card, self, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
+            outputs = [item.model_copy(update={'basis_current': item.basis_current and all(ref.basis_current for ref in target.dependencies),
+                'payload': item.payload.model_copy(update={'frame_target_state': target})}) for item in outputs]
         if isinstance(card, ObjectDescriptionCard) and not card.name.strip() and not allow_reference_drafts:
             return [item for item in outputs if item.source.port_id != 'object']
         return outputs
