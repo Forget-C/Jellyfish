@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DesignMediaUse } from './DesignMediaUse';
 import type { InputBinding } from './InputBinding';
 import type { PromptDocument } from './PromptDocument';
 import type { VideoModelConfig } from './VideoModelConfig';
@@ -20,4 +21,5 @@ export type VideoModelCard = {
     input_bindings?: Array<InputBinding>;
     type?: string;
     config?: VideoModelConfig;
+    design_media_uses?: Array<DesignMediaUse>;
 };
