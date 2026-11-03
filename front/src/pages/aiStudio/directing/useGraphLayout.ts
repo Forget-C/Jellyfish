@@ -43,10 +43,10 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
   const latestScope = useRef(scope)
   latestScope.current = scope
   const aliasIdentity = JSON.stringify(scope?.identityAliases || {})
-  const identity = nodes.map(node => node.id).join('|'), validIdentity = scope?.validIds.join('|')
+  const validIdentity = scope?.validIds.join('|')
   useLayoutEffect(() => {
     if (!scope || state.key !== key || !nodes.length || nodes.some(node => !measured[node.id])) return
-    setState(previous => {
+    const synchronize = (previous: LayoutState): LayoutState => {
       const cleaned = pruneGraphView(previous.view, new Set(scope.validIds), scope.identityAliases)
       const sizes = { ...cleaned.sizes }
       nodes.forEach(node => { sizes[node.id] = node.size || sizes[node.id] || measured[node.id] })
@@ -62,8 +62,10 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
       const view = { ...prepared, transform, positions, sizes }
       if (previous.ready && previous.anchor === scope.anchorId && JSON.stringify(view) === JSON.stringify(previous.view)) return previous
       return { ...previous, anchor: scope.anchorId, ready: true, view, undo: migration?.undo || previous.undo }
-    })
-  }, [key, identity, validIdentity, aliasIdentity, measured, scope?.anchorId, scope?.initialTop, state.view.positions])
+    }
+    // Skip no-op dispatches; a queued update still resolves against the latest state.
+    if (synchronize(state) !== state) setState(synchronize)
+  }, [key, nodes, scope, measured, viewportWidth, state])
   useEffect(() => {
     if (state.key && state.ready) {
       storeView(state.key, pruneGraphView(state.view, new Set(scope?.validIds), scope?.identityAliases), latestScope.current?.onStorageError)

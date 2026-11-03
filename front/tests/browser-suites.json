@@ -2,6 +2,7 @@
   "preflight": "preflight.mjs",
   "cases": {
     "generation-canvas-design-editor": { "file": "generationCanvasDesignEditor.browser.mjs", "ports": [4641, 8641], "timeoutMs": 120000 },
+    "generation-canvas-layout-convergence": { "file": "generationCanvasLayoutConvergence.browser.mjs", "ports": [4638, 8638], "timeoutMs": 120000 },
     "generation-canvas-context-menu": {"file":"generationCanvasContextMenu.browser.mjs","ports":[4637,8637],"timeoutMs":180000},
     "generation-canvas-history-refresh": { "file": "generationCanvasHistoryRefresh.browser.mjs", "ports": [4635, 8635], "timeoutMs": 120000 },
     "generation-canvas-reference-mentions": {"file":"generationCanvasReferenceMentions.browser.mjs","ports":[4633,8633],"timeoutMs":180000},
@@ -114,7 +115,7 @@
     "canvas-interaction": [
       "generation-canvas-editor-reveal",
       "generation-canvas-interaction-combinations","generation-canvas-interaction", "generation-canvas-interaction-rules", "generation-canvas-image-fit", "generation-canvas-model-card-shell", "generation-canvas-anchored-editor", "generation-canvas-stacks", "generation-canvas-organization", "generation-canvas-tools"],
-    "canvas-layout": ["generation-canvas-context-menu",
+    "canvas-layout": ["generation-canvas-layout-convergence","generation-canvas-context-menu",
       "generation-canvas-history-refresh",
       "generation-canvas-reference-mentions",
       "generation-canvas-editor-reveal",

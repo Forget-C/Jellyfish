@@ -1279,13 +1279,6 @@
       "file": "src/pages/aiStudio/directing/useGraphLayout.ts",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
-      "fingerprint": "2aaeb6da2433ee981b46908f9c36dbf56296598098c8f5907394e9b1a5b5b63b",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/useGraphLayout.ts",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
       "fingerprint": "85ed0067e265d70ab22c088f1f89d25d4f6c9dc692e05dbb52c060ccb16e826e",
       "count": 1
     },
