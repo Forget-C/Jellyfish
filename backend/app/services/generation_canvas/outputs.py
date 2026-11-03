@@ -2,7 +2,7 @@
 from typing import Protocol
 from app.core.contracts.generation_canvas import BasisTextOutputPayload, NamedImageObject
 from app.schemas.generation_canvas import (
-    CompositionCard, VisualStyleCard, PhotographyCard, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
+    MovementCard, CompositionCard, VisualStyleCard, PhotographyCard, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
     NamedImageReferenceCard, NamedImagePayload, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
@@ -23,6 +23,9 @@ class ContentOutputHandler:
         if isinstance(card, CompositionCard):
             from app.services.generation_canvas.composition import publish_composition
             return publish_composition(canvas_id, card)
+        if isinstance(card, MovementCard):
+            from app.services.generation_canvas.movement import publish_movement
+            return publish_movement(canvas_id, card, adopted_inputs)
         if isinstance(card, VisualStyleCard):
             from app.services.generation_canvas.visual_style import publish_style
             return publish_style(canvas_id, card)
