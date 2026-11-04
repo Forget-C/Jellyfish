@@ -43,7 +43,7 @@ try {
   await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
   assert.equal(await detail.getByRole('textbox',{name:'运动路径内容',exact:true}).isVisible(),false)
   await detail.locator('.design-preset-choice').first().click()
-  await detail.getByRole('button',{name:'应用即可',exact:true}).click()
+  await detail.getByRole('button',{name:'应用',exact:true}).click()
   await poll(state=>!!state.document.cards[0].fields.movement_path.text)
   const previewVideo=await detail.locator('.design-preset-preview video').getAttribute('src')
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()

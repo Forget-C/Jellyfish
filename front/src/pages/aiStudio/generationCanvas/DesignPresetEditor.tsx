@@ -73,7 +73,7 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
   const overwritten = changes.filter(change => change.populated).length
   const mode = <ConfigProvider componentDisabled={false}><Button ref={modeButton} variant="quiet" icon={advanced ? <ArrowLeftOutlined /> : <SettingOutlined />} onClick={() => { setAdvanced(value => !value); references?.changeMode(); requestAnimationFrame(() => modeButton.current?.focus({ preventScroll: true })) }}>{advanced ? '返回预设' : '高级设置'}</Button></ConfigProvider>
   const actions = <ConfigProvider componentDisabled={false}><WorkbenchDialogActions secondary={<><Button variant="quiet" icon={<UndoOutlined />} disabled={disabled || !onUndo} onClick={() => { onUndo?.(); setNotice('已撤销上一次修改') }}>撤销</Button><span role="status" className="design-preset-status">{disabled ? '只读 · 可以预览与对比' : notice || (advanced ? '编辑沿用画布自动保存' : matched ? `已应用 · ${matched.name}` : current ? '自定义配置' : '选择一个预设开始')}</span></>}>
-    {!advanced && <Button variant="primary" disabled={disabled || !preview || !changes.length} onClick={() => { if (preview && onApply(preview) !== false) setNotice(`已应用「${preview.name}」`) }}>应用即可</Button>}
+    {!advanced && <Button variant="primary" disabled={disabled || !preview || !changes.length} onClick={() => { if (preview && onApply(preview) !== false) setNotice(`已应用「${preview.name}」`) }}>应用</Button>}
   </WorkbenchDialogActions></ConfigProvider>
   return <div ref={owner} className="design-preset-editor">
     {header ? editorOpen && createPortal(mode, header) : mode}
