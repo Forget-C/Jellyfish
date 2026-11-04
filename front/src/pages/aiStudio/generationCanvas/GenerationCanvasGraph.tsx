@@ -9,12 +9,8 @@ import { TextContentEditor } from './TextContentEditor'
 import { CardStatusSummary } from './CardStatusSummary'
 import { ImageContentCardSummary } from './ImageContentCardSummary'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
-import { guidanceSummary, type GuidanceCard } from './GuidanceDirectionEditor'
-import { constraintSummary, type ConstraintCard } from './ConstraintDirectionEditor'
 import type { ImageContentCard } from '../../../services/generated'
 import { spatialSummary, type SpatialCard } from './SpatialDirectionEditor'
-import { soundSummary } from './SoundDirectionEditor'
-import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -1194,7 +1190,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
-            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} height={size?.height} />}

@@ -19,11 +19,12 @@ export function FlatDesignCardBody({ card, document, readonly, onEdit }: { card:
     const field = values.get(id)
     if (!field) return []
     const text = field.document ? field.document.segments?.map(part => part.kind === 'text' ? part.text : `@${sourceName(part.source.card_id)}`).join('')?.trim() : field.text?.trim()
+    if (card.type === 'direction.creative_control' && id === 'undecided' && field.state === 'undecided' && !text && !field.document && !field.source_locator && field.purpose === 'design') return []
     if (!text && (!field.state || field.state === 'empty') && !field.source_locator) return []
     return [{ label, text: field.state === 'empty' ? '未填写（保留内容）' : [states[field.state || ''], text || field.source_locator].filter(Boolean).join('：') }]
   })
   if ('production' in card && card.production !== 'undecided') rows.push({ label: '制作安排', text: card.production === 'postproduction' ? '待后期' : '同期生成意图' })
-  if ('category' in card && card.category !== 'space') rows.push({ label: '连续性分类', text: card.category || '' })
+  if ('category' in card && card.category !== 'space') rows.push({ label: '连续性分类', text: { space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', photography: '摄影', dialogue_sound: '对白与声音' }[card.category || 'space'] })
   if (rows.length && 'version' in card) rows.push({ label: '对白版本', text: String(card.version || 1) })
   if ('name' in card && card.name?.trim()) rows.unshift({ label: '名称', text: card.name.trim() })
   for (const binding of card.input_bindings || []) rows.push({ label: portLabels[binding.input_port] || '关联关系', text: sourceName(binding.source.card_id) })

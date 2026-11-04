@@ -26,7 +26,7 @@ function eligible(port: string, item: CanvasResolvedOutput) {
   return port === 'effect_object' && ['narrative_reference', 'spatial_reference'].includes(payload.kind || '') || payload.kind === 'narrative_reference' && 'category' in payload && port === 'related_event' && payload.category === 'event'
 }
 
-/** 约束卡分别编辑本卡设计、直接身份及固定证据；没有跨级正文或媒体采用。 */
+/** 约束卡分别编辑本卡设计、直接身份及固定证据；身份关系与本地证据不递归传播，字段实际素材引用按整卡携带。 */
 export function ConstraintDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as ConstraintCard
@@ -59,9 +59,4 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
     <details aria-label="完整约束输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整约束设计" />)}</details>
   </DesignPresetEditor>
-}
-
-export function constraintSummary(card: ConstraintCard) {
-  const preferred = card.type === 'direction.space_rule' ? [card.shootable_area] : card.type === 'direction.continuity' ? [card.before, card.after] : [(card as ImmutableFactCard).fact]
-  return designSummary(preferred, Object.values(card)) || (card.type === 'direction.space_rule' ? '可拍区域待定' : card.type === 'direction.continuity' ? '前态待定 → 后态待定' : '事实待填写')
 }

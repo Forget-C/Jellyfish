@@ -45,6 +45,7 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(150)}throw Error('save timeout')}
+  assert.match(await page.locator('[data-card-id="creative_control"]').textContent(), /开始设计/)
   for(const[id,key,label,preset]of cases){
     await openCanvasCard(page,id)
     if(preset){await detail.getByRole('button',{name:'预览 '+preset,exact:true}).click();await detail.getByRole('button',{name:'应用',exact:true}).click();await detail.getByRole('button',{name:'高级设置',exact:true}).click()}
@@ -57,5 +58,19 @@ try {
   await page.reload();await openCanvasCard(page,'continuity');await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
   await page.screenshot({path:join(output,'sound-constraints-mobile.png'),fullPage:true})
+  await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+  const observer=await page.context().newPage()
+  await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
+  await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
+  const revision=(await read()).revision
+  for(const[id,,label,preset]of cases){
+    await openCanvasCard(observer,id)
+    const readonly=observer.locator('.wb-details:not([hidden])')
+    if(preset)await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
+    assert.equal(await readonly.getByRole('textbox',{name:label+'内容',exact:true}).isDisabled(),true)
+    await readonly.getByRole('button',{name:'关闭详情',exact:true}).click()
+  }
+  assert.equal((await read()).revision,revision)
+  await observer.close()
   console.log('Eight sound/constraint cards: entry modes, preset application, references, version and mobile passed:',output)
 } finally { await cleanup() }

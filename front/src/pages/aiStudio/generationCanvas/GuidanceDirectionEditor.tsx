@@ -47,8 +47,3 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
     <details aria-label="完整要求输出"><summary>查看已保存完整要求 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整要求" />)}</details>
   </DesignPresetEditor>
 }
-
-export function guidanceSummary(card: GuidanceCard) {
-  const field = card.type === 'direction.criterion' ? card.standard : card.type === 'direction.guidance' ? card.priority : (card as CreativeControlCard).freedom
-  return `${card.name || '未命名要求'} · ${designSummary([field], Object.values(card)) || '内容待定'}`
-}

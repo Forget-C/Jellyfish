@@ -17,7 +17,7 @@ import { MediaPreview } from './MediaContentEditor'
 
 export type SoundCard = DialogueCard | SoundArrangementCard
 
-/** 声音设计的对象、制作安排与固定素材分别编辑；不会把示例当作模型输入。 */
+/** 声音设计的对象、制作安排与固定素材分别编辑；示例关联本身不形成模型输入。 */
 export function SoundDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions } = useGraphRules()
   const card = raw as SoundCard
@@ -67,10 +67,4 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
     </details>
     <details aria-label="完整设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</details>
   </DesignPresetEditor>
-}
-
-export function soundSummary(card: SoundCard) {
-  if (card.type === 'direction.dialogue') return `${designSummary([card.content], Object.values(card)) || '未填写对白'} · 版本 ${card.version || 1}`
-  const sound = card as SoundArrangementCard
-  return `${designSummary([sound.source_description, sound.environment], Object.values(card)) || '未填写声音安排'} · ${{ synchronous: '同期生成意图', postproduction: '待后期', undecided: '待确定' }[sound.production || 'undecided']}`
 }

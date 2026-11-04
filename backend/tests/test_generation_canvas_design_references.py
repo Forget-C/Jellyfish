@@ -222,3 +222,17 @@ async def test_preserved_literal_design_text_remains_authored_data(canvas_client
     assert '旧 @图片1 /首帧参考' in output['text']
     assert not output['payload'].get('reference_issues')
     assert not output['payload'].get('material_references')
+
+
+@pytest.mark.asyncio
+async def test_dialogue_text_reference_preserves_explicit_version(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白引用'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '请留下'}, {'id': 'design', 'type': 'direction.dialogue', 'dialogue_id': 'stable', 'version': 3, 'content': referenced(canvas['id'])}], edges=[{'id': 'text', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}], input_order={'design': {'text': ['text']}})
+    saved = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    output = (await canvas_client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
+    assert '请留下' in output['text']
+    assert output['payload']['version'] == 3
+    assert not output['payload'].get('material_references')
