@@ -102,3 +102,12 @@
   .design-preset-relations { max-height: 100px; }
 }
 .design-reference-issue { display: block; margin-top: 6px; font-size: 12px; }
+
+/* Shared metadata, retained footer and modal positioning. */
+.generation-editor-actions { flex: none; padding: 12px 16px; border-top: 1px solid var(--wb-border); background: var(--wb-surface); }
+.generation-editor-actions:empty { display: none; }
+.design-field-state { margin-left: 8px; font-size: 11px; color: var(--wb-text); }
+.design-field-metadata { display: grid; gap: 8px; margin-top: 8px; }
+.design-field-metadata[hidden] { display: none; }
+.generation-card-editor[data-design-editor="true"] { --design-editor-top: min(64px, 8dvh); }
+@media (max-width: 700px) { .generation-card-editor[data-design-editor="true"] { --design-editor-top: 8px; } }

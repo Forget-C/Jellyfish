@@ -15,8 +15,3 @@ export function designSummary(preferred: (DesignField | undefined)[], values: un
   const primary = preferred.map(describe).filter(Boolean)
   return (primary.length ? primary : values.map(describe).filter(Boolean)).slice(0, 3).join(' · ')
 }
-
-/** 更多参数的计数包含明确状态与来源，不将未填写字段计入。 */
-export function countDesignFields(fields: (DesignField | undefined)[]) {
-  return fields.filter(field => field && (field.state && field.state !== 'empty' || field.text?.trim() || field.source_locator)).length
-}

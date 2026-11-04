@@ -48,7 +48,18 @@ try {
   assert.match(await page.locator('[data-card-id="creative_control"]').textContent(), /开始设计/)
   for(const[id,key,label,preset]of cases){
     await openCanvasCard(page,id)
-    if(preset){await detail.getByRole('button',{name:'预览 '+preset,exact:true}).click();await detail.getByRole('button',{name:'应用',exact:true}).click();await detail.getByRole('button',{name:'高级设置',exact:true}).click()}
+    if(id==='dialogue'){
+      await detail.getByRole('button',{name:'添加设计来源',exact:true}).click()
+      await page.getByRole('menuitem',{name:/上传参考素材/}).hover()
+      await page.getByRole('menuitem',{name:'上传音频素材',exact:true}).waitFor()
+      await page.getByRole('menuitem',{name:'上传视频素材',exact:true}).waitFor()
+      await page.keyboard.press('Escape');await page.keyboard.press('Escape')
+    }
+    if(preset){await detail.getByRole('button',{name:'预览 '+preset,exact:true}).click();await detail.getByRole('button',{name:'应用',exact:true}).click();
+      await poll(state=>Object.values(state.document.cards.find(card=>card.id===id)).some(value=>value&&typeof value==='object'&&value.state==='proposal'))
+      await detail.getByRole('button',{name:'关闭详情',exact:true}).click();await openCanvasCard(page,id)
+      if(['space_rule','creative_control'].includes(id))await detail.getByText('已应用 · '+preset,{exact:true}).waitFor()
+      await detail.getByRole('button',{name:'高级设置',exact:true}).click()}
     const field=detail.getByRole('textbox',{name:label+'内容',exact:true})
     await field.fill('');await field.press('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()
     await poll(state=>state.document.cards.find(card=>card.id===id)[key]?.document?.segments?.some(segment=>segment.kind==='reference'))
@@ -58,6 +69,13 @@ try {
   await page.reload();await openCanvasCard(page,'continuity');await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
   await page.screenshot({path:join(output,'sound-constraints-mobile.png'),fullPage:true})
+  await detail.locator('summary').filter({hasText:'对象与制作关系'}).click()
+  await detail.getByRole('combobox',{name:'连续性分类',exact:true}).click()
+  await page.getByRole('option',{name:'造型',exact:true}).click()
+  await detail.getByRole('button',{name:'预览 变化后延续',exact:true}).click()
+  await detail.locator('.design-preset-changes').click()
+  await detail.getByText('将覆盖 · 后续约束',{exact:true}).click()
+  await detail.getByText(/新值：保持已明确的服装/).waitFor()
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   const observer=await page.context().newPage()
   await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})

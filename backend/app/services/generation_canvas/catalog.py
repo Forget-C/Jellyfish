@@ -53,7 +53,14 @@ def design_fields(card_model):
     else:
         labels = next((module.FIELD_LABELS for base, module in ((ConstraintDirectionCard, continuity), (GuidanceDirectionCard, guidance), (SpatialDirectionCard, spatial), (NarrativeDirectionCard, narrative), (SoundDirectionCard, sound)) if issubclass(card_model, base)), performance.FIELD_LABELS)
         names = [name for name, field in card_model.model_fields.items() if field.annotation in (DesignField, ReferenceDesignField)]
-    return [CanvasDesignFieldDefinition(id=name, label=labels[name]) for name in names]
+    # Defaults come from the actual saved-card schema, including specialized state/purpose defaults.
+    owner = card_model.model_fields['fields'].annotation if 'fields' in card_model.model_fields else card_model
+    definitions = []
+    for name in names:
+        value = owner.model_fields[name].get_default(call_default_factory=True)
+        default = DesignField(**{key: getattr(value, key) for key in DesignField.model_fields})
+        definitions.append(CanvasDesignFieldDefinition(id=name, label=labels[name], default_value=default))
+    return definitions
 
 
 def canvas_catalog():

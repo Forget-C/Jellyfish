@@ -236,3 +236,18 @@ async def test_dialogue_text_reference_preserves_explicit_version(canvas_client)
     assert '请留下' in output['text']
     assert output['payload']['version'] == 3
     assert not output['payload'].get('material_references')
+
+
+@pytest.mark.asyncio
+async def test_visual_audio_reference_is_reported_as_unsupported(canvas_client):
+    file_id = (await canvas_client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('reference.wav', b'audio', 'audio/wav')})).json()['data']['id']
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '音频仅本地参考'})).json()['data']
+    source = {'canvas_id': canvas['id'], 'card_id': 'audio', 'port_id': 'audio', 'position': 0}
+    document = canvas['document']
+    document.update(cards=[{'id': 'audio', 'type': 'content.audio', 'file_id': file_id}, {'id': 'design', 'type': 'direction.style', 'fields': {'direction': {'state': 'proposal', 'document': {'segments': [{'id': 'audio-use', 'kind': 'reference', 'source': source}]}}}}], edges=[{'id': 'audio', 'source_card': 'audio', 'source_port': 'audio', 'target_card': 'design', 'target_port': 'audio'}], input_order={'design': {'audio': ['audio']}})
+    url = f"/canvases/p/{canvas['id']}"
+    saved = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    output = (await canvas_client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
+    assert output['payload']['reference_issues'][0]['code'] == 'UNSUPPORTED_DESIGN_MEDIA'
+    assert not output['payload']['material_references'][0]['available']

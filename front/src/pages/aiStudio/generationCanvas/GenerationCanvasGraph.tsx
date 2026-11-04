@@ -1,3 +1,4 @@
+import { designMediaSourcePorts } from './designSources'
 import { designSummary } from './designSummary'
 import type { CompositionCard } from '../../../services/generated'
 import { FlatDesignCardBody } from './FlatDesignCard'
@@ -851,9 +852,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" overlayStyle={{ minWidth: 200 }} disabled={readonly} menu={{ items: [
     { key: 'upload', label: '上传参考素材', children: [
       { key: 'upload:text', label: '上传文本参考' },
-      ...sourcePorts(card).filter(port => ['image', 'video', 'audio', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video'].includes(port)).map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port)}素材` })),
+      ...designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port).replace(/素材$/, '')}素材` })),
     ] },
-    { key: 'library', label: '从素材库添加', disabled: !sourcePorts(card).some(port => port !== 'text'), children: sourcePorts(card).filter(port => ['image', 'video', 'audio', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video'].includes(port)).map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port)}素材` })) },
+    { key: 'library', label: '从素材库添加', disabled: !designMediaSourcePorts(sourcePorts(card)).length, children: designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port).replace(/素材$/, '')}素材` })) },
     { key: 'canvas', label: '从当前画布选择' },
   ], onClick: ({ key: action }) => {
     if (readonly) return
@@ -865,7 +866,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       setUploadText(source.id); return
     }
     setUploadLibrary(mode === 'library')
-    const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(key) ? 'image' : key === 'subject_video' ? 'video' : key
+    const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(key) ? 'image' : key === 'subject_video' ? 'video' : key.replace(/_example$/, '')
     const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false } as MediaCard
     const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
     const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }

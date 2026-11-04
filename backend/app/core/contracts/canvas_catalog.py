@@ -1,6 +1,8 @@
 """生成画布静态目录：值种类与内容模态分开，运行能力由模型接口提供。"""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.contracts.generation_canvas import DesignField
 
 CanvasValueKind = Literal['text', 'image', 'video', 'audio', 'object_reference', 'anchor', 'blocking', 'beat', 'event', 'shot', 'dialogue', 'criterion']
 
@@ -10,6 +12,7 @@ class CanvasDesignFieldDefinition(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str
     label: str
+    default_value: DesignField = Field(default_factory=DesignField)
 
 
 class CanvasInputPortDefinition(BaseModel):

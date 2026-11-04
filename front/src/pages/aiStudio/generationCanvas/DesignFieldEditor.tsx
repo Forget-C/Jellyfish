@@ -1,6 +1,5 @@
-import { countDesignFields } from './designSummary'
 import { useContext, type ReactNode } from 'react'
-import { DesignMetadataVisible } from './DesignEditorFrame'
+import { DesignMetadataVisible } from './DesignFieldContext'
 import { Input, Select, Space } from 'antd'
 import type { DesignField } from '../../../services/generated'
 
@@ -20,10 +19,4 @@ export function DesignFieldEditor({ label, value, purpose = 'design', compact = 
     {editor ?? <Input.TextArea aria-label={`${label}内容`} value={field.text} autoSize={{ minRows: 2, maxRows: 7 }} onChange={event => onChange({ ...field, text: event.target.value, state: field.state === 'empty' ? 'proposal' : field.state })} />}
     {compact ? <div hidden={!metadataVisible} className="design-field-metadata">{controls}{source}</div> : source}
   </section>
-}
-
-/** 两类画面设计在同一个更多参数入口提示已有内容。 */
-export function DesignMoreSummary({ fields, additional = 0 }: { fields: (DesignField | undefined)[]; additional?: number }) {
-  const count = countDesignFields(fields) + additional
-  return <summary>更多参数{count ? ` · 已填写 ${count} 项` : ''}</summary>
 }

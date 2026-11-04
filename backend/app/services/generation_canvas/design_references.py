@@ -77,7 +77,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                         item = item.model_copy(update={'text': source.name + '（' + '；'.join(location) + '）'})
             if not code and card.type == 'direction.dialogue' and (item.modality != 'text' or segment.source.port_id != 'text'):
                 code = 'UNSUPPORTED_DIALOGUE_REFERENCE'
-            if not code and card.type in FLAT_DESIGN_TYPES and item and item.modality == 'audio':
+            if not code and item and item.modality == 'audio':
                 code = 'UNSUPPORTED_DESIGN_MEDIA'
             if not code and item and item.modality == 'text' and not item.text:
                 code = 'REFERENCE_TEXT_UNAVAILABLE'

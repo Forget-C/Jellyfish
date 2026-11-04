@@ -1,3 +1,5 @@
+import { isDesignFieldConfigured } from './designFieldConfiguration'
+import { useGraphRules } from './CanvasCatalogContext'
 import { Tooltip } from 'antd'
 import type { CanvasDocument, ReferenceDesignField } from '../../../services/generated'
 import type { VisualDesignCard as DesignCard } from './designFieldReferences'
@@ -14,17 +16,17 @@ const kindOf = (card: DesignCard) => (card.type || 'direction.style').slice('dir
 const titleOf = (kind: string) => kind === 'style' ? '画面风格' : photographyRegions[kind as keyof typeof photographyRegions].label
 
 /** Configuration describes authored intent, independently from output eligibility or model readiness. */
-function cardRows(card: DesignCard, document: CanvasDocument) {
+function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<string, ReferenceDesignField | undefined>) {
   const kind = kindOf(card), labels: Record<string, string> = kind === 'style' ? styleLabels : photographyRegions[kind as keyof typeof photographyRegions].fields
   const sourceName = (id: string) => {
     const source = document.cards?.find(item => item.id === id)
     return source ? 'name' in source && source.name ? source.name : '已关联来源' : '失效来源'
   }
-  const describe = (field?: ReferenceDesignField & { size?: string | null }) => {
+  const describe = (field?: ReferenceDesignField & { size?: string | null }, key?: string) => {
     if (!field) return ''
     const text = field.document ? (field.document.segments || []).map(segment => segment.kind === 'text' ? segment.text : `@${sourceName(segment.source.card_id)}`).join('').trim() : field.text?.trim() || ''
     const size = field.size ? shotSizeLabels[field.size as keyof typeof shotSizeLabels] : ''
-    const configured = !!(text || size || field.source_locator?.trim() || field.state && field.state !== 'empty' || field.purpose && field.purpose !== 'design')
+    const configured = isDesignFieldConfigured(field, key ? defaults[key] : undefined)
     if (!configured) return ''
     const status = states[field.state || 'empty']
     const detail = [size, text].filter(Boolean).join(' · ')
@@ -32,7 +34,7 @@ function cardRows(card: DesignCard, document: CanvasDocument) {
     return [status, detail || field.source_locator?.trim() || (field.purpose === 'constraint' ? '约束' : field.purpose === 'background' ? '背景' : '')].filter(Boolean).join('：')
   }
   const rows = Object.entries(labels).flatMap(([key, label]) => {
-    const text = describe((card.fields as Record<string, ReferenceDesignField> | undefined)?.[key])
+    const text = describe((card.fields as Record<string, ReferenceDesignField> | undefined)?.[key], key)
     return text ? [{ label, text }] : []
   })
   if ('phases' in card) for (const [index, phase] of (card.phases || []).entries()) rows.push({ label: phase.name?.trim() || `阶段 ${index + 1}`, text: describe(phase.frame) || '阶段待填写' })
@@ -47,7 +49,9 @@ function cardRows(card: DesignCard, document: CanvasDocument) {
 
 /** Six designs share one card body and entry; their field ownership and modal editors stay independent. */
 export function VisualDesignCard({ card, document, readonly, onEdit }: { card: DesignCard; document: CanvasDocument; readonly?: boolean; onEdit: (trigger: HTMLElement) => void }) {
-  const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document)
+  const { cardDefinitions } = useGraphRules()
+  const defaults = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.default_value]))
+  const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document, defaults)
   return <DesignCardBody kind={kind} title={title} rows={rows} readonly={readonly} onEdit={onEdit} />
 }
 

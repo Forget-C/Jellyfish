@@ -37,7 +37,7 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     assert 'shot' in effect('direction.fact') and 'shot' not in effect('direction.criterion')
     assert effect('direction.performance') == ['object_reference']
     assert next(port for port in cards['direction.performance']['inputs'] if port['id'] == 'dialogue_basis')['accepts'] == ['dialogue']
-    assert {'id': 'physical_action', 'label': '身体动作'} in cards['direction.performance']['fields']
+    assert next(field for field in cards['direction.performance']['fields'] if field['id'] == 'physical_action')['label'] == '身体动作'
     assert (await client.get('/canvases/p/missing/catalog')).status_code == 404
 
 
@@ -45,3 +45,15 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
 async def test_public_output_modality_has_only_four_content_modalities(canvas_client):
     schema = (await canvas_client.get('/openapi.json')).json()
     assert schema['components']['schemas']['CanvasResolvedOutput']['properties']['modality']['enum'] == ['text', 'image', 'video', 'audio']
+
+
+@pytest.mark.asyncio
+async def test_catalog_exposes_type_specific_design_field_defaults(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '字段默认值'})).json()['data']
+    response = await canvas_client.get(f"/canvases/p/{canvas['id']}/catalog")
+    cards = {card['type']: card for card in response.json()['data']['cards']}
+    fields = lambda kind: {field['id']: field['default_value'] for field in cards[kind]['fields']}
+    assert fields('direction.space_rule')['spatial_basis']['purpose'] == 'background'
+    assert fields('direction.space_rule')['axis']['purpose'] == 'constraint'
+    assert fields('direction.creative_control')['undecided']['state'] == 'undecided'
+    assert fields('direction.camera')['viewpoint']['purpose'] == 'design'

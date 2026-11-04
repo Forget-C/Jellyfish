@@ -1,3 +1,5 @@
+import { isDesignFieldConfigured } from './designFieldConfiguration'
+import { useGraphRules } from './CanvasCatalogContext'
 import { DesignReferenceContext } from './DesignReferenceEditor'
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -5,8 +7,8 @@ import { ConfigProvider, Switch } from 'antd'
 import { ArrowLeftOutlined, SettingOutlined, UndoOutlined } from '@ant-design/icons'
 import type { DesignField, ReferenceDesignField } from '../../../services/generated'
 import { CanvasEditorFooter, CanvasEditorHeader } from './CanvasCardEditor'
-import { DesignMetadataVisible } from './DesignEditorFrame'
-import { PresetIllustration } from './VisualPresetPicker'
+import { DesignMetadataVisible } from './DesignFieldContext'
+import { PresetIllustration } from './PresetIllustration'
 import type { VisualPreset } from './visualPresets'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
@@ -25,6 +27,8 @@ const describe = (value?: ReferenceDesignField | null) => value ? `${value.text 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
 export function DesignPresetEditor({ fields, labels, presets, children, candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
   const references = useContext(DesignReferenceContext)
+  const { cardDefinitions } = useGraphRules()
+  const defaults = Object.fromEntries((references ? cardDefinitions[references.card.type!].fields : []).map(field => [field.id, field.default_value]))
   const owner = useRef<HTMLDivElement>(null)
   const header = useContext(CanvasEditorHeader), footer = useContext(CanvasEditorFooter)
   const [advanced, setAdvanced] = useState(direct), [metadata, setMetadata] = useState(false)
@@ -59,16 +63,18 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
     if (actual?.document?.segments?.some(segment => segment.kind === 'reference')) return false
     return Object.entries(expected || {}).every(([name, value]) => (name === 'text' && actual?.document ? actual.document.segments?.map(segment => segment.kind === 'text' ? segment.text : '').join('') || '' : actual?.[name as keyof DesignField]) === value)
   }))
-  const preview = selected || applied
+  const availableSelected = presets.find(preset => preset.id === selected?.id)
+  const availableCompare = presets.find(preset => preset.id === compare?.id)
+  const preview = availableSelected || applied
   const hasAdditionalConfiguration = applied && Object.keys(labels).some(key => {
     if (applied.fields[key as keyof typeof applied.fields]) return false
     const field = fields[key] as ReferenceDesignField
-    return !!field && (!!field.text?.trim() || field.state && field.state !== 'empty' || !!field.source_locator || ['constraint', 'background'].includes(field.purpose || '') || field.document?.segments?.some(segment => segment.kind === 'reference' || segment.text?.trim()))
+    return isDesignFieldConfigured(field, defaults[key])
   })
   const matched = hasAdditionalConfiguration ? undefined : applied
   const changes = preview ? Object.entries(preview.fields).flatMap(([key, value]) => {
     const before = fields[key] as ReferenceDesignField, after = { ...before, ...value, ...(before?.document ? { document: null } : {}) }
-    return JSON.stringify(before || {}) === JSON.stringify(after) ? [] : [{ key, before, after, populated: !!before && (!!before.text?.trim() || before.state !== 'empty' && !!before.state || !!before.source_locator || before.purpose === 'constraint' || before.purpose === 'background') }]
+    return JSON.stringify(before || {}) === JSON.stringify(after) ? [] : [{ key, before, after, populated: isDesignFieldConfigured(before, defaults[key]) }]
   }) : []
   const overwritten = changes.filter(change => change.populated).length
   const mode = <ConfigProvider componentDisabled={false}><Button ref={modeButton} variant="quiet" icon={advanced ? <ArrowLeftOutlined /> : <SettingOutlined />} onClick={() => { setAdvanced(value => !value); references?.changeMode(); modeButton.current?.focus({ preventScroll: true }) }}>{advanced ? '返回预设' : '高级设置'}</Button></ConfigProvider>
@@ -85,7 +91,7 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
         <Button variant="quiet" size="small" aria-label={`对比 ${preset.name}`} aria-pressed={compare?.id === preset.id} onClick={() => { if (!preview) setSelected(preset); else if (preview.id !== preset.id) setCompare(previous => previous?.id === preset.id ? undefined : preset) }}>{compare?.id === preset.id ? '取消对比' : '加入对比'}</Button>
       </article>)}</div></ConfigProvider></section>
       <aside className="design-preset-detail"><h3>{preview ? '方案预览' : '当前设计'}</h3>{preview ? <>
-        <div className="design-preset-preview" data-comparing={!!compare}>{[preview, compare].filter((preset): preset is VisualPreset => !!preset).map(preset => <figure key={preset.id}>{preset.video ? <video src={preset.video} controls muted playsInline loop aria-label={`${preset.name}运镜示意`} /> : <PresetIllustration preset={preset} />}<figcaption><strong>{preset.name}</strong><p>{preset.explanation}</p></figcaption></figure>)}</div>
+        <div className="design-preset-preview" data-comparing={!!compare}>{[preview, availableCompare].filter((preset): preset is VisualPreset => !!preset).map(preset => <figure key={preset.id}>{preset.video ? <video src={preset.video} controls muted playsInline loop aria-label={`${preset.name}运镜示意`} /> : <PresetIllustration preset={preset} />}<figcaption><strong>{preset.name}</strong><p>{preset.explanation}</p></figcaption></figure>)}</div>
         <small className="design-preset-disclaimer">用途示意，不代表实际生成效果</small>
         <details className="design-preset-changes" aria-label="预设变更清单"><summary>{changes.length ? `将填写 ${changes.length - overwritten} 项 · 覆盖 ${overwritten} 项` : '与当前参数一致，无需重复应用'}</summary>{changes.map(change => <details key={change.key}><summary>{change.populated ? '将覆盖' : '将填写'} · {labels[change.key]}</summary><p>原值：{describe(change.before)}</p><p>新值：{describe(change.after)}</p></details>)}</details>
       </> : <div className="design-preset-empty"><CanvasTextPreview text={current || '选择一个预设查看效果与详情，或进入高级设置填写参数。'} label="当前设计" lines={4} /></div>}</aside>
