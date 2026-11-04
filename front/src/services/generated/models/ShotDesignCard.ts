@@ -23,4 +23,3 @@ export type ShotDesignCard = {
     visible_result?: ReferenceDesignField;
     estimated_duration?: ReferenceDesignField;
 };
-

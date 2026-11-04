@@ -21,4 +21,3 @@ export type NarrativeEventCard = {
     event_id?: (string | null);
     action_change?: ReferenceDesignField;
 };
-

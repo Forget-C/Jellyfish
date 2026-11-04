@@ -11,4 +11,3 @@ export type ShotDesignFields = {
     visible_result: ReferenceDesignField;
     estimated_duration: ReferenceDesignField;
 };
-

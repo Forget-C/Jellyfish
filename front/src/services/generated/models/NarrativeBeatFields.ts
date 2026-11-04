@@ -12,4 +12,3 @@ export type NarrativeBeatFields = {
     expected_change: ReferenceDesignField;
     audience_must_see: ReferenceDesignField;
 };
-

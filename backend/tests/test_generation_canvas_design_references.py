@@ -2,7 +2,7 @@
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
-PERFORMANCE_CASES = [('narrative', 'viewpoint', 'open_questions'), ('beat', 'objective', 'obstacle'), ('event', 'action_change', 'action_change'), ('shot', 'visible_result', 'estimated_duration'), ('situation', 'situation', 'relationship'), ('performance', 'physical_action', 'gaze'), ('performance_rule', 'applicability', 'applicability'), ('anchor', 'position', 'orientation'), ('blocking', 'position', 'path'), ('activity', 'task', 'exit_state'), ('environment', 'activity', 'empty_space')]
+FLAT_CASES = [('narrative', 'viewpoint', 'open_questions'), ('beat', 'objective', 'obstacle'), ('event', 'action_change', 'action_change'), ('shot', 'visible_result', 'estimated_duration'), ('situation', 'situation', 'relationship'), ('performance', 'physical_action', 'gaze'), ('performance_rule', 'applicability', 'applicability'), ('anchor', 'position', 'orientation'), ('blocking', 'position', 'path'), ('activity', 'task', 'exit_state'), ('environment', 'activity', 'empty_space')]
 
 CASES = [('style', 'direction', 'notes'), ('camera', 'viewpoint', 'support'), ('lighting', 'light_sources', 'color_relationship'), ('focus', 'depth_focus', 'prohibitions'), ('composition', 'composition', 'negative_space'), ('movement', 'movement_path', 'end_frame')]
 
@@ -39,7 +39,7 @@ async def test_field_documents_expand_once_and_keep_retained_references(canvas_c
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('kind,key,other', [('style', 'direction', 'notes'), *PERFORMANCE_CASES])
+@pytest.mark.parametrize('kind,key,other', [('style', 'direction', 'notes'), *FLAT_CASES])
 async def test_only_active_media_is_declared_and_image_consumption_uses_it(canvas_client, kind, key, other):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('reference.png', b'image', 'image/png')})).json()['data']['id']
@@ -146,8 +146,8 @@ async def test_authored_unconfirmed_token_is_diagnosed_and_escaped_token_is_lite
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('kind,key,other', PERFORMANCE_CASES)
-async def test_performance_fields_publish_structured_text_references(canvas_client, kind, key, other):
+@pytest.mark.parametrize('kind,key,other', FLAT_CASES)
+async def test_flat_design_fields_publish_structured_text_references(canvas_client, kind, key, other):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '表演引用'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -194,7 +194,7 @@ async def test_anchor_reference_expands_only_self_contained_location(canvas_clie
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('kind,key,other', PERFORMANCE_CASES)
+@pytest.mark.parametrize('kind,key,other', FLAT_CASES)
 async def test_regular_media_candidate_can_be_local_example_without_carry(canvas_client, kind, key, other):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('example.png', b'image', 'image/png')})).json()['data']['id']

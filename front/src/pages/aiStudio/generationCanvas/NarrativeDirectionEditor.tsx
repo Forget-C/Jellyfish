@@ -70,8 +70,3 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
     <details><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整叙事设计" />)}</details>
   </DesignPresetEditor>
 }
-
-export function narrativeSummary(card: NarrativeCard) {
-  const value = card.type === 'direction.narrative' ? (card as NarrativeOverviewCard).information_change : card.type === 'direction.beat' ? (card as NarrativeBeatCard).expected_change : card.type === 'direction.event' ? (card as NarrativeEventCard).action_change : (card as ShotDesignCard).visible_result
-  return `${card.name || '未命名设计'} · ${designSummary([value], Object.values(card)) || '内容待定 · 未填写'}`
-}

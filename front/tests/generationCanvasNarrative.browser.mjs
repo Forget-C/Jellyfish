@@ -30,7 +30,8 @@ try {
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4293, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+  page = await context.newPage()
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
@@ -54,7 +55,7 @@ try {
       { id: 'received', source_card: 'event', source_port: 'event', target_card: 'performance', target_port: 'received_event' },
       { id: 'photo', source_card: 'shot', source_port: 'shot', target_card: 'photo', target_port: 'shot' },
       { id: 'design', source_card: 'shot', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
-    input_order: { photo: { shot: ['photo'] }, shot: { related_event: ['event'], covered_beat: ['beat', 'beat2'] }, performance: { received_event: ['received'] }, consumer: { text: ['design'] } } }
+    input_order: { overview: { text: ['brief-overview'] }, beat: { text: ['brief-beat'] }, event: { text: ['brief-event'] }, photo: { shot: ['photo'] }, shot: { text: ['brief-shot'], related_event: ['event'], covered_beat: ['beat', 'beat2'] }, performance: { received_event: ['received'] }, consumer: { text: ['design'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4293/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -126,5 +127,22 @@ try {
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)
   await page.screenshot({ path: join(output, 'narrative-mobile.png'), fullPage: true })
+  await card.getByRole('button', { name: '关闭详情', exact: true }).click()
+  const observer = await page.context().newPage()
+  await observer.setViewportSize({ width: 1440, height: 960 })
+  await observer.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await observer.goto(page.url())
+  await observer.getByText('此画布当前只读', { exact: true }).waitFor()
+  const revision = (await read()).revision
+  for (const [id, label] of [['overview', '观察视点'], ['beat', '行动目标'], ['event', '动作或变化说明'], ['shot', '可见结果']]) {
+    await observer.locator(`[data-card-id="${id}"]`).press('Enter')
+    const readonly = observer.locator('.wb-details:not([hidden])')
+    await readonly.getByRole('button', { name: '高级设置', exact: true }).click()
+    assert.equal(await readonly.getByRole('textbox', { name: label + '内容', exact: true }).isDisabled(), true)
+    assert.equal(await readonly.getByRole('textbox', { name: '叙事名称', exact: true }).isDisabled(), true)
+    await readonly.getByRole('button', { name: '关闭详情', exact: true }).click()
+  }
+  assert.equal((await read()).revision, revision)
+  await observer.close()
   console.log('Narrative browser passed; evidence:', output)
 } finally { await cleanup() }

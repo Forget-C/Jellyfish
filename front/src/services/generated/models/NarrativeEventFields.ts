@@ -9,4 +9,3 @@ import type { ReferenceDesignField } from './ReferenceDesignField';
 export type NarrativeEventFields = {
     action_change: ReferenceDesignField;
 };
-

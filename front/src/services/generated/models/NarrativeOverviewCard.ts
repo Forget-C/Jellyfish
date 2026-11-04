@@ -24,4 +24,3 @@ export type NarrativeOverviewCard = {
     turning_point?: ReferenceDesignField;
     open_questions?: ReferenceDesignField;
 };
-

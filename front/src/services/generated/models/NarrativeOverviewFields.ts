@@ -13,4 +13,3 @@ export type NarrativeOverviewFields = {
     turning_point: ReferenceDesignField;
     open_questions: ReferenceDesignField;
 };
-
