@@ -20,7 +20,7 @@ async def test_independent_design_saves_reopens_and_requires_whole_adoption(canv
     output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
     assert output['payload']['design_type'] == f'direction.{kind}'
     assert output['payload']['adoption'] == 'whole_card'
-    assert not (await client.get(url + '/cards/model/compile')).json()['data']['used']
+    assert len((await client.get(url + '/cards/model/compile')).json()['data']['used']) == 1
     document['cards'][1]['input_bindings'] = [{'id': 'adopt', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']

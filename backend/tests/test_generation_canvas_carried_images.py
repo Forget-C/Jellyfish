@@ -256,7 +256,7 @@ async def test_model_image_result_is_frozen_and_staleness_ignores_unused_candida
 
 
 @pytest.mark.asyncio
-async def test_composition_target_does_not_inherit_unadopted_movement_images(canvas_client):
+async def test_composition_target_carries_whole_movement_and_its_selected_images(canvas_client):
     client = canvas_client
     url, doc, _ = await carried_document(client)
     original = doc['cards'][1]['fields']['direction']
@@ -271,5 +271,5 @@ async def test_composition_target_does_not_inherit_unadopted_movement_images(can
     response = await client.put(url, json={'request_id': 'target-only', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert compiled['media'] == []
-    assert len(compiled['used']) == 1 and compiled['used'][0]['source']['card_id'] == 'composition'
+    assert len(compiled['media']) == 1
+    assert {'composition', 'movement'} <= {item['source']['card_id'] for item in compiled['used']}

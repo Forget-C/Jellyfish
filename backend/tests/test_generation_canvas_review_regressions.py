@@ -66,7 +66,7 @@ async def test_target_document_change_invalidates_actual_basis(runtime, image_st
     saved = await runtime.client.put(runtime.url, json={'request_id': 'semantic-restore', 'expected_revision': 4, 'document': doc})
     assert saved.status_code == 200, saved.text
     restored = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['current_outputs']['image'][0]
-    assert restored['basis_current'], '阶段显示名和片段身份不改变实际定位依据'
+    assert not restored['basis_current'], '完整运镜正文的阶段名称已变化'
 from tests.test_generation_canvas_runs import runtime
 from tests.test_generation_canvas_images import image_storage
 
@@ -108,7 +108,7 @@ async def test_target_only_model_reference_freezes_without_adopting_movement(run
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'image'})).json()['data']
     assert preview['can_run'], preview
     assert preview['input']['media'] == []
-    assert '目标画面人物站窗边' not in preview['input']['text'] and '不能自动采用' not in preview['input']['text']
+    assert '目标画面人物站窗边' in preview['input']['text'] and '不能自动采用' in preview['input']['text']
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'image', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200, accepted.text
     doc['cards'][0]['prompt']['segments'][0]['text'] = '运行后的新文本'

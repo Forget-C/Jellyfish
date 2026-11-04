@@ -20,14 +20,14 @@ async def setup_target(client):
 
 
 @pytest.mark.asyncio
-async def test_composition_target_keeps_stable_identity_without_adopting_movement(canvas_client):
+async def test_composition_target_keeps_stable_identity_with_whole_movement(canvas_client):
     client = canvas_client
     url, doc = await setup_target(client)
     response = await client.put(url, json={'request_id': 'first', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     first = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert '不应隐式采用的运动路径' not in first['text'] and '站在窗边' not in first['text']
-    assert len(first['used']) == 1 and first['used'][0]['source']['card_id'] == 'composition'
+    assert '不应隐式采用的运动路径' in first['text'] and '站在窗边' in first['text']
+    assert {item['source']['card_id'] for item in first['used']} == {'composition', 'movement'}
     assert first['used'][0]['payload']['frame_target_state']['label'] == '落幅'
     doc['cards'][0]['phases'][0]['name'] = '结束近景'
     response = await client.put(url, json={'request_id': 'rename', 'expected_revision': 1, 'document': doc})
@@ -146,7 +146,7 @@ async def test_target_basis_ignores_unrelated_movement_but_freezes_selected_stat
         worker.text_pool.shutdown(wait=False)
     assert len(calls) == 1
     assert calls[0]['prompt'] == current['input']['text']
-    assert '运行后新构图' not in calls[0]['prompt'] and '无关路径修改' not in calls[0]['prompt']
+    assert '运行后新构图' not in calls[0]['prompt'] and '无关路径修改' in calls[0]['prompt']
     run = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['runs'][0]
     target = run['nodes'][0]['basis']['input']['used'][0]['payload']['frame_target_state']
     assert target['frame']['text'] == '新的相关画面' and target['label'] == '落幅'
@@ -162,7 +162,7 @@ async def test_target_basis_ignores_unrelated_movement_but_freezes_selected_stat
     doc['cards'][0]['phases'][0]['name'] = '仅重命名保持定位'
     await save(6)
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-    assert state['current_outputs']['image'][0]['basis_current']
+    assert not state['current_outputs']['image'][0]['basis_current']
     doc['cards'][0]['phases'][0]['frame']['text'] = '相关画面再次变化'
     await save(7)
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
@@ -172,3 +172,12 @@ async def test_target_basis_ignores_unrelated_movement_but_freezes_selected_stat
 
 from tests.test_generation_canvas_runs import runtime  # noqa: F401,E402
 from tests.test_generation_canvas_images import image_storage  # noqa: F401,E402
+
+@pytest.mark.asyncio
+async def test_whole_movement_reference_protects_source_deletion(canvas_client):
+    url, doc = await setup_target(canvas_client)
+    saved = await canvas_client.put(url, json={'request_id': 'create', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    doc['cards'] = doc['cards'][1:]
+    removed = await canvas_client.put(url, json={'request_id': 'delete', 'expected_revision': 1, 'document': doc})
+    assert removed.status_code == 422 and removed.json()['detail']['code'] == 'REFERENCE_IN_USE', removed.text

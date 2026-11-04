@@ -41,6 +41,8 @@ def design_inputs(context, card, candidates, model_outputs):
             ('@' + binding.subject_name.strip() if binding.input_port.startswith('subject_') and (binding.subject_name or '').strip()
              else {'first_frame': '首帧', 'last_frame': '尾帧', 'key_frame': f'关键帧 {keyframes.index(key) + 1}' if key in keyframes else '关键帧'}.get(binding.input_port, '主体分组待配置'))
             for binding in bindings if identity_key(binding.source) == key)) or '素材用途待配置' for key in media}
+    if context.whole_designs:
+        tokens.update({identity_key(item.source): '[来源引用：' + item.source.card_id + ']' for item in selected if item.modality == 'text' and not isinstance(item.payload, DesignTextPayload)})
     rendered = []
     for candidate in candidates:
         key = identity_key(candidate.source)

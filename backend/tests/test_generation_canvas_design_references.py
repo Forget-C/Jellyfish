@@ -29,7 +29,8 @@ async def test_field_documents_expand_once_and_keep_retained_references(canvas_c
     document['cards'][2]['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert '站在 张三 @图片99 /首帧参考 身后' in compiled['text']
+    assert '站在 [来源引用：brief] 身后' in compiled['text']
+    assert compiled['text'].count('张三 @图片99 /首帧参考') == 1
     assert not [issue for issue in compiled['diagnostics'] if issue['code'] != 'MODEL_REQUIRED'], compiled
     document['cards'][1]['fields'][key] = {'state': 'empty', 'text': ''}
     document['edges'] = [edge for edge in document['edges'] if edge['id'] != 'candidate']
@@ -86,14 +87,14 @@ async def test_only_active_media_is_declared_and_image_consumption_uses_it(canva
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('problem', ['foreign', 'missing', 'design_body'])
+@pytest.mark.parametrize('problem', ['foreign', 'missing'])
 async def test_active_bad_field_reference_is_located_but_inactive_draft_does_not_block(canvas_client, problem):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '引用诊断'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     source = {'canvas_id': 'other' if problem == 'foreign' else canvas['id'], 'card_id': 'upstream', 'port_id': 'text', 'position': 0}
     document = canvas['document']
-    upstream = {'id': 'upstream', 'type': 'direction.style', 'fields': {'direction': {'text': '不允许嵌套正文', 'state': 'proposal'}}} if problem == 'design_body' else {'id': 'upstream', 'type': 'content.text', 'text': '普通来源'}
+    upstream = {'id': 'upstream', 'type': 'content.text', 'text': '普通来源'}
     document.update(cards=[upstream, {'id': 'design', 'type': 'direction.camera', 'fields': {'viewpoint': {'state': 'proposal', 'document': {'segments': [{'id': 'bad', 'kind': 'reference', 'source': source}]}}, 'support': {'text': '有效支撑方式', 'state': 'proposal'}}}, {'id': 'model', 'type': 'model.text', 'model_id': 'canvas-text'}], edges=[{'id': 'use', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'model': {'text': ['use']}})
     if problem != 'missing':
         document['edges'].append({'id': 'candidate', 'source_card': 'upstream', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'})
@@ -168,7 +169,7 @@ async def test_flat_design_fields_publish_structured_text_references(canvas_clie
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('nested,state,text,expected', [(False, 'proposal', '东墙前两步', '设计 / 位置 [提议]：东墙前两步'), (True, 'proposal', '', ''), (False, 'undecided', '东墙前两步', '设计 / 位置 [待确定]：东墙前两步'), (False, 'absent', '', '设计 / 位置 [明确没有]：')])
-async def test_anchor_reference_expands_only_self_contained_location(canvas_client, nested, state, text, expected):
+async def test_anchor_reference_carries_whole_card_and_nested_dependencies(canvas_client, nested, state, text, expected):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '锚点展开'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -180,17 +181,17 @@ async def test_anchor_reference_expands_only_self_contained_location(canvas_clie
     output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
     assert not output['payload'].get('material_references')
     assert '不应递归展开' not in output['text']
-    if nested:
-        assert output['payload']['reference_issues'][0]['code'] == 'ANCHOR_NESTED_REFERENCE'
-    else:
-        assert expected in output['text']
+    assert '[设计引用：anchor]' in output['text']
+    assert not output['payload'].get('reference_issues')
     document['cards'][3]['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
     issues = [issue for issue in compiled['diagnostics'] if issue['code'] == 'ANCHOR_NESTED_REFERENCE']
-    assert bool(issues) == nested
-    if nested:
-        assert issues[0]['target']['path'] == ['path', 'document']
+    assert not issues
+    assert 'anchor' in {item['source']['card_id'] for item in compiled['used']}
+    assert ('不应递归展开的场所正文' in compiled['text']) == nested
+    if not nested:
+        assert expected in compiled['text']
 
 
 @pytest.mark.asyncio

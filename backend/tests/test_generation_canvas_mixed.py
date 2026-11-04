@@ -64,17 +64,24 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
         accepted, preview = await run(runtime, 'video')
         assert preview['execution_nodes'] == ['video']
         assert len(accepted['task_ids']) == 1
-        doc['cards'][1]['text'] = '年龄八十岁'
+        doc['cards'][5]['prompt'] = {'segments': [{'id': 'unused', 'kind': 'text', 'text': '未采用候选变化'}]}
         await save(runtime, doc)
         await drain(worker)
         state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+        assert 'video' in state['current_outputs'], state
         assert state['current_outputs']['video'][0]['basis_current']
         posts = [body for method, _, body in calls if method == 'POST']
         assert len(posts) == 1
         text = posts[0]['content'][0]['text']
         assert '伸手拿钥匙' in text and '小雪' in text
-        assert '年龄' not in text and 'portrait' not in text
+        assert '年龄' in text and 'portrait' not in text
         assert (await runtime.client.get(runtime.url + '/cards/ref/outputs')).json()['data']['outputs'][0]['file_id'] == output['file_id']
+        doc['cards'][1]['text'] = '年龄八十岁'
+        await save(runtime, doc)
+        changed = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+        assert not changed['current_outputs']['video'][0]['basis_current']
+        doc['cards'][1]['text'] = '年龄二十岁'
+        await save(runtime, doc)
         # Re-running the fixed source publishes another file without changing the
         # adopted reference or its consumer's basis.
         await run(runtime, 'image')

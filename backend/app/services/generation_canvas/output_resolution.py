@@ -33,8 +33,9 @@ def prompt_references(card: ModelCard):
 class CanvasOutputContext:
     """绑定一份已验证且使用期间不再修改的文档；每个输出视图和草稿模式显式传入。"""
 
-    def __init__(self, document: CanvasDocument):
+    def __init__(self, document: CanvasDocument, *, whole_designs=True):
         """只建立结构索引，入边沿用文档顺序；不读取数据库或产生出口。"""
+        self.whole_designs = whole_designs
         self.document = document
         self.cards = {card.id: card for card in document.cards}
         self.edges = {edge.id: edge for edge in document.edges}

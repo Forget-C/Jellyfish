@@ -31,7 +31,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                  model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None,
                  capability: CanvasModelCapability | None = None,
                  context: CanvasOutputContext | None = None,
-                 include_acceptance: bool = True) -> CanvasCompiledInput:
+                 include_acceptance: bool = True, include_dependencies: bool = True) -> CanvasCompiledInput:
     """只遍历本地结构化片段一次，展开内容永不重新解释；保存不要求编译通过。
 
     显式 context 须绑定传入的同一份 document，且操作期间文档不再修改。"""
@@ -41,11 +41,14 @@ def compile_card(document: CanvasDocument, card_id: str, *,
         return CanvasCompiledInput(card_id=card_id)
     from app.services.generation_canvas.design_media import design_inputs
     candidates = context.resolve_outputs(card_id, model_outputs=model_outputs)
-    if include_acceptance:
+    if include_dependencies:
+        from app.services.generation_canvas.design_dependencies import design_dependency_inputs
+        card, candidates = design_dependency_inputs(context, card, candidates, model_outputs)
+    elif include_acceptance:
         from app.services.generation_canvas.acceptance import acceptance_inputs
         card, candidates = acceptance_inputs(context, card, candidates, model_outputs)
     candidates, carried = design_inputs(context, card, candidates, model_outputs)
-    result = compile_inputs(document.id, card, candidates, capability, carried=carried)
+    result = compile_inputs(document.id, card, candidates, capability, carried=carried, label_sources=include_dependencies)
     for binding in card.input_bindings:
         source = context.cards.get(binding.source.card_id)
         if isinstance(source, NamedImageReferenceCard) and (problem := reference_name_issue(document, source)):
@@ -63,7 +66,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
 
 
 def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResolvedOutput],
-                   capability: CanvasModelCapability | None = None, *, carried=()) -> CanvasCompiledInput:
+                   capability: CanvasModelCapability | None = None, *, carried=(), label_sources=False) -> CanvasCompiledInput:
     """模型编译只接收本卡配置、直接输出与能力，不获得整张画布。"""
     card_id = card.id
     result = CanvasCompiledInput(card_id=card_id)
@@ -113,7 +116,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in ('direction.dialogue', 'direction.sound'):
             note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
             return item.text + ('\n' + note if note else '')
-        return item.text
+        return ('来源卡：' + item.source.card_id + '\n' if label_sources and primary_designs else '') + (item.text or '') if item.text else ''
     for item in result.used:
         if isinstance(item.payload, DesignTextPayload):
             for problem in item.payload.reference_issues:
@@ -217,7 +220,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     if primary_designs:
         supplementary = result.text.strip()
         sound_note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
-        result.text = '导演设计 · 主要依据\n' + '\n'.join(item.text + ('\n' + sound_note if sound_note and item.payload.design_type in ('direction.dialogue', 'direction.sound') else '') for item in primary_designs)
+        result.text = '导演设计 · 主要依据\n' + '\n'.join(('设计卡：' + item.source.card_id + '\n' if label_sources else '') + item.text + ('\n' + sound_note if sound_note and item.payload.design_type in ('direction.dialogue', 'direction.sound') else '') for item in primary_designs)
         if supplementary:
             result.text += '\n\n模型正文 · 补充说明\n' + supplementary
 
@@ -384,5 +387,5 @@ def validate_frame_targets(card, result, issue):
             result.text += ('\n' if result.text else '') + '画面目标：' + state.label + '（' + state.id + '）'
     for binding in card.input_bindings:
         item = used.get(identity_key(binding.source))
-        if item and getattr(item.payload, 'requires_frame_target', False) and binding.id not in targets:
+        if item and getattr(item.payload, 'requires_frame_target', False) and binding.id not in targets and not binding.id.startswith('dependency:'):
             issue('FRAME_TARGET_REQUIRED', '多状态设计用于单张静帧时请选择画面目标', binding.id, ['frame_targets', binding.id])

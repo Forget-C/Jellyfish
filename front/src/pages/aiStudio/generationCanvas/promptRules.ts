@@ -14,6 +14,7 @@ export function referenceIssue(document: CanvasDocument, _receiver: GenerationCa
 /** 清理引用与删边/来源可以在同一份最终编辑文档里完成。 */
 export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string, targetPort?: string) {
   for (const card of document.cards || []) if (('input_bindings' in card || 'image_binding' in card || 'name_binding' in card) && (!receiverId || card.id === receiverId)) {
+    if (!sourcePort && 'frame_target' in card && card.frame_target?.card_id === sourceCard) return { message: '请先解除构图的运镜关联', cardId: card.id, segmentId: 'frame_target', referenceId: 'frame_target' }
     for (const { reference, field } of designReferences(card)) if (reference.source.canvas_id === document.id && reference.source.card_id === sourceCard && (!sourcePort || reference.source.port_id === sourcePort) && (!targetPort || document.edges?.some(edge => edge.target_card === card.id && edge.target_port === targetPort && edge.source_card === sourceCard && edge.source_port === reference.source.port_id))) return { message: `请先清理 ${card.id} 的参数引用 ${field}`, cardId: card.id, segmentId: reference.id, referenceId: reference.id }
     if ((!targetPort || targetPort === 'name') && 'name_binding' in card && card.name_binding?.card_id === sourceCard && (!sourcePort || card.name_binding.port_id === sourcePort))
       return { message: '请先取消已采用的名称关联', cardId: card.id, segmentId: 'name', referenceId: 'name' }
@@ -26,6 +27,8 @@ export function referenceProtection(document: CanvasDocument, sourceCard: string
       if (binding.input_port === 'acceptance_basis' && binding.source.port_id === 'criterion') continue
       if (targetPort && binding.input_port !== targetPort || binding.source.canvas_id !== document.id || binding.source.card_id !== sourceCard || sourcePort && binding.source.port_id !== sourcePort) continue
       const ref = referencesIn(editorPrompt(card)).find(reference => reference.binding_id === binding.id)
+      const source = document.cards?.find(item => item.id === sourceCard)
+      if (!ref && card.type?.startsWith('model.') && binding.input_port === 'text' && binding.source.port_id === 'text' && source?.type?.startsWith('direction.')) continue
       return { message: '请先清理 ' + card.id + ' 的实际输入绑定 ' + binding.id, cardId: card.id, segmentId: ref?.id || binding.id, referenceId: ref?.id || binding.id }
     }
     // 精确断边由实际输入用途判断；旧正文引用回退仅保护整张来源删除。

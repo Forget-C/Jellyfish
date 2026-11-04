@@ -22,7 +22,7 @@ async def test_style_is_whole_design_and_connection_alone_does_not_adopt(canvas_
     output = (await client.get(url + '/cards/style/outputs')).json()['data']['outputs'][0]
     assert output['payload']['adoption'] == 'whole_card'
     assert output['payload']['fields']['materials']['text'] == '纸张颗粒'
-    assert not (await client.get(url + '/cards/model/compile')).json()['data']['used']
+    assert len((await client.get(url + '/cards/model/compile')).json()['data']['used']) == 1
     document['cards'][1]['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']

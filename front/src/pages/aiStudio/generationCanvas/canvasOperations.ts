@@ -1,5 +1,5 @@
 import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } from '../../../services/generated'
-import { connect, disconnect, findConnection, cleanAcceptanceCandidates } from './graphRules'
+import { connect, disconnect, findConnection, cleanDirectDesignCandidates, isIndependentDesignEdge } from './graphRules'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { referenceProtection } from './promptRules'
 import { cleanReferenceImageSources } from './referenceCardRules'
@@ -18,7 +18,7 @@ export function createCanvasOperations({ connectionReason }: { connectionReason:
     return reason ? { reason } : { document: connect(document, edge) }
   }
   return {
-    clean: (document: CanvasDocument) => cleanAcceptanceCandidates(cleanReferenceImageSources(document)),
+    clean: (document: CanvasDocument) => cleanDirectDesignCandidates(cleanReferenceImageSources(document)),
     connect: addConnection,
     check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability) {
       if (findConnection(document, edge)) return undefined
@@ -29,6 +29,9 @@ export function createCanvasOperations({ connectionReason }: { connectionReason:
     update(document: CanvasDocument, next: GenerationCard): CanvasOperationResult {
       if (stackFor(document, next.id)) return { reason: '请先解除堆叠后编辑' }
       let changed: CanvasDocument = { ...document, cards: document.cards?.map(card => card.id === next.id ? next : card) }
+      if (next.type?.startsWith('model.') && 'input_bindings' in next) {
+        for (const edge of document.edges || []) if (edge.target_card === next.id && isIndependentDesignEdge(document, edge) && !next.input_bindings?.some(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port)) changed = disconnect(changed, edge.id)
+      }
       if ('name' in next) changed.cards = changed.cards?.map(card => card.type?.startsWith('reference.') && 'name_binding' in card && card.name_binding?.card_id === next.id ? { ...card, name: next.name } : card)
       // 名称选择或画布选图同次保存直接来源边；既有候选、几何与采用身份不改写。
       if (next.type?.startsWith('reference.')) {

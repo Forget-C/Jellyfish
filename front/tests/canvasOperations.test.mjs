@@ -137,7 +137,7 @@ test('copying incoming connections preserves explicit input order rather than ed
 })
 
 
-test('acceptance connections immediately associate, disconnect atomically and preserve direct model deletion protection', () => {
+test('acceptance connections immediately associate, disconnect atomically and allow independent model design removal', () => {
   const criterion = { id: 'criterion', type: 'direction.criterion', criterion_id: 'hand', name: '手部可见' }
   const shot = { id: 'shot', type: 'direction.shot', input_bindings: [] }
   const relation = { id: 'acceptance', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
@@ -151,8 +151,54 @@ test('acceptance connections immediately associate, disconnect atomically and pr
   const removed = operations.remove(connected, ['criterion'], new Set(), id => id).document
   assert.deepEqual(removed.cards[0].input_bindings, [])
   const direct = { ...model, input_bindings: [{ id: 'direct', input_port: 'text', source: { ...source, card_id: 'criterion', port_id: 'text' } }] }
-  assert.equal(operations.remove({ ...connected, cards: [...connected.cards, direct] }, ['criterion'], new Set(), id => id).protection.cardId, 'model')
+  assert.ok(operations.remove({ ...connected, cards: [...connected.cards, direct] }, ['criterion'], new Set(), id => id).document)
   const legacy = { ...original, edges: [relation], input_order: { shot: { acceptance_basis: ['acceptance'] } } }
   assert.deepEqual(operations.clean(legacy).edges, [])
   assert.deepEqual(original.cards[1].input_bindings, [])
+})
+
+test('independent design connections adopt immediately and protect explicit whole-card references', async () => {
+  const { connect } = await import(await moduleUrl('graphRules'))
+  const design = { id: 'design', type: 'direction.guidance' }
+  const receiver = { ...model, input_bindings: [] }
+  const link = { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' }
+  const original = document({ cards: [design, receiver], edges: [], input_order: {} })
+  const connected = connect(original, link)
+  assert.equal(connected.cards[1].input_bindings.length, 1)
+  assert.equal(operations.disconnect(connected, link).document.cards[1].input_bindings.length, 0)
+  const binding = connected.cards[1].input_bindings[0]
+  connected.cards[1].prompt.segments = [{ id: 'reference', kind: 'reference', binding_id: binding.id, source: binding.source }]
+  assert.match(operations.disconnect(connected, link).reason, /仍有输入被引用/)
+  const restored = connect({ ...connected, edges: [], input_order: {} }, { ...link, id: 'copied-edge' })
+  assert.equal(restored.cards[1].input_bindings[0].id, binding.id, 'recreating an incoming edge preserves copied prompt references')
+})
+
+test('whole movement target protects deletion until composition releases its reference', () => {
+  const movement = { id: 'movement', type: 'direction.movement' }
+  const composition = { id: 'composition', type: 'direction.composition', frame_target: { card_id: 'movement', state_id: 'phase:end' }, input_bindings: [] }
+  const original = document({ cards: [movement, composition], edges: [], input_order: {} })
+  assert.equal(operations.remove(original, ['movement'], new Set(), id => id).protection.referenceId, 'frame_target')
+  assert.ok(operations.remove({ ...original, cards: [movement, { ...composition, frame_target: null }] }, ['movement'], new Set(), id => id).document)
+})
+
+test('a newly created model draft adopts independent design before its first save', async () => {
+  const { connect } = await import(await moduleUrl('graphRules'))
+  const draft = { id: 'model', type: 'model.text', prompt: { segments: [] }, config: {} }
+  const original = document({ cards: [{ id: 'design', type: 'direction.guidance' }, draft], edges: [], input_order: {} })
+  const connected = connect(original, { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' })
+  assert.equal(connected.cards[1].input_bindings.length, 1)
+  assert.equal(operations.clean(connected).edges.length, 1)
+})
+
+test('clearing a prompt reference keeps the independent design association until explicitly disconnected', async () => {
+  const { connect } = await import(await moduleUrl('graphRules'))
+  const { withEditorPrompt } = await import(await moduleUrl('inputBindings'))
+  const receiver = { id: 'model', type: 'model.video', prompt: { segments: [] }, input_bindings: [] }
+  const connected = connect(document({ cards: [{ id: 'design', type: 'direction.guidance' }, receiver], edges: [], input_order: {} }), { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' })
+  const source = connected.cards[1].input_bindings[0].source
+  const referenced = withEditorPrompt(connected.cards[1], { segments: [{ id: 'explicit', kind: 'reference', source }] })
+  const cleared = withEditorPrompt(referenced, { segments: [] })
+  const updated = operations.update({ ...connected, cards: [connected.cards[0], referenced] }, cleared).document
+  assert.equal(updated.edges.length, 1)
+  assert.equal(updated.cards[1].input_bindings.length, 1)
 })

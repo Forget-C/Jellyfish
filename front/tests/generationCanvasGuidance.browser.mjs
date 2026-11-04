@@ -94,7 +94,7 @@ try {
   await card.getByRole('textbox', { name: '禁止项内容', exact: true }).fill('不可出现字幕')
   await poll(state => state.document.cards.find(item => item.id === 'guidance').prohibitions?.text === '不可出现字幕')
   await open('consumer')
-  await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
+  await card.getByRole('button', { name: '解除关联 @文本1', exact: true }).waitFor()
   await poll(state => state.document.cards.find(item => item.id === 'consumer').input_bindings?.length === 1)
   const compiled = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
   assert.match(compiled.text, /五指和钥匙清晰可见/)

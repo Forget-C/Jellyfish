@@ -260,14 +260,15 @@ async def test_acceptance_is_deduplicated_across_designs_and_direct_adoption(can
         *[{'id': kind, 'type': 'direction.shot', 'name': kind} for kind in ['first', 'second', 'unselected']],
         {'id': 'model', 'type': 'model.text', 'input_bindings': [{'id': kind, 'source': source(kind, 'text'), 'input_port': 'text'} for kind in ['first', 'second']]}],
         edges=[{'id': kind, 'source_card': 'unused' if kind == 'unselected' else 'required', 'source_port': 'criterion', 'target_card': kind, 'target_port': 'acceptance_basis'} for kind in ['first', 'second', 'unselected']]
-        + [{'id': 'model-' + kind, 'source_card': kind, 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'} for kind in ['first', 'second', 'unselected']],
-        input_order={**{kind: {'acceptance_basis': [kind]} for kind in ['first', 'second', 'unselected']}, 'model': {'text': ['model-first', 'model-second', 'model-unselected']}})
+        + [{'id': 'model-' + kind, 'source_card': kind, 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'} for kind in ['first', 'second']],
+        input_order={**{kind: {'acceptance_basis': [kind]} for kind in ['first', 'second', 'unselected']}, 'model': {'text': ['model-first', 'model-second']}})
     saved = await client.put(url, json={'request_id': 'connect', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 200, saved.text
     initial = (await client.get(url + '/cards/model/compile')).json()['data']
     assert initial['text'].count('只出现一次的标准') == 1
     assert '不应进入模型' not in initial['text']
     assert {item['source']['card_id'] for item in initial['used']} == {'first', 'second', 'required'}
+    doc['cards'][-1]['prompt'] = {'segments': [{'id': 'explicit', 'kind': 'reference', 'binding_id': 'direct'}]}
     doc['cards'][-1]['input_bindings'].append({'id': 'direct', 'source': source('required', 'text'), 'input_port': 'text'})
     doc['edges'].append({'id': 'direct', 'source_card': 'required', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'})
     doc['input_order']['model']['text'].append('direct')
@@ -339,3 +340,69 @@ async def test_old_unadopted_acceptance_candidates_are_removed_without_adopting_
     assert saved.status_code == 200, saved.text
     reopened = (await client.get(url)).json()['data']['document']
     assert not reopened['edges'] and not reopened['cards'][1]['input_bindings']
+
+@pytest.mark.asyncio
+async def test_independent_design_connection_adopts_and_disconnects(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '独立设计'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'design', 'type': 'direction.guidance', 'priority': {'state': 'fact', 'text': '只出现一次的动作设计'}},
+                      {'id': 'model', 'type': 'model.text'}],
+               edges=[{'id': 'design-edge', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+               input_order={'model': {'text': ['design-edge']}})
+    saved = await canvas_client.put(url, json={'request_id': 'connect', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    current = (await canvas_client.get(url)).json()['data']['document']
+    assert len(current['cards'][1]['input_bindings']) == 1
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert compiled['text'].count('只出现一次的动作设计') == 1
+    current['edges'] = []
+    current['input_order'] = {}
+    saved = await canvas_client.put(url, json={'request_id': 'disconnect', 'expected_revision': 1, 'document': current})
+    assert saved.status_code == 200, saved.text
+    assert not (await canvas_client.get(url)).json()['data']['document']['cards'][1]['input_bindings']
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source_type', ['direction.guidance', 'content.text'])
+async def test_whole_design_dependencies_follow_diamond_and_render_common_ancestor_once(canvas_client, source_type):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '菱形依赖'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    identity = lambda name: {'canvas_id': canvas['id'], 'card_id': name, 'port_id': 'text', 'position': 0}
+    field = lambda name: {'state': 'fact', 'document': {'segments': [{'id': 'ref-' + name, 'kind': 'reference', 'source': identity(name)}]}}
+    doc.update(cards=[({'id': 'a', 'type': source_type, 'text': '祖先内容唯一标记'} if source_type == 'content.text' else {'id': 'a', 'type': source_type, 'priority': {'state': 'fact', 'text': '祖先内容唯一标记'}}),
+        {'id': 'b', 'type': 'direction.guidance', 'priority': field('a')},
+        {'id': 'd', 'type': 'direction.guidance', 'priority': field('a')},
+        {'id': 'model', 'type': 'model.text'}], edges=[
+        {'id': 'ab', 'source_card': 'a', 'source_port': 'text', 'target_card': 'b', 'target_port': 'text'},
+        {'id': 'ad', 'source_card': 'a', 'source_port': 'text', 'target_card': 'd', 'target_port': 'text'},
+        {'id': 'bm', 'source_card': 'b', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'},
+        {'id': 'dm', 'source_card': 'd', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+        input_order={'b': {'text': ['ab']}, 'd': {'text': ['ad']}, 'model': {'text': ['bm', 'dm']}})
+    saved = await canvas_client.put(url, json={'request_id': 'diamond', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert compiled['text'].count('祖先内容唯一标记') == 1, compiled
+    assert {item['source']['card_id'] for item in compiled['used']} == {'a', 'b', 'd'}
+    assert not [issue for issue in compiled['diagnostics'] if issue['code'] != 'MODEL_REQUIRED'], compiled
+
+@pytest.mark.asyncio
+async def test_unavailable_asset_identity_in_design_dependency_blocks_compile(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '资产依赖'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    source = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'position': 0, 'object_id': 'actor'}
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'actor', 'type': 'reference.character', 'name': '甲', 'object_id': 'actor'},
+        {'id': 'camera', 'type': 'direction.camera', 'fields': {'viewpoint': {'state': 'fact', 'text': '低角度'}},
+         'input_bindings': [{'id': 'actor-use', 'input_port': 'effect_object', 'source': source}]},
+        {'id': 'model', 'type': 'model.text'}],
+        edges=[{'id': 'actor-use', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'camera', 'target_port': 'effect_object'},
+            {'id': 'camera-use', 'source_card': 'camera', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+        input_order={'camera': {'effect_object': ['actor-use']}, 'model': {'text': ['camera-use']}})
+    assert (await canvas_client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
+    doc['cards'][0]['name'] = ''
+    saved = await canvas_client.put(url, json={'request_id': 'incomplete', 'expected_revision': 1, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert not compiled['can_run']
+    assert 'OUTPUT_MISSING' in {issue['code'] for issue in compiled['diagnostics']}

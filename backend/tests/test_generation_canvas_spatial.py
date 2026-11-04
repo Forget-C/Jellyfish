@@ -28,7 +28,7 @@ async def test_text_anchor_and_blocking_keep_identity_and_do_not_read_ancestors(
     assert outputs[1]['payload']['reference_id'] == 'door'
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
     assert '从门边走向窗前' in compiled['text'] and '门边' in compiled['text']
-    assert '不应穿透' not in compiled['text'] and '东墙' not in compiled['text']
+    assert '不应穿透' in compiled['text'] and '东墙' in compiled['text']
     assert not compiled['media']
     blocking_output = (await client.get(url + '/cards/blocking/outputs')).json()['data']['outputs'][0]
     assert blocking_output['payload']['spatial_relations']['position_anchor_ids'] == ['door']
@@ -120,7 +120,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'video'])
-async def test_actual_worker_receives_complete_spatial_design_without_ancestor(runtime, image_storage, monkeypatch, modality):
+async def test_actual_worker_receives_complete_spatial_design_with_explicit_ancestors(runtime, image_storage, monkeypatch, modality):
     import asyncio
     import json
     from types import SimpleNamespace
@@ -148,7 +148,7 @@ async def test_actual_worker_receives_complete_spatial_design_without_ancestor(r
     assert saved.status_code == 200, saved.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
     assert preview['can_run'], preview
-    assert not preview['input']['media'] and '秘密外貌描述' not in preview['input']['text']
+    assert not preview['input']['media'] and '秘密外貌描述' in preview['input']['text']
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'run', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200
     received = []

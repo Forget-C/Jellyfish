@@ -27,7 +27,7 @@ async def test_dialogue_version_speaker_and_complete_sound_design(canvas_client)
     assert payload['participant_id'] == 'alice' and payload['adoption'] == 'whole_card'
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
     assert '请等一等' in compiled['text'] and '小雪' in compiled['text'] and '待后期' in compiled['text']
-    assert '祖先秘密' not in compiled['text'] and not compiled['media']
+    assert '祖先秘密' in compiled['text'] and not compiled['media']
     assert (await client.get(url)).json()['data']['document']['cards'][1]['dialogue_id'] == 'line-1'
 
 
@@ -47,7 +47,7 @@ async def test_performance_explicitly_adopts_dialogue_identity_version_without_r
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert 'line-7' in compiled['text'] and '版本 3' in compiled['text'] and '等等' not in compiled['text']
+    assert 'line-7' in compiled['text'] and '版本 3' in compiled['text'] and '等等' in compiled['text']
     relation = (await client.get(url + '/cards/line/outputs')).json()['data']['outputs'][1]['payload']
     assert relation == {'kind': 'dialogue_reference', 'dialogue_id': 'line-7', 'version': 3, 'speaker': None}
     assert 'content' not in (await client.get(url + '/cards/act/outputs')).json()['data']['outputs'][0]['payload']['dialogue_basis'][0]
@@ -136,7 +136,7 @@ async def test_actual_worker_receives_whole_sound_design_without_audio_reference
     assert saved.status_code == 200, saved.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
     assert preview['can_run'], preview
-    assert not preview['input']['media'] and '秘密外貌描述' not in preview['input']['text']
+    assert not preview['input']['media'] and '秘密外貌描述' in preview['input']['text']
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'run', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200
     received = []

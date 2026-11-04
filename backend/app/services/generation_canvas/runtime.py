@@ -128,17 +128,19 @@ class CanvasRuntime:
             for edge in context.incoming.get(card_id, ()):
                 if edge.source_card in stored:
                     await resolve(edge.source_card)
-            from app.services.generation_canvas.design_references import effective_design_references
+            from app.services.generation_canvas.design_dependencies import dependency_sources
             from app.services.generation_canvas.output_resolution import prompt_references
-            for reference, _ in prompt_references(cards[card_id]):
-                design = cards.get(reference.source.card_id)
-                if design:
-                    designs = [design, *(cards[binding.source.card_id] for binding in getattr(design, 'input_bindings', [])
-                        if binding.input_port == 'acceptance_basis' and binding.source.card_id in cards)]
-                    for selected in designs:
-                        for field_ref, _, _ in effective_design_references(selected, cards):
-                            if field_ref.source.canvas_id == document.id and field_ref.source.card_id in stored:
-                                await resolve(field_ref.source.card_id)
+            pending = [reference.source.card_id for reference, _ in prompt_references(cards[card_id])]
+            seen = set()
+            while pending:
+                source_id = pending.pop()
+                if source_id in seen or source_id not in cards:
+                    continue
+                seen.add(source_id)
+                if source_id in stored:
+                    await resolve(source_id)
+                else:
+                    pending.extend(source.card_id for source in dependency_sources(cards[source_id], document.id))
             basis = await self._current_basis(canvas, card_id, result, context=context)
             result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
                 "basis_current": basis.compiled.can_run and basis.basis_hash == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]

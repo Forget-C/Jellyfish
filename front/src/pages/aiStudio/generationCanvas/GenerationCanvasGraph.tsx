@@ -42,7 +42,7 @@ import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
 import { generationCardSize } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
-import { findConnection } from './graphRules'
+import { findConnection, isIndependentDesignEdge } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
@@ -241,7 +241,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (readonly) return
     const cleaned = clean(document)
     if (cleaned !== document) {
-      if (document.edges?.some(edge => edge.target_port === 'acceptance_basis' && !cleaned.edges?.some(item => item.id === edge.id))) setReason('已清理旧的未采用验收候选线，已关联要求保留')
+      const removed = document.edges?.filter(edge => !cleaned.edges?.some(item => item.id === edge.id)) || []
+      if (removed.length) setReason(`已清理 ${removed.length} 条旧的未采用设计关联线，已采用关系保留`)
       onChange(cleaned)
     }
   }, [document, readonly, onChange, clean])
@@ -676,7 +677,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const edge = { ...option, id: crypto.randomUUID() }
     const sourceSide = drag?.side || accessibleConnection?.side
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    connectDocument(latest.current, edge); setReason('已连接候选输入；接收端明确选择后才实际使用')
+    connectDocument(latest.current, edge); setReason(option.target_port === 'acceptance_basis' || isIndependentDesignEdge(latest.current, option) ? '已连接并采用完整设计' : '已连接候选输入；接收端明确选择后才实际使用')
     cancelConnection()
   }
   const finishDrag = (event: PointerEvent) => {
@@ -967,7 +968,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     </div>}
     {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
       <strong>选择连接用途</strong>
-      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → {option.target_port === 'acceptance_basis' ? '关联验收要求' : <>作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</>}</Button>)}
+      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → {option.target_port === 'acceptance_basis' ? '关联验收要求' : isIndependentDesignEdge(document, option) ? '采用完整设计' : <>作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</>}</Button>)}
       <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
     </div>}
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />

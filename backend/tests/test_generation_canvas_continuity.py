@@ -80,7 +80,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'image', 'video'])
-async def test_actual_worker_receives_whole_continuity_without_evidence_or_ancestor(runtime, image_storage, monkeypatch, modality):
+async def test_actual_worker_receives_whole_continuity_with_explicit_ancestors_without_evidence(runtime, image_storage, monkeypatch, modality):
     import asyncio
     import json
     from types import SimpleNamespace
@@ -113,7 +113,7 @@ async def test_actual_worker_receives_whole_continuity_without_evidence_or_ances
     assert saved.status_code == 200, saved.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
     assert preview['can_run'], preview
-    assert not preview['input']['media'] and '秘密事件正文' not in preview['input']['text']
+    assert not preview['input']['media'] and '秘密事件正文' in preview['input']['text']
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'run', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200
     received = []

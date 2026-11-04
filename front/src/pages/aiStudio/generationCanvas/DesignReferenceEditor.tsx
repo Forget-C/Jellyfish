@@ -40,7 +40,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     const source = document.cards?.find(value => value.id === item.source.card_id)
     const connected = item.source.canvas_id === document.id && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
     const identityOnly = isFlatDesign(card) && !['text', 'image', 'video', 'audio', 'anchor'].includes(item.source.port_id)
-    const reason = card.type === 'direction.dialogue' && (item.modality !== 'text' || item.source.port_id !== 'text') ? '对白正文仅支持文本引用，媒体仅作本地参考' : identityOnly ? '请通过关系控件选择对象用途' : item.modality === 'audio' ? '本期不支持音频字段引用与携带' : source?.type?.startsWith('direction.') && item.source.port_id === 'text' || item.source.port_id === 'anchor' && !isFlatDesign(card) ? '设计正文不支持互相引用' : undefined
+    const reason = card.type === 'direction.dialogue' && (item.modality !== 'text' || item.source.port_id !== 'text') ? '对白正文仅支持文本引用，媒体仅作本地参考' : identityOnly ? '请通过关系控件选择对象用途' : item.modality === 'audio' ? '本期不支持音频字段引用与携带' : item.source.port_id === 'anchor' && !isFlatDesign(card) ? '设计正文不支持互相引用' : undefined
     const forbidden = !!reason
     return { source: item.source, token: item.token || '@缺失来源', displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? reason : !connected ? '来源未连接' : item.available === false ? '来源输出缺失' : undefined }
   })

@@ -19,7 +19,7 @@ async def test_composition_preserves_framing_and_whole_design(canvas_client):
     output = (await client.get(url + '/cards/composition/outputs')).json()['data']['outputs'][0]
     assert output['payload']['adoption'] == 'whole_card'
     assert output['payload']['fields']['shot_size']['size'] == 'close_up'
-    assert not (await client.get(url + '/cards/model/compile')).json()['data']['used']
+    assert len((await client.get(url + '/cards/model/compile')).json()['data']['used']) == 1
     document['cards'][1]['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']

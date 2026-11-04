@@ -61,8 +61,8 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
             if effective and item and not item.basis_current:
                 basis_current = False
             source = context.cards.get(segment.source.card_id)
-            code = 'REFERENCE_CANVAS_MISMATCH' if segment.source.canvas_id != context.document.id else 'DESIGN_BODY_REFERENCE_FORBIDDEN' if source and source.type.startswith('direction.') and segment.source.port_id == 'text' else 'REFERENCE_NOT_CONNECTED' if item is None else 'OUTPUT_MISSING' if not item.available else None
-            if not code and segment.source.port_id == 'anchor':
+            code = 'REFERENCE_CANVAS_MISMATCH' if segment.source.canvas_id != context.document.id else 'REFERENCE_NOT_CONNECTED' if item is None else 'OUTPUT_MISSING' if not item.available else None
+            if not context.whole_designs and not code and segment.source.port_id == 'anchor':
                 if card.type not in FLAT_DESIGN_TYPES or not source or source.type != 'direction.anchor':
                     code = 'DESIGN_BODY_REFERENCE_FORBIDDEN'
                 else:
@@ -79,14 +79,16 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                 code = 'UNSUPPORTED_DIALOGUE_REFERENCE'
             if not code and item and item.modality == 'audio':
                 code = 'UNSUPPORTED_DESIGN_MEDIA'
-            if not code and item and item.modality == 'text' and not item.text:
+            if not code and item and item.modality == 'text' and not item.text and not (source and source.type.startswith('direction.')):
                 code = 'REFERENCE_TEXT_UNAVAILABLE'
             if code:
                 if effective:
                     issues.append(DesignReferenceIssue(source=segment.source, field_id=key, reference_id=segment.id, code=code, message='锚点定位包含未展开的引用，请改为纯文本定位或在当前卡直接表达位置与素材' if code == 'ANCHOR_NESTED_REFERENCE' else '设计参数引用不可用，请查看对应字段和来源'))
                 text += '[引用不可用]'
+            elif context.whole_designs and source and source.type.startswith('direction.'):
+                text += '[设计引用：' + source.id + ']'
             elif item.modality == 'text':
-                text += item.text or ''
+                text += (reference_tokens or {}).get(identity_key(item.source), item.text or '')
             else:
                 text += (reference_tokens or {}).get(identity_key(item.source), item.token)
             media_key = (key, identity_key(item.source)) if item else None

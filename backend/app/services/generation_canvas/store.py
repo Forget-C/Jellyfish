@@ -81,6 +81,8 @@ class CanvasStore:
         previous_document = clean_reference_image_sources(previous_document)
         from app.services.generation_canvas.acceptance import synchronize_acceptance
         document = synchronize_acceptance(document, previous_document)
+        from app.services.generation_canvas.design_connections import synchronize_design_connections
+        document = synchronize_design_connections(document, previous_document)
         validate_stack_edit(previous_document.model_dump(), document)
         previous_types = {card.id: card.type for card in previous_document.cards}
         identities = {key: previous_types.get(key, value) if value == 'content.object' else value for key, value in canvas.card_types.items()}
@@ -129,6 +131,10 @@ class CanvasStore:
                     output['modality'] == 'text' and card.text != output.get('text')) or (
                     output['modality'] != 'text' and card.file_id != output.get('file_id')):
                     raise diagnostic('INVALID_ORIGIN', '另存内容须与固定成果及完成状态一致', {'card_id': card.id})
+        for card in document.cards:
+            target = getattr(card, 'frame_target', None)
+            if target and target.card_id in previous_cards and not any(source.id == target.card_id for source in document.cards):
+                raise diagnostic('REFERENCE_IN_USE', '请先解除构图的运镜关联再删除来源', {'card_id': card.id, 'path': ['frame_target']})
         validate_graph(document, previous_document)
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references

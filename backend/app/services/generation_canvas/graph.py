@@ -36,6 +36,11 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
                 raise diagnostic('INVALID_REFERENCE_CATEGORY', '名称候选必须来自同类型描述卡', target)
         successors[edge.source_card].add(edge.target_card)
         expected.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
+    # 画面定位也是整卡依赖，即使没有独立候选线也必须参与环检查。
+    for card in document.cards:
+        target = getattr(card, 'frame_target', None)
+        if target and target.card_id in cards:
+            successors[target.card_id].add(card.id)
     # Kahn 排序避免深图递归溢出；候选关系自身也不允许循环。
     indegree = dict.fromkeys(cards, 0)
     for destinations in successors.values():
