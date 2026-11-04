@@ -9,4 +9,8 @@ export type DesignFieldText = {
     id: string;
     kind: 'text';
     text?: string;
+    /**
+     * Preserved authored text is not implicitly converted to source references.
+     */
+    literal?: boolean;
 };

@@ -165,14 +165,14 @@ async def test_performance_fields_publish_structured_text_references(canvas_clie
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('nested', [False, True])
-async def test_anchor_reference_expands_only_self_contained_location(canvas_client, nested):
+@pytest.mark.parametrize('nested,state,text,expected', [(False, 'proposal', '东墙前两步', '设计 / 位置 [提议]：东墙前两步'), (True, 'proposal', '', ''), (False, 'undecided', '东墙前两步', '设计 / 位置 [待确定]：东墙前两步'), (False, 'absent', '', '设计 / 位置 [明确没有]：')])
+async def test_anchor_reference_expands_only_self_contained_location(canvas_client, nested, state, text, expected):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '锚点展开'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     anchor_source = {'canvas_id': canvas['id'], 'card_id': 'anchor', 'port_id': 'anchor', 'position': 0, 'object_id': 'stable'}
     document = canvas['document']
-    document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '不应递归展开的场所正文'}, {'id': 'anchor', 'type': 'direction.anchor', 'anchor_id': 'stable', 'name': '吧台左侧', 'position': referenced(canvas['id']) if nested else {'state': 'proposal', 'text': '东墙前两步'}}, {'id': 'design', 'type': 'direction.blocking', 'path': {'state': 'proposal', 'document': {'segments': [{'id': 'anchor-use', 'kind': 'reference', 'source': anchor_source}]} }}, {'id': 'model', 'type': 'model.image', 'model_id': 'canvas-image'}], edges=[{'id': 'anchor-text', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'anchor', 'target_port': 'text'}, {'id': 'reference', 'source_card': 'anchor', 'source_port': 'anchor', 'target_card': 'design', 'target_port': 'anchor'}, {'id': 'adopt', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'anchor': {'text': ['anchor-text']}, 'design': {'anchor': ['reference']}, 'model': {'text': ['adopt']}})
+    document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '不应递归展开的场所正文'}, {'id': 'anchor', 'type': 'direction.anchor', 'anchor_id': 'stable', 'name': '吧台左侧', 'position': referenced(canvas['id']) if nested else {'state': state, 'text': text}}, {'id': 'design', 'type': 'direction.blocking', 'path': {'state': 'proposal', 'document': {'segments': [{'id': 'anchor-use', 'kind': 'reference', 'source': anchor_source}]} }}, {'id': 'model', 'type': 'model.image', 'model_id': 'canvas-image'}], edges=[{'id': 'anchor-text', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'anchor', 'target_port': 'text'}, {'id': 'reference', 'source_card': 'anchor', 'source_port': 'anchor', 'target_card': 'design', 'target_port': 'anchor'}, {'id': 'adopt', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'anchor': {'text': ['anchor-text']}, 'design': {'anchor': ['reference']}, 'model': {'text': ['adopt']}})
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
     output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
@@ -181,7 +181,7 @@ async def test_anchor_reference_expands_only_self_contained_location(canvas_clie
     if nested:
         assert output['payload']['reference_issues'][0]['code'] == 'ANCHOR_NESTED_REFERENCE'
     else:
-        assert '吧台左侧（位置：东墙前两步）' in output['text']
+        assert expected in output['text']
     document['cards'][3]['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
@@ -189,3 +189,34 @@ async def test_anchor_reference_expands_only_self_contained_location(canvas_clie
     assert bool(issues) == nested
     if nested:
         assert issues[0]['target']['path'] == ['path', 'document']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind,key,other', PERFORMANCE_CASES)
+async def test_regular_media_candidate_can_be_local_example_without_carry(canvas_client, kind, key, other):
+    client = canvas_client
+    file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('example.png', b'image', 'image/png')})).json()['data']['id']
+    canvas = (await client.post('/canvases/p', json={'name': '本地示例'})).json()['data']
+    source = {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}
+    document = canvas['document']
+    document.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id}, {'id': 'design', 'type': f'direction.{kind}', key: {'state': 'proposal', 'text': '手工设计'}, 'examples': [{'id': 'example', 'source': source, 'file_id': file_id, 'purpose': 'negative'}]}], edges=[{'id': 'candidate', 'source_card': 'image', 'source_port': 'image', 'target_card': 'design', 'target_port': 'image'}], input_order={'design': {'image': ['candidate']}})
+    url = f"/canvases/p/{canvas['id']}"
+    saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
+    assert not output['payload'].get('material_references')
+
+
+@pytest.mark.asyncio
+async def test_preserved_literal_design_text_remains_authored_data(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '保留旧文字'})).json()['data']
+    document = canvas['document']
+    document['cards'] = [{'id': 'design', 'type': 'direction.performance_rule', 'applicability': {'state': 'proposal', 'document': {'segments': [{'id': 'legacy', 'kind': 'text', 'literal': True, 'text': '旧 @图片1 /首帧参考'}]}}}]
+    url = f"/canvases/p/{canvas['id']}"
+    saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
+    assert '旧 @图片1 /首帧参考' in output['text']
+    assert not output['payload'].get('reference_issues')
+    assert not output['payload'].get('material_references')

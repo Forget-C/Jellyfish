@@ -70,7 +70,7 @@ try {
   await card.getByRole('button', { name: '选择所属空间 大厅', exact: true }).click()
   await card.getByRole('textbox', { name: '位置内容', exact: true }).fill('东墙门口')
   await poll(state => state.document.cards.find(item => item.id === 'anchor').position?.text === '东墙门口')
-  await card.getByText('参考素材与图片标记', { exact: true }).click()
+  assert.equal(await card.getByRole('button', { name: '关联素材 @图片1', exact: true }).isVisible(), true, 'anchor reference marking opens directly')
   await card.getByRole('button', { name: '关联素材 @图片1', exact: true }).click()
   await card.getByRole('spinbutton', { name: '标记横坐标', exact: true }).fill('0.25')
   await card.getByRole('spinbutton', { name: '标记纵坐标', exact: true }).fill('0.75')

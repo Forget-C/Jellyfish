@@ -50,7 +50,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
         text = ''
         for segment in value.document.segments:
             if segment.kind == 'text':
-                if effective and re.search(r'(?<!\\)@(?:文本|图片|视频|音频)\d*', segment.text):
+                if effective and not segment.literal and re.search(r'(?<!\\)@(?:文本|图片|视频|音频)\d*', segment.text):
                     issues.append(DesignReferenceIssue(field_id=key, reference_id=segment.id, code='UNCONFIRMED_REFERENCE', message='参数代号尚未确认或不存在，请选择实际候选'))
                 text += re.sub(r'\\(?=[@/])', '', segment.text)
                 continue
@@ -69,7 +69,8 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                         code = 'ANCHOR_NESTED_REFERENCE'
                     else:
                         from app.services.generation_canvas.spatial import FIELD_LABELS
-                        location = [FIELD_LABELS[name] + '：' + (''.join(part.text for part in field.document.segments) if field.document else field.text) for name, field in active]
+                        from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+                        location = [PURPOSE_LABELS[field.purpose] + ' / ' + FIELD_LABELS[name] + ' [' + STATE_LABELS[field.state] + ']：' + (''.join(part.text for part in field.document.segments) if field.document else field.text) for name, field in active]
                         item = item.model_copy(update={'text': source.name + '（' + '；'.join(location) + '）'})
             if not code and card.type in PERFORMANCE_DESIGN_TYPES and item and item.modality == 'audio':
                 code = 'UNSUPPORTED_DESIGN_MEDIA'

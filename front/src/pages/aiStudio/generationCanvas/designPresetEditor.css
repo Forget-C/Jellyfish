@@ -101,4 +101,4 @@
   .performance-field-group, .design-anchor-layout { grid-template-columns: minmax(0, 1fr); }
   .design-preset-relations { max-height: 100px; }
 }
-.design-reference-issue { display: block; color: var(--wb-danger); margin-top: 6px; font-size: 12px; }
+.design-reference-issue { display: block; margin-top: 6px; font-size: 12px; }

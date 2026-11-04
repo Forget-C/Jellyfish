@@ -336,3 +336,6 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 `canvas-design` 覆盖画面设计 A 方案：类型专属卡面、常驻编辑入口、固定摘要优先级与特殊状态／运镜阶段、长摘要键盘全文、参数／关联与摄影分区切换、预设预览／覆盖清单／一次撤销、关闭会话清理、只读预览和桌面／窄屏固定操作区。运行 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-design --output /tmp/jellyfish-canvas-design`；仍使用隔离后端与真实画布页面，不使用视觉原型替代业务验收。原型对比保存在 `codex-prototype-design-cards` 分支（`da20a493`），生产路由已移除原型入口。
 
 `generation-canvas-design-editor` 补充画面设计编辑器四项交互规则：悬停不展开／无业务写入、点击菜单正确锚定且静止后不持续定位、Escape／Tab／字段／遮罩取消优先级、统一元信息开关的会话保留及关闭重置、特殊状态与已填写数量、输入不重新居中、桌面和短窄屏自适应高度及只读保护。该用例登记在 `canvas-design`，与原有卡面、预设覆盖撤销和摄影采用范围回归一起运行。
+
+
+表演与调度七类的共享卡面、预设／高级设置、字段引用及素材携带使用 `PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:browser performance-design` 验收。套件包含原表演／空间流程及七类预设、具名锚点、有效／停用引用、旧文字字面保护、保存重开、只读、桌面和窄屏回归；模型携带的冻结执行与异常输入另由后端公开接口／Worker 测试覆盖。

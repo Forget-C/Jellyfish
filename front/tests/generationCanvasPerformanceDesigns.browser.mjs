@@ -43,9 +43,10 @@ try {
   const canvas = (await (await fetch(base, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:'表演与调度引用'})})).json()).data
   const source = (id, port) => ({canvas_id:canvas.id, card_id:id, port_id:port, position:0})
   const edges = cases.flatMap(([id])=>['text','image'].map(port=>({id:id+port, source_card:port==='text'?'brief':'image', source_port:port, target_card:id, target_port:port})))
+  edges.push({id:'legacy-image',source_card:'image',source_port:'image',target_card:'legacy',target_port:'image'})
   edges.push({id:'location',source_card:'location',source_port:'anchor',target_card:'blocking',target_port:'anchor'})
   edges.push({id:'adopt',source_card:'environment',source_port:'text',target_card:'model',target_port:'text'})
-  const document = {...canvas.document, cards:[{id:'location',type:'direction.anchor',name:'吧台左侧',anchor_id:'location-stable',position:{state:'proposal',text:'东墙前两步'}},{id:'brief',type:'content.text',text:'吧台旁'}, {id:'image',type:'content.image',file_id:file.id}, ...cases.map(([id])=>({id,type:'direction.'+id,...(id==='anchor'?{name:'东侧位置',anchor_id:'stable'}:{})})), {id:'model',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'adopt',input_port:'text',source:source('environment','text')}]}], edges, input_order:Object.fromEntries([...cases.map(([id])=>[id,{text:[id+'text'],image:[id+'image'],...(id==='blocking'?{anchor:['location']}:{})}]),['model',{text:['adopt']}]])}
+  const document = {...canvas.document, cards:[{id:'legacy',type:'direction.performance_rule',applicability:{state:'proposal',text:'旧文字 @图片1 /首帧参考'}},{id:'location',type:'direction.anchor',name:'吧台左侧',anchor_id:'location-stable',position:{state:'proposal',text:'东墙前两步'}},{id:'brief',type:'content.text',text:'吧台旁'}, {id:'image',type:'content.image',file_id:file.id}, ...cases.map(([id])=>({id,type:'direction.'+id,...(id==='anchor'?{name:'东侧位置',anchor_id:'stable'}:{})})), {id:'model',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'adopt',input_port:'text',source:source('environment','text')}]}], edges, input_order:Object.fromEntries([...cases.map(([id])=>[id,{text:[id+'text'],image:[id+'image'],...(id==='blocking'?{anchor:['location']}:{})}]),['legacy',{image:['legacy-image']}],['model',{text:['adopt']}]])}
   const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seeded.ok,await seeded.text())
   const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
@@ -54,6 +55,25 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const close=()=>detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   const open=async id=>{await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
+  await open('legacy')
+  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  const original = (await read()).document.cards.find(card=>card.id==='legacy')
+  await detail.getByRole('textbox',{name:'表演适用说明内容',exact:true}).focus()
+  await close()
+  await page.getByRole('button',{name:'保存画布',exact:true}).click()
+  await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
+  assert.deepEqual((await read()).document.cards.find(card=>card.id==='legacy'),original,'viewing legacy @ text must not create references')
+  await open('legacy')
+  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  const legacy = detail.getByRole('textbox',{name:'表演适用说明内容',exact:true})
+  await legacy.press('End'); await legacy.press(' '); await legacy.pressSequentially('补充')
+  await poll(s=>s.document.cards.find(card=>card.id==='legacy').applicability.document?.segments.some(part=>part.kind==='text'&&part.literal))
+  await close(); await page.reload(); await open('legacy')
+  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  await legacy.press('End'); await legacy.press(' '); await legacy.press('@')
+  await page.getByRole('option',{name:'@图片1',exact:true}).click()
+  await poll(s=>s.document.cards.find(card=>card.id==='legacy').applicability.document.segments.filter(part=>part.kind==='reference').length===1)
+  await close()
   for(const [id,key,label,preset] of cases){
     await page.locator(`[data-card-id="${id}"] .visual-design-card .design-purpose svg`).waitFor({state:'attached'})
     await open(id)
@@ -81,7 +101,7 @@ try {
     assert.equal(saved.input_bindings.length,0,'field refs do not infer participant or other relationships')
     const published=(await(await fetch(`${base}/${canvas.id}/cards/${id}/outputs`)).json()).data.outputs.find(x=>x.source.port_id==='text')
     assert.match(published.text,/吧台旁/)
-    if(id==='blocking')assert.match(published.text,/吧台左侧（位置：东墙前两步）/)
+    if(id==='blocking')assert.match(published.text,/吧台左侧（设计 \/ 位置 \[提议\]：东墙前两步）/)
     assert.equal(published.payload.material_references.length,1)
     await detail.getByRole('switch',{name:'显示状态与来源',exact:true}).click()
     await detail.getByRole('combobox',{name:label+'状态',exact:true}).locator('xpath=ancestor::div[contains(@class,"ant-select-selector")]').click()
@@ -100,7 +120,7 @@ try {
   const compiled=(await(await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data
   assert.deepEqual(compiled.media.map(item=>item.file_id),[file.id])
   assert.match(compiled.text,/image 1/)
-  assert.equal((await read()).document.edges.length,16,'no extra model-to-media edges')
+  assert.equal((await read()).document.edges.length,17,'no extra model-to-media edges')
   await page.reload();await open('performance')
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('textbox',{name:'身体动作内容',exact:true}).locator('.generation-prompt-token').filter({hasText:'@图片1'}).waitFor()

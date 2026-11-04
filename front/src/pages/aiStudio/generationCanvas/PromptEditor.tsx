@@ -28,7 +28,7 @@ function copyClipboardSegment(segment: NonNullable<PromptDocument['segments']>[n
 /** 绑定身份回填不改变编辑内容；避免仅元数据变化时重建 DOM、清空活动光标。 */
 function contentKey(document: PromptDocument) {
   const reference = (item: PromptReference) => ({ id: item.id, kind: item.kind, source: item.source })
-  return JSON.stringify((document.segments || []).map(segment => segment.kind === 'reference' ? reference(segment) : segment.kind === 'instruction' ? { ...segment, references: (segment.references || []).map(reference) } : segment))
+  return JSON.stringify((document.segments || []).map(segment => segment.kind === 'reference' ? reference(segment) : segment.kind === 'instruction' ? { ...segment, references: (segment.references || []).map(reference) } : { id: segment.id, kind: segment.kind, text: segment.text || '', ...(segment.literal ? { literal: true } : {}) }))
 }
 
 /** 关联区与正文候选共用引用插入入口；模型通过绑定保存来源，设计宿主通过字段文档保存来源。 */
@@ -98,7 +98,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
   const draw = (next: PromptDocument) => {
     if (!root.current) return
     root.current.replaceChildren(...(next.segments || []).map(segment => {
-      if (segment.kind === 'text') { const node = window.document.createElement('span'); node.dataset.textId = segment.id; node.textContent = segment.text || ''; return node }
+      if (segment.kind === 'text') { const node = window.document.createElement('span'); node.dataset.textId = segment.id; if (segment.literal) node.dataset.literalText = 'true'; node.textContent = segment.text || ''; return node }
       const node = window.document.createElement('span'); node.contentEditable = 'false'; node.dataset.segment = JSON.stringify(segment); node.dataset.segmentId = segment.id
       node.className = 'generation-prompt-token'
       node.textContent = segment.kind === 'reference' ? label(segment) : `/${segment.command}`
@@ -126,7 +126,8 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       if (!text) return
       let id = textIds.current.get(node)
       if (!id) { id = node.parentElement?.dataset.textId || crypto.randomUUID(); if (segments.some(segment => segment.id === id)) id = crypto.randomUUID(); textIds.current.set(node, id) }
-      segments.push({ kind: 'text', id, text })
+      const literal = node.parentElement?.closest('[data-literal-text="true"]') || local.current.segments?.some(segment => segment.kind === 'text' && segment.id === id && segment.literal)
+      segments.push({ kind: 'text', id, text, ...(literal ? { literal: true } : {}) })
     }
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) { appendText(node, node.textContent || ''); return }
@@ -177,6 +178,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         }
       }
       const text = segment.text || '', expression = /(?<!\\)@(?:文本|图片|视频|音频)\d+(?=$|[\s,;:()，。；：、（）!?！？])/g
+      if (segment.literal) { segments.push(segment); offset += text.length; continue }
       let start = 0
       for (const match of text.matchAll(expression)) {
         // 全角限定括号属于名称标签语法；即使当前候选中没有该名称，也不解释其编号前缀。
@@ -194,7 +196,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     if (finalize) {
       const split: NonNullable<PromptDocument['segments']> = []
       for (const segment of segments) {
-        if (segment.kind !== 'text') { split.push(segment); continue }
+        if (segment.kind !== 'text' || segment.literal) { split.push(segment); continue }
         const text = segment.text || '', command = /(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:[ \t]+"[^"]*")?[ \t]*/g
         let start = 0
         for (const match of text.matchAll(command)) {
@@ -208,7 +210,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     const structured: NonNullable<PromptDocument['segments']> = []
     for (let index = 0; index < segments.length; index++) {
       const segment = segments[index]
-      const match = segment.kind === 'text' ? (segment.text || '').match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:\s+"([^"]*)")?\s*$/) : null
+      const match = segment.kind === 'text' && !segment.literal ? (segment.text || '').match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:\s+"([^"]*)")?\s*$/) : null
       if (!finalize || !match) { structured.push(segment); continue }
       const text = (segment as PromptText).text || '', prefix = text.slice(0, match.index)
       if (prefix) structured.push({ ...segment as PromptText, text: prefix })
@@ -352,7 +354,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         const selection = window.getSelection(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
         if (range && root.current?.contains(range.commonAncestorContainer)) {
           range.deleteContents(); const fragment = window.document.createDocumentFragment()
-          if (segments) for (const segment of segments) { const span = window.document.createElement('span'); if (segment.kind !== 'text') { span.contentEditable = 'false'; span.dataset.segment = JSON.stringify(segment); span.className = 'generation-prompt-token'; span.textContent = segment.kind === 'reference' ? label(segment) : `/${segment.command}` } else span.textContent = segment.text || ''; fragment.append(span) }
+          if (segments) for (const segment of segments) { const span = window.document.createElement('span'); if (segment.kind !== 'text') { span.contentEditable = 'false'; span.dataset.segment = JSON.stringify(segment); span.className = 'generation-prompt-token'; span.textContent = segment.kind === 'reference' ? label(segment) : `/${segment.command}` } else { span.textContent = segment.text || ''; if (segment.literal) span.dataset.literalText = 'true' } fragment.append(span) }
           else fragment.append(window.document.createTextNode(event.clipboardData.getData('text/plain')))
           range.insertNode(fragment); publish(read()); if (!segments) confirm()
         }

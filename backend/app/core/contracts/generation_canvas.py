@@ -155,6 +155,7 @@ class DesignFieldText(BaseModel):
     id: str = Field(min_length=1)
     kind: Literal['text'] = Field(json_schema_extra={'enum': ['text']})
     text: str = ''
+    literal: bool = Field(default=False, exclude_if=lambda value: not value, description='Preserved authored text is not implicitly converted to source references.')
 
 
 class DesignFieldReference(BaseModel):

@@ -4,7 +4,7 @@ import type { GenerationCard } from './graphRules'
 /** 编辑表面可显示来源，但保存的来源权威只在输入绑定中。 */
 export type EditorPromptReference = PromptReference & { source: OutputIdentity }
 export type EditorPromptInstruction = Omit<PromptInstruction, 'references'> & { references?: EditorPromptReference[] }
-export type EditorPromptDocument = { segments?: (PromptText | EditorPromptReference | EditorPromptInstruction)[] }
+export type EditorPromptDocument = { segments?: ((PromptText & { literal?: boolean }) | EditorPromptReference | EditorPromptInstruction)[] }
 const key = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.object_id || source.position])
 const commandPorts: Record<string, string> = { 首帧参考: 'first_frame', 尾帧参考: 'last_frame', 关键帧参考: 'key_frame', 主体参考: 'subject_image' }
 
@@ -40,7 +40,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
     return { id: reference.id, kind: 'reference', binding_id: binding.id }
   }
   const next: PromptDocument = { segments: (prompt.segments || []).map(segment => segment.kind === 'reference' ? bind(segment)
-    : segment.kind === 'instruction' ? { ...segment, references: segment.references?.map(reference => bind(reference, segment.command, segment.command === '主体参考' ? String(segment.parameters?.name || '').trim() : undefined)) } : segment) }
+    : segment.kind === 'instruction' ? { ...segment, references: segment.references?.map(reference => bind(reference, segment.command, segment.command === '主体参考' ? String(segment.parameters?.name || '').trim() : undefined)) } : { id: segment.id, kind: segment.kind, text: segment.text }) }
   if (card.type === 'model.video') {
     const order = new Map((card.input_bindings || []).map((binding, index) => [binding.id, index]))
     bindings.sort((left, right) => (order.get(left.id) ?? Infinity) - (order.get(right.id) ?? Infinity))

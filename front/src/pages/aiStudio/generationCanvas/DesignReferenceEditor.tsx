@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
-import { Popover } from 'antd'
+import { Popover, Typography } from 'antd'
 import type { DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { DesignFieldEditor } from './DesignFieldEditor'
@@ -48,8 +48,9 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   const renderCandidates = (advanced: boolean) => <div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
     {sources.map(item => {
       const key = sourceKey(item.source), candidate = candidates.find(value => sourceKey(value.source) === key)!
-      const state = used.has(key) ? '使用中' : retained.has(key) ? '已引用 · 未生效' : '候选'
-      return <Popover key={key} placement="bottomLeft" trigger="click" open={inspect === key} onOpenChange={next => { if (!next) setInspect(undefined) }} overlayClassName="canvas-workbench-dialog design-source-inspect" content={<div><strong>{candidate.name}</strong><p>{state}{candidate.disabledReason && ` · ${candidate.disabledReason}`}</p>{item.file_id && item.modality !== 'text' ? <MediaPreview fileId={item.file_id} type={item.modality} /> : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label="来源内容" lines={6} />}</div>}>
+      const localExample = 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key)
+      const state = used.has(key) ? '使用中' : retained.has(key) ? '已引用 · 未生效' : localExample ? '本地示例' : '候选'
+      return <Popover key={key} placement="bottomLeft" trigger="click" open={inspect === key} onOpenChange={next => { if (!next) setInspect(undefined) }} overlayClassName="canvas-workbench-dialog design-source-inspect" content={<div><strong>{candidate.name}</strong><p>{state}{localExample && ' · 已关联本地示例，关联本身不进入模型输入'}{candidate.disabledReason && ` · ${candidate.disabledReason}`}</p>{item.file_id && item.modality !== 'text' ? <MediaPreview fileId={item.file_id} type={item.modality} /> : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label="来源内容" lines={6} />}</div>}>
         <MaterialReferenceButton output={item} label={labelFor(item)} selected={used.has(key)} selectedLabel="使用中" data-design-source={key} aria-label={`候选 ${candidate.name} · ${state}`} title={`${labelFor(item)} · ${state}`} onMouseDown={event => { if (advanced && focused.current?.current) event.preventDefault() }} onClick={() => {
           if (advanced && focused.current?.current && !disabled && candidate.available) { setInspect(undefined); focused.current.current.insertReference(item.source) }
           else setInspect(previous => previous === key ? undefined : key)
@@ -73,7 +74,7 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
   const context = useContext(DesignReferenceContext), handle = useRef<PromptEditorHandle>(null)
   if (!context || !isReferenceDesign(context.card)) return <DesignFieldEditor {...props} />
   const value = props.value as ReferenceDesignField | undefined
-  const prompt: EditorPromptDocument = value?.document as EditorPromptDocument || { segments: [{ id: 'text', kind: 'text', text: value?.text || '' }] }
+  const prompt: EditorPromptDocument = value?.document as EditorPromptDocument || { segments: [{ id: 'text', kind: 'text', text: value?.text || '', ...(isPerformanceDesign(context.card) && value?.text ? { literal: true } : {}) }] }
   const onChange = (next: EditorPromptDocument) => {
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])
@@ -82,5 +83,5 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
   }
   const phase = 'phases' in context.card ? context.card.phases?.find(item => item.frame === props.value) : undefined
   const fieldId = designFieldEntries(context.card).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : cardDefinitions[context.card.type!]?.fields.find(field => field.label === props.label)?.id)
-  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <small role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</small>)}</div>
+  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <Typography.Text type="danger" role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</Typography.Text>)}</div>
 }
