@@ -71,4 +71,3 @@ export function PresetIllustration({ preset }: {preset: VisualPreset}) {
     {(look==='push'||look==='pan')&&<path d={look==='push'?'M210 270L236 245M236 245H218M236 245V262':'M175 260H305M305 260L289 249M305 260L289 271'} stroke="#fff" strokeWidth="3" fill="none"/>}
   </svg>
 }
-
