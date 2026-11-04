@@ -114,7 +114,7 @@ try {
   const beforePreset=(await read()).document.cards.find(card=>card.id==='style').fields
   await detail.getByRole('button',{name:'返回预设',exact:true}).click()
   await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).click()
-  await detail.getByRole('button',{name:/覆盖 \d+ 项并应用/}).click()
+  await detail.getByRole('button',{name:'应用即可'}).click()
   await poll(s=>!s.document.cards.find(card=>card.id==='style').fields.colors.document)
   assert.ok((await read()).document.cards.find(card=>card.id==='style').fields.notes.document,'undeclared field reference preserved')
   await detail.getByRole('button',{name:'撤销',exact:true}).click()
