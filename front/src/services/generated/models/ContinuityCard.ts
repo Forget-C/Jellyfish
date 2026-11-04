@@ -3,9 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ConstraintMediaExample } from './ConstraintMediaExample';
-import type { DesignField } from './DesignField';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 可选主体及事件，前后态不会变成隐式首尾帧。
  */
@@ -18,8 +18,8 @@ export type ContinuityCard = {
     examples?: Array<ConstraintMediaExample>;
     type?: 'direction.continuity';
     category?: 'space' | 'appearance' | 'hands_props' | 'environment' | 'photography' | 'dialogue_sound';
-    before?: DesignField;
-    change?: DesignField;
-    after?: DesignField;
-    following_constraints?: DesignField;
+    before?: ReferenceDesignField;
+    change?: ReferenceDesignField;
+    after?: ReferenceDesignField;
+    following_constraints?: ReferenceDesignField;
 };

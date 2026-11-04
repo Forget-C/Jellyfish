@@ -311,11 +311,11 @@ class SpatialDesignRelations(BaseModel):
 class SoundDesignFields(BaseModel):
     """对白正文与声音安排的具体字段；制作安排不代表生成成果。"""
     model_config = ConfigDict(extra='forbid')
-    content: DesignField | None = None
-    source_description: DesignField | None = None
-    environment: DesignField | None = None
-    action_sound: DesignField | None = None
-    music: DesignField | None = None
+    content: ReferenceDesignField | None = None
+    source_description: ReferenceDesignField | None = None
+    environment: ReferenceDesignField | None = None
+    action_sound: ReferenceDesignField | None = None
+    music: ReferenceDesignField | None = None
     production: Literal['synchronous', 'postproduction', 'undecided'] | None = None
 
 
@@ -349,25 +349,25 @@ class CriterionReferencePayload(BaseModel):
 class CreativeControlFields(BaseModel):
     """可发挥、保持和待定内容分别保留状态，不推断创作程度。"""
     model_config = ConfigDict(extra='forbid')
-    freedom: DesignField
-    allowed_range: DesignField
-    keep: DesignField
-    undecided: DesignField
+    freedom: ReferenceDesignField
+    allowed_range: ReferenceDesignField
+    keep: ReferenceDesignField
+    undecided: ReferenceDesignField
 
 
 class GenerationGuidanceFields(BaseModel):
     """生成优先级和参考要求仅作为设计，不自动采用媒体。"""
     model_config = ConfigDict(extra='forbid')
-    priority: DesignField
-    reference_requirements: DesignField
-    sound_strategy: DesignField
-    prohibitions: DesignField
+    priority: ReferenceDesignField
+    reference_requirements: ReferenceDesignField
+    sound_strategy: ReferenceDesignField
+    prohibitions: ReferenceDesignField
 
 
 class AcceptanceCriterionFields(BaseModel):
     """可观察的判断标准不代表结果已经通过验收。"""
     model_config = ConfigDict(extra='forbid')
-    standard: DesignField
+    standard: ReferenceDesignField
 
 
 class NarrativeOverviewFields(BaseModel):
@@ -422,26 +422,26 @@ class NarrativeDesignRelation(BaseModel):
 class SpaceRuleFields(BaseModel):
     """空间规则是设计要求，不校验自然语言的几何真实性。"""
     model_config = ConfigDict(extra='forbid')
-    spatial_basis: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    shootable_area: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
-    axis: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
-    scale: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    spatial_basis: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    shootable_area: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
+    axis: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
+    scale: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
 
 
 class ContinuityFields(BaseModel):
     """明确前后态是可定位状态，变化仍完整保留。"""
     model_config = ConfigDict(extra='forbid')
-    before: DesignField = Field(default_factory=DesignField)
-    change: DesignField = Field(default_factory=DesignField)
-    after: DesignField = Field(default_factory=DesignField)
-    following_constraints: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    before: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    after: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    following_constraints: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
 
 
 class ImmutableFactFields(BaseModel):
     """事实由创作者表述；来源定位不授权祖先正文读取。"""
     model_config = ConfigDict(extra='forbid')
-    fact: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
-    source_basis: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    fact: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
+    source_basis: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
 
 
 class FrameState(BaseModel):

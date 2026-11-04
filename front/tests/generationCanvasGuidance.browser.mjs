@@ -42,7 +42,7 @@ try {
     { id: 'guidance', type: 'direction.guidance', name: '生成安排' },
     { id: 'shot', type: 'direction.shot', shot_id: 'reaction', name: '反应镜头' },
     { id: 'performance', type: 'direction.performance' },
-    { id: 'photo', type: 'direction.photography', fields: { composition: { state: 'proposal', text: '人物居右' } } },
+    { id: 'photo', type: 'direction.camera', fields: { viewpoint: { state: 'proposal', text: '人物居右' } } },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model' }],
     edges: ['performance', 'photo'].map(kind => ({ id: kind, source_card: 'criterion', source_port: 'criterion', target_card: kind, target_port: 'acceptance_basis' })),
     input_order: Object.fromEntries(['performance', 'photo'].map(kind => [kind, { acceptance_basis: [kind] }])) }
@@ -52,7 +52,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4301/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = id => openCanvasCard(page, id)
+  const open = async id => { await openCanvasCard(page, id); const advanced = card.getByRole('button', { name: '高级设置', exact: true }); if (await advanced.count()) await advanced.click(); for (const summary of await card.locator('summary').all()) { if (/对象与制作关系|作用对象/.test(await summary.innerText())) { if (!(await summary.evaluate(el => el.parentElement.open))) await summary.click() } } }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('criterion')
@@ -101,7 +101,7 @@ try {
   await page.reload()
   await open('criterion')
   await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).waitFor()
-  assert.equal(await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).inputValue(), '五指和钥匙清晰可见')
+  assert.equal(await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).innerText(), '五指和钥匙清晰可见')
   await open('shot')
   await card.getByRole('button', { name: '取消验收关联 手部可见', exact: true }).click()
   await poll(state => !state.document.cards.find(item => item.id === 'shot').input_bindings?.length)

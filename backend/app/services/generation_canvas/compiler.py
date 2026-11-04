@@ -211,7 +211,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
 
     if primary_designs:
         supplementary = result.text.strip()
-        result.text = '导演设计 · 主要依据\n' + '\n'.join(item.text for item in primary_designs)
+        sound_note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
+        result.text = '导演设计 · 主要依据\n' + '\n'.join(item.text + ('\n' + sound_note if sound_note and item.payload.design_type in ('direction.dialogue', 'direction.sound') else '') for item in primary_designs)
         if supplementary:
             result.text += '\n\n模型正文 · 补充说明\n' + supplementary
 

@@ -1,4 +1,4 @@
-import type { NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, CharacterSituationCard, CharacterPerformanceCard, PerformanceRuleCard, SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ReferenceDesignField, DesignFieldReference, CameraCard, CompositionCard, FocusCard, LightingCard, MovementCard, VisualStyleCard } from '../../../services/generated'
+import type { DialogueCard, SoundArrangementCard, SpaceRuleCard, ContinuityCard, ImmutableFactCard, CreativeControlCard, GenerationGuidanceCard, AcceptanceCriterionCard, NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, CharacterSituationCard, CharacterPerformanceCard, PerformanceRuleCard, SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ReferenceDesignField, DesignFieldReference, CameraCard, CompositionCard, FocusCard, LightingCard, MovementCard, VisualStyleCard } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 
 export const visualDesignTypes = ['direction.style', 'direction.camera', 'direction.composition', 'direction.lighting', 'direction.focus', 'direction.movement']
@@ -7,8 +7,10 @@ export type PerformanceDesignCard = CharacterSituationCard | CharacterPerformanc
 export const isPerformanceDesign = (card: GenerationCard): card is PerformanceDesignCard => performanceDesignTypes.includes(card.type || '')
 export const narrativeDesignTypes = ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot']
 export type NarrativeDesignCard = NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard
-export type FlatDesignCard = PerformanceDesignCard | NarrativeDesignCard
-export const isFlatDesign = (card: GenerationCard): card is FlatDesignCard => isPerformanceDesign(card) || narrativeDesignTypes.includes(card.type || '')
+export const soundConstraintTypes = ['direction.dialogue', 'direction.sound', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion']
+export type SoundConstraintCard = DialogueCard | SoundArrangementCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard
+export type FlatDesignCard = SoundConstraintCard | PerformanceDesignCard | NarrativeDesignCard
+export const isFlatDesign = (card: GenerationCard): card is FlatDesignCard => soundConstraintTypes.includes(card.type || '') || isPerformanceDesign(card) || narrativeDesignTypes.includes(card.type || '')
 export const isReferenceDesign = (card: GenerationCard): card is VisualDesignCard | FlatDesignCard => isVisualDesign(card) || isFlatDesign(card)
 export type VisualDesignCard = CameraCard | CompositionCard | FocusCard | LightingCard | MovementCard | VisualStyleCard
 export const isVisualDesign = (card: GenerationCard): card is VisualDesignCard => visualDesignTypes.includes(card.type || '')

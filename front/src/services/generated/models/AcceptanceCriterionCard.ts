@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 稳定要求身份独立于标准正文，使用方明确选择引用。
  */
@@ -19,5 +19,5 @@ export type AcceptanceCriterionCard = {
     name?: string;
     type?: 'direction.criterion';
     criterion_id?: (string | null);
-    standard?: DesignField;
+    standard?: ReferenceDesignField;
 };

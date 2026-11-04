@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 可观察的判断标准不代表结果已经通过验收。
  */
 export type AcceptanceCriterionFields = {
-    standard: DesignField;
+    standard: ReferenceDesignField;
 };

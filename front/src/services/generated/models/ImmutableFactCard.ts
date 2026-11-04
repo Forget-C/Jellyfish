@@ -3,9 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ConstraintMediaExample } from './ConstraintMediaExample';
-import type { DesignField } from './DesignField';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 保留事实、来源与范围，不验证文本或图片真伪。
  */
@@ -17,6 +17,6 @@ export type ImmutableFactCard = {
     input_bindings?: Array<InputBinding>;
     examples?: Array<ConstraintMediaExample>;
     type?: 'direction.fact';
-    fact?: DesignField;
-    source_basis?: DesignField;
+    fact?: ReferenceDesignField;
+    source_basis?: ReferenceDesignField;
 };

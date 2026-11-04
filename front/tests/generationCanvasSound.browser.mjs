@@ -54,7 +54,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4291/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = id => openCanvasCard(page, id)
+  const open = async id => { await openCanvasCard(page, id); const advanced = card.getByRole('button', { name: '高级设置', exact: true }); if (await advanced.count()) await advanced.click(); for (const summary of await card.locator('summary').all()) { if (/对象与制作关系|作用对象/.test(await summary.innerText())) { if (!(await summary.evaluate(el => el.parentElement.open))) await summary.click() } } }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('line')
@@ -95,7 +95,7 @@ try {
   assert.equal(outputs[0].payload.dialogue_basis[0].speaker.object_id, 'alice')
   await page.reload()
   await open('line')
-  assert.equal(await card.getByRole('textbox', { name: '对白正文内容', exact: true }).inputValue(), '请等一等')
+  assert.equal(await card.getByRole('textbox', { name: '对白正文内容', exact: true }).innerText(), '请等一等')
   await page.screenshot({ path: join(output, 'dialogue-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)

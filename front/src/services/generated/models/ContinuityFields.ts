@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 明确前后态是可定位状态，变化仍完整保留。
  */
 export type ContinuityFields = {
-    before?: DesignField;
-    change?: DesignField;
-    after?: DesignField;
-    following_constraints?: DesignField;
+    before?: ReferenceDesignField;
+    change?: ReferenceDesignField;
+    after?: ReferenceDesignField;
+    following_constraints?: ReferenceDesignField;
 };

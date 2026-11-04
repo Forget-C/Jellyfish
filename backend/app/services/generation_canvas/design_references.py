@@ -7,7 +7,8 @@ VISUAL_DESIGN_TYPES = frozenset(('direction.style', 'direction.camera', 'directi
 
 PERFORMANCE_DESIGN_TYPES = frozenset(('direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'))
 NARRATIVE_DESIGN_TYPES = frozenset(('direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'))
-FLAT_DESIGN_TYPES = PERFORMANCE_DESIGN_TYPES | NARRATIVE_DESIGN_TYPES
+SOUND_CONSTRAINT_TYPES = frozenset(('direction.dialogue', 'direction.sound', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion'))
+FLAT_DESIGN_TYPES = PERFORMANCE_DESIGN_TYPES | NARRATIVE_DESIGN_TYPES | SOUND_CONSTRAINT_TYPES
 REFERENCE_DESIGN_TYPES = VISUAL_DESIGN_TYPES | FLAT_DESIGN_TYPES
 
 
@@ -74,6 +75,8 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                         from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
                         location = [PURPOSE_LABELS[field.purpose] + ' / ' + FIELD_LABELS[name] + ' [' + STATE_LABELS[field.state] + ']：' + (''.join(part.text for part in field.document.segments) if field.document else field.text) for name, field in active]
                         item = item.model_copy(update={'text': source.name + '（' + '；'.join(location) + '）'})
+            if not code and card.type == 'direction.dialogue' and (item.modality != 'text' or segment.source.port_id != 'text'):
+                code = 'UNSUPPORTED_DIALOGUE_REFERENCE'
             if not code and card.type in FLAT_DESIGN_TYPES and item and item.modality == 'audio':
                 code = 'UNSUPPORTED_DESIGN_MEDIA'
             if not code and item and item.modality == 'text' and not item.text:

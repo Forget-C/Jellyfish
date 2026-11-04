@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 空间规则是设计要求，不校验自然语言的几何真实性。
  */
 export type SpaceRuleFields = {
-    spatial_basis?: DesignField;
-    shootable_area?: DesignField;
-    axis?: DesignField;
-    scale?: DesignField;
+    spatial_basis?: ReferenceDesignField;
+    shootable_area?: ReferenceDesignField;
+    axis?: ReferenceDesignField;
+    scale?: ReferenceDesignField;
 };

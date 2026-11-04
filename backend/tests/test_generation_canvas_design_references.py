@@ -2,7 +2,7 @@
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
-FLAT_CASES = [('narrative', 'viewpoint', 'open_questions'), ('beat', 'objective', 'obstacle'), ('event', 'action_change', 'action_change'), ('shot', 'visible_result', 'estimated_duration'), ('situation', 'situation', 'relationship'), ('performance', 'physical_action', 'gaze'), ('performance_rule', 'applicability', 'applicability'), ('anchor', 'position', 'orientation'), ('blocking', 'position', 'path'), ('activity', 'task', 'exit_state'), ('environment', 'activity', 'empty_space')]
+FLAT_CASES = [('sound', 'environment', 'music'), ('space_rule', 'axis', 'scale'), ('continuity', 'before', 'after'), ('fact', 'fact', 'source_basis'), ('creative_control', 'freedom', 'keep'), ('guidance', 'priority', 'prohibitions'), ('criterion', 'standard', 'standard'), ('narrative', 'viewpoint', 'open_questions'), ('beat', 'objective', 'obstacle'), ('event', 'action_change', 'action_change'), ('shot', 'visible_result', 'estimated_duration'), ('situation', 'situation', 'relationship'), ('performance', 'physical_action', 'gaze'), ('performance_rule', 'applicability', 'applicability'), ('anchor', 'position', 'orientation'), ('blocking', 'position', 'path'), ('activity', 'task', 'exit_state'), ('environment', 'activity', 'empty_space')]
 
 CASES = [('style', 'direction', 'notes'), ('camera', 'viewpoint', 'support'), ('lighting', 'light_sources', 'color_relationship'), ('focus', 'depth_focus', 'prohibitions'), ('composition', 'composition', 'negative_space'), ('movement', 'movement_path', 'end_frame')]
 

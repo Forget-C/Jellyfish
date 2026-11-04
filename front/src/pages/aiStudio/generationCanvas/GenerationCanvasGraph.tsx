@@ -851,7 +851,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const [uploadText, setUploadText] = useState<string>()
   const [uploadLibrary, setUploadLibrary] = useState(false)
-  const sourcePorts = (card: GenerationCard) => isReferenceDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio', ...(isFlatDesign(card) ? ['anchor', 'participant', 'effect_object', 'space', 'position_anchor', 'area_anchor', 'beat', 'received_event', 'change_event', 'trigger_event', 'dialogue_basis', 'acceptance_basis', 'covered_beat', 'related_event', 'blocking_basis'] : [])].includes(port)) : capability(card)?.input_ports || []
+  const sourcePorts = (card: GenerationCard) => isReferenceDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio', ...(isFlatDesign(card) ? ['anchor', 'participant', 'effect_object', 'space', 'position_anchor', 'area_anchor', 'beat', 'received_event', 'change_event', 'trigger_event', 'dialogue_basis', 'acceptance_basis', 'covered_beat', 'related_event', 'blocking_basis', 'speaker', 'audio_example', 'video_example', 'image_example'] : [])].includes(port)) : capability(card)?.input_ports || []
   const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" overlayStyle={{ minWidth: 200 }} disabled={readonly} menu={{ items: [
     { key: 'upload', label: '上传参考素材', children: [
       { key: 'upload:text', label: '上传文本参考' },

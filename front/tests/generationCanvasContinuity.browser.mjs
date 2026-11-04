@@ -62,7 +62,7 @@ try {
   await page.getByRole('button', { name: '画面风格卡', exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭卡片列表', exact: true }).click()
   const card = page.locator('.wb-details:not([hidden])')
-  const open = id => openCanvasCard(page, id)
+  const open = async id => { await openCanvasCard(page, id); const advanced = card.getByRole('button', { name: '高级设置', exact: true }); if (await advanced.count()) await advanced.click(); for (const summary of await card.locator('summary').all()) { if (/对象与制作关系|作用对象/.test(await summary.innerText())) { if (!(await summary.evaluate(el => el.parentElement.open))) await summary.click() } } }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
@@ -110,7 +110,7 @@ try {
   assert.match(compiled.text, /空手/); assert.match(compiled.text, /拿起钥匙/); assert.match(compiled.text, /握住钥匙/)
   assert.doesNotMatch(compiled.text, /不跨级/); assert.equal(compiled.media.length, 0)
   await page.reload(); await open('continuity')
-  assert.equal(await card.getByRole('textbox', { name: '后态内容', exact: true }).inputValue(), '握住钥匙')
+  assert.equal(await card.getByRole('textbox', { name: '后态内容', exact: true }).innerText(), '握住钥匙')
   await card.getByRole('button', { name: '取消关联事件 钟响', exact: true }).waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)

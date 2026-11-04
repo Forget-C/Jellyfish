@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 一条稳定对白，正文修订由创作者显式记录版本。
  */
@@ -19,5 +19,5 @@ export type DialogueCard = {
     type?: 'direction.dialogue';
     dialogue_id: string;
     version?: number;
-    content?: DesignField;
+    content?: ReferenceDesignField;
 };

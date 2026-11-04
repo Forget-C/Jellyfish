@@ -1,8 +1,13 @@
+import { DesignPresetEditor } from './DesignPresetEditor'
+import { DesignScopeEditor } from './DesignScopeEditor'
+import { soundConstraintPresets } from './soundConstraintPresets'
+import { applyPreset } from './visualPresets'
+import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { DialogueCard, SoundArrangementCard, ObjectReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
+import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
@@ -13,7 +18,7 @@ import { MediaPreview } from './MediaContentEditor'
 export type SoundCard = DialogueCard | SoundArrangementCard
 
 /** 声音设计的对象、制作安排与固定素材分别编辑；不会把示例当作模型输入。 */
-export function SoundDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+export function SoundDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions } = useGraphRules()
   const card = raw as SoundCard
   const sound = raw as SoundArrangementCard
@@ -23,20 +28,8 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
   const relation = card.type === 'direction.dialogue' ? 'speaker' : 'effect_object'
   const label = relation === 'speaker' ? '说话对象' : '声源对象'
   const exampleUpdate = (id: string, patch: Partial<(typeof examples)[number]>) => update({ ...card, examples: examples.map(item => item.id === id ? { ...item, ...patch } : item) })
-  return <>
-
-    {resolved.error && <Alert type="warning" message={resolved.error} />}
-    {card.type === 'direction.dialogue' ? <section aria-label="对白条目"><p>对白身份：{card.dialogue_id}</p>
-      <strong>对白版本</strong><InputNumber aria-label="对白版本" min={1} value={card.version || 1} onChange={version => update({ ...card, version: version || 1 })} />
-      <FieldEditor label="对白正文" value={card.content} onChange={content => update({ ...card, content })} />
-    </section> : <section aria-label="声音条目">
-      <FieldEditor label="声源说明" value={sound.source_description} onChange={source_description => update({ ...sound, source_description })} />
-      <FieldEditor label="环境声" value={sound.environment} onChange={environment => update({ ...sound, environment })} />
-      <FieldEditor label="动作声" value={sound.action_sound} onChange={action_sound => update({ ...sound, action_sound })} />
-      <FieldEditor label="音乐约束" purpose="constraint" value={sound.music} onChange={music => update({ ...sound, music })} />
-      <strong>制作安排</strong><Select aria-label="声音制作安排" value={sound.production || 'undecided'} options={[{ value: 'synchronous', label: '同期生成意图' }, { value: 'postproduction', label: '待后期' }, { value: 'undecided', label: '待确定' }]} onChange={production => update({ ...sound, production })} />
-    </section>}
-    <section aria-label={label}><h3>{label}</h3>
+  const fields = Object.fromEntries(designFieldEntries(card))
+  const relations = <details><summary>对象与制作关系</summary>    <section aria-label={label}><h3>{label}</h3>
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference').map(item => {
         const object = item.payload as ObjectReferencePayload
         if (relation === 'speaker' && !['character', 'prop'].includes(object.category)) return null
@@ -45,13 +38,22 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
         return <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || !binding && relation === 'speaker' && bindings.some(value => value.input_port === relation)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: relation }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
       })}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(item => item.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
-    </section>
-    <details><summary>适用范围、阶段与来源</summary>
-      <Input aria-label="适用范围" value={card.scope?.description} onChange={event => update({ ...card, scope: { ...card.scope, description: event.target.value } })} />
-      <Input aria-label="适用条件" value={card.scope?.condition} onChange={event => update({ ...card, scope: { ...card.scope, condition: event.target.value } })} />
-      <Select aria-label="制作阶段" allowClear value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => update({ ...card, scope: { ...card.scope, phase: phase ?? null } })} />
-      <Input aria-label="设计来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
-    </details>
+    </section>{card.type === 'direction.sound' && <><strong>制作安排</strong><Select aria-label="声音制作安排" value={sound.production || 'undecided'} options={[{ value: 'synchronous', label: '同期生成意图' }, { value: 'postproduction', label: '待后期' }, { value: 'undecided', label: '待确定' }]} onChange={production => update({ ...sound, production })} /></>}</details>
+  return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.dialogue'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
+
+    {resolved.error && <Alert type="warning" message={resolved.error} />}
+    {card.type === 'direction.dialogue' ? <section aria-label="对白条目"><p>对白身份：{card.dialogue_id}</p>
+      <strong>对白版本</strong><InputNumber aria-label="对白版本" min={1} value={card.version || 1} onChange={version => update({ ...card, version: version || 1 })} />
+      <FieldEditor compact label="对白正文" value={card.content} onChange={content => update({ ...card, content })} />
+    </section> : <section aria-label="声音条目">
+      <FieldEditor compact label="声源说明" value={sound.source_description} onChange={source_description => update({ ...sound, source_description })} />
+      <FieldEditor compact label="环境声" value={sound.environment} onChange={environment => update({ ...sound, environment })} />
+      <FieldEditor compact label="动作声" value={sound.action_sound} onChange={action_sound => update({ ...sound, action_sound })} />
+      <FieldEditor compact label="音乐约束" purpose="constraint" value={sound.music} onChange={music => update({ ...sound, music })} />
+
+    </section>}
+
+    <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
     <details><summary>直接素材参考</summary>
       {resolved.candidates.filter(item => item.file_id && (item.modality === 'audio' || card.type === 'direction.dialogue' && item.modality === 'video')).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id!, purpose: 'positive' }] })}>关联参考 {item.token}</WorkbenchButton>)}
       {examples.map(example => <section key={example.id} aria-label={`参考 ${example.id}`}><MediaPreview fileId={example.file_id} type={example.source.port_id === 'audio' ? 'audio' : 'video'} />
@@ -63,8 +65,8 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
         <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, examples: examples.filter(value => value.id !== example.id) })}>取消参考</WorkbenchButton>
       </section>)}
     </details>
-    <section aria-label="完整设计输出"><h3>已保存完整设计 · revision {resolved.revision}</h3>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</section>
-  </>
+    <details aria-label="完整设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</details>
+  </DesignPresetEditor>
 }
 
 export function soundSummary(card: SoundCard) {
