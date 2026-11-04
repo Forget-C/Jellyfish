@@ -8,7 +8,7 @@ import type { GenerationCard } from './graphRules'
 
 type RelatedDesign = CameraCard | LightingCard | FocusCard | MovementCard | CompositionCard
 
-/** 五类画面设计复用明确对象／镜头／验收关系；验收连线即关联，其他候选须明确采用。 */
+/** 五类画面设计复用明确对象／镜头／验收关系；多用途来源在对应位置明确采用，取消用途保留来源连接。 */
 export function VisualDesignRelations({ card, document, savedRevision, modelOutputs, disabled, onChange, onLocateDesign }: {
   onLocateDesign?: (cardId: string, fieldId: string) => void; card: RelatedDesign; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; disabled?: boolean; onChange: (card: GenerationCard) => void
 }) {
@@ -23,7 +23,7 @@ export function VisualDesignRelations({ card, document, savedRevision, modelOutp
         return <WorkbenchButton key={port} disabled={disabled || !item.available || port === 'shot' && !bound && bindings.some(binding => binding.input_port === 'shot')} onClick={() => onChange({ ...card, input_bindings: bound ? bindings.filter(binding => binding.id !== bound.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{bound ? '取消' : '选择'}{label} {item.payload && 'name' in item.payload ? item.payload.name : ''}</WorkbenchButton>
       })}</div>)}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><Alert type="warning" message="已采用关系来源缺失，请替换或取消" /><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
-      <AcceptanceBasisSelector card={card} document={document} onLocateDesign={onLocateDesign} />
+      <AcceptanceBasisSelector card={card} document={document} disabled={disabled} onChange={onChange} onLocateDesign={onLocateDesign} />
     </section>
   )
 }

@@ -13,7 +13,7 @@ export function CandidateOutputStatus({ document, savedDocument, cardId, savedRe
   const target = document.cards?.find(card => card.id === cardId)
   return <section role="region" aria-label="候选输出状态">
     <h3>候选输出状态</h3>
-    <small>连线保留候选，输出可用后仍需明确选择。</small>
+    <small>输出可用性与实际采用分别确认，具体用途在当前卡片内查看。</small>
     {resolved.error && <p role="alert">{resolved.error}</p>}
     {edges.map(edge => {
       const source = document.cards?.find(card => card.id === edge.source_card)

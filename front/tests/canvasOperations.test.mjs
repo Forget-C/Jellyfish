@@ -202,3 +202,28 @@ test('clearing a prompt reference keeps the independent design association until
   assert.equal(updated.edges.length, 1)
   assert.equal(updated.cards[1].input_bindings.length, 1)
 })
+
+test('one design source exposes multiple receiver uses without auto-adoption and protects the whole connection', async () => {
+  const { visibleSourceEdges } = await import(await moduleUrl('graphRules'))
+  const groupedRules = createGraphRules({ cards: [definition('direction.criterion', [port('text', 'text'), port('criterion', 'criterion')]), definition('direction.shot', [], [input('text', 'text'), input('acceptance_basis', 'criterion')])] })
+  const grouped = createCanvasOperations(groupedRules)
+  const criterion = { id: 'criterion', type: 'direction.criterion', criterion_id: 'rule', name: '可见' }
+  const shot = { id: 'shot', type: 'direction.shot', input_bindings: [] }
+  const link = { id: 'source', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
+  const connected = grouped.connect(document({ cards: [criterion, shot], edges: [], input_order: {} }), link).document
+  assert.equal(connected.edges.length, 2)
+  assert.equal(visibleSourceEdges(connected).length, 1)
+  const copied = grouped.copyIncoming(connected, 'shot', { ...shot, id: 'copy' }).document
+  const copiedIds = copied.edges.filter(edge => edge.target_card === 'copy').map(edge => edge.id)
+  assert.equal(copiedIds.length, 2)
+  assert.deepEqual(Object.values(copied.input_order.copy).flat().sort(), copiedIds.sort())
+  assert.deepEqual(connected.cards[1].input_bindings, [])
+  connected.cards[1].input_bindings = [{ id: 'acceptance', input_port: 'acceptance_basis', source: { ...source, card_id: 'criterion', port_id: 'criterion', object_id: 'rule' } }]
+  connected.cards[1].visible_result = { state: 'fact', document: { segments: [{ id: 'body-reference', kind: 'reference', source: { ...source, card_id: 'criterion', port_id: 'text' } }] } }
+  assert.equal(grouped.disconnect(connected, connected.edges[0]).document, undefined)
+  const cleared = grouped.update(connected, { ...connected.cards[1], visible_result: { state: 'empty' }, input_bindings: [] }).document
+  assert.equal(grouped.clean(cleared).edges.length, 2, 'last use cancellation retains the candidate source')
+  const disconnected = grouped.disconnect(cleared, cleared.edges[0]).document
+  assert.equal(disconnected.edges.length, 0)
+  assert.deepEqual(disconnected.input_order.shot, { text: [], acceptance_basis: [] })
+})

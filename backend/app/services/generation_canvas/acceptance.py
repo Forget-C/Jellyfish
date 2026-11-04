@@ -29,9 +29,10 @@ def acceptance_inputs(context, card, candidates, model_outputs):
 
 
 def synchronize_acceptance(document, previous):
-    """新验收连线即关联；旧未采用候选清理，断线或删卡同步解除原关联。"""
+    """唯一验收用途随线生效；多用途由接收端选择，断线同步解除弱关联。"""
     old_edges = {(edge.source_card, edge.target_card) for edge in previous.edges
                  if edge.source_port == 'criterion' and edge.target_port == 'acceptance_basis'}
+    from app.services.generation_canvas.design_connections import multiple_source_uses
     previous_cards = {card.id: card for card in previous.cards}
     old_candidates = {(source, target) for source, target in old_edges
         if not any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source
@@ -40,6 +41,8 @@ def synchronize_acceptance(document, previous):
     removed = set()
     for edge in document.edges:
         if edge.source_port != 'criterion' or edge.target_port != 'acceptance_basis':
+            continue
+        if multiple_source_uses(document, edge.source_card, edge.target_card):
             continue
         source, target = cards.get(edge.source_card), cards.get(edge.target_card)
         if not source or source.type != 'direction.criterion' or not hasattr(target, 'input_bindings'):

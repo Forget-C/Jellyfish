@@ -1,5 +1,5 @@
 import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } from '../../../services/generated'
-import { connect, disconnect, findConnection, cleanDirectDesignCandidates, isIndependentDesignEdge } from './graphRules'
+import { connect, disconnect, findConnection, cleanDirectDesignCandidates, isIndependentDesignEdge, sourceConnectionEdges } from './graphRules'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { referenceProtection } from './promptRules'
 import { cleanReferenceImageSources } from './referenceCardRules'
@@ -10,15 +10,36 @@ type ConnectionReason = (document: CanvasDocument, edge: GenerationEdge, capabil
 
 /** Stateless document operations. Callers commit successful results once and retain
  * ownership, confirmation, geometry and history; server validation remains authoritative. */
-export function createCanvasOperations({ connectionReason }: { connectionReason: ConnectionReason }) {
+export function createCanvasOperations({ connectionReason, sourceOptions }: { connectionReason: ConnectionReason; sourceOptions?: (document: CanvasDocument, sourceId: string, targetId: string) => GenerationEdge[] }) {
   const stackFor = (document: CanvasDocument, id: string) => document.groups?.find(group => group.kind === 'stack' && group.card_ids?.includes(id))
   const addConnection = (document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability): CanvasOperationResult => {
+    const design = document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))
+    const options = design && sourceOptions ? sourceOptions(document, edge.source_card, edge.target_card) : [edge]
+    if (design && options.length > 1) {
+      let changed = document
+      for (const option of options) {
+        if (findConnection(changed, option)) continue
+        const reason = connectionReason(changed, option, capability)
+        if (reason) return { reason }
+        changed = connect(changed, { ...option, id: option.source_port === edge.source_port && option.target_port === edge.target_port ? edge.id : crypto.randomUUID() }, false)
+      }
+      return { document: changed }
+    }
     if (findConnection(document, edge)) return { document }
     const reason = connectionReason(document, edge, capability)
     return reason ? { reason } : { document: connect(document, edge) }
   }
   return {
-    clean: (document: CanvasDocument) => cleanDirectDesignCandidates(cleanReferenceImageSources(document)),
+    clean: (document: CanvasDocument) => {
+      let changed = cleanReferenceImageSources(document)
+      if (sourceOptions) for (const edge of document.edges || []) {
+        if (!document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))) continue
+        const options = sourceOptions(document, edge.source_card, edge.target_card)
+        if (options.length < 2) continue
+        for (const option of options) if (!findConnection(changed, option)) changed = connect(changed, { ...option, id: crypto.randomUUID() }, false)
+      }
+      return cleanDirectDesignCandidates(changed)
+    },
     connect: addConnection,
     check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability) {
       if (findConnection(document, edge)) return undefined
@@ -56,7 +77,7 @@ export function createCanvasOperations({ connectionReason }: { connectionReason:
         if (!result.document) return result
         changed = result.document
       }
-      return { document: { ...changed, input_order: { ...changed.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[sourceId] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } } }
+      return { document: { ...changed, input_order: { ...changed.input_order, [copy.id]: { ...changed.input_order?.[copy.id], ...Object.fromEntries(Object.entries(document.input_order?.[sourceId] || {}).map(([port, ids]) => [port, ids.map(id => { const original = incoming.find(edge => edge.id === id)!; return findConnection(changed, { ...original, target_card: copy.id })!.id })])) } } } }
     },
     remove(document: CanvasDocument, ids: string[], busyCards: Set<string>, cardLabel: (id: string) => string): CanvasOperationResult {
       const blocked = ids.find(id => stackFor(document, id) || document.edges?.some(edge => edge.source_card === id && stackFor(document, edge.target_card)) || busyCards.has(id))
@@ -73,8 +94,13 @@ export function createCanvasOperations({ connectionReason }: { connectionReason:
     },
     disconnect(document: CanvasDocument, edge: GenerationEdge): CanvasOperationResult {
       if (stackFor(document, edge.target_card)) return { reason: '请先解除堆叠后删除输入连线' }
-      if (referenceProtection(document, edge.source_card, edge.target_card, edge.source_port, edge.target_port)) return { reason: '此连线仍有输入被引用，请先取消引用后再删除' }
-      return { document: disconnect(document, edge.id) }
+      const members = sourceConnectionEdges(document, edge)
+      const design = document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))
+      const protection = design ? referenceProtection(document, edge.source_card, edge.target_card) : referenceProtection(document, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
+      if (protection) return { reason: '此连线仍有输入被引用，请先解除全部引用：' + protection.message, protection }
+      let changed = document
+      for (const member of members) changed = disconnect(changed, member.id)
+      return { document: changed }
     },
   }
 }

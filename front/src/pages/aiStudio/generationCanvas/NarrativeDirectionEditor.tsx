@@ -37,7 +37,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <>
     <label>名称<Input aria-label="叙事名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} /></label>
-    {card.type === 'direction.shot' && <AcceptanceBasisSelector card={card} document={document} onLocateDesign={onLocateDesign} />}
+    {card.type === 'direction.shot' && <AcceptanceBasisSelector card={card} document={document} disabled={disabled} onChange={onChange} onLocateDesign={onLocateDesign} />}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <details><summary>叙事关系 · 已选 {bindings.length} 项</summary>
     {card.type === 'direction.shot' && beats.length > 0 && <section aria-label="已选覆盖节拍顺序"><h3>已选覆盖节拍顺序</h3>{beats.map((binding, index) => {

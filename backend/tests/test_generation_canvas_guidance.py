@@ -225,24 +225,24 @@ async def test_acceptance_reference_rename_and_delete_update_linked_designs(canv
 
 
 @pytest.mark.asyncio
-async def test_acceptance_connection_remains_authoritative_when_receiver_binding_is_omitted(canvas_client):
+async def test_multi_use_source_preserves_explicit_acceptance_and_allows_receiver_to_cancel(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '连线即关联'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
     doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '手部'},
-                      {'id': 'shot', 'type': 'direction.shot', 'name': '镜头'}],
+                      {'id': 'shot', 'type': 'direction.shot', 'name': '镜头', 'input_bindings': [{'id': 'chosen', 'input_port': 'acceptance_basis', 'source': {'canvas_id': canvas['id'], 'card_id': 'criterion', 'port_id': 'criterion', 'position': 0, 'object_id': 'hand'}}]}],
         edges=[{'id': 'acceptance', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'acceptance_basis'}],
         input_order={'shot': {'acceptance_basis': ['acceptance']}})
     assert (await client.put(url, json={'request_id': 'connect', 'expected_revision': 0, 'document': doc})).status_code == 200
     saved = (await client.get(url)).json()['data']['document']
     assert saved['cards'][1]['input_bindings'][0]['source']['object_id'] == 'hand'
-    # The edge, rather than an obsolete receiver selection, owns the relationship.
+    # Cancelling one use does not remove the multi-use source connection.
     saved['cards'][1]['input_bindings'] = []
     assert (await client.put(url, json={'request_id': 'edit', 'expected_revision': 1, 'document': saved})).status_code == 200
     reopened = (await client.get(url)).json()['data']['document']
-    assert len(reopened['edges']) == 1
-    assert len(reopened['cards'][1]['input_bindings']) == 1
+    assert len(reopened['edges']) == 2
+    assert not reopened['cards'][1]['input_bindings']
     reopened.update(edges=[], input_order={})
     assert (await client.put(url, json={'request_id': 'disconnect', 'expected_revision': 2, 'document': reopened})).status_code == 200
     assert not (await client.get(url)).json()['data']['document']['cards'][1]['input_bindings']
@@ -257,7 +257,7 @@ async def test_acceptance_is_deduplicated_across_designs_and_direct_adoption(can
     doc = canvas['document']
     doc.update(cards=[{'id': 'required', 'type': 'direction.criterion', 'criterion_id': 'required', 'name': '共享要求', 'standard': {'state': 'fact', 'text': '只出现一次的标准'}},
         {'id': 'unused', 'type': 'direction.criterion', 'criterion_id': 'unused', 'name': '未采用设计的要求', 'standard': {'state': 'fact', 'text': '不应进入模型'}},
-        *[{'id': kind, 'type': 'direction.shot', 'name': kind} for kind in ['first', 'second', 'unselected']],
+        *[{'id': kind, 'type': 'direction.shot', 'name': kind, 'input_bindings': [{'id': 'selected', 'input_port': 'acceptance_basis', 'source': {**source('unused' if kind == 'unselected' else 'required', 'criterion'), 'object_id': 'unused' if kind == 'unselected' else 'required'}}]} for kind in ['first', 'second', 'unselected']],
         {'id': 'model', 'type': 'model.text', 'input_bindings': [{'id': kind, 'source': source(kind, 'text'), 'input_port': 'text'} for kind in ['first', 'second']]}],
         edges=[{'id': kind, 'source_card': 'unused' if kind == 'unselected' else 'required', 'source_port': 'criterion', 'target_card': kind, 'target_port': 'acceptance_basis'} for kind in ['first', 'second', 'unselected']]
         + [{'id': 'model-' + kind, 'source_card': kind, 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'} for kind in ['first', 'second']],
@@ -297,7 +297,7 @@ async def test_linked_acceptance_carries_effective_standard_media_and_checks_cap
     standard = {'state': 'fact', 'document': {'segments': [{'id': 'image', 'kind': 'reference', 'source': source('image', 'image')}]}}
     doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id},
         {'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '图文标准', 'standard': standard},
-        {'id': 'shot', 'type': 'direction.shot', 'name': '镜头'},
+        {'id': 'shot', 'type': 'direction.shot', 'name': '镜头', 'input_bindings': [{'id': 'chosen', 'input_port': 'acceptance_basis', 'source': {**source('criterion', 'criterion'), 'object_id': 'hand'}}]},
         {'id': 'model', 'type': 'model.' + modality, 'input_bindings': [{'id': 'shot', 'input_port': 'text', 'source': source('shot', 'text')}]}],
         edges=[{'id': 'media', 'source_card': 'image', 'source_port': 'image', 'target_card': 'criterion', 'target_port': 'image'},
             {'id': 'acceptance', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'acceptance_basis'},
@@ -323,7 +323,7 @@ async def test_linked_acceptance_carries_effective_standard_media_and_checks_cap
 
 
 @pytest.mark.asyncio
-async def test_old_unadopted_acceptance_candidates_are_removed_without_adopting_them(canvas_client, canvas_file_store):
+async def test_old_multi_use_acceptance_candidates_are_preserved_without_adopting_them(canvas_client, canvas_file_store):
     from app.models.generation_canvas import GenerationCanvas
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '旧候选'})).json()['data']
@@ -339,7 +339,8 @@ async def test_old_unadopted_acceptance_candidates_are_removed_without_adopting_
     saved = await client.put(url, json={'request_id': 'upgrade', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 200, saved.text
     reopened = (await client.get(url)).json()['data']['document']
-    assert not reopened['edges'] and not reopened['cards'][1]['input_bindings']
+    assert len(reopened['edges']) == 2 and not reopened['cards'][1]['input_bindings']
+    assert reopened['input_order']['shot']['acceptance_basis'] == ['old']
 
 @pytest.mark.asyncio
 async def test_independent_design_connection_adopts_and_disconnects(canvas_client):
@@ -406,3 +407,31 @@ async def test_unavailable_asset_identity_in_design_dependency_blocks_compile(ca
     compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
     assert not compiled['can_run']
     assert 'OUTPUT_MISSING' in {issue['code'] for issue in compiled['diagnostics']}
+
+@pytest.mark.asyncio
+async def test_multi_use_design_source_is_candidate_until_receiver_selects_and_cancelling_keeps_connection(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '多用途来源'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'rule', 'name': '可见', 'standard': {'state': 'fact', 'text': '手部可见'}},
+                      {'id': 'shot', 'type': 'direction.shot', 'name': '动作'}],
+        edges=[{'id': 'source', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'acceptance_basis'}],
+        input_order={'shot': {'acceptance_basis': ['source']}})
+    saved = await canvas_client.put(url, json={'request_id': 'connect', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    current = (await canvas_client.get(url)).json()['data']['document']
+    assert current['cards'][1]['input_bindings'] == []
+    assert {(edge['source_port'], edge['target_port']) for edge in current['edges']} == {('text', 'text'), ('criterion', 'acceptance_basis')}
+    current['cards'][1]['input_bindings'] = [{'id': 'selected', 'input_port': 'acceptance_basis', 'source': {'canvas_id': canvas['id'], 'card_id': 'criterion', 'port_id': 'criterion', 'position': 0, 'object_id': 'rule'}}]
+    assert (await canvas_client.put(url, json={'request_id': 'select', 'expected_revision': 1, 'document': current})).status_code == 200
+    current['cards'][1]['visible_result'] = {'state': 'fact', 'document': {'segments': [{'id': 'whole-source', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'criterion', 'port_id': 'text', 'position': 0}}]}}
+    assert (await canvas_client.put(url, json={'request_id': 'body-use', 'expected_revision': 2, 'document': current})).status_code == 200
+    disconnected = {**current, 'edges': [], 'input_order': {}}
+    protected = await canvas_client.put(url, json={'request_id': 'protected', 'expected_revision': 3, 'document': disconnected})
+    assert protected.status_code == 422 and protected.json()['detail']['code'] == 'REFERENCE_IN_USE', protected.text
+    current['cards'][1]['visible_result'] = {'state': 'empty'}
+    current['cards'][1]['input_bindings'] = []
+    assert (await canvas_client.put(url, json={'request_id': 'cancel', 'expected_revision': 3, 'document': current})).status_code == 200
+    reopened = (await canvas_client.get(url)).json()['data']['document']
+    assert not reopened['cards'][1]['input_bindings']
+    assert len(reopened['edges']) == 2

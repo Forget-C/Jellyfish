@@ -79,6 +79,8 @@ class CanvasStore:
         from app.services.generation_canvas.reference_rules import clean_reference_image_sources
         document = clean_reference_image_sources(document, previous_document)
         previous_document = clean_reference_image_sources(previous_document)
+        from app.services.generation_canvas.design_connections import expand_design_source_connections
+        document = expand_design_source_connections(document, previous_document)
         from app.services.generation_canvas.acceptance import synchronize_acceptance
         document = synchronize_acceptance(document, previous_document)
         from app.services.generation_canvas.design_connections import synchronize_design_connections
@@ -133,7 +135,7 @@ class CanvasStore:
                     raise diagnostic('INVALID_ORIGIN', '另存内容须与固定成果及完成状态一致', {'card_id': card.id})
         for card in document.cards:
             target = getattr(card, 'frame_target', None)
-            if target and target.card_id in previous_cards and not any(source.id == target.card_id for source in document.cards):
+            if target and target.card_id in previous_cards and (not any(source.id == target.card_id for source in document.cards) or any(edge['source_card'] == target.card_id and edge['target_card'] == card.id for edge in canvas.document.get('edges', [])) and not any(edge.source_card == target.card_id and edge.target_card == card.id for edge in document.edges)):
                 raise diagnostic('REFERENCE_IN_USE', '请先解除构图的运镜关联再删除来源', {'card_id': card.id, 'path': ['frame_target']})
         validate_graph(document, previous_document)
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。

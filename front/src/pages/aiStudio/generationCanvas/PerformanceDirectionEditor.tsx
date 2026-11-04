@@ -77,7 +77,7 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       {!bindings.length && <small>尚未选择对象</small>}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失，请替换或取消</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
     </section>
-    {card.type === 'direction.performance' && <AcceptanceBasisSelector card={card} document={document} onLocateDesign={onLocateDesign} />}
+    {card.type === 'direction.performance' && <AcceptanceBasisSelector card={card} document={document} disabled={disabled} onChange={onChange} onLocateDesign={onLocateDesign} />}
     {card.type === 'direction.performance' && <section aria-label="对白依据"><h3>对白依据</h3>{resolved.candidates.filter(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'dialogue_reference').map(item => {
       const binding = bindings.find(value => value.input_port === 'dialogue_basis' && sourceKey(value.source) === sourceKey(item.source))
       const payload = item.payload as DialogueReferencePayload

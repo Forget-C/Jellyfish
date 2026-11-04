@@ -3,6 +3,40 @@ from app.core.contracts.generation_canvas import InputBinding, OutputIdentity
 from app.services.generation_canvas.output_resolution import prompt_references
 
 
+def expand_design_source_connections(document, previous):
+    """一对设计来源卡保留全部兼容用途候选；旧边身份和各用途顺序不变。"""
+    from uuid import uuid4
+    from app.schemas.generation_canvas import GenerationCanvasEdge
+    from app.services.generation_canvas.catalog import ports_compatible
+    cards = {card.id: card for card in document.cards}
+    endpoints = {(edge.source_card, edge.source_port, edge.target_card, edge.target_port) for edge in document.edges}
+    old = {(edge.source_card, edge.source_port, edge.target_card, edge.target_port): edge for edge in previous.edges}
+    pairs = list(dict.fromkeys((edge.source_card, edge.target_card) for edge in document.edges))
+    for source_id, target_id in pairs:
+        source, target = cards.get(source_id), cards.get(target_id)
+        if not source or not target or not source.type.startswith('direction.'):
+            continue
+        options = [(output, input_port) for output in source.output_ports for input_port in target.input_ports
+                   if ports_compatible(output, target.type, input_port)]
+        if len(options) < 2:
+            continue
+        for output, input_port in options:
+            endpoint = (source_id, output, target_id, input_port)
+            if endpoint in endpoints:
+                continue
+            edge = old.get(endpoint) or GenerationCanvasEdge(id=uuid4().hex, source_card=source_id,
+                source_port=output, target_card=target_id, target_port=input_port)
+            document.edges.append(edge)
+            document.input_order.setdefault(target_id, {}).setdefault(input_port, []).append(edge.id)
+            endpoints.add(endpoint)
+    return document
+
+
+def multiple_source_uses(document, source_id, target_id):
+    """兼容用途在保存前已完整展开；多用途不自动选择任何一项。"""
+    return sum(edge.source_card == source_id and edge.target_card == target_id for edge in document.edges) > 1
+
+
 def independent_design_edge(edge, cards):
     """只允许设计正文进入模型的独立文本输入，不扩展资产或业务身份关系。"""
     source, target = cards.get(edge.source_card), cards.get(edge.target_card)

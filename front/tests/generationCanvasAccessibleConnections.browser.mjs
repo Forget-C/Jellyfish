@@ -38,7 +38,7 @@ try {
   await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
   const canvas=(await response.json()).data
-  const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'用于候选的正文'}, {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'person',type:'content.object',object_id:'actor',name:'张三',category:'character',text:'人物描述'}, {id:'photo',type:'direction.photography',input_bindings:[],examples:[],scope:{}}],edges:[],input_order:{}}
+  const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'用于候选的正文'}, {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'person',type:'content.object',object_id:'actor',name:'张三',category:'character',text:'人物描述'}, {id:'photo',type:'direction.focus',input_bindings:[],examples:[],scope:{}}],edges:[],input_order:{}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok,await seed.clone().text())
   await page.goto(`http://127.0.0.1:4482/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -104,7 +104,7 @@ try {
   await page.getByRole('button',{name:'取消连接',exact:true}).click()
   const person=page.locator('[data-card-id="person"]')
   await person.getByRole('button',{name:'右侧连接点',exact:true}).press('Enter')
-  await page.getByRole('button',{name:'连接到摄影设计卡 · 卡片 5',exact:true}).click()
+  await page.getByRole('button',{name:'连接到焦点与成像卡 · 卡片 5',exact:true}).click()
   const purposes=page.getByRole('menu',{name:'选择连接用途',exact:true})
   await purposes.waitFor()
   assert.equal(await page.getByRole('navigation',{name:'添加卡片',exact:true}).count(),0)
@@ -113,7 +113,7 @@ try {
   assert.equal(await purposes.count(),0)
   assert.equal(await person.getByRole('button',{name:'右侧连接点',exact:true}).evaluate(element=>element===document.activeElement),true,'cancel restores source focus')
   await person.getByRole('button',{name:'右侧连接点',exact:true}).press('Enter')
-  await page.getByRole('button',{name:'连接到摄影设计卡 · 卡片 5',exact:true}).click()
+  await page.getByRole('button',{name:'连接到焦点与成像卡 · 卡片 5',exact:true}).click()
   await purposes.getByRole('menuitem').filter({hasText:'焦点对象'}).click()
   await delay(1300)
   const final=(await(await fetch(`${base}/${canvas.id}`)).json()).data

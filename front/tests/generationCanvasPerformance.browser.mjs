@@ -85,7 +85,7 @@ try {
 
   await page.screenshot({ path: join(output, 'performance-desktop.png'), fullPage: true })
   await open('consumer')
-  await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
+  await card.getByRole('button', { name: '解除关联 @文本1', exact: true }).waitFor()
   await poll(state => state.document.cards.find(item => item.id === 'consumer').input_bindings?.length === 1)
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
