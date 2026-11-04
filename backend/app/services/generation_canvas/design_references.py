@@ -1,13 +1,22 @@
-"""Six visual designs resolve field-owned references without collecting candidate ancestors."""
+"""Design parameters resolve field-owned references without collecting candidate ancestors."""
 import re
-from app.core.contracts.generation_canvas import DesignFieldReference, DesignMediaReference, DesignReferenceIssue
+from app.core.contracts.generation_canvas import ReferenceDesignField, DesignFieldReference, DesignMediaReference, DesignReferenceIssue
 from app.services.generation_canvas.output_resolution import identity_key
 
 VISUAL_DESIGN_TYPES = frozenset(('direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.composition', 'direction.movement'))
 
+PERFORMANCE_DESIGN_TYPES = frozenset(('direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'))
+REFERENCE_DESIGN_TYPES = VISUAL_DESIGN_TYPES | PERFORMANCE_DESIGN_TYPES
+
 
 def design_fields(card):
     """Stable field paths include explicit movement phase identities."""
+    if card.type in PERFORMANCE_DESIGN_TYPES:
+        for key in type(card).model_fields:
+            value = getattr(card, key)
+            if isinstance(value, ReferenceDesignField):
+                yield key, value, [key]
+        return
     if card.type not in VISUAL_DESIGN_TYPES:
         return
     for key, value in card.fields:
@@ -50,9 +59,25 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                 basis_current = False
             source = context.cards.get(segment.source.card_id)
             code = 'REFERENCE_CANVAS_MISMATCH' if segment.source.canvas_id != context.document.id else 'DESIGN_BODY_REFERENCE_FORBIDDEN' if source and source.type.startswith('direction.') and segment.source.port_id == 'text' else 'REFERENCE_NOT_CONNECTED' if item is None else 'OUTPUT_MISSING' if not item.available else None
+            if not code and segment.source.port_id == 'anchor':
+                if card.type not in PERFORMANCE_DESIGN_TYPES or not source or source.type != 'direction.anchor':
+                    code = 'DESIGN_BODY_REFERENCE_FORBIDDEN'
+                else:
+                    values = list(design_fields(source))
+                    active = [(name, field) for name, field, _ in values if field.state not in ('empty', 'not_applicable')]
+                    if any(field.document and any(part.kind == 'reference' for part in field.document.segments) for _, field in active):
+                        code = 'ANCHOR_NESTED_REFERENCE'
+                    else:
+                        from app.services.generation_canvas.spatial import FIELD_LABELS
+                        location = [FIELD_LABELS[name] + '：' + (''.join(part.text for part in field.document.segments) if field.document else field.text) for name, field in active]
+                        item = item.model_copy(update={'text': source.name + '（' + '；'.join(location) + '）'})
+            if not code and card.type in PERFORMANCE_DESIGN_TYPES and item and item.modality == 'audio':
+                code = 'UNSUPPORTED_DESIGN_MEDIA'
+            if not code and item and item.modality == 'text' and not item.text:
+                code = 'REFERENCE_TEXT_UNAVAILABLE'
             if code:
                 if effective:
-                    issues.append(DesignReferenceIssue(source=segment.source, field_id=key, reference_id=segment.id, code=code, message='设计参数引用不可用，请查看对应字段和来源'))
+                    issues.append(DesignReferenceIssue(source=segment.source, field_id=key, reference_id=segment.id, code=code, message='锚点定位包含未展开的引用，请改为纯文本定位或在当前卡直接表达位置与素材' if code == 'ANCHOR_NESTED_REFERENCE' else '设计参数引用不可用，请查看对应字段和来源'))
                 text += '[引用不可用]'
             elif item.modality == 'text':
                 text += item.text or ''
@@ -67,7 +92,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
             phases[key[6:]] = updated
         else:
             fields[key] = updated
-    updated = card.model_copy(update={'fields': card.fields.model_copy(update=fields)})
+    updated = card.model_copy(update=fields) if card.type in PERFORMANCE_DESIGN_TYPES else card.model_copy(update={'fields': card.fields.model_copy(update=fields)})
     if phases:
         updated = updated.model_copy(update={'phases': [phase.model_copy(update={'frame': phases.get(phase.id, phase.frame)}) for phase in card.phases]})
     return updated, media, issues, basis_current

@@ -1,5 +1,5 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
-from app.core.contracts.generation_canvas import StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
+from app.core.contracts.generation_canvas import ReferenceDesignField, StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
 from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
@@ -380,37 +380,37 @@ class PerformanceDirectionCard(CardDefinition):
 class CharacterSituationCard(PerformanceDirectionCard):
     """情境只维护本卡处境和关系背景，不复制对象描述。"""
     type: Literal['direction.situation'] = Field(default='direction.situation', json_schema_extra={'enum': ['direction.situation']})
-    situation: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    relationship: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'effect_object')
+    situation: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    relationship: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'effect_object')
 
 
 class CharacterPerformanceCard(PerformanceDirectionCard):
     """完整表演；可选后续端点待对应来源票据接入，不伪造身份。"""
     type: Literal['direction.performance'] = Field(default='direction.performance', json_schema_extra={'enum': ['direction.performance']})
-    objective: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    obstacle: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    subtext: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    attention: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    internal_adjustment: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
-    physical_action: DesignField = Field(default_factory=DesignField)
-    gaze: DesignField = Field(default_factory=DesignField)
-    breath: DesignField = Field(default_factory=DesignField)
-    weight: DesignField = Field(default_factory=DesignField)
-    hands: DesignField = Field(default_factory=DesignField)
-    voice: DesignField = Field(default_factory=DesignField)
-    delivery: DesignField = Field(default_factory=DesignField)
-    reaction_order: DesignField = Field(default_factory=DesignField)
-    exit_state: DesignField = Field(default_factory=DesignField)
-    avoid: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
-    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'effect_object', 'beat', 'received_event', 'dialogue_basis', 'acceptance_basis', 'image_example', 'video_example')
+    objective: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    obstacle: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    subtext: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    attention: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    internal_adjustment: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
+    physical_action: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    gaze: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    breath: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    weight: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    hands: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    voice: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    delivery: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    reaction_order: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    exit_state: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    avoid: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'effect_object', 'beat', 'received_event', 'dialogue_basis', 'acceptance_basis', 'image_example', 'video_example')
 
 
 class PerformanceRuleCard(PerformanceDirectionCard):
     """规则保留背景或约束用途、适用范围和必要制作阶段。"""
     type: Literal['direction.performance_rule'] = Field(default='direction.performance_rule', json_schema_extra={'enum': ['direction.performance_rule']})
-    applicability: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example')
+    applicability: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'effect_object', 'image_example', 'video_example')
 
 
 class GuidanceDirectionCard(PerformanceDirectionCard):
@@ -471,11 +471,11 @@ class SpatialAnchorCard(SpatialDirectionCard):
             raise ValueError('锚点标记须对应唯一的已关联图片')
         return self
     name: str = ''
-    position: DesignField = Field(default_factory=DesignField)
-    orientation: DesignField = Field(default_factory=DesignField)
-    spatial_relation: DesignField = Field(default_factory=DesignField)
-    scale: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('space', 'effect_object', 'image_example', 'video_example')
+    position: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    orientation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    spatial_relation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    scale: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'space', 'effect_object', 'image_example', 'video_example')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'anchor')
 
 
@@ -484,38 +484,38 @@ class BlockingDirectionCard(SpatialDirectionCard):
     type: Literal['direction.blocking'] = Field(default='direction.blocking', json_schema_extra={'enum': ['direction.blocking']})
     blocking_id: str | None = Field(default=None, min_length=1, max_length=64)
     name: str = ''
-    position: DesignField = Field(default_factory=DesignField)
-    orientation: DesignField = Field(default_factory=DesignField)
-    initiative: DesignField = Field(default_factory=DesignField)
-    path: DesignField = Field(default_factory=DesignField)
-    transition_reason: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'position_anchor', 'change_event', 'image_example', 'video_example')
+    position: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    orientation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    initiative: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    path: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    transition_reason: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'position_anchor', 'change_event', 'image_example', 'video_example')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'blocking')
 
 
 class InFrameActivityCard(SpatialDirectionCard):
     """持续任务、反应延迟与入出画；触发事件不自动执行。"""
     type: Literal['direction.activity'] = Field(default='direction.activity', json_schema_extra={'enum': ['direction.activity']})
-    task: DesignField = Field(default_factory=DesignField)
-    attention: DesignField = Field(default_factory=DesignField)
-    main_action_effect: DesignField = Field(default_factory=DesignField)
-    path: DesignField = Field(default_factory=DesignField)
-    delay_basis: DesignField = Field(default_factory=DesignField)
+    task: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    attention: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    main_action_effect: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    path: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    delay_basis: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     delay_ms: int | None = Field(default=None, ge=0)
-    entry_exit: DesignField = Field(default_factory=DesignField)
-    exit_state: DesignField = Field(default_factory=DesignField)
-    depth: DesignField = Field(default_factory=DesignField)
-    intensity: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'area_anchor', 'trigger_event', 'effect_object', 'image_example', 'video_example')
+    entry_exit: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    exit_state: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    depth: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    intensity: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'area_anchor', 'trigger_event', 'effect_object', 'image_example', 'video_example')
 
 
 class EnvironmentActivityCard(SpatialDirectionCard):
     """环境活动与留白不要求先建镜头、人物或节拍。"""
     type: Literal['direction.environment'] = Field(default='direction.environment', json_schema_extra={'enum': ['direction.environment']})
-    activity: DesignField = Field(default_factory=DesignField)
-    empty_space: DesignField = Field(default_factory=DesignField)
-    reason: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
+    activity: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    empty_space: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    reason: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'image_example', 'video_example')
 
 class SoundDirectionCard(CardDefinition):
     """声音设计仅关联直接对象与固定素材，不新增模型音频输入。"""

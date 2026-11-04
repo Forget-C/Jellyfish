@@ -1,4 +1,4 @@
-import { VisualDesignScope } from './VisualDesignScope'
+import { DesignScopeEditor } from './DesignScopeEditor'
 import { VisualDesignRelations } from './VisualDesignRelations'
 import type { CameraCard, LightingCard, FocusCard, DesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -18,6 +18,6 @@ export function StaticVisualDesignEditor({ card: raw, disabled, editorOpen, onUn
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets[kind]} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) } as StaticVisualDesignCard)}>
     <div className="design-preset-fields">{Object.entries(labels).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={(fields as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } } as StaticVisualDesignCard)} />)}</div>
     <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
-    <VisualDesignScope card={card} onChange={onChange} disabled={disabled} />
+    <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} />
   </DesignPresetEditor>
 }

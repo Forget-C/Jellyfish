@@ -67,6 +67,7 @@
     "generation-canvas-spatial": { "file": "generationCanvasSpatial.browser.mjs", "ports": [4287, 8287], "timeoutMs": 180000 },
     "generation-canvas-sound": { "file": "generationCanvasSound.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-photography": { "file": "generationCanvasPhotography.browser.mjs", "ports": [8655, 4655], "timeoutMs": 180000 },
+    "generation-canvas-performance-designs": {"file":"generationCanvasPerformanceDesigns.browser.mjs","ports":[4452,8452],"timeoutMs":180000},
     "generation-canvas-performance": { "file": "generationCanvasPerformance.browser.mjs", "ports": [4285, 8285], "timeoutMs": 180000 },
     "generation-canvas-multi-view": { "file": "generationCanvasMultiView.browser.mjs", "ports": [4283, 8283], "timeoutMs": 180000 },
     "generation-canvas-named-references": { "file": "generationCanvasNamedReferences.browser.mjs", "ports": [4281, 8281], "timeoutMs": 180000 },
@@ -119,6 +120,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
+    "performance-design": ["generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
     "canvas-design": ["generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
     "canvas-interaction": [
       "generation-canvas-editor-reveal",

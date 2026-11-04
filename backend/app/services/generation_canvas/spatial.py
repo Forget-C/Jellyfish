@@ -1,4 +1,4 @@
-"""空间设计只展开本卡字段和直接选择的身份，媒体关联不成为输出。"""
+"""空间设计发布本卡字段及明确关系；仅关联的示例媒体不进入输出。"""
 from app.core.contracts.generation_canvas import (
     FrameState, DesignTextPayload, SpatialDesignRelations, DesignField, AnchorDesignFields, BlockingDesignFields, ActivityDesignFields, EnvironmentDesignFields, SpatialReferencePayload,
     ObjectReferencePayload, OutputIdentity,

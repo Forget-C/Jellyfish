@@ -179,7 +179,7 @@ class DesignFieldDocument(BaseModel):
 
 
 class ReferenceDesignField(DesignField):
-    """Only the six visual designs expose reference-aware parameter documents."""
+    """Design parameters with explicit, field-owned source references."""
     document: DesignFieldDocument | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
@@ -225,66 +225,66 @@ class DesignScope(BaseModel):
 class PerformanceDesignFields(BaseModel):
     """导演表演的具体业务字段；字段编辑不开放局部采用。"""
     model_config = ConfigDict(extra='forbid')
-    situation: DesignField | None = None
-    relationship: DesignField | None = None
-    objective: DesignField | None = None
-    obstacle: DesignField | None = None
-    subtext: DesignField | None = None
-    attention: DesignField | None = None
-    internal_adjustment: DesignField | None = None
-    physical_action: DesignField | None = None
-    gaze: DesignField | None = None
-    breath: DesignField | None = None
-    weight: DesignField | None = None
-    hands: DesignField | None = None
-    voice: DesignField | None = None
-    delivery: DesignField | None = None
-    reaction_order: DesignField | None = None
-    exit_state: DesignField | None = None
-    avoid: DesignField | None = None
-    applicability: DesignField | None = None
+    situation: ReferenceDesignField | None = None
+    relationship: ReferenceDesignField | None = None
+    objective: ReferenceDesignField | None = None
+    obstacle: ReferenceDesignField | None = None
+    subtext: ReferenceDesignField | None = None
+    attention: ReferenceDesignField | None = None
+    internal_adjustment: ReferenceDesignField | None = None
+    physical_action: ReferenceDesignField | None = None
+    gaze: ReferenceDesignField | None = None
+    breath: ReferenceDesignField | None = None
+    weight: ReferenceDesignField | None = None
+    hands: ReferenceDesignField | None = None
+    voice: ReferenceDesignField | None = None
+    delivery: ReferenceDesignField | None = None
+    reaction_order: ReferenceDesignField | None = None
+    exit_state: ReferenceDesignField | None = None
+    avoid: ReferenceDesignField | None = None
+    applicability: ReferenceDesignField | None = None
 
 
 class AnchorDesignFields(BaseModel):
     """可引用空间位置的完整设计。"""
     model_config = ConfigDict(extra='forbid')
-    position: DesignField
-    orientation: DesignField
-    spatial_relation: DesignField
-    scale: DesignField
+    position: ReferenceDesignField
+    orientation: ReferenceDesignField
+    spatial_relation: ReferenceDesignField
+    scale: ReferenceDesignField
 
 
 class BlockingDesignFields(BaseModel):
     """调度状态与切换依据，完整采用。"""
     model_config = ConfigDict(extra='forbid')
-    position: DesignField
-    orientation: DesignField
-    initiative: DesignField
-    path: DesignField
-    transition_reason: DesignField
+    position: ReferenceDesignField
+    orientation: ReferenceDesignField
+    initiative: ReferenceDesignField
+    path: ReferenceDesignField
+    transition_reason: ReferenceDesignField
 
 
 class ActivityDesignFields(BaseModel):
     """镜内活动完整过程和明确时序。"""
     model_config = ConfigDict(extra='forbid')
-    task: DesignField
-    attention: DesignField
-    main_action_effect: DesignField
-    path: DesignField
-    delay_basis: DesignField
+    task: ReferenceDesignField
+    attention: ReferenceDesignField
+    main_action_effect: ReferenceDesignField
+    path: ReferenceDesignField
+    delay_basis: ReferenceDesignField
     delay_ms: int | None = Field(default=None, ge=0)
-    entry_exit: DesignField
-    exit_state: DesignField
-    depth: DesignField
-    intensity: DesignField
+    entry_exit: ReferenceDesignField
+    exit_state: ReferenceDesignField
+    depth: ReferenceDesignField
+    intensity: ReferenceDesignField
 
 
 class EnvironmentDesignFields(BaseModel):
     """环境活动与刻意留白分别表达。"""
     model_config = ConfigDict(extra='forbid')
-    activity: DesignField
-    empty_space: DesignField
-    reason: DesignField
+    activity: ReferenceDesignField
+    empty_space: ReferenceDesignField
+    reason: ReferenceDesignField
 
 
 class SpatialReferencePayload(BaseModel):

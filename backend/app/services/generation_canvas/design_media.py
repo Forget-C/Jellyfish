@@ -1,7 +1,7 @@
 """Prepare explicitly declared design media without granting new direct-reference eligibility."""
 from app.core.contracts.generation_canvas import DesignMediaOrigin, DesignTextPayload
 from app.schemas.generation_canvas import CanvasResolvedOutput
-from app.services.generation_canvas.design_references import VISUAL_DESIGN_TYPES
+from app.services.generation_canvas.design_references import REFERENCE_DESIGN_TYPES
 from app.services.generation_canvas.output_resolution import identity_key, prompt_references
 
 
@@ -18,7 +18,7 @@ def design_inputs(context, card, candidates, model_outputs):
     known = {identity_key(item.source): item for item in candidates}
     counts = {modality: sum(item.modality == modality for item in candidates) for modality in ('image', 'video', 'audio')}
     for design in selected:
-        if not isinstance(design.payload, DesignTextPayload) or design.payload.design_type not in VISUAL_DESIGN_TYPES:
+        if not isinstance(design.payload, DesignTextPayload) or design.payload.design_type not in REFERENCE_DESIGN_TYPES:
             continue
         for ref in design.payload.material_references:
             key = identity_key(ref.source)

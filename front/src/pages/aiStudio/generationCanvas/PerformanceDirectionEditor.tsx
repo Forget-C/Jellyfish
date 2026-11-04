@@ -1,6 +1,11 @@
+import { DesignPresetEditor } from './DesignPresetEditor'
+import { DesignScopeEditor } from './DesignScopeEditor'
+import { performancePresets } from './performancePresets'
+import { applyPreset } from './visualPresets'
+import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
 import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
-import { Alert, Input, Select } from 'antd'
+import { Alert } from 'antd'
 import type { CharacterPerformanceCard, CharacterSituationCard, DialogueReferencePayload, PerformanceRuleCard, ObjectReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useCardCandidates } from './useCardCandidates'
@@ -8,50 +13,52 @@ import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
+import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 import { DesignMediaExamples } from './DesignMediaExamples'
 
 export type PerformanceCard = CharacterPerformanceCard | CharacterSituationCard | PerformanceRuleCard
 
 function SituationFields({ card, onChange }: { card: CharacterSituationCard; onChange: (card: PerformanceCard) => void }) {
-  return <><FieldEditor label="当前处境" purpose="background" value={card.situation} onChange={situation => onChange({ ...card, situation })} />
-    <FieldEditor label="人物关系" purpose="background" value={card.relationship} onChange={relationship => onChange({ ...card, relationship })} /></>
+  return <div className="design-preset-fields"><FieldEditor compact label="当前处境" purpose="background" value={card.situation} onChange={situation => onChange({ ...card, situation })} />
+    <FieldEditor compact label="人物关系" purpose="background" value={card.relationship} onChange={relationship => onChange({ ...card, relationship })} /></div>
 }
 
 function PerformanceFields({ card, onChange }: { card: CharacterPerformanceCard; onChange: (card: PerformanceCard) => void }) {
   return <>
-    <section aria-label="触发反应动作结束"><h3>触发 → 反应 → 动作 → 结束状态</h3>
-      <FieldEditor label="反应顺序" value={card.reaction_order} onChange={reaction_order => onChange({ ...card, reaction_order })} />
-      <FieldEditor label="身体动作" value={card.physical_action} onChange={physical_action => onChange({ ...card, physical_action })} />
-      <FieldEditor label="结束状态" value={card.exit_state} onChange={exit_state => onChange({ ...card, exit_state })} />
+    <section className="performance-field-group" aria-label="触发反应动作结束"><h3>触发 → 反应 → 动作 → 结束状态</h3>
+      <FieldEditor compact label="反应顺序" value={card.reaction_order} onChange={reaction_order => onChange({ ...card, reaction_order })} />
+      <FieldEditor compact label="身体动作" value={card.physical_action} onChange={physical_action => onChange({ ...card, physical_action })} />
+      <FieldEditor compact label="结束状态" value={card.exit_state} onChange={exit_state => onChange({ ...card, exit_state })} />
     </section>
-    <details><summary>背景与注意对象</summary>
-      <FieldEditor label="人物目标" purpose="background" value={card.objective} onChange={objective => onChange({ ...card, objective })} />
-      <FieldEditor label="阻碍" purpose="background" value={card.obstacle} onChange={obstacle => onChange({ ...card, obstacle })} />
-      <FieldEditor label="潜台词" purpose="background" value={card.subtext} onChange={subtext => onChange({ ...card, subtext })} />
-      <FieldEditor label="注意对象说明" purpose="background" value={card.attention} onChange={attention => onChange({ ...card, attention })} />
-      <FieldEditor label="内在调整" purpose="background" value={card.internal_adjustment} onChange={internal_adjustment => onChange({ ...card, internal_adjustment })} />
-    </details>
-    <details><summary>表演细节与约束</summary>
-      <FieldEditor label="目光" value={card.gaze} onChange={gaze => onChange({ ...card, gaze })} />
-      <FieldEditor label="呼吸" value={card.breath} onChange={breath => onChange({ ...card, breath })} />
-      <FieldEditor label="重心" value={card.weight} onChange={weight => onChange({ ...card, weight })} />
-      <FieldEditor label="手部" value={card.hands} onChange={hands => onChange({ ...card, hands })} />
-      <FieldEditor label="声音表现" value={card.voice} onChange={voice => onChange({ ...card, voice })} />
-      <FieldEditor label="表达方式" value={card.delivery} onChange={delivery => onChange({ ...card, delivery })} />
-      <FieldEditor label="避免的表现" purpose="constraint" value={card.avoid} onChange={avoid => onChange({ ...card, avoid })} />
-    </details>
+    <section className="performance-field-group" aria-label="背景与注意对象"><h3>背景与注意对象</h3>
+      <FieldEditor compact label="人物目标" purpose="background" value={card.objective} onChange={objective => onChange({ ...card, objective })} />
+      <FieldEditor compact label="阻碍" purpose="background" value={card.obstacle} onChange={obstacle => onChange({ ...card, obstacle })} />
+      <FieldEditor compact label="潜台词" purpose="background" value={card.subtext} onChange={subtext => onChange({ ...card, subtext })} />
+      <FieldEditor compact label="注意对象说明" purpose="background" value={card.attention} onChange={attention => onChange({ ...card, attention })} />
+      <FieldEditor compact label="内在调整" purpose="background" value={card.internal_adjustment} onChange={internal_adjustment => onChange({ ...card, internal_adjustment })} />
+    </section>
+    <section className="performance-field-group" aria-label="表演细节与约束"><h3>表演细节与约束</h3>
+      <FieldEditor compact label="目光" value={card.gaze} onChange={gaze => onChange({ ...card, gaze })} />
+      <FieldEditor compact label="呼吸" value={card.breath} onChange={breath => onChange({ ...card, breath })} />
+      <FieldEditor compact label="重心" value={card.weight} onChange={weight => onChange({ ...card, weight })} />
+      <FieldEditor compact label="手部" value={card.hands} onChange={hands => onChange({ ...card, hands })} />
+      <FieldEditor compact label="声音表现" value={card.voice} onChange={voice => onChange({ ...card, voice })} />
+      <FieldEditor compact label="表达方式" value={card.delivery} onChange={delivery => onChange({ ...card, delivery })} />
+      <FieldEditor compact label="避免的表现" purpose="constraint" value={card.avoid} onChange={avoid => onChange({ ...card, avoid })} />
+    </section>
   </>
 }
 
 /** 明确对象采用及本卡专用设计字段；正式输出只读取后端保存修订。 */
-export function PerformanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+export function PerformanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as PerformanceCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: PerformanceCard) => onChange(next)
-  return <>
+  const fields = Object.fromEntries(designFieldEntries(card))
+  const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
+  const relations = <>
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <section aria-label="对象关系"><h3>对象关系</h3>
@@ -76,16 +83,13 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       const payload = item.payload as DialogueReferencePayload
       return <div key={sourceKey(item.source)}><WorkbenchButton title={payload.dialogue_id} disabled={disabled || !item.available} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'dialogue_basis' }] })}>{`${binding ? '取消' : '采用'}对白 ${payload.dialogue_id.slice(0, 8)} · 版本 ${payload?.version}`}</WorkbenchButton><p>说话对象：{payload.speaker?.name || '待确定'}</p></div>
     })}</section>}
-    {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
-    <details><summary>适用范围、阶段与来源</summary>
-      <Input aria-label="适用范围" value={card.scope?.description} onChange={event => update({ ...card, scope: { ...card.scope, description: event.target.value } })} />
-      <Select aria-label="制作阶段" allowClear placeholder="必要制作阶段（可选）" value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => update({ ...card, scope: { ...card.scope, phase: phase ?? null } })} />
-      <Input aria-label="适用条件" value={card.scope?.condition} onChange={event => update({ ...card, scope: { ...card.scope, condition: event.target.value } })} />
-      <Input aria-label="设计来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
-    </details>
-    {card.type !== 'direction.situation' && <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={inputPorts(card)} examples={examples} candidates={resolved.candidates} disabled={disabled} onChange={next => update({ ...card, examples: next })} />}
-    <section aria-label="完整设计输出"><h3>已保存完整设计 · revision {resolved.revision}</h3>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</section>
   </>
+  return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as PerformanceCard)}>
+    {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor compact label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
+    <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
+    {card.type !== 'direction.situation' && <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={inputPorts(card)} examples={examples} candidates={resolved.candidates} disabled={disabled} onChange={next => update({ ...card, examples: next })} />}
+    <details aria-label="完整设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</details>
+  </DesignPresetEditor>
 }
 
 export function performanceSummary(card: PerformanceCard) {

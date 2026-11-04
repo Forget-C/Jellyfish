@@ -48,9 +48,14 @@ function cardRows(card: DesignCard, document: CanvasDocument) {
 /** Six designs share one card body and entry; their field ownership and modal editors stay independent. */
 export function VisualDesignCard({ card, document, readonly, onEdit }: { card: DesignCard; document: CanvasDocument; readonly?: boolean; onEdit: (trigger: HTMLElement) => void }) {
   const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document)
+  return <DesignCardBody kind={kind} title={title} rows={rows} readonly={readonly} onEdit={onEdit} />
+}
+
+/** Shared finite card geometry for visual design and performance/staging. */
+export function DesignCardBody({ kind, title, rows, readonly, onEdit, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: { label: string; text: string }[]; readonly?: boolean; onEdit: (trigger: HTMLElement) => void; emptyHint?: string }) {
   return <section className="visual-design-card" aria-label={`${title}摘要`}>
     <DesignPurposeIllustration kind={kind} />
-    {rows.length ? <><dl>{rows.slice(0, 2).map((row, index) => <div key={index}><dt title={row.label}>{row.label}</dt><Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}><dd tabIndex={0} aria-label={`${row.label}：${row.text}`}>{row.text}</dd></Tooltip></div>)}</dl>{rows.length > 2 && <small>另有 {rows.length - 2} 项配置</small>}</> : <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>选择预设或直接填写设计参数</p></div>}
+    {rows.length ? <><dl>{rows.slice(0, 2).map((row, index) => <div key={index}><dt title={row.label}>{row.label}</dt><Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}><dd tabIndex={0} aria-label={`${row.label}：${row.text}`}>{row.text}</dd></Tooltip></div>)}</dl>{rows.length > 2 && <small>另有 {rows.length - 2} 项配置</small>}</> : <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
     <WorkbenchButton className="design-card-entry" onClick={event => onEdit(event.currentTarget)}>{readonly ? '查看设计' : rows.length ? '编辑设计' : '开始设计'}</WorkbenchButton>
   </section>
 }

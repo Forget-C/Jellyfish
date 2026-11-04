@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 环境活动与留白不要求先建镜头、人物或节拍。
  */
@@ -17,7 +17,7 @@ export type EnvironmentActivityCard = {
     input_bindings?: Array<InputBinding>;
     examples?: Array<DesignMediaExample>;
     type?: 'direction.environment';
-    activity?: DesignField;
-    empty_space?: DesignField;
-    reason?: DesignField;
+    activity?: ReferenceDesignField;
+    empty_space?: ReferenceDesignField;
+    reason?: ReferenceDesignField;
 };

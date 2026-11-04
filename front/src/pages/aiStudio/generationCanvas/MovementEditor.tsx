@@ -1,4 +1,4 @@
-import { VisualDesignScope } from './VisualDesignScope'
+import { DesignScopeEditor } from './DesignScopeEditor'
 import { VisualDesignRelations } from './VisualDesignRelations'
 import { Input } from 'antd'
 import type { MovementCard } from '../../../services/generated'
@@ -17,7 +17,7 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="design-preset-fields">{Object.entries(labels).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}</div>
     <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
-    <VisualDesignScope card={card} onChange={onChange} disabled={disabled} labelPrefix="运镜" />
+    <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix="运镜" />
     <section aria-label="明确运镜阶段"><h3>明确运镜阶段</h3><Button disabled={disabled} onClick={() => onChange({ ...card, phases: [...phases, { id: crypto.randomUUID(), name: '新阶段', frame: { state: 'empty', text: '', purpose: 'design' } }] })}>添加阶段</Button>
       {phases.map((phase, index) => <section className="movement-design-phase" key={phase.id}>
         <Input aria-label={`阶段 ${index + 1} 名称`} value={phase.name} disabled={disabled} onChange={event => onChange({ ...card, phases: phases.map(item => item.id === phase.id ? { ...item, name: event.target.value } : item) })} />

@@ -5,9 +5,13 @@ from tests.test_generation_canvas_carried_images import carried_document
 
 
 @pytest.mark.asyncio
-async def test_video_requires_explicit_purpose_and_reuses_source_across_purposes(canvas_client):
+@pytest.mark.parametrize('performance', [False, True])
+async def test_video_requires_explicit_purpose_and_reuses_source_across_purposes(canvas_client, performance):
     client = canvas_client
     url, doc, file_id = await carried_document(client)
+    if performance:
+        values = doc['cards'][1].pop('fields')
+        doc['cards'][1].update(type='direction.environment', activity=values['direction'])
     model = doc['cards'][-1]
     model.update(type='model.video', config={'ratio': '16:9'})
     async def save(revision):
@@ -26,7 +30,7 @@ async def test_video_requires_explicit_purpose_and_reuses_source_across_purposes
     assert compiled['video_media']['subjects'][0]['media'][0]['file_id'] == file_id
     assert 'DESIGN_MEDIA_CARRY_NOT_READY' not in {item['code'] for item in compiled['diagnostics']}
     assert (await client.get(url)).json()['data']['document']['edges'] == doc['edges']
-    doc['cards'][1]['fields']['direction']['state'] = 'empty'
+    (doc['cards'][1]['activity'] if performance else doc['cards'][1]['fields']['direction'])['state'] = 'empty'
     inactive = await save(2)
     assert inactive['media'] == [] and inactive['video_media']['subjects'] == []
     assert inactive['video_media']['frames']['first'] is None

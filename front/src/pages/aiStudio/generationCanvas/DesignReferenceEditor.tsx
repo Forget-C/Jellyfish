@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { Popover } from 'antd'
-import type { CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
+import type { DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { DesignFieldEditor } from './DesignFieldEditor'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor'
 import type { EditorPromptDocument } from './inputBindings'
 import { sourceKey, type Candidate } from './promptRules'
-import { designReferences, isVisualDesign } from './designFieldReferences'
+import { designReferences, isReferenceDesign, isPerformanceDesign, designFieldEntries } from './designFieldReferences'
+import { useGraphRules } from './CanvasCatalogContext'
 import { useCardCandidates } from './useCardCandidates'
 import { referenceLabels } from './referenceLabels'
 import { MaterialReferenceButton } from './MaterialReferenceButton'
@@ -15,7 +16,7 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 type TargetField = { fieldId: string; serial: number }
 interface ReferenceContext {
-  targetField?: TargetField;
+  targetField?: TargetField; issues: DesignReferenceIssue[];
   document: CanvasDocument; card: GenerationCard; candidates: Candidate[]; disabled?: boolean;
   focus: (handle: React.RefObject<PromptEditorHandle>) => void;
   changeMode: () => void;
@@ -33,13 +34,15 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   const retained = new Set(designReferences(card).map(item => sourceKey(item.reference.source)))
   const sources = [...resolved.candidates]
   for (const { reference } of designReferences(card)) if (!sources.some(item => sourceKey(item.source) === sourceKey(reference.source))) sources.push({ source: reference.source, modality: ['image', 'video', 'audio'].includes(reference.source.port_id) ? reference.source.port_id as 'image' | 'video' | 'audio' : 'text', available: false })
-  const labels = referenceLabels(document, sources, card.id)
+  const labels = referenceLabels(document, sources, card.id, isPerformanceDesign(card))
   const labelFor = (item: CanvasResolvedOutput) => labels.get(sourceKey(item.source)) || item.token || '@缺失来源'
   const candidates: Candidate[] = sources.map(item => {
     const source = document.cards?.find(value => value.id === item.source.card_id)
     const connected = item.source.canvas_id === document.id && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
-    const forbidden = source?.type?.startsWith('direction.') && item.source.port_id === 'text'
-    return { source: item.source, token: item.token || '@缺失来源', displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? '设计正文不支持互相引用' : !connected ? '来源未连接' : item.available === false ? '来源输出缺失' : undefined }
+    const identityOnly = isPerformanceDesign(card) && !['text', 'image', 'video', 'audio', 'anchor'].includes(item.source.port_id)
+    const reason = identityOnly ? '请通过关系控件选择对象用途' : item.modality === 'audio' && isPerformanceDesign(card) ? '本期不支持音频字段引用与携带' : source?.type?.startsWith('direction.') && item.source.port_id === 'text' || item.source.port_id === 'anchor' && !isPerformanceDesign(card) ? '设计正文不支持互相引用' : undefined
+    const forbidden = !!reason
+    return { source: item.source, token: item.token || '@缺失来源', displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? reason : !connected ? '来源未连接' : item.available === false ? '来源输出缺失' : undefined }
   })
   const changeMode = () => { focused.current = undefined; setInspect(undefined) }
   const renderCandidates = (advanced: boolean) => <div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
@@ -56,7 +59,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     <div className="generation-material-add">{sourceActions}</div>
     <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${used.size} 个使用中`}</small>
   </div>
-  return <DesignReferenceContext.Provider value={{ card, document, candidates, disabled, targetField, focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
+  return <DesignReferenceContext.Provider value={{ card, document, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
     if (event.key !== 'Escape' || !inspect) return
     event.preventDefault(); event.stopPropagation()
     owner.current?.querySelector<HTMLButtonElement>(`[data-design-source="${CSS.escape(inspect)}"]`)?.focus({ preventScroll: true })
@@ -66,17 +69,18 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
 
 /** Reuse the model's editing surface; field source identities are persisted directly. */
 export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignFieldEditor>) {
+  const { cardDefinitions } = useGraphRules()
   const context = useContext(DesignReferenceContext), handle = useRef<PromptEditorHandle>(null)
-  if (!context || !isVisualDesign(context.card)) return <DesignFieldEditor {...props} />
+  if (!context || !isReferenceDesign(context.card)) return <DesignFieldEditor {...props} />
   const value = props.value as ReferenceDesignField | undefined
   const prompt: EditorPromptDocument = value?.document as EditorPromptDocument || { segments: [{ id: 'text', kind: 'text', text: value?.text || '' }] }
   const onChange = (next: EditorPromptDocument) => {
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])
     const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || '@缺失来源').join('')
-    props.onChange({ ...value, document: { segments }, text, state: value?.state === 'empty' || !value?.state ? 'proposal' : value.state } as ReferenceDesignField)
+    props.onChange({ purpose: props.purpose || 'design', ...value, document: { segments }, text, state: value?.state === 'empty' || !value?.state ? 'proposal' : value.state } as ReferenceDesignField)
   }
   const phase = 'phases' in context.card ? context.card.phases?.find(item => item.frame === props.value) : undefined
-  const fieldId = Object.entries('fields' in context.card ? context.card.fields || {} : {}).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : undefined)
-  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} /></div>
+  const fieldId = designFieldEntries(context.card).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : cardDefinitions[context.card.type!]?.fields.find(field => field.label === props.label)?.id)
+  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <small role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</small>)}</div>
 }

@@ -2,27 +2,27 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 导演表演的具体业务字段；字段编辑不开放局部采用。
  */
 export type PerformanceDesignFields = {
-    situation?: (DesignField | null);
-    relationship?: (DesignField | null);
-    objective?: (DesignField | null);
-    obstacle?: (DesignField | null);
-    subtext?: (DesignField | null);
-    attention?: (DesignField | null);
-    internal_adjustment?: (DesignField | null);
-    physical_action?: (DesignField | null);
-    gaze?: (DesignField | null);
-    breath?: (DesignField | null);
-    weight?: (DesignField | null);
-    hands?: (DesignField | null);
-    voice?: (DesignField | null);
-    delivery?: (DesignField | null);
-    reaction_order?: (DesignField | null);
-    exit_state?: (DesignField | null);
-    avoid?: (DesignField | null);
-    applicability?: (DesignField | null);
+    situation?: (ReferenceDesignField | null);
+    relationship?: (ReferenceDesignField | null);
+    objective?: (ReferenceDesignField | null);
+    obstacle?: (ReferenceDesignField | null);
+    subtext?: (ReferenceDesignField | null);
+    attention?: (ReferenceDesignField | null);
+    internal_adjustment?: (ReferenceDesignField | null);
+    physical_action?: (ReferenceDesignField | null);
+    gaze?: (ReferenceDesignField | null);
+    breath?: (ReferenceDesignField | null);
+    weight?: (ReferenceDesignField | null);
+    hands?: (ReferenceDesignField | null);
+    voice?: (ReferenceDesignField | null);
+    delivery?: (ReferenceDesignField | null);
+    reaction_order?: (ReferenceDesignField | null);
+    exit_state?: (ReferenceDesignField | null);
+    avoid?: (ReferenceDesignField | null);
+    applicability?: (ReferenceDesignField | null);
 };

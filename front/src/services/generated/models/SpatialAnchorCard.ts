@@ -3,10 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AnchorImageMarker } from './AnchorImageMarker';
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 文字可先于参考图；锚点身份不随媒体更换。
  */
@@ -21,8 +21,8 @@ export type SpatialAnchorCard = {
     anchor_id?: (string | null);
     markers?: Array<AnchorImageMarker>;
     name?: string;
-    position?: DesignField;
-    orientation?: DesignField;
-    spatial_relation?: DesignField;
-    scale?: DesignField;
+    position?: ReferenceDesignField;
+    orientation?: ReferenceDesignField;
+    spatial_relation?: ReferenceDesignField;
+    scale?: ReferenceDesignField;
 };

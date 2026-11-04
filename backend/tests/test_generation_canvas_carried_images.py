@@ -37,7 +37,8 @@ async def test_image_model_receives_only_design_referenced_image_without_direct_
 
 
 @pytest.mark.asyncio
-async def test_worker_freezes_carried_image_and_text_model_field_reference(runtime, image_storage, monkeypatch):
+@pytest.mark.parametrize('performance', [False, True])
+async def test_worker_freezes_carried_image_and_text_model_field_reference(runtime, image_storage, monkeypatch, performance):
     import asyncio
     import base64
     import json
@@ -71,6 +72,9 @@ async def test_worker_freezes_carried_image_and_text_model_field_reference(runti
         {'id': 'style', 'type': 'direction.style', 'fields': {'direction': reference_field(source('reference', 'image')), 'notes': reference_field(source('m', 'text'), '原文：')}},
         {'id': 'image', 'type': 'model.image', 'model_id': 'image-' + runtime.model_id, 'config': {'count': 1},
          'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': source('style', 'text')}]}]
+    if performance:
+        values = doc['cards'][2].pop('fields')
+        doc['cards'][2].update(type='direction.environment', activity=values['direction'], reason=values['notes'])
     doc['edges'] = [{'id': 'ref', 'source_card': 'reference', 'source_port': 'image', 'target_card': 'style', 'target_port': 'image_example'},
                     {'id': 'text', 'source_card': 'm', 'source_port': 'text', 'target_card': 'style', 'target_port': 'text'},
                     {'id': 'design', 'source_card': 'style', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'}]
@@ -82,7 +86,7 @@ async def test_worker_freezes_carried_image_and_text_model_field_reference(runti
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'image', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200, accepted.text
     doc['cards'][0]['prompt']['segments'][0]['text'] = '运行后新原文'
-    doc['cards'][2]['fields']['colors'] = {'state': 'proposal', 'text': '运行后新参数'}
+    (doc['cards'][2] if performance else doc['cards'][2]['fields'])['empty_space' if performance else 'colors'] = {'state': 'proposal', 'text': '运行后新参数'}
     assert (await runtime.client.put(runtime.url, json={'request_id': 'later', 'expected_revision': 2, 'document': doc})).status_code == 200
     stale = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'image'})).json()['data']
     assert 'INPUT_STALE' in {issue['code'] for issue in stale['diagnostics']}

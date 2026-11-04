@@ -1,8 +1,9 @@
 import { designSummary } from './designSummary'
 import type { CompositionCard } from '../../../services/generated'
+import { PerformanceDesignCardBody } from './PerformanceDesignCard'
 import { VisualDesignCard } from './VisualDesignCard'
 import { DesignReferenceEditor } from './DesignReferenceEditor'
-import { isVisualDesign } from './designFieldReferences'
+import { isVisualDesign, isReferenceDesign, isPerformanceDesign } from './designFieldReferences'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { TextContentEditor } from './TextContentEditor'
 import { CardStatusSummary } from './CardStatusSummary'
@@ -851,13 +852,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const [uploadText, setUploadText] = useState<string>()
   const [uploadLibrary, setUploadLibrary] = useState(false)
-  const sourcePorts = (card: GenerationCard) => isVisualDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio'].includes(port)) : capability(card)?.input_ports || []
+  const sourcePorts = (card: GenerationCard) => isReferenceDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio', ...(isPerformanceDesign(card) ? ['anchor', 'participant', 'effect_object', 'space', 'position_anchor', 'area_anchor', 'beat', 'received_event', 'change_event', 'trigger_event', 'dialogue_basis', 'acceptance_basis'] : [])].includes(port)) : capability(card)?.input_ports || []
   const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" overlayStyle={{ minWidth: 200 }} disabled={readonly} menu={{ items: [
     { key: 'upload', label: '上传参考素材', children: [
       { key: 'upload:text', label: '上传文本参考' },
-      ...sourcePorts(card).filter(port => port !== 'text').map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port)}素材` })),
+      ...sourcePorts(card).filter(port => ['image', 'video', 'audio', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video'].includes(port)).map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port)}素材` })),
     ] },
-    { key: 'library', label: '从素材库添加', disabled: !sourcePorts(card).some(port => port !== 'text'), children: sourcePorts(card).filter(port => port !== 'text').map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port)}素材` })) },
+    { key: 'library', label: '从素材库添加', disabled: !sourcePorts(card).some(port => port !== 'text'), children: sourcePorts(card).filter(port => ['image', 'video', 'audio', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video'].includes(port)).map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port)}素材` })) },
     { key: 'canvas', label: '从当前画布选择' },
   ], onClick: ({ key: action }) => {
     if (readonly) return
@@ -874,7 +875,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
     const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }
     if (connectDocument(next, edge, capability(card))) setUploadSource(source.id)
-  } }}><WorkbenchIconButton label={isVisualDesign(card) ? '添加设计来源' : '添加模型来源'} icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
+  } }}><WorkbenchIconButton label={isReferenceDesign(card) ? '添加设计来源' : '添加模型来源'} icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
   const sourceTargetCard = cards.find(card => card.id === sourceTarget)
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
@@ -944,7 +945,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       </div>
     </Modal>
     <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
-      <p>{sourceTargetCard && isVisualDesign(sourceTargetCard) ? '选择只建立候选，在参数中引用后才使用。' : '选择只建立候选，实际使用仍需明确采用。'}</p>
+      <p>{sourceTargetCard && isReferenceDesign(sourceTargetCard) ? '选择只建立候选，在参数中引用后才使用。' : '选择只建立候选，实际使用仍需明确采用。'}</p>
       {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
         commitConnection(option, 'left'); setSourceTarget(undefined)
       }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)}</Button>))}
@@ -952,7 +953,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     <Modal title="上传文本参考" open={!!uploadTextCard} onCancel={() => setUploadText(undefined)} footer={null}>
       {uploadTextCard && <TextContentEditor card={uploadTextCard} disabled={readonly} onChange={next => edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })} />}
     </Modal>
-    <Modal title={cards.some(card => card.id === detailId && isVisualDesign(card)) ? "添加参考素材" : "上传模型来源"} open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
+    <Modal title={cards.some(card => card.id === detailId && isReferenceDesign(card)) ? "添加参考素材" : "上传模型来源"} open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
       {uploadSourceCard && <MediaContentEditor key={uploadSourceCard.id} initialLibrary={uploadLibrary} card={uploadSourceCard} projectId={document.project_id} disabled={readonly} onChange={next => {
         if ((latest.current.cards || []).some(card => card.id === next.id)) edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })
       }} />}
@@ -1184,7 +1185,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
-          const visualDesign = isVisualDesign(card)
+          const visualDesign = isReferenceDesign(card)
           return <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger=>{const box=trigger.getBoundingClientRect();setCardMenuId(undefined);const ids=selected.includes(card.id)?selected:[card.id];setSelected(ids);setContextMenu({x:box.left,y:box.bottom,ids})}} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             viewportOffset={transform} scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (visualDesign ? 360 : focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : visualDesign ? undefined : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') && !visualDesign ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } : undefined}
@@ -1194,7 +1195,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
-            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : isPerformanceDesign(card) ? <PerformanceDesignCardBody card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} height={size?.height} />}
@@ -1229,10 +1230,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
       // 新卡先完成测量和创建视口恢复，避免覆盖首次让位（尤其是减少动态效果模式）。
       return <EditorContainer onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
-        {!desktop && !isVisualDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
-        {detailCard?.type?.startsWith('direction.') && !isVisualDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
+        {!desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
+        {detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'content.text' || isVisualDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'content.text' || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer>
     })}
@@ -1245,5 +1246,5 @@ export function GenerationCanvasGraph(props: ComponentProps<typeof GenerationCan
 }
 
 function DesignReferenceBoundary({ children, ...props }: ComponentProps<typeof DesignReferenceEditor>) {
-  return isVisualDesign(props.card) ? <DesignReferenceEditor {...props}>{children}</DesignReferenceEditor> : <>{children}</>
+  return isReferenceDesign(props.card) ? <DesignReferenceEditor {...props}>{children}</DesignReferenceEditor> : <>{children}</>
 }

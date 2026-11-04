@@ -15,7 +15,7 @@ import './designPresetEditor.css'
 
 type Props = {
   fields: Record<string, DesignField | null | undefined>; labels: Record<string, string>; presets: VisualPreset[];
-  children: ReactNode; candidates?: ReactNode; current: string; disabled?: boolean; editorOpen?: boolean;
+  children: ReactNode; candidates?: ReactNode; relations?: ReactNode; direct?: boolean; current: string; disabled?: boolean; editorOpen?: boolean;
   onApply: (preset: VisualPreset) => void | boolean; onUndo?: () => void;
 }
 const states: Record<string, string> = { empty: '未填写', proposal: '提议', fact: '事实', undecided: '待确定', absent: '明确没有', not_applicable: '不适用' }
@@ -23,15 +23,15 @@ const purposes: Record<string, string> = { background: '背景', design: '设计
 const describe = (value?: ReferenceDesignField | null) => value ? `${value.text || '无正文'} · 状态：${states[value.state || 'empty']} · 用途：${purposes[value.purpose || ''] || '未指定'} · 来源：${value.source_locator || '未指定'}${value.document?.segments?.some(segment => segment.kind === 'reference') ? ' · 含引用（应用后替换）' : ''}` : '未填写'
 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
-export function DesignPresetEditor({ fields, labels, presets, children, candidates, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
+export function DesignPresetEditor({ fields, labels, presets, children, candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
   const references = useContext(DesignReferenceContext)
   const owner = useRef<HTMLDivElement>(null)
   const header = useContext(CanvasEditorHeader), footer = useContext(CanvasEditorFooter)
-  const [advanced, setAdvanced] = useState(false), [metadata, setMetadata] = useState(false)
+  const [advanced, setAdvanced] = useState(direct), [metadata, setMetadata] = useState(false)
   const [selected, setSelected] = useState<VisualPreset>(), [compare, setCompare] = useState<VisualPreset>()
   const [notice, setNotice] = useState('')
   const modeButton = useRef<HTMLElement>(null)
-  useEffect(() => { if (!editorOpen) { setAdvanced(false); setMetadata(false); setSelected(undefined); setCompare(undefined); setNotice('') } }, [editorOpen])
+  useEffect(() => { if (!editorOpen) { setAdvanced(direct); setMetadata(false); setSelected(undefined); setCompare(undefined); setNotice('') } }, [editorOpen, direct])
   useEffect(() => {
     if (!references?.targetField || !editorOpen) return
     setAdvanced(true)
@@ -76,8 +76,9 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
     {!advanced && <Button variant="primary" disabled={disabled || !preview || !changes.length} onClick={() => { if (preview && onApply(preview) !== false) setNotice(`已应用「${preview.name}」`) }}>应用</Button>}
   </WorkbenchDialogActions></ConfigProvider>
   return <div ref={owner} className="design-preset-editor">
-    {header ? editorOpen && createPortal(mode, header) : mode}
+    {!direct && (header ? editorOpen && createPortal(mode, header) : mode)}
     {(references || candidates) && <div className="design-preset-candidates">{references ? references.renderCandidates(advanced) : candidates}</div>}
+    {relations && <div className="design-preset-relations">{relations}</div>}
     <div className="design-preset-layout" hidden={advanced}>
       <section className="design-preset-library"><h3>选择预设 <small>{presets.length} 个方案</small></h3><ConfigProvider componentDisabled={false}><div className="design-preset-grid">{presets.map(preset => <article key={preset.id} data-selected={preview?.id === preset.id}>
         <button type="button" className="design-preset-choice" aria-label={`预览 ${preset.name}`} aria-pressed={preview?.id === preset.id} onClick={() => { setSelected(preset); if (compare?.id === preset.id) setCompare(undefined); setNotice('') }}><PresetIllustration preset={preset} /><strong>{preset.name}{preview?.id === preset.id && <span aria-hidden="true"> ✓</span>}</strong><small>{preset.explanation}</small></button>

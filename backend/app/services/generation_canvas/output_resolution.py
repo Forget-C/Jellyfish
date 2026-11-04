@@ -56,9 +56,9 @@ class CanvasOutputContext:
                        and edge.target_card == card_id and edge.target_port == binding.input_port for edge in self.incoming.get(card_id, ())):
                     adopted.extend(item for item in self.published_outputs(binding.source.card_id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
                         if identity_key(item.source) == identity_key(binding.source))
-        from app.services.generation_canvas.design_references import VISUAL_DESIGN_TYPES, resolve_design_card
+        from app.services.generation_canvas.design_references import REFERENCE_DESIGN_TYPES, resolve_design_card
         media, issues, reference_current = [], [], True
-        if card.type in VISUAL_DESIGN_TYPES:
+        if card.type in REFERENCE_DESIGN_TYPES:
             card, media, issues, reference_current = resolve_design_card(self, card, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts, reference_tokens=reference_tokens)
         outputs = card_outputs(document.id, card, adopted_inputs=tuple(adopted),
                                published_results=tuple((model_outputs or {}).get(card_id, [])))

@@ -50,7 +50,7 @@ class CanvasBasis:
     _model_context: CanvasModelContext = field(repr=False)
 
     def to_snapshot(self) -> dict:
-        """固定直接来源及所采用六类设计的有效字段来源，不遍历任意祖先。"""
+        """固定直接来源及所采用设计的有效字段来源，不遍历任意祖先。"""
         used_sources = {ref.source.card_id for ref, _ in prompt_references(self.card)}
         from app.services.generation_canvas.design_references import effective_design_references
         cards = {card.id: card for card in self._document.cards}

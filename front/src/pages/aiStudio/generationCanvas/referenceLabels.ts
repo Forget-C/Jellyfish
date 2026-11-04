@@ -4,7 +4,7 @@ import { sourceKey } from './promptRules'
 const referenceTypes: Record<string, string> = { 'reference.character': '人物', 'reference.place': '场所', 'reference.prop': '道具', 'reference.costume': '服装' }
 
 /** 显示名只修饰当前模型的引用，编号、输出身份及持久绑定保持原值。 */
-export function referenceLabels(document: CanvasDocument, sources: Pick<CanvasResolvedOutput, 'source' | 'token'>[], receiverId: string) {
+export function referenceLabels(document: CanvasDocument, sources: Pick<CanvasResolvedOutput, 'source' | 'token'>[], receiverId: string, includeAnchors = false) {
   const cards = new Map((document.cards || []).map(card => [card.id, card]))
   const labels = new Map(sources.map(output => [sourceKey(output.source), output.token || `@缺失(${output.source.card_id}:${output.source.position + 1})`]))
   const groups = new Map<string, { key: string; type: string; angle: string; token: string }[]>()
@@ -17,6 +17,12 @@ export function referenceLabels(document: CanvasDocument, sources: Pick<CanvasRe
   }
   for (const output of associated) {
     const card = cards.get(output.source.card_id)
+    if (includeAnchors && card?.type === 'direction.anchor' && output.source.port_id === 'anchor' && 'name' in card && card.name?.trim()) {
+      const name = card.name.trim(), key = sourceKey(output.source), group = groups.get(name) || []
+      if (!group.some(item => item.key === key)) group.push({ key, type: '空间锚点', angle: '位置', token: output.token || `@缺失(${card.id})` })
+      groups.set(name, group)
+      continue
+    }
     if (!card || !referenceTypes[card.type || '']) continue
     const reference = card as NamedImageReferenceCard
     const linked = reference.name_binding?.canvas_id === document.id ? cards.get(reference.name_binding.card_id) : undefined

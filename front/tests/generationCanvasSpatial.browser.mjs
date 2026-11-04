@@ -60,7 +60,10 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4287/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = id => openCanvasCard(page, id)
+  const open = async (id, advanced = true) => {
+    await openCanvasCard(page, id)
+    if (advanced && await card.getByRole('button', { name: '高级设置', exact: true }).count()) await card.getByRole('button', { name: '高级设置', exact: true }).click()
+  }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('anchor')
@@ -81,7 +84,7 @@ try {
   await page.screenshot({ path: join(output, 'spatial-desktop.png'), fullPage: true })
   await open('activity')
   await card.getByRole('textbox', { name: '持续任务内容', exact: true }).fill('整理书架')
-  await card.getByText('位置、注意对象与时序', { exact: true }).click()
+
   await card.getByRole('spinbutton', { name: '反应延迟毫秒', exact: true }).fill('350')
   await poll(state => state.document.cards.find(item => item.id === 'activity').delay_ms === 350)
   await open('environment')
@@ -96,7 +99,7 @@ try {
   assert.doesNotMatch(compiled.text, /秘密场所正文|东墙门口/)
   await page.reload()
   await open('blocking')
-  assert.equal(await card.getByRole('textbox', { name: '路径内容', exact: true }).inputValue(), '从门边走向窗前')
+  assert.equal(await card.getByRole('textbox', { name: '路径内容', exact: true }).innerText(), '从门边走向窗前')
   await card.getByRole('button', { name: '取消位置锚点 门边', exact: true }).waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true, 'narrow editor has no horizontal overflow')

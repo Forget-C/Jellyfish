@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 可引用空间位置的完整设计。
  */
 export type AnchorDesignFields = {
-    position: DesignField;
-    orientation: DesignField;
-    spatial_relation: DesignField;
-    scale: DesignField;
+    position: ReferenceDesignField;
+    orientation: ReferenceDesignField;
+    spatial_relation: ReferenceDesignField;
+    scale: ReferenceDesignField;
 };

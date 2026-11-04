@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { DesignFieldDocument } from './DesignFieldDocument';
 /**
- * Only the six visual designs expose reference-aware parameter documents.
+ * Design parameters with explicit, field-owned source references.
  */
 export type ReferenceDesignField = {
     text?: string;

@@ -1,4 +1,4 @@
-import { VisualDesignScope } from './VisualDesignScope'
+import { DesignScopeEditor } from './DesignScopeEditor'
 import { VisualDesignRelations } from './VisualDesignRelations'
 import { Alert, Select } from 'antd'
 import type { CompositionCard, ReferenceDesignField, MovementCard } from '../../../services/generated'
@@ -25,7 +25,7 @@ export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, o
     <div className="design-preset-fields">{Object.entries(photographyRegions.composition.fields).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof typeof fields], ...value } } })} />)}</div>
     <label>结构化景别<Select aria-label="结构化景别" disabled={disabled} allowClear placeholder="可选" value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => onChange({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size, state: fields.shot_size?.state === 'empty' || !fields.shot_size?.state ? 'proposal' : fields.shot_size.state } } })} /></label>
     <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
-    <VisualDesignScope card={card} onChange={onChange} disabled={disabled} />
+    <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} />
     <section aria-label="构图画面定位"><h3>画面定位（可选）</h3>
       <label>运镜卡<Select aria-label="关联运镜卡" disabled={disabled} allowClear placeholder={movements.length ? '选择同画布运镜卡' : '当前没有运镜卡'} value={card.frame_target?.card_id}
         options={[...movements.map(item => ({ value: item.id, label: `运镜卡 · ${item.id}` })), ...(card.frame_target && !movement ? [{ value: card.frame_target.card_id, label: `失效运镜卡 · ${card.frame_target.card_id}`, disabled: true }] : [])]}

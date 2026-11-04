@@ -1,7 +1,7 @@
 """由真实卡类端点构建静态目录，并供候选图与客户端共享兼容规则。"""
 from typing import get_args
 from app.core.contracts.canvas_catalog import CanvasCatalog, CanvasCardTypeDefinition, CanvasInputPortDefinition, CanvasOutputPortDefinition, CanvasDesignFieldDefinition
-from app.core.contracts.generation_canvas import DesignField
+from app.core.contracts.generation_canvas import DesignField, ReferenceDesignField
 from app.schemas.generation_canvas import CanvasDocument, MovementCard, CompositionCard, CameraCard, LightingCard, FocusCard, SpatialDirectionCard, NarrativeDirectionCard, SoundDirectionCard, ConstraintDirectionCard, GuidanceDirectionCard, VisualStyleCard, ImageContentCard, VideoContentCard, AudioContentCard, NamedImageReferenceCard, ImageModelCard, VideoModelCard
 from app.services.generation_canvas import performance, spatial, narrative, sound, continuity, guidance, photography, visual_style, composition, movement
 
@@ -52,7 +52,7 @@ def design_fields(card_model):
         names = labels
     else:
         labels = next((module.FIELD_LABELS for base, module in ((ConstraintDirectionCard, continuity), (GuidanceDirectionCard, guidance), (SpatialDirectionCard, spatial), (NarrativeDirectionCard, narrative), (SoundDirectionCard, sound)) if issubclass(card_model, base)), performance.FIELD_LABELS)
-        names = [name for name, field in card_model.model_fields.items() if field.annotation is DesignField]
+        names = [name for name, field in card_model.model_fields.items() if field.annotation in (DesignField, ReferenceDesignField)]
     return [CanvasDesignFieldDefinition(id=name, label=labels[name]) for name in names]
 
 

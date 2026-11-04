@@ -1,8 +1,13 @@
+import { DesignPresetEditor } from './DesignPresetEditor'
+import { DesignScopeEditor } from './DesignScopeEditor'
+import { performancePresets } from './performancePresets'
+import { applyPreset } from './visualPresets'
+import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
+import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
@@ -13,61 +18,63 @@ import { MediaPreview } from './MediaContentEditor'
 export type SpatialCard = SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard
 
 function AnchorFields({ card, onChange }: { card: SpatialAnchorCard; onChange: (card: SpatialCard) => void }) {
-  return <>
+  return <div className="design-preset-fields performance-parameters">
     <Input aria-label="锚点名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />
-    <small>锚点身份：{card.anchor_id || '未建立'}</small>
-    <FieldEditor label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
-    <FieldEditor label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
-    <FieldEditor label="空间关系" value={card.spatial_relation} onChange={spatial_relation => onChange({ ...card, spatial_relation })} />
-    <FieldEditor label="尺度依据" value={card.scale} onChange={scale => onChange({ ...card, scale })} />
-  </>
+    <small className="performance-identity">锚点身份：{card.anchor_id || '未建立'}</small>
+    <FieldEditor compact label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
+    <FieldEditor compact label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
+    <FieldEditor compact label="空间关系" value={card.spatial_relation} onChange={spatial_relation => onChange({ ...card, spatial_relation })} />
+    <FieldEditor compact label="尺度依据" value={card.scale} onChange={scale => onChange({ ...card, scale })} />
+  </div>
 }
 
 function BlockingFields({ card, onChange }: { card: BlockingDirectionCard; onChange: (card: SpatialCard) => void }) {
-  return <><Input aria-label="调度名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} /><small>调度身份：{card.blocking_id || '未建立'}</small>
+  return <div className="design-preset-fields performance-parameters"><Input aria-label="调度名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} /><small className="performance-identity">调度身份：{card.blocking_id || '未建立'}</small>
     <h3>位置 → 路径 → 状态切换</h3>
-    <FieldEditor label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
-    <FieldEditor label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
-    <FieldEditor label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
-    <FieldEditor label="主动权" value={card.initiative} onChange={initiative => onChange({ ...card, initiative })} />
-    <FieldEditor label="状态切换原因" value={card.transition_reason} onChange={transition_reason => onChange({ ...card, transition_reason })} />
+    <FieldEditor compact label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
+    <FieldEditor compact label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
+    <FieldEditor compact label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
+    <FieldEditor compact label="主动权" value={card.initiative} onChange={initiative => onChange({ ...card, initiative })} />
+    <FieldEditor compact label="状态切换原因" value={card.transition_reason} onChange={transition_reason => onChange({ ...card, transition_reason })} />
 
-  </>
+  </div>
 }
 
 function ActivityFields({ card, onChange }: { card: InFrameActivityCard; onChange: (card: SpatialCard) => void }) {
-  return <><h3>谁在做什么</h3>
-    <FieldEditor label="持续任务" value={card.task} onChange={task => onChange({ ...card, task })} />
-    <FieldEditor label="对主戏的作用" value={card.main_action_effect} onChange={main_action_effect => onChange({ ...card, main_action_effect })} />
-    <FieldEditor label="结束状态" value={card.exit_state} onChange={exit_state => onChange({ ...card, exit_state })} />
-    <details><summary>位置、注意对象与时序</summary>
-      <FieldEditor label="注意对象说明" value={card.attention} onChange={attention => onChange({ ...card, attention })} />
-      <FieldEditor label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
-      <FieldEditor label="反应延迟依据" value={card.delay_basis} onChange={delay_basis => onChange({ ...card, delay_basis })} />
+  return <div className="design-preset-fields performance-parameters"><h3>谁在做什么</h3>
+    <FieldEditor compact label="持续任务" value={card.task} onChange={task => onChange({ ...card, task })} />
+    <FieldEditor compact label="对主戏的作用" value={card.main_action_effect} onChange={main_action_effect => onChange({ ...card, main_action_effect })} />
+    <FieldEditor compact label="结束状态" value={card.exit_state} onChange={exit_state => onChange({ ...card, exit_state })} />
+    <section aria-label="位置、注意对象与时序"><h3>位置、注意对象与时序</h3>
+      <FieldEditor compact label="注意对象说明" value={card.attention} onChange={attention => onChange({ ...card, attention })} />
+      <FieldEditor compact label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
+      <FieldEditor compact label="反应延迟依据" value={card.delay_basis} onChange={delay_basis => onChange({ ...card, delay_basis })} />
       <label>反应延迟毫秒<InputNumber aria-label="反应延迟毫秒" min={0} value={card.delay_ms} onChange={delay_ms => onChange({ ...card, delay_ms })} /></label>
-      <FieldEditor label="入出画" value={card.entry_exit} onChange={entry_exit => onChange({ ...card, entry_exit })} />
-      <FieldEditor label="景深层次" value={card.depth} onChange={depth => onChange({ ...card, depth })} />
-      <FieldEditor label="活动强度" value={card.intensity} onChange={intensity => onChange({ ...card, intensity })} />
+      <FieldEditor compact label="入出画" value={card.entry_exit} onChange={entry_exit => onChange({ ...card, entry_exit })} />
+      <FieldEditor compact label="景深层次" value={card.depth} onChange={depth => onChange({ ...card, depth })} />
+      <FieldEditor compact label="活动强度" value={card.intensity} onChange={intensity => onChange({ ...card, intensity })} />
 
-    </details>
-  </>
+    </section>
+  </div>
 }
 
 function EnvironmentFields({ card, onChange }: { card: EnvironmentActivityCard; onChange: (card: SpatialCard) => void }) {
-  return <><FieldEditor label="环境活动" value={card.activity} onChange={activity => onChange({ ...card, activity })} />
-    <FieldEditor label="刻意留白" value={card.empty_space} onChange={empty_space => onChange({ ...card, empty_space })} />
-    <FieldEditor label="留白理由" value={card.reason} onChange={reason => onChange({ ...card, reason })} />
-  </>
+  return <div className="design-preset-fields performance-parameters"><FieldEditor compact label="环境活动" value={card.activity} onChange={activity => onChange({ ...card, activity })} />
+    <FieldEditor compact label="刻意留白" value={card.empty_space} onChange={empty_space => onChange({ ...card, empty_space })} />
+    <FieldEditor compact label="留白理由" value={card.reason} onChange={reason => onChange({ ...card, reason })} />
+  </div>
 }
 
-/** 四种空间设计专用布局；候选只选择身份，不展开祖先设计。 */
-export function SpatialDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+/** 四种空间设计复用预设与字段引用；关系仍只采用明确身份。 */
+export function SpatialDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as SpatialCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: SpatialCard) => onChange(next)
-  return <>
+  const fields = Object.fromEntries(designFieldEntries(card))
+  const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
+  const relations = <>
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <section aria-label="空间关系"><h3>直接对象与空间关系</h3>
@@ -75,7 +82,7 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
         const rawPayload = item.payload
         if (rawPayload?.kind !== 'object_reference' && rawPayload?.kind !== 'spatial_reference' && rawPayload?.kind !== 'narrative_reference') return null
         const payload = rawPayload as ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
-        return <div key={sourceKey(item.source)}><span>{payload.name}</span>{inputPorts(card).filter(port => document.edges?.some(edge => edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && edge.target_card === card.id && edge.target_port === port)).map(port => {
+        return <div key={sourceKey(item.source)}><span>{payload.name}</span>{inputPorts(card).filter(port => ['space', 'participant', 'effect_object', 'position_anchor', 'area_anchor', 'change_event', 'trigger_event'].includes(port)).filter(port => document.edges?.some(edge => edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && edge.target_card === card.id && edge.target_port === port)).map(port => {
           if (port === 'participant' && (payload.kind !== 'object_reference' || payload.category === 'place')) return null
           if (port === 'space' && (payload.kind !== 'object_reference' || payload.category !== 'place')) return null
           const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
@@ -85,13 +92,12 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
       })}
       {bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source))).map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
     </section>
+  </>
+  return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} direct={card.type === 'direction.anchor'} relations={card.type === 'direction.environment' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as SpatialCard)}>
+    <div className={card.type === 'direction.anchor' ? 'design-anchor-layout' : undefined}><div>
     {card.type === 'direction.anchor' ? <AnchorFields card={card as SpatialAnchorCard} onChange={update} /> : card.type === 'direction.blocking' ? <BlockingFields card={card as BlockingDirectionCard} onChange={update} /> : card.type === 'direction.activity' ? <ActivityFields card={card as InFrameActivityCard} onChange={update} /> : <EnvironmentFields card={card as EnvironmentActivityCard} onChange={update} />}
-    <details><summary>适用范围与来源</summary>
-      <Input aria-label="适用范围" value={card.scope?.description} onChange={event => update({ ...card, scope: { ...card.scope, description: event.target.value } })} />
-      <Select aria-label="制作阶段" allowClear value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => update({ ...card, scope: { ...card.scope, phase: phase ?? null } })} />
-      <Input aria-label="适用条件" value={card.scope?.condition} onChange={event => update({ ...card, scope: { ...card.scope, condition: event.target.value } })} />
-      <Input aria-label="设计来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
-    </details>
+    <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
+    </div><div>
     <details><summary>参考素材与图片标记</summary>
       {resolved.candidates.filter(item => ['image', 'video'].includes(item.modality) && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || examples.some(value => sourceKey(value.source) === sourceKey(item.source) && value.file_id === item.file_id)} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id! }] })}>关联素材 {item.token}</WorkbenchButton>)}
       {examples.map(example => {
@@ -107,9 +113,10 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
           <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, examples: examples.filter(value => value.id !== example.id), ...(anchor ? { markers: anchor.markers?.filter(value => value.example_id !== example.id) } : {}) })}>取消素材</WorkbenchButton>
         </section>
       })}
-    </details>
-    <section aria-label="完整空间设计输出"><h3>已保存完整设计 · revision {resolved.revision}</h3>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整空间设计" />)}</section>
-  </>
+    </details>    </div></div>
+
+    <details aria-label="完整空间设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整空间设计" />)}</details>
+  </DesignPresetEditor>
 }
 
 export function spatialSummary(card: SpatialCard) {
