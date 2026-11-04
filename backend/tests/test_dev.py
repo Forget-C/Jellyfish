@@ -218,3 +218,71 @@ def test_reused_pid_without_worker_lock_cannot_impersonate_a_registered_worker(t
     monkeypatch.setattr(os, 'execvpe', lambda executable, command, env: launches.append(command))
     assert main(['worker']) == 0
     assert launches == [[sys.executable, '-m', 'app.task_worker']]
+
+
+def test_api_reload_with_open_event_stream_becomes_responsive(tmp_path, monkeypatch):
+    """Exercise the development command's actual Uvicorn flags with an open SSE client."""
+    import signal
+    import socket
+    import httpx
+
+    monkeypatch.setenv('JELLYFISH_DEV_RUNTIME_DIR', str(tmp_path / 'identities'))
+    captured = []
+    monkeypatch.setattr('app.dev.os.execvpe', lambda executable, argv, env: captured.extend(argv))
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
+    assert main(['api', '--host', '127.0.0.1', '--port', str(port)]) == 0
+    fixture = tmp_path / 'reload_fixture.py'
+    fixture.write_text('''import asyncio
+import os
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+app = FastAPI()
+@app.get('/health')
+async def health():
+    return {'pid': os.getpid()}
+@app.get('/events')
+async def events():
+    async def stream():
+        while True:
+            yield 'data: heartbeat\\n\\n'
+            await asyncio.sleep(.1)
+    return StreamingResponse(stream(), media_type='text/event-stream')
+''')
+    # Substitute only the fixture application; keep the dev entrypoint's server options.
+    argv = ['reload_fixture:app' if part == 'app.main:app' else part for part in captured]
+    argv += ['--reload-dir', str(tmp_path)]
+    address = f'http://127.0.0.1:{port}'
+    with (tmp_path / 'server.log').open('w+') as log:
+        process = subprocess.Popen(argv, cwd=tmp_path, stdout=log, stderr=log, start_new_session=True)
+        try:
+            with httpx.Client(timeout=.3, trust_env=False) as client:
+                def ready(previous=None):
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        try:
+                            response = client.get(address + '/health')
+                            if response.status_code == 200 and response.json()['pid'] != previous:
+                                return response.json()['pid']
+                        except httpx.HTTPError:
+                            pass
+                        time.sleep(.1)
+                    log.seek(0)
+                    pytest.fail('API did not respond after reload with an open stream:\n' + log.read())
+                previous = ready()
+                with client.stream('GET', address + '/events') as stream:
+                    lines = stream.iter_lines()
+                    assert next(lines) == 'data: heartbeat'
+                    # Ensure the watcher's first scan has completed before changing the fixture.
+                    time.sleep(.5)
+                    fixture.write_text(fixture.read_text() + '\n# trigger reload\n')
+                    assert ready(previous) != previous
+                    assert client.get(address + '/openapi.json').status_code == 200
+        finally:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=3)

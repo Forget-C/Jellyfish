@@ -79,7 +79,8 @@ def main(argv=None, *, sessions=None) -> int:
         if state in ('current', 'stale'):
             parser.error(f'{args.command} 已登记运行，请先停止原进程。')
         command = ['-m', 'app.task_worker'] if args.command == 'worker' else [
-            '-m', 'uvicorn', 'app.main:app', '--reload', '--host', args.host, '--port', str(args.port)]
+            '-m', 'uvicorn', 'app.main:app', '--reload', '--host', args.host, '--port', str(args.port),
+            '--timeout-graceful-shutdown', '5']
         os.execvpe(sys.executable, [sys.executable, *command],
             {**os.environ, 'JELLYFISH_DEV_RUNTIME_DIR': str(runtime_directory())})
         return 0

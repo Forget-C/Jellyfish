@@ -24,7 +24,7 @@ uv run python -m app.dev worker
 
 `uvicorn --reload` 只重载 API 进程，不重载 Worker。修改任务执行、模型输出解析或生成校验代码后，确认没有排队或运行中的任务，再停止并重新启动 Worker；同一数据库只运行一个调度 Worker。否则可能出现旧 Worker 将结果标为成功，而新 API 在应用时拒绝结果的情况。重启不会重写已完成任务的结果。
 
-以上开发入口适用于 macOS/Linux，API 保留自动重载；可用 `api --host 127.0.0.1 --port 8000` 指定监听地址。切换到开发入口前先停止原来直接启动的 API／Worker。原始 `uvicorn` 和 `python -m app.task_worker` 命令仍可用于部署；未设置 `JELLYFISH_DEV_RUNTIME_DIR` 时不登记开发身份。
+以上开发入口适用于 macOS/Linux，API 保留自动重载，重载时最多等待旧 HTTP 连接 5 秒，随后关闭尚未结束的 SSE 等请求，避免浏览器长连接阻塞新进程启动；独立 Worker 的生成任务不受这一 HTTP 等待时限影响。可用 `api --host 127.0.0.1 --port 8000` 指定监听地址。切换到开发入口前先停止原来直接启动的 API／Worker。原始 `uvicorn` 和 `python -m app.task_worker` 命令仍可用于部署；未设置 `JELLYFISH_DEV_RUNTIME_DIR` 时不登记开发身份。
 
 ## 核对进程与代码版本
 

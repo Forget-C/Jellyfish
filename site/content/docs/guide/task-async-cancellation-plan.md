@@ -11,7 +11,7 @@ weight: 8
 ```bash
 uv run python -m app.scripts.migrate_database
 uv run python -m app.scripts.seed_system_data
-uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uv run python -m app.dev api --host 127.0.0.1 --port 8000
 ```
 
 另开终端启动一个 Worker：
