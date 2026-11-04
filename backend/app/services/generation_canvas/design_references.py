@@ -6,12 +6,14 @@ from app.services.generation_canvas.output_resolution import identity_key
 VISUAL_DESIGN_TYPES = frozenset(('direction.style', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.composition', 'direction.movement'))
 
 PERFORMANCE_DESIGN_TYPES = frozenset(('direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'))
-REFERENCE_DESIGN_TYPES = VISUAL_DESIGN_TYPES | PERFORMANCE_DESIGN_TYPES
+NARRATIVE_DESIGN_TYPES = frozenset(('direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'))
+FLAT_DESIGN_TYPES = PERFORMANCE_DESIGN_TYPES | NARRATIVE_DESIGN_TYPES
+REFERENCE_DESIGN_TYPES = VISUAL_DESIGN_TYPES | FLAT_DESIGN_TYPES
 
 
 def design_fields(card):
     """Stable field paths include explicit movement phase identities."""
-    if card.type in PERFORMANCE_DESIGN_TYPES:
+    if card.type in FLAT_DESIGN_TYPES:
         for key in type(card).model_fields:
             value = getattr(card, key)
             if isinstance(value, ReferenceDesignField):
@@ -60,7 +62,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
             source = context.cards.get(segment.source.card_id)
             code = 'REFERENCE_CANVAS_MISMATCH' if segment.source.canvas_id != context.document.id else 'DESIGN_BODY_REFERENCE_FORBIDDEN' if source and source.type.startswith('direction.') and segment.source.port_id == 'text' else 'REFERENCE_NOT_CONNECTED' if item is None else 'OUTPUT_MISSING' if not item.available else None
             if not code and segment.source.port_id == 'anchor':
-                if card.type not in PERFORMANCE_DESIGN_TYPES or not source or source.type != 'direction.anchor':
+                if card.type not in FLAT_DESIGN_TYPES or not source or source.type != 'direction.anchor':
                     code = 'DESIGN_BODY_REFERENCE_FORBIDDEN'
                 else:
                     values = list(design_fields(source))
@@ -72,7 +74,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                         from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
                         location = [PURPOSE_LABELS[field.purpose] + ' / ' + FIELD_LABELS[name] + ' [' + STATE_LABELS[field.state] + ']：' + (''.join(part.text for part in field.document.segments) if field.document else field.text) for name, field in active]
                         item = item.model_copy(update={'text': source.name + '（' + '；'.join(location) + '）'})
-            if not code and card.type in PERFORMANCE_DESIGN_TYPES and item and item.modality == 'audio':
+            if not code and card.type in FLAT_DESIGN_TYPES and item and item.modality == 'audio':
                 code = 'UNSUPPORTED_DESIGN_MEDIA'
             if not code and item and item.modality == 'text' and not item.text:
                 code = 'REFERENCE_TEXT_UNAVAILABLE'
@@ -93,7 +95,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
             phases[key[6:]] = updated
         else:
             fields[key] = updated
-    updated = card.model_copy(update=fields) if card.type in PERFORMANCE_DESIGN_TYPES else card.model_copy(update={'fields': card.fields.model_copy(update=fields)})
+    updated = card.model_copy(update=fields) if card.type in FLAT_DESIGN_TYPES else card.model_copy(update={'fields': card.fields.model_copy(update=fields)})
     if phases:
         updated = updated.model_copy(update={'phases': [phase.model_copy(update={'frame': phases.get(phase.id, phase.frame)}) for phase in card.phases]})
     return updated, media, issues, basis_current

@@ -6,7 +6,7 @@ import { DesignFieldEditor } from './DesignFieldEditor'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor'
 import type { EditorPromptDocument } from './inputBindings'
 import { sourceKey, type Candidate } from './promptRules'
-import { designReferences, isReferenceDesign, isPerformanceDesign, designFieldEntries } from './designFieldReferences'
+import { designReferences, isReferenceDesign, isFlatDesign, designFieldEntries } from './designFieldReferences'
 import { useGraphRules } from './CanvasCatalogContext'
 import { useCardCandidates } from './useCardCandidates'
 import { referenceLabels } from './referenceLabels'
@@ -34,13 +34,13 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   const retained = new Set(designReferences(card).map(item => sourceKey(item.reference.source)))
   const sources = [...resolved.candidates]
   for (const { reference } of designReferences(card)) if (!sources.some(item => sourceKey(item.source) === sourceKey(reference.source))) sources.push({ source: reference.source, modality: ['image', 'video', 'audio'].includes(reference.source.port_id) ? reference.source.port_id as 'image' | 'video' | 'audio' : 'text', available: false })
-  const labels = referenceLabels(document, sources, card.id, isPerformanceDesign(card))
+  const labels = referenceLabels(document, sources, card.id, isFlatDesign(card))
   const labelFor = (item: CanvasResolvedOutput) => labels.get(sourceKey(item.source)) || item.token || '@缺失来源'
   const candidates: Candidate[] = sources.map(item => {
     const source = document.cards?.find(value => value.id === item.source.card_id)
     const connected = item.source.canvas_id === document.id && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
-    const identityOnly = isPerformanceDesign(card) && !['text', 'image', 'video', 'audio', 'anchor'].includes(item.source.port_id)
-    const reason = identityOnly ? '请通过关系控件选择对象用途' : item.modality === 'audio' && isPerformanceDesign(card) ? '本期不支持音频字段引用与携带' : source?.type?.startsWith('direction.') && item.source.port_id === 'text' || item.source.port_id === 'anchor' && !isPerformanceDesign(card) ? '设计正文不支持互相引用' : undefined
+    const identityOnly = isFlatDesign(card) && !['text', 'image', 'video', 'audio', 'anchor'].includes(item.source.port_id)
+    const reason = identityOnly ? '请通过关系控件选择对象用途' : item.modality === 'audio' && isFlatDesign(card) ? '本期不支持音频字段引用与携带' : source?.type?.startsWith('direction.') && item.source.port_id === 'text' || item.source.port_id === 'anchor' && !isFlatDesign(card) ? '设计正文不支持互相引用' : undefined
     const forbidden = !!reason
     return { source: item.source, token: item.token || '@缺失来源', displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? reason : !connected ? '来源未连接' : item.available === false ? '来源输出缺失' : undefined }
   })
@@ -74,7 +74,7 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
   const context = useContext(DesignReferenceContext), handle = useRef<PromptEditorHandle>(null)
   if (!context || !isReferenceDesign(context.card)) return <DesignFieldEditor {...props} />
   const value = props.value as ReferenceDesignField | undefined
-  const prompt: EditorPromptDocument = value?.document as EditorPromptDocument || { segments: [{ id: 'text', kind: 'text', text: value?.text || '', ...(isPerformanceDesign(context.card) && value?.text ? { literal: true } : {}) }] }
+  const prompt: EditorPromptDocument = value?.document as EditorPromptDocument || { segments: [{ id: 'text', kind: 'text', text: value?.text || '', ...(isFlatDesign(context.card) && value?.text ? { literal: true } : {}) }] }
   const onChange = (next: EditorPromptDocument) => {
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])

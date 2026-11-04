@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * beat 的专用字段及可选直接关系。
  */
@@ -19,8 +19,9 @@ export type NarrativeBeatCard = {
     name?: string;
     type?: 'direction.beat';
     beat_id?: (string | null);
-    objective?: DesignField;
-    obstacle?: DesignField;
-    expected_change?: DesignField;
-    audience_must_see?: DesignField;
+    objective?: ReferenceDesignField;
+    obstacle?: ReferenceDesignField;
+    expected_change?: ReferenceDesignField;
+    audience_must_see?: ReferenceDesignField;
 };
+

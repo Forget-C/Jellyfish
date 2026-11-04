@@ -2,7 +2,7 @@
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
-PERFORMANCE_CASES = [('situation', 'situation', 'relationship'), ('performance', 'physical_action', 'gaze'), ('performance_rule', 'applicability', 'applicability'), ('anchor', 'position', 'orientation'), ('blocking', 'position', 'path'), ('activity', 'task', 'exit_state'), ('environment', 'activity', 'empty_space')]
+PERFORMANCE_CASES = [('narrative', 'viewpoint', 'open_questions'), ('beat', 'objective', 'obstacle'), ('event', 'action_change', 'action_change'), ('shot', 'visible_result', 'estimated_duration'), ('situation', 'situation', 'relationship'), ('performance', 'physical_action', 'gaze'), ('performance_rule', 'applicability', 'applicability'), ('anchor', 'position', 'orientation'), ('blocking', 'position', 'path'), ('activity', 'task', 'exit_state'), ('environment', 'activity', 'empty_space')]
 
 CASES = [('style', 'direction', 'notes'), ('camera', 'viewpoint', 'support'), ('lighting', 'light_sources', 'color_relationship'), ('focus', 'depth_focus', 'prohibitions'), ('composition', 'composition', 'negative_space'), ('movement', 'movement_path', 'end_frame')]
 
@@ -56,6 +56,8 @@ async def test_only_active_media_is_declared_and_image_consumption_uses_it(canva
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
     output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
+    if kind == 'shot':
+        assert output['payload']['frame_states'] == [{'id': 'field:visible_result', 'label': '可见结果'}]
     media = output['payload']['material_references']
     assert len(media) == 1
     assert media[0]['source'] == source and media[0]['field_id'] == key

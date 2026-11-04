@@ -373,34 +373,34 @@ class AcceptanceCriterionFields(BaseModel):
 class NarrativeOverviewFields(BaseModel):
     """本卡强类型完整叙事字段，保留显式状态。"""
     model_config = ConfigDict(extra='forbid')
-    viewpoint: DesignField
-    information_change: DesignField
-    relationship_change: DesignField
-    turning_point: DesignField
-    open_questions: DesignField
+    viewpoint: ReferenceDesignField
+    information_change: ReferenceDesignField
+    relationship_change: ReferenceDesignField
+    turning_point: ReferenceDesignField
+    open_questions: ReferenceDesignField
 
 
 class NarrativeBeatFields(BaseModel):
     """本卡强类型完整叙事字段，保留显式状态。"""
     model_config = ConfigDict(extra='forbid')
-    objective: DesignField
-    obstacle: DesignField
-    expected_change: DesignField
-    audience_must_see: DesignField
+    objective: ReferenceDesignField
+    obstacle: ReferenceDesignField
+    expected_change: ReferenceDesignField
+    audience_must_see: ReferenceDesignField
 
 
 class NarrativeEventFields(BaseModel):
     """本卡强类型完整叙事字段，保留显式状态。"""
     model_config = ConfigDict(extra='forbid')
-    action_change: DesignField
+    action_change: ReferenceDesignField
 
 
 class ShotDesignFields(BaseModel):
     """本卡强类型完整叙事字段，保留显式状态。"""
     model_config = ConfigDict(extra='forbid')
-    narrative_role: DesignField
-    visible_result: DesignField
-    estimated_duration: DesignField
+    narrative_role: ReferenceDesignField
+    visible_result: ReferenceDesignField
+    estimated_duration: ReferenceDesignField
 
 
 class NarrativeReferencePayload(BaseModel):

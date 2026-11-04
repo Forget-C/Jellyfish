@@ -606,23 +606,23 @@ class NarrativeDirectionCard(PerformanceDirectionCard):
 class NarrativeOverviewCard(NarrativeDirectionCard):
     """narrative 的专用字段及可选直接关系。"""
     type: Literal['direction.narrative'] = Field(default='direction.narrative', json_schema_extra={'enum': ['direction.narrative']})
-    viewpoint: DesignField = Field(default_factory=DesignField)
-    information_change: DesignField = Field(default_factory=DesignField)
-    relationship_change: DesignField = Field(default_factory=DesignField)
-    turning_point: DesignField = Field(default_factory=DesignField)
-    open_questions: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object',)
+    viewpoint: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    information_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    relationship_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    turning_point: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    open_questions: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'text', 'image', 'video', 'anchor')
 
 
 class NarrativeBeatCard(NarrativeDirectionCard):
     """beat 的专用字段及可选直接关系。"""
     type: Literal['direction.beat'] = Field(default='direction.beat', json_schema_extra={'enum': ['direction.beat']})
     beat_id: str | None = Field(default=None, min_length=1, max_length=64)
-    objective: DesignField = Field(default_factory=DesignField)
-    obstacle: DesignField = Field(default_factory=DesignField)
-    expected_change: DesignField = Field(default_factory=DesignField)
-    audience_must_see: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('related_event',)
+    objective: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    obstacle: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    expected_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    audience_must_see: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('related_event', 'text', 'image', 'video', 'anchor')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'beat')
 
 
@@ -630,8 +630,8 @@ class NarrativeEventCard(NarrativeDirectionCard):
     """event 的专用字段及可选直接关系。"""
     type: Literal['direction.event'] = Field(default='direction.event', json_schema_extra={'enum': ['direction.event']})
     event_id: str | None = Field(default=None, min_length=1, max_length=64)
-    action_change: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object',)
+    action_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'text', 'image', 'video', 'anchor')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'event')
 
 
@@ -639,10 +639,10 @@ class ShotDesignCard(NarrativeDirectionCard):
     """shot 的专用字段及可选直接关系。"""
     type: Literal['direction.shot'] = Field(default='direction.shot', json_schema_extra={'enum': ['direction.shot']})
     shot_id: str | None = Field(default=None, min_length=1, max_length=64)
-    narrative_role: DesignField = Field(default_factory=DesignField)
-    visible_result: DesignField = Field(default_factory=DesignField)
-    estimated_duration: DesignField = Field(default_factory=DesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'covered_beat', 'related_event', 'blocking_basis', 'acceptance_basis', 'image_example', 'video_example')
+    narrative_role: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    visible_result: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    estimated_duration: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'covered_beat', 'related_event', 'blocking_basis', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'shot')
 
 

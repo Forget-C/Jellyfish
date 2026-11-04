@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 本卡强类型完整叙事字段，保留显式状态。
  */
 export type ShotDesignFields = {
-    narrative_role: DesignField;
-    visible_result: DesignField;
-    estimated_duration: DesignField;
+    narrative_role: ReferenceDesignField;
+    visible_result: ReferenceDesignField;
+    estimated_duration: ReferenceDesignField;
 };
+

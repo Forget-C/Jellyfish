@@ -95,7 +95,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             issue('SOURCE_NOT_CONNECTED', '引用来源未连接，请手动连接或替换', ref.id, path)
         elif not source.available:
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
-    from app.services.generation_canvas.design_references import PERFORMANCE_DESIGN_TYPES, REFERENCE_DESIGN_TYPES
+    from app.services.generation_canvas.design_references import FLAT_DESIGN_TYPES, REFERENCE_DESIGN_TYPES
     primary_designs = [item for item in result.used if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in REFERENCE_DESIGN_TYPES]
     def design_text(item):
         if item in primary_designs:
@@ -112,7 +112,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     for item in result.used:
         if isinstance(item.payload, DesignTextPayload):
             for problem in item.payload.reference_issues:
-                result.diagnostics.append(CanvasDiagnostic(code=problem.code, message=problem.message, target={'card_id': item.source.card_id, 'segment_id': problem.reference_id, 'path': (['phases', problem.field_id[6:], 'frame', 'document'] if problem.field_id.startswith('phase:') else ([problem.field_id, 'document'] if item.payload.design_type in PERFORMANCE_DESIGN_TYPES else ['fields', problem.field_id, 'document']))}, blocks=['run']))
+                result.diagnostics.append(CanvasDiagnostic(code=problem.code, message=problem.message, target={'card_id': item.source.card_id, 'segment_id': problem.reference_id, 'path': (['phases', problem.field_id[6:], 'frame', 'document'] if problem.field_id.startswith('phase:') else ([problem.field_id, 'document'] if item.payload.design_type in FLAT_DESIGN_TYPES else ['fields', problem.field_id, 'document']))}, blocks=['run']))
             if item.payload.material_references and card.type not in ('model.image', 'model.video'):
                 issue('DESIGN_MEDIA_CARRY_NOT_READY', '该设计引用了媒体，接收模型尚未配置素材携带，请处理设计引用后再生成', item.source.card_id)
         target = getattr(item.payload, 'frame_target_state', None)

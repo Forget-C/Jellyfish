@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * event 的专用字段及可选直接关系。
  */
@@ -19,5 +19,6 @@ export type NarrativeEventCard = {
     name?: string;
     type?: 'direction.event';
     event_id?: (string | null);
-    action_change?: DesignField;
+    action_change?: ReferenceDesignField;
 };
+

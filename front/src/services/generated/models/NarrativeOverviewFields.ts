@@ -2,14 +2,15 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * 本卡强类型完整叙事字段，保留显式状态。
  */
 export type NarrativeOverviewFields = {
-    viewpoint: DesignField;
-    information_change: DesignField;
-    relationship_change: DesignField;
-    turning_point: DesignField;
-    open_questions: DesignField;
+    viewpoint: ReferenceDesignField;
+    information_change: ReferenceDesignField;
+    relationship_change: ReferenceDesignField;
+    turning_point: ReferenceDesignField;
+    open_questions: ReferenceDesignField;
 };
+

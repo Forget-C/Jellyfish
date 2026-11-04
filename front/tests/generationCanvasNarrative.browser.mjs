@@ -37,15 +37,17 @@ try {
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
 
   const document = { ...canvas.document, cards: [
+    { id: 'brief', type: 'content.text', text: '引用文本依据' },
     { id: 'event', type: 'direction.event', event_id: 'bell', name: '钟响', action_change: { state: 'fact', text: '秘密事件正文' } },
     { id: 'beat', type: 'direction.beat', beat_id: 'decision', name: '决定' },
     { id: 'beat2', type: 'direction.beat', beat_id: 'escape', name: '逃离' },
     { id: 'overview', type: 'direction.narrative', name: '概览' },
     { id: 'shot', type: 'direction.shot', shot_id: 'reaction', name: '反应镜头' },
     { id: 'performance', type: 'direction.performance' },
-    { id: 'photo', type: 'direction.photography', fields: { composition: { state: 'proposal', text: '人物居右' } } },
+    { id: 'photo', type: 'direction.camera', fields: { viewpoint: { state: 'proposal', text: '人物居右' } } },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model' }],
     edges: [
+      ...['overview', 'beat', 'event', 'shot'].map(id => ({ id: 'brief-' + id, source_card: 'brief', source_port: 'text', target_card: id, target_port: 'text' })),
       { id: 'event', source_card: 'event', source_port: 'event', target_card: 'shot', target_port: 'related_event' },
       { id: 'beat', source_card: 'beat', source_port: 'beat', target_card: 'shot', target_port: 'covered_beat' },
       { id: 'beat2', source_card: 'beat2', source_port: 'beat', target_card: 'shot', target_port: 'covered_beat' },
@@ -57,9 +59,25 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4293/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = id => openCanvasCard(page, id)
+  const open = async id => { await openCanvasCard(page, id); const advanced = card.getByRole('button', { name: '高级设置', exact: true }); if (await advanced.count()) await advanced.click(); const relations = card.locator('summary').filter({ hasText: /^叙事关系/ }); if (await relations.count()) await relations.click() }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
+  for (const [id, preset, label, key] of [['overview', '信息逐步揭示', '观察视点', 'viewpoint'], ['beat', '目标受阻', '行动目标', 'objective'], ['event', '外部刺激', '动作或变化说明', 'action_change'], ['shot', '反应揭示', '可见结果', 'visible_result']]) {
+    await open(id)
+    await card.getByRole('button', { name: '返回预设', exact: true }).click()
+    await card.getByRole('button', { name: '预览 ' + preset, exact: true }).click()
+    await card.getByRole('button', { name: '应用', exact: true }).click()
+    await poll(state => state.document.cards.find(item => item.id === id)[key]?.text)
+    await page.keyboard.press('Escape')
+    await open(id)
+    await card.getByRole('button', { name: '返回预设', exact: true }).click()
+    assert.equal(await card.getByRole('button', { name: '预览 ' + preset, exact: true }).getAttribute('aria-pressed'), 'true')
+    await card.getByRole('button', { name: '高级设置', exact: true }).click()
+    const field = card.getByRole('textbox', { name: label + '内容', exact: true })
+    await field.fill(''); await field.press('@')
+    await page.getByRole('option', { name: '@文本1', exact: true }).click()
+    await poll(state => state.document.cards.find(item => item.id === id)[key]?.document?.segments?.some(segment => segment.kind === 'reference'))
+  }
   await open('overview')
   await card.getByRole('textbox', { name: '观察视点内容', exact: true }).fill('小雪观察')
   await card.getByRole('textbox', { name: '待确定问题内容', exact: true }).fill('是否离开')
@@ -101,7 +119,7 @@ try {
   assert.doesNotMatch(compiled.text, /秘密事件正文|拿到钥匙|获得主动/)
   await page.reload()
   await open('shot')
-  assert.equal(await card.getByRole('textbox', { name: '可见结果内容', exact: true }).inputValue(), '看向门口')
+  assert.equal(await card.getByRole('textbox', { name: '可见结果内容', exact: true }).innerText(), '看向门口')
   await card.getByRole('button', { name: '取消覆盖节拍 决定', exact: true }).waitFor()
   const reopened = await read()
   assert.deepEqual(reopened.document.cards.find(item => item.id === 'shot').input_bindings.filter(binding => binding.input_port === 'covered_beat').map(binding => binding.source.object_id), ['escape', 'decision'])

@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * shot 的专用字段及可选直接关系。
  */
@@ -19,7 +19,8 @@ export type ShotDesignCard = {
     name?: string;
     type?: 'direction.shot';
     shot_id?: (string | null);
-    narrative_role?: DesignField;
-    visible_result?: DesignField;
-    estimated_duration?: DesignField;
+    narrative_role?: ReferenceDesignField;
+    visible_result?: ReferenceDesignField;
+    estimated_duration?: ReferenceDesignField;
 };
+

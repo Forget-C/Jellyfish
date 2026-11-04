@@ -1,5 +1,5 @@
 import type { CanvasDocument } from '../../../services/generated'
-import type { PerformanceDesignCard } from './designFieldReferences'
+import type { FlatDesignCard } from './designFieldReferences'
 import { designFieldEntries } from './designFieldReferences'
 import { useGraphRules } from './CanvasCatalogContext'
 import { DesignCardBody } from './VisualDesignCard'
@@ -7,7 +7,7 @@ import { DesignCardBody } from './VisualDesignCard'
 const states: Record<string, string> = { not_applicable: '不适用', absent: '明确没有', undecided: '待确定', fact: '事实', proposal: '提议' }
 
 /** Summaries show authored configuration, including retained references, independently of generation readiness. */
-export function PerformanceDesignCardBody({ card, document, readonly, onEdit }: { card: PerformanceDesignCard; document: CanvasDocument; readonly?: boolean; onEdit: (trigger: HTMLElement) => void }) {
+export function PerformanceDesignCardBody({ card, document, readonly, onEdit }: { card: FlatDesignCard; document: CanvasDocument; readonly?: boolean; onEdit: (trigger: HTMLElement) => void }) {
   const { cardDefinitions, portLabels } = useGraphRules()
   const definition = cardDefinitions[card.type!], title = definition.title.replace(/卡$/, '')
   const sourceName = (id: string) => {

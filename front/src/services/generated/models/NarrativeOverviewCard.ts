@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { DesignField } from './DesignField';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
+import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
  * narrative 的专用字段及可选直接关系。
  */
@@ -18,9 +18,10 @@ export type NarrativeOverviewCard = {
     examples?: Array<DesignMediaExample>;
     name?: string;
     type?: 'direction.narrative';
-    viewpoint?: DesignField;
-    information_change?: DesignField;
-    relationship_change?: DesignField;
-    turning_point?: DesignField;
-    open_questions?: DesignField;
+    viewpoint?: ReferenceDesignField;
+    information_change?: ReferenceDesignField;
+    relationship_change?: ReferenceDesignField;
+    turning_point?: ReferenceDesignField;
+    open_questions?: ReferenceDesignField;
 };
+

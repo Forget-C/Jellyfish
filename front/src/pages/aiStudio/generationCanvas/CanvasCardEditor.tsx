@@ -1,4 +1,4 @@
-import { visualDesignTypes, performanceDesignTypes } from './designFieldReferences'
+import { visualDesignTypes, performanceDesignTypes, narrativeDesignTypes } from './designFieldReferences'
 import { createContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -25,7 +25,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
-  const visualDesign = [...visualDesignTypes, ...performanceDesignTypes].includes(cardType || '')
+  const visualDesign = [...visualDesignTypes, ...performanceDesignTypes, ...narrativeDesignTypes].includes(cardType || '')
   const slot = useWorkbenchDetailsSlot(), slotId = useId(), selectSlot = slot?.select
   const slotSelected = !slot || slot.active === slotId
   const activated = useRef(false)
