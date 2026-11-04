@@ -27,8 +27,20 @@ export async function verifyIndependentDesigns(scenario, port) {
     const fieldKeys=['direction','composition','viewpoint','movement_path','light_sources','depth_focus']
     const fieldLabels=['风格方向','构图重心','观察视点','运动路径','光源','景深与焦点']
     const cards=types.map((kind,i)=>({id:kind,type:'direction.'+kind,fields:{[fieldKeys[i]]:{text:`独立设计${i}`,state:'fact'}}}))
+    if(scenario==='summaries')cards.push(
+      ...types.map(kind=>({id:'empty-'+kind,type:'direction.'+kind})),
+      {id:'stage-only',type:'direction.movement',phases:[{id:'draft',name:'待定落幅'.repeat(30),frame:{state:'empty'}}]},
+      {id:'size-only',type:'direction.composition',fields:{shot_size:{state:'fact',size:'close_up'}}},
+      {id:'scope-only',type:'direction.style',scope:{description:'整场黄昏'}},
+      {id:'fact-only',type:'direction.focus',fields:{depth_focus:{state:'fact'}}},
+      {id:'state-only',type:'direction.camera',fields:{viewpoint:{state:'not_applicable'}}},
+      {id:'doc-only',type:'direction.lighting',fields:{light_sources:{state:'proposal',document:{segments:[{id:'literal',kind:'text',text:'窗外斜射光'}]}}}},
+      {id:'person',type:'content.character',object_id:'person-id',name:'张三'},
+      {id:'relation-only',type:'direction.focus',input_bindings:[{id:'person-use',input_port:'effect_object',source:{canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'person-id'}}]}
+    )
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
+    if(scenario==='summaries'){document.edges.push({id:'person-focus',source_card:'person',source_port:'object',target_card:'relation-only',target_port:'effect_object'});document.input_order['relation-only']={effect_object:['person-focus']}}
     const saved=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(saved.ok,await saved.text())
     const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
     const poll=async predicate=>{for(let i=0;i<80;i++){if(predicate(await read()))return;await delay(100)}throw Error('save timeout')}
@@ -43,6 +55,28 @@ export async function verifyIndependentDesigns(scenario, port) {
       assert.ok((await (await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data.diagnostics.some(item=>item.code==='DESIGN_BASIS_MISSING'))
       await detail.getByRole('button',{name:'已处理缺失设计',exact:true}).click();await poll(s=>s.document.cards.find(c=>c.id==='model').missing_designs.length===0)
       await page.keyboard.press('Escape');await detail.waitFor({state:'hidden'})
+    }
+    if(scenario==='summaries') {
+      const names=['画面风格','景别与构图','机位与视角','运镜','光影与色彩','焦点与成像']
+      for(let i=0;i<types.length;i++) {
+        const card=page.locator(`[data-card-id="${types[i]}"]`)
+        await card.getByRole('img',{name:names[i]+'用途示意',exact:true}).waitFor({state:'attached'})
+        await card.getByRole('button',{name:'编辑设计',exact:true}).waitFor({state:'attached'})
+        const empty=page.locator(`[data-card-id="empty-${types[i]}"]`)
+        await empty.getByText('尚未填写'+names[i],{exact:true}).waitFor({state:'attached'})
+        await empty.getByRole('button',{name:'开始设计',exact:true}).waitFor({state:'attached'})
+      }
+      for(const [id,text] of [['stage-only','阶段待填写'],['size-only','特写'],['scope-only','整场黄昏'],['state-only','不适用'],['fact-only','事实'],['doc-only','提议：窗外斜射光'],['relation-only','张三']]) {
+        const card=page.locator(`[data-card-id="${id}"]`)
+        await card.getByRole('button',{name:'编辑设计',exact:true}).waitFor({state:'attached',timeout:5000})
+        await card.getByRole('definition').filter({hasText:text}).waitFor({state:'attached'})
+      }
+      const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().height)))
+      assert.equal(figures.length,cards.length-1,'every design, including empty and stage-only, has a purpose illustration')
+      assert.equal(new Set(figures).size,1,'type-specific illustrations keep the same visible height')
+      assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=2)),true,'cards keep at most two labelled summary rows')
+      assert.equal(await page.locator('.visual-design-card dl > div').evaluateAll(nodes=>nodes.every(node=>{const row=node.getBoundingClientRect();return [...node.children].every(child=>{const r=child.getBoundingClientRect();return r.left>=row.left-1&&r.right<=row.right+1})})),true,'long stage labels and values remain inside the summary')
+      await page.screenshot({path:join(output,'unified-design-cards-desktop.png'),animations:'disabled'})
     }
     for(let i=0;i<types.length;i++){
       const kind=types[i], card=page.locator(`[data-card-id="${kind}"]`)
@@ -61,6 +95,12 @@ export async function verifyIndependentDesigns(scenario, port) {
     }
     await page.setViewportSize({width:390,height:844});await page.locator('[data-card-id="composition"]').press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
     await page.screenshot({path:join(output,`${scenario}-mobile.png`)});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+    if(scenario==='summaries') {
+      const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url())
+      await observer.getByText('此画布当前只读',{exact:true}).waitFor()
+      for(const kind of types) await observer.locator(`[data-card-id="${kind}"]`).getByRole('button',{name:'查看设计',exact:true}).waitFor({state:'attached'})
+      await observer.close()
+    }
     const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards.filter(c=>c.category==='画面设计');assert.equal(catalog.length,6);assert.ok(catalog.every(c=>c.outputs[0].adoption==='whole_card'&&c.entries.length===0))
     console.log(`PASS ${scenario}: six independent designs, no legacy navigation, saved fields, narrow layout`)
   } finally {await cleanup()}

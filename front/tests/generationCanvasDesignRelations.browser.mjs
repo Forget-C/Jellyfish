@@ -83,11 +83,11 @@ try {
     await detail.screenshot({path:join(output,kind+'-relations-mobile.png'),animations:'disabled'})
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click();await page.setViewportSize({width:1440,height:960})
   }
-  await page.reload();await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).click();await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  await page.reload();await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await detail.getByRole('textbox',{name:'设计来源',exact:true}).inputValue(),'导演说明')
   await detail.getByRole('button',{name:'取消作用对象 张三',exact:true}).waitFor()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
-  await observer.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).click();const readonly=observer.locator('.wb-details:visible');await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
+  await observer.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');const readonly=observer.locator('.wb-details:visible');await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await readonly.getByRole('button',{name:'取消作用对象 张三',exact:true}).isDisabled(),true)
   assert.equal(await readonly.getByRole('textbox',{name:'设计来源',exact:true}).isDisabled(),true)
   await observer.close()

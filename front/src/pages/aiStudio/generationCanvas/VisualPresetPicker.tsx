@@ -96,7 +96,7 @@ export function VisualPresetPicker({ label, presets, disabled, onApply, children
   return <section ref={root} className="canvas-effect-editor" aria-label={label + '效果选择'}>
     <div className="canvas-effect-parameters" hidden={gallery}>{children}</div>
     <aside className="canvas-effect-preview" hidden={gallery}>
-      <details className="canvas-effect-current" open={window.innerWidth > 700}><summary>设计预览与预设</summary>{currentPreview || <DesignPurposeIllustration style={label === '风格'} />}<ConfigProvider componentDisabled={false}><CanvasTextPreview text={currentName || '尚未填写设计。'} label="当前设计" lines={4} /></ConfigProvider>
+      <details className="canvas-effect-current" open={window.innerWidth > 700}><summary>设计预览与预设</summary>{currentPreview || <DesignPurposeIllustration kind={label === '风格' ? 'style' : 'composition'} />}<ConfigProvider componentDisabled={false}><CanvasTextPreview text={currentName || '尚未填写设计。'} label="当前设计" lines={4} /></ConfigProvider>
       <ConfigProvider componentDisabled={false}><WorkbenchButton ref={node => { selectedRef.current = node as HTMLButtonElement }} onClick={() => browse(true)}>浏览预设与对比</WorkbenchButton></ConfigProvider>
       </details>
     </aside>

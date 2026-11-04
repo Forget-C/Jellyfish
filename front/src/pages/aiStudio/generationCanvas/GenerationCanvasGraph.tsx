@@ -1,20 +1,17 @@
+import { designSummary } from './designSummary'
+import type { CompositionCard } from '../../../services/generated'
+import { VisualDesignCard } from './VisualDesignCard'
 import { DesignReferenceEditor } from './DesignReferenceEditor'
 import { isVisualDesign } from './designFieldReferences'
-import { StaticVisualDesignCardSummary, type StaticVisualDesignCard } from './StaticVisualDesignEditor'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { TextContentEditor } from './TextContentEditor'
-import { designSummary } from './designSummary'
 import { CardStatusSummary } from './CardStatusSummary'
 import { ImageContentCardSummary } from './ImageContentCardSummary'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
 import { guidanceSummary, type GuidanceCard } from './GuidanceDirectionEditor'
 import { constraintSummary, type ConstraintCard } from './ConstraintDirectionEditor'
-import type { VisualStyleCard, ImageContentCard } from '../../../services/generated'
+import type { ImageContentCard } from '../../../services/generated'
 import { narrativeSummary, type NarrativeCard } from './NarrativeDirectionEditor'
-import { DesignPurposeIllustration } from './DesignPurposeIllustration'
-import { movementSummary } from './MovementEditor'
-import { VisualStyleCardSummary } from './PhotographyCardSummary'
-import type { CompositionCard } from '../../../services/generated'
 import { spatialSummary, type SpatialCard } from './SpatialDirectionEditor'
 import { soundSummary } from './SoundDirectionEditor'
 import type { SoundCard } from './SoundDirectionEditor'
@@ -1197,8 +1194,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
-            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : ['direction.camera', 'direction.lighting', 'direction.focus'].includes(card.type || '') ? <StaticVisualDesignCardSummary card={card as StaticVisualDesignCard} /> : card.type === 'direction.movement' ? <p className="canvas-card-summary">{movementSummary(card as import('../../../services/generated').MovementCard) || '选择预设，开始运镜设计'}{!!(card as import('../../../services/generated').MovementCard).phases?.length && <small>{(card as import('../../../services/generated').MovementCard).phases?.length} 个运镜阶段</small>}</p> : card.type === 'direction.composition' ? <section className="design-card-summary" aria-label="构图摘要"><DesignPurposeIllustration /><p className="canvas-card-summary">{designSummary([], Object.values((card as CompositionCard).fields || {})) || '选择预设，开始构图设计'}</p></section> : card.type === 'direction.style' ? <VisualStyleCardSummary card={card as VisualStyleCard} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
-              {visualDesign && <Button className="design-card-entry" onClick={event => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(event.currentTarget); setDetailId(card.id) }}>{readonly ? '查看设计' : !designSummary([], Object.values((card as VisualStyleCard).fields || {})) ? card.type === 'direction.style' ? '设计画面风格' : '开始设计' : '编辑设计'}</Button>}
+            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} height={size?.height} />}
