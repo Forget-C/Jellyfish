@@ -1,17 +1,28 @@
-import type { CanvasDocument, CanvasResolvedOutput } from '../../../services/generated'
+import type { CanvasDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { sourceKey } from './promptRules'
+import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
-/** 验收关系仅采用必要身份；标准正文须由模型另行直接采用。 */
-export function AcceptanceBasisSelector({ card, document, candidates, disabled, onChange }: { card: GenerationCard; document: CanvasDocument; candidates: CanvasResolvedOutput[]; disabled?: boolean; onChange: (card: GenerationCard) => void }) {
+/** 连线维护关联；这里只读展示当前标准，并定位来源编辑。 */
+export function AcceptanceBasisSelector({ card, document, onLocateDesign }: { card: GenerationCard; document: CanvasDocument; onLocateDesign?: (cardId: string, fieldId: string) => void }) {
   if (!('input_bindings' in card)) return null
-  const bindings = card.input_bindings || []
-  return <section aria-label="验收依据"><h3>验收依据</h3>
-    {candidates.filter(item => item.payload?.kind === 'criterion_reference' && document.edges?.some(edge => edge.target_card === card.id && edge.target_port === 'acceptance_basis' && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)).map(item => {
-      const binding = bindings.find(value => value.input_port === 'acceptance_basis' && sourceKey(value.source) === sourceKey(item.source))
-      const name = item.payload && 'name' in item.payload ? item.payload.name : ''
-      return <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available} onClick={() => onChange({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'acceptance_basis' }] })}>{`${binding ? '取消验收关联' : '关联验收要求'} ${name}`}</WorkbenchButton>
+  const bindings = (card.input_bindings || []).filter(binding => binding.input_port === 'acceptance_basis')
+  return <section aria-label="关联的验收要求"><h3>关联的验收要求</h3>
+    {!bindings.length && <small>连接验收要求卡以建立关联</small>}
+    {bindings.map(binding => {
+      const source = document.cards?.find(item => item.id === binding.source.card_id)
+      const criterion = source && 'standard' in source ? source : undefined
+      const standard = criterion?.standard
+      const text = standard?.document ? standard.document.segments?.map(segment => {
+        if (segment.kind === 'text') return segment.text
+        const referenced = document.cards?.find(item => item.id === segment.source.card_id)
+        return '@' + (referenced && 'name' in referenced && referenced.name || segment.source.card_id)
+      }).join('') : standard?.text
+      return <div key={binding.id}>
+        <span>{criterion?.name || '未命名验收要求'}</span>
+        <WorkbenchButton variant="quiet" disabled={!criterion || !onLocateDesign} onClick={() => onLocateDesign?.(binding.source.card_id, 'standard')}>查看验收要求</WorkbenchButton>
+        <details><summary>展开标准</summary><CanvasTextPreview text={standard?.state === 'not_applicable' ? '不适用' : text || '标准尚未填写'} label="验收标准" /></details>
+      </div>
     })}
   </section>
 }

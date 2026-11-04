@@ -30,7 +30,8 @@ def resolve_outputs(document: CanvasDocument, card_id: str,
 def compile_card(document: CanvasDocument, card_id: str, *,
                  model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None,
                  capability: CanvasModelCapability | None = None,
-                 context: CanvasOutputContext | None = None) -> CanvasCompiledInput:
+                 context: CanvasOutputContext | None = None,
+                 include_acceptance: bool = True) -> CanvasCompiledInput:
     """只遍历本地结构化片段一次，展开内容永不重新解释；保存不要求编译通过。
 
     显式 context 须绑定传入的同一份 document，且操作期间文档不再修改。"""
@@ -39,7 +40,11 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     if not isinstance(card, ModelCard):
         return CanvasCompiledInput(card_id=card_id)
     from app.services.generation_canvas.design_media import design_inputs
-    candidates, carried = design_inputs(context, card, context.resolve_outputs(card_id, model_outputs=model_outputs), model_outputs)
+    candidates = context.resolve_outputs(card_id, model_outputs=model_outputs)
+    if include_acceptance:
+        from app.services.generation_canvas.acceptance import acceptance_inputs
+        card, candidates = acceptance_inputs(context, card, candidates, model_outputs)
+    candidates, carried = design_inputs(context, card, candidates, model_outputs)
     result = compile_inputs(document.id, card, candidates, capability, carried=carried)
     for binding in card.input_bindings:
         source = context.cards.get(binding.source.card_id)

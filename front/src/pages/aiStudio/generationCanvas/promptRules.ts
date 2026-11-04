@@ -23,6 +23,7 @@ export function referenceProtection(document: CanvasDocument, sourceCard: string
       if (example.source.card_id === sourceCard && (!sourcePort || example.source.port_id === sourcePort)) return { message: '请先取消示例关联', cardId: card.id, segmentId: example.id, referenceId: example.id }
     }
     for (const binding of 'input_bindings' in card ? card.input_bindings || [] : []) {
+      if (binding.input_port === 'acceptance_basis' && binding.source.port_id === 'criterion') continue
       if (targetPort && binding.input_port !== targetPort || binding.source.canvas_id !== document.id || binding.source.card_id !== sourceCard || sourcePort && binding.source.port_id !== sourcePort) continue
       const ref = referencesIn(editorPrompt(card)).find(reference => reference.binding_id === binding.id)
       return { message: '请先清理 ' + card.id + ' 的实际输入绑定 ' + binding.id, cardId: card.id, segmentId: ref?.id || binding.id, referenceId: ref?.id || binding.id }

@@ -10,7 +10,7 @@ import { photographyRegions, shotSizeLabels } from './photographyDesign'
 import { designSummary } from './designSummary'
 
 /** 构图文字与结构化景别属于同一卡片；画面阶段关联由独立关系提供。 */
-export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs }: CardRendererProps) {
+export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs, onLocateDesign }: CardRendererProps) {
   const card = raw as CompositionCard, fields = card.fields || {}
   const movements = (document.cards || []).filter((item): item is MovementCard => item.type === 'direction.movement')
   const movement = movements.find(item => item.id === card.frame_target?.card_id)
@@ -24,7 +24,7 @@ export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, o
   return <DesignPresetEditor fields={{ ...fields }} labels={photographyRegions.composition.fields} presets={photographyPresets.composition} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="design-preset-fields">{Object.entries(photographyRegions.composition.fields).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof typeof fields], ...value } } })} />)}</div>
     <label>结构化景别<Select aria-label="结构化景别" disabled={disabled} allowClear placeholder="可选" value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => onChange({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size, state: fields.shot_size?.state === 'empty' || !fields.shot_size?.state ? 'proposal' : fields.shot_size.state } } })} /></label>
-    <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
+    <VisualDesignRelations onLocateDesign={onLocateDesign} card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
     <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} />
     <section aria-label="构图画面定位"><h3>画面定位（可选）</h3>
       <label>运镜卡<Select aria-label="关联运镜卡" disabled={disabled} allowClear placeholder={movements.length ? '选择同画布运镜卡' : '当前没有运镜卡'} value={card.frame_target?.card_id}

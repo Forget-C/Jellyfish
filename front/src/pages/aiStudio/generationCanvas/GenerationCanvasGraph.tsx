@@ -240,7 +240,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     if (readonly) return
     const cleaned = clean(document)
-    if (cleaned !== document) onChange(cleaned)
+    if (cleaned !== document) {
+      if (document.edges?.some(edge => edge.target_port === 'acceptance_basis' && !cleaned.edges?.some(item => item.id === edge.id))) setReason('已清理旧的未采用验收候选线，已关联要求保留')
+      onChange(cleaned)
+    }
   }, [document, readonly, onChange, clean])
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
@@ -921,6 +924,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }} />}
     <WorkbenchModal title={`删除 ${pendingDeletion?.length || 0} 张卡片？`} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>确认删除</Button></WorkbenchDialogActions>}>
       相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。
+      {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>将解除 {cardLabel(card.id)} 的验收关联，后续生成不再自动带入该要求。</p>)}
     </WorkbenchModal>
     <Modal title="堆叠内容（只读）" open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
       <div className="generation-stack-reading" onClick={event => { if (event.target === event.currentTarget) setViewStackId(undefined) }}>
@@ -963,7 +967,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     </div>}
     {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
       <strong>选择连接用途</strong>
-      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → 作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</Button>)}
+      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → {option.target_port === 'acceptance_basis' ? '关联验收要求' : <>作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</>}</Button>)}
       <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
     </div>}
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />

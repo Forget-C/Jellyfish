@@ -39,11 +39,28 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
 
 /** 每个接收端口独立排序；位置、分组和模型身份均不参与排序。 */
 export function connect(document: CanvasDocument, edge: GenerationEdge): CanvasDocument {
-  return { ...document, edges: [...(document.edges || []), edge], input_order: { ...document.input_order,
+  const source = document.cards?.find(card => card.id === edge.source_card)
+  const cards = edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && source && 'criterion_id' in source
+    ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: [...(card.input_bindings || []).filter(binding => !(binding.input_port === 'acceptance_basis' && binding.source.card_id === source.id)), { id: 'acceptance:' + edge.id, input_port: 'acceptance_basis', source: { canvas_id: document.id, card_id: source.id, port_id: 'criterion', position: 0, object_id: source.criterion_id } }] } : card) : document.cards
+  return { ...document, cards, edges: [...(document.edges || []), edge], input_order: { ...document.input_order,
     [edge.target_card]: { ...document.input_order?.[edge.target_card], [edge.target_port]: [...(document.input_order?.[edge.target_card]?.[edge.target_port] || []), edge.id] } } }
 }
 export function disconnect(document: CanvasDocument, id: string): CanvasDocument {
   const order = Object.fromEntries(Object.entries(document.input_order || {}).map(([card, ports]) => [card,
     Object.fromEntries(Object.entries(ports).map(([port, ids]) => [port, ids.filter(edge => edge !== id)]))]))
-  return { ...document, edges: document.edges?.filter(edge => edge.id !== id), input_order: order }
+  const edge = document.edges?.find(item => item.id === id)
+  const cards = edge?.source_port === 'criterion' && edge.target_port === 'acceptance_basis'
+    ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === 'acceptance_basis' && binding.source.card_id === edge.source_card)) } : card) : document.cards
+  return { ...document, cards, edges: document.edges?.filter(edge => edge.id !== id), input_order: order }
+}
+
+/** 清理旧的未采用验收候选，避免升级时增加生成输入。 */
+export function cleanAcceptanceCandidates(document: CanvasDocument): CanvasDocument {
+  let next = document
+  for (const edge of document.edges || []) {
+    if (edge.source_port !== 'criterion' || edge.target_port !== 'acceptance_basis') continue
+    const card = document.cards?.find(item => item.id === edge.target_card)
+    if (!card || !('input_bindings' in card) || !card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && binding.source.card_id === edge.source_card)) next = disconnect(next, edge.id)
+  }
+  return next
 }

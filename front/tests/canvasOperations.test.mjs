@@ -15,6 +15,8 @@ const port = (id, value_kind) => ({ id, value_kind, label: id })
 const input = (id, value_kind) => ({ id, accepts: [value_kind], label: id })
 const definition = (type, outputs = [], inputs = []) => ({ type, title: type, outputs, inputs })
 const rules = createGraphRules({ cards: [
+  definition('direction.criterion', [port('criterion', 'criterion')]),
+  definition('direction.shot', [], [input('acceptance_basis', 'criterion')]),
   definition('content.image', [port('image', 'image')]),
   definition('content.text', [port('text', 'text')]),
   definition('content.character', [port('text', 'text')]),
@@ -132,4 +134,25 @@ test('copying incoming connections preserves explicit input order rather than ed
   assert.deepEqual(result.input_order.model.image, ['second-edge', 'edge'])
   assert.equal(original.cards.length, 3)
   assert.equal(original.edges.length, 2)
+})
+
+
+test('acceptance connections immediately associate, disconnect atomically and preserve direct model deletion protection', () => {
+  const criterion = { id: 'criterion', type: 'direction.criterion', criterion_id: 'hand', name: '手部可见' }
+  const shot = { id: 'shot', type: 'direction.shot', input_bindings: [] }
+  const relation = { id: 'acceptance', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
+  const original = document({ cards: [criterion, shot], edges: [], input_order: {} })
+  const connected = operations.connect(original, relation).document
+  assert.equal(connected.cards[1].input_bindings[0].source.object_id, 'hand')
+  assert.equal(operations.clean(connected), connected)
+  const disconnected = operations.disconnect(connected, relation).document
+  assert.deepEqual(disconnected.cards[1].input_bindings, [])
+  assert.deepEqual(disconnected.edges, [])
+  const removed = operations.remove(connected, ['criterion'], new Set(), id => id).document
+  assert.deepEqual(removed.cards[0].input_bindings, [])
+  const direct = { ...model, input_bindings: [{ id: 'direct', input_port: 'text', source: { ...source, card_id: 'criterion', port_id: 'text' } }] }
+  assert.equal(operations.remove({ ...connected, cards: [...connected.cards, direct] }, ['criterion'], new Set(), id => id).protection.cardId, 'model')
+  const legacy = { ...original, edges: [relation], input_order: { shot: { acceptance_basis: ['acceptance'] } } }
+  assert.deepEqual(operations.clean(legacy).edges, [])
+  assert.deepEqual(original.cards[1].input_bindings, [])
 })

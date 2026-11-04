@@ -61,7 +61,7 @@ try {
     await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='effect_object'))
     await detail.getByRole('button',{name:'选择所属镜头 反应镜头',exact:true}).click()
     await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='shot'))
-    await detail.getByRole('button',{name:'关联验收要求 手部可见',exact:true}).click()
+    await detail.getByRole('region',{name:'关联的验收要求',exact:true}).getByText('手部可见',{exact:true}).waitFor()
     await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='acceptance_basis'))
     if(kind==='composition') {
       await detail.getByRole('textbox',{name:'设计适用范围',exact:true}).fill('窗边画面')

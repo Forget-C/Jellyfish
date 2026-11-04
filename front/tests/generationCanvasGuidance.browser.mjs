@@ -1,4 +1,4 @@
-import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -46,7 +46,7 @@ try {
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model' }],
     edges: ['performance', 'photo'].map(kind => ({ id: kind, source_card: 'criterion', source_port: 'criterion', target_card: kind, target_port: 'acceptance_basis' })),
     input_order: Object.fromEntries(['performance', 'photo'].map(kind => [kind, { acceptance_basis: [kind] }])) }
-  document.edges.push({ id: 'standard', source_card: 'criterion', source_port: 'text', target_card: 'consumer', target_port: 'text' })
+  document.edges.push({ id: 'standard', source_card: 'shot', source_port: 'text', target_card: 'consumer', target_port: 'text' })
   document.input_order.consumer = { text: ['standard'] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
@@ -58,7 +58,7 @@ try {
   await open('criterion')
   await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).fill('五指和钥匙清晰可见')
   await poll(state => state.document.cards.find(item => item.id === 'criterion').standard?.text === '五指和钥匙清晰可见')
-  await card.getByRole('region', { name: '被使用记录', exact: true }).getByText('尚未被采用').waitFor()
+  assert.equal(await card.getByRole('region', { name: '被使用记录', exact: true }).getByText('尚未被采用').count(), 0)
   await page.keyboard.press('Escape')
   await page.locator('[data-card-id="criterion"]').hover()
   const out = await page.locator('[data-card-id="criterion"] [data-connection-side="right"]').boundingBox()
@@ -69,11 +69,12 @@ try {
   await page.mouse.move(input.x + input.width / 2, input.y + input.height / 2, { steps: 12 })
   await page.mouse.up()
   const purposes = page.getByRole('menu', { name: '选择连接用途', exact: true })
-  if (await purposes.isVisible()) await purposes.getByRole('menuitem', { name: '验收要求 → 作为验收依据候选', exact: true }).click()
+  if (await purposes.isVisible()) await purposes.getByRole('menuitem', { name: '验收要求 → 关联验收要求', exact: true }).click()
   await poll(state => state.document.edges.some(edge => edge.source_port === 'criterion' && edge.target_card === 'shot'))
   for (const id of ['shot', 'performance', 'photo']) {
     await open(id)
-    await card.getByRole('button', { name: '关联验收要求 手部可见', exact: true }).click()
+    await card.getByRole('region', { name: '关联的验收要求', exact: true }).getByText('手部可见', { exact: true }).waitFor()
+    assert.equal(await card.getByRole('button', { name: '关联验收要求 手部可见', exact: true }).count(), 0)
     await poll(state => state.document.cards.find(item => item.id === id).input_bindings?.some(binding => binding.input_port === 'acceptance_basis'))
     const output = (await (await fetch(`${base}/${canvas.id}/cards/${id}/outputs`)).json()).data.outputs[0]
     assert.match(output.text, /手部可见/)
@@ -98,13 +99,39 @@ try {
   const compiled = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
   assert.match(compiled.text, /五指和钥匙清晰可见/)
   assert.equal(compiled.media.length, 0)
+  await card.getByRole('region', { name: '随设计采用的验收要求', exact: true }).waitFor()
+  assert.equal((await read()).document.edges.filter(edge => edge.source_card === 'criterion' && edge.target_card === 'consumer').length, 0)
   await page.reload()
   await open('criterion')
   await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).waitFor()
   assert.equal(await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).innerText(), '五指和钥匙清晰可见')
   await open('shot')
-  await card.getByRole('button', { name: '取消验收关联 手部可见', exact: true }).click()
+  const standardSummary = card.getByText('展开标准', { exact: true })
+  if (!(await standardSummary.evaluate(element => element.parentElement.open))) await standardSummary.click()
+  await card.getByText('五指和钥匙清晰可见', { exact: true }).waitFor()
+  await page.screenshot({ path: join(output, 'acceptance-relations-desktop.png'), fullPage: true })
+  await closeCanvasDetails(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await open('shot')
+  if (!(await standardSummary.evaluate(element => element.parentElement.open))) await standardSummary.click()
+  await card.getByText('五指和钥匙清晰可见', { exact: true }).waitFor()
+  assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)
+  await card.getByText('五指和钥匙清晰可见', { exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: join(output, 'acceptance-relations-narrow.png'), fullPage: true })
+  await closeCanvasDetails(page)
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await open('shot')
+  await card.getByRole('button', { name: '查看验收要求', exact: true }).click()
+  await card.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).waitFor()
+  await open('shot')
+  const shotEdge = (await read()).document.edges.find(edge => edge.target_card === 'shot' && edge.target_port === 'acceptance_basis')
+  await closeCanvasDetails(page)
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await page.locator(`[data-generation-edge-id="${shotEdge.id}"]`).getByRole('button').press('Enter')
+  await page.getByRole('button', { name: '删除此候选连接', exact: true }).click()
   await poll(state => !state.document.cards.find(item => item.id === 'shot').input_bindings?.length)
+  const afterDisconnect = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
+  assert.doesNotMatch(afterDisconnect.text, /五指和钥匙清晰可见/)
   await page.setViewportSize({ width: 390, height: 844 })
   await open('criterion')
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)

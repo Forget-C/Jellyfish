@@ -48,10 +48,12 @@ class CanvasBasis:
     _document: CanvasDocument = field(repr=False)
     _outputs: dict[str, list[CanvasResolvedOutput]] = field(repr=False)
     _model_context: CanvasModelContext = field(repr=False)
+    _include_acceptance: bool = field(default=True, repr=False)
 
     def to_snapshot(self) -> dict:
         """固定直接来源及所采用设计的有效字段来源，不遍历任意祖先。"""
         used_sources = {ref.source.card_id for ref, _ in prompt_references(self.card)}
+        used_sources.update(item.source.card_id for item in self.compiled.used)
         from app.services.generation_canvas.design_references import effective_design_references
         cards = {card.id: card for card in self._document.cards}
         for source_id in tuple(used_sources):
@@ -59,6 +61,7 @@ class CanvasBasis:
                 used_sources.update(ref.source.card_id for ref, _, _ in effective_design_references(cards[source_id], cards))
         context = self._model_context
         return {'document': self._document.model_dump(), 'revision': self.compiled.revision,
+            'include_acceptance': self._include_acceptance,
             'outputs': {key: [item.model_dump() for item in values] for key, values in self._outputs.items() if key in used_sources},
             'execution_config': context.execution_config,
             'capability': context.capability.model_dump() if context.execution_config and context.capability else None}
@@ -72,13 +75,14 @@ def _model_card(document, card_id) -> ModelCard:
 
 
 def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[CanvasResolvedOutput]],
-                *, revision: int, model_context: CanvasModelContext, context: CanvasOutputContext | None = None) -> CanvasBasis:
+                *, revision: int, model_context: CanvasModelContext, context: CanvasOutputContext | None = None,
+                include_acceptance: bool = True) -> CanvasBasis:
     """使用已取得的配置编译，并以同一输入产生公开依据和私有配置参与的哈希。"""
     context = context or CanvasOutputContext(document)
     card = context.cards.get(card_id)
     if not isinstance(card, ModelCard):
         raise HTTPException(404, 'Model card not found')
-    compiled = compile_card(document, card_id, model_outputs=outputs, capability=model_context.capability, context=context)
+    compiled = compile_card(document, card_id, model_outputs=outputs, capability=model_context.capability, context=context, include_acceptance=include_acceptance)
     compiled.revision = revision
     issues = list(model_context.diagnostics)
     if not compiled.text.strip() and not (card.type == 'model.video' and compiled.media):
@@ -103,7 +107,7 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
     if card.type == 'model.video':
         actual['video_media'] = compiled.video_media.model_dump()
     return CanvasBasis(card, compiled, public, digest({'basis': actual, 'execution': model_context.execution_config}),
-                       document, outputs, model_context)
+                       document, outputs, model_context, include_acceptance)
 
 
 def restore_basis(snapshot: dict, card_id: str, dependency_outputs: dict[str, list[dict]]) -> CanvasBasis:
@@ -122,4 +126,5 @@ def restore_basis(snapshot: dict, card_id: str, dependency_outputs: dict[str, li
             'provider_key': frozen['provider_key'], 'provider_id': frozen['provider_id'],
             'api_key': frozen['api_key'], 'base_url': frozen['base_url']},
         capability=CanvasModelCapability.model_validate(snapshot['capability']))
-    return build_basis(document, card_id, outputs, revision=snapshot['revision'], model_context=context)
+    return build_basis(document, card_id, outputs, revision=snapshot['revision'], model_context=context,
+                       include_acceptance=snapshot.get('include_acceptance', False))

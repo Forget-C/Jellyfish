@@ -1,5 +1,5 @@
 import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } from '../../../services/generated'
-import { connect, disconnect, findConnection } from './graphRules'
+import { connect, disconnect, findConnection, cleanAcceptanceCandidates } from './graphRules'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { referenceProtection } from './promptRules'
 import { cleanReferenceImageSources } from './referenceCardRules'
@@ -18,7 +18,7 @@ export function createCanvasOperations({ connectionReason }: { connectionReason:
     return reason ? { reason } : { document: connect(document, edge) }
   }
   return {
-    clean: cleanReferenceImageSources,
+    clean: (document: CanvasDocument) => cleanAcceptanceCandidates(cleanReferenceImageSources(document)),
     connect: addConnection,
     check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability) {
       if (findConnection(document, edge)) return undefined

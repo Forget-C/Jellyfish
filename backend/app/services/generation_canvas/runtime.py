@@ -133,9 +133,12 @@ class CanvasRuntime:
             for reference, _ in prompt_references(cards[card_id]):
                 design = cards.get(reference.source.card_id)
                 if design:
-                    for field_ref, _, _ in effective_design_references(design, cards):
-                        if field_ref.source.canvas_id == document.id and field_ref.source.card_id in stored:
-                            await resolve(field_ref.source.card_id)
+                    designs = [design, *(cards[binding.source.card_id] for binding in getattr(design, 'input_bindings', [])
+                        if binding.input_port == 'acceptance_basis' and binding.source.card_id in cards)]
+                    for selected in designs:
+                        for field_ref, _, _ in effective_design_references(selected, cards):
+                            if field_ref.source.canvas_id == document.id and field_ref.source.card_id in stored:
+                                await resolve(field_ref.source.card_id)
             basis = await self._current_basis(canvas, card_id, result, context=context)
             result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
                 "basis_current": basis.compiled.can_run and basis.basis_hash == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]

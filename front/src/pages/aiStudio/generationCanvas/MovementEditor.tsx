@@ -11,12 +11,12 @@ import { designSummary } from './designSummary'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 
 /** 运镜阶段身份由创建时确定；重命名和重排只改变展示，不改变引用目标。 */
-export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs }: CardRendererProps) {
+export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs, onLocateDesign }: CardRendererProps) {
   const card = raw as MovementCard, fields = card.fields || {}, phases = card.phases || []
   const labels = photographyRegions.movement.fields
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="design-preset-fields">{Object.entries(labels).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}</div>
-    <VisualDesignRelations card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
+    <VisualDesignRelations onLocateDesign={onLocateDesign} card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
     <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix="运镜" />
     <section aria-label="明确运镜阶段"><h3>明确运镜阶段</h3><Button disabled={disabled} onClick={() => onChange({ ...card, phases: [...phases, { id: crypto.randomUUID(), name: '新阶段', frame: { state: 'empty', text: '', purpose: 'design' } }] })}>添加阶段</Button>
       {phases.map((phase, index) => <section className="movement-design-phase" key={phase.id}>

@@ -101,6 +101,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id })} />{parameters}</>
+  const automaticCriteria = resolved.compiled?.used?.filter(item => item.payload && 'design_type' in item.payload && item.payload.design_type === 'direction.criterion' && !adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source))) || []
   const carriedInputs = !!resolved.compiled?.media?.some(item => item.design_sources?.length) && <section className="generation-design-carried" aria-label="随设计携带的素材"><strong>随设计携带的素材</strong><small>来源由设计中的有效引用决定，无需补连素材</small>
       {resolved.compiled.media.filter(item => item.design_sources?.length).map(item => <div key={sourceKey(item.source)}><strong>{labelFor(item)}</strong>{item.modality === 'image' && item.file_id && <details><summary>查看携带图片</summary><MediaPreview fileId={item.file_id} type="image" /></details>}
         {item.design_sources?.map(origin => {
@@ -141,6 +142,12 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
           </Space>}
         </div>
       })}
+      {!!automaticCriteria.length && <section aria-label="随设计采用的验收要求"><strong>随设计采用的验收要求</strong>
+        {automaticCriteria.map(item => <div key={sourceKey(item.source)}>
+          <CanvasTextPreview text={item.text || ''} label="验收要求" />
+          <WorkbenchButton variant="quiet" onClick={() => onLocateDesign?.(item.source.card_id, 'standard')}>查看验收要求</WorkbenchButton>
+        </div>)}
+      </section>}
       {carriedInputs}
       {(resolved.compiled?.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}

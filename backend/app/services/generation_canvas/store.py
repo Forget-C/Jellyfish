@@ -79,6 +79,8 @@ class CanvasStore:
         from app.services.generation_canvas.reference_rules import clean_reference_image_sources
         document = clean_reference_image_sources(document, previous_document)
         previous_document = clean_reference_image_sources(previous_document)
+        from app.services.generation_canvas.acceptance import synchronize_acceptance
+        document = synchronize_acceptance(document, previous_document)
         validate_stack_edit(previous_document.model_dump(), document)
         previous_types = {card.id: card.type for card in previous_document.cards}
         identities = {key: previous_types.get(key, value) if value == 'content.object' else value for key, value in canvas.card_types.items()}
