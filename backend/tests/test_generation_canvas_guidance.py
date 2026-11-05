@@ -77,7 +77,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'image', 'video'])
-@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule'])
+@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule', 'object-situation', 'object-performance', 'object-activity'])
 async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_connection(runtime, image_storage, monkeypatch, modality, legacy_conflict):
     import asyncio
     import json
@@ -122,7 +122,9 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
         async with runtime.sessions.begin() as db:
             node = await db.scalar(select(CanvasRunNode))
             private = deepcopy(node.execution_snapshot)
-            if legacy_conflict == 'object':
+            if isinstance(legacy_conflict, str) and legacy_conflict.startswith('object-'):
+                private['document']['cards'].append({'id': 'old-design', 'type': 'direction.' + legacy_conflict.removeprefix('object-'), 'input_bindings': [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]})
+            elif legacy_conflict == 'object':
                 private['document']['cards'][0]['input_bindings'] = [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]
             elif isinstance(legacy_conflict, str) and legacy_conflict.startswith('direction.'):
                 private['document']['cards'].append({'id': 'old-requirement', 'type': legacy_conflict, 'input_bindings': [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]})

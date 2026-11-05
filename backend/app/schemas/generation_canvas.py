@@ -382,7 +382,7 @@ class CharacterSituationCard(PerformanceDirectionCard):
     type: Literal['direction.situation'] = Field(default='direction.situation', json_schema_extra={'enum': ['direction.situation']})
     situation: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
     relationship: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
-    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'effect_object')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant')
 
 
 class CharacterPerformanceCard(PerformanceDirectionCard):
@@ -403,7 +403,7 @@ class CharacterPerformanceCard(PerformanceDirectionCard):
     reaction_order: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     exit_state: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     avoid: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
-    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'effect_object', 'beat', 'received_event', 'dialogue_basis', 'acceptance_basis', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'beat', 'received_event', 'dialogue_basis', 'acceptance_basis', 'image_example', 'video_example')
 
 
 class PerformanceRuleCard(PerformanceDirectionCard):
@@ -512,7 +512,7 @@ class InFrameActivityCard(SpatialDirectionCard):
     exit_state: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     depth: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     intensity: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'area_anchor', 'trigger_event', 'effect_object', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'participant', 'area_anchor', 'trigger_event', 'image_example', 'video_example')
 
 
 class EnvironmentActivityCard(SpatialDirectionCard):
