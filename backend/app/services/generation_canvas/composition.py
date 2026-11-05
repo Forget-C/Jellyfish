@@ -20,7 +20,7 @@ def publish_composition(canvas_id, card, adopted_inputs):
         if value:
             lines.append(label + '：' + value)
     objects = {item.payload.object_id: item.payload for item in adopted_inputs if item.available and isinstance(item.payload, ObjectReferencePayload)}
-    roles = {'effect_object': '作用对象', 'attention_object': '关注对象'}
+    roles = {'attention_object': '关注对象'}
     for binding in card.input_bindings:
         if binding.input_port in roles and binding.source.object_id in objects:
             obj = objects[binding.source.object_id]
