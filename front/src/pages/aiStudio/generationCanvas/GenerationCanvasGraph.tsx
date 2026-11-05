@@ -664,6 +664,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return source && target ? outputPorts(source).flatMap(source_port => inputPorts(target).map(target_port => ({ id: 'preview', source_card: sourceId, source_port, target_card: targetId, target_port }))) : []
   }
   const compatibleOptions = (sourceId: string, targetId: string) => connectionOptions(sourceId, targetId).filter(edge => !check(edge))
+  // Hover, pointer release and keyboard activation report the same compatible-use failure.
+  const connectionFailure = (sourceId: string, targetId: string) => {
+    const options = sourceOptions(latest.current, sourceId, targetId)
+    const first = options[0] || connectionOptions(sourceId, targetId)[0]
+    return first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'
+  }
   /** 替代拖线的入口，复用来源兼容与能力校验，唯一独立用途随连接生效。 */
   const startAccessibleConnection = (card: string, side: ConnectionSide, trigger: HTMLElement) => {
     if (readonly) return
@@ -693,15 +699,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const targetId = target.dataset.card!, side = target.dataset.connectionSide as ConnectionSide
     const options = compatibleOptions(drag.card, targetId)
     if (!options.length) {
-      const first = sourceOptions(latest.current, drag.card, targetId)[0] || connectionOptions(drag.card, targetId)[0]
-      setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); cancelConnection()
+      setReason(connectionFailure(drag.card, targetId)); cancelConnection()
     } else if (options.length === 1 || cards.find(card => card.id === drag.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: event.clientX, y: event.clientY })
   }
   const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
     if (!accessibleConnection) return
     const options = compatibleOptions(accessibleConnection.card, targetId)
-    if (!options.length) { const first = sourceOptions(latest.current, accessibleConnection.card, targetId)[0] || connectionOptions(accessibleConnection.card, targetId)[0]; setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); return }
+    if (!options.length) { setReason(connectionFailure(accessibleConnection.card, targetId)); return }
     if (options.length === 1 || cards.find(card => card.id === accessibleConnection.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: 88, y: 180 })
   }
@@ -725,7 +730,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const options = sourceConnection && card.id !== sourceConnection.card ? compatibleOptions(sourceConnection.card, card.id) : []
     const outputName = ({ text: '文本', image: '图片', video: '视频', audio: '音频' })[definition?.modality || 'text']
     const hoveredPoint = drag && !pendingConnection ? window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]') : undefined
-    const summary = sourceConnection && card.id !== sourceConnection.card ? options.length ? `可作为${[...new Set(options.map(edge => inputLabel(card, edge.target_port)))].join('／')}候选` : connectionOptions(sourceConnection.card, card.id).map(check).find(Boolean) || '此卡没有兼容的接收用途' : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
+    const summary = sourceConnection && card.id !== sourceConnection.card ? options.length ? `可作为${[...new Set(options.map(edge => inputLabel(card, edge.target_port)))].join('／')}候选` : connectionFailure(sourceConnection.card, card.id) : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
     return connectionSides.map(side => {
       const connected = edges.some(edge => {
         const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
