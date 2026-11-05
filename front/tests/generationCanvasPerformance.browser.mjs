@@ -39,10 +39,12 @@ try {
   const document = { ...canvas.document, cards: [
     { id: 'ref', type: 'reference.character', objects: [{ object_id: 'alice', name: '小雪', category: 'character' }] },
     { id: 'act', type: 'direction.performance', source_locator: '原文第三章', physical_action: { text: '旧动作', state: 'not_applicable', purpose: 'background', source_locator: extractionLocator, authorship: 'model' }, voice: { state: 'absent', authorship: 'model' }, hands: { authorship: 'model' }, breath: { text: '历史呼吸', state: 'proposal', source_locator: '旧记录' } },
-    { id: 'situation', type: 'direction.situation' },
+    { id: 'situation', type: 'direction.situation', input_bindings: [{ id: 'old-object', input_port: 'effect_object', source: { canvas_id: canvas.id, card_id: 'ref', port_id: 'object', position: 0, object_id: 'alice' } }] },
     { id: 'rule', type: 'direction.performance_rule' },
+    { id: 'activity', type: 'direction.activity', task: { text: '持续整理' } },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config: { count: 3 } }],
     edges: [
+      { id: 'old-object', source_card: 'ref', source_port: 'object', target_card: 'situation', target_port: 'effect_object' },
       { id: 'person', source_card: 'ref', source_port: 'object', target_card: 'act', target_port: 'participant' },
       { id: 'design', source_card: 'act', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
     input_order: { act: { participant: ['person'] }, consumer: { text: ['design'] } } }
@@ -57,6 +59,8 @@ try {
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('situation', false)
+  assert.equal(await card.getByRole('button', { name: /作用对象/ }).count(), 0)
+  assert.equal((await read()).document.cards.find(item => item.id === 'situation').input_bindings.length, 0)
   assert.equal(await card.getByRole('switch', { name: '显示状态与来源', exact: true, includeHidden: true }).count(), 0)
   assert.equal(await card.getByRole('button', { name: '应用', exact: true }).isDisabled(), true)
   await card.getByRole('button', { name: '预览 等待回应', exact: true }).click()
@@ -76,6 +80,7 @@ try {
   await card.getByRole('textbox', { name: '表演适用说明内容', exact: true }).fill('')
   await poll(state => state.document.cards.find(item => item.id === 'rule').applicability?.state === 'empty')
   await open('act')
+  assert.equal(await card.getByRole('button', { name: /作用对象/ }).count(), 0)
   assert.equal(await card.getByRole('switch', { name: '显示状态与来源', exact: true }).count(), 0)
   await card.getByText(`不适用 · 不参与生成 · 背景 · 来源：${extractionLocator}`, { exact: true }).waitFor()
   assert.equal(await card.getByRole('region', { name: '手部', exact: true }).locator('.design-field-metadata').count(), 0)
@@ -130,5 +135,18 @@ try {
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true, 'narrow editor has no horizontal overflow')
   await page.screenshot({ path: join(output, 'performance-mobile.png'), fullPage: true })
+  await open('activity')
+  assert.equal(await card.getByRole('button', { name: /作用对象/ }).count(), 0)
+  await card.getByRole('textbox', { name: '持续任务内容', exact: true }).fill('持续整理并看向门口')
+  await poll(state => state.document.cards.find(item => item.id === 'activity').task?.text === '持续整理并看向门口')
+  await card.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'activity').task?.text === '持续整理')
+  await page.getByRole('button', { name: '重做操作', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'activity').task?.text === '持续整理并看向门口')
+  assert.equal((await read()).document.cards.some(item => item.input_bindings?.some(binding => binding.input_port === 'effect_object' && ['direction.situation', 'direction.performance', 'direction.activity'].includes(item.type))), false)
+  await page.reload()
+  await open('activity')
+  assert.equal(await card.getByRole('textbox', { name: '持续任务内容', exact: true }).innerText(), '持续整理并看向门口')
   console.log('Performance browser passed; evidence:', output)
 } finally { await cleanup() }
