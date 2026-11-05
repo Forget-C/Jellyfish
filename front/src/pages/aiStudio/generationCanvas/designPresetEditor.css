@@ -130,3 +130,6 @@
   .design-title-row { flex-wrap: wrap; gap: 4px 12px; }
   .design-title-heading { min-width: min(120px, 100%); max-width: 100%; }
 }
+
+/* Scroll focused controls clear of the outer ring, including fractional viewport heights. */
+.design-preset-advanced :is(input, textarea, [role="textbox"], .ant-select, .ant-input-number) { scroll-margin-block: 8px; }

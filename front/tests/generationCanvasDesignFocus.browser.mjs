@@ -1,0 +1,106 @@
+import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import { createServer } from 'vite'
+const { chromium } = createRequire(import.meta.url)('playwright')
+const root = fileURLToPath(new URL('..', import.meta.url))
+const output = await browserOutput('jellyfish-design-focus-audit-')
+const api = 'http://127.0.0.1:8694', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8694' }, stdio: ['ignore', 'pipe', 'pipe'],
+})
+captureBackend(backend, output)
+let server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+try {
+  let ready = false
+  for (let attempt = 0; attempt < 80; attempt++) {
+    if (backend.exitCode !== null) throw new Error('isolated backend exited')
+    try { if ((await fetch(base)).ok) { ready = true; break } } catch {}
+    await delay(250)
+  }
+  assert.ok(ready, 'isolated backend ready')
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4694, strictPort: true, open: false, proxy: { '/api': api } } })
+  await server.listen()
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  page.setDefaultTimeout(12000)
+  page.on('pageerror', error => console.log('PAGE ERROR', error.message))
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '全部设计卡焦点轮廓检查' }) })).json()).data
+  const definitions = (await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards.filter(card => card.type.startsWith('direction.'))
+  assert.equal(definitions.length, 25)
+  const visual = new Set(['style', 'composition', 'camera', 'movement', 'lighting', 'focus'])
+  const document = { ...canvas.document, cards: definitions.map(definition => {
+    const id = definition.type.slice('direction.'.length)
+    const fields = Object.fromEntries(definition.fields.map((field, index) => [field.id, index === 0 ? { text: '模型提取的设计参数', state: 'proposal', purpose: 'background', source_locator: '模型提取定位', authorship: 'model' } : { text: '自行填写的设计参数', state: 'fact', purpose: 'design', authorship: 'user' }]))
+    return { id, type: definition.type, source_locator: '卡片原始定位', ...(id === 'movement' ? { phases: [{ id: 'focus-phase', name: '中间阶段', frame: { text: '阶段画面' } }] } : {}), ...(id === 'dialogue' ? { dialogue_id: 'audit-dialogue' } : {}), ...(visual.has(id) ? { fields } : fields) }
+  }) }
+  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  assert.ok(seeded.ok, await seeded.text())
+  await page.goto(`http://127.0.0.1:4694/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const failures = []
+  let checked = 0
+  const inspectFocus = async (control, kind, viewport) => {
+    await control.scrollIntoViewIfNeeded()
+    await control.focus()
+    await control.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    const paint = await control.evaluate(node => {
+      const target = node.closest('.ant-select')?.querySelector('.ant-select-selector') || node.closest('.ant-input-number') || node
+      const css = getComputedStyle(target), box = target.getBoundingClientRect()
+      const outline = css.outlineStyle !== 'none' ? Math.max(0, parseFloat(css.outlineOffset) + parseFloat(css.outlineWidth)) : 0
+      const shadow = css.boxShadow.replace(/rgba?\([^)]*\)/g, '').match(/-?[\d.]+px/g)?.map(parseFloat) || []
+      const outset = Math.max(outline, shadow.length >= 4 ? shadow[2] + shadow[3] : 0)
+      const clipped = []
+      for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent), rect = parent.getBoundingClientRect()
+        const left = rect.left + parent.clientLeft, top = rect.top + parent.clientTop
+        const right = left + parent.clientWidth, bottom = top + parent.clientHeight
+        const sides = []
+        if (['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX)) {
+          if (box.left - outset < left - 0.5) sides.push('left')
+          if (box.right + outset > right + 0.5) sides.push('right')
+        }
+        if (['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowY)) {
+          if (box.top - outset < top - 0.5) sides.push('top')
+          if (box.bottom + outset > bottom + 0.5) sides.push('bottom')
+        }
+        if (sides.length) clipped.push({ ancestor: parent.className, sides, overflow: { top: top - (box.top - outset), bottom: box.bottom + outset - bottom } })
+      }
+      return { label: node.getAttribute('aria-label') || node.id, clipped }
+    })
+    checked++
+    if (paint.clipped.length) failures.push({ kind, viewport, ...paint })
+  }
+  for (const definition of definitions) {
+    const id = definition.type.slice('direction.'.length)
+    const detail = await openCanvasCard(page, id)
+    const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
+    if (await advanced.count()) await advanced.click()
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 })
+      const controls = detail.locator('[role="textbox"], input:not([type="hidden"]), textarea')
+      for (const control of await controls.all()) {
+        if (await control.isVisible() && await control.isEnabled()) await inspectFocus(control, id, width)
+      }
+      await detail.screenshot({ path: join(output, `${id}-focus-${width}.png`) })
+      const editName = detail.getByRole('button', { name: /^编辑.*名称$/ })
+      if (await editName.count()) {
+        await editName.click()
+        const input = detail.locator('.design-title-row input')
+        await inspectFocus(input, id, width)
+        await input.press('Escape')
+      }
+    }
+    await closeCanvasDetails(page)
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    console.log('CHECKED focus', definition.type)
+  }
+  console.log('Focus controls checked:', checked)
+  assert.deepEqual(failures, [], 'focused controls must retain their entire outline on all four sides')
+} finally { await cleanup() }
