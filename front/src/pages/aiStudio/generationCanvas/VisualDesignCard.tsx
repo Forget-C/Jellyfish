@@ -30,6 +30,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
     if (!configured) return ''
     const status = states[field.state || 'empty']
     const detail = [size, text].filter(Boolean).join(' · ')
+    if (field.authorship === 'user') return detail
     if (field.state === 'empty' || !field.state) return detail ? `未填写（保留内容）` : '未填写（已配置元信息）'
     return [status, detail || field.source_locator?.trim() || (field.purpose === 'constraint' ? '约束' : field.purpose === 'background' ? '背景' : '')].filter(Boolean).join('：')
   }
@@ -42,7 +43,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
   if (card.scope?.description?.trim()) rows.push({ label: '适用范围', text: card.scope.description.trim() })
   if (card.scope?.phase) rows.push({ label: '制作阶段', text: phases[card.scope.phase] })
   if (card.scope?.condition?.trim()) rows.push({ label: '适用条件', text: card.scope.condition.trim() })
-  if (card.source_locator?.trim()) rows.push({ label: '来源', text: card.source_locator.trim() })
+  if (card.source_locator?.trim()) rows.push({ label: '卡片原始来源', text: card.source_locator.trim() })
   for (const binding of card.input_bindings || []) rows.push({ label: relationLabels[binding.input_port] || '关联关系', text: sourceName(binding.source.card_id) })
   return rows
 }
