@@ -16,11 +16,12 @@ def clean_acceptance(value, *, candidates=False):
         return value
     if any(not isinstance(card, dict) or not isinstance(card.get('id'), str) or not isinstance(card.get('type'), str) or not isinstance(card.get('input_bindings', []), list) or any(not isinstance(binding, dict) or not isinstance(binding.get('source', {}), dict) or not isinstance(binding.get('source', {}).get('card_id', ''), str) for binding in card.get('input_bindings', [])) for card in value['cards']):
         return value
-    result = deepcopy(value)
+    from app.services.generation_canvas.object_cleanup import clean_object_sources
+    result = clean_object_sources(deepcopy(value))
     cards = {card.get('id'): card for card in result['cards'] if isinstance(card, dict)}
     criteria = {key for key, card in cards.items() if card.get('type') == 'direction.criterion'}
     if not criteria:
-        return value
+        return result
     removed = set()
     for edge in result.get('edges', []):
         target = cards.get(edge.get('target_card'), {})

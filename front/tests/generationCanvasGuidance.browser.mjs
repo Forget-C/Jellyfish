@@ -39,6 +39,7 @@ try {
 
   const types = ['shot', 'performance', 'camera', 'lighting', 'focus', 'composition', 'movement']
   const document = { ...canvas.document, cards: [
+    { id: 'prop', type: 'content.prop', object_id: 'key', name: '钥匙', text: '完整钥匙参考' },
     { id: 'criterion', type: 'direction.criterion', criterion_id: 'hand', name: '手部可见', standard: { text: '五指和钥匙清晰可见', authorship: 'user' } },
     { id: 'second', type: 'direction.criterion', criterion_id: 'space', name: '空间一致', standard: { text: '保持左右关系', state: 'proposal', purpose: 'constraint', source_locator: '原文第三段', authorship: 'model' } },
     { id: 'blank', type: 'direction.criterion', criterion_id: 'blank', name: '' },
@@ -77,7 +78,7 @@ try {
   assert.equal(await requirementName.getAttribute('placeholder'), '例如：手部与钥匙清晰可见')
   assert.equal(await blankDetail.getByText('例如：手部与钥匙清晰可见', { exact: true }).count(), 0)
   assert.equal(await blankDetail.locator('summary').filter({ hasText: '对象与制作关系' }).count(), 0)
-  assert.equal(await blankDetail.locator('summary').filter({ hasText: '作用对象' }).count(), 1)
+  assert.equal(await blankDetail.locator('summary').filter({ hasText: '作用对象' }).count(), 0)
   assert.equal(await requirementName.getAttribute('aria-invalid'), 'true')
   await blankDetail.getByRole('alert').filter({ hasText: '请先填写验收要求名称' }).waitFor()
   await blankDetail.screenshot({ path: join(output, 'requirement-name-error-desktop.png') })
@@ -90,8 +91,6 @@ try {
   assert.equal(await blankDetail.evaluate(element => element.scrollWidth <= element.clientWidth), true)
   const nameBox = await requirementName.boundingBox(), panelBox = await blankDetail.boundingBox()
   assert.ok(nameBox.width > panelBox.width - 64, 'name input fills the available narrow editor width')
-  const objectBox = await blankDetail.locator('summary').filter({ hasText: '作用对象' }).boundingBox()
-  assert.ok(objectBox.y >= nameBox.y + nameBox.height, 'object relations follow the name input')
   await blankDetail.screenshot({ path: join(output, 'requirement-name-mobile.png') })
   await page.setViewportSize({ width: 1440, height: 1000 })
   await poll(state => state.document.cards.find(item => item.id === 'blank').name === '补充名称后的验收')
@@ -143,7 +142,40 @@ try {
     await closeCanvasDetails(page)
     await page.setViewportSize({ width: 1440, height: 1000 })
   }
+  // Restore a pre-upgrade local draft. Cleanup is outside edit history and cannot be undone.
+  const baseline = await read(), recovered = structuredClone(baseline.document)
+  const oldCriterion = recovered.cards.find(item => item.id === 'blank')
+  oldCriterion.standard = { text: '恢复的手填标准', authorship: 'user' }
+  oldCriterion.input_bindings = [{ id: 'old-object', input_port: 'effect_object', source: { canvas_id: canvas.id, card_id: 'prop', port_id: 'object', object_id: 'key', position: 0 } }]
+  recovered.edges.push({ id: 'old-object', source_card: 'prop', source_port: 'object', target_card: 'blank', target_port: 'effect_object' })
+  recovered.input_order.blank = { effect_object: ['old-object'] }
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: `jellyfish:generation:canvas-project:${canvas.id}:recovery`, value: { schema: 1, baseline, document: recovered } })
   await page.reload()
+  await page.getByRole('button', { name: '恢复本地内容', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'blank').standard.text === '恢复的手填标准')
+  const assertCleaned = async () => {
+    const state = await read()
+    assert.equal(state.document.cards.find(item => item.id === 'blank').input_bindings.length, 0)
+    assert.ok(state.document.edges.some(edge => edge.id === 'old-object' && edge.source_port === 'text' && edge.target_port === 'text'))
+    assert.ok(!state.document.edges.some(edge => edge.target_card === 'blank' && edge.target_port === 'effect_object'))
+  }
+  await assertCleaned()
+  await openCanvasCard(page, 'blank')
+  const restoredDetails = page.locator('.wb-details:visible')
+  assert.equal(await restoredDetails.locator('summary').filter({ hasText: '作用对象' }).count(), 0)
+  await restoredDetails.getByRole('textbox', { name: '验收要求名称', exact: true }).fill('撤销恢复测试')
+  await poll(state => state.document.cards.find(item => item.id === 'blank').name === '撤销恢复测试')
+  await closeCanvasDetails(page)
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'blank').name === '补充名称后的验收')
+  await assertCleaned()
+  await page.getByRole('button', { name: '重做操作', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'blank').name === '撤销恢复测试')
+  await assertCleaned()
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'blank').name === '补充名称后的验收')
+  await page.reload()
+  await assertCleaned()
   await openCanvasCard(page, 'shot')
   await expand()
   await region().getByRole('region', { name: '验收要求详情' }).getByText('五指和钥匙清晰可见', { exact: true }).waitFor()

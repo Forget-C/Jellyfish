@@ -2,6 +2,7 @@ import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } f
 import { connect, disconnect, findConnection, cleanDirectDesignCandidates, isIndependentDesignEdge, sourceConnectionEdges } from './graphRules'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { referenceProtection } from './promptRules'
+import { cleanObjectSources } from './objectSourceCleanup'
 import { cleanReferenceImageSources } from './referenceCardRules'
 
 type Protection = NonNullable<ReturnType<typeof referenceProtection>>
@@ -31,7 +32,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions }: { co
   }
   return {
     clean: (document: CanvasDocument) => {
-      let changed = cleanReferenceImageSources(document)
+      let changed = cleanReferenceImageSources(cleanObjectSources(document))
       if (sourceOptions) for (const edge of document.edges || []) {
         if (!document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))) continue
         const options = sourceOptions(document, edge.source_card, edge.target_card)
