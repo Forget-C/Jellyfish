@@ -113,7 +113,7 @@
 .design-title-host, .design-title-name { width: 100%; min-width: 0; }
 .design-title-heading { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 24px; }
 .design-title-row { display: flex; align-items: baseline; gap: 12px; min-width: 0; min-height: 24px; }
-.design-title-tools { display: inline-flex; align-items: baseline; flex-shrink: 0; gap: 6px; color: var(--wb-muted); font-size: 12px; line-height: 18px; white-space: nowrap; }
+.design-title-tools { display: inline-flex; align-items: baseline; flex-shrink: 0; gap: 4px; color: var(--wb-muted); font-size: 12px; line-height: 18px; white-space: nowrap; }
 .design-title-row > .ant-input { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; }
 .design-title-edit { flex-shrink: 0; padding: 0; border: 0; background: none; color: var(--wb-focus); font: inherit; font-size: 12px; cursor: pointer; }
 .design-title-edit:hover { text-decoration: underline; }
