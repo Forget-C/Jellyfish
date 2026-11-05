@@ -1,4 +1,5 @@
 import { DesignPresetEditor } from './DesignPresetEditor'
+import { DesignNameField } from './DesignNameField'
 import { DesignScopeEditor } from './DesignScopeEditor'
 import { performancePresets } from './performancePresets'
 import { applyPreset } from './visualPresets'
@@ -19,7 +20,6 @@ export type SpatialCard = SpatialAnchorCard | BlockingDirectionCard | InFrameAct
 
 function AnchorFields({ card, onChange }: { card: SpatialAnchorCard; onChange: (card: SpatialCard) => void }) {
   return <div className="design-preset-fields performance-parameters">
-    <Input aria-label="锚点名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />
     <small className="performance-identity">锚点身份：{card.anchor_id || '未建立'}</small>
     <FieldEditor compact label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
     <FieldEditor compact label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
@@ -29,7 +29,7 @@ function AnchorFields({ card, onChange }: { card: SpatialAnchorCard; onChange: (
 }
 
 function BlockingFields({ card, onChange }: { card: BlockingDirectionCard; onChange: (card: SpatialCard) => void }) {
-  return <div className="design-preset-fields performance-parameters"><Input aria-label="调度名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} /><small className="performance-identity">调度身份：{card.blocking_id || '未建立'}</small>
+  return <div className="design-preset-fields performance-parameters"><small className="performance-identity">调度身份：{card.blocking_id || '未建立'}</small>
     <h3>位置 → 路径 → 状态切换</h3>
     <FieldEditor compact label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
     <FieldEditor compact label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
@@ -75,6 +75,7 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
   const fields = Object.fromEntries(designFieldEntries(card))
   const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
   const relations = <>
+    {(card.type === 'direction.anchor' || card.type === 'direction.blocking') && <DesignNameField label={card.type === 'direction.anchor' ? '锚点名称' : '调度名称'} placeholder={card.type === 'direction.anchor' ? '例如：窗边桌角' : '例如：从门口走向窗边'} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />}
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <section aria-label="空间关系"><h3>直接对象与空间关系</h3>

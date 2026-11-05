@@ -4,7 +4,8 @@ import { narrativePresets } from './narrativePresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
-import { Alert, Input } from 'antd'
+import { Alert } from 'antd'
+import { DesignNameField } from './DesignNameField'
 import type { NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, ReferenceDesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { DesignMediaExamples } from './DesignMediaExamples'
@@ -35,7 +36,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const identity = 'beat_id' in card ? card.beat_id : 'event_id' in card ? card.event_id : 'shot_id' in card ? card.shot_id : undefined
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <>
-    <label>名称<Input aria-label="叙事名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} /></label>
+    <DesignNameField label={{ 'direction.narrative': '叙事名称', 'direction.beat': '节拍名称', 'direction.event': '事件名称', 'direction.shot': '镜头名称' }[card.type!]} placeholder={{ 'direction.narrative': '例如：车站告别', 'direction.beat': '例如：发现钥匙', 'direction.event': '例如：门外响起脚步声', 'direction.shot': '例如：手部取钥匙特写' }[card.type!]} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <details><summary>叙事关系 · 已选 {bindings.length} 项</summary>
     {card.type === 'direction.shot' && beats.length > 0 && <section aria-label="已选覆盖节拍顺序"><h3>已选覆盖节拍顺序</h3>{beats.map((binding, index) => {

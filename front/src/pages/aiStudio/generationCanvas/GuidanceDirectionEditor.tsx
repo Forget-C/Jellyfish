@@ -4,8 +4,8 @@ import { soundConstraintPresets } from './soundConstraintPresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
-import { useId } from 'react'
-import { Alert, Input, Typography } from 'antd'
+import { Alert } from 'antd'
+import { DesignNameField } from './DesignNameField'
 import type { AcceptanceCriterionCard, CreativeControlCard, GenerationGuidanceCard, DesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
@@ -23,7 +23,6 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
   const { cardDefinitions, cardTitles, inputPorts } = useGraphRules()
   const card = raw as GuidanceCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
-  const nameId = useId()
   const nameInvalid = card.type === 'direction.criterion' && !!requirementNameValidationRequested && !card.name?.trim()
   const bindings = card.input_bindings || []
   const field = (key: string, label: string, purpose: DesignField['purpose'] = 'design') => <DesignFieldEditor compact key={key} label={label} purpose={purpose} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />
@@ -37,13 +36,12 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
       })}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已选对象失效</small><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象</WorkbenchButton></div>)}
     </details>
-  const relations = card.type === 'direction.criterion' ? <div className="criterion-relations">
-    <section className="design-preset-fields static-design-scope"><div>
-      <label htmlFor={nameId}>验收要求名称<Input id={nameId} disabled={disabled} value={card.name} placeholder="例如：手部与钥匙清晰可见" status={nameInvalid ? 'error' : undefined} aria-invalid={nameInvalid} aria-describedby={nameInvalid ? `${nameId}-error` : undefined} onChange={event => onChange({ ...card, name: event.target.value })} /></label>
-      {nameInvalid && <Typography.Text type="danger" id={`${nameId}-error`} role="alert" className="design-reference-issue">请先填写验收要求名称</Typography.Text>}
-    </div></section>
+  const nameLabel = card.type === 'direction.criterion' ? '验收要求名称' : card.type === 'direction.creative_control' ? '创作控制名称' : '生成指导名称'
+  const namePlaceholder = card.type === 'direction.criterion' ? '例如：手部与钥匙清晰可见' : card.type === 'direction.creative_control' ? '例如：主角造型保持原则' : '例如：反应镜头生成指导'
+  const relations = <div className="design-named-relations">
+    <DesignNameField label={nameLabel} placeholder={namePlaceholder} value={card.name} disabled={disabled} error={nameInvalid ? '请先填写验收要求名称' : undefined} onChange={name => onChange({ ...card, name })} />
     {objects}
-  </div> : <details><summary>对象与制作关系</summary><Input aria-label="要求名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />{objects}</details>
+  </div>
   return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={false} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 
