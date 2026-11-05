@@ -237,7 +237,7 @@ class DesignScope(BaseModel):
     """创作者声明的范围与制作阶段，不自动推断镜头适用性。"""
     model_config = ConfigDict(extra='forbid')
     description: str = ''
-    phase: Literal['video', 'sound', 'postproduction'] | None = None
+    phase: str | None = None
     condition: str = ''
 
 

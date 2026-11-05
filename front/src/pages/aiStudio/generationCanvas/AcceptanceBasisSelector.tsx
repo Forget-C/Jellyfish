@@ -1,3 +1,4 @@
+import { designPhaseLabel } from './designScope'
 import { ConfigProvider } from 'antd'
 import { useEffect, useId, useState } from 'react'
 import type { CanvasDocument } from '../../../services/generated'
@@ -31,8 +32,8 @@ export function AcceptanceBasisSelector({ card, document, onLocateDesign, disabl
       <section className="acceptance-detail" aria-label="验收要求详情"><h4>{current.name || '未命名验收要求'}</h4><strong>可观察判断标准</strong><CanvasTextPreview text={text || '标准尚未填写'} label="验收标准" />
         {metadata && <small className="design-field-metadata">{metadata}</small>}
         {!!objects?.length && <p>作用对象：{objects.map(source => source && 'name' in source && source.name || source?.id).join('、')}</p>}
-        {current.scope?.description && <p>适用范围：{current.scope.description}</p>}
-        {current.scope?.phase && <p>制作阶段：{{ video: '画面／视频', sound: '声音', postproduction: '后期' }[current.scope.phase]}</p>}
+        {current.scope?.description && <p>内容适用范围：{current.scope.description}</p>}
+        {current.scope?.phase && <p>制作阶段：{designPhaseLabel(current.scope.phase)}</p>}
         {current.scope?.condition && <p>适用条件：{current.scope.condition}</p>}
         {current.source_locator && <small className="design-field-metadata">卡片原始来源：{current.source_locator}</small>}
         {!!current.examples?.length && <section aria-label="参考示例">{current.examples.map(example => <div key={example.id}><p>{example.purpose === 'negative' ? '反例' : '正向示例'}{example.description && `：${example.description}`}</p><MediaPreview fileId={example.file_id} type={example.source.port_id === 'video' ? 'video' : example.source.port_id === 'audio' ? 'audio' : 'image'} />{example.start_ms !== null && example.start_ms !== undefined && <small>参考区间：{example.start_ms}–{example.end_ms} 毫秒</small>}</div>)}</section>}

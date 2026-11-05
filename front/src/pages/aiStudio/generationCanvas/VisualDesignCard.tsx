@@ -1,3 +1,4 @@
+import { designPhaseLabel } from './designScope'
 import { isDesignFieldConfigured } from './designFieldConfiguration'
 import { useGraphRules } from './CanvasCatalogContext'
 import { Tooltip } from 'antd'
@@ -10,7 +11,6 @@ import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import './visualDesignCard.css'
 
 const states: Record<string, string> = { empty: '未填写', not_applicable: '不适用', absent: '明确没有', fact: '事实', undecided: '待确定', proposal: '提议' }
-const phases: Record<string, string> = { video: '画面／视频', sound: '声音', postproduction: '后期' }
 const relationLabels: Record<string, string> = { effect_object: '作用对象', attention_object: '关注对象', focus_object: '焦点对象', shot: '所属镜头', acceptance_basis: '验收依据' }
 const kindOf = (card: DesignCard) => (card.type || 'direction.style').slice('direction.'.length)
 const titleOf = (kind: string) => kind === 'style' ? '画面风格' : photographyRegions[kind as keyof typeof photographyRegions].label
@@ -40,8 +40,8 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
   })
   if ('phases' in card) for (const [index, phase] of (card.phases || []).entries()) rows.push({ label: phase.name?.trim() || `阶段 ${index + 1}`, text: describe(phase.frame) || '阶段待填写' })
   if ('frame_target' in card && card.frame_target) rows.push({ label: '画面目标', text: card.frame_target.state_id?.startsWith('phase:') ? '已关联运镜阶段' : card.frame_target.state_id === 'field:movement_start' ? '运镜起始画面' : card.frame_target.state_id === 'field:end_frame' ? '运镜结束画面' : '目标待选择' })
-  if (card.scope?.description?.trim()) rows.push({ label: '适用范围', text: card.scope.description.trim() })
-  if (card.scope?.phase) rows.push({ label: '制作阶段', text: phases[card.scope.phase] })
+  if (card.scope?.description?.trim()) rows.push({ label: '内容适用范围', text: card.scope.description.trim() })
+  if (card.scope?.phase) rows.push({ label: '制作阶段', text: designPhaseLabel(card.scope.phase) })
   if (card.scope?.condition?.trim()) rows.push({ label: '适用条件', text: card.scope.condition.trim() })
   if (card.source_locator?.trim()) rows.push({ label: '卡片原始来源', text: card.source_locator.trim() })
   for (const binding of card.input_bindings || []) rows.push({ label: relationLabels[binding.input_port] || '关联关系', text: sourceName(binding.source.card_id) })

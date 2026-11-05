@@ -41,7 +41,7 @@ try {
     {id:'brief',type:'content.text',text:'站在窗边'},
     {id:'movement',type:'direction.movement',phases:[{id:'end',name:'落幅',frame:{state:'proposal',document:{segments:[{id:'ref',kind:'reference',source:source('brief','text')}]}}}]},
     ...['camera','lighting','focus'].map(kind=>({id:kind,type:'direction.'+kind,fields:{}})),
-    {id:'composition',type:'direction.composition',source_locator:'导演说明',fields:{composition:{state:'proposal',text:'左侧构图'}}}],edges:[],input_order:{}}
+    {id:'composition',type:'direction.composition',scope:{phase:'video'},source_locator:'导演说明',fields:{composition:{state:'proposal',text:'左侧构图'}}}],edges:[],input_order:{}}
   for(const target of ['camera','lighting','focus','composition','movement']) {
     document.input_order[target]={}
     for(const [card,port,target_port] of [['person','object','effect_object'],['shot','shot','shot'],['criterion','criterion','acceptance_basis'],...(target==='movement'?[['person','object','attention_object'],['brief','text','text']]:[])]) {
@@ -68,7 +68,26 @@ try {
     await detail.getByRole('region',{name:'关联的验收要求',exact:true}).getByRole('heading',{name:'手部可见',exact:true}).waitFor()
     await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='acceptance_basis'))
     if(kind==='composition') {
-      await detail.getByRole('textbox',{name:'设计适用范围',exact:true}).fill('窗边画面')
+      await detail.getByRole('combobox',{name:'设计内容适用范围',exact:true}).fill('窗边画面')
+      const phase = detail.getByRole('combobox',{name:'设计制作阶段',exact:true})
+      assert.equal(await phase.inputValue(),'画面／视频')
+      assert.equal((await read()).document.cards.find(c=>c.id===kind).scope.phase,'video')
+      await phase.fill('调色完成后')
+      await phase.press('Enter')
+      await poll(state=>state.document.cards.find(c=>c.id===kind).scope.phase==='调色完成后')
+      await phase.fill('声音')
+      await phase.press('Escape')
+      assert.equal(await detail.isVisible(),true)
+      await poll(state=>state.document.cards.find(c=>c.id===kind).scope.phase==='声音')
+      await phase.fill('')
+      await phase.click()
+      await page.locator('.ant-select-dropdown:visible .ant-select-item-option[title="后期"]').click()
+      await poll(state=>state.document.cards.find(c=>c.id===kind).scope.phase==='后期')
+      await phase.fill('constructor')
+      await phase.press('Tab')
+      await poll(state=>state.document.cards.find(c=>c.id===kind).scope.phase==='constructor')
+      assert.equal(await phase.inputValue(),'constructor')
+      await detail.getByRole('combobox',{name:'设计适用条件',exact:true}).press('Escape')
       assert.equal(await detail.getByRole('textbox',{name:'设计来源',exact:true}).count(),0)
       await detail.getByRole('combobox',{name:'关联运镜卡',exact:true}).locator('xpath=../..').click()
       await page.getByTitle('运镜卡 · movement',{exact:true}).click()
@@ -98,7 +117,7 @@ try {
   await poll(state=>state.document.cards.filter(card=>['camera','lighting','focus','composition','movement'].includes(card.id)).every(card=>card.scope.description==='恢复的设计说明'&&!card.input_bindings.some(binding=>binding.input_port==='effect_object')))
   await page.reload();await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByText('卡片原始来源：导演说明',{exact:true}).waitFor()
-  await detail.getByRole('textbox',{name:'设计适用范围',exact:true}).fill('可撤销的说明')
+  await detail.getByRole('combobox',{name:'设计内容适用范围',exact:true}).fill('可撤销的说明')
   await poll(state=>state.document.cards.find(card=>card.id==='composition').scope.description==='可撤销的说明')
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.getByRole('button',{name:'撤销操作',exact:true}).click()
@@ -109,6 +128,8 @@ try {
   await detail.getByRole('button',{name:'取消所属镜头 反应镜头',exact:true}).waitFor()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
   await observer.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');const readonly=observer.locator('.wb-details:visible');await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
+  assert.equal(await readonly.getByRole('combobox',{name:'设计制作阶段',exact:true}).isDisabled(),true)
+  assert.equal(await readonly.getByRole('combobox',{name:'设计制作阶段',exact:true}).inputValue(),'constructor')
   assert.equal(await readonly.getByRole('button',{name:'取消所属镜头 反应镜头',exact:true}).isDisabled(),true)
   await readonly.getByRole('button',{name:'展开验收要求',exact:true}).click()
   assert.equal(await readonly.getByRole('button',{name:'定位源卡',exact:true}).isEnabled(),true)

@@ -718,3 +718,22 @@ async def test_malformed_retired_example_edge_returns_validation_error(canvas_cl
         edges=[{'source_card': 'video', 'source_port': 'video', 'target_card': 'design', 'target_port': 'video_example'}])
     saved = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'invalid', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 422, saved.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('phase', ['调色完成后', 'video', 'constructor', '__proto__', None, ''])
+async def test_scope_keeps_custom_and_legacy_stage_without_implicit_defaults(canvas_client, phase):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '限制说明'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    scope = {'description': '仅右手区域', 'phase': phase, 'condition': '钥匙出现时'}
+    doc['cards'] = [{'id': 'criterion', 'type': 'direction.criterion', 'name': '手部', 'standard': {'text': '清晰可见', 'authorship': 'user'}, 'scope': scope}]
+    saved = await canvas_client.put(url, json={'request_id': 'scope', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    reopened = (await canvas_client.get(url)).json()['data']['document']
+    assert reopened['cards'][0]['scope'] == scope
+    outputs = (await canvas_client.get(url + '/cards/criterion/outputs')).json()['data']['outputs']
+    assert '仅右手区域' in outputs[0]['text'] and '钥匙出现时' in outputs[0]['text']
+    assert ('制作阶段：' in outputs[0]['text']) == bool(phase)
+    if phase:
+        assert phase in outputs[0]['text']

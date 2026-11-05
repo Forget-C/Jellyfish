@@ -7,6 +7,6 @@
  */
 export type DesignScope = {
     description?: string;
-    phase?: ('video' | 'sound' | 'postproduction' | null);
+    phase?: (string | null);
     condition?: string;
 };

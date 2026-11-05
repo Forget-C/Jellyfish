@@ -58,7 +58,7 @@ try {
     await poll(s=>Object.values(s.document.cards.find(c=>c.id===card.id).fields).some(f=>f.text))
     await detail.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await detail.getByRole('textbox',{name:main+'内容',exact:true}).isVisible(),true)
-    await detail.getByRole('textbox',{name:'设计适用范围',exact:true}).fill('仅用于'+kind+'试拍')
+    await detail.getByRole('combobox',{name:'设计内容适用范围',exact:true}).fill('仅用于'+kind+'试拍')
     await poll(s=>s.document.cards.find(c=>c.id===card.id).scope.description==='仅用于'+kind+'试拍')
     await detail.getByRole('textbox',{name:extra+'内容',exact:true}).fill('独立的'+kind+'说明')
     await poll(s=>Object.values(s.document.cards.find(c=>c.id===card.id).fields).some(f=>f.text==='独立的'+kind+'说明'))
