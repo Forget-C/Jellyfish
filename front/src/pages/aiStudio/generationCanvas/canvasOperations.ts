@@ -83,8 +83,9 @@ export function createCanvasOperations({ connectionReason, sourceOptions }: { co
     remove(document: CanvasDocument, ids: string[], busyCards: Set<string>, cardLabel: (id: string) => string): CanvasOperationResult {
       const blocked = ids.find(id => stackFor(document, id) || document.edges?.some(edge => edge.source_card === id && stackFor(document, edge.target_card)) || busyCards.has(id))
       if (blocked) return { reason: `${cardLabel(blocked)}：${busyCards.has(blocked) ? '卡片正在运行，结束前不可删除' : '请先解除相关堆叠后删除'}` }
+      // Only retained consumers can protect a source from a batch deletion.
       for (const id of ids) {
-        const protection = referenceProtection(document, id)
+        const protection = referenceProtection(document, id, undefined, undefined, undefined, ids)
         if (protection) return { reason: protection.message, protection }
       }
       let next = document
