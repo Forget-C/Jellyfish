@@ -1,7 +1,7 @@
 """独立构图完整发布文字与结构化景别，不推断运镜关联。"""
 from app.core.contracts.generation_canvas import DesignTextPayload, ObjectReferencePayload, NarrativeReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+from app.services.generation_canvas.formatting import design_field_line
 
 COMPOSITION_LABELS = {'shot_size': '景别', 'composition': '构图重心', 'frame_position': '画面位置', 'depth_layers': '空间层次', 'negative_space': '留白', 'composition_requirements': '构图要求'}
 SHOT_SIZE_LABELS = {'extreme_close_up': '大特写', 'close_up': '特写', 'medium': '中景', 'full': '全身', 'wide': '远景', 'extreme_wide': '大远景'}
@@ -15,7 +15,7 @@ def publish_composition(canvas_id, card, adopted_inputs):
         if key == 'shot_size' and value.size:
             text = ' / '.join(filter(None, [SHOT_SIZE_LABELS[value.size], text]))
         if value.state not in ('empty', 'not_applicable') and (text or value.state == 'absent'):
-            lines.append(f'{PURPOSE_LABELS[value.purpose]} / {COMPOSITION_LABELS[key]} [{STATE_LABELS[value.state]}]：{text}')
+            lines.append(design_field_line(COMPOSITION_LABELS[key], value, text, source=False))
     for label, value in (('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)):
         if value:
             lines.append(label + '：' + value)

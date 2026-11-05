@@ -1,9 +1,10 @@
+import { userDesignField } from './designFieldMetadata'
 import type { DesignField, CompositionDesignFields, CameraDesignFields, MovementDesignFields, LightingDesignFields, FocusDesignFields, StyleDesignFields } from '../../../services/generated'
 
 type VisualPresetFields = CompositionDesignFields & CameraDesignFields & MovementDesignFields & LightingDesignFields & FocusDesignFields & StyleDesignFields
 
 export type VisualPreset = { id: string; name: string; explanation: string; look: string; fields: Partial<VisualPresetFields> & Record<string, (DesignField & { size?: string | null }) | undefined>; video?: string; steps?: string[]; diagram?: string }
-const field = (text: string): DesignField => ({ text, state: 'proposal', purpose: 'design', source_locator: '' })
+const field = (text: string): DesignField => userDesignField({ text })
 export const styleLabels: Record<keyof StyleDesignFields, string> = { direction: '风格方向', visual_features: '视觉特征', materials: '材质倾向', colors: '色彩倾向', notes: '自定义说明' }
 export const stylePresets: VisualPreset[] = [
   { id:'watercolor',name:'手绘水彩',look:'watercolor',explanation:'半透明叠色、自然晕染与纸张颗粒。',fields:{direction:field('手绘水彩'),visual_features:field('柔和边缘、半透明叠色、自然晕染'),materials:field('水彩颜料与纸张颗粒'),colors:field('低饱和青绿与暖色点缀')} },

@@ -5,7 +5,12 @@ import ts from 'typescript'
 
 const load = async name => {
   const source = await readFile(new URL('../src/pages/aiStudio/generationCanvas/' + name + '.ts', import.meta.url), 'utf8')
-  const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } })
+  let { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } })
+  if (outputText.includes("'./designFieldMetadata'")) {
+    const dependency = await readFile(new URL('../src/pages/aiStudio/generationCanvas/designFieldMetadata.ts', import.meta.url), 'utf8')
+    const compiled = ts.transpileModule(dependency, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
+    outputText = outputText.replaceAll("'./designFieldMetadata'", JSON.stringify(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`))
+  }
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
 }
 const { isDesignFieldConfigured } = await load('designFieldConfiguration')

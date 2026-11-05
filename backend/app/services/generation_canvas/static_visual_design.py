@@ -2,14 +2,14 @@
 from app.core.contracts.generation_canvas import DesignTextPayload, NarrativeReferencePayload, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput
 from app.services.generation_canvas.guidance import adopted_acceptance, acceptance_lines
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+from app.services.generation_canvas.formatting import design_field_line
 from app.services.generation_canvas.photography import REGIONS
 
 
 def publish_static_design(canvas_id, card, adopted_inputs):
     """Publish active own fields and adopted relationships, never ancestor media."""
     labels = REGIONS[card.type.split('.')[1]]
-    lines = [f'{PURPOSE_LABELS[value.purpose]} / {labels[key]} [{STATE_LABELS[value.state]}]：{value.text}'
+    lines = [design_field_line(labels[key], value, source=False)
              for key, value in card.fields if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
     objects = {item.payload.object_id: item.payload for item in adopted_inputs if item.available and isinstance(item.payload, ObjectReferencePayload)}
     roles = {'effect_object': '作用对象', 'attention_object': '关注对象', 'focus_object': '焦点对象'}

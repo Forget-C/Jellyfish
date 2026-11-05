@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { Popover, Typography } from 'antd'
 import type { DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { DesignFieldEditor } from './DesignFieldEditor'
+import { designFieldMetadata, userDesignField } from './designFieldMetadata'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor'
 import type { EditorPromptDocument } from './inputBindings'
 import { sourceKey, type Candidate } from './promptRules'
@@ -72,6 +73,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
 export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignFieldEditor>) {
   const { cardDefinitions } = useGraphRules()
   const context = useContext(DesignReferenceContext), handle = useRef<PromptEditorHandle>(null)
+  const metadataId = useId()
   if (!context || !isReferenceDesign(context.card)) return <DesignFieldEditor {...props} />
   const value = props.value as ReferenceDesignField | undefined
   const prompt: EditorPromptDocument = value?.document as EditorPromptDocument || { segments: [{ id: 'text', kind: 'text', text: value?.text || '', ...(isFlatDesign(context.card) && value?.text ? { literal: true } : {}) }] }
@@ -79,9 +81,13 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])
     const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || '@缺失来源').join('')
-    props.onChange({ purpose: props.purpose || 'design', ...value, document: { segments }, text, state: value?.state === 'empty' || !value?.state ? 'proposal' : value.state } as ReferenceDesignField)
+    const content = (parts: NonNullable<DesignFieldDocument['segments']>) => parts.map(part => part.kind === 'reference' ? ['reference', part.source] : ['text', part.text])
+    if (JSON.stringify(content(segments)) === JSON.stringify(content(prompt.segments as NonNullable<DesignFieldDocument['segments']> || []))) return
+    props.onChange(userDesignField({ ...value, document: { segments }, text }))
   }
   const phase = 'phases' in context.card ? context.card.phases?.find(item => item.frame === props.value) : undefined
   const fieldId = designFieldEntries(context.card).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : cardDefinitions[context.card.type!]?.fields.find(field => field.label === props.label)?.id)
-  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <Typography.Text type="danger" role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</Typography.Text>)}</div>
+  const defaults = cardDefinitions[context.card.type!]?.fields.find(field => field.id === fieldId)?.default_value
+  const hasMetadata = !!designFieldMetadata(value, defaults || { purpose: props.purpose || 'design' })
+  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} metadataId={metadataId} defaults={defaults} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldDescriptionId={hasMetadata ? metadataId : undefined} fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <Typography.Text type="danger" role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</Typography.Text>)}</div>
 }

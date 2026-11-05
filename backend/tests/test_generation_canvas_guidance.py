@@ -97,7 +97,7 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
             provider.name = 'volcengine'
     source = lambda card, port, **extra: {'canvas_id': runtime.canvas_id, 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = runtime.document
-    doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '手部验收', 'standard': {'state': 'fact', 'text': '提交时标准：手与钥匙清晰可见'}},
+    doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '手部验收', 'standard': {'state': 'fact', 'text': '提交时标准：手与钥匙清晰可见', 'authorship': 'model', 'source_locator': '原文提取定位'}},
         {'id': 'guidance', 'type': 'direction.guidance', 'priority': {'state': 'proposal', 'text': '反应优先'}, 'reference_requirements': {'state': 'undecided', 'text': '稍后选择图片'}, 'sound_strategy': {'state': 'proposal', 'text': '声音后期制作'}, 'prohibitions': {'state': 'fact', 'purpose': 'constraint', 'text': '不可出现字幕'}},
         {'id': 'control', 'type': 'direction.creative_control', 'freedom': {'state': 'proposal', 'text': '背景可探索'}, 'keep': {'state': 'fact', 'purpose': 'constraint', 'text': '保持帽子'}, 'undecided': {'state': 'undecided', 'text': '色调待定'}},
         {'id': 'shot', 'type': 'direction.shot', 'name': '反应', 'input_bindings': [{'id': 'criterion', 'input_port': 'acceptance_basis', 'source': source('criterion', 'criterion', object_id='hand')}]},
@@ -114,11 +114,13 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
     assert not preview['input']['media'] and '提交时标准' in preview['input']['text']
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'run', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200
-    doc['cards'][0]['standard']['text'] = '新标准：钥匙必须位于画面中央'
+    doc['cards'][0]['standard'].update(text='新标准：钥匙必须位于画面中央', authorship='user')
     changed = await runtime.client.put(runtime.url, json={'request_id': 'after-admission', 'expected_revision': 2, 'document': doc})
     assert changed.status_code == 200, changed.text
     current = (await runtime.client.get(runtime.url + '/cards/consumer/compile')).json()['data']
     assert '新标准' in current['text'] and '提交时标准' not in current['text']
+    assert '原文提取定位' not in current['text']
+    assert '原文提取定位' in preview['input']['text']
     received = []
     class ProviderText:
         def __init__(self, **kwargs):
@@ -435,3 +437,106 @@ async def test_multi_use_design_source_is_candidate_until_receiver_selects_and_c
     reopened = (await canvas_client.get(url)).json()['data']['document']
     assert not reopened['cards'][1]['input_bindings']
     assert len(reopened['edges']) == 2
+
+
+@pytest.mark.asyncio
+async def test_design_field_authorship_roundtrip_preserves_extraction_and_simplifies_user_output(canvas_client):
+    """来源类别决定展示与输出标签；未标记历史字段仍保持原语义。"""
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '字段来源'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    document['cards'] = [{'id': 'design', 'type': 'direction.guidance',
+        'priority': {'text': '先呈现反应', 'state': 'fact', 'purpose': 'design', 'authorship': 'user'},
+        'reference_requirements': {'text': '保留原文参考', 'state': 'proposal', 'purpose': 'background', 'source_locator': '第三章第2段', 'authorship': 'model'},
+        'prohibitions': {'text': '历史禁止项', 'state': 'fact', 'purpose': 'constraint'}}]
+    response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 200, response.text
+    reopened = (await canvas_client.get(url)).json()['data']['document']['cards'][0]
+    assert reopened['priority']['authorship'] == 'user'
+    assert reopened['reference_requirements']['authorship'] == 'model'
+    assert 'authorship' not in reopened['prohibitions']
+    output = (await canvas_client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]['text']
+    assert '编译优先级：先呈现反应' in output
+    assert '设计 / 编译优先级 [事实]' not in output
+    assert '背景 / 参考绑定要求 [提议]：保留原文参考（来源：第三章第2段）' in output
+    assert '约束 / 禁止项 [事实]：历史禁止项' in output
+
+
+@pytest.mark.asyncio
+async def test_user_design_values_normalize_stale_metadata_and_invalid_authorship_is_rejected(canvas_client):
+    """用户设定不能因旧状态停用，清空内容恢复未填写。"""
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '用户设定'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    document['cards'] = [{'id': 'design', 'type': 'direction.guidance',
+        'priority': {'text': '必须先呈现反应', 'authorship': 'user', 'state': 'not_applicable', 'purpose': 'background', 'source_locator': '旧来源'},
+        'prohibitions': {'text': '', 'authorship': 'user', 'state': 'absent', 'source_locator': '旧来源'}}]
+    response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 200, response.text
+    card = (await canvas_client.get(url)).json()['data']['document']['cards'][0]
+    assert card['priority']['state'] == 'fact'
+    assert card['priority']['purpose'] == 'design'
+    assert card['priority']['source_locator'] == ''
+    assert card['prohibitions']['state'] == 'empty'
+    assert card['prohibitions']['source_locator'] == ''
+    document['cards'][0]['priority']['authorship'] = 'inferred'
+    response = await canvas_client.put(url, json={'request_id': 'invalid', 'expected_revision': 1, 'document': document})
+    assert response.status_code == 422
+    document['cards'][0]['priority'].update(authorship='model', metadata_fields=['text'])
+    response = await canvas_client.put(url, json={'request_id': 'invalid-metadata', 'expected_revision': 1, 'document': document})
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_extracted_field_preserves_missing_metadata_across_reopen(canvas_client):
+    """提取未提供的元信息不因契约默认值被伪装为已提取。"""
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '缺失元信息'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    document['cards'] = [{'id': 'design', 'type': 'direction.guidance',
+        'priority': {'authorship': 'model'},
+        'reference_requirements': {'authorship': 'model', 'state': 'absent'}}]
+    saved = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    reopened = (await canvas_client.get(url)).json()['data']
+    card = reopened['document']['cards'][0]
+    assert card['priority']['metadata_fields'] == []
+    assert card['reference_requirements']['metadata_fields'] == ['state']
+    again = await canvas_client.put(url, json={'request_id': 'again', 'expected_revision': 1, 'document': reopened['document']})
+    assert again.status_code == 200, again.text
+    card = (await canvas_client.get(url)).json()['data']['document']['cards'][0]
+    assert card['priority']['metadata_fields'] == []
+    assert card['reference_requirements']['metadata_fields'] == ['state']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind,key,label,nested', [
+    ('style', 'direction', '风格方向', True),
+    ('camera', 'viewpoint', '观察视点', True),
+    ('lighting', 'light_sources', '光源', True),
+    ('focus', 'depth_focus', '景深与焦点', True),
+    ('composition', 'composition', '构图重心', True),
+    ('movement', 'movement_path', '运动路径', True),
+    ('performance', 'physical_action', '身体动作', False),
+    ('shot', 'visible_result', '可见结果', False),
+    ('anchor', 'position', '位置', False),
+    ('sound', 'source_description', '声源说明', False),
+    ('continuity', 'following_constraints', '后续约束', False),
+])
+async def test_all_design_outputs_distinguish_user_settings_from_extracted_metadata(canvas_client, kind, key, label, nested):
+    """各类设计发布统一保留提取说明，用户设定只发布字段名与正文。"""
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '设计输出'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    cards = []
+    for authorship in ('user', 'model'):
+        value = {'text': '完整设计正文', 'authorship': authorship, 'state': 'proposal', 'purpose': 'background', 'source_locator': '原文定位'}
+        cards.append({'id': authorship, 'type': 'direction.' + kind, **({'fields': {key: value}} if nested else {key: value})})
+    document['cards'] = cards
+    response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 200, response.text
+    user = (await canvas_client.get(url + '/cards/user/outputs')).json()['data']['outputs'][0]['text']
+    extracted = (await canvas_client.get(url + '/cards/model/outputs')).json()['data']['outputs'][0]['text']
+    assert label + '：完整设计正文' in user
+    assert '[事实]' not in user and '原文定位' not in user
+    assert f'背景 / {label} [提议]：完整设计正文（来源：原文定位）' in extracted

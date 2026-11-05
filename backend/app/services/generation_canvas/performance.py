@@ -2,14 +2,13 @@
 from app.core.contracts.generation_canvas import DialogueReferencePayload, CriterionReferencePayload, FrameState, DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, GuidanceDirectionCard, ConstraintDirectionCard
 from app.services.generation_canvas.errors import diagnostic
+from app.services.generation_canvas.formatting import design_field_line
 
 FIELD_LABELS = {'situation': '当前处境', 'relationship': '人物关系', 'objective': '人物目标', 'obstacle': '阻碍',
                 'subtext': '潜台词', 'attention': '注意对象说明', 'internal_adjustment': '内在调整',
                 'physical_action': '身体动作', 'gaze': '目光', 'breath': '呼吸', 'weight': '重心',
                 'hands': '手部', 'voice': '声音表现', 'delivery': '表达方式', 'reaction_order': '反应顺序',
                 'exit_state': '结束状态', 'avoid': '避免的表现', 'applicability': '表演适用说明'}
-STATE_LABELS = {'absent': '明确没有', 'undecided': '待确定', 'proposal': '提议', 'fact': '事实'}
-PURPOSE_LABELS = {'background': '背景', 'design': '设计', 'constraint': '约束'}
 
 
 def publish_design(canvas_id, card, adopted_inputs):
@@ -28,7 +27,7 @@ def publish_design(canvas_id, card, adopted_inputs):
     lines = relation_lines([row for row in relations if row.input_port in ('beat', 'received_event')]) + [f'对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects]
     if participant:
         lines.append(f'参与对象：{participant}')
-    lines.extend(f'{PURPOSE_LABELS[value.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[value.state]}]：{value.text}' + (f'（来源：{value.source_locator}）' if value.source_locator else '') for key, value in active)
+    lines.extend(design_field_line(FIELD_LABELS[key], value) for key, value in active)
     if card.scope.description:
         lines.append('适用范围：' + card.scope.description)
     if card.scope.phase:

@@ -1,3 +1,4 @@
+import { userDesignField } from './designFieldMetadata'
 import { DesignScopeEditor } from './DesignScopeEditor'
 import { VisualDesignRelations } from './VisualDesignRelations'
 import { Alert, Select } from 'antd'
@@ -23,7 +24,7 @@ export function CompositionEditor({ card: raw, onChange, disabled, editorOpen, o
   const missing = !!card.frame_target && !states.some(state => state.value === card.frame_target?.state_id)
   return <DesignPresetEditor fields={{ ...fields }} labels={photographyRegions.composition.fields} presets={photographyPresets.composition} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="design-preset-fields">{Object.entries(photographyRegions.composition.fields).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof typeof fields], ...value } } })} />)}</div>
-    <label>结构化景别<Select aria-label="结构化景别" disabled={disabled} allowClear placeholder="可选" value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => onChange({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size, state: fields.shot_size?.state === 'empty' || !fields.shot_size?.state ? 'proposal' : fields.shot_size.state } } })} /></label>
+    <label>结构化景别<Select aria-label="结构化景别" disabled={disabled} allowClear placeholder="可选" value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => onChange({ ...card, fields: { ...fields, shot_size: userDesignField({ ...fields.shot_size, size }) } })} /></label>
     <VisualDesignRelations onLocateDesign={onLocateDesign} card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
     <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} />
     <section aria-label="构图画面定位"><h3>画面定位（可选）</h3>

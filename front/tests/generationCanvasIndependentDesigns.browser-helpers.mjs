@@ -87,7 +87,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       const field=detail.getByRole('textbox',{name:fieldLabels[i]+'内容',exact:true});assert.equal(await field.evaluate(element => 'value' in element ? element.value : element.innerText),`独立设计${i}`)
       if(scenario==='editor'){
         await field.fill(`已编辑${kind}`);await poll(s=>s.document.cards.find(c=>c.id===kind).fields[fieldKeys[i]].text===`已编辑${kind}`)
-        await detail.getByRole('switch',{name:'显示状态与来源',exact:true}).click();assert.equal(await detail.getByRole('combobox',{name:fieldLabels[i]+'状态',exact:true}).isVisible(),true)
+        assert.equal(await detail.getByRole('switch',{name:'显示状态与来源',exact:true}).count(),0);assert.equal(await detail.getByRole('combobox',{name:fieldLabels[i]+'状态',exact:true}).count(),0)
         await detail.getByRole('button',{name:'返回预设',exact:true}).click();await detail.getByRole('button',{name:/预览 /}).first().click()
         await detail.getByRole('button',{name:'高级设置',exact:true}).click();assert.equal(await field.evaluate(element => 'value' in element ? element.value : element.innerText),`已编辑${kind}`)
       }

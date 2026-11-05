@@ -4,9 +4,8 @@ from app.core.contracts.generation_canvas import (
     DesignTextPayload, OutputIdentity, ObjectReferencePayload,
 )
 from app.schemas.generation_canvas import CanvasResolvedOutput, GuidanceDirectionCard
-from app.services.generation_canvas.formatting import scope_source_lines
+from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
 from app.services.generation_canvas.errors import diagnostic
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 
 FIELD_TYPES = {'direction.creative_control': CreativeControlFields,
                'direction.guidance': GenerationGuidanceFields, 'direction.criterion': AcceptanceCriterionFields}
@@ -23,7 +22,7 @@ def publish_guidance(canvas_id, card, adopted_inputs):
     lines = ['名称：' + card.name] if card.name.strip() else []
     lines.extend(f'作用对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects)
     lines.extend(f'作用对象：{row.name}（{row.reference_id}，{row.category}）' for row in references)
-    lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '')
+    lines.extend(design_field_line(FIELD_LABELS[key], field)
                  for key in type(fields).model_fields if (field := getattr(fields, key)).state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
     lines.extend(scope_source_lines(card.scope, card.source_locator))
     if not lines:

@@ -1,7 +1,8 @@
+import { userDesignField } from './designFieldMetadata'
 import type { VisualPreset } from './visualPresets'
 import type { DesignField } from '../../../services/generated'
 
-const field = (text: string): DesignField => ({ text, state: 'proposal', purpose: 'design', source_locator: '' })
+const field = (text: string): DesignField => userDesignField({ text })
 
 /** Narrative presets author generic intent without assigning story identities or relationships. */
 export const narrativePresets: Record<string, VisualPreset[]> = {

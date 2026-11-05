@@ -5,8 +5,7 @@ from app.core.contracts.generation_canvas import (
     NarrativeDesignRelation, ObjectReferencePayload, SpatialReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import NarrativeDirectionCard, CanvasResolvedOutput
-from app.services.generation_canvas.formatting import scope_source_lines
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
 from app.services.generation_canvas.errors import diagnostic
 
 FIELD_TYPES = {'direction.narrative': NarrativeOverviewFields, 'direction.beat': NarrativeBeatFields,
@@ -44,7 +43,7 @@ def publish_narrative(canvas_id, card, adopted_inputs):
     lines = ['名称：' + card.name] if card.name.strip() else []
     lines.extend(relation_lines(relations))
     lines.extend(acceptance_lines(acceptance))
-    lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '')
+    lines.extend(design_field_line(FIELD_LABELS[key], field)
                  for key in field_type.model_fields if isinstance((field := getattr(fields, key)), DesignField) and field.state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
     lines.extend(scope_source_lines(card.scope, card.source_locator))
     outputs = []

@@ -1,7 +1,7 @@
 """独立运镜发布完整文字和画面状态，不提供局部采用投影。"""
 from app.core.contracts.generation_canvas import DesignTextPayload, FrameState, NarrativeReferencePayload, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+from app.services.generation_canvas.formatting import design_field_line
 from app.services.generation_canvas.photography import REGIONS
 
 
@@ -9,8 +9,7 @@ def publish_movement(canvas_id, card, adopted_inputs):
     """阶段和字段保持明确状态；只对有效画面声明稳定定位身份。"""
     fields = [(f'field:{key}', REGIONS['movement'][key], value) for key, value in card.fields]
     fields += [(f'phase:{phase.id}', phase.name, phase.frame) for phase in card.phases]
-    lines = [f'{PURPOSE_LABELS[value.purpose]} / {label} [{STATE_LABELS[value.state]}]：{value.text}' +
-             (f'（来源：{value.source_locator}）' if value.source_locator else '')
+    lines = [design_field_line(label, value)
              for _, label, value in fields if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
     objects = list({item.payload.object_id: item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available}.values())
     roles = {'effect_object': '作用对象', 'attention_object': '关注对象'}

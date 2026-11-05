@@ -1,9 +1,8 @@
 """对白及声音安排只发布本卡设计；参考素材不进入出口。"""
 from app.core.contracts.generation_canvas import DialogueReferencePayload, DesignField, DesignTextPayload, SoundDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, DialogueCard, SoundDirectionCard
-from app.services.generation_canvas.formatting import scope_source_lines
+from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
 from app.services.generation_canvas.errors import diagnostic
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 
 FIELD_LABELS = {'content': '对白正文', 'source_description': '声源说明', 'environment': '环境声', 'action_sound': '动作声', 'music': '音乐约束'}
 PRODUCTION_LABELS = {'synchronous': '同期生成意图（按模型实际能力执行，不代表已生成声音）', 'postproduction': '待后期（本次不视为已生成声音）', 'undecided': '待确定'}
@@ -25,7 +24,7 @@ def publish_sound(canvas_id, card, adopted_inputs):
     else:
         fields['production'] = card.production
         lines.append('制作安排：' + PRODUCTION_LABELS[card.production])
-    lines.extend(f'{PURPOSE_LABELS[value.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[value.state]}]：{value.text}' + (f'（来源：{value.source_locator}）' if value.source_locator else '') for key, value in active)
+    lines.extend(design_field_line(FIELD_LABELS[key], value) for key, value in active)
     lines.extend(scope_source_lines(card.scope, card.source_locator))
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=SoundDesignFields(**fields), scope=card.scope,
                                 objects=objects, participant_id=speaker, source_locator=card.source_locator, **values)

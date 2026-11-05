@@ -1,14 +1,14 @@
 """风格输出仅来自本卡字段，不传递示例媒体。"""
 from app.core.contracts.generation_canvas import DesignTextPayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+from app.services.generation_canvas.formatting import design_field_line
 
 STYLE_LABELS = {'direction': '风格方向', 'visual_features': '视觉特征', 'materials': '材质倾向', 'colors': '色彩倾向', 'notes': '自定义说明'}
 
 
 def publish_style(canvas_id, card):
     """风格保持完整设计与字段状态；空和不适用不变成生成要求。"""
-    lines = [f'{PURPOSE_LABELS[value.purpose]} / {STYLE_LABELS[key]} [{STATE_LABELS[value.state]}]：{value.text}'
+    lines = [design_field_line(STYLE_LABELS[key], value, source=False)
              for key, value in card.fields if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
     if card.scope.description:
         lines.append('适用范围：' + card.scope.description)

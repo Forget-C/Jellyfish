@@ -3,11 +3,11 @@ import { useGraphRules } from './CanvasCatalogContext'
 import { DesignReferenceContext } from './DesignReferenceEditor'
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ConfigProvider, Switch } from 'antd'
+import { ConfigProvider } from 'antd'
 import { ArrowLeftOutlined, SettingOutlined, UndoOutlined } from '@ant-design/icons'
 import type { DesignField, ReferenceDesignField } from '../../../services/generated'
 import { CanvasEditorFooter, CanvasEditorHeader } from './CanvasCardEditor'
-import { DesignMetadataVisible } from './DesignFieldContext'
+import { designFieldMetadata } from './designFieldMetadata'
 import { PresetIllustration } from './PresetIllustration'
 import type { VisualPreset } from './visualPresets'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -20,9 +20,7 @@ type Props = {
   children: ReactNode; candidates?: ReactNode; relations?: ReactNode; direct?: boolean; current: string; disabled?: boolean; editorOpen?: boolean;
   onApply: (preset: VisualPreset) => void | boolean; onUndo?: () => void;
 }
-const states: Record<string, string> = { empty: '未填写', proposal: '提议', fact: '事实', undecided: '待确定', absent: '明确没有', not_applicable: '不适用' }
-const purposes: Record<string, string> = { background: '背景', design: '设计', constraint: '约束' }
-const describe = (value?: ReferenceDesignField | null) => value ? `${value.text || '无正文'} · 状态：${states[value.state || 'empty']} · 用途：${purposes[value.purpose || ''] || '未指定'} · 来源：${value.source_locator || '未指定'}${value.document?.segments?.some(segment => segment.kind === 'reference') ? ' · 含引用（应用后替换）' : ''}` : '未填写'
+const describe = (value?: ReferenceDesignField | null, defaults?: DesignField) => value ? [value.text || '无正文', designFieldMetadata(value, defaults), value.document?.segments?.some(segment => segment.kind === 'reference') ? '含引用（应用后替换）' : ''].filter(Boolean).join(' · ') : '未填写'
 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
 export function DesignPresetEditor({ fields, labels, presets, children, candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
@@ -31,11 +29,11 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
   const defaults = Object.fromEntries((references ? cardDefinitions[references.card.type!].fields : []).map(field => [field.id, field.default_value]))
   const owner = useRef<HTMLDivElement>(null)
   const header = useContext(CanvasEditorHeader), footer = useContext(CanvasEditorFooter)
-  const [advanced, setAdvanced] = useState(direct), [metadata, setMetadata] = useState(false)
+  const [advanced, setAdvanced] = useState(direct)
   const [selected, setSelected] = useState<VisualPreset>(), [compare, setCompare] = useState<VisualPreset>()
   const [notice, setNotice] = useState('')
   const modeButton = useRef<HTMLElement>(null)
-  useEffect(() => { if (!editorOpen) { setAdvanced(direct); setMetadata(false); setSelected(undefined); setCompare(undefined); setNotice('') } }, [editorOpen, direct])
+  useEffect(() => { if (!editorOpen) { setAdvanced(direct); setSelected(undefined); setCompare(undefined); setNotice('') } }, [editorOpen, direct])
   useEffect(() => {
     if (!references?.targetField || !editorOpen) return
     setAdvanced(true)
@@ -93,10 +91,10 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
       <aside className="design-preset-detail"><h3>{preview ? '方案预览' : '当前设计'}</h3>{preview ? <>
         <div className="design-preset-preview" data-comparing={!!compare}>{[preview, availableCompare].filter((preset): preset is VisualPreset => !!preset).map(preset => <figure key={preset.id}>{preset.video ? <video src={preset.video} controls muted playsInline loop aria-label={`${preset.name}运镜示意`} /> : <PresetIllustration preset={preset} />}<figcaption><strong>{preset.name}</strong><p>{preset.explanation}</p></figcaption></figure>)}</div>
         <small className="design-preset-disclaimer">用途示意，不代表实际生成效果</small>
-        <details className="design-preset-changes" aria-label="预设变更清单"><summary>{changes.length ? `将填写 ${changes.length - overwritten} 项 · 覆盖 ${overwritten} 项` : '与当前参数一致，无需重复应用'}</summary>{changes.map(change => <details key={change.key}><summary>{change.populated ? '将覆盖' : '将填写'} · {labels[change.key]}</summary><p>原值：{describe(change.before)}</p><p>新值：{describe(change.after)}</p></details>)}</details>
+        <details className="design-preset-changes" aria-label="预设变更清单"><summary>{changes.length ? `将填写 ${changes.length - overwritten} 项 · 覆盖 ${overwritten} 项` : '与当前参数一致，无需重复应用'}</summary>{changes.map(change => <details key={change.key}><summary>{change.populated ? '将覆盖' : '将填写'} · {labels[change.key]}</summary><p>原值：{describe(change.before, defaults[change.key])}</p><p>新值：{describe(change.after, defaults[change.key])}</p></details>)}</details>
       </> : <div className="design-preset-empty"><CanvasTextPreview text={current || '选择一个预设查看效果与详情，或进入高级设置填写参数。'} label="当前设计" lines={4} /></div>}</aside>
     </div>
-    <section className="design-preset-advanced" hidden={!advanced}><div className="design-preset-advanced-heading"><h3>设计参数</h3><ConfigProvider componentDisabled={false}><label><Switch size="small" aria-label="显示状态与来源" checked={metadata} onChange={setMetadata} /> 显示状态与来源</label></ConfigProvider></div><DesignMetadataVisible.Provider value={metadata}>{children}</DesignMetadataVisible.Provider></section>
+    <section className="design-preset-advanced" hidden={!advanced}><div className="design-preset-advanced-heading"><h3>设计参数</h3></div>{children}</section>
     {footer ? editorOpen && createPortal(actions, footer) : actions}
   </div>
 }

@@ -40,7 +40,7 @@ try {
     {id:'criterion',type:'direction.criterion',criterion_id:'criterion-id',name:'手部可见'},
     {id:'brief',type:'content.text',text:'站在窗边'},
     {id:'movement',type:'direction.movement',phases:[{id:'end',name:'落幅',frame:{state:'proposal',document:{segments:[{id:'ref',kind:'reference',source:source('brief','text')}]}}}]},
-    {id:'composition',type:'direction.composition',fields:{composition:{state:'proposal',text:'左侧构图'}}}],edges:[],input_order:{}}
+    {id:'composition',type:'direction.composition',source_locator:'导演说明',fields:{composition:{state:'proposal',text:'左侧构图'}}}],edges:[],input_order:{}}
   for(const target of ['composition','movement']) {
     document.input_order[target]={}
     for(const [card,port,target_port] of [['person','object','effect_object'],['shot','shot','shot'],['criterion','criterion','acceptance_basis'],...(target==='movement'?[['person','object','attention_object'],['brief','text','text']]:[])]) {
@@ -66,8 +66,7 @@ try {
     await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='acceptance_basis'))
     if(kind==='composition') {
       await detail.getByRole('textbox',{name:'设计适用范围',exact:true}).fill('窗边画面')
-      await detail.getByRole('textbox',{name:'设计来源',exact:true}).fill('导演说明')
-      await poll(state=>state.document.cards.find(c=>c.id===kind).source_locator==='导演说明')
+      assert.equal(await detail.getByRole('textbox',{name:'设计来源',exact:true}).count(),0)
       await detail.getByRole('combobox',{name:'关联运镜卡',exact:true}).locator('xpath=../..').click()
       await page.getByTitle('运镜卡 · movement',{exact:true}).click()
       await detail.getByRole('combobox',{name:'构图目标阶段',exact:true}).locator('xpath=../..').click()
@@ -85,12 +84,12 @@ try {
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click();await page.setViewportSize({width:1440,height:960})
   }
   await page.reload();await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
-  assert.equal(await detail.getByRole('textbox',{name:'设计来源',exact:true}).inputValue(),'导演说明')
+  await detail.getByText('卡片原始来源：导演说明',{exact:true}).waitFor()
   await detail.getByRole('button',{name:'取消作用对象 张三',exact:true}).waitFor()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
   await observer.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');const readonly=observer.locator('.wb-details:visible');await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await readonly.getByRole('button',{name:'取消作用对象 张三',exact:true}).isDisabled(),true)
-  assert.equal(await readonly.getByRole('textbox',{name:'设计来源',exact:true}).isDisabled(),true)
+  assert.equal(await readonly.getByRole('textbox',{name:'设计来源',exact:true}).count(),0);await readonly.getByText('卡片原始来源：导演说明',{exact:true}).waitFor()
   await observer.close()
   console.log('Retained design relationships, scope/source and reference-only target picker passed:',output)
 } finally { await cleanup() }

@@ -4,6 +4,7 @@ import type { ReferenceDesignField, DesignField } from '../../../services/genera
 export function isDesignFieldConfigured(field?: ReferenceDesignField | null, defaults?: DesignField | null): boolean {
   if (!field) return false
   const text = field.document ? field.document.segments?.map(part => part.kind === 'text' ? part.text : '@reference').join('') : field.text
+  if (field.authorship === 'user') return !!(text?.trim() || 'size' in field && field.size)
   return !!(text?.trim() || field.source_locator?.trim() ||
     (field.state || 'empty') !== (defaults?.state || 'empty') ||
     (field.purpose || 'design') !== (defaults?.purpose || 'design') ||

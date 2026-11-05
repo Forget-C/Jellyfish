@@ -4,8 +4,7 @@ from app.core.contracts.generation_canvas import (
     ObjectReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import SpatialDirectionCard, SpatialAnchorCard, CanvasResolvedOutput
-from app.services.generation_canvas.formatting import scope_source_lines
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
 from app.services.generation_canvas.errors import diagnostic
 
 RELATION_LABELS = {'space': '所属空间', 'participant': '参与对象', 'effect_object': '作用对象', 'position_anchor': '位置锚点', 'area_anchor': '区域锚点', 'change_event': '变化事件', 'trigger_event': '触发事件'}
@@ -34,7 +33,7 @@ def publish_spatial(canvas_id, card, adopted_inputs):
         if item and isinstance(item.payload, (ObjectReferencePayload, SpatialReferencePayload)):
             identifier = item.payload.object_id if isinstance(item.payload, ObjectReferencePayload) else item.payload.reference_id
             lines.append(f'{RELATION_LABELS[binding.input_port]}：{item.payload.name}（{identifier}）')
-    lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '')
+    lines.extend(design_field_line(FIELD_LABELS[key], field)
                  for key in field_type.model_fields if isinstance((field := getattr(fields, key)), DesignField) and field.state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
     if getattr(card, 'delay_ms', None) is not None:
         lines.append(f'反应延迟毫秒：{card.delay_ms}')

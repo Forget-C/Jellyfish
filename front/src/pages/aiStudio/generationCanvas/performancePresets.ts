@@ -1,21 +1,22 @@
+import { userDesignField } from './designFieldMetadata'
 import type { DesignField } from '../../../services/generated'
 import type { VisualPreset } from './visualPresets'
 
-const field = (text: string, purpose: DesignField['purpose'] = 'design'): DesignField => ({ text, state: 'proposal', purpose, source_locator: '' })
+const field = (text: string): DesignField => userDesignField({ text })
 
 /** Templates describe observable intent; object identities and relationships are always chosen explicitly. */
 export const performancePresets: Record<string, VisualPreset[]> = {
   situation: [
-    { id: 'waiting', name: '等待回应', look: 'performance', diagram: 'situation', steps: ['等待', '观察', '调整'], explanation: '等待对方回应，观察变化，保持当前关系的不确定性。', fields: { situation: field('等待对方回应，留意对方的动作和态度变化', 'background'), relationship: field('双方尚未明确表态，保持试探性的距离', 'background') } },
-    { id: 'reunion', name: '久别重逢', look: 'performance', diagram: 'situation', steps: ['辨认', '靠近', '停留'], explanation: '从辨认到靠近，先保留距离，再建立交流。', fields: { situation: field('久别后再次相遇，先辨认对方，再尝试靠近', 'background'), relationship: field('彼此熟悉，但需要重新确认当前关系', 'background') } },
+    { id: 'waiting', name: '等待回应', look: 'performance', diagram: 'situation', steps: ['等待', '观察', '调整'], explanation: '等待对方回应，观察变化，保持当前关系的不确定性。', fields: { situation: field('等待对方回应，留意对方的动作和态度变化'), relationship: field('双方尚未明确表态，保持试探性的距离') } },
+    { id: 'reunion', name: '久别重逢', look: 'performance', diagram: 'situation', steps: ['辨认', '靠近', '停留'], explanation: '从辨认到靠近，先保留距离，再建立交流。', fields: { situation: field('久别后再次相遇，先辨认对方，再尝试靠近'), relationship: field('彼此熟悉，但需要重新确认当前关系') } },
   ],
   performance: [
     { id: 'restrained', name: '克制回应', look: 'performance', diagram: 'performance', steps: ['停顿', '回应', '收住动作'], explanation: '短暂停顿后回应，动作幅度较小，结束时保持稳定。', fields: { reaction_order: field('先短暂停顿，确认对方反应后再回应'), physical_action: field('动作幅度较小，回应后收住动作'), exit_state: field('保持稳定姿态，等待对方下一步反应') } },
     { id: 'leave', name: '转身离开', look: 'performance', diagram: 'performance', steps: ['移开视线', '转身', '离开'], explanation: '先移开视线，再转身离开，动作顺序清楚。', fields: { reaction_order: field('先移开视线，停顿后转身'), physical_action: field('转身后连续走开，不在途中回头'), exit_state: field('离开原来的交流位置') } },
   ],
   performance_rule: [
-    { id: 'small', name: '减少多余动作', look: 'performance', diagram: 'performance_rule', steps: ['明确目标', '减少动作', '保留反应'], explanation: '让动作服务当前目标，避免无依据的重复动作。', fields: { applicability: field('动作服务当前目标；减少无依据的手部动作和反复点头，保留对事件的可见反应', 'constraint') } },
-    { id: 'listen', name: '保持倾听反应', look: 'performance', diagram: 'performance_rule', steps: ['倾听', '变化', '回应'], explanation: '对方说话时保留注意和反应，避免机械等待。', fields: { applicability: field('对方说话时保持明确注意；反应随接收到的信息变化，避免机械等待轮到自己发言', 'constraint') } },
+    { id: 'small', name: '减少多余动作', look: 'performance', diagram: 'performance_rule', steps: ['明确目标', '减少动作', '保留反应'], explanation: '让动作服务当前目标，避免无依据的重复动作。', fields: { applicability: field('动作服务当前目标；减少无依据的手部动作和反复点头，保留对事件的可见反应') } },
+    { id: 'listen', name: '保持倾听反应', look: 'performance', diagram: 'performance_rule', steps: ['倾听', '变化', '回应'], explanation: '对方说话时保留注意和反应，避免机械等待。', fields: { applicability: field('对方说话时保持明确注意；反应随接收到的信息变化，避免机械等待轮到自己发言') } },
   ],
   blocking: [
     { id: 'approach', name: '靠近后停下', look: 'performance', diagram: 'blocking', steps: ['起点', '靠近', '停下'], explanation: '沿明确路径靠近目标，在交流距离停下。', fields: { position: field('从当前起点出发，在目标前保留交流距离'), path: field('沿直接路径靠近目标，抵达后停下'), orientation: field('抵达后面向交流目标') } },

@@ -72,7 +72,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                         code = 'ANCHOR_NESTED_REFERENCE'
                     else:
                         from app.services.generation_canvas.spatial import FIELD_LABELS
-                        from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
+                        from app.services.generation_canvas.formatting import STATE_LABELS, PURPOSE_LABELS
                         location = [PURPOSE_LABELS[field.purpose] + ' / ' + FIELD_LABELS[name] + ' [' + STATE_LABELS[field.state] + ']：' + (''.join(part.text for part in field.document.segments) if field.document else field.text) for name, field in active]
                         item = item.model_copy(update={'text': source.name + '（' + '；'.join(location) + '）'})
             if not code and card.type == 'direction.dialogue' and (item.modality != 'text' or segment.source.port_id != 'text'):

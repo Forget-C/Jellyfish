@@ -141,12 +141,30 @@ class NamedImageMapping(NamedImageObject):
 
 
 class DesignField(BaseModel):
-    """显式创作状态及用途；不从正文猜测事实或强制可见动作。"""
+    """字段来源显式区分用户设定与提取；unknown 保持历史语义及快照格式。"""
     model_config = ConfigDict(extra='forbid')
     text: str = ''
     state: Literal['empty', 'not_applicable', 'absent', 'undecided', 'proposal', 'fact'] = 'empty'
     purpose: Literal['background', 'design', 'constraint'] = 'design'
     source_locator: str = ''
+    authorship: Literal['unknown', 'user', 'model'] = Field(default='unknown', exclude_if=lambda value: value == 'unknown',
+        description='user 为用户明确设定，model 为模型提取，unknown 保留未标记历史数据。')
+    metadata_fields: list[Literal['state', 'purpose', 'source_locator']] | None = Field(default=None, exclude_if=lambda value: value is None,
+        description='模型实际返回的元信息项；保存后保持缺项，不将契约默认值视为提取结果。')
+
+    @model_validator(mode='after')
+    def normalize_user_setting(self):
+        """用户设定按实际内容生效，不继承提取的停用状态或原文定位。"""
+        if self.authorship == 'model' and self.metadata_fields is None:
+            self.metadata_fields = [key for key in ('state', 'purpose', 'source_locator') if key in self.model_fields_set]
+        elif self.authorship == 'user':
+            self.metadata_fields = None
+            document = getattr(self, 'document', None)
+            populated = any(part.kind == 'reference' or part.text.strip() for part in document.segments) if document is not None else bool(self.text.strip())
+            self.state = 'fact' if populated or getattr(self, 'size', None) else 'empty'
+            self.purpose = 'design'
+            self.source_locator = ''
+        return self
 
 
 class DesignFieldText(BaseModel):

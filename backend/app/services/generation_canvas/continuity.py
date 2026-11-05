@@ -4,9 +4,8 @@ from app.core.contracts.generation_canvas import (
     FrameState, ObjectReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import CanvasResolvedOutput
-from app.services.generation_canvas.formatting import scope_source_lines
+from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
 from app.services.generation_canvas.narrative import direct_relations, relation_lines
-from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 
 FIELD_TYPES = {'direction.space_rule': SpaceRuleFields, 'direction.continuity': ContinuityFields, 'direction.fact': ImmutableFactFields}
 FIELD_LABELS = {'spatial_basis': '空间依据', 'shootable_area': '可拍区域', 'axis': '轴线', 'scale': '空间尺度', 'before': '前态', 'change': '变化', 'after': '后态', 'following_constraints': '后续约束', 'fact': '不可改事实', 'source_basis': '来源依据'}
@@ -22,7 +21,7 @@ def publish_constraint(canvas_id, card, adopted_inputs):
     if card.type == 'direction.continuity':
         lines.append('连续性分类：' + CATEGORY_LABELS[card.category])
     active = {key: field for key in field_type.model_fields if (field := getattr(fields, key)).state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent')}
-    lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '') for key, field in active.items())
+    lines.extend(design_field_line(FIELD_LABELS[key], field) for key, field in active.items())
     lines.extend(scope_source_lines(card.scope, card.source_locator))
     if not lines:
         return []
