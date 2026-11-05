@@ -30,7 +30,7 @@ try {
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4301, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'], viewport: { width: 1440, height: 1000 } })
   page = await context.newPage()
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
@@ -41,7 +41,7 @@ try {
   const document = { ...canvas.document, cards: [
     { id: 'prop', type: 'content.prop', object_id: 'key', name: '钥匙', text: '完整钥匙参考' },
     { id: 'criterion', type: 'direction.criterion', criterion_id: 'hand', name: '手部可见', standard: { text: '五指和钥匙清晰可见', authorship: 'user' } },
-    { id: 'second', type: 'direction.criterion', criterion_id: 'space', name: '空间一致', standard: { text: '保持左右关系', state: 'proposal', purpose: 'constraint', source_locator: '原文第三段', authorship: 'model' } },
+    { id: 'second', type: 'direction.criterion', criterion_id: 'space', name: '空间一致', standard: { text: '保持左右关系', state: 'proposal', purpose: 'constraint', source_locator: '原文第三段' + '：长来源定位说明'.repeat(40), authorship: 'model' } },
     { id: 'blank', type: 'direction.criterion', criterion_id: 'blank', name: '' },
     { id: 'empty-movement', type: 'direction.movement' },
     ...types.map(id => ({ id, type: 'direction.' + id }))],
@@ -138,6 +138,17 @@ try {
     assert.equal(await detail.locator('.design-field-metadata').count(), 0)
     await region().getByRole('button', { name: /空间一致/ }).click()
     await detail.getByText(/来源：原文第三段/).waitFor()
+    if (id === 'shot') {
+      const metadata = detail.locator('.design-field-metadata')
+      assert.match(await metadata.textContent(), /状态：提议 · 用途：约束/)
+      assert.equal(await metadata.locator('.design-metadata-source').evaluate(node=>node.scrollWidth>node.clientWidth),true)
+      await metadata.focus()
+      const popup = page.locator('.ant-popover:visible .design-metadata-detail')
+      await popup.waitFor()
+      await popup.getByRole('button',{name:/copy|复制/i}).click()
+      await page.waitForFunction(async expected => await navigator.clipboard.readText() === expected, '原文第三段' + '：长来源定位说明'.repeat(40))
+      await region().getByRole('heading',{name:/关联的验收要求/}).click()
+    }
     await region().getByRole('button', { name: '收起验收要求' }).click()
     await expand()
     assert.equal(await region().getByRole('button', { name: /空间一致/ }).getAttribute('aria-pressed'), 'true')

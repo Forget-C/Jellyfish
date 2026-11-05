@@ -107,6 +107,7 @@ try {
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 })
       for (const token of await detail.locator('.generation-prompt-token').all()) assert.deepEqual(await token.evaluate(node => { const style = getComputedStyle(node); return [style.fontSize, style.fontWeight] }), ['14px', '400'])
+      for (const metadata of await detail.locator('.design-field-metadata').all()) assert.deepEqual(await metadata.evaluate(node => { const style = getComputedStyle(node); return [style.fontSize, style.fontWeight, style.whiteSpace] }), ['11px', '400', 'nowrap'])
       const revision = detail.locator('.design-preset-revision')
       assert.equal(await revision.evaluate(node => { const box = node.getBoundingClientRect(), parent = node.closest('.generation-editor-actions').getBoundingClientRect(); return box.left >= parent.left && box.right <= parent.right && box.top >= parent.top && box.bottom <= parent.bottom }), true, `${id}: footer revision fits ${width}px`)
       const controls = detail.locator('[role="textbox"], input:not([type="hidden"]), textarea')
