@@ -448,7 +448,7 @@ class AcceptanceCriterionCard(GuidanceDirectionCard):
     standard: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'criterion')
 
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example', 'text', 'image', 'video', 'anchor')
 
 
 class SpatialDirectionCard(PerformanceDirectionCard):

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
+import { cleanObjectSources } from './objectSourceCleanup'
 import { useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
 type HistoryEntry = { document: CanvasDocument } | { apply: () => void; reverse: () => void }
@@ -60,7 +61,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const edit = (next: CanvasDocument | ((previous: CanvasDocument) => CanvasDocument)) => {
     const s = state.current
     if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key) return
-    const value = typeof next === 'function' ? next(s.document) : next
+    const value = cleanObjectSources(typeof next === 'function' ? next(s.document) : next)
     if (same(value, s.document)) return
     history.current = { scope: key, past: [...history.current.past.slice(-49), { document: s.document }], future: [] }
     s.document = value
@@ -83,7 +84,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       next.apply(); refreshHistory(value => value + 1); return 'layout' as const
     } else {
       h[direction === 'past' ? 'future' : 'past'].push({ document: s.document })
-      s.document = next.document; setDocument(s.document); persist(); return 'document' as const
+      s.document = cleanObjectSources(next.document); setDocument(s.document); persist(); return 'document' as const
     }
   }
   const save = (): Promise<boolean> => {
@@ -99,7 +100,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           const result = await Canvases.canvasSave({ projectId, canvasId: s.current!.id, requestBody: command })
           if (!result.data || result.data.request_id !== command.request_id || result.data.canvas_id !== s.current!.id) throw new Error('invalid receipt')
           if (s !== state.current) return false
-          s.current = { ...s.current!, revision: result.data.revision, document: command.document as CanvasDocument }; s.pending = undefined; s.blocked = undefined
+          s.current = { ...s.current!, revision: result.data.revision, document: cleanObjectSources(command.document as CanvasDocument) }; s.pending = undefined; s.blocked = undefined
           setCurrent(s.current); persist()
         }
         return true
@@ -134,7 +135,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       if (response.data.revision !== baseline.revision || !same(response.data.document, baseline.document)) {
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
-      s.current = response.data; s.document = saved.document; s.pending = undefined; s.recovery = undefined
+      s.current = response.data; s.document = cleanObjectSources(saved.document); s.pending = undefined; s.recovery = undefined
       history.current = { scope: key, past: [], future: [] }
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
     } catch (reason) {
