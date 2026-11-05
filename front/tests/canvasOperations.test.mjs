@@ -215,3 +215,17 @@ test('acceptance source has a single directly adopted use and disconnect removes
   assert.equal(disconnected.edges.length, 0)
   assert.equal(disconnected.cards[1].input_bindings.length, 0)
 })
+
+test('empty acceptance names reject connection before changing the document', () => {
+  for (const name of ['', '   ', undefined]) {
+    const cards = [{ id: 'criterion', type: 'direction.criterion', criterion_id: 'rule', name }, { id: 'shot', type: 'direction.shot', input_bindings: [] }]
+    const edge = { id: 'source', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
+    const rules = createGraphRules({ cards: [definition('direction.criterion', [port('text', 'text'), port('criterion', 'criterion')]), definition('direction.shot', [], [input('text', 'text'), input('acceptance_basis', 'criterion')])] })
+    const original = document({ cards, edges: [], input_order: {} })
+    const before = structuredClone(original)
+    const result = createCanvasOperations(rules).connect(original, edge)
+    assert.equal(result.reason, '请先填写验收要求名称')
+    assert.equal(result.document, undefined)
+    assert.deepEqual(original, before)
+  }
+})

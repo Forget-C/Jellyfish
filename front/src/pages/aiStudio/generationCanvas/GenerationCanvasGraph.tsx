@@ -693,7 +693,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const targetId = target.dataset.card!, side = target.dataset.connectionSide as ConnectionSide
     const options = compatibleOptions(drag.card, targetId)
     if (!options.length) {
-      const first = connectionOptions(drag.card, targetId)[0]
+      const first = sourceOptions(latest.current, drag.card, targetId)[0] || connectionOptions(drag.card, targetId)[0]
       setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); cancelConnection()
     } else if (options.length === 1 || cards.find(card => card.id === drag.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: event.clientX, y: event.clientY })
@@ -701,7 +701,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
     if (!accessibleConnection) return
     const options = compatibleOptions(accessibleConnection.card, targetId)
-    if (!options.length) { const first = connectionOptions(accessibleConnection.card, targetId)[0]; setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); return }
+    if (!options.length) { const first = sourceOptions(latest.current, accessibleConnection.card, targetId)[0] || connectionOptions(accessibleConnection.card, targetId)[0]; setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); return }
     if (options.length === 1 || cards.find(card => card.id === accessibleConnection.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: 88, y: 180 })
   }

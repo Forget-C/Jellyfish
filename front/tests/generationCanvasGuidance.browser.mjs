@@ -40,6 +40,8 @@ try {
   const document = { ...canvas.document, cards: [
     { id: 'criterion', type: 'direction.criterion', criterion_id: 'hand', name: '手部可见', standard: { text: '五指和钥匙清晰可见', authorship: 'user' } },
     { id: 'second', type: 'direction.criterion', criterion_id: 'space', name: '空间一致', standard: { text: '保持左右关系', state: 'proposal', purpose: 'constraint', source_locator: '原文第三段', authorship: 'model' } },
+    { id: 'blank', type: 'direction.criterion', criterion_id: 'blank', name: '' },
+    { id: 'empty-movement', type: 'direction.movement' },
     ...types.map(id => ({ id, type: 'direction.' + id }))],
     edges: types.flatMap(id => ['criterion', 'second'].map(source => ({ id: id + source, source_card: source, source_port: 'criterion', target_card: id, target_port: 'acceptance_basis' }))), input_order: {} }
   document.input_order = Object.fromEntries(types.map(id => [id, { acceptance_basis: [id + 'criterion', id + 'second'] }]))
@@ -48,6 +50,34 @@ try {
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('save did not arrive') }
   await page.goto(`http://127.0.0.1:4301/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const savedBeforeEmptyConnection = await read()
+  const point = (id, side) => page.locator(`[data-card-id="${id}"] [data-connection-side="${side}"]`)
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  const from = await point('blank', 'right').boundingBox(), to = await point('empty-movement', 'left').boundingBox()
+  assert.ok(from && to)
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 })
+  await page.mouse.up()
+  await page.getByText('请先填写验收要求名称', { exact: true }).waitFor()
+  assert.deepEqual(await read(), savedBeforeEmptyConnection)
+  // Keyboard connection uses the same preflight as dragging and must name the actual problem.
+  await point('blank', 'right').press('Enter')
+  await point('empty-movement', 'left').press('Enter')
+  await page.getByText('请先填写验收要求名称', { exact: true }).waitFor()
+  await page.keyboard.press('Escape')
+  assert.deepEqual(await read(), savedBeforeEmptyConnection, 'rejected empty-card connection must not save')
+  assert.equal(await page.locator('[data-generation-edge-id]').count(), savedBeforeEmptyConnection.document.edges.length)
+  await openCanvasCard(page, 'blank')
+  const blankDetail = page.locator('.wb-details:visible')
+  await blankDetail.locator('summary').filter({ hasText: '对象与制作关系' }).click()
+  await blankDetail.getByRole('textbox', { name: '要求名称', exact: true }).fill('补充名称后的验收')
+  await poll(state => state.document.cards.find(item => item.id === 'blank').name === '补充名称后的验收')
+  await closeCanvasDetails(page)
+  await point('blank', 'right').press('Enter')
+  await point('empty-movement', 'left').press('Enter')
+  await poll(state => state.document.cards.find(item => item.id === 'empty-movement').input_bindings?.some(binding => binding.input_port === 'acceptance_basis'))
+  await page.reload()
   const card = page.locator('.wb-details:visible')
   const region = () => card.getByRole('region', { name: '关联的验收要求', exact: true })
   const expand = () => region().getByRole('button', { name: '展开验收要求', exact: true }).click()

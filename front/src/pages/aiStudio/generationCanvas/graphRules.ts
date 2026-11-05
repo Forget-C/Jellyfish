@@ -24,6 +24,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   const output = cardDefinitions[source.type || '']?.outputs.find(port => port.id === edge.source_port)
   const input = cardDefinitions[target.type || '']?.inputs.find(port => port.id === edge.target_port)
   if (!output || !input?.accepts.includes(output.value_kind)) return '端口值种类不匹配，不提供隐式转换'
+  if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return '请先填写验收要求名称'
   if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return '所选模型未接入该输入用途'
   const edges = document.edges || []
   if (findConnection(document, edge)) return '同一端口连接已存在'
