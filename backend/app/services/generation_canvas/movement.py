@@ -12,7 +12,7 @@ def publish_movement(canvas_id, card, adopted_inputs):
     lines = [design_field_line(label, value)
              for _, label, value in fields if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
     objects = list({item.payload.object_id: item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available}.values())
-    roles = {'effect_object': '作用对象', 'attention_object': '关注对象'}
+    roles = {'attention_object': '关注对象'}
     for binding in card.input_bindings:
         obj = next((obj for obj in objects if obj.object_id == binding.source.object_id), None)
         if obj and binding.input_port in roles:

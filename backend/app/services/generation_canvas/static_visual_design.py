@@ -12,7 +12,7 @@ def publish_static_design(canvas_id, card, adopted_inputs):
     lines = [design_field_line(labels[key], value, source=False)
              for key, value in card.fields if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
     objects = {item.payload.object_id: item.payload for item in adopted_inputs if item.available and isinstance(item.payload, ObjectReferencePayload)}
-    roles = {'effect_object': '作用对象', 'attention_object': '关注对象', 'focus_object': '焦点对象'}
+    roles = {'attention_object': '关注对象', 'focus_object': '焦点对象'}
     for binding in card.input_bindings:
         if binding.input_port in roles and binding.source.object_id in objects:
             obj = objects[binding.source.object_id]
