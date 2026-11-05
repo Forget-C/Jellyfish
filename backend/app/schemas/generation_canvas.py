@@ -481,7 +481,7 @@ class SpatialAnchorCard(SpatialDirectionCard):
     orientation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     spatial_relation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     scale: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'space', 'effect_object', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'space', 'image_example', 'video_example')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'anchor')
 
 
@@ -617,7 +617,7 @@ class NarrativeOverviewCard(NarrativeDirectionCard):
     relationship_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     turning_point: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     open_questions: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor')
 
 
 class NarrativeBeatCard(NarrativeDirectionCard):
@@ -637,7 +637,7 @@ class NarrativeEventCard(NarrativeDirectionCard):
     type: Literal['direction.event'] = Field(default='direction.event', json_schema_extra={'enum': ['direction.event']})
     event_id: str | None = Field(default=None, min_length=1, max_length=64)
     action_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'event')
 
 
@@ -670,7 +670,7 @@ class SpaceRuleCard(ConstraintDirectionCard):
     shootable_area: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     axis: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     scale: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
-    input_ports: ClassVar[tuple[str, ...]] = ('space', 'effect_object', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('space', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
 
 
 class ContinuityCard(ConstraintDirectionCard):
