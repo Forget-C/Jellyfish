@@ -42,7 +42,7 @@ async def test_complete_performance_output_keeps_states_and_only_direct_identity
     ([('a', 'character'), ('b', 'character')], ['a', 'b'], 'participant', 'PARTICIPANT_COUNT_EXCEEDED'),
     ([('a', 'place')], ['a'], 'participant', 'INVALID_DESIGN_CATEGORY'),
     ([('a', 'character')], [None], 'participant', 'INVALID_DESIGN_BINDING'),
-    ([('a', 'character')], ['missing'], 'effect_object', 'INVALID_DESIGN_BINDING'),
+    ([('a', 'character')], ['missing'], 'participant', 'INVALID_DESIGN_BINDING'),
 ])
 async def test_design_relations_require_specific_eligible_direct_objects(canvas_client, objects, selected, port, code):
     client = canvas_client
@@ -303,3 +303,61 @@ async def test_example_field_location_is_saved_and_rejects_other_card_fields(can
     doc['cards'][1]['examples'][0]['field_id'] = 'standard'
     invalid = await client.put(url, json={'request_id': 'invalid', 'expected_revision': 1, 'document': doc})
     assert invalid.status_code == 422 and invalid.json()['detail']['code'] == 'INVALID_EXAMPLE_FIELD'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind,field', [('situation', 'situation'), ('performance', 'physical_action'), ('activity', 'task')])
+async def test_generic_object_retirement_preserves_subject_and_whole_field_reference(canvas_client, kind, field):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '明确主体与引用'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    actor = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'position': 0, 'object_id': 'alice'}
+    text = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'text', 'position': 0}
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'actor', 'type': 'content.character', 'object_id': 'alice', 'name': '甲', 'text': '甲完整角色描述'},
+        {'id': 'design', 'type': 'direction.' + kind, field: {'text': '@引用看向乙', 'state': 'fact', 'document': {'segments': [{'id': 'ref', 'kind': 'reference', 'source': text}, {'id': 'words', 'kind': 'text', 'text': '看向乙'}]}},
+         'input_bindings': [{'id': 'subject', 'input_port': 'participant', 'source': actor}, {'id': 'old', 'input_port': 'effect_object', 'source': actor}]},
+        {'id': 'model', 'type': 'model.video', 'input_bindings': [{'id': 'use', 'input_port': 'text', 'source': {'canvas_id': canvas['id'], 'card_id': 'design', 'port_id': 'text', 'position': 0}}]}],
+        edges=[{'id': 'subject', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'design', 'target_port': 'participant'}, {'id': 'old', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'design', 'target_port': 'effect_object'}, {'id': 'reference', 'source_card': 'actor', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}, {'id': 'use', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+        input_order={'design': {'participant': ['subject'], 'effect_object': ['old'], 'text': ['reference']}, 'model': {'text': ['use']}})
+    response = await client.put(url, json={'request_id': 'legacy', 'expected_revision': 0, 'document': doc})
+    assert response.status_code == 200, response.text
+    saved = (await client.get(url)).json()['data']
+    design = saved['document']['cards'][1]
+    assert [binding['input_port'] for binding in design['input_bindings']] == ['participant']
+    assert design[field]['document']['segments'][0]['source'] == text
+    assert {edge['id'] for edge in saved['document']['edges']} == {'subject', 'reference', 'use'}
+    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
+    assert '甲完整角色描述' in compiled['text']
+    assert 'DESIGN_SUBJECT_REQUIRED' not in [row['code'] for row in compiled['diagnostics']]
+    design['input_bindings'] = []
+    response = await client.put(url, json={'request_id': 'remove-subject', 'expected_revision': saved['revision'], 'document': saved['document']})
+    assert response.status_code == 200, response.text
+    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
+    assert 'DESIGN_SUBJECT_REQUIRED' in [row['code'] for row in compiled['diagnostics']]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind,field', [('situation', 'situation'), ('performance', 'physical_action'), ('activity', 'task')])
+async def test_retired_object_alone_becomes_candidate_not_a_subject_or_dependency(canvas_client, kind, field):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '候选不采用'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    source = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'object_id': 'alice', 'position': 0}
+    doc.update(cards=[{'id': 'actor', 'type': 'content.character', 'name': '甲', 'object_id': 'alice', 'text': '不应隐式携带的描述'},
+        {'id': 'design', 'type': 'direction.' + kind, field: {'text': '看向门口', 'state': 'fact'}, 'input_bindings': [{'id': 'old', 'input_port': 'effect_object', 'source': source}]},
+        {'id': 'model', 'type': 'model.text', 'input_bindings': [{'id': 'use', 'input_port': 'text', 'source': {'canvas_id': canvas['id'], 'card_id': 'design', 'port_id': 'text', 'position': 0}}]}],
+        edges=[{'id': 'old', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'design', 'target_port': 'effect_object'}, {'id': 'use', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'design': {'effect_object': ['old']}, 'model': {'text': ['use']}})
+    response = await client.put(url, json={'request_id': 'old', 'expected_revision': 0, 'document': doc})
+    assert response.status_code == 200, response.text
+    first = (await client.get(url)).json()['data']
+    assert first == (await client.get(url)).json()['data']
+    assert first['document']['cards'][1]['input_bindings'] == []
+    assert first['document']['edges'][1] == {'id': 'old', 'source_card': 'actor', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}
+    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
+    assert '看向门口' in compiled['text'] and '不应隐式携带的描述' not in compiled['text']
+    catalog = (await client.get(url + '/catalog')).json()['data']['cards']
+    inputs = next(card['inputs'] for card in catalog if card['type'] == 'direction.' + kind)
+    assert 'participant' in [port['id'] for port in inputs]
+    assert 'effect_object' not in [port['id'] for port in inputs]
