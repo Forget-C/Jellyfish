@@ -38,7 +38,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const relations = <>
     <DesignNameField label={{ 'direction.narrative': '叙事名称', 'direction.beat': '节拍名称', 'direction.event': '事件名称', 'direction.shot': '镜头名称' }[card.type!]} placeholder={{ 'direction.narrative': '例如：车站告别', 'direction.beat': '例如：发现钥匙', 'direction.event': '例如：门外响起脚步声', 'direction.shot': '例如：手部取钥匙特写' }[card.type!]} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />
     {resolved.error && <Alert type="warning" message={resolved.error} />}
-    <details><summary>叙事关系 · 已选 {bindings.length} 项</summary>
+    {!['direction.narrative', 'direction.event'].includes(card.type!) && <details><summary>叙事关系 · 已选 {bindings.length} 项</summary>
     {card.type === 'direction.shot' && beats.length > 0 && <section aria-label="已选覆盖节拍顺序"><h3>已选覆盖节拍顺序</h3>{beats.map((binding, index) => {
       const item = resolved.candidates.find(candidate => sourceKey(candidate.source) === sourceKey(binding.source))
       const name = item?.payload && 'name' in item.payload ? item.payload.name : binding.source.object_id || '失效节拍'
@@ -56,7 +56,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
       })}
       {bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source))).map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
     </section>
-    </details>
+    </details>}
   </>
   return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={narrativePresets[card.type!] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as NarrativeCard)}>
     {card.type === 'direction.narrative' && <>{field('viewpoint', '观察视点')}{field('information_change', '信息变化')}{field('relationship_change', '人物关系变化')}{field('turning_point', '关键转折')}{field('open_questions', '待确定问题')}</>}

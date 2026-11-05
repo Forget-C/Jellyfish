@@ -1,7 +1,7 @@
 import type { CanvasDocument } from '../../../services/generated'
 
 /** 已落地退役的类型；恢复旧编辑记录时同样禁止重建通用对象用途。 */
-const retiredObjectTypes = new Set(['direction.criterion', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule', 'direction.situation', 'direction.performance', 'direction.activity'])
+const retiredObjectTypes = new Set(['direction.criterion', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule', 'direction.situation', 'direction.performance', 'direction.activity', 'direction.narrative', 'direction.event', 'direction.space_rule', 'direction.anchor'])
 const candidatePort = (type: string) => type.startsWith('reference.') || ['content.image', 'model.image'].includes(type) ? 'image'
   : ['content.video', 'model.video'].includes(type) ? 'video'
     : type.startsWith('direction.') || type.startsWith('content.') && !['content.image', 'content.video', 'content.audio'].includes(type) || type === 'model.text' ? 'text' : undefined
