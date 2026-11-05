@@ -37,10 +37,10 @@ try {
     {id:'person',type:'content.character',object_id:'person-id',name:'张三',text:'窗边人物'},
     {id:'dialogue',type:'direction.dialogue',dialogue_id:'dialogue-id',content:{state:'fact',text:'人物台词',document:{segments:[{id:'ref',kind:'reference',source:source('person','text')}] }},input_bindings:[{id:'speaker',input_port:'speaker',source:source('person','object','person-id')}]},
     {id:'empty',type:'direction.style'},
-    {id:'movement',type:'direction.movement',fields:{movement_type:{state:'fact',text:'平稳推进'}},input_bindings:[{id:'effect',input_port:'effect_object',source:source('person','object','person-id')},{id:'attention',input_port:'attention_object',source:source('person','object','person-id')}]},
+    {id:'movement',type:'direction.focus',fields:{depth_focus:{state:'fact',text:'清晰主体'}},input_bindings:[{id:'focus',input_port:'focus_object',source:source('person','object','person-id')},{id:'attention',input_port:'attention_object',source:source('person','object','person-id')}]},
     {id:'inactive',type:'direction.style',fields:{notes:{state:'not_applicable',document:{segments:[{id:'inactive-ref',kind:'reference',source:source('person','text')}]}}}},
   ],edges:[{id:'speaker',source_card:'person',source_port:'object',target_card:'dialogue',target_port:'speaker'},{id:'text',source_card:'person',source_port:'text',target_card:'dialogue',target_port:'text'}],input_order:{dialogue:{speaker:['speaker'],text:['text']}}}
-  for(const port of ['effect_object','attention_object']) document.edges.push({id:port,source_card:'person',source_port:'object',target_card:'movement',target_port:port})
+  for(const port of ['focus_object','attention_object']) document.edges.push({id:port,source_card:'person',source_port:'object',target_card:'movement',target_port:port})
   document.edges.push({id:'inactive-text',source_card:'person',source_port:'text',target_card:'inactive',target_port:'text'})
   for(const edge of document.edges){document.input_order[edge.target_card] ||= {};document.input_order[edge.target_card][edge.target_port] ||= [edge.id]}
   const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seeded.ok,await seeded.text())
@@ -60,10 +60,10 @@ try {
   await detail.getByText('暂无候选来源，请先连接来源或添加素材。',{exact:true}).waitFor()
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.locator('[data-card-id="movement"]').getByRole('button',{name:/设计/}).press('Enter')
-  await detail.getByRole('button',{name:/候选 张三 · 已用作作用对象；已用作关注对象/}).waitFor()
+  await detail.getByRole('button',{name:/候选 张三 · 已用作焦点对象；已用作关注对象/}).waitFor()
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('button',{name:'取消关注对象 张三',exact:true}).click()
-  await detail.getByRole('button',{name:/候选 张三 · 已用作作用对象$/}).waitFor()
+  await detail.getByRole('button',{name:/候选 张三 · 已用作焦点对象$/}).waitFor()
   await detail.screenshot({path:join(output,'candidate-roles-desktop.png'),animations:'disabled'})
   await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
