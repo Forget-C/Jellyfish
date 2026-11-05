@@ -86,6 +86,23 @@ try {
   assert.equal(await blankDetail.getByRole('alert').filter({ hasText: '请先填写验收要求名称' }).count(), 0)
   assert.equal(await page.getByRole('status').filter({ hasText: '请先填写验收要求名称' }).count(), 0)
   await blankDetail.getByRole('button', { name: '高级设置', exact: true }).click()
+  const standardField = blankDetail.getByRole('textbox', { name: '可观察判断标准内容', exact: true })
+  await standardField.fill('能够辨认关键动作的发生及结果状态；判断依据应在实际画面中可观察')
+  const readFocusPaint = () => standardField.evaluate(node => {
+    const style = getComputedStyle(node), box = node.getBoundingClientRect()
+    const outset = Math.max(0, parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth))
+    const clipped = []
+    for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+      const css = getComputedStyle(parent), rect = parent.getBoundingClientRect()
+      const left = rect.left + parent.clientLeft, right = left + parent.clientWidth
+      if (['auto', 'scroll', 'hidden', 'clip'].includes(css.overflowX) && (box.left - outset < left - 0.5 || box.right + outset > right + 0.5)) clipped.push(parent.className)
+    }
+    return { outlineWidth: parseFloat(style.outlineWidth), clipped }
+  })
+  const focusPaint = await readFocusPaint()
+  await blankDetail.screenshot({ path: join(output, 'standard-focus-desktop.png') })
+  assert.ok(focusPaint.outlineWidth >= 1, 'focused field retains a visible keyboard outline')
+  assert.deepEqual(focusPaint.clipped, [], 'focused field outline must not be clipped by horizontal scroll containers')
   await blankDetail.getByRole('button', { name: '编辑验收要求名称', exact: true }).click()
   assert.equal(await requirementName.isVisible(), true)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -94,6 +111,11 @@ try {
   const nameBox = await requirementName.boundingBox(), panelBox = await blankDetail.boundingBox()
   assert.ok(nameBox.width > 100 && nameBox.x + nameBox.width <= panelBox.x + panelBox.width, 'name input fits narrow heading')
   await blankDetail.screenshot({ path: join(output, 'requirement-name-mobile.png') })
+  await standardField.press('ArrowRight')
+  const mobileFocusPaint = await readFocusPaint()
+  assert.ok(mobileFocusPaint.outlineWidth >= 1)
+  assert.deepEqual(mobileFocusPaint.clipped, [], 'mobile field outline remains fully visible')
+  await blankDetail.screenshot({ path: join(output, 'standard-focus-mobile.png') })
   await page.setViewportSize({ width: 1440, height: 1000 })
   await poll(state => state.document.cards.find(item => item.id === 'blank').name === '补充名称后的验收')
   await closeCanvasDetails(page)
