@@ -1,7 +1,7 @@
 """本卡创作要求及验收关系；不检查纯文本真实性或产生审查结论。"""
 from app.core.contracts.generation_canvas import (
-    SpatialReferencePayload, NarrativeReferencePayload, CriterionReferencePayload, CreativeControlFields, GenerationGuidanceFields, AcceptanceCriterionFields,
-    DesignTextPayload, OutputIdentity, ObjectReferencePayload,
+    CriterionReferencePayload, CreativeControlFields, GenerationGuidanceFields, AcceptanceCriterionFields,
+    DesignTextPayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import CanvasResolvedOutput, GuidanceDirectionCard
 from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
@@ -14,14 +14,10 @@ FIELD_LABELS = {'freedom': '创作控制程度', 'allowed_range': '允许发挥�
                 'sound_strategy': '声音策略', 'prohibitions': '禁止项', 'standard': '可观察判断标准'}
 
 
-def publish_guidance(canvas_id, card, adopted_inputs):
-    """默认完整输出自身字段和必要对象指代；示例文件不进入设计输出。"""
+def publish_guidance(canvas_id, card, _adopted_inputs):
+    """默认完整输出自身字段；明确字段来源沿用完整引用解析，示例不进入输出。"""
     fields = FIELD_TYPES[card.type](**{key: getattr(card, key) for key in FIELD_TYPES[card.type].model_fields})
-    objects = [item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available]
-    references = [item.payload for item in adopted_inputs if item.available and isinstance(item.payload, (SpatialReferencePayload, NarrativeReferencePayload))]
     lines = ['名称：' + card.name] if card.name.strip() else []
-    lines.extend(f'作用对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects)
-    lines.extend(f'作用对象：{row.name}（{row.reference_id}，{row.category}）' for row in references)
     lines.extend(design_field_line(FIELD_LABELS[key], field)
                  for key in type(fields).model_fields if (field := getattr(fields, key)).state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
     lines.extend(scope_source_lines(card.scope, card.source_locator))
@@ -29,7 +25,7 @@ def publish_guidance(canvas_id, card, adopted_inputs):
         return []
     outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text',
         payload=DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=fields, scope=card.scope,
-            objects=objects, references=references, source_locator=card.source_locator))]
+            source_locator=card.source_locator))]
     if card.type == 'direction.criterion' and card.criterion_id and card.name.strip():
         outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='criterion', position=0, object_id=card.criterion_id), modality='text',
             payload=CriterionReferencePayload(criterion_id=card.criterion_id, name=card.name.strip())))
@@ -70,7 +66,7 @@ def validate_guidance_relations(document, published, previous, *, context=None):
             continue
         for check in inspect_design_bindings(document, card, relevant, published, context=context):
             binding, item = check.binding, check.output
-            valid = isinstance(item.payload, CriterionReferencePayload) if item and binding.input_port == 'acceptance_basis' else bool(item and binding.input_port == 'effect_object' and isinstance(item.payload, (ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload)) and not (card.type == 'direction.criterion' and isinstance(item.payload, NarrativeReferencePayload) and item.payload.category == 'shot'))
+            valid = isinstance(item.payload, CriterionReferencePayload) if item and binding.input_port == 'acceptance_basis' else False
             if not check.binding_valid or not item or not valid:
                 raise diagnostic('INVALID_REQUIREMENT_BINDING', '请选择直接候选中适用的对象或验收要求', {'card_id': card.id, 'path': ['input_bindings', binding.id]})
 

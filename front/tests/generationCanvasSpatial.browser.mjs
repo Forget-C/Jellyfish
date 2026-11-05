@@ -92,11 +92,11 @@ try {
   await card.getByRole('textbox', { name: '刻意留白内容', exact: true }).fill('门口无人')
   await poll(state => state.document.cards.find(item => item.id === 'environment').empty_space?.text === '门口无人')
   await open('consumer')
-  await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
   await poll(state => state.document.cards.find(item => item.id === 'consumer').input_bindings?.length === 1)
   const compiled = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
   assert.match(compiled.text, /从门边走向窗前/)
-  assert.doesNotMatch(compiled.text, /秘密场所正文|东墙门口/)
+  assert.match(compiled.text, /秘密场所正文/)
+  assert.match(compiled.text, /东墙门口/)
   await page.reload()
   await open('blocking')
   assert.equal(await card.getByRole('textbox', { name: '路径内容', exact: true }).innerText(), '从门边走向窗前')

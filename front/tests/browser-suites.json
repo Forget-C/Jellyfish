@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-narrative-spatial-objects": {"file":"generationCanvasNarrativeSpatialObjects.browser.mjs","ports":[4744,8744],"timeoutMs":180000},
     "generation-canvas-candidate-states": {"file":"generationCanvasCandidateStates.browser.mjs","ports":[4693,8693],"timeoutMs":180000},
     "generation-canvas-design-metadata": {"file":"generationCanvasDesignMetadata.browser.mjs","ports":[4691,8691],"timeoutMs":300000},
     "generation-canvas-sound-constraints": {"file":"generationCanvasSoundConstraints.browser.mjs","ports":[4463,8463],"timeoutMs":180000},
@@ -125,7 +126,7 @@
   },
   "suites": {
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],
-    "performance-design": ["generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
+    "performance-design": ["generation-canvas-narrative-spatial-objects", "generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
     "canvas-design": ["generation-canvas-candidate-states","generation-canvas-design-names","generation-canvas-design-metadata","generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
     "canvas-interaction": [
       "generation-canvas-editor-reveal",
