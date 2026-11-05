@@ -58,6 +58,25 @@ try {
   for(const kind of ['camera','lighting','focus','composition','movement']) {
     await page.locator(`[data-card-id="${kind}"]`).getByRole('button',{name:/设计/}).press('Enter')
     await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+    if(kind==='camera') {
+      const inputs=detail.locator('.static-design-scope [role="combobox"]')
+      for(const input of await inputs.all()) {
+        await input.focus()
+        await input.press('ArrowDown')
+        await page.locator('.ant-select-dropdown:visible').first().waitFor()
+        assert.equal(await page.locator('.ant-select-dropdown:visible').count(),1,'only one popup is visible')
+        assert.equal(await inputs.evaluateAll(nodes=>nodes.filter(node=>node.getAttribute('aria-expanded')==='true').length),1,'scope dropdowns are mutually exclusive')
+      }
+      await inputs.last().press('Tab')
+      await page.waitForFunction(()=>![...document.querySelectorAll('.static-design-scope [role="combobox"]')].some(node=>node.getAttribute('aria-expanded')==='true'))
+      assert.equal(await page.locator('.ant-select-dropdown:visible').count(),0,'closed scope menus do not linger')
+      await inputs.first().click()
+      const heading=detail.getByRole('heading',{name:'设计参数',exact:true})
+      await heading.evaluate(node=>node.addEventListener('pointerdown',event=>event.preventDefault(),{once:true}))
+      await heading.click()
+      await page.waitForFunction(()=>![...document.querySelectorAll('.static-design-scope [role="combobox"]')].some(node=>node.getAttribute('aria-expanded')==='true'))
+      assert.equal(await page.locator('.ant-select-dropdown:visible').count(),0,'closed scope menus do not linger')
+    }
     assert.equal(await detail.getByRole('button',{name:/作用对象/}).count(),0)
     await detail.getByRole('button',{name:'选择所属镜头 反应镜头',exact:true}).click()
     await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='shot'))
