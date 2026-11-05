@@ -75,12 +75,12 @@ async def test_movement_retains_explicit_object_relationship_and_scope(canvas_cl
     source = {'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'object', 'position': 0, 'object_id': 'person-id'}
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'person-id', 'name': '张三', 'text': '穿着外套'},
                       {'id': 'move', 'type': 'direction.movement', 'scope': {'description': '门口一段'}, 'source_locator': '创作要求',
-                       'input_bindings': [{'id': 'object', 'source': source, 'input_port': 'effect_object'}]}],
-               edges=[{'id': 'e', 'source_card': 'person', 'source_port': 'object', 'target_card': 'move', 'target_port': 'effect_object'}],
-               input_order={'move': {'effect_object': ['e']}})
+                       'input_bindings': [{'id': 'object', 'source': source, 'input_port': 'attention_object'}]}],
+               edges=[{'id': 'e', 'source_card': 'person', 'source_port': 'object', 'target_card': 'move', 'target_port': 'attention_object'}],
+               input_order={'move': {'attention_object': ['e']}})
     response = await canvas_client.put(url, json={'request_id': 'object', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     payload = (await canvas_client.get(url + '/cards/move/outputs')).json()['data']['outputs'][0]['payload']
     assert payload['objects'][0]['name'] == '张三'
-    assert '作用对象：张三' in payload['text']
+    assert '关注对象：张三' in payload['text']
     assert '适用范围：门口一段' in payload['text']

@@ -158,13 +158,16 @@ async def test_actual_worker_receives_whole_continuity_with_explicit_ancestors_w
     assert reopened['cards'][1]['after']['state'] == 'fact'
 
 @pytest.mark.asyncio
-async def test_fact_explicit_effect_object_accepts_anchor_identity_without_description(canvas_client):
+async def test_fact_old_object_becomes_unadopted_anchor_candidate(canvas_client):
     canvas=(await canvas_client.post('/canvases/p',json={'name':'锚点事实'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
     doc.update(cards=[{'id':'anchor','type':'direction.anchor','anchor_id':'door','name':'门边','position':{'state':'fact','text':'不穿透锚点正文'}},{'id':'fact','type':'direction.fact','fact':{'state':'fact','text':'不可移动'},'input_bindings':[{'id':'object','input_port':'effect_object','source':{'canvas_id':canvas['id'],'card_id':'anchor','port_id':'anchor','position':0,'object_id':'door'}}]}],edges=[{'id':'edge','source_card':'anchor','source_port':'anchor','target_card':'fact','target_port':'effect_object'}],input_order={'fact':{'effect_object':['edge']}})
     result=await canvas_client.put(url,json={'request_id':'save','expected_revision':0,'document':doc})
     assert result.status_code==200,result.text
     text=(await canvas_client.get(url+'/cards/fact/outputs')).json()['data']['outputs'][0]['text']
-    assert '门边' in text and '不穿透' not in text
+    assert '门边' not in text and '不穿透' not in text
+    reopened=(await canvas_client.get(url)).json()['data']['document']
+    assert reopened['cards'][1]['input_bindings']==[]
+    assert all(edge['target_port']!='effect_object' for edge in reopened['edges'])
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('case,code',[('count','CONSTRAINT_RELATION_COUNT'),('field','INVALID_CONSTRAINT_EXAMPLE_FIELD'),('direct','INVALID_CONSTRAINT_BINDING')])

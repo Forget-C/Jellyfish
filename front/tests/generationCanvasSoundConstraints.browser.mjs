@@ -35,7 +35,7 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const cases = [['dialogue','content','对白正文',null],['sound','environment','环境声','对白优先'],['space_rule','axis','轴线','保持轴线'],['continuity','before','前态','变化后延续'],['fact','fact','不可改事实',null],['creative_control','freedom','创作控制程度','有限发挥'],['guidance','priority','编译优先级','动作可读优先'],['criterion','standard','可观察判断标准','动作结果可辨']]
+  const cases = [['dialogue','content','对白正文',null],['sound','environment','环境声','对白优先'],['space_rule','axis','轴线','保持轴线'],['continuity','before','前态','变化后延续'],['fact','fact','不可改事实',null],['creative_control','freedom','创作控制程度','有限发挥'],['guidance','priority','编译优先级','动作可读优先'],['criterion','standard','可观察判断标准','动作结果可辨'],['performance_rule','applicability','表演适用说明','减少多余动作']]
   const canvas=(await (await fetch(base,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'声音约束验收'})})).json()).data
   const edges=cases.map(([id])=>({id,source_card:'brief',source_port:'text',target_card:id,target_port:'text'}))
   const document={...canvas.document,cards:[{id:'brief',type:'content.text',text:'明确的文本依据'},...cases.map(([id])=>({id,type:'direction.'+id,...(id==='dialogue'?{dialogue_id:'stable-dialogue',version:3}:{})}))],edges,input_order:Object.fromEntries(cases.map(([id])=>[id,{text:[id]}]))}
@@ -48,6 +48,11 @@ try {
   assert.match(await page.locator('[data-card-id="creative_control"]').textContent(), /开始设计/)
   for(const[id,key,label,preset]of cases){
     await openCanvasCard(page,id)
+    if(['creative_control','guidance','fact','performance_rule'].includes(id)){
+      assert.equal(await detail.locator('summary').filter({hasText:'作用对象'}).count(),0)
+      assert.equal(await detail.getByRole('region',{name:'对象关系',exact:true}).count(),0)
+      assert.equal(await detail.locator('summary').filter({hasText:'对象与制作关系'}).count(),0)
+    }
     if(id==='dialogue'){
       await detail.getByRole('button',{name:'添加设计来源',exact:true}).click()
       await page.getByRole('menuitem',{name:/上传参考素材/}).hover()
@@ -66,6 +71,33 @@ try {
     if(id==='dialogue')assert.equal((await read()).document.cards.find(card=>card.id===id).version,3)
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   }
+  const baseline=await read(), recovered=structuredClone(baseline.document)
+  recovered.cards.push({id:'old-prop',type:'content.prop',object_id:'key',name:'钥匙',text:'保留的完整钥匙描述'})
+  const retired=['creative_control','guidance','fact','performance_rule']
+  for(const id of retired){
+    recovered.cards.find(card=>card.id===id).input_bindings=[{id:'old-'+id,input_port:'effect_object',source:{canvas_id:canvas.id,card_id:'old-prop',port_id:'object',object_id:'key',position:0}}]
+    recovered.edges.push({id:'old-'+id,source_card:'old-prop',source_port:'object',target_card:id,target_port:'effect_object'})
+    recovered.input_order[id].effect_object=['old-'+id]
+  }
+  await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:`jellyfish:generation:canvas-project:${canvas.id}:recovery`,value:{schema:1,baseline,document:recovered}})
+  await page.reload();await page.getByRole('button',{name:'恢复本地内容',exact:true}).click()
+  await poll(state=>state.document.cards.some(card=>card.id==='old-prop'))
+  const assertClean=async()=>{const state=await read();for(const id of retired){
+    assert.deepEqual(state.document.cards.find(card=>card.id===id).input_bindings,[])
+    assert.ok(state.document.edges.some(edge=>edge.id==='old-'+id&&edge.source_port==='text'&&edge.target_port==='text'))
+    assert.ok(!state.document.edges.some(edge=>edge.target_card===id&&edge.target_port==='effect_object'))
+    assert.ok(state.document.cards.find(card=>card.id===id)[cases.find(row=>row[0]===id)[1]].document.segments.some(segment=>segment.kind==='reference'&&segment.source.card_id==='brief'))
+  }}
+  await assertClean();await openCanvasCard(page,'creative_control')
+  await detail.getByRole('textbox',{name:'创作控制名称',exact:true}).fill('清理后编辑')
+  await poll(state=>state.document.cards.find(card=>card.id==='creative_control').name==='清理后编辑')
+  await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await page.getByRole('button',{name:'撤销操作',exact:true}).click()
+  await poll(state=>state.document.cards.find(card=>card.id==='creative_control').name==='');await assertClean()
+  await page.getByRole('button',{name:'重做操作',exact:true}).click()
+  await poll(state=>state.document.cards.find(card=>card.id==='creative_control').name==='清理后编辑');await assertClean()
+  await page.reload();await assertClean()
+  {
   const baseline = await read(), recovered = structuredClone(baseline.document)
   recovered.cards.push({id:'key',type:'content.prop',object_id:'key',name:'钥匙',text:'金属钥匙'})
   const oldSound = recovered.cards.find(item=>item.id==='sound')
@@ -94,6 +126,7 @@ try {
   await poll(state=>state.document.cards.find(item=>item.id==='sound').action_sound.text==='编辑后的碰撞声')
   await page.reload()
   await assertClean()
+  }
   await page.reload();await openCanvasCard(page,'continuity');await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
   await page.screenshot({path:join(output,'sound-constraints-mobile.png'),fullPage:true})
@@ -120,5 +153,5 @@ try {
   }
   assert.equal((await read()).revision,revision)
   await observer.close()
-  console.log('Eight sound/constraint cards: entry modes, preset application, references, version and mobile passed:',output)
+  console.log('Nine sound/constraint/rule cards: entry modes, preset application, references, version and mobile passed:',output)
 } finally { await cleanup() }

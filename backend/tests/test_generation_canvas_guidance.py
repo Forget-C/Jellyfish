@@ -77,7 +77,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'image', 'video'])
-@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'object-situation', 'object-performance', 'object-activity', 'object-sound'])
+@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'object-situation', 'object-performance', 'object-activity', 'object-sound', 'object-camera', 'object-lighting', 'object-focus', 'object-composition', 'object-movement', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule'])
 async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_connection(runtime, image_storage, monkeypatch, modality, legacy_conflict):
     import asyncio
     import json
@@ -126,6 +126,8 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
                 private['document']['cards'].append({'id': 'old-design', 'type': 'direction.' + legacy_conflict.removeprefix('object-'), 'input_bindings': [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]})
             elif legacy_conflict == 'object':
                 private['document']['cards'][0]['input_bindings'] = [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]
+            elif isinstance(legacy_conflict, str) and legacy_conflict.startswith('direction.'):
+                private['document']['cards'].append({'id': 'old-requirement', 'type': legacy_conflict, 'input_bindings': [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]})
             else:
                 private['document']['edges'].append({'id': 'old-text', 'source_card': 'criterion', 'source_port': 'text', 'target_card': 'shot', 'target_port': 'text'})
                 private['document']['input_order']['shot']['text'] = ['old-text']
@@ -173,6 +175,8 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
         assert state['runs'][0]['nodes'][0]['status'] == 'failed'
         assert state['runs'][0]['nodes'][0]['error_code'] == 'LEGACY_ACCEPTANCE_SNAPSHOT'
         assert '重新提交' in state['runs'][0]['nodes'][0]['error_message']
+        if isinstance(legacy_conflict, str) and legacy_conflict.startswith('direction.'):
+            assert '通用对象用途' in state['runs'][0]['nodes'][0]['error_message']
         assert state['runs'][0]['nodes'][0]['basis']['input']['text'] == preview['input']['text']
         return
     assert received == [preview['input']['text']]
@@ -184,7 +188,7 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
     assert (await runtime.client.get(runtime.url)).json()['data']['document']['cards'][0]['standard']['state'] == 'fact'
 
 @pytest.mark.asyncio
-async def test_guidance_effects_accept_declared_story_and_spatial_identity_only(canvas_client):
+async def test_old_guidance_objects_become_story_and_spatial_candidates_without_adoption(canvas_client):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '作用范围'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
@@ -198,8 +202,11 @@ async def test_guidance_effects_accept_declared_story_and_spatial_identity_only(
     response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     output = (await canvas_client.get(url + '/cards/guidance/outputs')).json()['data']['outputs'][0]
-    assert '钟响' in output['text'] and '门口' in output['text'] and '不可跨级' not in output['text']
-    assert len(output['payload']['references']) == 2
+    assert output['text'] == '名称：要求'
+    assert output['payload'].get('references', []) == []
+    reopened = (await canvas_client.get(url)).json()['data']['document']
+    assert reopened['cards'][2]['input_bindings'] == []
+    assert all(edge['target_port'] != 'effect_object' for edge in reopened['edges'])
 
 @pytest.mark.asyncio
 async def test_acceptance_examples_stay_fixed_and_require_cleanup_before_source_delete(canvas_client):
@@ -420,12 +427,12 @@ async def test_unavailable_asset_identity_in_design_dependency_blocks_compile(ca
     source = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'position': 0, 'object_id': 'actor'}
     doc = canvas['document']
     doc.update(cards=[{'id': 'actor', 'type': 'reference.character', 'name': '甲', 'object_id': 'actor'},
-        {'id': 'camera', 'type': 'direction.camera', 'fields': {'viewpoint': {'state': 'fact', 'text': '低角度'}},
-         'input_bindings': [{'id': 'actor-use', 'input_port': 'effect_object', 'source': source}]},
+        {'id': 'camera', 'type': 'direction.focus', 'fields': {'depth_focus': {'state': 'fact', 'text': '低角度'}},
+         'input_bindings': [{'id': 'actor-use', 'input_port': 'focus_object', 'source': source}]},
         {'id': 'model', 'type': 'model.text'}],
-        edges=[{'id': 'actor-use', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'camera', 'target_port': 'effect_object'},
+        edges=[{'id': 'actor-use', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'camera', 'target_port': 'focus_object'},
             {'id': 'camera-use', 'source_card': 'camera', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
-        input_order={'camera': {'effect_object': ['actor-use']}, 'model': {'text': ['camera-use']}})
+        input_order={'camera': {'focus_object': ['actor-use']}, 'model': {'text': ['camera-use']}})
     assert (await canvas_client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
     doc['cards'][0]['name'] = ''
     saved = await canvas_client.put(url, json={'request_id': 'incomplete', 'expected_revision': 1, 'document': doc})
@@ -599,14 +606,15 @@ async def test_acceptance_cleanup_preserves_invalid_input_validation(canvas_clie
     assert response.status_code == 422, response.text
 
 @pytest.mark.asyncio
-async def test_criterion_retires_generic_objects_without_losing_field_candidates(canvas_client):
+@pytest.mark.parametrize('kind,field', [('criterion', 'standard'), ('creative_control', 'keep'), ('guidance', 'prohibitions'), ('fact', 'fact'), ('performance_rule', 'applicability')])
+async def test_requirements_retire_generic_objects_without_losing_field_candidates(canvas_client, kind, field):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '标准引用'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     source = {'canvas_id': canvas['id'], 'card_id': 'prop', 'port_id': 'text', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[{'id': 'prop', 'type': 'content.prop', 'object_id': 'key', 'name': '钥匙', 'text': '完整钥匙说明'},
-        {'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'visible', 'name': '钥匙可见',
-         'standard': {'state': 'fact', 'text': '钥匙清晰可见'},
+        {'id': 'criterion', 'type': 'direction.' + kind, **({'criterion_id': 'visible', 'name': '钥匙可见'} if kind == 'criterion' else {'name': '钥匙可见'} if kind in ('creative_control', 'guidance') else {}),
+         field: {'state': 'fact', 'text': '钥匙清晰可见'},
          'input_bindings': [{'id': 'old', 'input_port': 'effect_object', 'source': {**source, 'port_id': 'object', 'object_id': 'key'}}]}],
         edges=[{'id': 'old', 'source_card': 'prop', 'source_port': 'object', 'target_card': 'criterion', 'target_port': 'effect_object'}],
         input_order={'criterion': {'effect_object': ['old']}})
@@ -615,13 +623,13 @@ async def test_criterion_retires_generic_objects_without_losing_field_candidates
     reopened = (await canvas_client.get(url)).json()['data']
     criterion = reopened['document']['cards'][1]
     assert criterion['input_bindings'] == []
-    assert criterion['standard']['text'] == '钥匙清晰可见'
+    assert criterion[field]['text'] == '钥匙清晰可见'
     assert reopened['document']['edges'] == [{'id': 'old', 'source_card': 'prop', 'source_port': 'text', 'target_card': 'criterion', 'target_port': 'text'}]
     assert reopened['document']['input_order']['criterion']['text'] == ['old']
     outputs = (await canvas_client.get(url + '/cards/criterion/outputs')).json()['data']['outputs']
     assert '完整钥匙说明' not in outputs[0]['text']
     assert '作用对象' not in outputs[0]['text']
-    criterion['standard'] = {'state': 'fact', 'text': '@引用必须可见', 'document': {'segments': [
+    criterion[field] = {'state': 'fact', 'text': '@引用必须可见', 'document': {'segments': [
         {'id': 'reference', 'kind': 'reference', 'source': source}, {'id': 'text', 'kind': 'text', 'text': '必须可见'}]}}
     response = await canvas_client.put(url, json={'request_id': 'reference', 'expected_revision': reopened['revision'], 'document': reopened['document']})
     assert response.status_code == 200, response.text
@@ -629,7 +637,8 @@ async def test_criterion_retires_generic_objects_without_losing_field_candidates
     assert '完整钥匙说明' in outputs[0]['text']
 
 @pytest.mark.asyncio
-async def test_old_criterion_object_cleanup_is_idempotent_and_preserves_other_uses(canvas_client, canvas_file_store):
+@pytest.mark.parametrize('kind,field', [('criterion', 'standard'), ('creative_control', 'keep'), ('guidance', 'prohibitions'), ('fact', 'fact'), ('performance_rule', 'applicability')])
+async def test_old_requirement_object_cleanup_is_idempotent_and_preserves_other_uses(canvas_client, canvas_file_store, kind, field):
     from app.models.generation_canvas import GenerationCanvas
     canvas = (await canvas_client.post('/canvases/p', json={'name': '旧对象关系'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -637,10 +646,10 @@ async def test_old_criterion_object_cleanup_is_idempotent_and_preserves_other_us
     edge = lambda ident, target, source_port, target_port: {'id': ident, 'source_card': 'prop', 'source_port': source_port, 'target_card': target, 'target_port': target_port}
     doc = canvas['document']
     doc.update(cards=[{'id': 'prop', 'type': 'content.prop', 'object_id': 'key', 'name': '钥匙', 'text': '参考正文'},
-        {'id': 'criterion', 'type': 'direction.criterion', 'name': '清晰可见', 'criterion_id': 'visible', 'standard': {'text': '钥匙可见', 'authorship': 'user'}, 'input_bindings': [{'id': 'old', 'input_port': 'effect_object', 'source': source}]},
-        {'id': 'guidance', 'type': 'direction.guidance', 'name': '保持形状', 'input_bindings': [{'id': 'keep', 'input_port': 'effect_object', 'source': source}]}],
-        edges=[edge('old', 'criterion', 'object', 'effect_object'), edge('existing', 'criterion', 'text', 'text'), edge('keep', 'guidance', 'object', 'effect_object')],
-        input_order={'criterion': {'effect_object': ['old'], 'text': ['existing']}, 'guidance': {'effect_object': ['keep']}})
+        {'id': 'criterion', 'type': 'direction.' + kind, **({'name': '清晰可见', 'criterion_id': 'visible'} if kind == 'criterion' else {'name': '清晰可见'} if kind in ('creative_control', 'guidance') else {}), field: {'text': '钥匙可见', 'authorship': 'user'}, 'input_bindings': [{'id': 'old', 'input_port': 'effect_object', 'source': source}]},
+        {'id': 'guidance', 'type': 'direction.focus', 'input_bindings': [{'id': 'keep', 'input_port': 'attention_object', 'source': source}]}],
+        edges=[edge('old', 'criterion', 'object', 'effect_object'), edge('existing', 'criterion', 'text', 'text'), edge('keep', 'guidance', 'object', 'attention_object')],
+        input_order={'criterion': {'effect_object': ['old'], 'text': ['existing']}, 'guidance': {'attention_object': ['keep']}})
     async with canvas_file_store['sessions'].begin() as db:
         row = await db.get(GenerationCanvas, canvas['id'])
         row.document = doc
@@ -649,14 +658,15 @@ async def test_old_criterion_object_cleanup_is_idempotent_and_preserves_other_us
     assert first == second
     assert first['revision'] == 1
     assert first['document']['cards'][1]['input_bindings'] == []
-    assert first['document']['cards'][1]['standard']['text'] == '钥匙可见'
-    assert first['document']['cards'][1]['standard']['authorship'] == 'user'
+    assert first['document']['cards'][1][field]['text'] == '钥匙可见'
+    assert first['document']['cards'][1][field]['authorship'] == 'user'
     assert first['document']['cards'][2]['input_bindings'][0]['source'] == source
-    assert first['document']['cards'][2]['input_bindings'][0]['input_port'] == 'effect_object'
+    assert first['document']['cards'][2]['input_bindings'][0]['input_port'] == 'attention_object'
     assert [row['id'] for row in first['document']['edges']] == ['existing', 'keep']
-    assert first['document']['input_order'] == {'criterion': {'text': ['existing']}, 'guidance': {'effect_object': ['keep']}}
+    assert first['document']['input_order'] == {'criterion': {'text': ['existing']}, 'guidance': {'attention_object': ['keep']}}
     stale = await canvas_client.put(url, json={'request_id': 'stale', 'expected_revision': 0, 'document': doc})
     assert stale.status_code == 409
     catalog = (await canvas_client.get(url + '/catalog')).json()['data']['cards']
     assert 'effect_object' not in [port['id'] for card in catalog if card['type'] == 'direction.criterion' for port in card['inputs']]
-    assert 'effect_object' in [port['id'] for card in catalog if card['type'] == 'direction.guidance' for port in card['inputs']]
+    assert 'effect_object' not in [port['id'] for card in catalog if card['type'] == 'direction.' + kind for port in card['inputs']]
+    assert 'attention_object' in [port['id'] for card in catalog if card['type'] == 'direction.focus' for port in card['inputs']]

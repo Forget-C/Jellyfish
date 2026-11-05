@@ -410,7 +410,7 @@ class PerformanceRuleCard(PerformanceDirectionCard):
     """规则保留背景或约束用途、适用范围和必要制作阶段。"""
     type: Literal['direction.performance_rule'] = Field(default='direction.performance_rule', json_schema_extra={'enum': ['direction.performance_rule']})
     applicability: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
-    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'effect_object', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'image_example', 'video_example')
 
 
 class GuidanceDirectionCard(PerformanceDirectionCard):
@@ -427,7 +427,7 @@ class CreativeControlCard(GuidanceDirectionCard):
     keep: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     undecided: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(state='undecided'))
 
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example', 'text', 'image', 'video', 'anchor')
 
 
 class GenerationGuidanceCard(GuidanceDirectionCard):
@@ -438,7 +438,7 @@ class GenerationGuidanceCard(GuidanceDirectionCard):
     sound_strategy: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     prohibitions: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
 
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example', 'text', 'image', 'video', 'anchor')
 
 
 class AcceptanceCriterionCard(GuidanceDirectionCard):
@@ -481,7 +481,7 @@ class SpatialAnchorCard(SpatialDirectionCard):
     orientation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     spatial_relation: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     scale: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'space', 'effect_object', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor', 'space', 'image_example', 'video_example')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'anchor')
 
 
@@ -565,7 +565,7 @@ class CameraCard(PerformanceDirectionCard):
     type: Literal['direction.camera'] = Field(default='direction.camera', json_schema_extra={'enum': ['direction.camera']})
     fields: CameraDesignFields = Field(default_factory=CameraDesignFields)
     examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
+    input_ports: ClassVar[tuple[str, ...]] = ('shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
 
 
 class LightingCard(PerformanceDirectionCard):
@@ -573,7 +573,7 @@ class LightingCard(PerformanceDirectionCard):
     type: Literal['direction.lighting'] = Field(default='direction.lighting', json_schema_extra={'enum': ['direction.lighting']})
     fields: LightingDesignFields = Field(default_factory=LightingDesignFields)
     examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
+    input_ports: ClassVar[tuple[str, ...]] = ('shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
 
 
 class FocusCard(PerformanceDirectionCard):
@@ -581,20 +581,20 @@ class FocusCard(PerformanceDirectionCard):
     type: Literal['direction.focus'] = Field(default='direction.focus', json_schema_extra={'enum': ['direction.focus']})
     fields: FocusDesignFields = Field(default_factory=FocusDesignFields)
     examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'focus_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
+    input_ports: ClassVar[tuple[str, ...]] = ('attention_object', 'focus_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
 
 class CompositionCard(PerformanceDirectionCard):
     """独立景别与构图，仅整卡采用。"""
     type: Literal['direction.composition'] = Field(default='direction.composition', json_schema_extra={'enum': ['direction.composition']})
     fields: CompositionDesignFields = Field(default_factory=CompositionDesignFields)
     frame_target: DesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
+    input_ports: ClassVar[tuple[str, ...]] = ('shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
 class MovementCard(PerformanceDirectionCard):
     """独立运镜及稳定阶段，只有整卡设计出口。"""
     type: Literal['direction.movement'] = Field(default='direction.movement', json_schema_extra={'enum': ['direction.movement']})
     fields: MovementDesignFields = Field(default_factory=MovementDesignFields)
     phases: list[MovementPhase] = Field(default_factory=list)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
+    input_ports: ClassVar[tuple[str, ...]] = ('attention_object', 'shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
 
     @model_validator(mode='after')
     def validate_phase_ids(self):
@@ -617,7 +617,7 @@ class NarrativeOverviewCard(NarrativeDirectionCard):
     relationship_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     turning_point: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     open_questions: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor')
 
 
 class NarrativeBeatCard(NarrativeDirectionCard):
@@ -637,7 +637,7 @@ class NarrativeEventCard(NarrativeDirectionCard):
     type: Literal['direction.event'] = Field(default='direction.event', json_schema_extra={'enum': ['direction.event']})
     event_id: str | None = Field(default=None, min_length=1, max_length=64)
     action_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'anchor')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'event')
 
 
@@ -670,7 +670,7 @@ class SpaceRuleCard(ConstraintDirectionCard):
     shootable_area: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     axis: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     scale: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
-    input_ports: ClassVar[tuple[str, ...]] = ('space', 'effect_object', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('space', 'image_example', 'video_example', 'text', 'image', 'video', 'anchor')
 
 
 class ContinuityCard(ConstraintDirectionCard):
@@ -689,7 +689,7 @@ class ImmutableFactCard(ConstraintDirectionCard):
     type: Literal['direction.fact'] = Field(default='direction.fact', json_schema_extra={'enum': ['direction.fact']})
     fact: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     source_basis: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='background'))
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example', 'audio_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example', 'audio_example', 'text', 'image', 'video', 'anchor')
 
 
 class CanvasDocument(BaseModel):
