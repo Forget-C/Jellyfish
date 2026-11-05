@@ -14,7 +14,7 @@ FIELD_LABELS = {'position': '位置', 'orientation': '方位与朝向', 'spatial
 
 
 def publish_spatial(canvas_id, card, adopted_inputs):
-    """稳定引用独立于完整设计；不把位置锚点全文隐式传递。"""
+    """稳定引用独立于完整设计；明确采用的锚点正文由模型编译闭包传递。"""
     field_type = {'direction.anchor': AnchorDesignFields, 'direction.blocking': BlockingDesignFields, 'direction.activity': ActivityDesignFields, 'direction.environment': EnvironmentDesignFields}[card.type]
     fields = field_type(**{key: getattr(card, key) for key in field_type.model_fields})
     objects = [item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available]

@@ -1,7 +1,7 @@
 # 01: 验收卡改用完整来源引用
 
 Status: ready-for-agent
-Completion: completed
+Completion: integrated
 Blocked by: None
 
 **What to build:** 用户通过标准正文表达验收期望，需要稳定来源时直接引用完整内容，不再选择独立“作用对象”。验收要求仍可直接被模型采用，也可随受支持的设计采用；旧画布可以安全重开，历史运行依据保持原样。
@@ -48,3 +48,5 @@ Blocked by: None
 - 前端 typecheck 通过、lint 存量274项且0新增；后端应用 Pylint 通过。当前工作树生产 OpenAPI 与已提交schema解析后完全等价，以当前导出生成的客户端与既有内容完全等价（忽略纯尾空白）；主区8000并非本工作树，标准 openapi:update 留待集成后确认主进程已加载改动再执行，避免从旧进程覆盖。
 - 未进行付费供应商调用；实际供应商质量不由受控替身验证代表。
 - 合入票据07候选展示后再次 typecheck 通过，真实 Chrome guidance **PASS 24.0s**（browser-LVLIn3）；前端完整 unit 退出0。既有整体验证日志保留于本机临时目录 jellyfish-ref01-*，未将临时截图或日志提交到业务目录。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

@@ -51,9 +51,7 @@ try {
   await page.goto(`http://127.0.0.1:4667/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.locator('[data-card-id="image"]').press('Enter')
   await openModelInspection(page)
-  const detail=page.locator('.wb-details:not([hidden])')
-  assert.equal((await compiled()).media.length,0)
-  await detail.getByRole('button',{name:'采用 @文本1',exact:true}).click()
+  // A sole independent design connection is adopted immediately.
   await poll(state=>state.document.cards.find(c=>c.id==='image').input_bindings?.length===1)
   await page.getByRole('region',{name:'随设计携带的素材',exact:true}).waitFor()
   assert.equal((await compiled()).media.length,1)

@@ -1,7 +1,7 @@
 # 02: 简化四类通用要求卡
 
 Status: ready-for-agent
-Completion: completed
+Completion: integrated
 Blocked by: 01
 
 **What to build:** 创作控制、生成指导、不可改事实和表演规则通过各自正文与完整来源引用表达涉及对象，去掉重复的对象采用步骤；用户重开旧数据时，仍能使用原有文字、合法候选和其他有效关系。
@@ -46,3 +46,5 @@ Blocked by: 01
 - 当前工作树生产OpenAPI与已提交schema完全等价（输入端点为动态目录ClassVar，不改变schema字段）；目录行为由HTTP覆盖。主区确认当前后端后执行标准openapi:update由集成流程完成，不用其他工作树或旧进程覆盖生成客户端。
 - 已同步集成分支（包含03），保留双方类型集合、快照用例及文档。原规格未修改；验证使用现有受控供应商边界，没有付费生成或真实质量结论。
 - 合入03后的最终Chrome九类组合 **PASS 31.7s**（browser-jaQP6u），验证代码为同步后最终状态；没有新增必要检查遗漏。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

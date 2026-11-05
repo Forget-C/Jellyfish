@@ -19,18 +19,18 @@ async def test_reference_aware_frame_target_is_available(canvas_client):
     assert 'DESIGN_FRAME_TARGET_MISSING' not in {x['code'] for x in compiled['diagnostics']}
 
 @pytest.mark.asyncio
-async def test_composition_keeps_declared_object_relationship(canvas_client):
+async def test_composition_uses_explicit_whole_description_reference(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': 'review'})).json()['data']
     url = '/canvases/p/' + canvas['id']
     doc = canvas['document']
-    source = {'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'object', 'position': 0, 'object_id': 'person-id'}
-    doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'person-id', 'name': '张三', 'text': '人物'}, {'id': 'composition', 'type': 'direction.composition', 'fields': {'composition': {'state': 'proposal', 'text': '左侧构图'}}, 'input_bindings': [{'id': 'obj', 'input_port': 'effect_object', 'source': source}]}], edges=[{'id': 'obj', 'source_card': 'person', 'source_port': 'object', 'target_card': 'composition', 'target_port': 'effect_object'}], input_order={'composition': {'effect_object': ['obj']}})
+    source = {'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'text', 'position': 0}
+    doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'person-id', 'name': '张三', 'text': '人物'}, {'id': 'composition', 'type': 'direction.composition', 'fields': {'composition': {'state': 'proposal', 'text': '@引用左侧构图', 'document': {'segments': [{'id': 'person', 'kind': 'reference', 'source': source}, {'id': 'text', 'kind': 'text', 'text': '左侧构图'}]}}}}], edges=[{'id': 'obj', 'source_card': 'person', 'source_port': 'text', 'target_card': 'composition', 'target_port': 'text'}], input_order={'composition': {'text': ['obj']}})
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 200, saved.text
     payload = (await client.get(url + '/cards/composition/outputs')).json()['data']['outputs'][0]['payload']
-    print('composition object relation:', payload)
-    assert payload['objects'] and payload['objects'][0]['name'] == '张三'
+    assert '人物' in payload['text'] and '左侧构图' in payload['text']
+    assert payload['fields']['composition']['document']['segments'][0]['source'] == source
 
 @pytest.mark.asyncio
 async def test_target_document_change_invalidates_actual_basis(runtime, image_storage):

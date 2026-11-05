@@ -1,4 +1,4 @@
-"""独立表演卡输出与直接关系校验，不读取祖先设计或运行模型。"""
+"""独立表演卡发布自身字段与直接关系；完整明确依赖由模型编译闭包传递。"""
 from app.core.contracts.generation_canvas import DialogueReferencePayload, CriterionReferencePayload, FrameState, DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, GuidanceDirectionCard, ConstraintDirectionCard
 from app.services.generation_canvas.errors import diagnostic
