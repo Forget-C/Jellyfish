@@ -41,6 +41,10 @@ try {
     const fields = Object.fromEntries(definition.fields.map((field, index) => [field.id, index === 0 ? { text: '模型提取的设计参数', state: 'proposal', purpose: 'background', source_locator: '模型提取定位', authorship: 'model' } : { text: '自行填写的设计参数', state: 'fact', purpose: 'design', authorship: 'user' }]))
     return { id, type: definition.type, source_locator: '卡片原始定位', ...(id === 'movement' ? { phases: [{ id: 'focus-phase', name: '中间阶段', frame: { text: '阶段画面' } }] } : {}), ...(id === 'dialogue' ? { dialogue_id: 'audit-dialogue' } : {}), ...(visual.has(id) ? { fields } : fields) }
   }) }
+  const ordinaryAnchorTargets = new Set(['anchor', 'blocking', 'activity', 'beat', 'shot', 'space_rule', 'continuity'])
+  document.cards.push({ id: 'candidate-anchor', type: 'direction.anchor', anchor_id: 'candidate', name: '普通候选锚点', position: { text: '窗边', authorship: 'user' } })
+  document.edges = [...ordinaryAnchorTargets].map(id => ({ id: `candidate-${id}`, source_card: 'candidate-anchor', source_port: 'anchor', target_card: id, target_port: 'anchor' }))
+  document.input_order = Object.fromEntries([...ordinaryAnchorTargets].map(id => [id, { anchor: [`candidate-${id}`] }]))
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4694/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -83,6 +87,10 @@ try {
     const detail = await openCanvasCard(page, id)
     assert.equal(await detail.getByText('revision 1', { exact: true }).count(), 1, `${id}: saved canvas revision in footer`)
     assert.equal(await detail.locator('summary').filter({ hasText: '查看已保存完整' }).count(), 0, `${id}: no redundant output preview`)
+    if (ordinaryAnchorTargets.has(id)) await detail.locator('[data-design-source]').first().waitFor()
+    assert.equal(await detail.getByRole('region', { name: '被使用记录', exact: true }).count(), 0)
+    if (!ordinaryAnchorTargets.has(id) || id === 'anchor') for (const heading of ['对象关系', '直接对象与空间关系', '直接关系候选与已采用']) await detail.getByRole('heading', { name: heading, exact: true }).waitFor({ state: 'detached' })
+    for (const row of await detail.locator('.design-preset-relations section > div:has(> span)').all()) assert.ok(await row.getByRole('button').count() || await row.getByRole('alert').count(), `${id}: relation names have operations or warnings`)
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
     if (await advanced.count()) await advanced.click()
     assert.equal(await detail.locator('summary').filter({ hasText: /正向示例与反例|固定证据与前后态素材|参考素材与图片标记|直接素材参考/ }).count(), retainedExamples.has(id) ? 1 : 0, `${id}: only retained cards expose local references`)

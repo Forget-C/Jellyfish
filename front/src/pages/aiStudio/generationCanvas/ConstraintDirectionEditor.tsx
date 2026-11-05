@@ -32,14 +32,19 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
   const bindings = card.input_bindings || []
   const keys = (card.type === 'direction.space_rule' ? ['spatial_basis', 'shootable_area', 'axis', 'scale'] : card.type === 'direction.continuity' ? ['before', 'change', 'after', 'following_constraints'] : ['fact', 'source_basis']) as (keyof typeof labels)[]
   const fields = Object.fromEntries(designFieldEntries(card))
-  const relations = <details><summary>对象与制作关系</summary>    <section aria-label="约束关系"><h3>直接关系候选与已采用</h3>{resolved.candidates.map(item => {
-      const payload = item.payload
-      if (!payload || !('name' in payload)) return null
-      return <div key={sourceKey(item.source)}><span>{payload.name}</span>{inputPorts(card).filter(port => eligible(port, item) && document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)).map(port => {
-        const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
-        return <WorkbenchButton key={port} disabled={disabled || !item.available} onClick={() => onChange({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
-      })}</div>
-    })}{bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source))).map(binding => <div key={binding.id}><span role="alert">已选关系失效</span><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}</section>    {card.type === 'direction.continuity' && <Select aria-label="连续性分类" value={card.category || 'space'} options={categoryOptions} onChange={category => onChange({ ...card, category })} />}</details>
+  const missingBindings = bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source)))
+  const relationRows = resolved.candidates.map(item => {
+    const payload = item.payload
+    if (!payload || !('name' in payload)) return null
+    const ports = inputPorts(card).filter(port => eligible(port, item) && document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id))
+    if (!ports.length) return null
+    return <div key={sourceKey(item.source)}><span>{payload.name}</span>{ports.map(port => {
+      const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
+      return <WorkbenchButton key={port} disabled={disabled || !item.available} onClick={() => onChange({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
+    })}</div>
+  }).filter(Boolean)
+  const hasRelations = relationRows.length > 0 || missingBindings.length > 0
+  const relations = (hasRelations || card.type === 'direction.continuity') && <details><summary>对象与制作关系</summary>    {hasRelations && <section aria-label="约束关系"><h3>直接关系候选与已采用</h3>{relationRows}{missingBindings.map(binding => <div key={binding.id}><span role="alert">已选关系失效</span><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}</section>}    {card.type === 'direction.continuity' && <Select aria-label="连续性分类" value={card.category || 'space'} options={categoryOptions} onChange={category => onChange({ ...card, category })} />}</details>
   return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.fact'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={card.type === 'direction.fact' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 

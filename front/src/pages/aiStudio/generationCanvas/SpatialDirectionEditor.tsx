@@ -73,25 +73,28 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
   const update = (next: SpatialCard) => onChange(next)
   const fields = Object.fromEntries(designFieldEntries(card))
   const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
+  const missingBindings = bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source)))
+  const relationRows = resolved.candidates.map(item => {
+    const rawPayload = item.payload
+    if (rawPayload?.kind !== 'object_reference' && rawPayload?.kind !== 'spatial_reference' && rawPayload?.kind !== 'narrative_reference') return null
+    const payload = rawPayload as ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
+    const ports = inputPorts(card).filter(port => ['space', 'participant', 'effect_object', 'position_anchor', 'area_anchor', 'change_event', 'trigger_event'].includes(port)).filter(port => document.edges?.some(edge => edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && edge.target_card === card.id && edge.target_port === port)).filter(port => (port !== 'participant' || payload.kind === 'object_reference' && payload.category !== 'place') && (port !== 'space' || payload.kind === 'object_reference' && payload.category === 'place'))
+    if (!ports.length) return null
+    return <div key={sourceKey(item.source)}><span>{payload.name}</span>{ports.map(port => {
+      const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
+      const single = ['participant', 'space', 'area_anchor', 'change_event', 'trigger_event'].includes(port)
+      return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
+    })}</div>
+  }).filter(Boolean)
+  const hasRelations = relationRows.length > 0 || missingBindings.length > 0
   const relations = <>
     {(card.type === 'direction.anchor' || card.type === 'direction.blocking') && <DesignNameField label={card.type === 'direction.anchor' ? '锚点名称' : '调度名称'} placeholder={card.type === 'direction.anchor' ? '例如：窗边桌角' : '例如：从门口走向窗边'} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />}
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
-    <section aria-label="空间关系"><h3>直接对象与空间关系</h3>
-      {resolved.candidates.map(item => {
-        const rawPayload = item.payload
-        if (rawPayload?.kind !== 'object_reference' && rawPayload?.kind !== 'spatial_reference' && rawPayload?.kind !== 'narrative_reference') return null
-        const payload = rawPayload as ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
-        return <div key={sourceKey(item.source)}><span>{payload.name}</span>{inputPorts(card).filter(port => ['space', 'participant', 'effect_object', 'position_anchor', 'area_anchor', 'change_event', 'trigger_event'].includes(port)).filter(port => document.edges?.some(edge => edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && edge.target_card === card.id && edge.target_port === port)).map(port => {
-          if (port === 'participant' && (payload.kind !== 'object_reference' || payload.category === 'place')) return null
-          if (port === 'space' && (payload.kind !== 'object_reference' || payload.category !== 'place')) return null
-          const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
-          const single = ['participant', 'space', 'area_anchor', 'change_event', 'trigger_event'].includes(port)
-          return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
-        })}</div>
-      })}
-      {bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source))).map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
-    </section>
+    {hasRelations && <section aria-label="空间关系"><h3>直接对象与空间关系</h3>
+      {relationRows}
+      {missingBindings.map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
+    </section>}
   </>
   return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} direct={card.type === 'direction.anchor'} relations={card.type === 'direction.environment' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as SpatialCard)}>
     <div className={card.type === 'direction.anchor' ? 'design-anchor-layout' : undefined}><div>

@@ -55,26 +55,28 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   const update = (next: PerformanceCard) => onChange(next)
   const fields = Object.fromEntries(designFieldEntries(card))
   const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
+  const missingBindings = bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source)))
+  const relationRows = resolved.candidates.filter(item => item.payload?.kind === 'object_reference' || item.payload?.kind === 'narrative_reference').map(item => {
+    const object = item.payload as ObjectReferencePayload | NarrativeReferencePayload
+    if (object.kind !== 'object_reference' && object.kind !== 'narrative_reference') return null
+    const ports = inputPorts(card).filter(port => ['participant', 'effect_object', 'beat', 'received_event'].includes(port)).filter(port => port !== 'participant' || card.type !== 'direction.performance_rule' && object.kind === 'object_reference' && ['character', 'prop', 'costume'].includes(object.category)).filter(port => document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id))
+    if (!ports.length) return null
+    return <div key={sourceKey(item.source)}><span>{object.name} · {{ character: '人物', prop: '物件', costume: '服装', place: '场所', beat: '节拍', event: '事件', shot: '镜头' }[object.category]}</span>{ports.map(port => {
+      const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
+      const label = portLabels[port]
+      const single = port === 'participant' || port === 'beat'
+      return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port && value.source.object_id !== item.source.object_id)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
+    })}</div>
+  }).filter(Boolean)
+  const hasRelations = relationRows.length > 0 || missingBindings.length > 0
   const relations = <>
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
-    {card.type !== 'direction.performance_rule' && <section aria-label="对象关系"><h3>对象关系</h3>
-      {resolved.candidates.filter(item => item.payload?.kind === 'object_reference' || item.payload?.kind === 'narrative_reference').map(item => {
-        const object = item.payload as ObjectReferencePayload | NarrativeReferencePayload
-        if (object.kind !== 'object_reference' && object.kind !== 'narrative_reference') return null
-        return <div key={sourceKey(item.source)}><span>{object.name} · {{ character: '人物', prop: '物件', costume: '服装', place: '场所', beat: '节拍', event: '事件', shot: '镜头' }[object.category]}</span>{inputPorts(card).filter(port => ['participant', 'effect_object', 'beat', 'received_event'].includes(port)).map(port => {
-          if (port === 'participant' && (card.type === 'direction.performance_rule' || object.kind !== 'object_reference' || !['character', 'prop', 'costume'].includes(object.category))) return null
-          if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null
-          const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
-          const label = portLabels[port]
-          const single = port === 'participant' || port === 'beat'
-          return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port && value.source.object_id !== item.source.object_id)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
-        })}</div>
-      })}
-      {!bindings.length && <small>尚未选择对象</small>}
-      {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失，请替换或取消</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
+    {card.type !== 'direction.performance_rule' && hasRelations && <section aria-label="对象关系"><h3>对象关系</h3>
+      {relationRows}
+      {missingBindings.map(binding => <div key={binding.id}><small role="alert">已采用对象缺失，请替换或取消</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
     </section>}
-    {card.type === 'direction.performance' && <section aria-label="对白依据"><h3>对白依据</h3>{resolved.candidates.filter(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'dialogue_reference').map(item => {
+    {card.type === 'direction.performance' && resolved.candidates.some(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'dialogue_reference') && <section aria-label="对白依据"><h3>对白依据</h3>{resolved.candidates.filter(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'dialogue_reference').map(item => {
       const binding = bindings.find(value => value.input_port === 'dialogue_basis' && sourceKey(value.source) === sourceKey(item.source))
       const payload = item.payload as DialogueReferencePayload
       return <div key={sourceKey(item.source)}><WorkbenchButton title={payload.dialogue_id} disabled={disabled || !item.available} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'dialogue_basis' }] })}>{`${binding ? '取消' : '采用'}对白 ${payload.dialogue_id.slice(0, 8)} · 版本 ${payload?.version}`}</WorkbenchButton><p>说话对象：{payload.speaker?.name || '待确定'}</p></div>

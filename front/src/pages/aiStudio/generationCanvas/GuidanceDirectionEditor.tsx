@@ -14,14 +14,13 @@ import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignRefere
 
 export type GuidanceCard = AcceptanceCriterionCard | CreativeControlCard | GenerationGuidanceCard
 
-/** 要求正文与只读使用记录分别展示，素材复用统一候选区。 */
+/** 要求正文直接编辑，素材复用统一候选区。 */
 export function GuidanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign, requirementNameValidationRequested }: CardRendererProps) {
-  const { cardDefinitions, cardTitles } = useGraphRules()
+  const { cardDefinitions } = useGraphRules()
   const card = raw as GuidanceCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const nameInvalid = card.type === 'direction.criterion' && !!requirementNameValidationRequested && !card.name?.trim()
   const field = (key: string, label: string, purpose: DesignField['purpose'] = 'design') => <DesignFieldEditor compact key={key} label={label} purpose={purpose} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />
-  const users = document.cards?.filter(consumer => 'input_bindings' in consumer && consumer.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && binding.source.card_id === card.id && binding.source.port_id === 'criterion')) || []
   const fields = Object.fromEntries(designFieldEntries(card))
   const nameLabel = card.type === 'direction.criterion' ? '验收要求名称' : card.type === 'direction.creative_control' ? '创作控制名称' : '生成指导名称'
   const namePlaceholder = card.type === 'direction.criterion' ? '例如：手部与钥匙清晰可见' : card.type === 'direction.creative_control' ? '例如：主角造型保持原则' : '例如：反应镜头生成指导'
@@ -31,7 +30,7 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
 
     {card.type === 'direction.creative_control' && <>{field('freedom', '创作控制程度')}{field('allowed_range', '允许发挥范围')}{field('keep', '需要保持', 'constraint')}{field('undecided', '待确定事项')}</>}
     {card.type === 'direction.guidance' && <>{field('priority', '编译优先级')}{field('reference_requirements', '参考绑定要求')}{field('sound_strategy', '声音策略')}{field('prohibitions', '禁止项', 'constraint')}</>}
-    {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}<section role="region" aria-label="被使用记录"><h3>被使用记录 · 只读</h3>{users.length ? users.map(consumer => <p key={consumer.id}>{'name' in consumer && consumer.name || cardTitles[consumer.type || ''] || consumer.type}</p>) : <small>尚未被采用</small>}</section></>}
+    {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}</>}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
