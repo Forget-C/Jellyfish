@@ -45,6 +45,10 @@ try {
   document.cards.push({ id: 'candidate-anchor', type: 'direction.anchor', anchor_id: 'candidate', name: '普通候选锚点', position: { text: '窗边', authorship: 'user' } })
   document.edges = [...ordinaryAnchorTargets].map(id => ({ id: `candidate-${id}`, source_card: 'candidate-anchor', source_port: 'anchor', target_card: id, target_port: 'anchor' }))
   document.input_order = Object.fromEntries([...ordinaryAnchorTargets].map(id => [id, { anchor: [`candidate-${id}`] }]))
+  const criterion = document.cards.find(card => card.id === 'criterion')
+  criterion.standard.document = { segments: [{ id: 'intro', kind: 'text', text: '参考：' }, { id: 'source', kind: 'reference', source: { canvas_id: canvas.id, card_id: 'candidate-anchor', port_id: 'text', position: 0 } }] }
+  document.edges.push({ id: 'criterion-reference', source_card: 'candidate-anchor', source_port: 'text', target_card: 'criterion', target_port: 'text' })
+  document.input_order.criterion = { text: ['criterion-reference'] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4694/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -77,8 +81,14 @@ try {
         }
         if (sides.length) clipped.push({ ancestor: parent.className, sides, overflow: { top: top - (box.top - outset), bottom: box.bottom + outset - bottom } })
       }
-      return { label: node.getAttribute('aria-label') || node.id, clipped }
+      const root = node.closest('.design-preset-editor')
+      const font = getComputedStyle(node), placeholder = getComputedStyle(node, '::placeholder')
+      return { label: node.getAttribute('aria-label') || node.id, clipped, font: { size: font.fontSize, weight: font.fontWeight, family: font.fontFamily }, family: (() => { const probe = document.createElement('span'); probe.style.fontFamily = root && getComputedStyle(root).getPropertyValue('--design-input-font') || ''; root?.append(probe); const family = getComputedStyle(probe).fontFamily; probe.remove(); return family })(), placeholder: { size: placeholder.fontSize, weight: placeholder.fontWeight } }
     })
+    if (!await control.evaluate(node => !!node.closest('.design-title-row'))) {
+      assert.deepEqual(paint.font, { size: '14px', weight: '400', family: paint.family }, `${kind} ${paint.label}: consistent input typography`)
+      if (await control.evaluate(node => node.matches('input, textarea'))) assert.deepEqual(paint.placeholder, { size: '14px', weight: '400' })
+    }
     checked++
     if (paint.clipped.length) failures.push({ kind, viewport, ...paint })
   }
@@ -96,6 +106,7 @@ try {
     assert.equal(await detail.locator('summary').filter({ hasText: /正向示例与反例|固定证据与前后态素材|参考素材与图片标记|直接素材参考/ }).count(), retainedExamples.has(id) ? 1 : 0, `${id}: only retained cards expose local references`)
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 })
+      for (const token of await detail.locator('.generation-prompt-token').all()) assert.deepEqual(await token.evaluate(node => { const style = getComputedStyle(node); return [style.fontSize, style.fontWeight] }), ['14px', '400'])
       const revision = detail.locator('.design-preset-revision')
       assert.equal(await revision.evaluate(node => { const box = node.getBoundingClientRect(), parent = node.closest('.generation-editor-actions').getBoundingClientRect(); return box.left >= parent.left && box.right <= parent.right && box.top >= parent.top && box.bottom <= parent.bottom }), true, `${id}: footer revision fits ${width}px`)
       const controls = detail.locator('[role="textbox"], input:not([type="hidden"]), textarea')

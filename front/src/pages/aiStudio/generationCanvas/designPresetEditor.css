@@ -45,7 +45,7 @@
 .design-preset-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
 .design-preset-fields > section { min-width: 0; }
 .design-preset-fields > section:last-child:nth-child(odd) { grid-column: 1 / -1; }
-.design-preset-fields section > strong { display: block; color: var(--wb-muted); font-size: 12px; margin-bottom: 8px; font-weight: 400; }
+.design-preset-fields section > strong, .design-preset-advanced [data-design-field="standard"] section > strong { display: block; color: var(--wb-muted); font-size: 12px; margin-bottom: 8px; font-weight: 400; }
 @media (min-width: 701px) and (max-height: 760px) {
   .design-preset-choice svg { height: 92px; }
   .design-preset-preview svg, .design-preset-preview video { max-height: 150px; }
@@ -136,3 +136,10 @@
 
 .design-preset-actions > div:last-child { margin-left: auto; justify-content: flex-end; }
 .design-preset-revision { color: var(--wb-muted); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+/* Input typography is scoped to design editors; titles and reading surfaces retain their hierarchy. */
+.design-preset-editor :is(.generation-prompt-editor, .ant-input, .ant-select, .ant-select-selection-item, .ant-select-selection-placeholder, .ant-input-number, .ant-input-number-input) { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; }
+.design-preset-editor :is(.generation-prompt-editor, textarea.ant-input) { line-height: 1.8; }
+.design-preset-editor .generation-prompt-token { font: inherit; }
+.design-preset-editor :is(.ant-input, .ant-input-number-input)::placeholder { font-family: inherit; font-size: inherit; font-weight: inherit; font-style: normal; color: var(--wb-muted); opacity: 1; }
+.design-preset-editor .ant-select-selection-placeholder, .design-preset-editor .generation-prompt-editor::before { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; font-style: normal; color: var(--wb-muted); }

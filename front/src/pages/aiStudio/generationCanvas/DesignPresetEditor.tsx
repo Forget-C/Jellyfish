@@ -1,9 +1,9 @@
 import { isDesignFieldConfigured } from './designFieldConfiguration'
 import { useGraphRules } from './CanvasCatalogContext'
 import { DesignReferenceContext } from './DesignReferenceEditor'
-import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ConfigProvider } from 'antd'
+import { ConfigProvider, theme } from 'antd'
 import { ArrowLeftOutlined, SettingOutlined, UndoOutlined } from '@ant-design/icons'
 import type { DesignField, ReferenceDesignField } from '../../../services/generated'
 import { CanvasEditorFooter, CanvasEditorHeader } from './CanvasCardEditor'
@@ -24,6 +24,7 @@ const describe = (value?: ReferenceDesignField | null, defaults?: DesignField) =
 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
 export function DesignPresetEditor({ fields, labels, presets, children, candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
+  const { token } = theme.useToken()
   const references = useContext(DesignReferenceContext)
   const { cardDefinitions } = useGraphRules()
   const defaults = Object.fromEntries((references ? cardDefinitions[references.card.type!].fields : []).map(field => [field.id, field.default_value]))
@@ -80,7 +81,7 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
     {references?.savedRevision !== undefined && <small className="design-preset-revision">revision {references.savedRevision}</small>}
     {!advanced && <Button variant="primary" disabled={disabled || !preview || !changes.length} onClick={() => { if (preview && onApply(preview) !== false) setNotice(`已应用「${preview.name}」`) }}>应用</Button>}
   </WorkbenchDialogActions></ConfigProvider>
-  return <div ref={owner} className="design-preset-editor">
+  return <div ref={owner} className="design-preset-editor" style={{ '--design-input-font': token.fontFamily } as CSSProperties}>
     {!direct && (header ? editorOpen && createPortal(mode, header) : mode)}
     {(references || candidates) && <div className="design-preset-candidates">{references ? references.renderCandidates(advanced) : candidates}</div>}
     {relations && <div className="design-preset-relations">{relations}</div>}

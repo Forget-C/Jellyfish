@@ -142,6 +142,10 @@ try {
     assert.equal(await input.count(), 0)
     assert.equal(await detail.getByRole('button', { name: '编辑' + label, exact: true }).count(), 0)
     assert.equal(await detail.locator('.design-title-tools > span').count(), 0, 'readonly hides the action separator')
+    const advanced = detail.getByRole('button', {name:'高级设置',exact:true})
+    if (await advanced.count()) await advanced.click()
+    const fonts = await detail.locator('.design-preset-advanced .generation-prompt-editor, .design-preset-advanced input').evaluateAll(nodes => nodes.map(node => { const style = getComputedStyle(node); return [style.fontSize, style.fontWeight] }))
+    assert.ok(fonts.length && fonts.every(([size, weight]) => size === '14px' && weight === '400'), 'readonly input typography matches editable content')
     await closeCanvasDetails(observer)
   }
   await observer.close()
