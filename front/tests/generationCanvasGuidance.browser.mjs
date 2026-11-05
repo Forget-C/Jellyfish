@@ -169,10 +169,13 @@ try {
   // Restore a pre-upgrade local draft. Cleanup is outside edit history and cannot be undone.
   const baseline = await read(), recovered = structuredClone(baseline.document)
   const oldCriterion = recovered.cards.find(item => item.id === 'blank')
+  oldCriterion.examples = [{ id: 'old-example', file_id: 'obsolete-file', purpose: 'negative' }]
+  recovered.cards.push({ id: 'example-video', type: 'content.video' })
+  recovered.edges.push({ id: 'old-example', source_card: 'example-video', source_port: 'video', target_card: 'blank', target_port: 'video_example' })
   oldCriterion.standard = { text: '恢复的手填标准', authorship: 'user' }
   oldCriterion.input_bindings = [{ id: 'old-object', input_port: 'effect_object', source: { canvas_id: canvas.id, card_id: 'prop', port_id: 'object', object_id: 'key', position: 0 } }]
   recovered.edges.push({ id: 'old-object', source_card: 'prop', source_port: 'object', target_card: 'blank', target_port: 'effect_object' })
-  recovered.input_order.blank = { effect_object: ['old-object'] }
+  recovered.input_order.blank = { effect_object: ['old-object'], video_example: ['old-example'] }
   await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: `jellyfish:generation:canvas-project:${canvas.id}:recovery`, value: { schema: 1, baseline, document: recovered } })
   await page.reload()
   await page.getByRole('button', { name: '恢复本地内容', exact: true }).click()
@@ -180,6 +183,9 @@ try {
   const assertCleaned = async () => {
     const state = await read()
     assert.equal(state.document.cards.find(item => item.id === 'blank').input_bindings.length, 0)
+    assert.deepEqual(state.document.cards.find(item => item.id === 'blank').examples, [])
+    assert.ok(state.document.edges.some(edge => edge.id === 'old-example' && edge.target_port === 'video'))
+    assert.ok(!state.document.input_order.blank.video_example)
     assert.ok(state.document.edges.some(edge => edge.id === 'old-object' && edge.source_port === 'text' && edge.target_port === 'text'))
     assert.ok(!state.document.edges.some(edge => edge.target_card === 'blank' && edge.target_port === 'effect_object'))
   }

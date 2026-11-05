@@ -42,7 +42,7 @@ async def test_constraint_relationships_only_adopt_eligible_direct_identity(canv
         assert response.json()['detail']['code'] == 'INVALID_CONSTRAINT_CATEGORY'
 
 @pytest.mark.asyncio
-async def test_fixed_continuity_evidence_survives_source_replacement_and_requires_release(canvas_client):
+async def test_retired_continuity_evidence_is_cleaned_and_does_not_protect_deleted_source(canvas_client):
     files = [(await canvas_client.post('/files/upload',data={'project_id':'p','usage_kind':'generation_upload'},files={'file':(f'{i}.png', b'image', 'image/png')})).json()['data']['id'] for i in range(2)]
     canvas=(await canvas_client.post('/canvases/p',json={'name':'固定证据'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
     source={'canvas_id':canvas['id'],'card_id':'image','port_id':'image','position':0}
@@ -51,13 +51,13 @@ async def test_fixed_continuity_evidence_survives_source_replacement_and_require
     doc['cards'][0]['file_id']=files[1]
     assert (await canvas_client.put(url,json={'request_id':'replace','expected_revision':1,'document':doc})).status_code==200
     reopened=(await canvas_client.get(url)).json()['data']['document']['cards'][1]
-    assert reopened['examples'][0]['file_id']==files[0]
+    assert reopened['examples']==[]
     assert files[0] not in str((await canvas_client.get(url+'/cards/design/outputs')).json()['data']['outputs'])
     doc['cards']=doc['cards'][1:];doc.update(edges=[],input_order={})
     result=await canvas_client.put(url,json={'request_id':'delete','expected_revision':2,'document':doc})
-    assert result.status_code==422 and result.json()['detail']['code']=='REFERENCE_IN_USE'
+    assert result.status_code==200,result.text
     doc['cards'][0]['examples']=[]
-    assert (await canvas_client.put(url,json={'request_id':'release','expected_revision':2,'document':doc})).status_code==200
+    assert (await canvas_client.put(url,json={'request_id':'release','expected_revision':3,'document':doc})).status_code==200
 
 @pytest.mark.asyncio
 async def test_continuity_image_target_keeps_whole_design_and_rejects_field_mismatch(canvas_client):
@@ -170,7 +170,7 @@ async def test_fact_old_object_becomes_unadopted_anchor_candidate(canvas_client)
     assert all(edge['target_port']!='effect_object' for edge in reopened['edges'])
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('case,code',[('count','CONSTRAINT_RELATION_COUNT'),('field','INVALID_CONSTRAINT_EXAMPLE_FIELD'),('direct','INVALID_CONSTRAINT_BINDING')])
+@pytest.mark.parametrize('case,code',[('count','CONSTRAINT_RELATION_COUNT'),('direct','INVALID_CONSTRAINT_BINDING')])
 async def test_constraint_structural_errors_are_located_without_text_correction(canvas_client,case,code):
     canvas=(await canvas_client.post('/canvases/p',json={'name':'结构边界'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
     doc.update(cards=[{'id':'one','type':'content.place','object_id':'one','name':'一号'},{'id':'two','type':'content.place','object_id':'two','name':'二号'},{'id':'rule','type':'direction.space_rule','axis':{'state':'proposal','text':'随意矛盾纯文本不纠错'},'input_bindings':[{'id':'one','input_port':'space','source':{'canvas_id':canvas['id'],'card_id':'one','port_id':'object','object_id':'one','position':0}}]}],edges=[{'id':'one','source_card':'one','source_port':'object','target_card':'rule','target_port':'space'}],input_order={'rule':{'space':['one']}})

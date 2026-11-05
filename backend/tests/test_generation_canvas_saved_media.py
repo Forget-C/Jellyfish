@@ -8,7 +8,7 @@ from tests.test_generation_canvas_reference_save import reference_document, save
 async def media_document(client):
     url, doc, files = await reference_document(client)
     source = deepcopy(doc['cards'][1]['image_binding']['source'])
-    doc['cards'].append({'id': 'design', 'type': 'direction.performance_rule',
+    doc['cards'].append({'id': 'design', 'type': 'direction.anchor',
         'examples': [{'id': 'e', 'file_id': files[0], 'source': source}]})
     doc['edges'].append({'id': 'example-edge', 'source_card': 'image', 'source_port': 'image',
         'target_card': 'design', 'target_port': 'image_example'})

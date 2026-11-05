@@ -99,7 +99,7 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
     {card.type === 'direction.anchor' ? <AnchorFields card={card as SpatialAnchorCard} onChange={update} /> : card.type === 'direction.blocking' ? <BlockingFields card={card as BlockingDirectionCard} onChange={update} /> : card.type === 'direction.activity' ? <ActivityFields card={card as InFrameActivityCard} onChange={update} /> : <EnvironmentFields card={card as EnvironmentActivityCard} onChange={update} />}
     <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
     </div><div>
-    <details open={card.type === 'direction.anchor'}><summary>参考素材与图片标记</summary>
+    {card.type === 'direction.anchor' && <details open><summary>参考素材与图片标记</summary>
       {resolved.candidates.filter(item => ['image', 'video'].includes(item.modality) && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || examples.some(value => sourceKey(value.source) === sourceKey(item.source) && value.file_id === item.file_id)} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id! }] })}>关联素材 {item.token}</WorkbenchButton>)}
       {examples.map(example => {
         const change = (patch: Partial<typeof example>) => update({ ...card, examples: examples.map(value => value.id === example.id ? { ...value, ...patch } : value) })
@@ -114,7 +114,7 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
           <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, examples: examples.filter(value => value.id !== example.id), ...(anchor ? { markers: anchor.markers?.filter(value => value.example_id !== example.id) } : {}) })}>取消素材</WorkbenchButton>
         </section>
       })}
-    </details>    </div></div>
+    </details>}    </div></div>
 
     <details aria-label="完整空间设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整空间设计" />)}</details>
   </DesignPresetEditor>

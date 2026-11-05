@@ -46,6 +46,7 @@ try {
   await page.goto(`http://127.0.0.1:4694/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const failures = []
   let checked = 0
+  const retainedExamples = new Set(['anchor', 'dialogue', 'sound'])
   const inspectFocus = async (control, kind, viewport) => {
     await control.scrollIntoViewIfNeeded()
     await control.focus()
@@ -82,6 +83,7 @@ try {
     const detail = await openCanvasCard(page, id)
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
     if (await advanced.count()) await advanced.click()
+    assert.equal(await detail.locator('summary').filter({ hasText: /正向示例与反例|固定证据与前后态素材|参考素材与图片标记|直接素材参考/ }).count(), retainedExamples.has(id) ? 1 : 0, `${id}: only retained cards expose local references`)
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 })
       const controls = detail.locator('[role="textbox"], input:not([type="hidden"]), textarea')

@@ -29,7 +29,8 @@ async def test_video_requires_explicit_purpose_and_reuses_source_across_purposes
     assert compiled['video_media']['subjects'][0]['name'] == '张三'
     assert compiled['video_media']['subjects'][0]['media'][0]['file_id'] == file_id
     assert 'DESIGN_MEDIA_CARRY_NOT_READY' not in {item['code'] for item in compiled['diagnostics']}
-    assert (await client.get(url)).json()['data']['document']['edges'] == doc['edges']
+    expected_edges = [{**edge, 'target_port': 'image'} if performance and edge['target_port'] == 'image_example' else edge for edge in doc['edges']]
+    assert sorted((await client.get(url)).json()['data']['document']['edges'], key=lambda edge: edge['id']) == sorted(expected_edges, key=lambda edge: edge['id'])
     (doc['cards'][1]['activity'] if performance else doc['cards'][1]['fields']['direction'])['state'] = 'empty'
     inactive = await save(2)
     assert inactive['media'] == [] and inactive['video_media']['subjects'] == []

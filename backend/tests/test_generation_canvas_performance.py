@@ -58,7 +58,7 @@ async def test_design_relations_require_specific_eligible_direct_objects(canvas_
 
 
 @pytest.mark.asyncio
-async def test_examples_are_protected_direct_media_and_never_enter_design_output(canvas_client):
+async def test_retired_examples_release_delete_protection_and_never_enter_design_output(canvas_client):
     client = canvas_client
     file = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('demo.mp4', b'video', 'video/mp4')})).json()['data']
     canvas = (await client.post('/canvases/p', json={'name': '示例'})).json()['data']
@@ -70,13 +70,13 @@ async def test_examples_are_protected_direct_media_and_never_enter_design_output
          'examples': [{'id': 'ex', 'source': source, 'file_id': file['id'], 'start_ms': 100, 'end_ms': 900, 'purpose': 'negative', 'field_id': 'applicability'}]}],
         edges=[{'id': 'e', 'source_card': 'v', 'source_port': 'video', 'target_card': 'rule', 'target_port': 'video_example'}], input_order={'rule': {'video_example': ['e']}})
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
-    assert (await client.get(url)).json()['data']['document']['cards'][1]['examples'][0]['field_id'] == 'applicability'
+    assert (await client.get(url)).json()['data']['document']['cards'][1]['examples'] == []
     outputs = (await client.get(url + '/cards/rule/outputs')).json()['data']['outputs']
     assert file['id'] not in str(outputs) and '900' not in str(outputs)
     doc['cards'] = doc['cards'][1:]
     doc.update(edges=[], input_order={})
     response = await client.put(url, json={'request_id': 'delete', 'expected_revision': 1, 'document': doc})
-    assert response.status_code == 422 and response.json()['detail']['code'] == 'REFERENCE_IN_USE'
+    assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio
@@ -105,7 +105,7 @@ async def test_example_keeps_fixed_file_when_source_content_changes(canvas_clien
     canvas = (await client.post('/canvases/p', json={'name': '固定示例'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
-    doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': files[0]}, {'id': 'rule', 'type': 'direction.performance_rule',
+    doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': files[0]}, {'id': 'rule', 'type': 'direction.anchor',
         'examples': [{'id': 'e', 'file_id': files[0], 'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}}]}],
         edges=[{'id': 'e', 'source_card': 'image', 'source_port': 'image', 'target_card': 'rule', 'target_port': 'image_example'}], input_order={'rule': {'image_example': ['e']}})
     assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
@@ -256,7 +256,7 @@ async def test_example_rejects_invalid_or_nonvideo_intervals(canvas_client, port
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '无效区间'})).json()['data']
     doc = canvas['document']
-    doc['cards'] = [{'id': 'rule', 'type': 'direction.performance_rule', 'examples': [{'id': 'example', 'file_id': 'file',
+    doc['cards'] = [{'id': 'rule', 'type': 'direction.anchor', 'examples': [{'id': 'example', 'file_id': 'file',
         'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': port, 'position': 0}, 'start_ms': start, 'end_ms': end}]}]
     result = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert result.status_code == 422
@@ -288,7 +288,7 @@ async def test_costume_object_can_participate_without_description_or_image(canva
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('card_type,field_id', [('direction.performance', 'physical_action'), ('direction.anchor', 'position')])
+@pytest.mark.parametrize('card_type,field_id', [('direction.anchor', 'position')])
 async def test_example_field_location_is_saved_and_rejects_other_card_fields(canvas_client, card_type, field_id):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('example.png', b'image', 'image/png')})).json()['data']['id']

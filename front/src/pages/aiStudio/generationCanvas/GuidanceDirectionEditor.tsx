@@ -12,14 +12,13 @@ import { useGraphRules } from './CanvasCatalogContext'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
-import { DesignMediaExamples } from './DesignMediaExamples'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 export type GuidanceCard = AcceptanceCriterionCard | CreativeControlCard | GenerationGuidanceCard
 
-/** 要求正文、固定示例和只读使用记录分别展示。 */
+/** 要求正文与只读使用记录分别展示，素材复用统一候选区。 */
 export function GuidanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign, requirementNameValidationRequested }: CardRendererProps) {
-  const { cardDefinitions, cardTitles, inputPorts } = useGraphRules()
+  const { cardDefinitions, cardTitles } = useGraphRules()
   const card = raw as GuidanceCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const nameInvalid = card.type === 'direction.criterion' && !!requirementNameValidationRequested && !card.name?.trim()
@@ -37,7 +36,6 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
     {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}<section role="region" aria-label="被使用记录"><h3>被使用记录 · 只读</h3>{users.length ? users.map(consumer => <p key={consumer.id}>{'name' in consumer && consumer.name || cardTitles[consumer.type || ''] || consumer.type}</p>) : <small>尚未被采用</small>}</section></>}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
-    <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={inputPorts(card)} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => onChange({ ...card, examples })} />
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
     <details aria-label="完整要求输出"><summary>查看已保存完整要求 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整要求" />)}</details>
   </DesignPresetEditor>

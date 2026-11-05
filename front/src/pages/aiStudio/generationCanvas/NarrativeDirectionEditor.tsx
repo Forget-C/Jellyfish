@@ -8,7 +8,6 @@ import { Alert } from 'antd'
 import { DesignNameField } from './DesignNameField'
 import type { NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, ReferenceDesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignMediaExamples } from './DesignMediaExamples'
 import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
@@ -65,7 +64,6 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
     {card.type === 'direction.shot' && <>{field('narrative_role', '叙事作用')}{field('visible_result', '可见结果')}{field('estimated_duration', '预计时长')}</>}
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
     {identity && <details><summary>稳定身份</summary>{identity}</details>}
-    {card.type === 'direction.shot' && <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({ value: field.id, label: field.label }))} ports={[...inputPorts(card), 'image_example', 'video_example']} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => onChange({ ...card, examples })} />}
     <details><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整叙事设计" />)}</details>
   </DesignPresetEditor>
 }

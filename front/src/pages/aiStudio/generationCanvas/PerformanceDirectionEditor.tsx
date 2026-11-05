@@ -13,7 +13,6 @@ import { sourceKey } from './promptRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
-import { DesignMediaExamples } from './DesignMediaExamples'
 
 export type PerformanceCard = CharacterPerformanceCard | CharacterSituationCard | PerformanceRuleCard
 
@@ -53,7 +52,7 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as PerformanceCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
-  const bindings = card.input_bindings || [], examples = card.examples || []
+  const bindings = card.input_bindings || []
   const update = (next: PerformanceCard) => onChange(next)
   const fields = Object.fromEntries(designFieldEntries(card))
   const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
@@ -85,7 +84,6 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as PerformanceCard)}>
     {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor compact label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
     <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
-    <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={[...inputPorts(card), 'image_example', 'video_example']} examples={examples} candidates={resolved.candidates} disabled={disabled} onChange={next => update({ ...card, examples: next })} />
     <details aria-label="完整设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</details>
   </DesignPresetEditor>
 }

@@ -77,6 +77,10 @@ def require_supported_snapshot(snapshot):
     """旧固定依据不可清理后继续执行，以免改变历史任务的创作输入。"""
     from app.services.generation_canvas.acceptance_cleanup import clean_acceptance
     document = snapshot.get('document', {})
+    from app.services.generation_canvas.example_cleanup import clean_examples
+    if clean_examples(document) != document:
+        from fastapi import HTTPException
+        raise HTTPException(422, {'code': 'LEGACY_DESIGN_SNAPSHOT', 'message': '旧示例功能已移除，请从当前画布重新提交'})
     if clean_acceptance(document, candidates=True) != document:
         from fastapi import HTTPException
         raise HTTPException(422, {'code': 'LEGACY_ACCEPTANCE_SNAPSHOT', 'message': '旧验收或通用对象用途已退出，请使用当前画布重新提交'})

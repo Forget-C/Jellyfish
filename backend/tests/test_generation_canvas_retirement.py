@@ -51,7 +51,11 @@ from tests.test_generation_canvas_runs import runtime  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_legacy_fixed_design_is_not_cleaned_into_executable_history(runtime):
+@pytest.mark.parametrize('legacy', [
+    {'id': 'retired', 'type': 'direction.photography'},
+    {'id': 'retired', 'type': 'direction.criterion', 'examples': [{'id': 'old', 'file_id': 'old'}]},
+])
+async def test_legacy_fixed_design_is_not_cleaned_into_executable_history(runtime, legacy):
     from copy import deepcopy
     from sqlalchemy import select
     from app.models.generation_canvas import CanvasRunNode
@@ -60,7 +64,7 @@ async def test_legacy_fixed_design_is_not_cleaned_into_executable_history(runtim
     async with runtime.sessions.begin() as db:
         node = await db.scalar(select(CanvasRunNode).where(CanvasRunNode.run_id == accepted['run_id'], CanvasRunNode.card_id == 'B'))
         snapshot = deepcopy(node.execution_snapshot)
-        snapshot['document']['cards'].append({'id':'retired','type':'direction.photography'})
+        snapshot['document']['cards'].append(legacy)
         node.execution_snapshot = snapshot
     await finish_source(runtime, accepted, result={'text':'New source'})
     _, nodes = await history(runtime, accepted)

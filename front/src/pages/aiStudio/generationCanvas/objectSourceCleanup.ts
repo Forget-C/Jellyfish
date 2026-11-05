@@ -1,3 +1,4 @@
+import { cleanExamples } from './exampleCleanup'
 import type { CanvasDocument } from '../../../services/generated'
 
 /** 已落地退役的类型；恢复旧编辑记录时同样禁止重建通用对象用途。 */
@@ -7,7 +8,8 @@ const candidatePort = (type: string) => type.startsWith('reference.') || ['conte
     : type.startsWith('direction.') || type.startsWith('content.') && !['content.image', 'content.video', 'content.audio'].includes(type) || type === 'model.text' ? 'text' : undefined
 
 /** 只撤回已废弃用途；同源其他采用保持，剩余来源成为合法候选而非自动引用。 */
-export function cleanObjectSources(document: CanvasDocument): CanvasDocument {
+export function cleanObjectSources(value: CanvasDocument): CanvasDocument {
+  const document = cleanExamples(value)
   const retired = new Set(document.cards?.filter(card => retiredObjectTypes.has(card.type || '')).map(card => card.id))
   const dropped = document.edges?.filter(edge => retired.has(edge.target_card) && edge.target_port === 'effect_object') || []
   if (!dropped.length && !document.cards?.some(card => retired.has(card.id) && 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'effect_object'))) return document

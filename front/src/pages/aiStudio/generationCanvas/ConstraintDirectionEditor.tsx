@@ -4,8 +4,8 @@ import { soundConstraintPresets } from './soundConstraintPresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
-import { Alert, Input, InputNumber, Select, Space } from 'antd'
-import type { SpaceRuleCard, ContinuityCard, ImmutableFactCard, ConstraintMediaExample, DesignField, CanvasResolvedOutput } from '../../../services/generated'
+import { Alert, Select } from 'antd'
+import type { SpaceRuleCard, ContinuityCard, ImmutableFactCard, DesignField, CanvasResolvedOutput } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { useCardCandidates } from './useCardCandidates'
@@ -13,7 +13,6 @@ import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
-import { MediaPreview } from './MediaContentEditor'
 
 export type ConstraintCard = SpaceRuleCard | ContinuityCard | ImmutableFactCard
 const categoryOptions = [{ value: 'space', label: '空间' }, { value: 'appearance', label: '造型' }, { value: 'hands_props', label: '手部与道具' }, { value: 'environment', label: '环境' }, { value: 'photography', label: '摄影' }, { value: 'dialogue_sound', label: '对白与声音' }]
@@ -26,14 +25,13 @@ function eligible(port: string, item: CanvasResolvedOutput) {
   return port === 'effect_object' && ['narrative_reference', 'spatial_reference'].includes(payload.kind || '') || payload.kind === 'narrative_reference' && 'category' in payload && port === 'related_event' && payload.category === 'event'
 }
 
-/** 约束卡分别编辑本卡设计、直接身份及固定证据；身份关系与本地证据不递归传播，字段实际素材引用按整卡携带。 */
+/** 约束卡编辑本卡设计与明确身份关系；素材使用统一候选，字段实际引用按整卡携带。 */
 export function ConstraintDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as ConstraintCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
-  const bindings = card.input_bindings || [], examples = card.examples || []
+  const bindings = card.input_bindings || []
   const keys = (card.type === 'direction.space_rule' ? ['spatial_basis', 'shootable_area', 'axis', 'scale'] : card.type === 'direction.continuity' ? ['before', 'change', 'after', 'following_constraints'] : ['fact', 'source_basis']) as (keyof typeof labels)[]
-  const updateExample = (id: string, patch: Partial<ConstraintMediaExample>) => onChange({ ...card, examples: examples.map(value => value.id === id ? { ...value, ...patch } : value) })
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <details><summary>对象与制作关系</summary>    <section aria-label="约束关系"><h3>直接关系候选与已采用</h3>{resolved.candidates.map(item => {
       const payload = item.payload
@@ -49,13 +47,6 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
     {keys.map(key => <DesignFieldEditor compact key={key} label={labels[key]} purpose={['spatial_basis', 'source_basis'].includes(key) ? 'background' : ['before', 'change', 'after'].includes(key) ? 'design' : 'constraint'} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />)}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
-    <details><summary>固定证据与前后态素材</summary>
-      {resolved.candidates.filter(item => item.file_id && inputPorts(card).includes(item.modality + '_example')).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available} onClick={() => onChange({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id!, purpose: 'evidence' }] })}>关联证据 {item.token}</WorkbenchButton>)}
-      {examples.map(example => <section key={example.id} aria-label="固定证据"><MediaPreview fileId={example.file_id} type={example.source.port_id === 'video' ? 'video' : example.source.port_id === 'audio' ? 'audio' : 'image'} /><Select aria-label="证据用途" value={example.purpose} options={[{ value: 'evidence', label: '来源证据' }, { value: 'positive', label: '正向示例' }, { value: 'negative', label: '反例' }, ...(card.type === 'direction.continuity' ? [{ value: 'before', label: '前态' }, { value: 'after', label: '后态' }] : [])]} onChange={purpose => updateExample(example.id, { purpose, ...(['before', 'after'].includes(purpose) ? { field_id: purpose as 'before' | 'after' } : {}) })} />
-      <Select aria-label="证据定位字段" allowClear value={example.field_id || undefined} options={keys.map(key => ({ value: key, label: labels[key] }))} onChange={field_id => updateExample(example.id, { field_id: field_id ?? null })} /><Input aria-label="证据说明" value={example.description} onChange={event => updateExample(example.id, { description: event.target.value })} />
-      {['video', 'audio'].includes(example.source.port_id) && <Space><InputNumber aria-label="证据起点毫秒" min={0} value={example.start_ms} onChange={start => updateExample(example.id, start === null ? { start_ms: null, end_ms: null } : { start_ms: start, end_ms: Math.max(example.end_ms || 0, start + 1) })} /><InputNumber aria-label="证据终点毫秒" min={(example.start_ms || 0) + 1} value={example.end_ms} onChange={end => updateExample(example.id, end === null ? { start_ms: null, end_ms: null } : { start_ms: example.start_ms || 0, end_ms: end })} /></Space>}
-      <WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, examples: examples.filter(value => value.id !== example.id) })}>取消证据</WorkbenchButton></section>)}
-    </details>
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
     <details aria-label="完整约束输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整约束设计" />)}</details>
   </DesignPresetEditor>
