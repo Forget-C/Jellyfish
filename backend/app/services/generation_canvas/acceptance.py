@@ -49,7 +49,7 @@ def synchronize_acceptance(document, previous):
             continue
         bound = any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source.id
                     for binding in target.input_bindings)
-        if not bound and (source.id, target.id) in old_candidates:
+        if not bound and ((source.id, target.id) in old_candidates or any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source.id for binding in getattr(previous_cards.get(target.id), 'input_bindings', []))):
             removed.add(edge.id)
         elif not bound:
             from app.core.contracts.generation_canvas import OutputIdentity

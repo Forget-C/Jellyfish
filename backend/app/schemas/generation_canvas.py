@@ -712,8 +712,15 @@ class CanvasDocument(BaseModel):
         """只读解析旧格式；不原地重写原始幂等正文或历史快照。"""
         if not isinstance(value, dict):
             return value
+        if not isinstance(value.get('edges', []), list) or any(not isinstance(edge, dict) for edge in value.get('edges', [])):
+            return value
+        orders = value.get('input_order', {})
+        if not isinstance(orders, dict) or any(not isinstance(ports, dict) or any(not isinstance(ids, list) or any(not isinstance(item, str) for item in ids) for ids in ports.values()) for ports in orders.values()):
+            return value
         from app.services.generation_canvas.retirement import retire_photography
         value = retire_photography(value)
+        from app.services.generation_canvas.acceptance_cleanup import clean_acceptance
+        value = clean_acceptance(value)
         cards = value.get('cards', [])
         if not isinstance(cards, list) or any(not isinstance(card, dict) for card in cards):
             return value

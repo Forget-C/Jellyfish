@@ -28,8 +28,9 @@ class CanvasStore:
     async def list(self) -> list[GenerationCanvas]:
         """列出项目画布，沿用现有项目存在性边界。"""
         await get_or_404(self.db, Project, self.project_id, detail="Project not found")
-        return list((await self.db.scalars(select(GenerationCanvas).where(
+        rows = list((await self.db.scalars(select(GenerationCanvas).where(
             GenerationCanvas.project_id == self.project_id).order_by(GenerationCanvas.created_at, GenerationCanvas.id))).all())
+        return [await self.get(row.id) for row in rows]
 
     async def get(self, canvas_id: str, *, lock: bool = False) -> GenerationCanvas:
         """锁住文档行后再读回执，使同画布的竞争请求按数据库顺序核实。"""
@@ -40,6 +41,12 @@ class CanvasStore:
         canvas = await self.db.scalar(stmt)
         if canvas is None:
             raise HTTPException(404, 'Canvas not found')
+        from app.services.generation_canvas.acceptance_cleanup import clean_acceptance
+        cleaned = clean_acceptance(canvas.document, candidates=True)
+        if cleaned != canvas.document:
+            await self.db.execute(update(GenerationCanvas).where(GenerationCanvas.id == canvas_id,
+                GenerationCanvas.revision == canvas.revision).values(document=cleaned, revision=GenerationCanvas.revision + 1))
+            await self.db.refresh(canvas)
         return canvas
 
     async def create(self, name: str) -> GenerationCanvas:

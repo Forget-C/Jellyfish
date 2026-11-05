@@ -75,6 +75,11 @@ def retire_photography(value):
 
 def require_supported_snapshot(snapshot):
     """旧固定依据不可清理后继续执行，以免改变历史任务的创作输入。"""
+    from app.services.generation_canvas.acceptance_cleanup import clean_acceptance
+    document = snapshot.get('document', {})
+    if clean_acceptance(document, candidates=True) != document:
+        from fastapi import HTTPException
+        raise HTTPException(422, {'code': 'LEGACY_ACCEPTANCE_SNAPSHOT', 'message': '旧验收用途已退出，请使用当前画布重新提交'})
     cards = snapshot.get('document', {}).get('cards', [])
     if any(card.get('type') == 'direction.photography' or card.get('type') in VISUAL_DESIGNS and card.get('examples') or any('photography_scope' in binding for binding in card.get('input_bindings', [])) for card in cards):
         from fastapi import HTTPException

@@ -206,6 +206,18 @@ class TaskWorker:
                 task = await self._load(task_id)
                 if task is None:
                     return
+                if task.target_type == 'canvas_node':
+                    async with self.sessions() as db:
+                        from app.models.generation_canvas import CanvasRunNode
+                        from app.services.generation_canvas.retirement import require_supported_snapshot
+                        node = await db.get(CanvasRunNode, task.target_id)
+                        if node:
+                            from fastapi import HTTPException
+                            try:
+                                require_supported_snapshot(node.execution_snapshot or {})
+                            except HTTPException as error:
+                                await self._fail(task.id, error.detail['code'], error.detail['message'])
+                                return
                 if task.kind == 'scene_export':
                     await execute_scene_export(self.sessions, task,
                         lambda content, sources, profile: self._render_scene(task, content, sources, profile),

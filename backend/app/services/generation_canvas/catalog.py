@@ -31,8 +31,10 @@ def input_definition(card_type, port):
     return CanvasInputPortDefinition(id=port, label='所属镜头' if port == 'shot' else PORT_LABELS[port], relation=relation, accepts=accepts)
 
 
-def ports_compatible(source_port, receiver_type, target_port):
+def ports_compatible(source_port, receiver_type, target_port, source_type=None):
     """只判断声明的值种类；具体对象类别和实际采用仍由接收业务校验。"""
+    if source_type == 'direction.criterion' and receiver_type.startswith('direction.') and source_port == 'text':
+        return False
     return VALUE_KINDS[source_port] in input_definition(receiver_type, target_port).accepts
 
 

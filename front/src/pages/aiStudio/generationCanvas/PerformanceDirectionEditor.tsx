@@ -4,7 +4,6 @@ import { performancePresets } from './performancePresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
-import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { Alert } from 'antd'
 import type { CharacterPerformanceCard, CharacterSituationCard, DialogueReferencePayload, PerformanceRuleCard, ObjectReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -50,7 +49,7 @@ function PerformanceFields({ card, onChange }: { card: CharacterPerformanceCard;
 }
 
 /** 明确对象采用及本卡专用设计字段；正式输出只读取后端保存修订。 */
-export function PerformanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign, onLocateDesign }: CardRendererProps) {
+export function PerformanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as PerformanceCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
@@ -77,7 +76,6 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       {!bindings.length && <small>尚未选择对象</small>}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失，请替换或取消</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
     </section>
-    {card.type === 'direction.performance' && <AcceptanceBasisSelector card={card} document={document} disabled={disabled} onChange={onChange} onLocateDesign={onLocateDesign} />}
     {card.type === 'direction.performance' && <section aria-label="对白依据"><h3>对白依据</h3>{resolved.candidates.filter(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'dialogue_reference').map(item => {
       const binding = bindings.find(value => value.input_port === 'dialogue_basis' && sourceKey(value.source) === sourceKey(item.source))
       const payload = item.payload as DialogueReferencePayload

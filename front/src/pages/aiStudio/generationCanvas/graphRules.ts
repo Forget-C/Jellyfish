@@ -19,6 +19,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   if (!source || !target || !outputPorts(source).includes(edge.source_port) || !inputPorts(target).includes(edge.target_port)) return '连接端点不存在'
   if (target.type?.startsWith('reference.') && edge.target_port === 'image_source' && source.type !== 'content.image') return '参考图仅支持图片内容卡，请先另存为图片内容卡'
   if (target.type?.startsWith('reference.') && edge.target_port === 'name' && source.type !== 'content.' + target.type.split('.')[1]) return '名称候选必须来自同类型描述卡'
+  if (source.type === 'direction.criterion' && target.type?.startsWith('direction.') && edge.source_port === 'text') return '验收要求仅支持验收关联'
   if (source.id === target.id) return '卡片不能连接自身'
   const output = cardDefinitions[source.type || '']?.outputs.find(port => port.id === edge.source_port)
   const input = cardDefinitions[target.type || '']?.inputs.find(port => port.id === edge.target_port)
@@ -37,7 +38,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   const sourceOptions = (document: CanvasDocument, sourceId: string, targetId: string): GenerationEdge[] => {
     const source = document.cards?.find(card => card.id === sourceId), target = document.cards?.find(card => card.id === targetId)
     if (!source || !target) return []
-    return (cardDefinitions[source.type || '']?.outputs || []).flatMap(output => (cardDefinitions[target.type || '']?.inputs || []).filter(input => input.accepts.includes(output.value_kind)).map(input => ({ id: '', source_card: sourceId, source_port: output.id, target_card: targetId, target_port: input.id })))
+    return (cardDefinitions[source.type || '']?.outputs || []).flatMap(output => (cardDefinitions[target.type || '']?.inputs || []).filter(input => input.accepts.includes(output.value_kind) && !(source.type === 'direction.criterion' && target.type?.startsWith('direction.') && output.id === 'text')).map(input => ({ id: '', source_card: sourceId, source_port: output.id, target_card: targetId, target_port: input.id })))
   }
   return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions }
 }

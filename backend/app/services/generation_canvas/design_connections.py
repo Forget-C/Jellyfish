@@ -17,7 +17,7 @@ def expand_design_source_connections(document, previous):
         if not source or not target or not source.type.startswith('direction.'):
             continue
         options = [(output, input_port) for output in source.output_ports for input_port in target.input_ports
-                   if ports_compatible(output, target.type, input_port)]
+                   if ports_compatible(output, target.type, input_port, source.type)]
         if len(options) < 2:
             continue
         for output, input_port in options:

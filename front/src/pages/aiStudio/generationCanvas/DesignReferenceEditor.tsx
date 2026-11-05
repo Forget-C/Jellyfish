@@ -13,6 +13,7 @@ import { useCardCandidates } from './useCardCandidates'
 import { referenceLabels } from './referenceLabels'
 import { MaterialReferenceButton } from './MaterialReferenceButton'
 import { MediaPreview } from './MediaContentEditor'
+import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 type TargetField = { fieldId: string; serial: number }
@@ -26,14 +27,14 @@ interface ReferenceContext {
 export const DesignReferenceContext = createContext<ReferenceContext | undefined>(undefined)
 
 /** Reference session belongs to one retained design card, not a model prompt binding set. */
-export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField }: { targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
+export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField, onDisconnect, onLocateDesign }: { onDisconnect?: (edgeId: string) => void; onLocateDesign?: (cardId: string, fieldId: string) => void; targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const focused = useRef<React.RefObject<PromptEditorHandle>>(), owner = useRef<HTMLDivElement>(null)
   const [inspect, setInspect] = useState<string>()
   useEffect(() => { if (!editorOpen) { focused.current = undefined; setInspect(undefined) } }, [editorOpen])
   const used = new Set(designReferences(card, true).map(item => sourceKey(item.reference.source)))
   const retained = new Set(designReferences(card).map(item => sourceKey(item.reference.source)))
-  const sources = [...resolved.candidates]
+  const sources = resolved.candidates.filter(item => document.cards?.find(source => source.id === item.source.card_id)?.type !== 'direction.criterion')
   for (const { reference } of designReferences(card)) if (!sources.some(item => sourceKey(item.source) === sourceKey(reference.source))) sources.push({ source: reference.source, modality: ['image', 'video', 'audio'].includes(reference.source.port_id) ? reference.source.port_id as 'image' | 'video' | 'audio' : 'text', available: false })
   const labels = referenceLabels(document, sources, card.id, isFlatDesign(card))
   const labelFor = (item: CanvasResolvedOutput) => labels.get(sourceKey(item.source)) || item.token || '@缺失来源'
@@ -46,7 +47,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     return { source: item.source, token: item.token || '@缺失来源', displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? reason : !connected ? '来源未连接' : item.available === false ? '来源输出缺失' : undefined }
   })
   const changeMode = () => { focused.current = undefined; setInspect(undefined) }
-  const renderCandidates = (advanced: boolean) => <div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
+  const renderCandidates = (advanced: boolean) => <><div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
     {sources.map(item => {
       const key = sourceKey(item.source), candidate = candidates.find(value => sourceKey(value.source) === key)!
       const localExample = 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key)
@@ -60,7 +61,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     })}
     <div className="generation-material-add">{sourceActions}</div>
     <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${used.size} 个使用中`}</small>
-  </div>
+  </div>{onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</>
   return <DesignReferenceContext.Provider value={{ card, document, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
     if (event.key !== 'Escape' || !inspect) return
     event.preventDefault(); event.stopPropagation()

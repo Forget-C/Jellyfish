@@ -24,7 +24,7 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
             raise diagnostic('INVALID_ENDPOINT', '连接端点不存在', target)
         if edge.source_card == edge.target_card:
             raise diagnostic('SELF_CONNECTION', '卡片不能连接自身', target)
-        if not ports_compatible(edge.source_port, receiver.type, edge.target_port):
+        if not ports_compatible(edge.source_port, receiver.type, edge.target_port, source.type):
             raise diagnostic('INCOMPATIBLE_PORT', '端口值种类不匹配，不提供隐式转换', target)
         if isinstance(receiver, NamedImageReferenceCard):
             binding = receiver.name_binding if edge.target_port == 'name' else receiver.image_binding.source if receiver.image_binding else None

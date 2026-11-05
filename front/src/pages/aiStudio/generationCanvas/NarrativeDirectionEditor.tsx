@@ -4,7 +4,6 @@ import { narrativePresets } from './narrativePresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
-import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { Alert, Input } from 'antd'
 import type { NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, ReferenceDesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -19,7 +18,7 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard
 
 /** 四种叙事卡保留自己的字段；关系只选择直接候选身份。 */
-export function NarrativeDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign, onLocateDesign }: CardRendererProps) {
+export function NarrativeDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as NarrativeCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
@@ -37,7 +36,6 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <>
     <label>名称<Input aria-label="叙事名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} /></label>
-    {card.type === 'direction.shot' && <AcceptanceBasisSelector card={card} document={document} disabled={disabled} onChange={onChange} onLocateDesign={onLocateDesign} />}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <details><summary>叙事关系 · 已选 {bindings.length} 项</summary>
     {card.type === 'direction.shot' && beats.length > 0 && <section aria-label="已选覆盖节拍顺序"><h3>已选覆盖节拍顺序</h3>{beats.map((binding, index) => {
