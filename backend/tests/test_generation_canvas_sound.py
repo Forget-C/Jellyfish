@@ -126,7 +126,7 @@ async def test_actual_worker_receives_whole_sound_design_without_audio_reference
     source = lambda card, port, **extra: {'canvas_id': runtime.canvas_id, 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = runtime.document
     doc.update(cards=[{'id': 'person', 'type': 'content.object', 'object_id': 'alice', 'name': '小雪', 'text': '秘密外貌描述'},
-                     {'id': 'act', 'type': 'direction.sound', 'source_description': {'state': 'proposal', 'text': '窗外风声'}, 'environment': {'state': 'fact', 'text': '细雨'}, 'production': 'postproduction',
+                     {'id': 'act', 'type': 'direction.sound', 'source_description': {'state': 'proposal', 'text': '窗外风声', 'document': {'segments': [{'id': 'person', 'kind': 'reference', 'source': source('person', 'text')}, {'id': 'wind', 'kind': 'text', 'text': '窗外风声'}]}}, 'environment': {'state': 'fact', 'text': '细雨'}, 'production': 'postproduction',
                       'input_bindings': [{'id': 'p', 'source': source('person', 'object', object_id='alice'), 'input_port': 'effect_object'}]},
                      {'id': 'consumer', 'type': 'model.' + modality, 'model_id': runtime.model_id, 'config': {'ratio': '16:9', 'seconds': 5} if modality == 'video' else {},
                       'input_bindings': [{'id': 'whole', 'source': source('act', 'text'), 'input_port': 'text'}]}],
@@ -243,3 +243,31 @@ async def test_sound_preserves_field_state_purpose_and_literal_text(canvas_clien
     assert bool(output) == visible
     if visible:
         assert phrase in output[0]['text'] and '约束 / 音乐约束' in output[0]['text'] and '有音乐且没有音乐' in output[0]['text'] and '原文4' in output[0]['text']
+
+
+@pytest.mark.asyncio
+async def test_sound_retires_object_use_and_adopts_complete_field_reference(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '声源引用'})).json()['data']
+    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    source = {'canvas_id': canvas['id'], 'card_id': 'key', 'port_id': 'text', 'position': 0}
+    doc.update(cards=[{'id': 'key', 'type': 'content.prop', 'object_id': 'key', 'name': '钥匙', 'text': '唯一金属纹路'},
+        {'id': 'sound', 'type': 'direction.sound', 'action_sound': {'text': '钥匙落地', 'authorship': 'user'}, 'production': 'postproduction',
+         'input_bindings': [{'id': 'old', 'input_port': 'effect_object', 'source': {**source, 'port_id': 'object', 'object_id': 'key'}}]},
+        {'id': 'model', 'type': 'model.text', 'input_bindings': [{'id': 'use', 'input_port': 'text', 'source': {**source, 'card_id': 'sound'}}]}],
+        edges=[{'id': 'old', 'source_card': 'key', 'source_port': 'object', 'target_card': 'sound', 'target_port': 'effect_object'},
+               {'id': 'use', 'source_card': 'sound', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+        input_order={'sound': {'effect_object': ['old']}, 'model': {'text': ['use']}})
+    saved = await client.put(url, json={'request_id': 'old', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    current = (await client.get(url)).json()['data']['document']
+    assert current['cards'][1]['input_bindings'] == []
+    assert current['cards'][1]['production'] == 'postproduction'
+    assert any(edge['source_card'] == 'key' and edge['target_port'] == 'text' for edge in current['edges'])
+    assert '唯一金属纹路' not in (await client.get(url + '/cards/model/compile')).json()['data']['text']
+    current['cards'][1]['action_sound'] = {'text': '钥匙落地', 'authorship': 'user', 'document': {'segments': [{'id': 'ref', 'kind': 'reference', 'source': source}, {'id': 'text', 'kind': 'text', 'text': '落地金属碰撞声'}]}}
+    saved = await client.put(url, json={'request_id': 'reference', 'expected_revision': 1, 'document': current})
+    assert saved.status_code == 200, saved.text
+    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
+    assert '唯一金属纹路' in compiled['text'] and '待后期' in compiled['text']
+    assert not compiled['media']

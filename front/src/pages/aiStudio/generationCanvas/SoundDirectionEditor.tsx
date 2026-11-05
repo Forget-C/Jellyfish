@@ -29,7 +29,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
   const label = relation === 'speaker' ? '说话对象' : '声源对象'
   const exampleUpdate = (id: string, patch: Partial<(typeof examples)[number]>) => update({ ...card, examples: examples.map(item => item.id === id ? { ...item, ...patch } : item) })
   const fields = Object.fromEntries(designFieldEntries(card))
-  const relations = <details><summary>对象与制作关系</summary>    <section aria-label={label}><h3>{label}</h3>
+  const relations = <details><summary>对象与制作关系</summary>    {card.type === 'direction.dialogue' && <section aria-label={label}><h3>{label}</h3>
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference').map(item => {
         const object = item.payload as ObjectReferencePayload
         if (relation === 'speaker' && !['character', 'prop'].includes(object.category)) return null
@@ -38,7 +38,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
         return <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || !binding && relation === 'speaker' && bindings.some(value => value.input_port === relation)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: relation }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
       })}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(item => item.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
-    </section>{card.type === 'direction.sound' && <><strong>制作安排</strong><Select aria-label="声音制作安排" value={sound.production || 'undecided'} options={[{ value: 'synchronous', label: '同期生成意图' }, { value: 'postproduction', label: '待后期' }, { value: 'undecided', label: '待确定' }]} onChange={production => update({ ...sound, production })} /></>}</details>
+    </section>}{card.type === 'direction.sound' && <><strong>制作安排</strong><Select aria-label="声音制作安排" value={sound.production || 'undecided'} options={[{ value: 'synchronous', label: '同期生成意图' }, { value: 'postproduction', label: '待后期' }, { value: 'undecided', label: '待确定' }]} onChange={production => update({ ...sound, production })} /></>}</details>
   return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.dialogue'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}

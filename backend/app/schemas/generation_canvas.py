@@ -550,7 +550,7 @@ class SoundArrangementCard(SoundDirectionCard):
     action_sound: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     music: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
     production: Literal['synchronous', 'postproduction', 'undecided'] = 'undecided'
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'audio_example', 'text', 'image', 'video', 'anchor')
+    input_ports: ClassVar[tuple[str, ...]] = ('audio_example', 'text', 'image', 'video', 'anchor')
 
 
 class VisualStyleCard(PerformanceDirectionCard):

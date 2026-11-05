@@ -1,7 +1,7 @@
 """清理已退役的通用对象用途，保留合法候选和其他明确用途。"""
 
 # 按已落地的卡片类型扩展；未迁移类型不能提前失去其现有用途。
-RETIRED_OBJECT_TYPES = {'direction.criterion', 'direction.situation', 'direction.performance', 'direction.activity'}
+RETIRED_OBJECT_TYPES = {'direction.criterion', 'direction.sound', 'direction.situation', 'direction.performance', 'direction.activity'}
 
 
 def candidate_endpoint(source):
