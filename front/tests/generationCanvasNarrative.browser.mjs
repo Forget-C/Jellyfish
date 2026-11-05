@@ -143,7 +143,7 @@ try {
     const readonly = observer.locator('.wb-details:not([hidden])')
     await readonly.getByRole('button', { name: '高级设置', exact: true }).click()
     assert.equal(await readonly.getByRole('textbox', { name: label + '内容', exact: true }).isDisabled(), true)
-    assert.equal(await readonly.getByRole('textbox', { name: { overview: '叙事名称', beat: '节拍名称', event: '事件名称', shot: '镜头名称' }[id], exact: true }).isDisabled(), true)
+    assert.equal(await readonly.getByRole('button', { name: '编辑' + { overview: '叙事名称', beat: '节拍名称', event: '事件名称', shot: '镜头名称' }[id], exact: true }).count(), 0)
     await readonly.getByRole('button', { name: '关闭详情', exact: true }).click()
   }
   assert.equal((await read()).revision, revision)

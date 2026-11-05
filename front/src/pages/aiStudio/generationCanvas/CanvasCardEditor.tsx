@@ -16,11 +16,13 @@ export function canvasEditorFocusTargets(root: HTMLElement) {
 /** 操作条位于滚动正文之外；复杂设计编辑器仍保留同一实例。 */
 export const CanvasEditorHeader = createContext<HTMLElement | null>(null)
 
+export const CanvasEditorTitle = createContext<{ host: HTMLElement | null; open: boolean; typeLabel: string } | undefined>(undefined)
+
 export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
-export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, material = false, focusLayout = false, modality, cardType, onReveal, suppressed = false, children }: {
-  title: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
+export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, material = false, focusLayout = false, modality, cardType, onReveal, suppressed = false, children }: {
+  title: string; editableTitle?: boolean; typeLabel?: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
   anchor?: HTMLElement | null; layoutKey: string; suppressed?: boolean; onReveal: (offset: { x: number; y: number }) => (() => void);
   expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
@@ -34,6 +36,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const [placement, setPlacement] = useState({ left: 16, top: 100, maxHeight: 360, width: 700 })
   const panel = useRef<HTMLElement>(null)
   const menuAtMaskPress = useRef(false)
+  const [titleHost, setTitleHost] = useState<HTMLDivElement | null>(null)
   const [header, setHeader] = useState<HTMLDivElement | null>(null)
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const close = useRef(onClose); close.current = onClose
@@ -189,12 +192,12 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     }} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
       className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-preset-design={visualDesign} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: 'min(730px, calc(100dvh - 2 * var(--design-editor-top)))', maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
-      <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
+      <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading" data-name-editor={editableTitle}>{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}{editableTitle ? <div ref={setTitleHost} className="design-title-host" /> : <h2 title={title}>{title}</h2>}{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
         {(!desktop || !material) && <WorkbenchIconButton style={!desktop && visualDesign ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
-      <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></div>
+      <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorTitle.Provider value={{ host: titleHost, open: visible, typeLabel }}><CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></CanvasEditorTitle.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />
     </section>
   </>, document.body)

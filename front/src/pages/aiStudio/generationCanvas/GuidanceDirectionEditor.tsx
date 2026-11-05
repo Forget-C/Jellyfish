@@ -28,9 +28,7 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
   const fields = Object.fromEntries(designFieldEntries(card))
   const nameLabel = card.type === 'direction.criterion' ? '验收要求名称' : card.type === 'direction.creative_control' ? '创作控制名称' : '生成指导名称'
   const namePlaceholder = card.type === 'direction.criterion' ? '例如：手部与钥匙清晰可见' : card.type === 'direction.creative_control' ? '例如：主角造型保持原则' : '例如：反应镜头生成指导'
-  const relations = <div className="design-named-relations">
-    <DesignNameField label={nameLabel} placeholder={namePlaceholder} value={card.name} disabled={disabled} error={nameInvalid ? '请先填写验收要求名称' : undefined} onChange={name => onChange({ ...card, name })} />
-  </div>
+  const relations = <DesignNameField label={nameLabel} placeholder={namePlaceholder} value={card.name} disabled={disabled} error={nameInvalid ? '请先填写验收要求名称' : undefined} onChange={name => onChange({ ...card, name })} />
   return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={false} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 

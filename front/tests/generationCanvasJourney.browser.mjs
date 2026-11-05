@@ -162,6 +162,7 @@ try {
   await poll(state=>state.document.cards.find(card=>card.id===performance).input_bindings?.length===2)
   assert.equal(await detail.getByText('今天会是晴天。',{exact:false}).count(),0)
   const anchor=await add('空间锚点卡','direction.anchor')
+  await detail.getByRole('button',{name:'编辑锚点名称',exact:true}).click()
   await detail.getByRole('textbox',{name:'锚点名称',exact:true}).fill('门口')
   await detail.getByRole('textbox',{name:'位置内容',exact:true}).fill('画面左侧门框')
   await connectExisting(anchor,image,'图片素材')

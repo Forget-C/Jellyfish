@@ -57,7 +57,8 @@ try {
   assert.equal((await read()).revision,before.revision)
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.locator('[data-card-id="empty"]').getByRole('button',{name:/设计/}).press('Enter')
-  await detail.getByText('暂无候选来源，请先连接来源或添加素材。',{exact:true}).waitFor()
+  await detail.getByText('0 个候选 · 0 个使用中',{exact:true}).waitFor()
+  assert.equal(await detail.getByText('暂无候选来源，请先连接来源或添加素材。',{exact:true}).count(),0)
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.locator('[data-card-id="movement"]').getByRole('button',{name:/设计/}).press('Enter')
   await detail.getByRole('button',{name:/候选 张三 · 已用作焦点对象；已用作关注对象/}).waitFor()
@@ -92,6 +93,5 @@ try {
   await page.reload()
   await page.locator('[data-card-id="dialogue"]').getByRole('button',{name:/设计/}).press('Enter')
   await detail.getByText('候选来源读取失败，请保存或重开后重试。',{exact:true}).waitFor()
-  assert.equal(await detail.getByText('暂无候选来源，请先连接来源或添加素材。',{exact:true}).count(),0)
   console.log('Candidate role, field, empty, loading, failure and preview-only states passed:',output)
 } finally { await cleanup() }

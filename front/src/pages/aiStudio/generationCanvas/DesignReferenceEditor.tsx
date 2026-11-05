@@ -78,7 +78,6 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     })}
     {resolved.loading && <small role="status">正在读取候选来源…</small>}
     {!resolved.loading && resolved.error && <Alert type="warning" message="候选来源读取失败，请保存或重开后重试。" />}
-    {!resolved.loading && !resolved.error && !sources.length && <small>暂无候选来源，请先连接来源或添加素材。</small>}
     <div className="generation-material-add">{sourceActions}</div>
     {(!resolved.loading && !resolved.error || resolved.candidates.length > 0) && <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${activeCount} 个使用中`}</small>}
   </div>{onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</>

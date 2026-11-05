@@ -37,7 +37,7 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const labels = { creative_control: '创作控制名称', guidance: '生成指导名称', criterion: '验收要求名称', narrative: '叙事名称', beat: '节拍名称', event: '事件名称', shot: '镜头名称', anchor: '锚点名称', blocking: '调度名称' }
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '设计名称字段审计' }) })).json()).data
-  const document = { ...canvas.document, cards: Object.keys(labels).map(id => ({ id, type: 'direction.' + id, name: '' })) }
+  const document = { ...canvas.document, cards: [...Object.keys(labels).map(id => ({ id, type: 'direction.' + id, name: '' })), { id: 'other-criterion', type: 'direction.criterion', name: '已占用名称' }] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
@@ -46,24 +46,60 @@ try {
   for (const [id, label] of Object.entries(labels)) {
     const detail = await openCanvasCard(page, id)
     const input = detail.getByRole('textbox', { name: label, exact: true })
+    await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
     await input.waitFor()
-    assert.equal(await detail.locator('label').filter({ hasText: label }).count(), 1, 'visible name label')
+    assert.equal(await input.evaluate(element => !!element.closest('header')), true, 'name edits in modal heading')
     assert.equal(await input.evaluate(element => !!element.closest('details')), false, 'name is outside relation folds')
     const placeholder = await input.getAttribute('placeholder')
     assert.ok(placeholder?.startsWith('例如：'))
     assert.equal(await detail.getByText(placeholder, { exact: true }).count(), 0)
     await input.fill('已命名-' + id)
     await poll(state => state.document.cards.find(card => card.id === id).name === '已命名-' + id)
+    if (id === 'creative_control') {
+      await input.dispatchEvent('keydown', { key: 'Enter', isComposing: true })
+      assert.equal(await input.isVisible(), true, 'IME confirmation does not exit name editing')
+    }
+    await input.press('Enter')
+    await detail.getByRole('heading', { name: '已命名-' + id, exact: true }).waitFor()
+    const edit = detail.getByRole('button', { name: '编辑' + label, exact: true })
+    await page.waitForFunction(name => document.activeElement?.getAttribute('aria-label') === name, '编辑' + label)
+    await edit.click()
+    await input.press('Escape')
+    assert.equal(await detail.isVisible(), true, 'Escape ends name editing before closing modal')
+    assert.equal(await input.count(), 0)
+    await edit.click()
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
-    if (await advanced.count()) await advanced.click()
+    if (await advanced.count()) {
+      await advanced.click()
+      assert.equal(await input.count(), 0, 'mode button blur ends editing')
+      await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
+    }
     assert.equal(await input.isVisible(), true)
     await page.setViewportSize({ width: 390, height: 844 })
+    if (!await input.isVisible()) await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
+    await input.waitFor()
     const box = await input.boundingBox(), panel = await detail.boundingBox()
-    assert.ok(box.width > panel.width - 64, 'name fills the narrow editor')
+    assert.ok(box.width > 100 && box.x >= panel.x && box.x + box.width <= panel.x + panel.width, 'name fits narrow heading')
     await detail.screenshot({ path: join(output, id + '-name-mobile.png') })
     await page.setViewportSize({ width: 1440, height: 1000 })
     await closeCanvasDetails(page)
   }
+  const criterion = await openCanvasCard(page, 'criterion')
+  const nameInput = criterion.getByRole('textbox', { name: labels.criterion, exact: true })
+  await criterion.getByRole('button', { name: '编辑' + labels.criterion, exact: true }).click()
+  await nameInput.fill('已占用名称')
+  await criterion.getByRole('alert').filter({ hasText: '该名称已被同类型卡片使用' }).waitFor()
+  await nameInput.press('Enter')
+  assert.equal(await nameInput.count(), 0, 'invalid name does not trap editing')
+  await criterion.getByRole('button', { name: '编辑' + labels.criterion, exact: true }).click()
+  await nameInput.fill('已命名-criterion')
+  assert.equal(await criterion.getByRole('alert').count(), 0)
+  await nameInput.press('Enter')
+  await poll(state => state.document.cards.find(card => card.id === 'criterion').name === '已命名-criterion')
+  await closeCanvasDetails(page)
+  const reopened = await openCanvasCard(page, 'criterion')
+  assert.equal(await reopened.getByRole('textbox', { name: labels.criterion, exact: true }).count(), 0, 'reopen resets edit session')
+  await closeCanvasDetails(page)
   await page.reload()
   const observer = await context.newPage()
   await observer.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
@@ -72,10 +108,27 @@ try {
   for (const [id, label] of Object.entries(labels)) {
     const detail = await openCanvasCard(observer, id)
     const input = detail.getByRole('textbox', { name: label, exact: true })
-    assert.equal(await input.inputValue(), '已命名-' + id)
-    assert.equal(await input.isDisabled(), true)
+    await detail.getByRole('heading', { name: '已命名-' + id, exact: true }).waitFor()
+    assert.equal(await input.count(), 0)
+    assert.equal(await detail.getByRole('button', { name: '编辑' + label, exact: true }).count(), 0)
     await closeCanvasDetails(observer)
   }
   await observer.close()
+  const failedDetail = await openCanvasCard(page, 'guidance')
+  await failedDetail.getByRole('button', { name: '编辑' + labels.guidance, exact: true }).click()
+  const failedInput = failedDetail.getByRole('textbox', { name: labels.guidance, exact: true })
+  let rejectSave
+  const rejected = new Promise(resolve => { rejectSave = resolve })
+  const saveUrl = `**/generation-canvases/canvas-project/${canvas.id}`
+  await page.route(saveUrl, route => {
+    if (route.request().method() === 'PUT') { rejectSave(); return route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) }
+    return route.continue()
+  })
+  await failedInput.fill('网络失败保留的名称')
+  await rejected
+  await failedInput.press('Enter')
+  await failedDetail.getByRole('heading', { name: '网络失败保留的名称', exact: true }).waitFor()
+  assert.equal(await failedDetail.getByRole('alert').count(), 0, 'network failure is not a name validation error')
+  await page.unroute(saveUrl)
   console.log('PASS all nine named design types: visible label, persistent name, placeholder only, full width and readonly')
 } finally { await cleanup() }

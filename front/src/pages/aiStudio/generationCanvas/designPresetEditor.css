@@ -109,6 +109,16 @@
 .generation-card-editor[data-design-editor="true"] { --design-editor-top: min(64px, 8dvh); }
 @media (max-width: 700px) { .generation-card-editor[data-design-editor="true"] { --design-editor-top: 8px; } }
 
-.design-named-relations { flex-basis: 100%; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.generation-editor-heading[data-name-editor="true"] { flex: 1; min-width: 0; }
+.design-title-host, .design-title-name { width: 100%; min-width: 0; }
+.design-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.design-title-row h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.design-title-row .wb-action { flex-shrink: 0; font-size: 12px; }
+.design-title-type { display: block; color: var(--wb-muted); font-size: 12px; }
+.design-title-error-dot { margin-right: 4px; }
+.generation-card-editor[data-narrow="true"]:has(.design-title-host) > .wb-details-header { flex-wrap: wrap; }
+.generation-card-editor[data-narrow="true"] .generation-editor-heading[data-name-editor="true"] { flex-basis: 100%; }
 
-.design-name-field { width: 100%; min-width: 0; }
+.design-preset-relations:empty { display: none; }
+
+.design-title-name > .ant-input { font-size: 16px; font-weight: 600; }

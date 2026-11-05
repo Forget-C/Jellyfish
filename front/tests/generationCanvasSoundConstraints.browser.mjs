@@ -89,6 +89,7 @@ try {
     assert.ok(state.document.cards.find(card=>card.id===id)[cases.find(row=>row[0]===id)[1]].document.segments.some(segment=>segment.kind==='reference'&&segment.source.card_id==='brief'))
   }}
   await assertClean();await openCanvasCard(page,'creative_control')
+  await detail.getByRole('button',{name:'编辑创作控制名称',exact:true}).click()
   await detail.getByRole('textbox',{name:'创作控制名称',exact:true}).fill('清理后编辑')
   await poll(state=>state.document.cards.find(card=>card.id==='creative_control').name==='清理后编辑')
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
