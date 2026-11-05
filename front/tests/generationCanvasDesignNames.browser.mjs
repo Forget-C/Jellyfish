@@ -46,6 +46,7 @@ try {
   for (const [id, label] of Object.entries(labels)) {
     const detail = await openCanvasCard(page, id)
     const input = detail.getByRole('textbox', { name: label, exact: true })
+    if (id === 'criterion') await detail.screenshot({ path: join(output, 'unnamed-title-desktop.png') })
     await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
     await input.waitFor()
     assert.equal(await input.evaluate(element => !!element.closest('header')), true, 'name edits in modal heading')
@@ -61,8 +62,14 @@ try {
     }
     await input.press('Enter')
     await detail.getByRole('heading', { name: '已命名-' + id, exact: true }).waitFor()
-    const edit = detail.getByRole('button', { name: '编辑' + label, exact: true })
     await page.waitForFunction(name => document.activeElement?.getAttribute('aria-label') === name, '编辑' + label)
+    if (id === 'criterion') {
+      await detail.screenshot({ path: join(output, 'named-title-desktop.png') })
+      await page.setViewportSize({ width: 390, height: 844 })
+      await detail.screenshot({ path: join(output, 'named-title-mobile.png') })
+      await page.setViewportSize({ width: 1440, height: 1000 })
+    }
+    const edit = detail.getByRole('button', { name: '编辑' + label, exact: true })
     await edit.click()
     await input.press('Escape')
     assert.equal(await detail.isVisible(), true, 'Escape ends name editing before closing modal')

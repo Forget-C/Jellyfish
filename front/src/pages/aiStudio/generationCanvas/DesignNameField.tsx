@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { Input, Typography, type InputRef } from 'antd'
 import { CanvasEditorTitle } from './CanvasCardEditor'
 import { DesignReferenceContext } from './DesignReferenceEditor'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 
 /** 名称原位编辑沿用画布自动保存；退出只结束编辑，回退使用画布撤销。 */
 export function DesignNameField({ label, placeholder, value, disabled, error, onChange }: { label: string; placeholder: string; value?: string; disabled?: boolean; error?: string; onChange: (value: string) => void }) {
@@ -39,7 +38,7 @@ export function DesignNameField({ label, placeholder, value, disabled, error, on
     {editing && !disabled ? <Input ref={input} id={id} aria-label={label} aria-invalid={!!issue} aria-describedby={issue ? `${id}-error` : undefined} value={value} placeholder={placeholder} status={issue ? 'error' : undefined} onChange={event => onChange(event.target.value)} onBlur={() => setEditing(false)} onKeyDown={event => {
       if (!event.nativeEvent.isComposing && (event.key === 'Enter' || event.key === 'Escape')) { event.preventDefault(); event.stopPropagation(); finish() }
     }} /> : <div className="design-title-row"><h2 title={name || title.typeLabel}>{name || title.typeLabel}</h2>
-      {disabled ? !name && <small>未设置名称</small> : <WorkbenchButton ref={action} variant="quiet" aria-label={`编辑${label}`} aria-describedby={issue ? `${id}-error` : undefined} onClick={() => setEditing(true)}>{issue && <Typography.Text type="danger" className="design-title-error-dot" aria-hidden="true">●</Typography.Text>}{name ? '编辑' : '未设置名称'}</WorkbenchButton>}
+      {disabled ? !name && <small>未设置名称</small> : <button type="button" ref={action} className="design-title-edit" aria-label={`编辑${label}`} aria-describedby={issue ? `${id}-error` : undefined} onClick={() => setEditing(true)}>{issue && <Typography.Text type="danger" className="design-title-error-dot" aria-hidden="true">●</Typography.Text>}{name ? '编辑' : '未设置名称'}</button>}
     </div>}
     {(name || editing) && <small className="design-title-type">{title.typeLabel}</small>}
     {issue && <Typography.Text type="danger" id={`${id}-error`} role="alert" className="design-reference-issue">{issue}</Typography.Text>}

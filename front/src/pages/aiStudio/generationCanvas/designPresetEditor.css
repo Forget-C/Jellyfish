@@ -111,9 +111,11 @@
 
 .generation-editor-heading[data-name-editor="true"] { flex: 1; min-width: 0; }
 .design-title-host, .design-title-name { width: 100%; min-width: 0; }
-.design-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.design-title-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .design-title-row h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.design-title-row .wb-action { flex-shrink: 0; font-size: 12px; }
+.design-title-edit { flex-shrink: 0; padding: 0; border: 0; background: none; color: var(--wb-focus); font: inherit; font-size: 12px; cursor: pointer; }
+.design-title-edit:hover { text-decoration: underline; }
+.design-title-edit:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: 2px; border-radius: 2px; }
 .design-title-type { display: block; color: var(--wb-muted); font-size: 12px; }
 .design-title-error-dot { margin-right: 4px; }
 .generation-card-editor[data-narrow="true"]:has(.design-title-host) > .wb-details-header { flex-wrap: wrap; }
