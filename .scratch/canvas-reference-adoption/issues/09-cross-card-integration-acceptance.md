@@ -1,7 +1,7 @@
 # 09: 完成 18 类卡片的跨场景集成验收
 
 Status: ready-for-agent
-Completion: completed
+Completion: integrated
 Blocked by: 02, 03, 04, 05, 06, 07, 08
 
 **What to build:** 用户在同一生成画布混合使用新旧卡片、多种关系和运行历史时，获得与规格一致的完整行为；完成范围核对、跨票据集成问题修复及文档／契约一致性验收。
@@ -45,3 +45,5 @@ Blocked by: 02, 03, 04, 05, 06, 07, 08
 - 完整前端unit、typecheck、lint基线检查通过（274存量、0新增），应用Pylint10.00/10。canvas-design全部17项通过，包括25类元信息全生命周期、名称、候选、多路径保护、字段引用、媒体携带及画面定位；仅对失败／未执行场景继续执行，已通过场景复用。两处旧浏览器夹具分别改为独立设计连线即采用和保留focus角色，不削减原断言目的。
 - 浏览器结果和截图保存在 `/private/tmp/jellyfish-ref09-evidence`；全后端最终日志 `/private/tmp/ref09-backend-final.log`，混合文档日志 `/private/tmp/ref09-mixed-final.log`；具体覆盖见本功能validation记录。桌面卡面与390px候选／详情截图已检查，无横向溢出。
 - 标准OpenAPI已由根代理在确认主8000来自当前工作区自动重载后端后更新，schema与生成客户端内容等价；本票无新公共契约。同步架构／工作台中明确依赖传播和18类清理范围的陈述，修正局部发布注释，不修改原规格。01–08已合入集成分支，完成标记改为integrated，Status仍ready-for-agent。未调用付费生成，外部MySQL等47跳过项及真实供应商质量不冒称已验收。
+
+- 2026-11-05：全部票据已集成，最终 Standards 与 Spec 两轴人工审查均为0项未解决问题；提交标题规范修正后范围检查通过。
