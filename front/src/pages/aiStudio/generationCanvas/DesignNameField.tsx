@@ -35,12 +35,14 @@ export function DesignNameField({ label, placeholder, value, disabled, error, on
   }
   if (!title?.host) return null
   return createPortal(<div className="design-title-name">
-    <small className="design-title-type">{title.typeLabel}</small>
     <div className="design-title-row">
       {editing && !disabled ? <Input ref={input} id={id} aria-label={label} aria-invalid={!!issue} aria-describedby={issue ? `${id}-error` : undefined} value={value} placeholder={placeholder} status={issue ? 'error' : undefined} onChange={event => onChange(event.target.value)} onBlur={() => setEditing(false)} onKeyDown={event => {
         if (!event.nativeEvent.isComposing && (event.key === 'Enter' || event.key === 'Escape')) { event.preventDefault(); event.stopPropagation(); finish() }
       }} /> : name ? <h2 className="design-title-heading" title={name}>{name}</h2> : disabled && <small>未设置名称</small>}
-      {!editing && !disabled && <button type="button" ref={action} className="design-title-edit" aria-label={`编辑${label}`} aria-describedby={issue ? `${id}-error` : undefined} onClick={() => setEditing(true)}>{issue && <Typography.Text type="danger" className="design-title-error-dot" aria-hidden="true">●</Typography.Text>}{name ? '重命名' : '未设置名称'}</button>}
+      <span className="design-title-tools">
+        {!editing && !disabled && <><button type="button" ref={action} className="design-title-edit" aria-label={`编辑${label}`} aria-describedby={issue ? `${id}-error` : undefined} onClick={() => setEditing(true)}>{issue && <Typography.Text type="danger" className="design-title-error-dot" aria-hidden="true">●</Typography.Text>}{name ? '重命名' : '未设置名称'}</button><span aria-hidden="true">-</span></>}
+        <small className="design-title-type">{title.typeLabel}</small>
+      </span>
     </div>
     {issue && <Typography.Text type="danger" id={`${id}-error`} role="alert" className="design-reference-issue">{issue}</Typography.Text>}
   </div>, title.host)

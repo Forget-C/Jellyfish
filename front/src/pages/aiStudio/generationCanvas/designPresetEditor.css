@@ -112,8 +112,9 @@
 .generation-editor-heading[data-name-editor="true"] { flex: 1; min-width: 0; }
 .design-title-host, .design-title-name { width: 100%; min-width: 0; }
 .design-title-heading { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 24px; }
-.design-title-row { display: flex; align-items: baseline; gap: 12px; min-width: 0; margin-top: 4px; min-height: 24px; }
-.design-title-row > .ant-input { min-width: 0; font-size: 16px; font-weight: 600; }
+.design-title-row { display: flex; align-items: baseline; gap: 12px; min-width: 0; min-height: 24px; }
+.design-title-tools { display: inline-flex; align-items: baseline; flex-shrink: 0; gap: 6px; color: var(--wb-muted); font-size: 12px; line-height: 18px; white-space: nowrap; }
+.design-title-row > .ant-input { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; }
 .design-title-edit { flex-shrink: 0; padding: 0; border: 0; background: none; color: var(--wb-focus); font: inherit; font-size: 12px; cursor: pointer; }
 .design-title-edit:hover { text-decoration: underline; }
 .design-title-edit:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: 2px; border-radius: 2px; }
@@ -123,3 +124,8 @@
 .generation-card-editor[data-narrow="true"] .generation-editor-heading[data-name-editor="true"] { flex-basis: 100%; }
 
 .design-preset-relations:empty { display: none; }
+
+@media (max-width: 360px) {
+  .design-title-row { flex-wrap: wrap; gap: 4px 12px; }
+  .design-title-heading { min-width: min(120px, 100%); max-width: 100%; }
+}
