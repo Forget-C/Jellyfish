@@ -39,21 +39,39 @@ try {
   const document = { ...canvas.document, cards: definitions.map(definition => {
     const id = definition.type.slice('direction.'.length)
     const fields = Object.fromEntries(definition.fields.map((field, index) => [field.id, index === 0 ? { text: '模型提取的设计参数', state: 'proposal', purpose: 'background', source_locator: '模型提取定位', authorship: 'model' } : { text: '自行填写的设计参数', state: 'fact', purpose: 'design', authorship: 'user' }]))
-    return { id, type: definition.type, ...(id === 'dialogue' ? { dialogue_id: 'audit-dialogue' } : {}), ...(visual.has(id) ? { fields } : fields) }
+    return { id, type: definition.type, source_locator: '卡片原始定位', ...(id === 'dialogue' ? { dialogue_id: 'audit-dialogue' } : {}), ...(visual.has(id) ? { fields } : fields) }
   }) }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 100; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('design metadata save timeout') }
   await page.goto(`http://127.0.0.1:4691/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const savedCard = async id => (await read()).document.cards.find(card => card.id === id)
+  const valueOf = (card, key) => visual.has(card.id) ? card.fields[key] : card[key]
+  const assertFields = async (detail, saved) => {
+    const definition = definitions.find(item => item.type === saved.type)
+    for (const field of definition.fields) {
+      const text = await detail.getByRole('textbox', { name: field.label + '内容', exact: true }).innerText()
+      assert.equal(text.trim(), valueOf(saved, field.id).text.trim(), `${definition.title}: reopened ${field.label} matches saved content`)
+    }
+  }
+  const reopen = async id => {
+    await closeCanvasDetails(page)
+    const detail = await openCanvasCard(page, id)
+    const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
+    if (await advanced.count()) await advanced.click()
+    await detail.getByText('卡片原始来源：卡片原始定位', { exact: true }).waitFor()
+    await assertFields(detail, await savedCard(id))
+    return detail
+  }
+  const userMetadataHidden = async (detail, title) => assert.equal(await detail.locator('[data-design-field] .design-field-metadata').count(), 0, title)
   for (const definition of definitions) {
     const id = definition.type.slice('direction.'.length)
     const node = page.locator(`[data-card-id="${id}"]`)
     await node.getByRole('button', { name: '编辑设计', exact: true }).waitFor({ state: 'attached' })
     for (const text of await node.locator('dd').allTextContents()) assert.doesNotMatch(text, /^(事实|设计|背景|约束)[：·]/, `${definition.title}: user card summary omits default metadata`)
-    const detail = await openCanvasCard(page, id)
-    const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
-    if (await advanced.count()) await advanced.click()
+    const original = await savedCard(id)
+    const detail = await reopen(id)
     await detail.getByText('提议 · 背景 · 来源：模型提取定位', { exact: true }).waitFor()
     assert.equal(await detail.getByRole('switch', { name: '显示状态与来源', exact: true, includeHidden: true }).count(), 0, definition.title)
     for (const field of definition.fields) {
@@ -68,7 +86,34 @@ try {
       const value = visual.has(id) ? saved.fields[first.id] : saved[first.id]
       return value.text === '实际编辑后的设计参数' && value.authorship === 'user'
     })
-    assert.equal(await detail.locator('.design-field-metadata').count(), 0, `${definition.title}: editing removes extracted metadata`)
+    const authored = await savedCard(id)
+    const field = valueOf(authored, first.id)
+    assert.equal(field.state, 'fact')
+    assert.equal(field.purpose, 'design')
+    assert.equal(field.source_locator, '')
+    assert.equal(field.metadata_fields, undefined)
+    await reopen(id)
+    await userMetadataHidden(detail, `${definition.title}: saved manual content has no default metadata`)
+    await detail.getByRole('button', { name: '撤销', exact: true }).click()
+    await poll(state => JSON.stringify(state.document.cards.find(card => card.id === id)) === JSON.stringify(original))
+    await reopen(id)
+    await detail.getByText('提议 · 背景 · 来源：模型提取定位', { exact: true }).waitFor()
+    await closeCanvasDetails(page)
+    await page.getByRole('button', { name: '重做操作', exact: true }).click()
+    await poll(state => JSON.stringify(state.document.cards.find(card => card.id === id)) === JSON.stringify(authored))
+    await reopen(id)
+    await userMetadataHidden(detail, `${definition.title}: redo preserves user authorship`)
+    await detail.getByRole('textbox', { name: first.label + '内容', exact: true }).fill('')
+    await poll(state => valueOf(state.document.cards.find(card => card.id === id), first.id).state === 'empty')
+    const empty = valueOf(await savedCard(id), first.id)
+    assert.equal(empty.source_locator, '')
+    assert.equal(empty.metadata_fields, undefined)
+    await reopen(id)
+    await userMetadataHidden(detail, `${definition.title}: cleared content stays empty after reopening`)
+    await detail.getByRole('button', { name: '撤销', exact: true }).click()
+    await poll(state => JSON.stringify(state.document.cards.find(card => card.id === id)) === JSON.stringify(authored))
+    await assertFields(detail, authored)
+    await userMetadataHidden(detail, `${definition.title}: undo clear restores user settings`)
     const back = detail.getByRole('button', { name: '返回预设', exact: true })
     if (await back.count()) {
       await back.click()
@@ -81,12 +126,36 @@ try {
           return !['实际编辑后的设计参数', '自行填写的设计参数'].includes(value.text) && value.authorship === 'user'
         })
       })
-      await advanced.click()
-      assert.equal(await detail.locator('.design-field-metadata').count(), 0, `${definition.title}: preset fields have no default metadata`)
+      const presetCard = await savedCard(id)
+      await reopen(id)
+      await userMetadataHidden(detail, `${definition.title}: saved preset content has no default metadata`)
+      for (const entry of definition.fields) {
+        const value = valueOf(presetCard, entry.id)
+        assert.equal(value.authorship, 'user')
+        assert.equal(value.state, 'fact')
+        assert.equal(value.purpose, 'design')
+        assert.equal(value.source_locator, '')
+        assert.equal(value.metadata_fields, undefined)
+      }
+      await detail.getByRole('button', { name: '撤销', exact: true }).click()
+      await poll(state => JSON.stringify(state.document.cards.find(card => card.id === id)) === JSON.stringify(authored))
+      await assertFields(detail, authored)
+      await userMetadataHidden(detail, `${definition.title}: undo preset restores the complete previous fields`)
     }
     await closeCanvasDetails(page)
     for (const text of await node.locator('dd').allTextContents()) assert.doesNotMatch(text, /^(事实|设计|背景|约束)[：·]/, `${definition.title}: preset and edited summaries omit default metadata`)
+    console.log('PASS lifecycle', definition.type)
+  }
+  const beforeReload = (await read()).document
+  await page.reload()
+  for (const definition of definitions) {
+    const id = definition.type.slice('direction.'.length)
+    const detail = await reopen(id)
+    await userMetadataHidden(detail, `${definition.title}: reload does not reintroduce default metadata`)
+    assert.deepEqual(await savedCard(id), beforeReload.cards.find(card => card.id === id))
+    await closeCanvasDetails(page)
+    for (const text of await page.locator(`[data-card-id="${id}"] dd`).allTextContents()) assert.doesNotMatch(text, /^(事实|设计|背景|约束)[：·]/)
   }
   await page.screenshot({ path: join(output, 'all-design-metadata-desktop.png'), fullPage: true })
-  console.log('PASS all 25 design types: readonly metadata controls, manual and preset values, and card summaries')
+  console.log('PASS all 25 design types: save/reopen, reload, undo/redo, clear, presets and extraction metadata')
 } finally { await cleanup() }

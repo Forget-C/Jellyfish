@@ -1,7 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
-    "generation-canvas-design-metadata": {"file":"generationCanvasDesignMetadata.browser.mjs","ports":[4691,8691],"timeoutMs":180000},
+    "generation-canvas-design-metadata": {"file":"generationCanvasDesignMetadata.browser.mjs","ports":[4691,8691],"timeoutMs":300000},
     "generation-canvas-sound-constraints": {"file":"generationCanvasSoundConstraints.browser.mjs","ports":[4463,8463],"timeoutMs":180000},
     "generation-canvas-design-relations": { "file": "generationCanvasDesignRelations.browser.mjs", "ports": [4670, 8670], "timeoutMs": 180000 },
     "generation-canvas-carried-video": { "file": "generationCanvasCarriedVideo.browser.mjs", "ports": [4668, 8668], "timeoutMs": 180000 },
