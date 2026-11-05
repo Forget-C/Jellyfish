@@ -46,3 +46,5 @@ Blocked by: 01
 - 新增公开 HTTP 回归：逐路径解除直接／随设计验收与独立来源、不同身份相同标准正文不合并、重复正文引用位置保留且来源导入一次、失效引用可保存但有效采用阻止编译、停用不导入但继续删除保护。正常编译仍复用完整设计依赖闭包，无新增最终依赖缓存或公开协议。
 - 组合公开 API 回归（采用路径、验收、完整字段引用、携带视频）：166 passed / 22.60s。覆盖既有菱形依赖与媒体多用途，保持现有身份去重和视频用途逻辑。
 - 新真实 Chrome 回归 generation-canvas-multipath-protection：PASS 10.4s，证据 browser-upngsU。受影响 canvasOperations 单元回归、typecheck、lint 基线检查（274 存量、0 新增）、diffcheck通过。未修改后端应用或公共 schema，不需本票单独重新生成客户端；Python应用Pylint复用集成相同代码的通过结果，后端新增测试已执行。
+
+- 合入全部18类退役实现后再次验证：API组合184 passed / 26.20s、typecheck通过、真实Chrome批量删除与恢复PASS 10.3s（browser-86TvtJ）；合并仅文档追加冲突，保留双方说明。
