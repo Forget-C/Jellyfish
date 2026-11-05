@@ -77,7 +77,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'image', 'video'])
-@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule', 'object-situation', 'object-performance', 'object-activity'])
+@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'object-situation', 'object-performance', 'object-activity', 'object-sound', 'object-camera', 'object-lighting', 'object-focus', 'object-composition', 'object-movement', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule'])
 async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_connection(runtime, image_storage, monkeypatch, modality, legacy_conflict):
     import asyncio
     import json
@@ -427,12 +427,12 @@ async def test_unavailable_asset_identity_in_design_dependency_blocks_compile(ca
     source = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'position': 0, 'object_id': 'actor'}
     doc = canvas['document']
     doc.update(cards=[{'id': 'actor', 'type': 'reference.character', 'name': '甲', 'object_id': 'actor'},
-        {'id': 'camera', 'type': 'direction.camera', 'fields': {'viewpoint': {'state': 'fact', 'text': '低角度'}},
-         'input_bindings': [{'id': 'actor-use', 'input_port': 'effect_object', 'source': source}]},
+        {'id': 'camera', 'type': 'direction.focus', 'fields': {'depth_focus': {'state': 'fact', 'text': '低角度'}},
+         'input_bindings': [{'id': 'actor-use', 'input_port': 'focus_object', 'source': source}]},
         {'id': 'model', 'type': 'model.text'}],
-        edges=[{'id': 'actor-use', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'camera', 'target_port': 'effect_object'},
+        edges=[{'id': 'actor-use', 'source_card': 'actor', 'source_port': 'object', 'target_card': 'camera', 'target_port': 'focus_object'},
             {'id': 'camera-use', 'source_card': 'camera', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
-        input_order={'camera': {'effect_object': ['actor-use']}, 'model': {'text': ['camera-use']}})
+        input_order={'camera': {'focus_object': ['actor-use']}, 'model': {'text': ['camera-use']}})
     assert (await canvas_client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
     doc['cards'][0]['name'] = ''
     saved = await canvas_client.put(url, json={'request_id': 'incomplete', 'expected_revision': 1, 'document': doc})
