@@ -18,7 +18,7 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 type TargetField = { fieldId: string; serial: number }
 interface ReferenceContext {
-  targetField?: TargetField; issues: DesignReferenceIssue[];
+  savedRevision?: number; targetField?: TargetField; issues: DesignReferenceIssue[];
   document: CanvasDocument; card: GenerationCard; candidates: Candidate[]; disabled?: boolean;
   focus: (handle: React.RefObject<PromptEditorHandle>) => void;
   changeMode: () => void;
@@ -81,7 +81,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     <div className="generation-material-add">{sourceActions}</div>
     {(!resolved.loading && !resolved.error || resolved.candidates.length > 0) && <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${activeCount} 个使用中`}</small>}
   </div>{onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</>
-  return <DesignReferenceContext.Provider value={{ card, document, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
+  return <DesignReferenceContext.Provider value={{ card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
     if (event.key !== 'Escape' || !inspect) return
     event.preventDefault(); event.stopPropagation()
     owner.current?.querySelector<HTMLButtonElement>(`[data-design-source="${CSS.escape(inspect)}"]`)?.focus({ preventScroll: true })

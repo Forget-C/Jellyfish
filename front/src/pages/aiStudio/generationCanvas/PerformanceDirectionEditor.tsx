@@ -10,7 +10,6 @@ import type { CardRendererProps } from './rendererRegistry'
 import { useCardCandidates } from './useCardCandidates'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 
@@ -84,7 +83,6 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as PerformanceCard)}>
     {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor compact label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
     <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
-    <details aria-label="完整设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</details>
   </DesignPresetEditor>
 }
 

@@ -81,11 +81,15 @@ try {
   for (const definition of definitions) {
     const id = definition.type.slice('direction.'.length)
     const detail = await openCanvasCard(page, id)
+    assert.equal(await detail.getByText('revision 1', { exact: true }).count(), 1, `${id}: saved canvas revision in footer`)
+    assert.equal(await detail.locator('summary').filter({ hasText: '查看已保存完整' }).count(), 0, `${id}: no redundant output preview`)
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
     if (await advanced.count()) await advanced.click()
     assert.equal(await detail.locator('summary').filter({ hasText: /正向示例与反例|固定证据与前后态素材|参考素材与图片标记|直接素材参考/ }).count(), retainedExamples.has(id) ? 1 : 0, `${id}: only retained cards expose local references`)
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 })
+      const revision = detail.locator('.design-preset-revision')
+      assert.equal(await revision.evaluate(node => { const box = node.getBoundingClientRect(), parent = node.closest('.generation-editor-actions').getBoundingClientRect(); return box.left >= parent.left && box.right <= parent.right && box.top >= parent.top && box.bottom <= parent.bottom }), true, `${id}: footer revision fits ${width}px`)
       const controls = detail.locator('[role="textbox"], input:not([type="hidden"]), textarea')
       for (const control of await controls.all()) {
         if (await control.isVisible() && await control.isEnabled()) await inspectFocus(control, id, width)

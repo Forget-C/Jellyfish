@@ -12,7 +12,6 @@ import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 export type ConstraintCard = SpaceRuleCard | ContinuityCard | ImmutableFactCard
 const categoryOptions = [{ value: 'space', label: '空间' }, { value: 'appearance', label: '造型' }, { value: 'hands_props', label: '手部与道具' }, { value: 'environment', label: '环境' }, { value: 'photography', label: '摄影' }, { value: 'dialogue_sound', label: '对白与声音' }]
@@ -48,6 +47,5 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
-    <details aria-label="完整约束输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整约束设计" />)}</details>
   </DesignPresetEditor>
 }

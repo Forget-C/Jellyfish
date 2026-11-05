@@ -55,7 +55,8 @@ try {
     assert.ok(placeholder?.startsWith('例如：'))
     assert.equal(await detail.getByText(placeholder, { exact: true }).count(), 0)
     await input.fill('已命名-' + id)
-    await poll(state => state.document.cards.find(card => card.id === id).name === '已命名-' + id)
+    const saved = await poll(state => state.document.cards.find(card => card.id === id).name === '已命名-' + id)
+    await detail.getByText(`revision ${saved.revision}`, { exact: true }).waitFor()
     if (id === 'creative_control') {
       await input.dispatchEvent('keydown', { key: 'Enter', isComposing: true })
       assert.equal(await input.isVisible(), true, 'IME confirmation does not exit name editing')
@@ -87,7 +88,8 @@ try {
       await edit.click()
       await input.fill('已命名-' + id)
       await input.press('Enter')
-      await poll(state => state.document.cards.find(card => card.id === id).name === '已命名-' + id)
+      const saved = await poll(state => state.document.cards.find(card => card.id === id).name === '已命名-' + id)
+      await detail.getByText(`revision ${saved.revision}`, { exact: true }).waitFor()
       await page.setViewportSize({ width: 1440, height: 1000 })
     }
     await edit.click()
@@ -134,6 +136,7 @@ try {
   await observer.getByText('此画布当前只读', { exact: true }).waitFor()
   for (const [id, label] of Object.entries(labels)) {
     const detail = await openCanvasCard(observer, id)
+    await detail.locator('.design-preset-revision').getByText(`revision ${(await read()).revision}`, { exact: true }).waitFor()
     const input = detail.getByRole('textbox', { name: label, exact: true })
     await detail.getByRole('heading', { name: '已命名-' + id, exact: true }).waitFor()
     assert.equal(await input.count(), 0)
@@ -152,8 +155,11 @@ try {
     if (route.request().method() === 'PUT') { rejectSave(); return route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) }
     return route.continue()
   })
+  const savedRevision = (await read()).revision
+  await failedDetail.getByText(`revision ${savedRevision}`, { exact: true }).waitFor()
   await failedInput.fill('网络失败保留的名称')
   await rejected
+  assert.equal(await failedDetail.getByText(`revision ${savedRevision}`, { exact: true }).count(), 1, 'failed save retains confirmed revision')
   await failedInput.press('Enter')
   await failedDetail.getByRole('heading', { name: '网络失败保留的名称', exact: true }).waitFor()
   assert.equal(await failedDetail.getByRole('alert').count(), 0, 'network failure is not a name validation error')

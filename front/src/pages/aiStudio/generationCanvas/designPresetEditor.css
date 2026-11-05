@@ -39,7 +39,7 @@
 .design-preset-detail:has(.design-preset-changes[open]) .design-preset-preview,
 .design-preset-detail:has(.design-preset-changes[open]) .design-preset-disclaimer { display: none; }
 /* Keep the 3px outer focus ring inside the scroll viewport without shifting field alignment. */
-.design-preset-advanced { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; min-height: 0; padding: 0 6px 0 4px; margin-left: -4px; }
+.design-preset-advanced { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; min-height: 0; padding: 0 6px 4px 4px; margin-left: -4px; }
 .design-preset-advanced-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .design-preset-advanced-heading h3 { margin: 0; }
 .design-preset-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
@@ -133,3 +133,6 @@
 
 /* Scroll focused controls clear of the outer ring, including fractional viewport heights. */
 .design-preset-advanced :is(input, textarea, [role="textbox"], .ant-select, .ant-input-number) { scroll-margin-block: 8px; }
+
+.design-preset-actions > div:last-child { margin-left: auto; justify-content: flex-end; }
+.design-preset-revision { color: var(--wb-muted); font-size: 12px; white-space: nowrap; flex-shrink: 0; }

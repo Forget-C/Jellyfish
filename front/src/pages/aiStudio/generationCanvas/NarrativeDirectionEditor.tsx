@@ -13,7 +13,6 @@ import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard
 
@@ -64,6 +63,5 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
     {card.type === 'direction.shot' && <>{field('narrative_role', '叙事作用')}{field('visible_result', '可见结果')}{field('estimated_duration', '预计时长')}</>}
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
     {identity && <details><summary>稳定身份</summary>{identity}</details>}
-    <details><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整叙事设计" />)}</details>
   </DesignPresetEditor>
 }

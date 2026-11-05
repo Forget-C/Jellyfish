@@ -11,7 +11,6 @@ import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEdi
 import { useCardCandidates } from './useCardCandidates'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { MediaPreview } from './MediaContentEditor'
 
@@ -65,6 +64,5 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
         <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, examples: examples.filter(value => value.id !== example.id) })}>取消参考</WorkbenchButton>
       </section>)}
     </details>
-    <details aria-label="完整设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</details>
   </DesignPresetEditor>
 }

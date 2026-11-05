@@ -10,9 +10,7 @@ import type { AcceptanceCriterionCard, CreativeControlCard, GenerationGuidanceCa
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
 import { useCardCandidates } from './useCardCandidates'
-import { sourceKey } from './promptRules'
 import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 export type GuidanceCard = AcceptanceCriterionCard | CreativeControlCard | GenerationGuidanceCard
 
@@ -37,6 +35,5 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
     <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
-    <details aria-label="完整要求输出"><summary>查看已保存完整要求 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整要求" />)}</details>
   </DesignPresetEditor>
 }

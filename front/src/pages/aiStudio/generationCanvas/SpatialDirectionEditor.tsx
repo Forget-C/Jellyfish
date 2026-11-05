@@ -13,7 +13,6 @@ import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { MediaPreview } from './MediaContentEditor'
 
 export type SpatialCard = SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard
@@ -116,7 +115,6 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
       })}
     </details>}    </div></div>
 
-    <details aria-label="完整空间设计输出"><summary>查看已保存完整设计 · revision {resolved.revision}</summary>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整空间设计" />)}</details>
   </DesignPresetEditor>
 }
 
