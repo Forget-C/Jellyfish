@@ -1,7 +1,7 @@
 # 06: 声音安排改用字段表达声源
 
 Status: ready-for-agent
-Completion: completed
+Completion: integrated
 Blocked by: 01
 
 **What to build:** 声音安排直接在声源说明、环境声或动作声等字段表达与引用来源，不再重复选择“声源对象”；对白的明确说话对象和本地音频参考继续工作。
@@ -39,3 +39,5 @@ Blocked by: 01
 - 2026-11-05：实现 `ba5d9407`，同步集成 `19ee1bba` 后前后端退役集合保留18类并集。公开接口新增声源退役 red→green；合后声音与验收／真实工作器组合 **128 passed**，覆盖 object-sound 的三模态旧冲突快照拒绝。保留对白身份、主体、制作安排及本地参考；原声音工作器改为字段显式引用人物以保留完整依赖。
 - 首轮真实 Chrome 声音约束回归 **PASS 30.5s**；包含声源旧本地内容恢复、撤销重做、重开及制作安排保留。合并其他卡组后追加混合回归，避免测试素材身份重复；最终结果在下一条记录。typecheck、Pylint **10.00/10**、lint基线 **0新增** 通过。日志保存在 `/private/tmp/ref06-merged-api.log`、`/private/tmp/ref06-pylint.log`、`/private/tmp/ref06-lint.log`。本票仅ClassVar目录端点变化，字段schema不变；主工作区标准OpenAPI同步由集成收尾完成，未调用付费生成。
 - 最终合后真实 Chrome **PASS 36.9s**，证据 `browser-5d364n`，同时覆盖02四类与本票声音恢复、原子撤销重做、保存重开、只读及390px。最终日志 `/private/tmp/ref06-final-browser.log`。本票未重复运行其他组已通过且未受影响的完整前端单元测试。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

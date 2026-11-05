@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01
-Completion: completed
+Completion: integrated
 
 **What to build:** 机位、光影、构图、运镜和焦点设计用具体字段表达一般对象关联，同时保留关注、焦点、所属镜头、验收标准及画面定位，避免同一来源承担多用途时被错误解除。
 
@@ -41,3 +41,5 @@ Completion: completed
 - typecheck、Pylint 10.00/10、lint 基线检查（274 存量，0 新增）及 diffcheck 通过。端口为目录 ClassVar，字段 schema 未改变；集成后由根代理核实当前后端并统一执行标准 OpenAPI 同步。未执行付费生成，不声明真实模型质量已验收。
 
 - 合入已完成的02／03／04后，保留各组退役集合和旧工作器快照参数；合后组合公开接口117 passed，typecheck通过。输出角色映射也移除本票废弃作用对象分支，不保留不可达的现行用途。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

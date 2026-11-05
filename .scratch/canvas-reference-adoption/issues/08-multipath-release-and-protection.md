@@ -1,7 +1,7 @@
 # 08: 完善多路径采用、解除与删除保护
 
 Status: ready-for-agent
-Completion: completed
+Completion: integrated
 Blocked by: 01
 
 **What to build:** 同一标准或完整来源经多条路径进入模型时只导入一次，用户解除某一路径不会误伤其他用途；失效、断线、删除及撤销都有可解释且一致的结果。
@@ -48,3 +48,5 @@ Blocked by: 01
 - 新真实 Chrome 回归 generation-canvas-multipath-protection：PASS 10.4s，证据 browser-upngsU。受影响 canvasOperations 单元回归、typecheck、lint 基线检查（274 存量、0 新增）、diffcheck通过。未修改后端应用或公共 schema，不需本票单独重新生成客户端；Python应用Pylint复用集成相同代码的通过结果，后端新增测试已执行。
 
 - 合入全部18类退役实现后再次验证：API组合184 passed / 26.20s、typecheck通过、真实Chrome批量删除与恢复PASS 10.3s（browser-86TvtJ）；合并仅文档追加冲突，保留双方说明。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

@@ -1,7 +1,7 @@
 # 04: 简化叙事与空间卡的通用对象关系
 
 Status: ready-for-agent
-Completion: completed
+Completion: integrated
 Blocked by: 01
 
 **What to build:** 用户在叙事或空间字段中表达一般对象关联，事件身份、空间归属和锚点定位继续稳定工作；清理旧作用对象不影响这些卡片作为其他设计来源的能力。
@@ -45,3 +45,5 @@ Blocked by: 01
 - 未调用真实供应商，不以受控供应商边界测试代表实际生成质量；未新增验收复核能力。
 
 - 合入最新集成分支的表演／活动退役后，退役集合与文档按并集合并；叙事／空间／连续性／表演公开接口组合97 passed（12.80s），合后typecheck再次通过。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

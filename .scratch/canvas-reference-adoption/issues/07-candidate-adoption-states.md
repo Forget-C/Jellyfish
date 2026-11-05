@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: None
-Completion: completed
+Completion: integrated
 
 **What to build:** 用户在候选区直接看清来源正在承担的全部用途，区分正文引用、明确业务角色、本地参考和未采用候选，不再遇到关系已经采用却仍显示纯候选，或展开后无说明空白的情况。
 
@@ -41,3 +41,5 @@ Completion: completed
 - 原六类设计字段引用浏览器回归通过（browser-qHnoJF，36.3s）；断言由笼统“使用中”更新为具体字段用途。新用例已纳入 canvas-design 套件。
 - 前端 typecheck 通过；lint:check 为 274 项已知问题、0 项新增。普通 lint 仍报告这 274 项存量问题，本票未扩大修复。未改后端、公共契约或 generated client；无需 OpenAPI 同步。具体浏览器与命令日志在本票工作树 test-results 和 /tmp/ref07-*。
 - 前端完整 test:unit 通过（/tmp/ref07-unit.log）；git diff --check 通过。可保留截图及浏览器结果副本位于 /private/tmp/jellyfish-ref07-evidence，避免工作树清理后丢失证据。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

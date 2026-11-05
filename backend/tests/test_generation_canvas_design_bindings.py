@@ -6,24 +6,31 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind,code,message', [
-    ('guidance', 'INVALID_REQUIREMENT_BINDING', '请选择直接候选中适用的对象或验收要求'),
+    ('acceptance', 'INVALID_REQUIREMENT_BINDING', '请选择直接候选中适用的对象或验收要求'),
     ('shot', 'INVALID_NARRATIVE_BINDING', '请选择直接候选中的明确关系'),
     ('blocking', 'INVALID_SPATIAL_BINDING', '请选择直接候选中的明确空间关系'),
-    ('sound', 'INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象'),
+    ('dialogue', 'INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象'),
     ('performance', 'INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象'),
-    ('fact', 'INVALID_CONSTRAINT_BINDING', '请选择直接候选中的明确关系'),
+    ('continuity', 'INVALID_CONSTRAINT_BINDING', '请选择直接候选中的明确关系'),
 ])
 @pytest.mark.parametrize('problem', ['disconnected', 'missing_identity', 'foreign_canvas', 'duplicate', 'wrong_port'])
 async def test_design_binding_errors_keep_exact_diagnostic(canvas_client, kind, code, message, problem):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '关系校验'})).json()['data']
     doc = canvas['document']
-    port = 'participant' if kind in ('shot', 'blocking') else 'effect_object'
+    port = 'acceptance_basis' if kind == 'acceptance' else 'speaker' if kind == 'dialogue' else 'participant'
     binding = {'id': 'selected', 'input_port': port, 'source': {
         'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'object', 'position': 0, 'object_id': 'person'}}
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'name': '人物', 'object_id': 'person'},
         {'id': 'design', 'type': 'direction.' + kind, 'input_bindings': [binding]}],
         edges=[{'id': 'edge', 'source_card': 'person', 'source_port': 'object', 'target_card': 'design', 'target_port': port}],
         input_order={'design': {port: ['edge']}})
+    if kind == 'dialogue':
+        doc['cards'][1]['dialogue_id'] = 'dialogue'
+    if kind == 'acceptance':
+        doc['cards'][0] = {'id': 'person', 'type': 'direction.criterion', 'criterion_id': 'person', 'name': '清晰可见'}
+        doc['cards'][1]['type'] = 'direction.shot'
+        binding['source']['port_id'] = 'criterion'
+        doc['edges'][0]['source_port'] = 'criterion'
     if problem == 'disconnected':
         doc.update(edges=[], input_order={})
     elif problem == 'missing_identity':
@@ -34,6 +41,8 @@ async def test_design_binding_errors_keep_exact_diagnostic(canvas_client, kind, 
         doc['cards'][1]['input_bindings'].append(deepcopy(binding))
     else:
         binding['input_port'] = 'unknown'
+    if kind == 'acceptance' and problem == 'wrong_port':
+        code, message = 'INVALID_NARRATIVE_BINDING', '请选择直接候选中的明确关系'
     if kind == 'performance' and problem in ('duplicate', 'wrong_port'):
         message = '请选择已接入的明确关系用途'
     response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={

@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01
-Completion: completed
+Completion: integrated
 
 **What to build:** 用户在情境、人物表演和镜内活动的具体字段引用相关对象，同时保留明确参与对象；删除通用作用对象不会使模型失去表演主体或其他业务关系。
 
@@ -39,3 +39,5 @@ Completion: completed
 - 2026-11-05：在独立工作树按公开HTTP边界先red（3类型保存仍有旧作用对象），后green；仅移除情境、表演、镜内活动端口并扩展前后端退役集合，复用01的读取／保存／恢复／执行准入。目录驱动关系按钮自然退出，participant及专用角色保留。新增同源主体＋旧用途＋字段引用、仅旧用途转纯候选与主体缺失诊断，实际工作器追加三类型×三模态旧快照拒绝。
 - 验证：表演／空间／guidance组合116 passed（16.63s）；补充纯候选回归后表演完整35 passed（4.64s）；typecheck通过；应用Pylint 10.00/10；真实Chrome performance最终21.5s通过（browser-EpCACG），覆盖三类无通用入口、旧用途清理、主体选择、模型预检／受控执行、活动编辑撤销／重做、刷新及窄屏。已查看performance-mobile截图。证据位于本票工作树浏览器临时目录，后端日志为/private/tmp/jellyfish-ref03-api.log与/private/tmp/jellyfish-ref03-pylint.log。
 - 本票改变ClassVar目录语义，未改变OpenAPI字段schema；集成分支统一核实当前8000后运行标准生成客户端同步，不使用其他进程覆盖。未调用付费模型；实际供应商质量不在本票验证范围。
+
+- 2026-11-05：本票已合入集成分支，09以18类混合场景完成验收；最终全后端1516 passed／47 skipped、canvas-design17项通过。复用本票已有独立浏览器证据，Status保留ready-for-agent，Completion记为integrated。

@@ -36,11 +36,11 @@ export async function verifyIndependentDesigns(scenario, port) {
       {id:'state-only',type:'direction.camera',fields:{viewpoint:{state:'not_applicable'}}},
       {id:'doc-only',type:'direction.lighting',fields:{light_sources:{state:'proposal',document:{segments:[{id:'literal',kind:'text',text:'窗外斜射光'}]}}}},
       {id:'person',type:'content.character',object_id:'person-id',name:'张三'},
-      {id:'relation-only',type:'direction.focus',input_bindings:[{id:'person-use',input_port:'effect_object',source:{canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'person-id'}}]}
+      {id:'relation-only',type:'direction.focus',input_bindings:[{id:'person-use',input_port:'focus_object',source:{canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'person-id'}}]}
     )
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
-    if(scenario==='summaries'){document.edges.push({id:'person-focus',source_card:'person',source_port:'object',target_card:'relation-only',target_port:'effect_object'});document.input_order['relation-only']={effect_object:['person-focus']}}
+    if(scenario==='summaries'){document.edges.push({id:'person-focus',source_card:'person',source_port:'object',target_card:'relation-only',target_port:'focus_object'});document.input_order['relation-only']={focus_object:['person-focus']}}
     const saved=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(saved.ok,await saved.text())
     const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
     const poll=async predicate=>{for(let i=0;i<80;i++){if(predicate(await read()))return;await delay(100)}throw Error('save timeout')}

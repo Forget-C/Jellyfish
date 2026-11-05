@@ -33,9 +33,7 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     assert {'text', 'image', 'video', 'audio', 'object'} <= inputs
     for kind in ('style', 'camera', 'lighting', 'focus', 'composition', 'movement'):
         assert {'text', 'image', 'video', 'audio', 'object'} <= {port['id'] for port in cards['direction.' + kind]['inputs']}
-    effect = lambda card: next(port for port in cards[card]['inputs'] if port['id'] == 'effect_object')['accepts']
-    assert 'shot' in effect('direction.fact') and 'shot' not in effect('direction.criterion')
-    assert effect('direction.performance') == ['object_reference']
+    assert all('effect_object' not in {port['id'] for port in card['inputs']} for card in cards.values())
     assert next(port for port in cards['direction.performance']['inputs'] if port['id'] == 'dialogue_basis')['accepts'] == ['dialogue']
     assert next(field for field in cards['direction.performance']['fields'] if field['id'] == 'physical_action')['label'] == '身体动作'
     assert (await client.get('/canvases/p/missing/catalog')).status_code == 404
