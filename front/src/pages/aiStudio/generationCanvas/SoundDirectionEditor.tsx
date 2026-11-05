@@ -25,8 +25,8 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: SoundCard) => onChange(next)
-  const relation = card.type === 'direction.dialogue' ? 'speaker' : 'effect_object'
-  const label = relation === 'speaker' ? '说话对象' : '声源对象'
+  const relation = 'speaker'
+  const label = '说话对象'
   const exampleUpdate = (id: string, patch: Partial<(typeof examples)[number]>) => update({ ...card, examples: examples.map(item => item.id === id ? { ...item, ...patch } : item) })
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <details><summary>对象与制作关系</summary>    {card.type === 'direction.dialogue' && <section aria-label={label}><h3>{label}</h3>

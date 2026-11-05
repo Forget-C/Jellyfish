@@ -99,11 +99,11 @@ try {
   await page.reload();await assertClean()
   {
   const baseline = await read(), recovered = structuredClone(baseline.document)
-  recovered.cards.push({id:'key',type:'content.prop',object_id:'key',name:'钥匙',text:'金属钥匙'})
+  recovered.cards.push({id:'key',type:'content.prop',object_id:'sound-key',name:'音效钥匙',text:'金属钥匙'})
   const oldSound = recovered.cards.find(item=>item.id==='sound')
   oldSound.production='postproduction'
   oldSound.action_sound={text:'恢复的钥匙碰撞声',authorship:'user'}
-  oldSound.input_bindings=[{id:'old-sound',input_port:'effect_object',source:{canvas_id:canvas.id,card_id:'key',port_id:'object',object_id:'key',position:0}}]
+  oldSound.input_bindings=[{id:'old-sound',input_port:'effect_object',source:{canvas_id:canvas.id,card_id:'key',port_id:'object',object_id:'sound-key',position:0}}]
   recovered.edges.push({id:'old-sound',source_card:'key',source_port:'object',target_card:'sound',target_port:'effect_object'})
   recovered.input_order.sound.effect_object=['old-sound']
   await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:`jellyfish:generation:canvas-project:${canvas.id}:recovery`,value:{schema:1,baseline,document:recovered}})
