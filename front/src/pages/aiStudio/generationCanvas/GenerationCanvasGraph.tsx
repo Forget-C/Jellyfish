@@ -115,6 +115,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
   const [reason, setReason] = useState('')
+  const [invalidRequirementNames, setInvalidRequirementNames] = useState<Set<string>>(() => new Set())
   const [sourceTarget, setSourceTarget] = useState<string>()
   const [uploadSource, setUploadSource] = useState<string>()
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>()
@@ -425,7 +426,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => {
     const result = operations.update(latest.current, next)
-    if (result.document) { edit(result.document); return true }
+    if (result.document) {
+      edit(result.document)
+      if (invalidRequirementNames.has(next.id) && next.type === 'direction.criterion' && 'name' in next && next.name?.trim() && reason === '请先填写验收要求名称') setReason('')
+      return true
+    }
     setReason(result.reason); return false
   }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
@@ -670,6 +675,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const first = options[0] || connectionOptions(sourceId, targetId)[0]
     return first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'
   }
+  const showConnectionIssue = (message: string, sourceId: string) => {
+    setReason(message)
+    if (message === '请先填写验收要求名称') setInvalidRequirementNames(previous => new Set(previous).add(sourceId))
+  }
   /** 替代拖线的入口，复用来源兼容与能力校验，唯一独立用途随连接生效。 */
   const startAccessibleConnection = (card: string, side: ConnectionSide, trigger: HTMLElement) => {
     if (readonly) return
@@ -682,7 +691,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const existing = findConnection(latest.current, option)
     if (existing) { selectEdge(existing.id); setReason('该候选连接已存在'); cancelConnection(); return }
     const issue = check(option)
-    if (issue) { setReason(issue); cancelConnection(); return }
+    if (issue) { showConnectionIssue(issue, option.source_card); cancelConnection(); return }
     const edge = { ...option, id: crypto.randomUUID() }
     const sourceSide = drag?.side || accessibleConnection?.side
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
@@ -699,14 +708,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const targetId = target.dataset.card!, side = target.dataset.connectionSide as ConnectionSide
     const options = compatibleOptions(drag.card, targetId)
     if (!options.length) {
-      setReason(connectionFailure(drag.card, targetId)); cancelConnection()
+      showConnectionIssue(connectionFailure(drag.card, targetId), drag.card); cancelConnection()
     } else if (options.length === 1 || cards.find(card => card.id === drag.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: event.clientX, y: event.clientY })
   }
   const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
     if (!accessibleConnection) return
     const options = compatibleOptions(accessibleConnection.card, targetId)
-    if (!options.length) { setReason(connectionFailure(accessibleConnection.card, targetId)); return }
+    if (!options.length) { showConnectionIssue(connectionFailure(accessibleConnection.card, targetId), accessibleConnection.card); return }
     if (options.length === 1 || cards.find(card => card.id === accessibleConnection.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: 88, y: 180 })
   }
@@ -1260,7 +1269,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {!desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'content.text' || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (!edge) return; const result = operations.disconnect(latest.current, edge); if (result.document) edit(result.document) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'content.text' || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (!edge) return; const result = operations.disconnect(latest.current, edge); if (result.document) edit(result.document) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer>
     })}
