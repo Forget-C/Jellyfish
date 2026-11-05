@@ -97,6 +97,36 @@ try {
   await page.getByRole('button',{name:'重做操作',exact:true}).click()
   await poll(state=>state.document.cards.find(card=>card.id==='creative_control').name==='清理后编辑');await assertClean()
   await page.reload();await assertClean()
+  {
+  const baseline = await read(), recovered = structuredClone(baseline.document)
+  recovered.cards.push({id:'key',type:'content.prop',object_id:'sound-key',name:'音效钥匙',text:'金属钥匙'})
+  const oldSound = recovered.cards.find(item=>item.id==='sound')
+  oldSound.production='postproduction'
+  oldSound.action_sound={text:'恢复的钥匙碰撞声',authorship:'user'}
+  oldSound.input_bindings=[{id:'old-sound',input_port:'effect_object',source:{canvas_id:canvas.id,card_id:'key',port_id:'object',object_id:'sound-key',position:0}}]
+  recovered.edges.push({id:'old-sound',source_card:'key',source_port:'object',target_card:'sound',target_port:'effect_object'})
+  recovered.input_order.sound.effect_object=['old-sound']
+  await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:`jellyfish:generation:canvas-project:${canvas.id}:recovery`,value:{schema:1,baseline,document:recovered}})
+  await page.reload()
+  await page.getByRole('button',{name:'恢复本地内容',exact:true}).click()
+  await poll(state=>state.document.cards.find(item=>item.id==='sound').action_sound.text==='恢复的钥匙碰撞声')
+  const assertClean=async()=>{const state=await read();const sound=state.document.cards.find(item=>item.id==='sound');assert.deepEqual(sound.input_bindings,[]);assert.equal(sound.production,'postproduction');assert.ok(!state.document.edges.some(edge=>edge.target_card==='sound'&&edge.target_port==='effect_object'));assert.ok(state.document.edges.some(edge=>edge.id==='old-sound'&&edge.target_port==='text'))}
+  await assertClean()
+  await openCanvasCard(page,'sound')
+  assert.equal(await detail.getByRole('region',{name:'声源对象',exact:true}).count(),0)
+  assert.equal(await detail.getByRole('button',{name:/选择声源对象/}).count(),0)
+  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  await detail.getByRole('textbox',{name:'动作声内容',exact:true}).fill('编辑后的碰撞声')
+  await poll(state=>state.document.cards.find(item=>item.id==='sound').action_sound.text==='编辑后的碰撞声')
+  await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await page.getByRole('button',{name:'撤销操作',exact:true}).click()
+  await poll(state=>state.document.cards.find(item=>item.id==='sound').action_sound.text==='恢复的钥匙碰撞声')
+  await assertClean()
+  await page.getByRole('button',{name:'重做操作',exact:true}).click()
+  await poll(state=>state.document.cards.find(item=>item.id==='sound').action_sound.text==='编辑后的碰撞声')
+  await page.reload()
+  await assertClean()
+  }
   await page.reload();await openCanvasCard(page,'continuity');await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
   await page.screenshot({path:join(output,'sound-constraints-mobile.png'),fullPage:true})

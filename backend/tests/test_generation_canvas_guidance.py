@@ -77,7 +77,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'image', 'video'])
-@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'object-situation', 'object-performance', 'object-activity', 'object-camera', 'object-lighting', 'object-focus', 'object-composition', 'object-movement', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule'])
+@pytest.mark.parametrize('legacy_conflict', [False, 'text', 'object', 'object-situation', 'object-performance', 'object-activity', 'object-sound', 'object-camera', 'object-lighting', 'object-focus', 'object-composition', 'object-movement', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule'])
 async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_connection(runtime, image_storage, monkeypatch, modality, legacy_conflict):
     import asyncio
     import json
