@@ -79,7 +79,7 @@ def require_supported_snapshot(snapshot):
     document = snapshot.get('document', {})
     if clean_acceptance(document, candidates=True) != document:
         from fastapi import HTTPException
-        raise HTTPException(422, {'code': 'LEGACY_ACCEPTANCE_SNAPSHOT', 'message': '旧验收用途已退出，请使用当前画布重新提交'})
+        raise HTTPException(422, {'code': 'LEGACY_ACCEPTANCE_SNAPSHOT', 'message': '旧验收或通用对象用途已退出，请使用当前画布重新提交'})
     cards = snapshot.get('document', {}).get('cards', [])
     if any(card.get('type') == 'direction.photography' or card.get('type') in VISUAL_DESIGNS and card.get('examples') or any('photography_scope' in binding for binding in card.get('input_bindings', [])) for card in cards):
         from fastapi import HTTPException
