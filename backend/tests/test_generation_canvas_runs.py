@@ -739,3 +739,24 @@ async def test_repeated_terminal_fact_sync_keeps_results_and_events_unchanged(ru
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert 'must not append' not in state['runs'][0]['nodes'][0]['text']
     await accept(runtime, 'after-repeat')
+
+
+@pytest.mark.asyncio
+async def test_current_view_refreshes_after_publication_in_same_transaction(runtime):
+    from sqlalchemy import select
+    from app.models.generation_canvas import CanvasEvent, GenerationCanvas
+    from app.services.generation_canvas.current_state import CanvasCurrentState
+    from app.services.task_service import TaskService
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        service = TaskService(db)
+        await service.claim(accepted['task_ids'][0], worker_id='view')
+        canvas = await db.get(GenerationCanvas, runtime.canvas_id)
+        view = CanvasCurrentState(db, runtime.project_id)
+        assert await view.current_outputs(canvas) == {}
+        await service.finish(accepted['task_ids'][0], result={'text': 'published'})
+        outputs = await view.current_outputs(canvas)
+        assert outputs['m'][0].text == 'published' and outputs['m'][0].basis_current
+        events = list(await db.scalars(select(CanvasEvent).where(CanvasEvent.canvas_id == runtime.canvas_id)))
+        finished = next(event.envelope for event in events if event.envelope['type'] == 'node.finished')
+        assert finished['payload']['current_outputs'] == {key: [item.model_dump() for item in values] for key, values in outputs.items()}

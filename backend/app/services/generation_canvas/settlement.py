@@ -8,7 +8,7 @@ from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead, Canvas
 from app.services.generation_canvas.events import TERMINAL, event_head, append_event
 from app.services.generation_canvas.node_completion import finish_node
 from app.services.generation_canvas.output_resolution import CanvasOutputContext
-from app.services.generation_canvas.runtime import CanvasRuntime
+from app.services.generation_canvas.current_state import CanvasCurrentState
 
 
 async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
@@ -53,11 +53,11 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
             result.outputs = node.outputs
             await db.flush()
             canvas = await db.get(GenerationCanvas, node.canvas_id, populate_existing=True)
-            runtime = CanvasRuntime(db, canvas.project_id)
+            current_state = CanvasCurrentState(db, canvas.project_id)
             try:
                 context = CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
-                basis = await runtime._current_basis(canvas, node.card_id,
-                    await runtime.current_outputs(canvas, context=context), context=context)
+                basis = await current_state.current_basis(canvas, node.card_id,
+                    await current_state.current_outputs(canvas, context=context), context=context)
                 can_publish = basis.compiled.can_run and basis.basis_hash == node.basis_hash
             except HTTPException:
                 can_publish = False
@@ -74,7 +74,7 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
         # Publication also changes downstream validity; the shared stream must
         # carry that authoritative view without executing those downstream cards.
         payload['current_outputs'] = {key: [item.model_dump() for item in values]
-            for key, values in (await runtime.current_outputs(canvas)).items()}
+            for key, values in (await current_state.current_outputs(canvas)).items()}
     if delta:
         payload.update(delta=delta, position=0)
     if terminal:

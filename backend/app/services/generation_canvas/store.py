@@ -89,14 +89,14 @@ class CanvasStore:
         """返回已保存修订的单卡出口和直接候选，不形成实际采用。"""
         from app.schemas.generation_canvas import CanvasCardOutputs
         from app.services.generation_canvas.output_resolution import CanvasOutputContext
-        from app.services.generation_canvas.runtime import CanvasRuntime
+        from app.services.generation_canvas.current_state import CanvasCurrentState
         canvas = await self.get(canvas_id)
         document = CanvasDocument.model_validate(canvas.document)
         card = next((item for item in document.cards if item.id == card_id), None)
         if card is None:
             raise HTTPException(404, 'Card not found')
         context = CanvasOutputContext(document)
-        published = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas, context=context)
+        published = await CanvasCurrentState(self.db, self.project_id).current_outputs(canvas, context=context)
         return CanvasCardOutputs(revision=canvas.revision, card_id=card_id,
             outputs=context.published_outputs(card.id, model_outputs=published),
             candidates=context.resolve_outputs(card_id, model_outputs=published))
@@ -111,9 +111,9 @@ class CanvasStore:
         if not isinstance(card, ModelCard):
             raise HTTPException(404, 'Model card not found')
         capability = await model_capability(self.db, card.model_id) if card.model_id else None
-        from app.services.generation_canvas.runtime import CanvasRuntime
+        from app.services.generation_canvas.current_state import CanvasCurrentState
         context = CanvasOutputContext(document)
-        outputs = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas, context=context)
+        outputs = await CanvasCurrentState(self.db, self.project_id).current_outputs(canvas, context=context)
         result = compile_card(document, card_id, model_outputs=outputs, capability=capability, context=context)
         result.revision = canvas.revision
         if not card.model_id:

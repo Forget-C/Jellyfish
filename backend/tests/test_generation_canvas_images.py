@@ -456,3 +456,25 @@ async def test_image_current_position_missing_does_not_fallback_and_saved_produc
     fixed = (await runtime.client.get(runtime.url + '/cards/' + copy['id'] + '/outputs')).json()['data']['outputs'][0]
     assert fixed['file_id'] == original['outputs'][2]['file_id']
     assert (await runtime.client.delete('/api/v1/studio/files/' + fixed['file_id'])).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_withdrawn_published_file_keeps_output_identity_and_result_pointer(runtime, image_storage):
+    await image_card(runtime, count=1)
+    await accept(runtime)
+    from app.task_worker import TaskWorker
+    from app.models.studio import FileItem
+    from app.services.task_service import utcnow
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200,
+            json={'data': [{'b64_json': base64.b64encode(b'image').decode()}]}))) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    before = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['current_outputs']['image'][0]
+    async with runtime.sessions.begin() as db:
+        file = await db.get(FileItem, before['file_id'])
+        file.delete_requested_at = utcnow()
+    after = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['current_outputs']['image'][0]
+    assert not after['available'] and after['file_id'] is None
+    assert (after['source'], after['result_set_id'], after['basis_current']) == (before['source'], before['result_set_id'], before['basis_current'])

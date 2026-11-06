@@ -126,9 +126,9 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     from app.services.generation_canvas.references import validate_references
     await validate_references(db, document, previous_document.model_dump(), project_id, media_references, context=context)
     if any(isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)) for card in document.cards):
-        from app.services.generation_canvas.runtime import CanvasRuntime
+        from app.services.generation_canvas.current_state import CanvasCurrentState
         from app.services.generation_canvas.performance import validate_design_relations, validate_design_examples
-        published = await CanvasRuntime(db, project_id).current_outputs(canvas)
+        published = await CanvasCurrentState(db, project_id).current_outputs(canvas)
         models = {card.id for card in document.cards if isinstance(card, ModelCard)}
         published = {card_id: values for card_id, values in published.items() if card_id in models}
         from app.services.generation_canvas.spatial import validate_spatial_relations

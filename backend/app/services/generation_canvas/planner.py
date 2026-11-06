@@ -8,7 +8,7 @@ from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.generation_canvas.execution_basis import digest, restore_basis
 
 
-async def plan(runtime, canvas, command, *, lock_config=False):
+async def plan(current_state, canvas, command, *, lock_config=False):
     """只规划当前模型并固定直接输入；保留单节点计划结构供受理与快照消费。"""
     if command.kind != 'single' or command.card_ids:
         from app.services.generation_canvas.errors import diagnostic
@@ -21,9 +21,9 @@ async def plan(runtime, canvas, command, *, lock_config=False):
             raise diagnostic('STACK_READ_ONLY', '请先解除堆叠，再提交模型',
                              {'group_id': group.id, 'card_id': command.card_id}, blocks=['run'])
     context = CanvasOutputContext(document)
-    outputs = await runtime.current_outputs(canvas, context=context)
+    outputs = await current_state.current_outputs(canvas, context=context)
     card_id = command.card_id
-    basis = await runtime._current_basis(canvas, card_id, outputs, lock_config=lock_config, context=context)
+    basis = await current_state.current_basis(canvas, card_id, outputs, lock_config=lock_config, context=context)
     compiled = basis.compiled
     nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis, 'hash': basis.basis_hash,
         'dependencies': [], 'private': basis.to_snapshot()}}
