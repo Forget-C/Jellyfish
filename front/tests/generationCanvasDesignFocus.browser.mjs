@@ -103,6 +103,12 @@ try {
     for (const row of await detail.locator('.design-preset-relations section > div:has(> span)').all()) assert.ok(await row.getByRole('button').count() || await row.getByRole('alert').count(), `${id}: relation names have operations or warnings`)
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
     if (await advanced.count()) await advanced.click()
+    const heading = detail.locator('.design-preset-advanced-heading')
+    assert.equal(await heading.evaluate(node => !!node.closest('.design-preset-advanced')), false, `${definition.title}: heading stays outside scrolling content`)
+    const headingBox = await heading.boundingBox()
+    await detail.locator('.design-preset-advanced').evaluate(node => { node.scrollTop = node.scrollHeight })
+    assert.deepEqual(await heading.boundingBox(), headingBox, `${definition.title}: scrolling preserves the heading`)
+    await detail.locator('.design-preset-advanced').evaluate(node => { node.scrollTop = 0 })
     assert.equal(await detail.locator('summary').filter({ hasText: /正向示例与反例|固定证据与前后态素材|参考素材与图片标记|直接素材参考/ }).count(), retainedExamples.has(id) ? 1 : 0, `${id}: only retained cards expose local references`)
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 })

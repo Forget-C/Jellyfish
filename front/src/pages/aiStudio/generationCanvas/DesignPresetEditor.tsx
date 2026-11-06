@@ -96,7 +96,8 @@ export function DesignPresetEditor({ fields, labels, presets, children, advanced
         <details className="design-preset-changes" aria-label="预设变更清单"><summary>{changes.length ? `将填写 ${changes.length - overwritten} 项 · 覆盖 ${overwritten} 项` : '与当前参数一致，无需重复应用'}</summary>{changes.map(change => <details key={change.key}><summary>{change.populated ? '将覆盖' : '将填写'} · {labels[change.key]}</summary><p>原值：{describe(change.before, defaults[change.key])}</p><p>新值：{describe(change.after, defaults[change.key])}</p></details>)}</details>
       </> : <div className="design-preset-empty"><CanvasTextPreview text={current || '选择一个预设查看效果与详情，或进入高级设置填写参数。'} label="当前设计" lines={4} /></div>}</aside>
     </div>
-    <section className="design-preset-advanced" hidden={!advanced}>{advancedTitle && <div className="design-preset-advanced-heading"><h3>{advancedTitle}</h3>{scopeTools}</div>}{children}</section>
+    {advancedTitle && <div className="design-preset-advanced-heading" hidden={!advanced}><h3>{advancedTitle}</h3>{scopeTools}</div>}
+    <section className="design-preset-advanced" hidden={!advanced}>{children}</section>
     {footer ? editorOpen && createPortal(actions, footer) : actions}
   </div>
 }

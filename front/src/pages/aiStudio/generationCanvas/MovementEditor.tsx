@@ -34,9 +34,18 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
     if ('frame_targets' in target) count += (target.frame_targets || []).filter(frame => frame.state_id === 'phase:' + id && target.input_bindings?.some(binding => binding.id === frame.binding_id && binding.source.card_id === card.id)).length
     return count
   }, 0)
+  const keyframes = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const region = keyframes.current, viewport = region?.closest<HTMLElement>('.design-preset-advanced')
+    if (!region || !viewport) return
+    // Reserve 98px stage chrome + 236px parameters + 9px divider + 4px scroll padding; keep aligned with CSS.
+    const resize = () => region.style.setProperty('--movement-frame-height', `${Math.max(120, Math.min(140, viewport.clientHeight - 347))}px`)
+    const observer = new ResizeObserver(resize); observer.observe(viewport); resize()
+    return () => { observer.disconnect(); region.style.removeProperty('--movement-frame-height') }
+  }, [])
   const labels = photographyRegions.movement.fields
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
-    <section className="movement-keyframes design-stable-region" aria-label="运镜关键画面">
+    <section ref={keyframes} className="movement-keyframes design-stable-region" aria-label="运镜关键画面">
       <MovementPhaseTabs phases={phases} activeId={activeId} onSelect={setSelectedId} editorOpen={editorOpen} disabled={disabled} uses={uses} issues={(references?.issues || []).filter(issue => issue.field_id.startsWith('phase:')).map(issue => issue.field_id.slice(6))}
         onRename={(id, name) => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === id ? { ...phase, name } : phase) })}
         onOrder={ids => change({ ...latest.current, phases: ids.map(id => latest.current.phases!.find(phase => phase.id === id)!) })}
