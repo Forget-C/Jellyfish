@@ -1,6 +1,6 @@
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { DesignNameField } from './DesignNameField'
-import { DesignScopeEditor } from './DesignScopeEditor'
+import { DesignScopePopover } from './DesignScopePopover'
 import { performancePresets } from './performancePresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
@@ -96,10 +96,9 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
       {missingBindings.map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
     </section>}
   </>
-  return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} direct={card.type === 'direction.anchor'} relations={card.type === 'direction.environment' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as SpatialCard)}>
+  return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} onChange={update} disabled={disabled} editorOpen={editorOpen} />} fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} direct={card.type === 'direction.anchor'} relations={card.type === 'direction.environment' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as SpatialCard)}>
     <div className={card.type === 'direction.anchor' ? 'design-anchor-layout' : undefined}><div>
     {card.type === 'direction.anchor' ? <AnchorFields card={card as SpatialAnchorCard} onChange={update} /> : card.type === 'direction.blocking' ? <BlockingFields card={card as BlockingDirectionCard} onChange={update} /> : card.type === 'direction.activity' ? <ActivityFields card={card as InFrameActivityCard} onChange={update} /> : <EnvironmentFields card={card as EnvironmentActivityCard} onChange={update} />}
-    <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
     </div><div>
     {card.type === 'direction.anchor' && <details open><summary>参考素材与图片标记</summary>
       {resolved.candidates.filter(item => ['image', 'video'].includes(item.modality) && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || examples.some(value => sourceKey(value.source) === sourceKey(item.source) && value.file_id === item.file_id)} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id! }] })}>关联素材 {item.token}</WorkbenchButton>)}

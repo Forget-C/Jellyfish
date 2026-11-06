@@ -1,6 +1,6 @@
-import { DesignScopeEditor } from './DesignScopeEditor'
+import { DesignScopePopover } from './DesignScopePopover'
 import { VisualDesignRelations } from './VisualDesignRelations'
-import { ConfigProvider, Divider, Dropdown, Input, Popover, Select } from 'antd'
+import { ConfigProvider, Divider, Dropdown, Input, Select } from 'antd'
 import type { InputRef } from 'antd'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { DesignReferenceContext } from './DesignReferenceEditor'
@@ -11,7 +11,7 @@ import { DesignPresetEditor } from './DesignPresetEditor'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions } from './photographyDesign'
 import { designSummary } from './designSummary'
-import { FilterOutlined, PlusOutlined } from '@ant-design/icons'
+import { PlusOutlined } from '@ant-design/icons'
 import { WorkbenchButton as Button, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 
 /** 运镜阶段身份由创建时确定；重命名和重排只改变展示，不改变引用目标。 */
@@ -23,11 +23,10 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const nameInput = useRef<InputRef>(null), focusNew = useRef(false)
   const activeId = selectedId === 'field:end_frame' || phases.some(phase => phase.id === selectedId) ? selectedId : 'field:movement_start'
   const selected = phases.find(phase => phase.id === activeId)
-  const [scopeOpen, setScopeOpen] = useState(false)
   const frameField = activeId === 'field:end_frame' ? 'end_frame' : 'movement_start'
   const frameLabel = frameField === 'end_frame' ? '结束画面' : '起始画面'
   const index = phases.findIndex(phase => phase.id === selected?.id)
-  useEffect(() => { if (!editorOpen) { focusNew.current = false; setScopeOpen(false); setSelectedId('field:movement_start') } }, [editorOpen])
+  useEffect(() => { if (!editorOpen) { focusNew.current = false; setSelectedId('field:movement_start') } }, [editorOpen])
   useEffect(() => {
     if (!editorOpen) return
     const field = references?.targetField?.fieldId
@@ -53,20 +52,8 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const describe = (phase: typeof phases[number]) => phase.frame?.document
     ? phase.frame.document.segments?.map(segment => segment.kind === 'text' ? segment.text : '@引用').join('') || ''
     : phase.frame?.text || ''
-  const scopeCount = Object.values(card.scope || {}).filter(value => value?.trim()).length
-  const scopeTrigger = useRef<HTMLElement>(null)
   const labels = photographyRegions.movement.fields
-  const scopeTools = <ConfigProvider componentDisabled={false}>
-    <Popover trigger="click" placement="bottomRight" open={scopeOpen} onOpenChange={setScopeOpen} getPopupContainer={trigger => trigger.parentElement!} content={<div className="movement-scope-panel" onKeyDown={event => {
-      if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); setScopeOpen(false); scopeTrigger.current?.focus() }
-    }}>
-      <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix="运镜" productionLabel="适用制作环节" />
-      <p>描述整张运镜卡的适用限制，随整卡传递；不会自动筛选关键画面。</p>
-    </div>}>
-      <span className="movement-scope-trigger"><WorkbenchIconButton ref={scopeTrigger} variant="quiet" label={`整卡适用限制${scopeCount ? ` · 已填写 ${scopeCount} 项` : ''}`} aria-expanded={scopeOpen} icon={<FilterOutlined />} />{scopeCount > 0 && <i aria-hidden="true" />}</span>
-    </Popover>
-  </ConfigProvider>
-  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} advancedTitle="" onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
+  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <section className="movement-keyframes" aria-label="运镜关键画面">
       <div className="movement-keyframe-layout">
         <div className="movement-sequence">
@@ -89,8 +76,6 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
           focusNew.current = true; setSelectedId(id)
           onChange({ ...card, phases: [...phases, { id, name: '', frame: { state: 'empty', text: '', purpose: 'design' } }] })
         }} />
-        <Divider type="vertical" />
-        {scopeTools}
         </div>
         {phases.length > 3 && <ConfigProvider componentDisabled={false}><Select className="movement-frame-select" aria-label="全部画面" value={activeId} onChange={setSelectedId} options={[{value:'field:movement_start',label:'起始'}, ...phases.map((phase, position) => ({ value: phase.id, label: `${position + 1} ${phase.name?.trim() || '未命名画面'}` })), {value:'field:end_frame',label:'结束'}]} /></ConfigProvider>}
         <div className="movement-keyframe-edit" role="tabpanel" aria-label={selected ? selected.name || '未命名画面' : frameLabel}>

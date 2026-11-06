@@ -62,7 +62,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   }
   const activeCount = sources.filter(item => item.available !== false && used.has(sourceKey(item.source))).length
   const changeMode = () => { focused.current = undefined; setInspect(undefined) }
-  const renderCandidates = (advanced: boolean) => <><div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
+  const renderCandidates = (advanced: boolean) => <div className="design-candidate-layout"><div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
     {sources.map(item => {
       const key = sourceKey(item.source), candidate = candidates.find(value => sourceKey(value.source) === key)!
       const localExample = 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key)
@@ -80,7 +80,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     {!resolved.loading && resolved.error && <Alert type="warning" message="候选来源读取失败，请保存或重开后重试。" />}
     <div className="generation-material-add">{sourceActions}</div>
     {(!resolved.loading && !resolved.error || resolved.candidates.length > 0) && <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${activeCount} 个使用中`}</small>}
-  </div>{onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</>
+  </div>{onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</div>
   return <DesignReferenceContext.Provider value={{ card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
     if (event.key !== 'Escape' || !inspect) return
     event.preventDefault(); event.stopPropagation()

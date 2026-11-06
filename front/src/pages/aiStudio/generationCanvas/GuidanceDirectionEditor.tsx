@@ -1,5 +1,5 @@
 import { DesignPresetEditor } from './DesignPresetEditor'
-import { DesignScopeEditor } from './DesignScopeEditor'
+import { DesignScopePopover } from './DesignScopePopover'
 import { soundConstraintPresets } from './soundConstraintPresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
@@ -25,7 +25,7 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
   const nameLabel = card.type === 'direction.criterion' ? '验收要求名称' : card.type === 'direction.creative_control' ? '创作控制名称' : '生成指导名称'
   const namePlaceholder = card.type === 'direction.criterion' ? '例如：手部与钥匙清晰可见' : card.type === 'direction.creative_control' ? '例如：主角造型保持原则' : '例如：反应镜头生成指导'
   const relations = <DesignNameField label={nameLabel} placeholder={namePlaceholder} value={card.name} disabled={disabled} error={nameInvalid ? '请先填写验收要求名称' : undefined} onChange={name => onChange({ ...card, name })} />
-  return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={false} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
+  return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={false} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 
     {card.type === 'direction.creative_control' && <>{field('freedom', '创作控制程度')}{field('allowed_range', '允许发挥范围')}{field('keep', '需要保持', 'constraint')}{field('undecided', '待确定事项')}</>}
@@ -33,6 +33,5 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
     {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}</>}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
-    <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
   </DesignPresetEditor>
 }

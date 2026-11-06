@@ -17,13 +17,13 @@ import './designPresetEditor.css'
 
 type Props = {
   fields: Record<string, DesignField | null | undefined>; labels: Record<string, string>; presets: VisualPreset[];
-  children: ReactNode; advancedTitle?: string; candidates?: ReactNode; relations?: ReactNode; direct?: boolean; current: string; disabled?: boolean; editorOpen?: boolean;
+  children: ReactNode; scopeTools?: ReactNode; advancedTitle?: string; candidates?: ReactNode; relations?: ReactNode; direct?: boolean; current: string; disabled?: boolean; editorOpen?: boolean;
   onApply: (preset: VisualPreset) => void | boolean; onUndo?: () => void;
 }
 const describe = (value?: ReferenceDesignField | null, defaults?: DesignField) => value ? [value.text || '无正文', designFieldMetadata(value, defaults), value.document?.segments?.some(segment => segment.kind === 'reference') ? '含引用（应用后替换）' : ''].filter(Boolean).join(' · ') : '未填写'
 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
-export function DesignPresetEditor({ fields, labels, presets, children, advancedTitle = '设计参数', candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
+export function DesignPresetEditor({ fields, labels, presets, children, advancedTitle = '设计参数', scopeTools, candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
   const { token } = theme.useToken()
   const references = useContext(DesignReferenceContext)
   const { cardDefinitions } = useGraphRules()
@@ -96,7 +96,7 @@ export function DesignPresetEditor({ fields, labels, presets, children, advanced
         <details className="design-preset-changes" aria-label="预设变更清单"><summary>{changes.length ? `将填写 ${changes.length - overwritten} 项 · 覆盖 ${overwritten} 项` : '与当前参数一致，无需重复应用'}</summary>{changes.map(change => <details key={change.key}><summary>{change.populated ? '将覆盖' : '将填写'} · {labels[change.key]}</summary><p>原值：{describe(change.before, defaults[change.key])}</p><p>新值：{describe(change.after, defaults[change.key])}</p></details>)}</details>
       </> : <div className="design-preset-empty"><CanvasTextPreview text={current || '选择一个预设查看效果与详情，或进入高级设置填写参数。'} label="当前设计" lines={4} /></div>}</aside>
     </div>
-    <section className="design-preset-advanced" hidden={!advanced}>{advancedTitle && <div className="design-preset-advanced-heading"><h3>{advancedTitle}</h3></div>}{children}</section>
+    <section className="design-preset-advanced" hidden={!advanced}>{advancedTitle && <div className="design-preset-advanced-heading"><h3>{advancedTitle}</h3>{scopeTools}</div>}{children}</section>
     {footer ? editorOpen && createPortal(actions, footer) : actions}
   </div>
 }

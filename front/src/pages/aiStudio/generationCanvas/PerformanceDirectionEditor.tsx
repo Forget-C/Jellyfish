@@ -1,5 +1,5 @@
 import { DesignPresetEditor } from './DesignPresetEditor'
-import { DesignScopeEditor } from './DesignScopeEditor'
+import { DesignScopePopover } from './DesignScopePopover'
 import { performancePresets } from './performancePresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
@@ -82,9 +82,8 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       return <div key={sourceKey(item.source)}><WorkbenchButton title={payload.dialogue_id} disabled={disabled || !item.available} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'dialogue_basis' }] })}>{`${binding ? '取消' : '采用'}对白 ${payload.dialogue_id.slice(0, 8)} · 版本 ${payload?.version}`}</WorkbenchButton><p>说话对象：{payload.speaker?.name || '待确定'}</p></div>
     })}</section>}
   </>
-  return <DesignPresetEditor fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as PerformanceCard)}>
+  return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} onChange={update} disabled={disabled} editorOpen={editorOpen} />} fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as PerformanceCard)}>
     {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor compact label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
-    <DesignScopeEditor card={card} onChange={update} disabled={disabled} />
   </DesignPresetEditor>
 }
 

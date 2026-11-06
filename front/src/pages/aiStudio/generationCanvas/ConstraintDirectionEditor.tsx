@@ -1,5 +1,5 @@
 import { DesignPresetEditor } from './DesignPresetEditor'
-import { DesignScopeEditor } from './DesignScopeEditor'
+import { DesignScopePopover } from './DesignScopePopover'
 import { soundConstraintPresets } from './soundConstraintPresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
@@ -45,12 +45,11 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
   }).filter(Boolean)
   const hasRelations = relationRows.length > 0 || missingBindings.length > 0
   const relations = (hasRelations || card.type === 'direction.continuity') && <details><summary>对象与制作关系</summary>    {hasRelations && <section aria-label="约束关系"><h3>直接关系候选与已采用</h3>{relationRows}{missingBindings.map(binding => <div key={binding.id}><span role="alert">已选关系失效</span><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}</section>}    {card.type === 'direction.continuity' && <Select aria-label="连续性分类" value={card.category || 'space'} options={categoryOptions} onChange={category => onChange({ ...card, category })} />}</details>
-  return <DesignPresetEditor fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.fact'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={card.type === 'direction.fact' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
+  return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.fact'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={card.type === 'direction.fact' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 
     {keys.map(key => <DesignFieldEditor compact key={key} label={labels[key]} purpose={['spatial_basis', 'source_basis'].includes(key) ? 'background' : ['before', 'change', 'after'].includes(key) ? 'design' : 'constraint'} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />)}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
-    <DesignScopeEditor card={card} disabled={disabled} onChange={onChange} />
   </DesignPresetEditor>
 }

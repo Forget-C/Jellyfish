@@ -40,8 +40,8 @@
 .design-preset-detail:has(.design-preset-changes[open]) .design-preset-disclaimer { display: none; }
 /* Keep the 3px outer focus ring inside the scroll viewport without shifting field alignment. */
 .design-preset-advanced { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; min-height: 0; padding: 0 6px 4px 4px; margin-left: -4px; }
-.design-preset-advanced-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.design-preset-advanced-heading h3 { margin: 0; }
+.design-preset-advanced-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; margin-bottom: 8px; }
+.design-preset-advanced-heading h3 { margin: 0; font-size: 13px; }
 .design-preset-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
 .design-preset-fields > section { min-width: 0; }
 .design-preset-fields > section:last-child:nth-child(odd) { grid-column: 1 / -1; }
@@ -70,7 +70,9 @@
 
 
 .design-reference-owner { display: contents; }
-.design-preset-candidates { flex: none; padding-bottom: 12px; }
+.design-preset-candidates { flex: none; padding-bottom: 8px; }
+.design-candidate-layout { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: center; }
+.design-candidate-layout > .design-field-candidates { min-width: 0; overflow-x: auto; }
 .design-field-candidates { margin: 0; align-items: center; }
 .design-reference-hint { color: var(--wb-muted); font-size: 11px; white-space: nowrap; padding-left: 4px; }
 .design-reference-inactive { position: absolute; top: 2px; right: 2px; background: var(--wb-surface); color: var(--wb-muted); font-size: 10px; }
@@ -149,8 +151,7 @@
 /* Full-width frame editing precedes the shared two-column motion fields. */
 .design-preset-advanced > .movement-keyframes { margin-bottom: 0; }
 .movement-section-divider.ant-divider-horizontal { width: 32px; min-width: 32px; margin: 8px auto 12px; border-color: var(--wb-border); }
-.movement-sequence > .ant-divider-vertical { margin: 0; border-color: var(--wb-border); }
-.movement-sequence > .wb-icon-trigger, .movement-sequence > .movement-scope-trigger { flex-shrink: 0; }
+.movement-sequence > .wb-icon-trigger { flex-shrink: 0; }
 .movement-sequence { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .movement-keyframe-list { position: relative; display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 4px 0 8px; }
 .movement-keyframe-list button { flex-shrink: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--wb-muted); cursor: pointer; font: inherit; font-size: 12px; }
@@ -162,11 +163,11 @@
 .movement-keyframe-edit .generation-prompt-editor { min-height: 140px; max-height: 180px; overflow-y: auto; }
 .movement-keyframe-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .movement-motion .generation-prompt-editor { min-height: 64px; max-height: 120px; }
-.movement-scope-trigger { position: relative; }
-.movement-scope-trigger > i { position: absolute; right: 4px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--wb-text); pointer-events: none; }
-.movement-scope-panel { width: min(300px, calc(100vw - 80px)); }
-.movement-scope-panel .static-design-scope { grid-template-columns: minmax(0, 1fr); margin: 0; }
-.movement-scope-panel > p { color: var(--wb-muted); font-size: 12px; margin: 16px 0 0; }
+.design-scope-trigger { position: relative; }
+.design-scope-trigger > i { position: absolute; right: 4px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--wb-text); pointer-events: none; }
+.design-scope-panel { width: min(300px, calc(100vw - 80px)); }
+.design-scope-panel .static-design-scope { grid-template-columns: minmax(0, 1fr); margin: 0; }
+.design-scope-panel > p { color: var(--wb-muted); font-size: 12px; margin: 16px 0 0; }
 @media (max-width: 700px) {
   .movement-frame-select { width: 100%; }
 }

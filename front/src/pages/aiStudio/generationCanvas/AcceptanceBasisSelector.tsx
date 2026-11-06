@@ -1,5 +1,6 @@
 import { DesignMetadataLine } from './DesignMetadataLine'
 import { designPhaseLabel } from './designScope'
+import { AuditOutlined, DownOutlined, UpOutlined } from '@ant-design/icons'
 import { ConfigProvider } from 'antd'
 import { useEffect, useId, useState } from 'react'
 import type { CanvasDocument } from '../../../services/generated'
@@ -26,7 +27,7 @@ export function AcceptanceBasisSelector({ card, document, onLocateDesign, disabl
   const edge = document.edges?.find(item => item.source_card === current.id && item.target_card === card.id && item.target_port === 'acceptance_basis')
   const objects = current.input_bindings?.filter(binding => binding.input_port === 'effect_object').map(binding => document.cards?.find(source => source.id === binding.source.card_id)).filter(Boolean)
   return <section className="acceptance-basis" aria-label="关联的验收要求">
-    <button type="button" className="acceptance-toggle" aria-expanded={open} aria-controls={panelId} aria-label={`${open ? '收起' : '展开'}验收要求`} title={`${open ? '收起' : '展开'}验收要求`} onClick={() => setOpen(value => !value)}><span aria-hidden="true">{open ? '▴' : '▾'}</span></button>
+    <ConfigProvider componentDisabled={false}><WorkbenchButton variant="quiet" className="acceptance-toggle" aria-expanded={open} aria-controls={panelId} aria-label={`${open ? '收起' : '展开'}验收要求`} title={`${open ? '收起' : '展开'}验收要求`} onClick={() => setOpen(value => !value)}><AuditOutlined /><span>{sources.length}</span>{open ? <UpOutlined /> : <DownOutlined />}</WorkbenchButton></ConfigProvider>
     <div id={panelId} hidden={!open}>
       <h3>关联的验收要求 · {sources.length}</h3>
       <div className="acceptance-thumbnails">{sources.map(source => <button type="button" key={source.id} aria-pressed={source.id === current.id} onClick={() => setSelected(source.id)}><strong>▣ {'name' in source && source.name || '未命名验收要求'}</strong><span>{'standard' in source && source.standard?.text || '标准尚未填写'}</span></button>)}</div>
