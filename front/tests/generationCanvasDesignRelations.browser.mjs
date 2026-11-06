@@ -44,7 +44,7 @@ try {
     {id:'composition',type:'direction.composition',scope:{phase:'video'},source_locator:'导演说明',fields:{composition:{state:'proposal',text:'左侧构图'}}}],edges:[],input_order:{}}
   for(const target of ['camera','lighting','focus','composition','movement']) {
     document.input_order[target]={}
-    for(const [card,port,target_port] of [['person','object','effect_object'],['shot','shot','shot'],['criterion','criterion','acceptance_basis'],...(target==='movement'?[['person','object','attention_object'],['brief','text','text']]:[])]) {
+    for(const [card,port,target_port] of [['shot','shot','shot'],['criterion','criterion','acceptance_basis'],...(target==='movement'?[['person','object','attention_object'],['brief','text','text']]:[])]) {
       const id=target+'-'+target_port
       document.edges.push({id,source_card:card,source_port:port,target_card:target,target_port})
       document.input_order[target][target_port]=[id]
@@ -59,6 +59,7 @@ try {
     await page.locator(`[data-card-id="${kind}"]`).getByRole('button',{name:/设计/}).press('Enter')
     await detail.getByRole('button',{name:'高级设置',exact:true}).click()
     if(kind==='camera') {
+      await detail.getByRole('button',{name:/整卡适用限制/}).click()
       const inputs=detail.locator('.static-design-scope [role="combobox"]')
       for(const input of await inputs.all()) {
         await input.focus()
@@ -127,14 +128,12 @@ try {
   }
   const baseline=await read(), recovered=structuredClone(baseline.document)
   for(const card of recovered.cards.filter(card=>['camera','lighting','focus','composition','movement'].includes(card.id))) {
-    card.input_bindings.push({id:'legacy-'+card.id,input_port:'effect_object',source:source('person','object','person-id')})
-    recovered.edges.push({id:'legacy-'+card.id,source_card:'person',source_port:'object',target_card:card.id,target_port:'effect_object'})
-    recovered.input_order[card.id].effect_object=['legacy-'+card.id]
     card.scope.description='恢复的设计说明'
   }
   await page.evaluate(({key,value})=>localStorage.setItem(key,JSON.stringify(value)),{key:`jellyfish:generation:canvas-project:${canvas.id}:recovery`,value:{schema:1,baseline,document:recovered}})
   await page.reload();await page.getByRole('button',{name:'恢复本地内容',exact:true}).click()
-  await poll(state=>state.document.cards.filter(card=>['camera','lighting','focus','composition','movement'].includes(card.id)).every(card=>card.scope.description==='恢复的设计说明'&&!card.input_bindings.some(binding=>binding.input_port==='effect_object')))
+  await poll(state=>state.document.cards.filter(card=>['camera','lighting','focus','composition','movement'].includes(card.id)).every(card=>card.scope.description==='恢复的设计说明'))
+  assert.deepEqual((await read()).document.edges,baseline.document.edges,'restoring scope preserves valid relationship edges')
   await page.reload();await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('button',{name:/整卡适用限制/}).click()
   await detail.getByText('卡片原始来源：导演说明',{exact:true}).waitFor()
@@ -144,7 +143,7 @@ try {
   await page.getByRole('button',{name:'撤销操作',exact:true}).click()
   await poll(state=>state.document.cards.find(card=>card.id==='composition').scope.description==='恢复的设计说明')
   await page.getByRole('button',{name:'重做操作',exact:true}).click()
-  await poll(state=>state.document.cards.find(card=>card.id==='composition').scope.description==='可撤销的说明'&&!state.document.cards.some(card=>card.input_bindings?.some(binding=>binding.input_port==='effect_object')))
+  await poll(state=>state.document.cards.find(card=>card.id==='composition').scope.description==='可撤销的说明')
   await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('button',{name:'取消所属镜头 反应镜头',exact:true}).waitFor()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
