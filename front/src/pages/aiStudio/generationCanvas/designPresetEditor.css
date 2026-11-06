@@ -93,15 +93,13 @@
 .design-preset-relations small { color: var(--wb-muted); }
 .design-preset-advanced > section { margin-bottom: 16px; }
 .performance-preset-illustration { color: var(--wb-muted); }
-.performance-field-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
-.performance-field-group > h3, .performance-parameters > h3, .performance-identity { grid-column: 1 / -1; }
-.performance-field-group > div { min-width: 0; }
+.performance-identity { grid-column: 1 / -1; }
 .design-anchor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
 .design-anchor-layout > div { min-width: 0; }
 .design-anchor-layout .design-preset-fields { grid-template-columns: minmax(0, 1fr); }
 .design-anchor-layout details > summary { margin-bottom: 12px; }
 @media (max-width: 700px) {
-  .performance-field-group, .design-anchor-layout { grid-template-columns: minmax(0, 1fr); }
+  .design-anchor-layout { grid-template-columns: minmax(0, 1fr); }
   .design-preset-relations { max-height: 100px; }
 }
 .design-reference-issue { display: block; margin-top: 6px; font-size: 12px; }
@@ -208,3 +206,31 @@
 
 .design-field-candidates .generation-material-reference[data-frame-target] { flex-basis: 120px; width: 120px; }
 .design-field-candidates .generation-material-reference[data-frame-target] > small { white-space: normal; max-height: 28px; }
+
+/* Fixed parameter groups share the available body; tabs and modal chrome do not scroll. */
+.design-preset-advanced:not([hidden]):has(> .design-parameter-tabs),
+.design-preset-advanced:not([hidden]):has(.design-parameter-tabs) { overflow: hidden; display: flex; flex-direction: column; }
+.design-parameter-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.design-parameter-tabs > .ant-tabs { flex: 1; min-height: 0; }
+.design-parameter-tabs .ant-tabs-nav { flex: none; margin-bottom: 8px; }
+.design-parameter-tabs .ant-tabs-tab { padding: 6px 0; font-size: 12px; }
+.design-parameter-tabs .ant-tabs-content-holder,
+.design-parameter-tabs .ant-tabs-content,
+.design-parameter-tabs .ant-tabs-tabpane { min-height: 0; height: 100%; }
+.design-parameter-page { height: 100%; overflow-y: auto; scrollbar-gutter: stable; padding: 4px; box-sizing: border-box; }
+.design-candidate-relations { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.design-delay-control { display: inline-flex; align-items: center; gap: 4px; }
+.design-delay-control .ant-input-number { width: 80px; }
+@media (max-width: 700px) {
+  .design-parameter-tabs .ant-tabs-tab { min-height: 36px; }
+  .design-field-label-actions { flex-wrap: wrap; }
+}
+.design-tab-configured { color: var(--wb-muted); }
+
+.design-preset-advanced > div:has(.design-parameter-tabs),
+.design-preset-advanced > div > div:has(> .design-parameter-tabs) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.design-parameter-tabs .ant-tabs-tab, .design-parameter-tabs .ant-tabs-tab:hover { color: var(--wb-muted); }
+.design-parameter-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--wb-text); text-shadow: none; }
+.design-parameter-tabs .ant-tabs-ink-bar { background: var(--wb-text); }
+.design-parameter-tabs .design-preset-fields section > strong { min-height: 24px; display: flex; align-items: center; }

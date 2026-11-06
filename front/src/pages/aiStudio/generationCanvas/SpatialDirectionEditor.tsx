@@ -1,3 +1,5 @@
+import { DesignParameterTabs } from './DesignParameterTabs'
+import { PlayCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { DesignNameField } from './DesignNameField'
 import { DesignScopePopover } from './DesignScopePopover'
@@ -5,8 +7,8 @@ import { performancePresets } from './performancePresets'
 import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
-import { Alert, Input, InputNumber, Select, Space } from 'antd'
-import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
+import { Input, InputNumber, Select, Space } from 'antd'
+import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 import { useCardCandidates } from './useCardCandidates'
@@ -29,7 +31,7 @@ function AnchorFields({ card, onChange }: { card: SpatialAnchorCard; onChange: (
 
 function BlockingFields({ card, onChange }: { card: BlockingDirectionCard; onChange: (card: SpatialCard) => void }) {
   return <div className="design-preset-fields performance-parameters"><small className="performance-identity">调度身份：{card.blocking_id || '未建立'}</small>
-    <h3>位置 → 路径 → 状态切换</h3>
+
     <FieldEditor compact label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
     <FieldEditor compact label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
     <FieldEditor compact label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
@@ -39,22 +41,17 @@ function BlockingFields({ card, onChange }: { card: BlockingDirectionCard; onCha
   </div>
 }
 
-function ActivityFields({ card, onChange }: { card: InFrameActivityCard; onChange: (card: SpatialCard) => void }) {
-  return <div className="design-preset-fields performance-parameters"><h3>谁在做什么</h3>
-    <FieldEditor compact label="持续任务" value={card.task} onChange={task => onChange({ ...card, task })} />
-    <FieldEditor compact label="对主戏的作用" value={card.main_action_effect} onChange={main_action_effect => onChange({ ...card, main_action_effect })} />
-    <FieldEditor compact label="结束状态" value={card.exit_state} onChange={exit_state => onChange({ ...card, exit_state })} />
-    <section aria-label="位置、注意对象与时序"><h3>位置、注意对象与时序</h3>
-      <FieldEditor compact label="注意对象说明" value={card.attention} onChange={attention => onChange({ ...card, attention })} />
-      <FieldEditor compact label="路径" value={card.path} onChange={path => onChange({ ...card, path })} />
-      <FieldEditor compact label="反应延迟依据" value={card.delay_basis} onChange={delay_basis => onChange({ ...card, delay_basis })} />
-      <label>反应延迟毫秒<InputNumber aria-label="反应延迟毫秒" min={0} value={card.delay_ms} onChange={delay_ms => onChange({ ...card, delay_ms })} /></label>
-      <FieldEditor compact label="入出画" value={card.entry_exit} onChange={entry_exit => onChange({ ...card, entry_exit })} />
-      <FieldEditor compact label="景深层次" value={card.depth} onChange={depth => onChange({ ...card, depth })} />
-      <FieldEditor compact label="活动强度" value={card.intensity} onChange={intensity => onChange({ ...card, intensity })} />
-
-    </section>
-  </div>
+function ActivityFields({ card, onChange, editorOpen }: { card: InFrameActivityCard; onChange: (card: SpatialCard) => void; editorOpen?: boolean }) {
+  const field = (key: 'task' | 'main_action_effect' | 'exit_state' | 'intensity' | 'path' | 'entry_exit' | 'depth' | 'attention' | 'delay_basis', label: string, labelAction?: React.ReactNode) => <FieldEditor key={key} compact label={label} labelAction={labelAction} value={card[key]} onChange={value => onChange({ ...card, [key]: value })} />
+  return <DesignParameterTabs editorOpen={editorOpen} items={[
+    { key: 'activity', fields: ["task", "main_action_effect", "intensity", "exit_state"], label: <><PlayCircleOutlined /> 活动内容</>, children: <div className="design-preset-fields design-preset-fields-compact">
+      {field('task', '持续任务')}{field('main_action_effect', '对主戏的作用')}{field('intensity', '活动强度')}{field('exit_state', '结束状态')}
+    </div> },
+    { key: 'space', fields: ["path", "entry_exit", "depth", "attention", "delay_basis"], label: <><ClockCircleOutlined /> 空间与时序</>, children: <div className="design-preset-fields design-preset-fields-compact">
+      {field('path', '路径')}{field('entry_exit', '入出画')}{field('depth', '景深层次')}{field('attention', '注意对象说明')}
+      {field('delay_basis', '反应延迟依据', <span className="design-delay-control"><InputNumber size="small" aria-label="反应延迟毫秒" min={0} value={card.delay_ms} onChange={delay_ms => onChange({ ...card, delay_ms })} /> ms</span>)}
+    </div> },
+  ]} />
 }
 
 function EnvironmentFields({ card, onChange }: { card: EnvironmentActivityCard; onChange: (card: SpatialCard) => void }) {
@@ -66,39 +63,17 @@ function EnvironmentFields({ card, onChange }: { card: EnvironmentActivityCard; 
 
 /** 四种空间设计复用预设与字段引用；关系仍只采用明确身份。 */
 export function SpatialDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
-  const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
+  const { cardDefinitions } = useGraphRules()
   const card = raw as SpatialCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
-  const bindings = card.input_bindings || [], examples = card.examples || []
+  const examples = card.examples || []
   const update = (next: SpatialCard) => onChange(next)
   const fields = Object.fromEntries(designFieldEntries(card))
   const labels = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))
-  const missingBindings = bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source)))
-  const relationRows = resolved.candidates.map(item => {
-    const rawPayload = item.payload
-    if (rawPayload?.kind !== 'object_reference' && rawPayload?.kind !== 'spatial_reference' && rawPayload?.kind !== 'narrative_reference') return null
-    const payload = rawPayload as ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
-    const ports = inputPorts(card).filter(port => ['space', 'participant', 'effect_object', 'position_anchor', 'area_anchor', 'change_event', 'trigger_event'].includes(port)).filter(port => document.edges?.some(edge => edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && edge.target_card === card.id && edge.target_port === port)).filter(port => (port !== 'participant' || payload.kind === 'object_reference' && payload.category !== 'place') && (port !== 'space' || payload.kind === 'object_reference' && payload.category === 'place'))
-    if (!ports.length) return null
-    return <div key={sourceKey(item.source)}><span>{payload.name}</span>{ports.map(port => {
-      const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
-      const single = ['participant', 'space', 'area_anchor', 'change_event', 'trigger_event'].includes(port)
-      return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
-    })}</div>
-  }).filter(Boolean)
-  const hasRelations = relationRows.length > 0 || missingBindings.length > 0
-  const relations = <>
-    {(card.type === 'direction.anchor' || card.type === 'direction.blocking') && <DesignNameField label={card.type === 'direction.anchor' ? '锚点名称' : '调度名称'} placeholder={card.type === 'direction.anchor' ? '例如：窗边桌角' : '例如：从门口走向窗边'} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />}
-
-    {resolved.error && <Alert type="warning" message={resolved.error} />}
-    {hasRelations && <section aria-label="空间关系"><h3>直接对象与空间关系</h3>
-      {relationRows}
-      {missingBindings.map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
-    </section>}
-  </>
+  const relations = (card.type === 'direction.anchor' || card.type === 'direction.blocking') && <DesignNameField label={card.type === 'direction.anchor' ? '锚点名称' : '调度名称'} placeholder={card.type === 'direction.anchor' ? '例如：窗边桌角' : '例如：从门口走向窗边'} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} onChange={update} disabled={disabled} editorOpen={editorOpen} />} fields={fields} labels={labels} presets={performancePresets[card.type!.split('.')[1]] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} direct={card.type === 'direction.anchor'} relations={card.type === 'direction.environment' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as SpatialCard)}>
     <div className={card.type === 'direction.anchor' ? 'design-anchor-layout' : undefined}><div>
-    {card.type === 'direction.anchor' ? <AnchorFields card={card as SpatialAnchorCard} onChange={update} /> : card.type === 'direction.blocking' ? <BlockingFields card={card as BlockingDirectionCard} onChange={update} /> : card.type === 'direction.activity' ? <ActivityFields card={card as InFrameActivityCard} onChange={update} /> : <EnvironmentFields card={card as EnvironmentActivityCard} onChange={update} />}
+    {card.type === 'direction.anchor' ? <AnchorFields card={card as SpatialAnchorCard} onChange={update} /> : card.type === 'direction.blocking' ? <BlockingFields card={card as BlockingDirectionCard} onChange={update} /> : card.type === 'direction.activity' ? <ActivityFields card={card as InFrameActivityCard} onChange={update} editorOpen={editorOpen} /> : <EnvironmentFields card={card as EnvironmentActivityCard} onChange={update} />}
     </div><div>
     {card.type === 'direction.anchor' && <details open><summary>参考素材与图片标记</summary>
       {resolved.candidates.filter(item => ['image', 'video'].includes(item.modality) && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || examples.some(value => sourceKey(value.source) === sourceKey(item.source) && value.file_id === item.file_id)} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id! }] })}>关联素材 {item.token}</WorkbenchButton>)}

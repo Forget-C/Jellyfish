@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-parameter-groups": {"file":"generationCanvasParameterGroups.browser.mjs","ports":[4285,8285],"timeoutMs":180000},
     "generation-canvas-multipath-protection": {"file":"generationCanvasMultipathProtection.browser.mjs","ports":[4758,8758],"timeoutMs":180000},
     "generation-canvas-narrative-spatial-objects": {"file":"generationCanvasNarrativeSpatialObjects.browser.mjs","ports":[4744,8744],"timeoutMs":180000},
     "generation-canvas-candidate-states": {"file":"generationCanvasCandidateStates.browser.mjs","ports":[4693,8693],"timeoutMs":180000},

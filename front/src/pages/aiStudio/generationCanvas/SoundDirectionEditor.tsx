@@ -5,7 +5,7 @@ import { applyPreset } from './visualPresets'
 import { designFieldEntries } from './designFieldReferences'
 import { designSummary } from './designSummary'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
-import type { DialogueCard, SoundArrangementCard, ObjectReferencePayload } from '../../../services/generated'
+import type { DialogueCard, SoundArrangementCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEditor'
 import { useCardCandidates } from './useCardCandidates'
@@ -22,22 +22,11 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
   const card = raw as SoundCard
   const sound = raw as SoundArrangementCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
-  const bindings = card.input_bindings || [], examples = card.examples || []
+  const examples = card.examples || []
   const update = (next: SoundCard) => onChange(next)
-  const relation = 'speaker'
-  const label = '说话对象'
   const exampleUpdate = (id: string, patch: Partial<(typeof examples)[number]>) => update({ ...card, examples: examples.map(item => item.id === id ? { ...item, ...patch } : item) })
   const fields = Object.fromEntries(designFieldEntries(card))
-  const relations = <details><summary>对象与制作关系</summary>    {card.type === 'direction.dialogue' && <section aria-label={label}><h3>{label}</h3>
-      {resolved.candidates.filter(item => item.payload?.kind === 'object_reference').map(item => {
-        const object = item.payload as ObjectReferencePayload
-        if (relation === 'speaker' && !['character', 'prop'].includes(object.category)) return null
-        if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === relation && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null
-        const binding = bindings.find(value => value.input_port === relation && sourceKey(value.source) === sourceKey(item.source))
-        return <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || !binding && relation === 'speaker' && bindings.some(value => value.input_port === relation)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: relation }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
-      })}
-      {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(item => item.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
-    </section>}{card.type === 'direction.sound' && <><strong>制作安排</strong><Select aria-label="声音制作安排" value={sound.production || 'undecided'} options={[{ value: 'synchronous', label: '同期生成意图' }, { value: 'postproduction', label: '待后期' }, { value: 'undecided', label: '待确定' }]} onChange={production => update({ ...sound, production })} /></>}</details>
+  const relations = card.type === 'direction.sound' && <label>制作安排 <Select size="small" aria-label="声音制作安排" value={sound.production || 'undecided'} options={[{ value: 'synchronous', label: '同期生成意图' }, { value: 'postproduction', label: '待后期' }, { value: 'undecided', label: '待确定' }]} onChange={production => update({ ...sound, production })} /></label>
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.dialogue'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}

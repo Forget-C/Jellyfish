@@ -86,8 +86,9 @@ try {
       return { label: node.getAttribute('aria-label') || node.id, clipped, font: { size: font.fontSize, weight: font.fontWeight, family: font.fontFamily }, family: (() => { const probe = document.createElement('span'); probe.style.fontFamily = root && getComputedStyle(root).getPropertyValue('--design-input-font') || ''; root?.append(probe); const family = getComputedStyle(probe).fontFamily; probe.remove(); return family })(), placeholder: { size: placeholder.fontSize, weight: placeholder.fontWeight } }
     })
     if (!await control.evaluate(node => !!node.closest('.design-title-row'))) {
-      assert.deepEqual(paint.font, { size: '14px', weight: '400', family: paint.family }, `${kind} ${paint.label}: consistent input typography`)
-      if (await control.evaluate(node => node.matches('input, textarea'))) assert.deepEqual(paint.placeholder, { size: '14px', weight: '400' })
+      const size = await control.evaluate(node => !!node.closest('.design-composition-fields .ant-select')) ? '12px' : '14px'
+      assert.deepEqual(paint.font, { size, weight: '400', family: paint.family }, `${kind} ${paint.label}: consistent input typography`)
+      if (await control.evaluate(node => node.matches('input, textarea'))) assert.deepEqual(paint.placeholder, { size, weight: '400' })
     }
     checked++
     if (paint.clipped.length) failures.push({ kind, viewport, ...paint })
