@@ -115,7 +115,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 画布使用 `canvas_node` 生成目标及 `text_chat/image_generation/video_generation × canvas_node × async_polling` 提交矩阵。此 delivery 表示后台 Task 受理协议，画布观察仍使用 SSE。目标指向独立运行节点，任务来源可回跳项目、画布、运行及节点；不创建实验室消息。受理冻结的模型名、有效参数、供应商身份、路由及凭据保存在服务端节点私有快照和 Task 私有执行输入中；公开预检、运行、事件不携带凭据。Worker 使用该配置调用 `llm.astream`，关闭 SDK 自动重试，每次有效增量在短事务中持久累计正文及事件。离开或刷新页面不改变 Task，也不重发模型请求。
 
-`current_state.CanvasCurrentState` 集中查询当前正式输出与当前模型依据，供快照、规划、保存和结算直接调用；结构索引继续复用 `CanvasOutputContext`，纯依据计算仍由 `execution_basis` 负责。查询不缓存动态输出、文件状态或配置，沿用调用方事务及原配置锁策略；结算发布前核实资格，发布后重新查询事件携带的输出视图。历史成果定位仍由 runtime 核实项目归属和来源。
+`current_state.CanvasCurrentState` 集中查询当前正式输出与当前模型依据，供快照、规划、保存和结算直接调用；结构索引继续复用 `CanvasOutputContext`，纯依据计算仍由 `execution_basis` 负责。查询不缓存动态输出、文件状态或配置，沿用调用方事务及原配置锁策略；结算发布前核实资格，发布后重新查询事件携带的输出视图。历史成果另存及来源校验由 `historical_content.CanvasHistoricalContent` 集中处理，供内容准备接口与文档保存直接调用。首次另存核实固定内容和完成状态，已保存内容仅保护来源不可变；文件可用性检查仍保持准备与保存各自的阶段及诊断。
 
 `TaskService` 仍是唯一任务写入口。领取、进度和唯一终态裁决后调用窄范围画布事实同步；成功、失败、取消、排队取消、过期和启动中断均在 Task 的原事务更新节点与事件。完整成功才创建 ResultSet；相关当前依据仍匹配时整体更新当前输出指向，不推进编辑 revision。失败及取消保留未完成正文和旧正式成果。正式指向即使依据已变也保留，`basis_current=false` 表示不能作为单卡有效输入；实际内容仍可显示和绑定引用。结果集身份作为实际输入依据的一部分，未使用候选和无关文档编辑不使已有成果失效。
 

@@ -21,7 +21,7 @@ from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.current_state import CanvasCurrentState
 from app.services.task_service import utcnow
-from app.services.generation_canvas.events import TERMINAL, event_head, append_event
+from app.services.generation_canvas.events import event_head, append_event
 
 
 
@@ -106,29 +106,6 @@ class CanvasRuntime:
         self.db.add(CanvasRunReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=request_hash, response=response))
         await self.db.flush()
         return response
-
-    async def content(self, canvas_id: str, run_id: str, node_id: str, position: int):
-        """返回一次明确另存的独立内容；文档仍通过普通 CAS 队列保存。"""
-        from app.schemas.generation_canvas import CanvasContentOrigin, TextContentCard, ImageContentCard, VideoContentCard
-        node = await self.output_node(canvas_id, run_id, node_id, position)
-        output = node.outputs[position]
-        origin = CanvasContentOrigin(canvas_id=canvas_id, run_id=run_id, node_id=node_id,
-                                     position=position, incomplete=node.status != 'succeeded')
-        if output['modality'] == 'text':
-            return TextContentCard(id=uuid4().hex, text=output['text'], origin=origin)
-        from app.services.studio.files import require_available_file
-        await require_available_file(self.db, file_id=output['file_id'], expected_type=output['modality'])
-        kind = ImageContentCard if output['modality'] == 'image' else VideoContentCard
-        return kind(id=uuid4().hex, file_id=output['file_id'], origin=origin)
-
-    async def output_node(self, canvas_id: str, run_id: str, node_id: str, position: int):
-        """按项目和画布校验历史输出；运行中内容不伪装成固定成果。"""
-        await CanvasStore(self.db, self.project_id).get(canvas_id)
-        node = await self.db.scalar(select(CanvasRunNode).where(CanvasRunNode.id == node_id,
-            CanvasRunNode.canvas_id == canvas_id, CanvasRunNode.run_id == run_id))
-        if node is None or node.status not in TERMINAL or position < 0 or position >= len(node.outputs):
-            raise diagnostic('OUTPUT_NOT_AVAILABLE', '历史成果不存在或尚未完成', {'node_id': node_id, 'position': position}, status=422)
-        return node
 
     async def cancel(self, canvas_id: str, run_id: str, node_id: str | None = None) -> CanvasRunRead:
         """明确取消范围；先确定性锁住全部既有 Task，再触发任何事件写入。
