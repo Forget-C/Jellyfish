@@ -146,10 +146,11 @@
 .design-preset-editor :is(.ant-input, .ant-input-number-input)::placeholder { font-family: inherit; font-size: inherit; font-weight: inherit; font-style: normal; color: var(--wb-muted); opacity: 1; }
 .design-preset-editor .ant-select-selection-placeholder, .design-preset-editor .generation-prompt-editor::before { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; font-style: normal; color: var(--wb-muted); }
 
-/* The frame sequence owns the main surface; motion parameters remain visible beside it. */
-.movement-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 12px 24px; }
-.movement-layout > * { min-width: 0; }
-.design-preset-mode-tools { display: flex; align-items: center; gap: 12px; }
+/* Full-width frame editing precedes the shared two-column motion fields. */
+.design-preset-advanced > .movement-keyframes { margin-bottom: 0; }
+.movement-section-divider.ant-divider-horizontal { width: 32px; min-width: 32px; margin: 8px auto 12px; border-color: var(--wb-border); }
+.movement-sequence > .ant-divider-vertical { margin: 0; border-color: var(--wb-border); }
+.movement-sequence > .wb-icon-trigger, .movement-sequence > .movement-scope-trigger { flex-shrink: 0; }
 .movement-sequence { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .movement-keyframe-list { position: relative; display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 4px 0 8px; }
 .movement-keyframe-list button { flex-shrink: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--wb-muted); cursor: pointer; font: inherit; font-size: 12px; }
@@ -158,22 +159,14 @@
 .movement-frame-select { width: 180px; margin-bottom: 12px; }
 .movement-keyframe-edit > label { display: grid; gap: 8px; margin-bottom: 12px; color: var(--wb-muted); font-size: 12px; }
 .movement-keyframe-edit section > strong { display: block; color: var(--wb-muted); font-size: 12px; margin-bottom: 8px; font-weight: 400; }
-.movement-keyframe-edit .generation-prompt-editor { min-height: 220px; max-height: 300px; overflow-y: auto; }
+.movement-keyframe-edit .generation-prompt-editor { min-height: 140px; max-height: 180px; overflow-y: auto; }
 .movement-keyframe-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.movement-motion.design-preset-fields { grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; }
 .movement-motion .generation-prompt-editor { min-height: 64px; max-height: 120px; }
-.movement-motion > [data-design-field="movement_path"] .generation-prompt-editor { min-height: 100px; }
-.movement-trigger { min-width: 0; color: var(--wb-muted); font-size: 12px; }
-.movement-trigger > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 0; }
-.movement-trigger > summary > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.movement-trigger[open] > summary > :last-child { transform: rotate(180deg); }
 .movement-scope-trigger { position: relative; }
 .movement-scope-trigger > i { position: absolute; right: 4px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--wb-text); pointer-events: none; }
 .movement-scope-panel { width: min(300px, calc(100vw - 80px)); }
 .movement-scope-panel .static-design-scope { grid-template-columns: minmax(0, 1fr); margin: 0; }
 .movement-scope-panel > p { color: var(--wb-muted); font-size: 12px; margin: 16px 0 0; }
 @media (max-width: 700px) {
-  .movement-layout { grid-template-columns: minmax(0, 1fr); }
   .movement-frame-select { width: 100%; }
-  .movement-keyframe-edit .generation-prompt-editor { min-height: 160px; }
 }

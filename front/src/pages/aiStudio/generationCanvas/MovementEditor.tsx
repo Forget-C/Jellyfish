@@ -1,6 +1,6 @@
 import { DesignScopeEditor } from './DesignScopeEditor'
 import { VisualDesignRelations } from './VisualDesignRelations'
-import { ConfigProvider, Dropdown, Input, Popover, Select } from 'antd'
+import { ConfigProvider, Divider, Dropdown, Input, Popover, Select } from 'antd'
 import type { InputRef } from 'antd'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { DesignReferenceContext } from './DesignReferenceEditor'
@@ -11,7 +11,7 @@ import { DesignPresetEditor } from './DesignPresetEditor'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions } from './photographyDesign'
 import { designSummary } from './designSummary'
-import { FilterOutlined, PlusOutlined, ThunderboltOutlined, DownOutlined } from '@ant-design/icons'
+import { FilterOutlined, PlusOutlined } from '@ant-design/icons'
 import { WorkbenchButton as Button, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 
 /** 运镜阶段身份由创建时确定；重命名和重排只改变展示，不改变引用目标。 */
@@ -23,18 +23,16 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const nameInput = useRef<InputRef>(null), focusNew = useRef(false)
   const activeId = selectedId === 'field:end_frame' || phases.some(phase => phase.id === selectedId) ? selectedId : 'field:movement_start'
   const selected = phases.find(phase => phase.id === activeId)
-  const [triggerOpen, setTriggerOpen] = useState(false)
   const [scopeOpen, setScopeOpen] = useState(false)
   const frameField = activeId === 'field:end_frame' ? 'end_frame' : 'movement_start'
   const frameLabel = frameField === 'end_frame' ? '结束画面' : '起始画面'
   const index = phases.findIndex(phase => phase.id === selected?.id)
-  useEffect(() => { if (!editorOpen) { focusNew.current = false; setTriggerOpen(false); setScopeOpen(false); setSelectedId('field:movement_start') } }, [editorOpen])
+  useEffect(() => { if (!editorOpen) { focusNew.current = false; setScopeOpen(false); setSelectedId('field:movement_start') } }, [editorOpen])
   useEffect(() => {
     if (!editorOpen) return
     const field = references?.targetField?.fieldId
     if (field?.startsWith('phase:')) setSelectedId(field.slice(6))
     else if (field === 'movement_start' || field === 'end_frame') setSelectedId('field:' + field)
-    else if (field === 'movement_trigger') setTriggerOpen(true)
   }, [references?.targetField, editorOpen])
   useEffect(() => {
     if (focusNew.current && selected) { nameInput.current?.focus(); focusNew.current = false }
@@ -68,8 +66,7 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
       <span className="movement-scope-trigger"><WorkbenchIconButton ref={scopeTrigger} variant="quiet" label={`整卡适用限制${scopeCount ? ` · 已填写 ${scopeCount} 项` : ''}`} aria-expanded={scopeOpen} icon={<FilterOutlined />} />{scopeCount > 0 && <i aria-hidden="true" />}</span>
     </Popover>
   </ConfigProvider>
-  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} advancedTitle="" advancedTools={scopeTools} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
-    <div className="movement-layout">
+  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} advancedTitle="" onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <section className="movement-keyframes" aria-label="运镜关键画面">
       <div className="movement-keyframe-layout">
         <div className="movement-sequence">
@@ -92,6 +89,8 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
           focusNew.current = true; setSelectedId(id)
           onChange({ ...card, phases: [...phases, { id, name: '', frame: { state: 'empty', text: '', purpose: 'design' } }] })
         }} />
+        <Divider type="vertical" />
+        {scopeTools}
         </div>
         {phases.length > 3 && <ConfigProvider componentDisabled={false}><Select className="movement-frame-select" aria-label="全部画面" value={activeId} onChange={setSelectedId} options={[{value:'field:movement_start',label:'起始'}, ...phases.map((phase, position) => ({ value: phase.id, label: `${position + 1} ${phase.name?.trim() || '未命名画面'}` })), {value:'field:end_frame',label:'结束'}]} /></ConfigProvider>}
         <div className="movement-keyframe-edit" role="tabpanel" aria-label={selected ? selected.name || '未命名画面' : frameLabel}>
@@ -109,14 +108,10 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
         </div>
       </div>
     </section>
-    <aside className="movement-motion design-preset-fields" aria-label="运镜功能参数">
-      {(['movement_type', 'movement_path', 'movement_speed'] as const).map(key => <DesignFieldEditor compact key={key} label={labels[key]} value={fields[key]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}
-      <details className="movement-trigger" open={triggerOpen} onToggle={event => setTriggerOpen(event.currentTarget.open)}>
-        <summary aria-label="触发条件"><ThunderboltOutlined /><span>{fields.movement_trigger?.text || '未填写触发条件'}</span><DownOutlined /></summary>
-        <DesignFieldEditor compact label={labels.movement_trigger} value={fields.movement_trigger} onChange={value => onChange({ ...card, fields: { ...fields, movement_trigger: value } })} />
-      </details>
-    </aside>
-    </div>
+    <Divider className="movement-section-divider" />
+    <section className="movement-motion design-preset-fields" aria-label="运镜功能参数">
+      {(['movement_type', 'movement_path', 'movement_speed', 'movement_trigger'] as const).map(key => <DesignFieldEditor compact key={key} label={labels[key]} value={fields[key]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}
+    </section>
     <VisualDesignRelations onLocateDesign={onLocateDesign} card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
   </DesignPresetEditor>
 }

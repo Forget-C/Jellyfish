@@ -17,13 +17,13 @@ import './designPresetEditor.css'
 
 type Props = {
   fields: Record<string, DesignField | null | undefined>; labels: Record<string, string>; presets: VisualPreset[];
-  children: ReactNode; advancedTitle?: string; advancedTools?: ReactNode; candidates?: ReactNode; relations?: ReactNode; direct?: boolean; current: string; disabled?: boolean; editorOpen?: boolean;
+  children: ReactNode; advancedTitle?: string; candidates?: ReactNode; relations?: ReactNode; direct?: boolean; current: string; disabled?: boolean; editorOpen?: boolean;
   onApply: (preset: VisualPreset) => void | boolean; onUndo?: () => void;
 }
 const describe = (value?: ReferenceDesignField | null, defaults?: DesignField) => value ? [value.text || '无正文', designFieldMetadata(value, defaults), value.document?.segments?.some(segment => segment.kind === 'reference') ? '含引用（应用后替换）' : ''].filter(Boolean).join(' · ') : '未填写'
 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
-export function DesignPresetEditor({ fields, labels, presets, children, advancedTitle = '设计参数', advancedTools, candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
+export function DesignPresetEditor({ fields, labels, presets, children, advancedTitle = '设计参数', candidates, relations, direct = false, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
   const { token } = theme.useToken()
   const references = useContext(DesignReferenceContext)
   const { cardDefinitions } = useGraphRules()
@@ -77,13 +77,12 @@ export function DesignPresetEditor({ fields, labels, presets, children, advanced
   }) : []
   const overwritten = changes.filter(change => change.populated).length
   const mode = <ConfigProvider componentDisabled={false}><Button ref={modeButton} variant="quiet" icon={advanced ? <ArrowLeftOutlined /> : <SettingOutlined />} onClick={() => { setAdvanced(value => !value); references?.changeMode(); modeButton.current?.focus({ preventScroll: true }) }}>{advanced ? '返回预设' : '高级设置'}</Button></ConfigProvider>
-  const modeTools = advancedTools ? <div className="design-preset-mode-tools">{advanced && advancedTools}{mode}</div> : mode
   const actions = <ConfigProvider componentDisabled={false}><WorkbenchDialogActions className="design-preset-actions" secondary={<><Button variant="quiet" icon={<UndoOutlined />} disabled={disabled || !onUndo} onClick={() => { onUndo?.(); setNotice('已撤销上一次修改') }}>撤销</Button><span role="status" className="design-preset-status">{disabled ? '只读 · 可以预览与对比' : notice || (advanced ? '编辑沿用画布自动保存' : matched ? `已应用 · ${matched.name}` : current ? '自定义配置' : '选择一个预设开始')}</span></>}>
     {references?.savedRevision !== undefined && <small className="design-preset-revision">revision {references.savedRevision}</small>}
     {!advanced && <Button variant="primary" disabled={disabled || !preview || !changes.length} onClick={() => { if (preview && onApply(preview) !== false) setNotice(`已应用「${preview.name}」`) }}>应用</Button>}
   </WorkbenchDialogActions></ConfigProvider>
   return <div ref={owner} className="design-preset-editor" style={{ '--design-input-font': token.fontFamily } as CSSProperties}>
-    {!direct && (header ? editorOpen && createPortal(modeTools, header) : modeTools)}
+    {!direct && (header ? editorOpen && createPortal(mode, header) : mode)}
     {(references || candidates) && <div className="design-preset-candidates">{references ? references.renderCandidates(advanced) : candidates}</div>}
     {relations && <div className="design-preset-relations">{relations}</div>}
     <div className="design-preset-layout" hidden={advanced}>
