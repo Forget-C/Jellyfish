@@ -44,7 +44,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
     {card.type === 'direction.dialogue' ? <section aria-label="对白条目"><p>对白身份：{card.dialogue_id}</p>
       <strong>对白版本</strong><InputNumber aria-label="对白版本" min={1} value={card.version || 1} onChange={version => update({ ...card, version: version || 1 })} />
       <FieldEditor compact label="对白正文" value={card.content} onChange={content => update({ ...card, content })} />
-    </section> : <section aria-label="声音条目">
+    </section> : <section aria-label="声音条目" className="design-preset-fields design-preset-fields-compact">
       <FieldEditor compact label="声源说明" value={sound.source_description} onChange={source_description => update({ ...sound, source_description })} />
       <FieldEditor compact label="环境声" value={sound.environment} onChange={environment => update({ ...sound, environment })} />
       <FieldEditor compact label="动作声" value={sound.action_sound} onChange={action_sound => update({ ...sound, action_sound })} />

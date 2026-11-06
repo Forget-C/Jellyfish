@@ -28,9 +28,11 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={false} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 
+    <div className={card.type === 'direction.criterion' ? undefined : 'design-preset-fields design-preset-fields-compact'}>
     {card.type === 'direction.creative_control' && <>{field('freedom', '创作控制程度')}{field('allowed_range', '允许发挥范围')}{field('keep', '需要保持', 'constraint')}{field('undecided', '待确定事项')}</>}
     {card.type === 'direction.guidance' && <>{field('priority', '编译优先级')}{field('reference_requirements', '参考绑定要求')}{field('sound_strategy', '声音策略')}{field('prohibitions', '禁止项', 'constraint')}</>}
     {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}</>}
+    </div>
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
   </DesignPresetEditor>

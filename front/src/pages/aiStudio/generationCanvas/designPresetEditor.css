@@ -151,26 +151,45 @@
 .design-preset-editor :is(.ant-input, .ant-input-number-input)::placeholder { font-family: inherit; font-size: inherit; font-weight: inherit; font-style: normal; color: var(--wb-muted); opacity: 1; }
 .design-preset-editor .ant-select-selection-placeholder, .design-preset-editor .generation-prompt-editor::before { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; font-style: normal; color: var(--wb-muted); }
 
-/* Full-width frame editing precedes the shared two-column motion fields. */
-.design-preset-advanced > .movement-keyframes { margin-bottom: 0; }
-.movement-section-divider.ant-divider-horizontal { width: 32px; min-width: 32px; margin: 8px auto 12px; border-color: var(--wb-border); }
+/* Stable business regions share sizing rules; short parameters reuse the same field grid. */
+.design-stable-region:has(.design-reference-issue) { height: auto; min-height: var(--design-region-height); }
+.design-stable-region { box-sizing: border-box; height: var(--design-region-height); min-height: var(--design-region-height); }
+.design-preset-fields-compact { row-gap: 8px; }
+.design-preset-fields-compact section > strong { line-height: 18px; }
+.design-preset-fields-compact .generation-prompt-editor { min-height: 64px; height: 64px; max-height: 64px; padding: 8px 12px; overflow-y: auto; }
+.design-preset-fields-compact [data-design-field] > section:not(:has(.design-field-metadata))::after,
+.movement-keyframe-edit [data-design-field] > section:not(:has(.design-field-metadata))::after { content: ''; display: block; height: 18px; margin-top: 6px; }
+.design-preset-advanced > .movement-keyframes { --design-region-height: 238px; margin-bottom: 0; }
+.design-preset-advanced > .movement-motion { --design-region-height: 236px; margin-bottom: 0; }
+.movement-section-divider.ant-divider-horizontal { width: 32px; min-width: 32px; margin: 8px auto; border-color: var(--wb-border); }
+.movement-sequence { display: flex; align-items: center; gap: 8px; height: 40px; margin-bottom: 8px; }
 .movement-sequence > .wb-icon-trigger { flex-shrink: 0; }
-.movement-sequence { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.movement-keyframe-list { position: relative; display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 4px 0 8px; }
-.movement-keyframe-list button { flex-shrink: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--wb-muted); cursor: pointer; font: inherit; font-size: 12px; }
-.movement-keyframe-list button[aria-selected="true"] { color: var(--wb-text); border-bottom-color: var(--wb-text); }
-.movement-keyframe-list button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -2px; }
-.movement-frame-select { width: 180px; margin-bottom: 12px; }
-.movement-keyframe-edit > label { display: grid; gap: 8px; margin-bottom: 12px; color: var(--wb-muted); font-size: 12px; }
-.movement-keyframe-edit section > strong { display: block; color: var(--wb-muted); font-size: 12px; margin-bottom: 8px; font-weight: 400; }
-.movement-keyframe-edit .generation-prompt-editor { min-height: 140px; max-height: 180px; overflow-y: auto; }
-.movement-keyframe-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.movement-motion .generation-prompt-editor { min-height: 64px; max-height: 120px; }
+.movement-keyframe-list { position: relative; display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 2px; height: 40px; }
+.movement-phase-tab { display: flex; align-items: center; position: relative; flex-shrink: 0; max-width: 280px; border-bottom: 2px solid transparent; color: var(--wb-muted); }
+.movement-phase-tab[data-sort-id] { touch-action: pan-y; user-select: none; }
+.movement-phase-tab[data-selected="true"] { border-bottom-color: var(--wb-text); color: var(--wb-text); }
+.movement-phase-tab > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: inherit; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.movement-phase-tab > button:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
+.movement-phase-tab > .ant-input { width: 160px; height: 30px; }
+.movement-tab-actions { display: flex; visibility: hidden; }
+.movement-phase-tab:hover .movement-tab-actions, .movement-phase-tab:focus-within .movement-tab-actions { visibility: visible; }
+.movement-phase-tab[data-dragging="true"] { opacity: .5; }
+.movement-phase-tab[data-drop-target="true"], .design-sort-item[data-drop-target="true"] { box-shadow: inset 2px 0 var(--wb-focus); }
+.movement-frame-select { width: 96px; flex-shrink: 0; }
+.movement-keyframe-edit section > strong { line-height: 18px; display: block; color: var(--wb-muted); font-size: 12px; margin-bottom: 8px; font-weight: 400; }
+.movement-keyframe-edit .generation-prompt-editor { min-height: 140px; height: 140px; max-height: 140px; overflow-y: auto; }
+.movement-phase-tab[data-drop-target="true"][data-drop-side="after"], .design-sort-item[data-drop-target="true"][data-drop-side="after"] { box-shadow: inset -2px 0 var(--wb-focus); }
+.design-sort-item { touch-action: none; }
+.design-sort-item:focus-visible { outline: 1px solid var(--wb-focus); }
+.design-sort-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (hover: none) { .movement-phase-tab[data-selected="true"] .movement-tab-actions { visibility: visible; } }
+@media (max-width: 700px) {
+  .design-preset-advanced > .movement-motion { height: auto; min-height: 0; }
+  .movement-frame-select { width: 72px; }
+  .movement-phase-tab { max-width: 240px; }
+}
 .design-scope-trigger { position: relative; }
 .design-scope-trigger > i { position: absolute; right: 4px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--wb-text); pointer-events: none; }
 .design-scope-panel { width: min(300px, calc(100vw - 80px)); }
 .design-scope-panel .static-design-scope { grid-template-columns: minmax(0, 1fr); margin: 0; }
 .design-scope-panel > p { color: var(--wb-muted); font-size: 12px; margin: 16px 0 0; }
-@media (max-width: 700px) {
-  .movement-frame-select { width: 100%; }
-}

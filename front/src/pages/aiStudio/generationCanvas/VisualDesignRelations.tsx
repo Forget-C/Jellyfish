@@ -14,6 +14,8 @@ export function VisualDesignRelations({ card, document, savedRevision, modelOutp
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || []
   const ports = card.type === 'direction.focus' ? ['attention_object', 'focus_object'] : card.type === 'direction.movement' ? ['attention_object'] : []
+  const hasRelations = bindings.some(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)) || resolved.candidates.some(item => document.edges?.some(edge => edge.target_card === card.id && [...ports, 'shot'].includes(edge.target_port) && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id))
+  if (!hasRelations) return null
   return (
     <section className="static-design-relations" aria-label="对象与所属镜头">
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference' || item.payload?.kind === 'narrative_reference' && 'category' in item.payload && item.payload.category === 'shot').map(item => <div key={sourceKey(item.source)}>{[...ports, 'shot'].filter(port => document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)).map(port => {

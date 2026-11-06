@@ -48,7 +48,9 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.fact'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={card.type === 'direction.fact' ? undefined : relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
 
+    <div className="design-preset-fields design-preset-fields-compact">
     {keys.map(key => <DesignFieldEditor compact key={key} label={labels[key]} purpose={['spatial_basis', 'source_basis'].includes(key) ? 'background' : ['before', 'change', 'after'].includes(key) ? 'design' : 'constraint'} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />)}
+    </div>
     {resolved.error && <Alert type="warning" message={resolved.error} />}
 
   </DesignPresetEditor>

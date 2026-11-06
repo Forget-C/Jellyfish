@@ -1,101 +1,58 @@
-import { DesignScopePopover } from './DesignScopePopover'
-import { VisualDesignRelations } from './VisualDesignRelations'
-import { ConfigProvider, Divider, Dropdown, Input, Select } from 'antd'
-import type { InputRef } from 'antd'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { DesignReferenceContext } from './DesignReferenceEditor'
+import { Divider } from 'antd'
 import type { MovementCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
+import { DesignReferenceContext, ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { DesignPresetEditor } from './DesignPresetEditor'
+import { DesignScopePopover } from './DesignScopePopover'
+import { VisualDesignRelations } from './VisualDesignRelations'
+import { MovementPhaseTabs } from './MovementPhaseTabs'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions } from './photographyDesign'
 import { designSummary } from './designSummary'
-import { PlusOutlined } from '@ant-design/icons'
-import { WorkbenchButton as Button, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 
-/** 运镜阶段身份由创建时确定；重命名和重排只改变展示，不改变引用目标。 */
+/** 阶段身份不随名称和顺序改变；删除只移除本卡画面，外部定位保留失效状态。 */
 export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs, onLocateDesign }: CardRendererProps) {
   const card = raw as MovementCard, fields = card.fields || {}, phases = card.phases || []
-  const [selectedId, setSelectedId] = useState<string>('field:movement_start')
+  const latest = useRef(card); latest.current = card
+  const change = (next: MovementCard) => { latest.current = next; onChange(next) }
+  const [selectedId, setSelectedId] = useState('field:movement_start')
   const references = useContext(DesignReferenceContext)
-  const list = useRef<HTMLDivElement>(null)
-  const nameInput = useRef<InputRef>(null), focusNew = useRef(false)
   const activeId = selectedId === 'field:end_frame' || phases.some(phase => phase.id === selectedId) ? selectedId : 'field:movement_start'
   const selected = phases.find(phase => phase.id === activeId)
   const frameField = activeId === 'field:end_frame' ? 'end_frame' : 'movement_start'
   const frameLabel = frameField === 'end_frame' ? '结束画面' : '起始画面'
-  const index = phases.findIndex(phase => phase.id === selected?.id)
-  useEffect(() => { if (!editorOpen) { focusNew.current = false; setSelectedId('field:movement_start') } }, [editorOpen])
+  useEffect(() => { if (!editorOpen) setSelectedId('field:movement_start') }, [editorOpen])
   useEffect(() => {
     if (!editorOpen) return
     const field = references?.targetField?.fieldId
     if (field?.startsWith('phase:')) setSelectedId(field.slice(6))
     else if (field === 'movement_start' || field === 'end_frame') setSelectedId('field:' + field)
   }, [references?.targetField, editorOpen])
-  useEffect(() => {
-    if (focusNew.current && selected) { nameInput.current?.focus(); focusNew.current = false }
-  }, [selected])
-  useEffect(() => {
-    const root = list.current, button = root?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
-    if (!root || !button) return
-    if (button.offsetLeft < root.scrollLeft) root.scrollLeft = button.offsetLeft
-    else if (button.offsetLeft + button.offsetWidth > root.scrollLeft + root.clientWidth) root.scrollLeft = button.offsetLeft + button.offsetWidth - root.clientWidth
-  }, [activeId])
-  const move = (offset: number) => {
-    if (!selected) return
-    setSelectedId(selected.id)
-    const next = [...phases]
-    ;[next[index], next[index + offset]] = [next[index + offset], next[index]]
-    onChange({ ...card, phases: next })
-  }
-  const describe = (phase: typeof phases[number]) => phase.frame?.document
-    ? phase.frame.document.segments?.map(segment => segment.kind === 'text' ? segment.text : '@引用').join('') || ''
-    : phase.frame?.text || ''
+  const uses = (id: string) => (document.cards || []).reduce((count, target) => {
+    if ('frame_target' in target && target.frame_target?.card_id === card.id && target.frame_target.state_id === 'phase:' + id) count += 1
+    if ('frame_targets' in target) count += (target.frame_targets || []).filter(frame => frame.state_id === 'phase:' + id && target.input_bindings?.some(binding => binding.id === frame.binding_id && binding.source.card_id === card.id)).length
+    return count
+  }, 0)
   const labels = photographyRegions.movement.fields
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
-    <section className="movement-keyframes" aria-label="运镜关键画面">
-      <div className="movement-keyframe-layout">
-        <div className="movement-sequence">
-        <div ref={list} className="movement-keyframe-list" role="tablist" aria-label="关键画面列表" onKeyDown={event => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-          const ids = ['field:movement_start', ...phases.map(phase => phase.id), 'field:end_frame']
-          const current = ids.indexOf(activeId)
-          const next = event.key === 'Home' ? 0 : event.key === 'End' ? ids.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + ids.length) % ids.length
-          event.preventDefault(); setSelectedId(ids[next])
-          list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
-        }}>
-          <button type="button" role="tab" aria-selected={activeId === 'field:movement_start'} tabIndex={activeId === 'field:movement_start' ? 0 : -1} onClick={() => setSelectedId('field:movement_start')}>起始</button>
-          {phases.map((phase, position) => <button type="button" role="tab" key={phase.id} aria-selected={activeId === phase.id} tabIndex={activeId === phase.id ? 0 : -1} onClick={() => setSelectedId(phase.id)} title={describe(phase)}>
-            {String(position + 1).padStart(2, '0')} {phase.name?.trim() || '未命名画面'}{references?.issues.some(issue => issue.field_id === 'phase:' + phase.id) && ' · 引用需处理'}
-          </button>)}
-          <button type="button" role="tab" aria-selected={activeId === 'field:end_frame'} tabIndex={activeId === 'field:end_frame' ? 0 : -1} onClick={() => setSelectedId('field:end_frame')}>结束</button>
-        </div>
-        <WorkbenchIconButton label="添加关键画面" variant="quiet" icon={<PlusOutlined />} disabled={disabled} onClick={() => {
-          const id = crypto.randomUUID()
-          focusNew.current = true; setSelectedId(id)
-          onChange({ ...card, phases: [...phases, { id, name: '', frame: { state: 'empty', text: '', purpose: 'design' } }] })
+    <section className="movement-keyframes design-stable-region" aria-label="运镜关键画面">
+      <MovementPhaseTabs phases={phases} activeId={activeId} onSelect={setSelectedId} editorOpen={editorOpen} disabled={disabled} uses={uses} issues={(references?.issues || []).filter(issue => issue.field_id.startsWith('phase:')).map(issue => issue.field_id.slice(6))}
+        onRename={(id, name) => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === id ? { ...phase, name } : phase) })}
+        onOrder={ids => change({ ...latest.current, phases: ids.map(id => latest.current.phases!.find(phase => phase.id === id)!) })}
+        onAdd={() => { const id = crypto.randomUUID(); change({ ...latest.current, phases: [...(latest.current.phases || []), { id, name: '', frame: { state: 'empty', text: '', purpose: 'design' } }] }); setSelectedId(id); return id }}
+        onDelete={id => {
+          const current = latest.current, index = current.phases!.findIndex(phase => phase.id === id)
+          if (activeId === id) setSelectedId(current.phases![index + 1]?.id || 'field:end_frame')
+          change({ ...current, phases: current.phases!.filter(phase => phase.id !== id) })
         }} />
-        </div>
-        {phases.length > 3 && <ConfigProvider componentDisabled={false}><Select className="movement-frame-select" aria-label="全部画面" value={activeId} onChange={setSelectedId} options={[{value:'field:movement_start',label:'起始'}, ...phases.map((phase, position) => ({ value: phase.id, label: `${position + 1} ${phase.name?.trim() || '未命名画面'}` })), {value:'field:end_frame',label:'结束'}]} /></ConfigProvider>}
-        <div className="movement-keyframe-edit" role="tabpanel" aria-label={selected ? selected.name || '未命名画面' : frameLabel}>
-          {!selected ? <DesignFieldEditor compact key={frameField} label={frameLabel} value={fields[frameField]} onChange={value => onChange({...card, fields:{...fields, [frameField]:value}})} /> : <>
-          <label>画面名称<Input ref={nameInput} aria-label="画面名称" placeholder="如：经过门口、靠近人物" value={selected.name} disabled={disabled} onChange={event => onChange({ ...card, phases: phases.map(item => item.id === selected.id ? { ...item, name: event.target.value } : item) })} /></label>
-          <DesignFieldEditor compact key={selected.id} label="此时的画面" value={selected.frame} onChange={frame => onChange({ ...card, phases: phases.map(item => item.id === selected.id ? { ...item, frame } : item) })} />
-          <div className="movement-keyframe-actions">
-            <Dropdown disabled={disabled} trigger={['click']} menu={{ items: [{key:'up', label:'上移', disabled:index === 0}, {key:'down', label:'下移', disabled:index === phases.length - 1}, { key: 'delete', label: '删除关键画面', danger: true }], onClick: ({key}) => {
-              if (key === 'up' || key === 'down') { move(key === 'up' ? -1 : 1); return }
-              focusNew.current = phases.length > 1
-              setSelectedId(phases[index + 1]?.id || phases[index - 1]?.id || 'field:movement_start')
-              onChange({ ...card, phases: phases.filter(item => item.id !== selected.id) })
-            } }}><Button disabled={disabled}>更多画面操作</Button></Dropdown></div>
-          </>}
-        </div>
+      <div className="movement-keyframe-edit" role="tabpanel" aria-label={selected ? selected.name || '未命名画面' : frameLabel}>
+        {!selected ? <DesignFieldEditor compact key={frameField} label={frameLabel} value={fields[frameField]} onChange={value => change({ ...latest.current, fields: { ...latest.current.fields, [frameField]: value } })} /> : <DesignFieldEditor compact key={selected.id} label="此时的画面" value={selected.frame} onChange={frame => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === selected.id ? { ...phase, frame } : phase) })} />}
       </div>
     </section>
     <Divider className="movement-section-divider" />
-    <section className="movement-motion design-preset-fields" aria-label="运镜功能参数">
-      {(['movement_type', 'movement_path', 'movement_speed', 'movement_trigger'] as const).map(key => <DesignFieldEditor compact key={key} label={labels[key]} value={fields[key]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}
+    <section className="movement-motion design-preset-fields design-preset-fields-compact design-stable-region" aria-label="运镜功能参数">
+      {(['movement_type', 'movement_path', 'movement_speed', 'movement_trigger'] as const).map(key => <DesignFieldEditor compact key={key} label={labels[key]} value={fields[key]} onChange={value => change({ ...latest.current, fields: { ...latest.current.fields, [key]: value } })} />)}
     </section>
     <VisualDesignRelations onLocateDesign={onLocateDesign} card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
   </DesignPresetEditor>
