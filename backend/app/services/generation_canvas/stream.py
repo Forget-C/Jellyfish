@@ -3,7 +3,8 @@ import asyncio
 import json
 from sqlalchemy import select
 from app.models.generation_canvas import CanvasEvent
-from app.services.generation_canvas.runtime import CanvasRuntime, event_head
+from app.services.generation_canvas.runtime import CanvasRuntime
+from app.services.generation_canvas.events import event_head
 
 
 def encode(event):

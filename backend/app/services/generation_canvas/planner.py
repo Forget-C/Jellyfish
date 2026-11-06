@@ -1,8 +1,8 @@
 """单模型规划与历史运行推进：新请求固定当前模型，已受理依赖按快照执行。"""
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from fastapi import HTTPException
 from pydantic import ValidationError
-from app.models.generation_canvas import CanvasRun, CanvasRunNode, CanvasScopeOccupancy
+from app.models.generation_canvas import CanvasRun, CanvasRunNode
 from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead
 from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.generation_canvas.execution_basis import digest, restore_basis
@@ -72,17 +72,17 @@ async def start_node(db, node, producers=None):
 
 async def stop_waiting(db, node, head, status, code, message):
     """无 Task 的节点也必须产生明确终态、事件并释放占用。"""
-    from app.services.generation_canvas.runtime import append_event
+    from app.services.generation_canvas.node_completion import finish_node
+    if node.status != 'waiting':
+        return
     node.status, node.stage = status, status
     node.error_code, node.error_message = code, message
-    await db.execute(delete(CanvasScopeOccupancy).where(CanvasScopeOccupancy.node_id == node.id))
-    await db.flush()
-    await append_event(db, head, 'node.finished', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
+    await finish_node(db, node, head)
 
 
 async def advance(db, run_id, head, *, interrupted=False):
     """事件头已锁；只创建新 Task，不取得既有 Task 锁，避免反向死锁。"""
-    from app.services.generation_canvas.runtime import TERMINAL, append_event
+    from app.services.generation_canvas.events import TERMINAL, append_event
     nodes = list(await db.scalars(select(CanvasRunNode).where(CanvasRunNode.run_id == run_id).execution_options(populate_existing=True)))
     producers = {node.card_id: node for node in nodes}
     for node in nodes:

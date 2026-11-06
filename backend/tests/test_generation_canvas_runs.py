@@ -683,3 +683,59 @@ async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events
     recovered = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert [run['id'] for run in recovered['runs']] == [first['run_id'], second['run_id']]
     assert recovered['current_outputs'] == state['current_outputs']
+
+
+@pytest.mark.asyncio
+async def test_task_settlement_rolls_back_with_facts_and_repeated_finish_does_not_publish_twice(runtime):
+    """任务、成果、占用和事件同事务回滚；重复终态不重复交付。"""
+    from app.services.task_service import TaskService
+    from app.services.generation_canvas.runtime import CanvasRuntime
+    accepted, _ = await accept(runtime)
+    task_id = accepted['task_ids'][0]
+    async with runtime.sessions.begin() as db:
+        assert await TaskService(db).claim(task_id, worker_id='settlement-test')
+    before = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    async with runtime.sessions() as db:
+        assert await TaskService(db).finish(task_id, result={'text': 'complete'})
+        snapshot = await CanvasRuntime(db, runtime.project_id).snapshot(runtime.canvas_id)
+        assert snapshot.runs[0].nodes[0].status == 'succeeded'
+        assert snapshot.current_outputs['m'][0].text == 'complete'
+        await db.rollback()
+    assert (await runtime.client.get(runtime.url + '/runtime')).json()['data'] == before
+    # A rolled-back release must not let another run claim the same model.
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'm'})).json()['data']
+    conflict = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'still-busy', 'preview_token': preview['preview_token']})
+    assert conflict.status_code == 409
+    async with runtime.sessions.begin() as db:
+        assert await TaskService(db).finish(task_id, result={'text': 'complete'})
+    finished = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    async with runtime.sessions.begin() as db:
+        repeated = await TaskService(db).finish(task_id, result={'text': 'duplicate'})
+        assert repeated.result == {'text': 'complete'}
+    assert (await runtime.client.get(runtime.url + '/runtime')).json()['data'] == finished
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', [{'result': {'text': 'complete'}}, {'error': 'failed'}, {'cancelled': True}])
+async def test_repeated_terminal_fact_sync_keeps_results_and_events_unchanged(runtime, outcome):
+    from sqlalchemy import select
+    from app.models.generation_canvas import CanvasEvent, CanvasResultSet
+    from app.services.task_service import TaskService
+    from app.services.generation_canvas.settlement import sync_task_fact
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        service = TaskService(db)
+        await service.claim(accepted['task_ids'][0], worker_id='repeat-fact')
+        task = await service.finish(accepted['task_ids'][0], **outcome)
+        async def facts():
+            events = list(await db.scalars(select(CanvasEvent).where(CanvasEvent.canvas_id == runtime.canvas_id).order_by(CanvasEvent.cursor)))
+            results = list(await db.scalars(select(CanvasResultSet.id).where(CanvasResultSet.canvas_id == runtime.canvas_id)))
+            return [event.envelope for event in events], results
+        before = await facts()
+        await sync_task_fact(db, task, delta='must not append after terminal')
+        assert await facts() == before
+        assert len(before[1]) == (1 if 'result' in outcome else 0)
+        assert [event['type'] for event in before[0]][-2:] == ['node.finished', 'run.finished']
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert 'must not append' not in state['runs'][0]['nodes'][0]['text']
+    await accept(runtime, 'after-repeat')

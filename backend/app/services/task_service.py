@@ -277,7 +277,7 @@ class TaskService:
     async def _sync_canvas(self, row: Task, *, delta: str | None = None) -> None:
         """Canvas fact hook keeps Task and business events in the same transaction."""
         if row.target_type == 'canvas_node':
-            from app.services.generation_canvas.runtime import sync_task_fact
+            from app.services.generation_canvas.settlement import sync_task_fact
             await sync_task_fact(self.db, row, delta=delta)
 
     async def append_canvas_text(self, task_id: str, delta: str) -> bool:

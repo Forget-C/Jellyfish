@@ -228,3 +228,32 @@ async def test_gate_keeps_current_config_fallback_for_node_without_execution_con
         snapshot = await GenerationEntityGate().validate(db, command)
         assert snapshot.execution_config.model_params == {'temperature': .7}
         assert snapshot.execution_config.api_key == 'current-secret'
+
+
+@pytest.mark.asyncio
+async def test_waiting_completion_rolls_back_and_repeated_stop_keeps_one_terminal_event(runtime):
+    from app.models.generation_canvas import CanvasEvent
+    from app.services.generation_canvas.events import event_head
+    from app.services.generation_canvas.planner import stop_waiting, advance
+    accepted, _ = await historical_waiter(runtime)
+    async def waiter(db):
+        return await db.scalar(select(CanvasRunNode).where(CanvasRunNode.run_id == accepted['run_id'], CanvasRunNode.card_id == 'B'))
+    async with runtime.sessions() as db:
+        head = await event_head(db, runtime.canvas_id)
+        await stop_waiting(db, await waiter(db), head, 'cancelled', 'RUN_CANCELLED', 'cancelled')
+        await db.rollback()
+    async with runtime.sessions.begin() as db:
+        head = await event_head(db, runtime.canvas_id)
+        node = await waiter(db)
+        assert node.status == 'waiting'
+        assert await db.get(CanvasScopeOccupancy, (runtime.canvas_id, 'B')) is not None
+        events = list(await db.scalars(select(CanvasEvent).where(CanvasEvent.canvas_id == runtime.canvas_id)))
+        assert not any(event.envelope['node_id'] == node.id for event in events)
+        await stop_waiting(db, node, head, 'cancelled', 'RUN_CANCELLED', 'cancelled')
+        await stop_waiting(db, node, head, 'blocked', 'UPSTREAM_FAILED', 'must not overwrite')
+        await advance(db, accepted['run_id'], head)
+        assert node.status == 'cancelled' and node.error_code == 'RUN_CANCELLED'
+        assert await db.get(CanvasScopeOccupancy, (runtime.canvas_id, 'B')) is None
+        events = list(await db.scalars(select(CanvasEvent).where(CanvasEvent.canvas_id == runtime.canvas_id)))
+        assert len([event for event in events if event.envelope['node_id'] == node.id and event.envelope['type'] == 'node.finished']) == 1
+        assert not any(event.envelope['type'] == 'run.finished' for event in events)
