@@ -149,7 +149,7 @@
 /* The frame sequence owns the main surface; motion parameters remain visible beside it. */
 .movement-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 12px 24px; }
 .movement-layout > * { min-width: 0; }
-.movement-toolbar { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.design-preset-mode-tools { display: flex; align-items: center; gap: 12px; }
 .movement-sequence { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .movement-keyframe-list { position: relative; display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 4px 0 8px; }
 .movement-keyframe-list button { flex-shrink: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--wb-muted); cursor: pointer; font: inherit; font-size: 12px; }

@@ -58,18 +58,18 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const scopeCount = Object.values(card.scope || {}).filter(value => value?.trim()).length
   const scopeTrigger = useRef<HTMLElement>(null)
   const labels = photographyRegions.movement.fields
-  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} advancedTitle="" onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
+  const scopeTools = <ConfigProvider componentDisabled={false}>
+    <Popover trigger="click" placement="bottomRight" open={scopeOpen} onOpenChange={setScopeOpen} getPopupContainer={trigger => trigger.parentElement!} content={<div className="movement-scope-panel" onKeyDown={event => {
+      if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); setScopeOpen(false); scopeTrigger.current?.focus() }
+    }}>
+      <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix="运镜" productionLabel="适用制作环节" />
+      <p>描述整张运镜卡的适用限制，随整卡传递；不会自动筛选关键画面。</p>
+    </div>}>
+      <span className="movement-scope-trigger"><WorkbenchIconButton ref={scopeTrigger} variant="quiet" label={`整卡适用限制${scopeCount ? ` · 已填写 ${scopeCount} 项` : ''}`} aria-expanded={scopeOpen} icon={<FilterOutlined />} />{scopeCount > 0 && <i aria-hidden="true" />}</span>
+    </Popover>
+  </ConfigProvider>
+  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} advancedTitle="" advancedTools={scopeTools} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <div className="movement-layout">
-      <div className="movement-toolbar"><ConfigProvider componentDisabled={false}>
-        <Popover trigger="click" placement="bottomRight" open={scopeOpen} onOpenChange={setScopeOpen} getPopupContainer={trigger => trigger.parentElement!} content={<div className="movement-scope-panel" onKeyDown={event => {
-          if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); setScopeOpen(false); scopeTrigger.current?.focus() }
-        }}>
-          <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix="运镜" productionLabel="适用制作环节" />
-          <p>描述整张运镜卡的适用限制，随整卡传递；不会自动筛选关键画面。</p>
-        </div>}>
-          <span className="movement-scope-trigger"><WorkbenchIconButton ref={scopeTrigger} variant="quiet" label={`整卡适用限制${scopeCount ? ` · 已填写 ${scopeCount} 项` : ''}`} aria-expanded={scopeOpen} icon={<FilterOutlined />} />{scopeCount > 0 && <i aria-hidden="true" />}</span>
-        </Popover>
-      </ConfigProvider></div>
     <section className="movement-keyframes" aria-label="运镜关键画面">
       <div className="movement-keyframe-layout">
         <div className="movement-sequence">
