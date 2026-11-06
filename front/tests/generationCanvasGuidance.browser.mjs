@@ -126,6 +126,19 @@ try {
   const card = page.locator('.wb-details:visible')
   const region = () => card.getByRole('region', { name: '关联的验收要求', exact: true })
   const expand = () => region().getByRole('button', { name: '展开验收要求', exact: true }).click()
+  const checkAcceptanceEntry = async height => {
+    await page.waitForFunction(minimum => [...document.querySelectorAll('.acceptance-toggle')].find(node => node.getClientRects().length)?.getBoundingClientRect().height >= minimum - 0.5, height)
+    const paint = await region().locator('.acceptance-toggle').evaluate(node => {
+      const label = node.querySelector('span'), style = getComputedStyle(label)
+      const probe = document.createElement('span'); probe.style.color = 'var(--wb-muted)'; node.append(probe)
+      const muted = getComputedStyle(probe).color; probe.remove()
+      const add = node.closest('.design-candidate-layout').querySelector('.generation-material-add').getBoundingClientRect()
+      const box = node.getBoundingClientRect()
+      return { size: style.fontSize, weight: style.fontWeight, color: style.color, muted, height: box.height, followsAdd: box.left >= add.right && Math.abs(box.top + box.height / 2 - add.top - add.height / 2) < 2 }
+    })
+    assert.equal(paint.size, '12px'); assert.equal(paint.weight, '400'); assert.equal(paint.color, paint.muted)
+    assert.ok(paint.height >= height - 0.5, JSON.stringify(paint)); assert.equal(paint.followsAdd, true)
+  }
   for (const id of types) {
     await openCanvasCard(page, id)
     assert.equal(await region().getByRole('button', { name: '展开验收要求' }).getAttribute('aria-expanded'), 'false')
@@ -170,9 +183,11 @@ try {
       await openCanvasCard(page, id)
       await expand()
     }
+    await checkAcceptanceEntry(32)
     await card.screenshot({ path: join(output, id + '-acceptance-desktop.png') })
     await page.setViewportSize({ width: 390, height: 844 })
     assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)
+    await checkAcceptanceEntry(36)
     await card.screenshot({ path: join(output, id + '-acceptance-mobile.png') })
     await closeCanvasDetails(page)
     await page.setViewportSize({ width: 1440, height: 1000 })

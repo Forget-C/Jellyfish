@@ -78,9 +78,9 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     })}
     {resolved.loading && <small role="status">正在读取候选来源…</small>}
     {!resolved.loading && resolved.error && <Alert type="warning" message="候选来源读取失败，请保存或重开后重试。" />}
-    <div className="generation-material-add">{sourceActions}</div>
+  </div><div className="generation-material-add">{sourceActions}</div>
     {(!resolved.loading && !resolved.error || resolved.candidates.length > 0) && <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${activeCount} 个使用中`}</small>}
-  </div>{onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</div>
+  {onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</div>
   return <DesignReferenceContext.Provider value={{ card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
     if (event.key !== 'Escape' || !inspect) return
     event.preventDefault(); event.stopPropagation()

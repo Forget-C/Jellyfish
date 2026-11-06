@@ -1,7 +1,9 @@
 .acceptance-basis { display: contents; color: var(--wb-text); }
 .acceptance-basis > div { grid-column: 1 / -1; margin-top: 8px; }
-.acceptance-toggle.wb-action { grid-column: 2; grid-row: 1; align-self: center; min-height: 32px; }
-@media (max-width: 700px) { .acceptance-toggle.wb-action { min-height: 36px; } }
+.design-candidate-layout .acceptance-toggle.wb-action.ant-btn { grid-column: 3; grid-row: 1; align-self: center; min-height: 32px; margin-right: 8px; padding-inline: 4px; color: var(--wb-muted); font-size: 12px; font-weight: 400; }
+.acceptance-toggle > span { color: var(--wb-muted); }
+.acceptance-toggle .anticon { font-size: 10px; }
+@media (max-width: 700px) { .design-candidate-layout .acceptance-toggle.wb-action.ant-btn { min-height: 36px; } }
 .acceptance-toggle:focus-visible, .acceptance-thumbnails button:focus-visible { outline: 2px solid var(--wb-strongBorder); outline-offset: 2px; }
 .acceptance-thumbnails { display: flex; gap: 8px; overflow-x: auto; padding: 4px; }
 .acceptance-thumbnails button { flex: 0 0 150px; padding: 10px; border: 1px solid var(--wb-border); border-radius: 8px; background: var(--wb-surface); color: inherit; text-align: left; cursor: pointer; }
