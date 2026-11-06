@@ -1,4 +1,5 @@
-import { ConfigProvider, Input, Popconfirm, Select } from 'antd'
+import { ConfigProvider, Input, Popconfirm, Select, theme } from 'antd'
+import type { CSSProperties } from 'react'
 import type { InputRef } from 'antd'
 import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
@@ -10,6 +11,9 @@ import { useOrderedDesignItems } from './useOrderedDesignItems'
 export function MovementPhaseTabs({ phases, activeId, onSelect, onRename, onOrder, onAdd, onDelete, uses, disabled, editorOpen, issues }: {
   phases: MovementPhase[]; activeId: string; onSelect: (id: string) => void; onRename: (id: string, name: string) => void; onOrder: (ids: string[]) => void; onAdd: () => string; onDelete: (id: string) => void; uses: (id: string) => number; disabled?: boolean; editorOpen?: boolean; issues: string[];
 }) {
+  const { token } = theme.useToken()
+  const [confirmId, setConfirmId] = useState<string>()
+  useEffect(() => { if (!editorOpen || disabled || !phases.some(phase => phase.id === confirmId)) setConfirmId(undefined) }, [editorOpen, disabled, phases, confirmId])
   const list = useRef<HTMLDivElement>(null), input = useRef<InputRef>(null)
   const [editing, setEditing] = useState<{ id: string; name: string }>()
   const edit = useRef(editing); edit.current = editing
@@ -33,7 +37,7 @@ export function MovementPhaseTabs({ phases, activeId, onSelect, onRename, onOrde
   }, [phases, editorOpen])
   useEffect(() => { const root = list.current, tab = root?.querySelector<HTMLElement>('[aria-selected="true"]'); if (root && tab) { const box = tab.getBoundingClientRect(), bounds = root.getBoundingClientRect(); if (box.left < bounds.left) root.scrollLeft -= bounds.left - box.left; else if (box.right > bounds.right) root.scrollLeft += box.right - bounds.right } }, [activeId])
   const items = [{ id: 'field:movement_start', name: '起始' }, ...phases, { id: 'field:end_frame', name: '结束' }]
-  return <div className="movement-sequence">
+  return <div className="movement-sequence" style={{ '--movement-delete-color': token.colorError } as CSSProperties}>
     <div ref={list} className="movement-keyframe-list" role="tablist" aria-label="关键画面列表" onPointerDown={sort.onPointerDown} onClickCapture={sort.onClickCapture} onKeyDown={event => {
       sort.onKeyDown(event)
       if (event.defaultPrevented || (event.target as HTMLElement).closest('input, [data-sort-ignore]')) return
@@ -48,8 +52,10 @@ export function MovementPhaseTabs({ phases, activeId, onSelect, onRename, onOrde
         return <div key={item.id} className="movement-phase-tab" data-sort-id={phase?.id} data-dragging={sort.drag?.id === item.id} data-drop-target={phase && sort.drag && phases[sort.drag.to]?.id === phase.id} data-drop-side={sort.drag && phases.findIndex(phase => phase.id === sort.drag!.id) < sort.drag.to ? 'after' : 'before'} data-selected={selected}>
           {editing?.id === item.id ? <Input ref={input} aria-label="画面名称" disabled={disabled} value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} onBlur={() => finish(true)} onKeyDown={event => { event.stopPropagation(); if (!event.nativeEvent.isComposing && (event.key === 'Enter' || event.key === 'Escape')) { event.preventDefault(); finish(event.key === 'Enter'); requestAnimationFrame(() => list.current?.querySelector<HTMLButtonElement>(`[data-sort-id="${CSS.escape(item.id)}"] [role="tab"]`)?.focus()) } }} /> : <button type="button" role="tab" aria-selected={selected} tabIndex={selected ? 0 : -1} title={`${item.name || '未命名画面'}${issues.includes(item.id) ? ' · 引用需处理' : ''}${phase && !disabled ? ' · 双击或F2改名；拖动或Ctrl/⌘+Shift+左右键排序' : ''}`} aria-keyshortcuts={phase && !disabled ? 'F2 Control+Shift+ArrowLeft Control+Shift+ArrowRight Meta+Shift+ArrowLeft Meta+Shift+ArrowRight' : undefined} onClick={() => { finish(true); onSelect(item.id) }} onDoubleClick={() => phase && rename(phase.id)}>{phase ? `${String(index).padStart(2, '0')} ${(item.name || '').trim() || '未命名画面'}` : item.name}{issues.includes(item.id) && ' · 引用需处理'}</button>}
           {phase && !disabled && <div className="movement-tab-actions" data-sort-ignore>
-            <WorkbenchIconButton label={`编辑画面名称 ${item.name || '未命名画面'}`} variant="quiet" icon={<EditOutlined />} onClick={() => rename(phase.id)} />
-            <Popconfirm getPopupContainer={node => node.closest<HTMLElement>('.design-preset-editor') || node.parentElement!} title={`此画面正被 ${count} 处定位使用`} description="删除后，相关目标需重新选择。" disabled={!count} okText="删除画面" cancelText="取消" onConfirm={() => onDelete(phase.id)}><WorkbenchIconButton label={`删除画面 ${item.name || '未命名画面'}`} variant="quiet" icon={<CloseOutlined />} onClick={() => { finish(true); if (!count) onDelete(phase.id) }} /></Popconfirm>
+            <WorkbenchIconButton className="movement-tab-edit" label={`编辑画面名称 ${item.name || '未命名画面'}`} variant="quiet" icon={<EditOutlined />} onClick={() => rename(phase.id)} />
+          </div>}
+          {phase && !disabled && <div className="movement-tab-delete" data-sort-ignore>
+            <Popconfirm open={confirmId === phase.id} onOpenChange={open => { if (!open || count) setConfirmId(open ? phase.id : undefined) }} getPopupContainer={node => node.closest<HTMLElement>('.design-preset-editor') || node.parentElement!} title={`此画面正被 ${count} 处定位使用`} description="删除后，相关目标需重新选择。" disabled={!count} okText="删除画面" cancelText="取消" onConfirm={() => onDelete(phase.id)}><WorkbenchIconButton tooltipOpen={confirmId === phase.id ? false : undefined} className="movement-tab-delete-button" label={`删除画面 ${item.name || '未命名画面'}`} variant="quiet" icon={<CloseOutlined />} onClick={() => { finish(true); if (!count) onDelete(phase.id) }} /></Popconfirm>
           </div>}
         </div>
       })}

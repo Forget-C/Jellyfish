@@ -12,7 +12,7 @@ export const WorkbenchButton = forwardRef<HTMLElement, WorkbenchButtonProps>(fun
   return <Button {...props} aria-label={props['aria-label'] ?? (typeof props.children === 'string' ? props.children : undefined)} ref={ref} type={variant === 'quiet' ? 'text' : 'default'} danger={variant === 'danger'} data-variant={variant} data-size={props.size || 'middle'} className={`wb-action ${className}`} />
 })
 
-/** 纯图标操作必须有可读名称，禁用时仍可查看说明。 */
-export const WorkbenchIconButton = forwardRef<HTMLElement, Omit<WorkbenchButtonProps, 'children' | 'icon'> & { label: string; icon: ReactNode }>(function WorkbenchIconButton({ label, className = '', ...props }, ref) {
-  return <Tooltip title={label}><span className="wb-icon-trigger"><WorkbenchButton {...props} ref={ref} aria-label={label} className={`wb-icon-action ${className}`} /></span></Tooltip>
+/** 纯图标操作必须有可读名称；tooltipOpen 允许确认浮层展开时收起重复提示，默认自动显示。 */
+export const WorkbenchIconButton = forwardRef<HTMLElement, Omit<WorkbenchButtonProps, 'children' | 'icon'> & { label: string; icon: ReactNode; tooltipOpen?: boolean }>(function WorkbenchIconButton({ label, tooltipOpen, className = '', ...props }, ref) {
+  return <Tooltip title={label} open={tooltipOpen}><span className="wb-icon-trigger"><WorkbenchButton {...props} ref={ref} aria-label={label} className={`wb-icon-action ${className}`} /></span></Tooltip>
 })

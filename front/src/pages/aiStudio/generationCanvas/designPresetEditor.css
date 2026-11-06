@@ -166,13 +166,20 @@
 .movement-sequence > .wb-icon-trigger { flex-shrink: 0; }
 .movement-keyframe-list { position: relative; display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; padding: 2px; height: 40px; }
 .movement-phase-tab { display: flex; align-items: center; position: relative; flex-shrink: 0; max-width: 280px; border-bottom: 2px solid transparent; color: var(--wb-muted); }
-.movement-phase-tab[data-sort-id] { touch-action: pan-y; user-select: none; }
+.movement-phase-tab[data-sort-id] { touch-action: pan-y; user-select: none; padding-right: 28px; }
 .movement-phase-tab[data-selected="true"] { border-bottom-color: var(--wb-text); color: var(--wb-text); }
 .movement-phase-tab > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: inherit; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 .movement-phase-tab > button:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
 .movement-phase-tab > .ant-input { width: 160px; height: 30px; }
-.movement-tab-actions { display: flex; visibility: hidden; }
-.movement-phase-tab:hover .movement-tab-actions, .movement-phase-tab:focus-within .movement-tab-actions { visibility: visible; }
+.movement-tab-actions { display: flex; flex: 0 0 24px; visibility: hidden; }
+.movement-tab-delete { position: absolute; right: 2px; top: 3px; width: 24px; height: 24px; visibility: hidden; }
+.movement-phase-tab:focus-within :is(.movement-tab-actions, .movement-tab-delete) { visibility: visible; }
+@media (hover: hover) { .movement-phase-tab:hover :is(.movement-tab-actions, .movement-tab-delete) { visibility: visible; } }
+/* Dense phase controls are a local exception to the normal 32px workbench icon buttons. */
+.movement-phase-tab :is(.movement-tab-edit, .movement-tab-delete-button).wb-action.ant-btn { width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; visibility: inherit; }
+.movement-phase-tab .movement-tab-edit .anticon { font-size: 12px; color: var(--wb-muted); }
+.movement-phase-tab .movement-tab-delete-button .anticon { font-size: 10px; color: var(--wb-muted); }
+.movement-phase-tab .movement-tab-delete-button:hover .anticon { color: var(--movement-delete-color); }
 .movement-phase-tab[data-dragging="true"] { opacity: .5; }
 .movement-phase-tab[data-drop-target="true"], .design-sort-item[data-drop-target="true"] { box-shadow: inset 2px 0 var(--wb-focus); }
 .movement-frame-select { width: 96px; flex-shrink: 0; }
@@ -182,7 +189,7 @@
 .design-sort-item { touch-action: none; }
 .design-sort-item:focus-visible { outline: 1px solid var(--wb-focus); }
 .design-sort-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-@media (hover: none) { .movement-phase-tab[data-selected="true"] .movement-tab-actions { visibility: visible; } }
+@media (hover: none) { .movement-phase-tab[data-selected="true"] :is(.movement-tab-actions, .movement-tab-delete) { visibility: visible; } }
 @media (max-width: 700px) {
   .design-preset-advanced > .movement-motion { height: auto; min-height: 0; }
   .movement-frame-select { width: 72px; }
