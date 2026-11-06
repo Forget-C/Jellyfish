@@ -137,6 +137,27 @@ try {
     return { remove:[remove.width,remove.height], editIcon:getComputedStyle(node.querySelector('.anticon')).fontSize, deleteIcon:getComputedStyle(document.querySelector('[aria-label="删除画面 回望"] .anticon')).fontSize, separate:remove.bottom<=edit.top+4, corner:remove.right<=box.right+1&&remove.bottom>=box.top&&remove.bottom<=box.top+8 }
   })
   assert.deepEqual(controlGeometry,{remove:[24,24],editIcon:'12px',deleteIcon:'10px',separate:true,corner:true},'compact controls have separate hit areas and a floating delete badge')
+  const removeButton = detail.getByRole('button',{name:'删除画面 回望',exact:true})
+  await page.mouse.move(0,0)
+  await titleTab.blur()
+  await removeButton.waitFor({state:'hidden'})
+  await titleTab.hover()
+  await removeButton.waitFor({state:'visible'})
+  await page.waitForFunction(() => { const popup=document.querySelector('[aria-label="删除画面 回望"]')?.closest('.ant-popover'); return popup && getComputedStyle(popup).opacity==='1' && !popup.getAnimations({subtree:true}).length })
+  await removeButton.hover()
+  const badge = await removeButton.evaluate(node => {
+    const hit=node.getBoundingClientRect(), icon=node.querySelector('.anticon'), glyph=icon.getBoundingClientRect()
+    return { offset:[glyph.x+glyph.width/2-hit.x-hit.width/2,glyph.y+glyph.height/2-hit.y-hit.height/2], inside:glyph.right+2<=hit.right&&glyph.bottom+2<=hit.bottom, background:getComputedStyle(node).backgroundColor, rounded:getComputedStyle(icon).borderRadius }
+  })
+  assert.deepEqual(badge,{offset:[4,4],inside:true,background:'rgba(0, 0, 0, 0)',rounded:'50%'},'hover feedback follows the shifted glyph within the unchanged hit area')
+  const phaseCount=(await read()).document.cards[0].phases.length
+  const titleBox=await titleTab.boundingBox(), titleEnd={x:titleBox.width-9,y:titleBox.height/2}
+  await titleTab.click({position:titleEnd})
+  assert.equal(await titleTab.getAttribute('aria-selected'),'true')
+  await titleTab.dblclick({position:titleEnd})
+  await detail.getByRole('textbox',{name:'画面名称',exact:true}).waitFor({state:'visible'})
+  assert.equal((await read()).document.cards[0].phases.length,phaseCount,'clicking and double-clicking the final title character never deletes a phase')
+  await detail.getByRole('textbox',{name:'画面名称',exact:true}).press('Escape')
   const inactiveTab=detail.getByRole('tab',{name:/窗边落幅/}).locator('..')
   await page.mouse.move(0,0)
   await detail.getByRole('button',{name:'删除画面 窗边落幅',exact:true}).waitFor({state:'hidden'})
