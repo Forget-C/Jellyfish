@@ -118,3 +118,31 @@ async def test_example_file_errors_keep_specific_target_and_ownership_message(ca
     assert response.json()['detail'] == {'code': 'INVALID_MEDIA_FILE', 'severity': 'error',
         'message': '示例文件不属于当前项目' if invalid == 'foreign' else 'Expected image file',
         'target': {'card_id': 'design', 'path': ['examples', 'e']}, 'blocks': ['save']}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stage,code,status', [
+    ('revision', 'REVISION_CONFLICT', 409),
+    ('schema', 'INVALID_DOCUMENT', 422),
+    ('identity', 'INVALID_IDENTITY', 422),
+    ('card_identity', 'INVALID_CARD_IDENTITY', 422),
+])
+async def test_save_early_errors_precede_missing_media_and_leave_request_reusable(canvas_client, stage, code, status):
+    client = canvas_client
+    url, doc, files = await media_document(client)
+    before = (await client.get(url)).json()['data']
+    old_protection = await protections(client, files[0])
+    doc['cards'].append({'id': 'missing-media', 'type': 'content.image', 'file_id': 'missing'})
+    if stage == 'schema':
+        doc['cards'].append({'id': 'unknown', 'type': 'unknown'})
+    elif stage == 'identity':
+        doc['id'] = 'another'
+    elif stage == 'card_identity':
+        doc['cards'].append(deepcopy(doc['cards'][0]))
+    response = await save(client, url, doc, 0 if stage == 'revision' else 1, 'retry')
+    assert response.status_code == status, response.text
+    assert response.json()['detail']['code'] == code
+    after = (await client.get(url)).json()['data']
+    assert (after['revision'], after['document']) == (before['revision'], before['document'])
+    assert await protections(client, files[0]) == old_protection
+    assert (await save(client, url, before['document'], 1, 'retry')).status_code == 200
