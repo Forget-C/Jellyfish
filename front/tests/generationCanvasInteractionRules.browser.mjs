@@ -415,6 +415,16 @@ try {
     assert.equal(await card.getAttribute('data-selected'), 'true')
     assert.equal(await other.getAttribute('data-selected'), 'true')
   })
+  await check('marquee survives window blur until pointer release', async () => {
+    await page.mouse.move(1700, 120)
+    await page.mouse.down()
+    await page.mouse.move(1750, 150, { steps: 3 })
+    assert.equal(await page.locator('.generation-selection-box').count(), 1)
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    assert.equal(await page.locator('.generation-selection-box').count(), 1)
+    await page.mouse.up()
+    assert.equal(await page.locator('.generation-selection-box').count(), 0)
+  })
   await check('Q6 wheel preserves pointer world position and plus preserves viewport center', async () => {
     await page.keyboard.press('Escape')
     const view = () => page.locator('.generation-world').evaluate(e => {

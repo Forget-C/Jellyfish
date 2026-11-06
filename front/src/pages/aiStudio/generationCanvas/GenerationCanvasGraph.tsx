@@ -24,6 +24,7 @@ import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image }
 import { StudioGenerationCanvasesService as Canvases, StudioFilesService, LlmService } from '../../../services/generated'
 import type { CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
+import { createSurfaceGesture } from './surfaceGesture'
 import { createConnectionSession, type ConnectionState } from './connectionSession'
 import { createMoveTransaction } from './moveTransaction'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
@@ -135,12 +136,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [cardMenuId, setCardMenuId] = useState<string>()
   useEffect(() => { if (cardMenuId && !cards.some(card => card.id === cardMenuId)) setCardMenuId(undefined) }, [cards, cardMenuId])
-  const [spaceHeld, setSpaceHeld] = useState(false)
-  const spacePanned = useRef(false)
-  const spaceTarget = useRef<EventTarget | null>(null)
+  const [surfaceState, setSurfaceState] = useState<{ spaceHeld: boolean; selectionBox?: { x: number; y: number; width: number; height: number } }>({ spaceHeld: false })
+  const [surfaceGesture] = useState(() => createSurfaceGesture(setSurfaceState))
+  const { spaceHeld, selectionBox } = surfaceState
   const blankPointer = useRef(false)
-  const panGesture = useRef<{ surface: HTMLDivElement; pointer: number; x: number; y: number; left: number; top: number }>()
-  const blankPress = useRef<{ x: number; y: number }>()
   const clearSelection = useCallback(() => { setMultiSelectMode(false); setSelected([]); setSelectedEdgeId(undefined); setDetailId(undefined); setSelectedGroupId(undefined); setGroupPanel(undefined) }, [])
   useEffect(() => {
     if (selected.length || detailId || selectedEdgeId || multiSelectMode) { setSelectedGroupId(undefined); setGroupPanel(undefined) }
@@ -162,38 +161,31 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as Element
-      if (event.key === 'Escape' || event.isComposing) { spaceTarget.current = null; setSpaceHeld(false); return }
+      if (event.key === 'Escape' || event.isComposing) { surfaceGesture.spaceReset(); return }
       if (event.defaultPrevented || movement.pointerActive || target.closest('input, textarea, select, [contenteditable], [role="dialog"], .generation-card-menu')) return
       if (event.code === 'Space' && target.closest('button, audio, video')) return
-      if (event.code === 'Space' && container.current?.contains(target)) { event.preventDefault(); if (!event.repeat) { spacePanned.current = false; spaceTarget.current = target } setSpaceHeld(true) }
+      if (event.code === 'Space' && container.current?.contains(target)) { event.preventDefault(); surfaceGesture.spaceDown(target, event.repeat) }
 
     }
     const keyup = (event: KeyboardEvent) => {
       if (event.code !== 'Space') return
-      setSpaceHeld(false)
-      const armed = spaceTarget.current === event.target
-      spaceTarget.current = null
-      if (!armed || event.isComposing || event.defaultPrevented || movement.pointerActive) return
+      if (!surfaceGesture.spaceUp(event.target, event.isComposing || event.defaultPrevented || movement.pointerActive)) return
       const target = event.target as HTMLElement
       const card = target.matches('[data-card-id]') ? target : undefined
-      if (card && !spacePanned.current) {
+      if (card) {
         const id = card.dataset.cardId!
         if (multiSelectMode) setSelected(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id])
         else { setSelected([id]); setDetailTrigger(card); setDetailId(id) }
       }
     }
     const focus = (event: FocusEvent) => {
-      spaceTarget.current = null
-      // Moving focus into the viewport during a pan must retain the physical Space hold.
-      if ((event.target as Element).closest('input, textarea, select, [contenteditable], [role="dialog"]')) setSpaceHeld(false)
+      surfaceGesture.focus(!!(event.target as Element).closest('input, textarea, select, [contenteditable], [role="dialog"]'))
     }
-    const blur = () => { spaceTarget.current = null; setSpaceHeld(false); if (panGesture.current) delete panGesture.current.surface.dataset.panning; panGesture.current = undefined; blankPress.current = undefined }
+    const blur = () => { if (viewport.surface.current) delete viewport.surface.current.dataset.panning; surfaceGesture.blur() }
     window.addEventListener('focusin', focus); window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur)
     return () => { window.removeEventListener('focusin', focus); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur) }
   }, [clearSelection, multiSelectMode])
   const [selecting, setSelecting] = useState(false)
-  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number }>()
-  const selectionStart = useRef<{ x: number; y: number }>()
   const [storageError, setStorageError] = useState('')
   const [modelDefaults, setModelDefaults] = useState<ModelSettingsRead>()
   const [models, setModels] = useState<ModelRead[]>([])
@@ -474,11 +466,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       if ((event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
         event.preventDefault(); if (!readonly) { if (event.shiftKey || event.key.toLowerCase() === 'y') history?.redo(); else history?.undo() } return
       }
-      if (event.key === 'Escape' && (selectionStart.current || panGesture.current)) {
+      if (event.key === 'Escape' && (surfaceGesture.selecting || surfaceGesture.pan)) {
         event.preventDefault()
-        selectionStart.current = undefined; setSelectionBox(undefined); blankPress.current = undefined
-        const pan = panGesture.current
-        if (pan) { layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: pan.left, y: pan.top } })); delete pan.surface.dataset.panning; panGesture.current = undefined }
+        const restore = surfaceGesture.escape()
+        if (restore) layout.setView(previous => ({ ...previous, transform: { ...previous.transform, ...restore } }))
+        if (viewport.surface.current) delete viewport.surface.current.dataset.panning
         return
       }
       if (event.key === 'Escape' && !detailId) { event.preventDefault(); clearSelection(); return }
@@ -619,7 +611,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const ownsCardShortcut = (target: Element) => target === viewport.surface.current
     || target.matches('[data-card-id], [data-keyboard-move]') && !!target.closest('[data-card-id]')
   const clipboardKey = useRef<(event: KeyboardEvent)=>void>();clipboardKey.current=event=>{
-    if(!contextMenu && !movement.pointerActive && !drag && !pendingConnection && !accessibleConnection && !selectionStart.current && !panGesture.current && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
+    if(!contextMenu && !movement.pointerActive && !drag && !pendingConnection && !accessibleConnection && !surfaceGesture.selecting && !surfaceGesture.pan && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
       const target=event.target as Element
       if(!container.current?.contains(target)||!ownsCardShortcut(target)||target.closest('input,textarea,[contenteditable],[data-card-details],[role="dialog"]'))return
       event.preventDefault();event.stopImmediatePropagation()
@@ -805,20 +797,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     })}</ol></div>
   })}</>
 
-  const finishSelection = (event: PointerEvent<HTMLDivElement>) => {
-    const start = selectionStart.current
-    if (!start) return
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 6) {
-      clearSelection(); selectionStart.current = undefined; setSelectionBox(undefined); return
-    }
-    const left = Math.min(start.x, event.clientX), right = Math.max(start.x, event.clientX)
-    const top = Math.min(start.y, event.clientY), bottom = Math.max(start.y, event.clientY)
-    const ids = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-card-id]')].filter(card => {
-      const box = card.getBoundingClientRect()
-      return box.left < right && box.right > left && box.top < bottom && box.bottom > top
-    }).map(card => card.dataset.cardId!)
-    setSelected(previous => event.shiftKey ? [...new Set([...previous, ...ids])] : ids); setDetailId(undefined); setSelectedEdgeId(undefined); selectionStart.current = undefined; setSelectionBox(undefined)
-  }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
   const fitVisibleCards = () => {
@@ -897,7 +875,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   return <div className="generation-graph" ref={container} onContextMenu={event => {
     event.preventDefault()
     const target = event.target as Element
-    if (movement.pointerActive || drag || pendingConnection || accessibleConnection || selectionStart.current || panGesture.current || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
+    if (movement.pointerActive || drag || pendingConnection || accessibleConnection || surfaceGesture.selecting || surfaceGesture.pan || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
     if (!viewport.surface.current?.contains(target)) return
     const id = target.closest<HTMLElement>('[data-card-id]')?.dataset.cardId
     const ids = id ? selected.includes(id) ? selected : [id] : []
@@ -909,9 +887,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const surface = viewport.surface.current
     if (surface) surface.dataset.keyboardFocus = 'false'
     if (surface?.contains(event.target as Node) && (event.button === 1 || spaceHeld && event.button === 0)) {
-      spacePanned.current = true
       event.preventDefault(); event.stopPropagation(); surface.focus({ preventScroll: true }); surface.setPointerCapture(event.pointerId)
-      panGesture.current = { surface, pointer: event.pointerId, x: event.clientX, y: event.clientY, left: transform.x, top: transform.y }
+      surfaceGesture.beginPan({ x: event.clientX, y: event.clientY }, event.pointerId, transform)
       surface.dataset.panning = 'true'; return
     }
     if (event.shiftKey || (event.target as Element).closest('.generation-surface')) return
@@ -1050,39 +1027,35 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         if (spaceHeld && event.button === 0 && event.currentTarget.contains(event.target as Node)
           && !(event.target as Element).closest('[data-card-id], button, input, select, textarea, audio, video')) {
           event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); event.currentTarget.setPointerCapture(event.pointerId)
-          panGesture.current = { surface: event.currentTarget, pointer: event.pointerId, x: event.clientX, y: event.clientY, left: transform.x, top: transform.y }
+          surfaceGesture.beginPan({ x: event.clientX, y: event.clientY }, event.pointerId, transform, false)
           event.currentTarget.dataset.panning = 'true'
           return
         }
-        if (event.button === 0 && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea, .canvas-edge-hit')) blankPress.current = { x: event.clientX, y: event.clientY }
+        if (event.button === 0 && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea, .canvas-edge-hit')) surfaceGesture.blankDown({ x: event.clientX, y: event.clientY })
         if (event.button === 0 && event.currentTarget.contains(event.target as Node)
           && !(event.target as Element).closest('[data-card-id], button, input, select, textarea, .canvas-edge-hit')) {
           event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
-          selectionStart.current = { x: event.clientX, y: event.clientY }
           const box = event.currentTarget.getBoundingClientRect()
-          setSelectionBox({ x: event.clientX - box.left, y: event.clientY - box.top, width: 0, height: 0 })
+          surfaceGesture.beginSelection({ x: event.clientX, y: event.clientY }, { x: box.left, y: box.top })
         } else viewport.surfaceProps.onPointerDown?.(event)
       }}
       onPointerMove={event => {
-        const pan = panGesture.current
-        if (pan) {
-          layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: pan.left + event.clientX - pan.x, y: pan.top + event.clientY - pan.y } }))
-          return
-        }
-        const start = selectionStart.current
-        if (!start) { viewport.surfaceProps.onPointerMove?.(event); return }
+        if (!surfaceGesture.pan && !surfaceGesture.selecting) { viewport.surfaceProps.onPointerMove?.(event); return }
         const box = event.currentTarget.getBoundingClientRect()
-        setSelectionBox({ x: Math.min(start.x, event.clientX) - box.left, y: Math.min(start.y, event.clientY) - box.top,
-          width: Math.abs(event.clientX - start.x), height: Math.abs(event.clientY - start.y) })
+        const next = surfaceGesture.move({ x: event.clientX, y: event.clientY }, { x: box.left, y: box.top })
+        if (next) layout.setView(previous => ({ ...previous, transform: { ...previous.transform, ...next } }))
       }}
       onPointerUp={event => {
-        const press = blankPress.current
-        if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 6 && !selectionStart.current) clearSelection()
-        blankPress.current = undefined; panGesture.current = undefined; delete event.currentTarget.dataset.panning
-        finishSelection(event); viewport.surfaceProps.onPointerUp?.(event)
+        const cards = surfaceGesture.selecting ? [...event.currentTarget.querySelectorAll<HTMLElement>('[data-card-id]')].map(card => { const { left, right, top, bottom } = card.getBoundingClientRect(); return { id: card.dataset.cardId!, left, right, top, bottom } }) : []
+        const result = surfaceGesture.finish({ x: event.clientX, y: event.clientY }, cards)
+        if (result.clear) clearSelection()
+        else if (result.ids) { const ids = result.ids; setSelected(previous => event.shiftKey ? [...new Set([...previous, ...ids])] : ids); setDetailId(undefined); setSelectedEdgeId(undefined) }
+        delete event.currentTarget.dataset.panning
+        viewport.surfaceProps.onPointerUp?.(event)
       }}
-      onPointerCancel={event => { panGesture.current = undefined; blankPress.current = undefined; delete event.currentTarget.dataset.panning; selectionStart.current = undefined; setSelectionBox(undefined); viewport.surfaceProps.onPointerCancel?.(event) }}
-      onLostPointerCapture={event => { panGesture.current = undefined; blankPress.current = undefined; delete event.currentTarget.dataset.panning; selectionStart.current = undefined; setSelectionBox(undefined); viewport.surfaceProps.onLostPointerCapture?.(event) }}>
+      onPointerCancel={event => { surfaceGesture.interrupt(); delete event.currentTarget.dataset.panning; viewport.surfaceProps.onPointerCancel?.(event) }}
+      onLostPointerCapture={event => { surfaceGesture.interrupt(); delete event.currentTarget.dataset.panning; viewport.surfaceProps.onLostPointerCapture?.(event) }}>
+
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, '--generation-canvas-scale': transform.scale } as CSSProperties}>
         <svg className="generation-edges" width={12000} height={12000}>
