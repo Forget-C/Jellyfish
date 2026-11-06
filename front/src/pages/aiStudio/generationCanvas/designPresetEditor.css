@@ -201,8 +201,10 @@
 .design-scope-panel .static-design-scope { grid-template-columns: minmax(0, 1fr); margin: 0; }
 .design-scope-panel > p { color: var(--wb-muted); font-size: 12px; margin: 16px 0 0; }
 
-.design-field-label-actions { display: flex !important; align-items: center; justify-content: space-between; gap: 8px; }
-.design-field-label-actions .ant-select { width: 110px; font-weight: 400; }
+.design-preset-fields section > strong.design-field-label-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.design-composition-fields.design-preset-fields section > strong { display: flex; align-items: center; height: 24px; }
+.design-preset-editor .design-composition-fields .ant-select { flex-shrink: 0; width: 88px; height: 24px; font-size: 12px; font-weight: 400; }
+.design-preset-editor .design-composition-fields .ant-select :is(.ant-select-selection-item, .ant-select-selection-placeholder, .ant-select-selection-search-input) { font-size: 12px; }
 
 .design-field-candidates .generation-material-reference[data-frame-target] { flex-basis: 120px; width: 120px; }
 .design-field-candidates .generation-material-reference[data-frame-target] > small { white-space: normal; max-height: 28px; }
