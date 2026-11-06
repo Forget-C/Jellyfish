@@ -1,8 +1,7 @@
 """公开引用解析与单次编译边界；候选关系不等于实际输入。"""
 import re
-from dataclasses import dataclass
 from app.core.contracts.generation_canvas import DescriptionTextPayload, SoundDesignFields
-from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubjectMediaReference
+from app.core.contracts.media import VideoMediaInput
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
     DesignTextPayload, ModelCard, SoundDirectionCard, PerformanceDirectionCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
@@ -39,7 +38,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     card = context.cards[card_id]
     if not isinstance(card, ModelCard):
         return CanvasCompiledInput(card_id=card_id)
-    from app.services.generation_canvas.design_media import design_inputs
+    from app.services.generation_canvas.input_preparation import prepare_inputs
     candidates = context.resolve_outputs(card_id, model_outputs=model_outputs)
     if include_dependencies:
         from app.services.generation_canvas.design_dependencies import design_dependency_inputs
@@ -47,8 +46,8 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     elif include_acceptance:
         from app.services.generation_canvas.acceptance import acceptance_inputs
         card, candidates = acceptance_inputs(context, card, candidates, model_outputs)
-    candidates, carried = design_inputs(context, card, candidates, model_outputs)
-    result = compile_inputs(document.id, card, candidates, capability, carried=carried, label_sources=include_dependencies)
+    prepared = prepare_inputs(context, card, candidates, model_outputs)
+    result = compile_inputs(document.id, prepared, capability, label_sources=include_dependencies)
     for binding in card.input_bindings:
         source = context.cards.get(binding.source.card_id)
         if isinstance(source, NamedImageReferenceCard) and (problem := reference_name_issue(document, source)):
@@ -65,25 +64,15 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     return result
 
 
-def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResolvedOutput],
-                   capability: CanvasModelCapability | None = None, *, carried=(), label_sources=False) -> CanvasCompiledInput:
-    """模型编译只接收本卡配置、直接输出与能力，不获得整张画布。"""
+def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability | None = None,
+                   *, label_sources=False) -> CanvasCompiledInput:
+    """消费单次准备结果，不读取画布或重新选择素材与用途。"""
+    card = prepared.card
     card_id = card.id
     result = CanvasCompiledInput(card_id=card_id)
-    by_source = {identity_key(item.source): item for item in candidates}
-    refs = list(prompt_references(card))
-    used_keys = {identity_key(ref.source) for ref, _ in refs}
-    result.used = [item for item in candidates if identity_key(item.source) in used_keys and item.available]
-    if card.type == 'model.image':
-        # 图片接收端采用顺序独立于候选连线顺序；同一输出身份仅提交一次。
-        order = list(dict.fromkeys(identity_key(binding.source) for binding in card.input_bindings))
-        result.used.sort(key=lambda item: order.index(identity_key(item.source)))
-    result.used.extend(carried)
-    result.media = [item for item in result.used if item.modality != 'text']
-    if card.type == 'model.video':
-        from app.services.generation_canvas.design_media import effective_video_bindings
-        card = card.model_copy(update={'input_bindings': effective_video_bindings(card, result.media)})
-    video = build_video_inputs(card, [item for item in result.media if item.available and item.file_id]) if card.type == 'model.video' else None
+    # 已解析视图不能再次校验，否则 payload 会覆盖本次动态输出字段。
+    result.used, result.media = prepared.used, prepared.media
+    by_source, refs, video = prepared.by_source, prepared.references, prepared.video
     def issue(code, message, segment_id, path=None, warning=False):
         if path and path[0] == 'input_bindings' and len(path) > 1 and path[1].startswith('design-use:'):
             segment_id = path[1].removeprefix('design-use:')
@@ -273,100 +262,11 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     return result
 
 
-@dataclass
-class VideoInputCompilation:
-    """视频计算的内部结果；用途图片位置与 DTO 的混合媒体序号分别保留。"""
-    video_media: VideoMediaInput
-    body_subject_names: dict[tuple, str]
-    mapping_locations: dict[str, tuple[str | None, int]]
-
-
-def build_video_inputs(card: ModelCard, media: list[CanvasResolvedOutput]) -> VideoInputCompilation:
-    """仅消费本卡和实际媒体，统一主体代指、命名图片用途位置及视频 DTO。
-
-    缺失来源仍保留显式名称以参与代指避碰；诊断由外层按原顺序产生。
-    """
-    source_groups, names = {}, {}
-    for binding in card.input_bindings:
-        name = (binding.subject_name or '').strip()
-        if binding.input_port not in ('subject_image', 'subject_video') or not name:
-            continue
-        name = names.setdefault(name.casefold(), name)
-        groups = source_groups.setdefault(identity_key(binding.source), [])
-        if name not in groups:
-            groups.append(name)
-    subject_ids = {binding.id for binding in card.input_bindings if binding.input_port in ('subject_image', 'subject_video')}
-    body_sources = {identity_key(segment.source) for segment in card.prompt.segments if isinstance(segment, PromptReference) and segment.binding_id in subject_ids}
-    for position, item in enumerate(media, 1):
-        key = identity_key(item.source)
-        if key not in body_sources or len(source_groups.get(key, [])) == 1:
-            continue
-        name = f'media{position}'
-        while name.casefold() in names:
-            position += 1
-            name = f'media{position}'
-        names[name.casefold()] = name
-        source_groups[key] = [name]
-    body_names = {identity_key(item.source): source_groups[identity_key(item.source)][0] for item in media
-                  if identity_key(item.source) in body_sources and identity_key(item.source) in source_groups}
-    # 映射只覆盖实际命名图片；错误用途也保留位置，交由外层诊断。
-    images = {identity_key(item.source) for item in media if item.modality == 'image'}
-    named_images = {identity_key(item.source) for item in media if isinstance(item.payload, NamedImagePayload)}
-    ordered = {}
-    for binding in card.input_bindings:
-        if identity_key(binding.source) in images:
-            group = (binding.subject_name or '').strip().casefold() if binding.input_port == 'subject_image' else None
-            ordered.setdefault((binding.input_port, group), []).append(binding)
-    locations = {}
-    for binding in card.input_bindings:
-        if identity_key(binding.source) not in named_images:
-            continue
-        port = binding.input_port
-        group = (binding.subject_name or '').strip().casefold() if port == 'subject_image' else None
-        if port in ('first_frame', 'last_frame'):
-            locations[binding.id] = (None, 1)
-        elif port == 'subject_image':
-            keys = list(dict.fromkeys(identity_key(value.source) for value in ordered[(port, group)]))
-            locations[binding.id] = (names.get(group) or None, keys.index(identity_key(binding.source)) + 1)
-        else:
-            locations[binding.id] = (None, ordered[(port, group)].index(binding) + 1)
-    available = {identity_key(item.source): item for item in media}
-    result = VideoMediaInput()
-    groups, seen = {}, {}
-    def reference(ref, ordinal):
-        item = available.get(identity_key(ref.source))
-        return MediaReference(file_id=item.file_id, media_kind=item.modality, ordinal=ordinal) if item and item.modality in ('image', 'video') else None
-    def add_subject(name, refs):
-        group = groups.setdefault(name.casefold(), {'name': name, 'media': []})
-        for ref in refs:
-            key = identity_key(ref.source)
-            if key in seen.setdefault(name.casefold(), set()):
-                continue
-            seen[name.casefold()].add(key)
-            media = reference(ref, len(group['media']))
-            if media:
-                group['media'].append(media)
-    for binding in card.input_bindings:
-        ref = PromptReference(kind='reference', id=binding.id, source=binding.source)
-        frame = reference(ref, len(result.frames.keys) if binding.input_port == 'key_frame' else 0)
-        if binding.input_port in ('subject_image', 'subject_video') and binding.source.port_id == binding.input_port.removeprefix('subject_') and (binding.subject_name or '').strip():
-            add_subject(binding.subject_name.strip(), [ref])
-        if frame and frame.media_kind == 'image':
-            if binding.input_port in ('first_frame', 'last_frame'):
-                setattr(result.frames, 'first' if binding.input_port == 'first_frame' else 'last', frame)
-            elif binding.input_port == 'key_frame':
-                result.frames.keys.append(frame)
-    for item in media:
-        key = identity_key(item.source)
-        if key in body_names:
-            add_subject(body_names[key], [PromptReference(kind='reference', id='implicit', source=item.source)])
-    result.subjects = [VideoSubjectMediaReference(**group) for group in groups.values() if group['media']]
-    return VideoInputCompilation(result, body_names, locations)
-
 
 def video_media(document: CanvasDocument, card_id: str, compiled: CanvasCompiledInput) -> VideoMediaInput:
     """现有公开编译入口只定位本卡，再交给不持有画布的模型编译器。"""
     card = next(item for item in document.cards if item.id == card_id)
+    from app.services.generation_canvas.input_preparation import build_video_inputs
     return build_video_inputs(card, compiled.media).video_media
 
 
