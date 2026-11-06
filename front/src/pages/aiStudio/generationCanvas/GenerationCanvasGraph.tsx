@@ -130,6 +130,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [invalidRequirementNames, setInvalidRequirementNames] = useState<Set<string>>(() => new Set())
   const [sourceTarget, setSourceTarget] = useState<string>()
   const [uploadSource, setUploadSource] = useState<string>()
+  const [pendingFrameDisconnect, setPendingFrameDisconnect] = useState<GenerationEdge>()
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>()
   const [selectedGroupId, setSelectedGroupId] = useState<string>()
   const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
@@ -733,9 +734,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       </Tooltip>
     })
   }
-  const removeEdge = (edge: GenerationEdge) => {
+  const removeEdge = (edge: GenerationEdge, confirmed = false) => {
+    const target = latest.current.cards?.find(card => card.id === edge.target_card)
+    const composition = target?.type === 'direction.composition' ? target as CompositionCard : undefined
+    const positioned = composition?.frame_target?.card_id === edge.source_card
+    if (positioned && designReferences(composition!).some(reference => reference.reference.source.card_id === edge.source_card)) { setReason('此连线仍被字段引用，请先解除字段引用'); return }
+    if (positioned && !confirmed) { setPendingFrameDisconnect(edge); return }
+    const current = positioned ? { ...latest.current, cards: latest.current.cards?.map(card => card.id === composition!.id ? { ...composition!, frame_target: null } : card) } : latest.current
     const members = sourceConnectionEdges(latest.current, edge)
-    const result = operations.disconnect(latest.current, edge)
+    const result = operations.disconnect(current, edge)
     if (!result.document) { setReason(result.reason); return }
     edit(result.document)
     if (members.some(member => member.id === selectedEdgeId)) setSelectedEdgeId(undefined)
@@ -915,6 +922,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       add(type,{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale},entry,true)
       setContextMenu(undefined)
     }} />}
+    <WorkbenchModal title="解除定位并断开？" open={!!pendingFrameDisconnect} onCancel={() => setPendingFrameDisconnect(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingFrameDisconnect(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const edge = pendingFrameDisconnect; setPendingFrameDisconnect(undefined); if (edge) removeEdge(edge, true) }}>解除定位并断开</Button></WorkbenchDialogActions>}><p>当前构图使用此运镜画面定位，可通过撤销恢复。</p></WorkbenchModal>
     <WorkbenchModal title={`删除 ${pendingDeletion?.length || 0} 张卡片？`} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>确认删除</Button></WorkbenchDialogActions>}>
       相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。
       {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>将解除 {cardLabel(card.id)} 的验收关联，后续生成不再自动带入该要求。</p>)}
@@ -1218,7 +1226,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {!desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'content.text' || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (!edge) return; const result = operations.disconnect(latest.current, edge); if (result.document) edit(result.document) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'content.text' || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer>
     })}

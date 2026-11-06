@@ -1,6 +1,8 @@
+import { CompositionFrameCandidate, movementFrameOptions } from './CompositionFrameCandidate'
+import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { Alert, Popover, Typography } from 'antd'
-import type { DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
+import type { CompositionCard, MovementCard, DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { DesignFieldEditor } from './DesignFieldEditor'
 import { designFieldMetadata, userDesignField } from './designFieldMetadata'
@@ -27,7 +29,7 @@ interface ReferenceContext {
 export const DesignReferenceContext = createContext<ReferenceContext | undefined>(undefined)
 
 /** Reference session belongs to one retained design card, not a model prompt binding set. */
-export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField, onDisconnect, onLocateDesign }: { onDisconnect?: (edgeId: string) => void; onLocateDesign?: (cardId: string, fieldId: string) => void; targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
+export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField, onDisconnect, onLocateDesign, onChange }: { onChange?: (card: GenerationCard) => void; onDisconnect?: (edgeId: string) => void; onLocateDesign?: (cardId: string, fieldId: string) => void; targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
   const { cardDefinitions } = useGraphRules()
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const focused = useRef<React.RefObject<PromptEditorHandle>>(), owner = useRef<HTMLDivElement>(null)
@@ -40,6 +42,8 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   const sources = resolved.candidates.filter(item => document.cards?.find(source => source.id === item.source.card_id)?.type !== 'direction.criterion')
   for (const { reference } of designReferences(card)) if (!sources.some(item => sourceKey(item.source) === sourceKey(reference.source))) sources.push({ source: reference.source, modality: ['image', 'video', 'audio'].includes(reference.source.port_id) ? reference.source.port_id as 'image' | 'video' | 'audio' : 'text', available: false })
   for (const binding of bindings) if (binding.input_port !== 'acceptance_basis' && !sources.some(item => sourceKey(item.source) === sourceKey(binding.source))) sources.push({ source: binding.source, modality: 'text', available: false })
+  const composition = card.type === 'direction.composition' ? card as CompositionCard : undefined
+  if (composition?.frame_target && !sources.some(item => item.source.card_id === composition!.frame_target!.card_id)) sources.push({ source: { canvas_id: document.id, card_id: composition!.frame_target.card_id, port_id: 'text', position: 0 }, modality: 'text', available: false })
   const labels = referenceLabels(document, sources, card.id, isFlatDesign(card))
   const labelFor = (item: CanvasResolvedOutput) => labels.get(sourceKey(item.source)) || item.token || '@缺失来源'
   const candidates: Candidate[] = sources.map(item => {
@@ -60,18 +64,22 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     })
     return [...new Set([...roles, ...fields])]
   }
-  const activeCount = sources.filter(item => item.available !== false && used.has(sourceKey(item.source))).length
+  const activeCount = sources.filter(item => (item.available !== false && used.has(sourceKey(item.source)) || composition?.frame_target?.card_id === item.source.card_id)).length
   const changeMode = () => { focused.current = undefined; setInspect(undefined) }
   const renderCandidates = (advanced: boolean) => <div className="design-candidate-layout"><div className="generation-material-references design-field-candidates" aria-label="设计候选内容">
     {sources.map(item => {
       const key = sourceKey(item.source), candidate = candidates.find(value => sourceKey(value.source) === key)!
       const localExample = 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key)
-      const usages = usageFor(key)
+      const movement = document.cards?.find(source => source.id === item.source.card_id && source.type === 'direction.movement') as MovementCard | undefined
+      const frameCandidate = card.type === 'direction.composition' && (movement?.type === 'direction.movement' || composition!.frame_target?.card_id === item.source.card_id)
+      const target = card.type === 'direction.composition' && composition!.frame_target?.card_id === item.source.card_id ? composition!.frame_target : undefined
+      const frameLabel = target ? movementFrameOptions(movement).find(option => option.value === target.state_id)?.label : undefined
+      const usages = [...usageFor(key), ...(target ? [frameLabel ? '已定位 · ' + frameLabel : '定位失效'] : [])]
       const state = usages.length ? usages.join('；') : item.modality === 'audio' ? '本地参考' : localExample ? '本地示例' : '候选'
-      const selected = item.available !== false && used.has(key)
-      return <Popover key={key} placement="bottomLeft" trigger="click" open={inspect === key} onOpenChange={next => { if (!next) setInspect(undefined) }} overlayClassName="canvas-workbench-dialog design-source-inspect" content={<div><strong>{candidate.name}</strong>{item.modality === 'video' && 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key && example.start_ms !== null && example.start_ms !== undefined) && <p>生成引用完整视频，参考区间不裁剪素材</p>}<p>{state}{localExample && ' · 已关联本地示例，关联本身不进入模型输入'}{candidate.disabledReason && ` · ${candidate.disabledReason}`}</p>{item.file_id && item.modality !== 'text' ? <MediaPreview fileId={item.file_id} type={item.modality} /> : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label="来源内容" lines={6} />}</div>}>
-        <MaterialReferenceButton output={item} label={labelFor(item)} selected={selected} selectedLabel="使用中" data-design-source={key} aria-label={`候选 ${candidate.name} · ${state}`} title={`${labelFor(item)} · ${state}`} onMouseDown={event => { if (advanced && focused.current?.current) event.preventDefault() }} onClick={() => {
-          if (advanced && focused.current?.current && !disabled && candidate.available) { setInspect(undefined); focused.current.current.insertReference(item.source) }
+      const selected = !!target || item.available !== false && used.has(key)
+      return <Popover key={key} placement="bottomLeft" trigger="click" open={inspect === key} onOpenChange={next => { if (!next) setInspect(undefined) }} overlayClassName="canvas-workbench-dialog design-source-inspect" content={<div><strong>{candidate.name}</strong>{item.modality === 'video' && 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key && example.start_ms !== null && example.start_ms !== undefined) && <p>生成引用完整视频，参考区间不裁剪素材</p>}<p>{state}{localExample && ' · 已关联本地示例，关联本身不进入模型输入'}{candidate.disabledReason && ` · ${candidate.disabledReason}`}</p>{item.file_id && item.modality !== 'text' ? <MediaPreview fileId={item.file_id} type={item.modality} /> : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label="来源内容" lines={6} />}{frameCandidate && card.type === 'direction.composition' && onChange && <CompositionFrameCandidate card={composition!} movement={movement} sourceId={item.source.card_id} disabled={disabled} onChange={onChange} onLocate={onLocateDesign} reference={<><WorkbenchButton disabled={disabled || !advanced || !focused.current?.current || !candidate.available} onClick={() => { focused.current?.current?.insertReference(item.source); setInspect(undefined) }}>引用当前字段</WorkbenchButton>{onDisconnect && document.edges?.filter(edge => edge.source_card === item.source.card_id && edge.target_card === card.id).slice(0, 1).map(edge => <WorkbenchButton key={edge.id} variant="quiet" disabled={disabled} onClick={() => onDisconnect(edge.id)}>断开候选连接</WorkbenchButton>)}</>} />}</div>}>
+        <MaterialReferenceButton output={item} label={target ? `${labelFor(item)} · ${frameLabel ? '已定位 · ' + frameLabel : '定位失效'}` : labelFor(item)} selected={selected} selectedLabel="使用中" data-frame-target={target ? true : undefined} data-design-source={key} aria-label={`候选 ${candidate.name} · ${state}`} title={`${labelFor(item)} · ${state}`} onMouseDown={event => { if (advanced && focused.current?.current) event.preventDefault() }} onClick={() => {
+          if (!frameCandidate && advanced && focused.current?.current && !disabled && candidate.available) { setInspect(undefined); focused.current.current.insertReference(item.source) }
           else setInspect(previous => previous === key ? undefined : key)
         }}>{retained.has(key) && !used.has(key) && <span className="design-reference-inactive">未生效</span>}</MaterialReferenceButton>
       </Popover>
@@ -81,8 +89,8 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   </div><div className="generation-material-add">{sourceActions}</div>
     {(!resolved.loading && !resolved.error || resolved.candidates.length > 0) && <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${activeCount} 个使用中`}</small>}
   {onDisconnect && <AcceptanceBasisSelector editorOpen={editorOpen} card={card} document={document} disabled={disabled} onDisconnect={onDisconnect} onLocateDesign={onLocateDesign} />}</div>
-  return <DesignReferenceContext.Provider value={{ card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
-    if (event.key !== 'Escape' || !inspect) return
+  return <DesignReferenceContext.Provider value={{ card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDown={event => {
+    if (event.key !== 'Escape' || event.defaultPrevented || !inspect) return
     event.preventDefault(); event.stopPropagation()
     owner.current?.querySelector<HTMLButtonElement>(`[data-design-source="${CSS.escape(inspect)}"]`)?.focus({ preventScroll: true })
     setInspect(undefined)

@@ -200,3 +200,9 @@
 .design-scope-panel { width: min(300px, calc(100vw - 80px)); }
 .design-scope-panel .static-design-scope { grid-template-columns: minmax(0, 1fr); margin: 0; }
 .design-scope-panel > p { color: var(--wb-muted); font-size: 12px; margin: 16px 0 0; }
+
+.design-field-label-actions { display: flex !important; align-items: center; justify-content: space-between; gap: 8px; }
+.design-field-label-actions .ant-select { width: 110px; font-weight: 400; }
+
+.design-field-candidates .generation-material-reference[data-frame-target] { flex-basis: 120px; width: 120px; }
+.design-field-candidates .generation-material-reference[data-frame-target] > small { white-space: normal; max-height: 28px; }

@@ -38,7 +38,7 @@ try {
     {id:'movement',type:'direction.movement',fields:{movement_start:{state:'fact',text:'门外全景'}},phases:[{id:'end',name:'落幅',frame:{state:'proposal',text:'窗边停顿'}}]},
     {id:'composition',type:'direction.composition',fields:{composition:{state:'proposal',text:'保持人物偏左'}}},
     {id:'image',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'composition-use',input_port:'text',source:identity('composition')},{id:'movement-use',input_port:'text',source:identity('movement')}]}],
-    edges:['composition','movement'].map(id=>({id,source_card:id,source_port:'text',target_card:'image',target_port:'text'})),input_order:{image:{text:['composition','movement']}}}
+    edges:[{id:'frame-candidate',source_card:'movement',source_port:'text',target_card:'composition',target_port:'text'},...['composition','movement'].map(id=>({id,source_card:id,source_port:'text',target_card:'image',target_port:'text'}))],input_order:{composition:{text:['frame-candidate']},image:{text:['composition','movement']}}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok,await seed.text())
   const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
@@ -47,11 +47,20 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).click()
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
-  await detail.getByRole('combobox',{name:'关联运镜卡',exact:true}).locator('xpath=../..').click()
-  await page.getByTitle('运镜卡 · movement',{exact:true}).click()
-  await detail.getByRole('combobox',{name:'构图目标阶段',exact:true}).locator('xpath=../..').click()
+  await detail.locator('[data-design-source]').first().click()
+  await page.getByRole('combobox',{name:'定位到画面',exact:true}).locator('xpath=../..').click()
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option[title="落幅"]').click()
   await poll(state=>state.document.cards.find(c=>c.id==='composition').frame_target?.state_id==='phase:end')
+  await page.getByRole('button',{name:'解除定位',exact:true}).click()
+  await poll(state=>!state.document.cards.find(c=>c.id==='composition').frame_target)
+  await detail.getByRole('button',{name:'撤销',exact:true}).click()
+  await poll(state=>state.document.cards.find(c=>c.id==='composition').frame_target?.state_id==='phase:end')
+  await detail.locator('[data-design-source]').first().click()
+  await page.getByRole('button',{name:'断开候选连接',exact:true}).click()
+  await page.getByRole('button',{name:'解除定位并断开',exact:true}).click()
+  await poll(state=>!state.document.cards.find(c=>c.id==='composition').frame_target&&!state.document.edges.some(e=>e.id==='frame-candidate'))
+  await detail.getByRole('button',{name:'撤销',exact:true}).click()
+  await poll(state=>state.document.cards.find(c=>c.id==='composition').frame_target?.state_id==='phase:end'&&state.document.edges.some(e=>e.id==='frame-candidate'))
   await page.screenshot({path:join(output,'composition-frame-target.png'),animations:'disabled'})
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.locator('[data-card-id="image"]').press('Enter')
@@ -63,7 +72,8 @@ try {
   await page.reload()
   await page.locator('[data-card-id="composition"]').getByRole('button',{name:/设计/}).click()
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
-  assert.equal(await detail.getByRole('combobox',{name:'构图目标阶段',exact:true}).locator('xpath=../..').innerText(),'落幅')
+  await detail.locator('[data-design-source]').first().click()
+  assert.equal(await page.getByRole('combobox',{name:'定位到画面',exact:true}).locator('xpath=../..').innerText(),'落幅')
   await page.setViewportSize({width:390,height:844})
   await page.screenshot({path:join(output,'frame-target-mobile.png'),animations:'disabled'})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
