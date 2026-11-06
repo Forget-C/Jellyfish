@@ -131,7 +131,8 @@ try {
   await page.getByRole('button', { name: '下一步：单元画布', exact: true }).click()
   await page.getByRole('button', { name: 'AI设计', exact: true }).click()
   await dialog.getByText('视频模型能力已核实', { exact: true }).waitFor()
-  assert.equal(await start.isDisabled(), false, 'valid global video model must be visibly preselected')
+  assert.equal(await dialog.getByRole('combobox', { name: '目标视频模型', exact: true }).evaluate(node => node.closest('.ant-select').querySelector('.ant-select-selection-item')?.textContent), 'test-video-model', 'valid global video model must be visibly preselected')
+  // Capability and task-history requests settle independently; click waits for all submission guards.
   await start.click()
   await dialog.getByText('等待执行', { exact: true }).waitFor()
   const nextRows = (await (await fetch(detail + '/unit-design-suggestions')).json()).data

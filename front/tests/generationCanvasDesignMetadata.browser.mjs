@@ -38,7 +38,7 @@ try {
   const visual = new Set(['style', 'composition', 'camera', 'movement', 'lighting', 'focus'])
   const document = { ...canvas.document, cards: definitions.map(definition => {
     const id = definition.type.slice('direction.'.length)
-    const fields = Object.fromEntries(definition.fields.map((field, index) => [field.id, index === 0 ? { text: '模型提取的设计参数', state: 'proposal', purpose: 'background', source_locator: '模型提取定位', authorship: 'model' } : { text: '自行填写的设计参数', state: 'fact', purpose: 'design', authorship: 'user' }]))
+    const fields = Object.fromEntries(definition.fields.map((field, index) => [field.id, index === 0 ? { text: '模型提取的设计参数', state: 'proposal', purpose: 'background', source_locator: '模型提取定位', authorship: 'model', metadata_fields: ['state', 'purpose', 'source_locator'] } : { text: '自行填写的设计参数', state: 'fact', purpose: 'design', authorship: 'user' }]))
     return { id, type: definition.type, source_locator: '卡片原始定位', ...(id === 'dialogue' ? { dialogue_id: 'audit-dialogue' } : {}), ...(visual.has(id) ? { fields } : fields) }
   }) }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
@@ -51,16 +51,22 @@ try {
   const assertFields = async (detail, saved) => {
     const definition = definitions.find(item => item.type === saved.type)
     for (const field of definition.fields) {
+      if (saved.type === 'direction.movement' && ['movement_start', 'end_frame'].includes(field.id)) await detail.getByRole('tab', { name: field.id === 'end_frame' ? '结束' : '起始', exact: true }).click()
       const text = await detail.getByRole('textbox', { name: field.label + '内容', exact: true }).innerText()
       assert.equal(text.trim(), valueOf(saved, field.id).text.trim(), `${definition.title}: reopened ${field.label} matches saved content`)
     }
+    if (saved.type === 'direction.movement') await detail.getByRole('tab', { name: '起始', exact: true }).click()
   }
   const reopen = async id => {
     await closeCanvasDetails(page)
     const detail = await openCanvasCard(page, id)
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
     if (await advanced.count()) await advanced.click()
-    await detail.getByText('卡片原始来源：卡片原始定位', { exact: true }).waitFor()
+    await detail.getByRole('button', { name: /^整卡适用限制/ }).click()
+    const scope = detail.locator('.design-scope-panel')
+    await scope.getByText('卡片原始来源：卡片原始定位', { exact: true }).waitFor()
+    await scope.getByRole('combobox').first().press('Escape')
+    await scope.waitFor({ state: 'hidden' })
     await assertFields(detail, await savedCard(id))
     return detail
   }
@@ -72,7 +78,7 @@ try {
     for (const text of await node.locator('dd').allTextContents()) assert.doesNotMatch(text, /^(事实|设计|背景|约束)[：·]/, `${definition.title}: user card summary omits default metadata`)
     const original = await savedCard(id)
     const detail = await reopen(id)
-    await detail.getByText('提议 · 背景 · 来源：模型提取定位', { exact: true }).waitFor()
+    await detail.getByLabel('状态：提议 · 用途：背景 · 来源：模型提取定位', { exact: true }).waitFor()
     assert.equal(await detail.getByRole('switch', { name: '显示状态与来源', exact: true, includeHidden: true }).count(), 0, definition.title)
     for (const field of definition.fields) {
       assert.equal(await detail.getByRole('combobox', { name: field.label + '状态', exact: true }).count(), 0)
@@ -97,7 +103,7 @@ try {
     await detail.getByRole('button', { name: '撤销', exact: true }).click()
     await poll(state => JSON.stringify(state.document.cards.find(card => card.id === id)) === JSON.stringify(original))
     await reopen(id)
-    await detail.getByText('提议 · 背景 · 来源：模型提取定位', { exact: true }).waitFor()
+    await detail.getByLabel('状态：提议 · 用途：背景 · 来源：模型提取定位', { exact: true }).waitFor()
     await closeCanvasDetails(page)
     await page.getByRole('button', { name: '重做操作', exact: true }).click()
     await poll(state => JSON.stringify(state.document.cards.find(card => card.id === id)) === JSON.stringify(authored))
