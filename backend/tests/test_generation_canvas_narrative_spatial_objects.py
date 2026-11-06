@@ -21,7 +21,7 @@ def design_card(kind, field):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind,field', CASES)
-async def test_narrative_spatial_old_objects_keep_other_uses_and_explicit_references(canvas_client, canvas_file_store, kind, field):
+async def test_reading_narrative_spatial_legacy_bindings_preserves_revision_and_connections(canvas_client, canvas_file_store, kind, field):
     from app.models.generation_canvas import GenerationCanvas
     canvas = (await canvas_client.post('/canvases/p', json={'name': '对象退役'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -45,31 +45,10 @@ async def test_narrative_spatial_old_objects_keep_other_uses_and_explicit_refere
     async with canvas_file_store['sessions'].begin() as db:
         (await db.get(GenerationCanvas, canvas['id'])).document = doc
     first = (await canvas_client.get(url)).json()['data']
-    second = (await canvas_client.get(url)).json()['data']
-    assert first == second and first['revision'] == 1
-    current = first['document']['cards'][1]
-    assert all(binding['input_port'] != 'effect_object' for binding in current['input_bindings'])
-    assert current[field]['text'] == '原有字段文字' and current[field]['authorship'] == 'user'
-    assert any(row['source_port'] == 'text' and row['target_port'] == 'text' and row['target_card'] == 'design' for row in first['document']['edges'])
-    catalog = (await canvas_client.get(url + '/catalog')).json()['data']['cards']
-    assert 'effect_object' not in [port['id'] for port in next(row for row in catalog if row['type'] == 'direction.' + kind)['inputs']]
-    if kind in ('anchor', 'space_rule'):
-        assert len(current['input_bindings']) == 1
-        assert current['input_bindings'][0]['input_port'] == 'space' and current['input_bindings'][0]['source'] == source('object')
-    if kind == 'event':
-        outputs = (await canvas_client.get(url + '/cards/design/outputs')).json()['data']['outputs']
-        assert outputs[1]['payload']['reference_id'] == 'stable-design'
-        assert first['document']['cards'][3]['input_bindings'][0]['source']['object_id'] == 'stable-design'
-    before = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
-    assert ('完整大厅说明' in before['text']) == (kind in ('anchor', 'space_rule'))
-    current[field] = {'text': '@引用具体说明', 'authorship': 'user', 'document': {'segments': [{'id': 'ref', 'kind': 'reference', 'source': source('text')}, {'id': 'text', 'kind': 'text', 'text': '具体说明'}]}}
-    saved = await canvas_client.put(url, json={'request_id': 'reference', 'expected_revision': 1, 'document': first['document']})
-    assert saved.status_code == 200, saved.text
-    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
-    assert compiled['text'].count('完整大厅说明') == 1
-    reopened = (await canvas_client.get(url)).json()['data']['document']['cards'][1]
-    assert reopened[field]['document']['segments'][0]['source'] == source('text')
-    assert (await canvas_client.put(url, json={'request_id': 'stale', 'expected_revision': 0, 'document': doc})).status_code == 409
+    assert first == (await canvas_client.get(url)).json()['data']
+    assert first['revision'] == 0
+    assert first['document']['edges'] == doc['edges']
+    assert [(b['id'], b['input_port'], b['source']) for b in first['document']['cards'][1]['input_bindings']] == [(b['id'], b['input_port'], b['source']) for b in card['input_bindings']]
 
 
 @pytest.mark.asyncio

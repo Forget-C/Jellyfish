@@ -104,7 +104,7 @@ async def test_spatial_relations_use_specific_direct_eligible_objects(canvas_cli
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '关系'})).json()['data']
     doc = canvas['document']
-    objects = [{'id': f'object{i}', 'type': 'content.place' if category == 'place' else 'content.object', 'object_id': f'identity{i}', 'name': f'对象{i}', 'category': category} for i in range(count)]
+    objects = [{'id': f'object{i}', 'type': 'content.' + category, 'object_id': f'identity{i}', 'name': f'对象{i}'} for i in range(count)]
     bindings = [{'id': str(i), 'input_port': port, 'source': {'canvas_id': canvas['id'], 'card_id': f'object{i}', 'port_id': 'object', 'object_id': f'identity{i}', 'position': 0}} for i in range(count)]
     doc.update(cards=[*objects, {'id': 'design', 'type': 'direction.' + kind, 'input_bindings': bindings}],
         edges=[{'id': str(i), 'source_card': f'object{i}', 'source_port': 'object', 'target_card': 'design', 'target_port': port} for i in range(count)],
@@ -137,7 +137,7 @@ async def test_actual_worker_receives_complete_spatial_design_with_explicit_ance
             provider.name = 'volcengine'
     source = lambda card, port, **extra: {'canvas_id': runtime.canvas_id, 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = runtime.document
-    doc.update(cards=[{'id': 'person', 'type': 'content.object', 'object_id': 'alice', 'name': '小雪', 'text': '秘密外貌描述'},
+    doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'alice', 'name': '小雪', 'text': '秘密外貌描述'},
                      {'id': 'act', 'type': 'direction.activity', 'task': {'state': 'proposal', 'text': '伸手'}, 'exit_state': {'state': 'fact', 'text': '看向门口'},
                       'input_bindings': [{'id': 'p', 'source': source('person', 'object', object_id='alice'), 'input_port': 'participant'}]},
                      {'id': 'consumer', 'type': 'model.' + modality, 'model_id': runtime.model_id, 'config': {'ratio': '16:9', 'seconds': 5} if modality == 'video' else {},

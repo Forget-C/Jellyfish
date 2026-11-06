@@ -44,9 +44,9 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
         def edge(id, src, port, dst, target):
             return {'id': id, 'source_card': src, 'source_port': port, 'target_card': dst, 'target_port': target}
         doc['cards'] += [
-            {'id': 'person', 'type': 'content.object', 'object_id': 'alice', 'name': '小雪', 'text': '年龄二十岁'},
+            {'id': 'person', 'type': 'content.character', 'object_id': 'alice', 'name': '小雪', 'text': '年龄二十岁'},
             {'id': 'ref', 'type': 'reference.character', 'image_binding': {'file_id': output['file_id'], 'source': source('fixed-picture', 'image')},
-             'input_bindings': [{'id': 'name', 'input_port': 'name', 'source': source('person', 'object', object_id='alice')}]},
+             'name_binding': source('person', 'object', object_id='alice')},
             {'id': 'act', 'type': 'direction.performance', 'physical_action': {'text': '伸手拿钥匙', 'state': 'fact'},
              'input_bindings': [{'id': 'actor', 'input_port': 'participant', 'source': source('ref', 'object', object_id='alice')}]},
             {'id': 'video', 'type': 'model.video', 'model_id': 'video-model', 'config': {'ratio': '16:9', 'seconds': 5},

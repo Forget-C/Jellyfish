@@ -308,23 +308,6 @@ class AudioContentCard(MediaContentCard):
     output_ports: ClassVar[tuple[str, ...]] = ('audio',)
 
 
-def _legacy_reference(value, identities=None):
-    """旧参考只保留已选主对象；纯转换不改写保存正文或历史快照。"""
-    if not isinstance(value, dict) or 'name' in value or 'name_binding' in value:
-        return value
-    if not any(key in value for key in ('title', 'objects', 'input_bindings', 'positions')) and value.get('type_version', 2) != 1:
-        return value
-    category = value.get('type', '').split('.')[-1]
-    owned = next((item for item in value.get('objects', []) if item.get('category') == category), None)
-    selected = next((identities.get(binding.get('source', {}).get('object_id'))
-                     for binding in value.get('input_bindings', [])
-                     if identities and identities.get(binding.get('source', {}).get('object_id'), {}).get('category') == category), None)
-    primary = owned or selected or {}
-    identity = primary.get('object_id') or next((binding.get('source', {}).get('object_id')
-                    for binding in value.get('input_bindings', []) if binding.get('source', {}).get('object_id')), None)
-    return {**{key: item for key, item in value.items() if key not in ('title', 'objects', 'input_bindings', 'positions')},
-            'type_version': 2, 'name': primary.get('name') or value.get('title', ''),
-            'object_id': identity or value.get('object_id') or value.get('id')}
 
 
 class NamedImageReferenceCard(CardDefinition):
@@ -339,11 +322,6 @@ class NamedImageReferenceCard(CardDefinition):
     input_ports: ClassVar[tuple[str, ...]] = ('name', 'image_source')
     output_ports: ClassVar[tuple[str, ...]] = ('image', 'object')
 
-    @model_validator(mode='before')
-    @classmethod
-    def read_legacy_reference(cls, value):
-        """独立解析旧卡时，沿用其首个本类别对象及稳定身份。"""
-        return _legacy_reference(value)
 
 
 class DesignMediaExample(BaseModel):
@@ -564,6 +542,7 @@ class SoundArrangementCard(SoundDirectionCard):
 
 class VisualStyleCard(PerformanceDirectionCard):
     """独立风格整卡采用，内置预设应用后成为本卡普通字段。"""
+    examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
     type: Literal['direction.style'] = Field(default='direction.style', json_schema_extra={'enum': ['direction.style']})
     fields: StyleDesignFields = Field(default_factory=StyleDesignFields)
     input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
@@ -594,12 +573,14 @@ class FocusCard(PerformanceDirectionCard):
 
 class CompositionCard(PerformanceDirectionCard):
     """独立景别与构图，仅整卡采用。"""
+    examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
     type: Literal['direction.composition'] = Field(default='direction.composition', json_schema_extra={'enum': ['direction.composition']})
     fields: CompositionDesignFields = Field(default_factory=CompositionDesignFields)
     frame_target: DesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)
     input_ports: ClassVar[tuple[str, ...]] = ('shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
 class MovementCard(PerformanceDirectionCard):
     """独立运镜及稳定阶段，只有整卡设计出口。"""
+    examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
     type: Literal['direction.movement'] = Field(default='direction.movement', json_schema_extra={'enum': ['direction.movement']})
     fields: MovementDesignFields = Field(default_factory=MovementDesignFields)
     phases: list[MovementPhase] = Field(default_factory=list)
@@ -722,55 +703,6 @@ class CanvasDocument(BaseModel):
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
 
 
-    @model_validator(mode='before')
-    @classmethod
-    def read_legacy_document(cls, value):
-        """只读解析旧格式；不原地重写原始幂等正文或历史快照。"""
-        if not isinstance(value, dict):
-            return value
-        if not isinstance(value.get('edges', []), list) or any(not isinstance(edge, dict) for edge in value.get('edges', [])):
-            return value
-        orders = value.get('input_order', {})
-        if not isinstance(orders, dict) or any(not isinstance(ports, dict) or any(not isinstance(ids, list) or any(not isinstance(item, str) for item in ids) for ids in ports.values()) for ports in orders.values()):
-            return value
-        from app.services.generation_canvas.retirement import retire_photography
-        value = retire_photography(value)
-        from app.services.generation_canvas.example_cleanup import clean_examples
-        value = clean_examples(value)
-        from app.services.generation_canvas.acceptance_cleanup import clean_acceptance
-        value = clean_acceptance(value)
-        cards = value.get('cards', [])
-        if not isinstance(cards, list) or any(not isinstance(card, dict) for card in cards):
-            return value
-        # 旧类别按原值拆分，保留卡片 ID、对象 ID、端口、连线和画布外的布局缓存。
-        cards = [{**card, 'type': 'content.' + card.get('category', 'character')} if card.get('type') == 'content.object' else card for card in cards]
-        identities = {}
-        for card in cards:
-            owned = card.get('objects', []) if card.get('type', '').startswith('reference.') else [card] if card.get('type') in ('content.character', 'content.prop', 'content.costume', 'content.place') else []
-            for obj in owned:
-                if obj.get('object_id'):
-                    identities[obj['object_id']] = {**obj, 'category': card['type'].split('.')[1] if not card['type'].startswith('reference.') else obj.get('category', 'character')}
-        normalized = []
-        retired = set()
-        for card in cards:
-            if card.get('type', '').startswith('reference.') and 'name' not in card and 'name_binding' not in card and (any(key in card for key in ('title', 'objects', 'input_bindings', 'positions')) or card.get('type_version') == 1):
-                legacy = _legacy_reference(card, identities)
-                binding = next((binding.get('source') for binding in card.get('input_bindings', [])
-                    if binding.get('input_port') == 'name' and any(source.get('id') == binding.get('source', {}).get('card_id')
-                    and source.get('type') == 'content.' + card['type'].split('.')[1]
-                    and source.get('object_id') == binding.get('source', {}).get('object_id') for source in cards)), None)
-                if binding:
-                    legacy['name_binding'] = binding
-                retired.add(card['id'])
-                card = legacy
-            normalized.append(card)
-        by_id = {card.get('id'): card for card in cards}
-        removed_edges = {edge.get('id') for edge in value.get('edges', []) if edge.get('target_card') in retired and edge.get('target_port') == 'name'
-            and by_id.get(edge.get('source_card'), {}).get('type') != 'content.' + by_id[edge['target_card']]['type'].split('.')[1]}
-        edges = [edge for edge in value.get('edges', []) if edge.get('id') not in removed_edges]
-        orders = {card_id: {port: [edge_id for edge_id in ids if edge_id not in removed_edges] for port, ids in ports.items()}
-                  for card_id, ports in value.get('input_order', {}).items()}
-        return {**value, 'schema_version': 2, 'cards': normalized, 'edges': edges, 'input_order': orders}
 
     @model_validator(mode='after')
     def synchronize_reference_names(self):

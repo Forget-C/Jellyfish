@@ -12,6 +12,8 @@ async def test_video_requires_explicit_purpose_and_reuses_source_across_purposes
     if performance:
         values = doc['cards'][1].pop('fields')
         doc['cards'][1].update(type='direction.environment', activity=values['direction'])
+        doc['edges'][0]['target_port'] = 'image'
+        doc['input_order']['style']['image'] = doc['input_order']['style'].pop('image_example')
     model = doc['cards'][-1]
     model.update(type='model.video', config={'ratio': '16:9'})
     async def save(revision):

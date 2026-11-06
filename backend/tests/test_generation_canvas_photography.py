@@ -17,18 +17,11 @@ async def test_independent_design_rejects_old_partial_adoption(canvas_client, ki
 
 
 @pytest.mark.asyncio
-async def test_retired_unadopted_candidate_does_not_create_false_missing_basis(canvas_client):
+async def test_retired_photography_candidate_is_rejected(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p',json={'name':'旧候选'})).json()['data']
     url=f"/canvases/p/{canvas['id']}"
     document=canvas['document']
     document.update(cards=[{'id':'old','type':'direction.photography'},{'id':'model','type':'model.text','prompt':{'segments':[{'id':'text','kind':'text','text':'独立正文'}]}}],edges=[{'id':'e','source_card':'old','source_port':'text','target_card':'model','target_port':'text'}],input_order={'model':{'text':['e']}})
     saved=await client.put(url,json={'request_id':'retire','expected_revision':0,'document':document})
-    assert saved.status_code==200,saved.text
-    read=(await client.get(url)).json()['data']['document']
-    assert [card['id'] for card in read['cards']]==['model']
-    assert read['cards'][0]['missing_designs']==[]
-    assert read['edges']==[]
-    compiled=(await client.get(url+'/cards/model/compile')).json()['data']
-    assert compiled['text']=='独立正文'
-    assert not any(item['code']=='DESIGN_BASIS_MISSING' for item in compiled['diagnostics'])
+    assert saved.status_code == 422, saved.text

@@ -114,7 +114,7 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
 
 def restore_basis(snapshot: dict, card_id: str, dependency_outputs: dict[str, list[dict]]) -> CanvasBasis:
     """按旧格式恢复已受理依据；依赖须已由调用方确认成功，整组替换且不回退旧位置。"""
-    from app.services.generation_canvas.retirement import require_supported_snapshot
+    from app.services.generation_canvas.snapshot_support import require_supported_snapshot
     require_supported_snapshot(snapshot)
     outputs = {key: [CanvasResolvedOutput.model_validate(item) for item in values] for key, values in snapshot['outputs'].items()}
     for source in snapshot['dependencies']:

@@ -6,18 +6,17 @@ from app.schemas.generation_canvas import CanvasDocument
 
 
 @pytest.mark.parametrize('category', ['character', 'prop', 'costume'])
-def test_legacy_descriptions_keep_identity_and_connections(category):
+def test_legacy_description_is_rejected_without_mutation(category):
     raw = {'id': 'c', 'project_id': 'p', 'name': '迁移', 'cards': [
         {'id': 'description', 'type': 'content.object', 'category': category, 'object_id': 'stable', 'name': '旧名称', 'text': '正文'},
         {'id': 'model', 'type': 'model.text'}],
         'edges': [{'id': 'e', 'source_card': 'description', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
         'input_order': {'model': {'text': ['e']}}}
     original = deepcopy(raw)
-    document = CanvasDocument.model_validate(raw)
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        CanvasDocument.model_validate(raw)
     assert raw == original
-    assert document.cards[0].type == 'content.' + category
-    assert document.cards[0].object_id == 'stable' and document.cards[0].text == '正文'
-    assert document.edges[0].id == 'e' and document.input_order == original['input_order']
 
 
 @pytest.mark.asyncio
@@ -114,7 +113,7 @@ async def test_name_candidate_edges_reject_other_description_types(canvas_client
 
 
 @pytest.mark.asyncio
-async def test_saved_legacy_card_type_registry_migrates_without_breaking_adoption(canvas_client, canvas_file_store):
+async def test_store_reads_legacy_document_and_identity_registry_without_rewriting(canvas_client, canvas_file_store):
     from app.models.generation_canvas import GenerationCanvas
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '旧数据'})).json()['data']
@@ -127,13 +126,18 @@ async def test_saved_legacy_card_type_registry_migrates_without_breaking_adoptio
         stored = await db.get(GenerationCanvas, canvas['id'])
         stored.document = doc
         stored.card_types = {'description': 'content.object', 'model': 'model.text'}
-    reopened = (await client.get(url)).json()['data']['document']
-    assert reopened['cards'][0]['type'] == 'content.costume'
-    response = await client.put(url, json={'request_id': 'migrate', 'expected_revision': 0, 'document': reopened})
-    assert response.status_code == 200, response.text
-    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert '旧描述' in compiled['text']
-    assert (await client.get(url)).json()['data']['document']['cards'][1]['input_bindings'][0]['source'] == source
+    from copy import deepcopy
+    from app.services.generation_canvas.store import CanvasStore
+    async with canvas_file_store['sessions']() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
+        store = CanvasStore(db, 'p')
+        await store.get(canvas['id'])
+        await store.get(canvas['id'])
+        await store.list()
+        await db.refresh(row)
+        assert (row.document, row.card_types, row.revision) == before
+        assert not db.dirty
 
 
 @pytest.mark.asyncio

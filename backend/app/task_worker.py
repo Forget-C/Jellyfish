@@ -209,7 +209,7 @@ class TaskWorker:
                 if task.target_type == 'canvas_node':
                     async with self.sessions() as db:
                         from app.models.generation_canvas import CanvasRunNode
-                        from app.services.generation_canvas.retirement import require_supported_snapshot
+                        from app.services.generation_canvas.snapshot_support import require_supported_snapshot
                         node = await db.get(CanvasRunNode, task.target_id)
                         if node:
                             from fastapi import HTTPException

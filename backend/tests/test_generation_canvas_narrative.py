@@ -85,7 +85,7 @@ async def test_story_identity_and_relation_errors_are_located(canvas_client, cas
         doc.update(edges=[{'id': name, 'source_card': name, 'source_port': 'beat', 'target_card': 'performance', 'target_port': 'beat'} for name in ['beat', 'two']], input_order={'performance': {'beat': ['beat', 'two']}})
     else:
         doc['cards'] += [{'id': 'shot', 'type': 'direction.shot'}, {'id': 'model', 'type': 'model.image'}]
-        doc.update(edges=[{'id': 'out', 'source_card': 'shot', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}, {'id': 'back', 'source_card': 'model', 'source_port': 'image', 'target_card': 'shot', 'target_port': 'image_example'}], input_order={'shot': {'image_example': ['back']}, 'model': {'text': ['out']}})
+        doc.update(edges=[{'id': 'out', 'source_card': 'shot', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}, {'id': 'back', 'source_card': 'model', 'source_port': 'image', 'target_card': 'shot', 'target_port': 'image'}], input_order={'shot': {'image': ['back']}, 'model': {'text': ['out']}})
     response = await canvas_client.put(url, json={'request_id': 'second', 'expected_revision': 1, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == code, response.text
 

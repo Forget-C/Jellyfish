@@ -29,8 +29,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
         raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
     previous_document = CanvasDocument.model_validate(canvas.document)
     document, previous_document = _normalize_document(document, previous_document)
-    previous_types = {card.id: card.type for card in previous_document.cards}
-    identities = {key: previous_types.get(key, value) if value == 'content.object' else value for key, value in canvas.card_types.items()}
+    identities = dict(canvas.card_types)
     seen = set()
     for card in document.cards:
         if card.id in seen or (card.id in identities and identities[card.id] != card.type):

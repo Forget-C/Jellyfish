@@ -63,8 +63,8 @@ async def test_requirements_reject_invalid_structure_not_free_text(canvas_client
         doc['edges'] = [{'id': 'back', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'text'}]
         doc['input_order'] = {'shot': {'text': ['back']}}
     if case == 'cycle':
-        doc['edges'] = [{'id': 'forward', 'source_card': 'criterion', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}, {'id': 'back', 'source_card': 'model', 'source_port': 'image', 'target_card': 'criterion', 'target_port': 'image_example'}]
-        doc['input_order'] = {'criterion': {'image_example': ['back']}, 'model': {'text': ['forward']}}
+        doc['edges'] = [{'id': 'forward', 'source_card': 'criterion', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}, {'id': 'back', 'source_card': 'model', 'source_port': 'image', 'target_card': 'criterion', 'target_port': 'image'}]
+        doc['input_order'] = {'criterion': {'image': ['back']}, 'model': {'text': ['forward']}}
     if case == 'bad_binding':
         doc['cards'][0]['input_bindings'] = [{'id': 'bad', 'input_port': 'acceptance_basis', 'source': {'canvas_id': canvas['id'], 'card_id': 'shot', 'port_id': 'shot', 'position': 0, 'object_id': 'shot'}}]
     response = await canvas_client.put(url, json={'request_id': 'bad', 'expected_revision': 0, 'document': doc})
@@ -190,7 +190,7 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
     assert (await runtime.client.get(runtime.url)).json()['data']['document']['cards'][0]['standard']['state'] == 'fact'
 
 @pytest.mark.asyncio
-async def test_old_guidance_objects_become_story_and_spatial_candidates_without_adoption(canvas_client):
+async def test_guidance_retired_object_bindings_are_rejected(canvas_client):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '作用范围'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
@@ -202,16 +202,10 @@ async def test_old_guidance_objects_become_story_and_spatial_candidates_without_
         edges=[{'id': 'event', 'source_card': 'event', 'source_port': 'event', 'target_card': 'guidance', 'target_port': 'effect_object'}, {'id': 'anchor', 'source_card': 'anchor', 'source_port': 'anchor', 'target_card': 'guidance', 'target_port': 'effect_object'}, {'id': 'criterion', 'source_card': 'anchor', 'source_port': 'anchor', 'target_card': 'criterion', 'target_port': 'effect_object'}],
         input_order={'guidance': {'effect_object': ['event', 'anchor']}, 'criterion': {'effect_object': ['criterion']}})
     response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
-    assert response.status_code == 200, response.text
-    output = (await canvas_client.get(url + '/cards/guidance/outputs')).json()['data']['outputs'][0]
-    assert output['text'] == '名称：要求'
-    assert output['payload'].get('references', []) == []
-    reopened = (await canvas_client.get(url)).json()['data']['document']
-    assert reopened['cards'][2]['input_bindings'] == []
-    assert all(edge['target_port'] != 'effect_object' for edge in reopened['edges'])
+    assert response.status_code == 422, response.text
 
 @pytest.mark.asyncio
-async def test_retired_acceptance_examples_are_cleaned_without_adoption_or_delete_protection(canvas_client):
+async def test_retired_acceptance_examples_are_rejected(canvas_client):
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': (name, b'video', 'video/mp4')})).json()['data']['id'] for name in ['before.mp4', 'after.mp4']]
     canvas = (await client.post('/canvases/p', json={'name': '正反例'})).json()['data']
@@ -223,19 +217,7 @@ async def test_retired_acceptance_examples_are_cleaned_without_adoption_or_delet
          'examples': [{'id': 'ex', 'source': source, 'file_id': files[0], 'purpose': 'negative', 'start_ms': 100, 'end_ms': 900}]}],
         edges=[{'id': 'e', 'source_card': 'video', 'source_port': 'video', 'target_card': 'criterion', 'target_port': 'video_example'}], input_order={'criterion': {'video_example': ['e']}})
     response = await client.put(url, json={'request_id': 'first', 'expected_revision': 0, 'document': doc})
-    assert response.status_code == 200, response.text
-    doc['cards'][0]['file_id'] = files[1]
-    assert (await client.put(url, json={'request_id': 'rerun', 'expected_revision': 1, 'document': doc})).status_code == 200
-    reopened = (await client.get(url)).json()['data']['document']
-    assert reopened['cards'][1]['examples'] == []
-    assert reopened['edges'][0]['target_port'] == 'video'
-    assert reopened['input_order'] == {'criterion': {'video': ['e']}}
-    outputs = (await client.get(url + '/cards/criterion/outputs')).json()['data']['outputs']
-    assert files[0] not in str(outputs) and files[1] not in str(outputs) and '900' not in str(outputs[0]['payload'])
-    doc['cards'] = doc['cards'][1:]
-    doc.update(edges=[], input_order={})
-    response = await client.put(url, json={'request_id': 'delete', 'expected_revision': 2, 'document': doc})
-    assert response.status_code == 200, response.text
+    assert response.status_code == 422, response.text
 
 @pytest.mark.asyncio
 async def test_acceptance_reference_rename_and_delete_update_linked_designs(canvas_client):
@@ -358,7 +340,7 @@ async def test_linked_acceptance_carries_effective_standard_media_and_checks_cap
 
 
 @pytest.mark.asyncio
-async def test_old_acceptance_candidates_are_cleaned_without_adopting_them(canvas_client, canvas_file_store):
+async def test_store_reads_unadopted_acceptance_candidates_without_rewriting(canvas_client, canvas_file_store):
     from app.models.generation_canvas import GenerationCanvas
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '旧候选'})).json()['data']
@@ -367,15 +349,22 @@ async def test_old_acceptance_candidates_are_cleaned_without_adopting_them(canva
     doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '未采用标准'}, {'id': 'shot', 'type': 'direction.shot', 'name': '镜头'}],
         edges=[{'id': 'old', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'acceptance_basis'}],
         input_order={'shot': {'acceptance_basis': ['old']}})
-    # Prepare a historical document which the former API allowed; verify only via HTTP.
+    # Seed a historical document to verify that Store reads do not rewrite it.
     async with canvas_file_store['sessions'].begin() as db:
         row = await db.get(GenerationCanvas, canvas['id'])
         row.document = doc
-    reopened = (await client.get(url)).json()['data']
-    assert reopened['revision'] == 1
-    assert not reopened['document']['edges']
-    assert not reopened['document']['cards'][1].get('input_bindings')
-    assert not reopened['document']['input_order']['shot']['acceptance_basis']
+    from copy import deepcopy
+    from app.services.generation_canvas.store import CanvasStore
+    async with canvas_file_store['sessions']() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
+        store = CanvasStore(db, 'p')
+        await store.get(canvas['id'])
+        await store.get(canvas['id'])
+        await store.list()
+        await db.refresh(row)
+        assert (row.document, row.card_types, row.revision) == before
+        assert not db.dirty
 
 @pytest.mark.asyncio
 async def test_independent_design_connection_adopts_and_disconnects(canvas_client):
@@ -568,7 +557,7 @@ async def test_all_design_outputs_distinguish_user_settings_from_extracted_metad
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('state', ['fact', 'not_applicable'])
-async def test_old_acceptance_field_references_are_removed_without_adopting(canvas_client, canvas_file_store, state):
+async def test_store_reads_legacy_acceptance_field_references_without_rewriting(canvas_client, canvas_file_store, state):
     from app.models.generation_canvas import GenerationCanvas
     canvas = (await canvas_client.post('/canvases/p', json={'name': '清理旧引用'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -579,18 +568,22 @@ async def test_old_acceptance_field_references_are_removed_without_adopting(canv
     async with canvas_file_store['sessions'].begin() as db:
         row = await db.get(GenerationCanvas, canvas['id'])
         row.document = doc
-    listed = (await canvas_client.get('/canvases/p')).json()['data'][0]
-    assert not listed['document']['edges']
-    reopened = (await canvas_client.get(url)).json()['data']
-    assert reopened['revision'] == listed['revision'] == 1
-    field = reopened['document']['cards'][1]['visible_result']
-    assert field['document']['segments'] == []
-    assert field['state'] == 'empty' and field['source_locator'] == '' and field['purpose'] == 'design'
-    assert not reopened['document']['cards'][1].get('input_bindings')
+    from copy import deepcopy
+    from app.services.generation_canvas.store import CanvasStore
+    async with canvas_file_store['sessions']() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
+        store = CanvasStore(db, 'p')
+        await store.get(canvas['id'])
+        await store.get(canvas['id'])
+        await store.list()
+        await db.refresh(row)
+        assert (row.document, row.card_types, row.revision) == before
+        assert not db.dirty
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('bad', ['edge', 'segment', 'source', 'text', 'order'])
-async def test_acceptance_cleanup_preserves_invalid_input_validation(canvas_client, bad):
+async def test_invalid_acceptance_document_is_rejected(canvas_client, bad):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '异常结构'})).json()['data']
     doc = canvas['document']
     doc['cards'] = [{'id': 'criterion', 'type': 'direction.criterion', 'name': '可见'}]
@@ -609,7 +602,7 @@ async def test_acceptance_cleanup_preserves_invalid_input_validation(canvas_clie
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind,field', [('criterion', 'standard'), ('creative_control', 'keep'), ('guidance', 'prohibitions'), ('fact', 'fact'), ('performance_rule', 'applicability')])
-async def test_requirements_retire_generic_objects_without_losing_field_candidates(canvas_client, kind, field):
+async def test_requirement_retired_object_binding_is_rejected(canvas_client, kind, field):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '标准引用'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     source = {'canvas_id': canvas['id'], 'card_id': 'prop', 'port_id': 'text', 'position': 0}
@@ -621,26 +614,11 @@ async def test_requirements_retire_generic_objects_without_losing_field_candidat
         edges=[{'id': 'old', 'source_card': 'prop', 'source_port': 'object', 'target_card': 'criterion', 'target_port': 'effect_object'}],
         input_order={'criterion': {'effect_object': ['old']}})
     saved = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
-    assert saved.status_code == 200, saved.text
-    reopened = (await canvas_client.get(url)).json()['data']
-    criterion = reopened['document']['cards'][1]
-    assert criterion['input_bindings'] == []
-    assert criterion[field]['text'] == '钥匙清晰可见'
-    assert reopened['document']['edges'] == [{'id': 'old', 'source_card': 'prop', 'source_port': 'text', 'target_card': 'criterion', 'target_port': 'text'}]
-    assert reopened['document']['input_order']['criterion']['text'] == ['old']
-    outputs = (await canvas_client.get(url + '/cards/criterion/outputs')).json()['data']['outputs']
-    assert '完整钥匙说明' not in outputs[0]['text']
-    assert '作用对象' not in outputs[0]['text']
-    criterion[field] = {'state': 'fact', 'text': '@引用必须可见', 'document': {'segments': [
-        {'id': 'reference', 'kind': 'reference', 'source': source}, {'id': 'text', 'kind': 'text', 'text': '必须可见'}]}}
-    response = await canvas_client.put(url, json={'request_id': 'reference', 'expected_revision': reopened['revision'], 'document': reopened['document']})
-    assert response.status_code == 200, response.text
-    outputs = (await canvas_client.get(url + '/cards/criterion/outputs')).json()['data']['outputs']
-    assert '完整钥匙说明' in outputs[0]['text']
+    assert saved.status_code == 422, saved.text
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind,field', [('criterion', 'standard'), ('creative_control', 'keep'), ('guidance', 'prohibitions'), ('fact', 'fact'), ('performance_rule', 'applicability')])
-async def test_old_requirement_object_cleanup_is_idempotent_and_preserves_other_uses(canvas_client, canvas_file_store, kind, field):
+async def test_store_reads_requirement_object_bindings_without_rewriting(canvas_client, canvas_file_store, kind, field):
     from app.models.generation_canvas import GenerationCanvas
     canvas = (await canvas_client.post('/canvases/p', json={'name': '旧对象关系'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -655,28 +633,23 @@ async def test_old_requirement_object_cleanup_is_idempotent_and_preserves_other_
     async with canvas_file_store['sessions'].begin() as db:
         row = await db.get(GenerationCanvas, canvas['id'])
         row.document = doc
-    first = (await canvas_client.get(url)).json()['data']
-    second = (await canvas_client.get(url)).json()['data']
-    assert first == second
-    assert first['revision'] == 1
-    assert first['document']['cards'][1]['input_bindings'] == []
-    assert first['document']['cards'][1][field]['text'] == '钥匙可见'
-    assert first['document']['cards'][1][field]['authorship'] == 'user'
-    assert first['document']['cards'][2]['input_bindings'][0]['source'] == source
-    assert first['document']['cards'][2]['input_bindings'][0]['input_port'] == 'attention_object'
-    assert [row['id'] for row in first['document']['edges']] == ['existing', 'keep']
-    assert first['document']['input_order'] == {'criterion': {'text': ['existing']}, 'guidance': {'attention_object': ['keep']}}
-    stale = await canvas_client.put(url, json={'request_id': 'stale', 'expected_revision': 0, 'document': doc})
-    assert stale.status_code == 409
-    catalog = (await canvas_client.get(url + '/catalog')).json()['data']['cards']
-    assert 'effect_object' not in [port['id'] for card in catalog if card['type'] == 'direction.criterion' for port in card['inputs']]
-    assert 'effect_object' not in [port['id'] for card in catalog if card['type'] == 'direction.' + kind for port in card['inputs']]
-    assert 'attention_object' in [port['id'] for card in catalog if card['type'] == 'direction.focus' for port in card['inputs']]
+    from copy import deepcopy
+    from app.services.generation_canvas.store import CanvasStore
+    async with canvas_file_store['sessions']() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
+        store = CanvasStore(db, 'p')
+        await store.get(canvas['id'])
+        await store.get(canvas['id'])
+        await store.list()
+        await db.refresh(row)
+        assert (row.document, row.card_types, row.revision) == before
+        assert not db.dirty
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['creative_control', 'guidance', 'criterion', 'situation', 'performance', 'performance_rule', 'shot', 'blocking', 'activity', 'environment', 'space_rule', 'continuity', 'fact', 'narrative', 'beat', 'event'])
-async def test_retired_examples_clean_on_save_reopen_and_deduplicate_candidates(canvas_client, kind):
+async def test_retired_design_examples_are_rejected(canvas_client, kind):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '清理示例'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
@@ -686,16 +659,12 @@ async def test_retired_examples_clean_on_save_reopen_and_deduplicate_candidates(
         {'id': 'old', 'source_card': 'video', 'source_port': 'video', 'target_card': 'design', 'target_port': 'video_example'}],
         input_order={'design': {'video': ['normal'], 'video_example': ['old']}})
     saved = await canvas_client.put(url, json={'request_id': 'clean', 'expected_revision': 0, 'document': doc})
-    assert saved.status_code == 200, saved.text
-    reopened = (await canvas_client.get(url)).json()['data']['document']
-    assert reopened['cards'][1]['examples'] == []
-    assert [edge['id'] for edge in reopened['edges']] == ['normal']
-    assert reopened['input_order'] == {'design': {'video': ['normal']}}
+    assert saved.status_code == 422, saved.text
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['continuity', 'fact'])
-async def test_retired_audio_examples_become_local_candidates(canvas_client, kind):
+async def test_retired_audio_example_connections_are_rejected(canvas_client, kind):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '音频候选'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
@@ -703,11 +672,7 @@ async def test_retired_audio_examples_become_local_candidates(canvas_client, kin
         edges=[{'id': 'audio-edge', 'source_card': 'audio', 'source_port': 'audio', 'target_card': 'design', 'target_port': 'audio_example'}],
         input_order={'design': {'audio_example': ['audio-edge']}})
     saved = await canvas_client.put(url, json={'request_id': 'clean', 'expected_revision': 0, 'document': doc})
-    assert saved.status_code == 200, saved.text
-    reopened = (await canvas_client.get(url)).json()['data']['document']
-    assert reopened['edges'][0]['target_port'] == 'audio'
-    assert reopened['input_order'] == {'design': {'audio': ['audio-edge']}}
-    assert reopened['cards'][1]['examples'] == []
+    assert saved.status_code == 422, saved.text
 
 
 @pytest.mark.asyncio

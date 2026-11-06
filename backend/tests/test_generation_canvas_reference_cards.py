@@ -61,7 +61,7 @@ def test_reference_images_of_other_categories_cannot_be_connected(category):
     assert error.value.detail['code'] == 'INVALID_REFERENCE_SOURCE'
 
 
-def test_legacy_reference_keeps_description_name_binding_without_mutation():
+def test_legacy_reference_is_rejected_without_mutation():
     raw = {'id': 'canvas', 'project_id': 'p', 'name': '旧画布', 'cards': [
         {'id': 'person', 'type': 'content.object', 'object_id': 'alice', 'name': '小雪'},
         {'id': 'ref', 'type': 'reference.character', 'title': '旧标题', 'input_bindings': [
@@ -70,15 +70,10 @@ def test_legacy_reference_keeps_description_name_binding_without_mutation():
         'edges': [{'id': 'edge', 'source_card': 'person', 'source_port': 'object',
                    'target_card': 'ref', 'target_port': 'name'}], 'input_order': {'ref': {'name': ['edge']}}}
     original = deepcopy(raw)
-    doc = CanvasDocument.model_validate(raw)
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        CanvasDocument.model_validate(raw)
     assert raw == original
-    assert doc.cards[1].name == '小雪'
-    assert doc.cards[1].object_id == 'alice'
-    assert doc.cards[1].input_ports == ('name', 'image_source')
-    assert len(doc.edges) == 1
-    assert doc.cards[1].name_binding.object_id == 'alice'
-    assert 'objects' not in doc.cards[1].model_dump()
-    validate_graph(doc)
 
 
 @pytest.mark.parametrize('name', [None, '名' * 256])

@@ -12,8 +12,7 @@ async def test_description_and_object_reference_are_separate_outputs(canvas_clie
     canvas = (await client.post('/canvases/p', json={'name': '对象'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     document = canvas['document']
-    document['cards'] = [{'id': 'person', 'type': 'content.object', 'object_id': 'zhang-san',
-                          'name': '张三', 'category': 'character', 'text': '红衣，沉默。', 'source_locator': '手稿第2页'}]
+    document['cards'] = [{'id': 'person', 'type': 'content.character', 'object_id': 'zhang-san', 'name': '张三', 'text': '红衣，沉默。', 'source_locator': '手稿第2页'}]
     saved = await client.put(url, json={'request_id': 'objects', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
     reopened = (await client.get(url)).json()['data']['document']['cards'][0]
@@ -31,7 +30,7 @@ async def test_names_are_unique_per_canvas_and_saved_object_identity_is_stable(c
     canvas = (await client.post('/canvases/p', json={'name': '唯一名称'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     document = canvas['document']
-    first = {'id': 'person', 'type': 'content.object', 'object_id': 'person-one', 'name': '张三', 'category': 'character', 'text': ''}
+    first = {'id': 'person', 'type': 'content.character', 'object_id': 'person-one', 'name': '张三', 'text': ''}
     document['cards'] = [first]
     assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': document})).status_code == 200
     duplicate = {**first, 'id': 'copy', 'object_id': 'person-two', 'name': ' 张三 '}
@@ -75,7 +74,7 @@ async def test_structural_categories_and_description_binding_protection(canvas_c
     canvas = (await client.post('/canvases/p', json={'name': '物件'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
-    source = {'id': 'item', 'type': 'content.object', 'object_id': 'item-one', 'name': '青色长袍', 'category': category, 'text': '正文可以提到任何类别。'}
+    source = {'id': 'item', 'type': 'content.' + category, 'object_id': 'item-one', 'name': '青色长袍', 'text': '正文可以提到任何类别。'}
     doc['cards'] = [source, {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'item', 'port_id': 'text', 'position': 0}}]}}]
     doc['edges'] = [{'id': 'edge', 'source_card': 'item', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}]
     doc['input_order'] = {'model': {'text': ['edge']}}
@@ -96,10 +95,10 @@ async def test_split_description_type_cannot_change_and_keeps_identity(canvas_cl
     canvas = (await client.post('/canvases/p', json={'name': '类别修正'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
-    item = {'id': 'item', 'type': 'content.object', 'object_id': 'item-one', 'name': '长袍', 'category': 'prop', 'text': '丝绸'}
+    item = {'id': 'item', 'type': 'content.prop', 'object_id': 'item-one', 'name': '长袍', 'text': '丝绸'}
     doc['cards'] = [item]
     assert (await client.put(url, json={'request_id': 'first', 'expected_revision': 0, 'document': doc})).status_code == 200
-    item['category'] = 'costume'
+    item['type'] = 'content.costume'
     corrected = await client.put(url, json={'request_id': 'correct', 'expected_revision': 1, 'document': doc})
     assert corrected.status_code == 422 and corrected.json()['detail']['code'] == 'INVALID_CARD_IDENTITY'
     outputs = (await client.get(url + '/cards/item/outputs')).json()['data']['outputs']
@@ -113,8 +112,7 @@ async def test_adopted_description_executes_with_its_own_identity_without_privat
     from types import SimpleNamespace
     from app.task_worker import TaskWorker
     from tests.test_generation_canvas_runs import accept
-    source = {'id': 'person', 'type': 'content.object', 'object_id': 'person-one', 'name': '张三',
-              'category': 'character', 'text': '红衣，沉默。', 'source_locator': '私有手稿第2页'}
+    source = {'id': 'person', 'type': 'content.character', 'object_id': 'person-one', 'name': '张三', 'text': '红衣，沉默。', 'source_locator': '私有手稿第2页'}
     runtime.document['cards'].append(source)
     runtime.document['cards'][0]['prompt'] = {'segments': [{'id': 'description', 'kind': 'reference', 'source': {
         'canvas_id': runtime.canvas_id, 'card_id': 'person', 'port_id': 'text', 'position': 0}}]}
@@ -172,8 +170,8 @@ async def test_named_descriptions_keep_identity_in_actual_image_request(runtime,
     doc['edges'] = []
     doc['input_order'] = {'image': {'text': [], 'image': []}}
     for oid, name, body in [('alice', '小雪', '红衣，沉默。'), ('bob', '小李', '蓝衣，微笑。')]:
-        doc['cards'].append({'id': oid + '-text', 'type': 'content.object', 'object_id': oid, 'name': name, 'text': body})
-        doc['cards'].append({'id': oid + '-ref', 'type': 'reference.character', 'input_bindings': [{'id': oid + '-name', 'input_port': 'name', 'source': {'canvas_id': runtime.canvas_id, 'card_id': oid + '-text', 'port_id': 'object', 'position': 0, 'object_id': oid}}], 'image_binding': {'file_id': oid}})
+        doc['cards'].append({'id': oid + '-text', 'type': 'content.character', 'object_id': oid, 'name': name, 'text': body})
+        doc['cards'].append({'id': oid + '-ref', 'type': 'reference.character', 'name_binding': {'canvas_id': runtime.canvas_id, 'card_id': oid + '-text', 'port_id': 'object', 'position': 0, 'object_id': oid}, 'image_binding': {'file_id': oid}})
         edge = oid + '-name'
         doc['edges'].append({'id': edge, 'source_card': oid + '-text', 'source_port': 'object', 'target_card': oid + '-ref', 'target_port': 'name'})
         doc['input_order'][oid + '-ref'] = {'name': [edge]}

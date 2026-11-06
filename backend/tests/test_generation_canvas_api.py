@@ -539,7 +539,7 @@ async def test_input_binding_owns_source_and_prompt_only_references_binding(canv
 
 
 @pytest.mark.asyncio
-async def test_legacy_prompt_document_is_read_as_version_two_without_duplicate_sources(canvas_client):
+async def test_legacy_document_version_is_rejected(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '旧文档读取'})).json()['data']
     document = canvas['document']
@@ -549,13 +549,7 @@ async def test_legacy_prompt_document_is_read_as_version_two_without_duplicate_s
         edges=[{'id': 'e', 'source_card': 'text', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
         input_order={'model': {'text': ['e']}})
     response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'legacy', 'expected_revision': 0, 'document': document})
-    assert response.status_code == 200, response.text
-    reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']['document']
-    assert reopened['schema_version'] == 2
-    model = reopened['cards'][1]
-    assert model['input_bindings'][0]['source'] == source
-    assert model['prompt']['segments'][0]['binding_id'] == model['input_bindings'][0]['id']
-    assert 'source' not in model['prompt']['segments'][0]
+    assert response.status_code == 422, response.text
 
 
 @pytest.mark.asyncio

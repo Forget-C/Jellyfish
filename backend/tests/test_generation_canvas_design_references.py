@@ -205,6 +205,9 @@ async def test_regular_media_candidate_can_be_local_example_without_carry(canvas
     document.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id}, {'id': 'design', 'type': f'direction.{kind}', key: {'state': 'proposal', 'text': '手工设计'}, 'examples': [{'id': 'example', 'source': source, 'file_id': file_id, 'purpose': 'negative'}]}], edges=[{'id': 'candidate', 'source_card': 'image', 'source_port': 'image', 'target_card': 'design', 'target_port': 'image'}], input_order={'design': {'image': ['candidate']}})
     url = f"/canvases/p/{canvas['id']}"
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    if kind not in ('anchor', 'dialogue', 'sound'):
+        assert saved.status_code == 422, saved.text
+        return
     assert saved.status_code == 200, saved.text
     output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
     assert not output['payload'].get('material_references')

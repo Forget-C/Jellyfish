@@ -38,12 +38,6 @@ class CanvasStore:
         canvas = await self.db.scalar(stmt)
         if canvas is None:
             raise HTTPException(404, 'Canvas not found')
-        from app.services.generation_canvas.acceptance_cleanup import clean_acceptance
-        cleaned = clean_acceptance(canvas.document, candidates=True)
-        if cleaned != canvas.document:
-            await self.db.execute(update(GenerationCanvas).where(GenerationCanvas.id == canvas_id,
-                GenerationCanvas.revision == canvas.revision).values(document=cleaned, revision=GenerationCanvas.revision + 1))
-            await self.db.refresh(canvas)
         return canvas
 
     async def create(self, name: str) -> GenerationCanvas:

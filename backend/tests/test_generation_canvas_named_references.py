@@ -88,7 +88,7 @@ async def test_reference_file_withdrawal_invalidates_image_but_keeps_object(canv
     url = f"/canvases/p/{canvas['id']}"
     source = {'canvas_id': canvas['id'], 'card_id': 'ref', 'port_id': 'image', 'position': 0}
     doc = canvas['document']
-    doc.update(cards=[{'id': 'ref', 'type': 'reference.place', 'objects': [{'object_id': 'room', 'name': '空屋', 'category': 'place'}], 'image_binding': {'file_id': uploaded['id']}},
+    doc.update(cards=[{'id': 'ref', 'type': 'reference.place', 'image_binding': {'file_id': uploaded['id']}, 'object_id': 'room', 'name': '空屋'},
         {'id': 'model', 'type': 'model.image', 'input_bindings': [{'id': 'ref-input', 'input_port': 'image', 'source': source}]}],
         edges=[{'id': 'e', 'source_card': 'ref', 'source_port': 'image', 'target_card': 'model', 'target_port': 'image'}], input_order={'model': {'image': ['e']}})
     reference_image_sources(doc)
@@ -162,8 +162,7 @@ async def test_subject_mapping_uses_group_image_order_instead_of_candidate_order
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': (name + '.png', b'image', 'image/png')})).json()['data']['id'] for name in ['front', 'side']]
     doc = canvas['document']
-    doc.update(cards=[{'id': name, 'type': 'reference.character', 'objects': [{'object_id': name, 'name': name, 'category': 'character'}],
-        'image_binding': {'file_id': file}} for name, file in zip(['front', 'side'], files)] + [
+    doc.update(cards=[{'id': name, 'type': 'reference.character', 'image_binding': {'file_id': file}, 'object_id': name, 'name': name} for name, file in zip(['front', 'side'], files)] + [
         {'id': 'v', 'type': 'model.video', 'input_bindings': [
             {'id': name, 'input_port': 'subject_image', 'subject_name': '人物组', 'source': {'canvas_id': canvas['id'], 'card_id': name, 'port_id': 'image', 'position': 0}} for name in ['side', 'front']]}],
         edges=[{'id': name, 'source_card': name, 'source_port': 'image', 'target_card': 'v', 'target_port': 'subject_image'} for name in ['front', 'side']],

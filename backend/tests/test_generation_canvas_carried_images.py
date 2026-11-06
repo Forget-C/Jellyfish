@@ -79,6 +79,9 @@ async def test_worker_freezes_carried_image_and_text_model_field_reference(runti
                     {'id': 'text', 'source_card': 'm', 'source_port': 'text', 'target_card': 'style', 'target_port': 'text'},
                     {'id': 'design', 'source_card': 'style', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'}]
     doc['input_order'] = {'style': {'image_example': ['ref'], 'text': ['text']}, 'image': {'text': ['design']}}
+    if performance:
+        doc['edges'][0]['target_port'] = 'image'
+        doc['input_order']['style']['image'] = doc['input_order']['style'].pop('image_example')
     saved = await runtime.client.put(runtime.url, json={'request_id': 'design', 'expected_revision': 1, 'document': doc})
     assert saved.status_code == 200, saved.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'image'})).json()['data']

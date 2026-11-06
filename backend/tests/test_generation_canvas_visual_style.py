@@ -106,7 +106,7 @@ async def test_style_whole_output_reaches_real_worker_without_implicit_media(run
 
 
 @pytest.mark.asyncio
-async def test_style_fixed_examples_are_not_transitive_media_inputs(canvas_client):
+async def test_style_retired_fixed_examples_are_rejected(canvas_client):
     client = canvas_client
     image = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('style.png', b'image', 'image/png')})).json()['data']
     canvas = (await client.post('/canvases/p', json={'name': '风格示例'})).json()['data']
@@ -118,14 +118,5 @@ async def test_style_fixed_examples_are_not_transitive_media_inputs(canvas_clien
         {'id': 'style', 'type': 'direction.style', 'fields': {'direction': {'text': '胶片色彩', 'state': 'proposal'}}, 'examples': [{'id': 'example', 'source': source('image', 'image'), 'file_id': image['id'], 'purpose': 'positive'}]},
         {'id': 'model', 'type': 'model.image', 'input_bindings': [{'id': 'style', 'source': source('style', 'text'), 'input_port': 'text'}]}],
         edges=[{'id': 'image', 'source_card': 'image', 'source_port': 'image', 'target_card': 'style', 'target_port': 'image_example'}, {'id': 'style', 'source_card': 'style', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'style': {'image_example': ['image']}, 'model': {'text': ['style']}})
-    assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})).status_code == 200
-    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert compiled['media'] == [] and image['id'] not in str(compiled['used'])
-    document['cards'][2]['input_bindings'][0]['photography_scope'] = ['field:direction']
-    assert (await client.put(url, json={'request_id': 'partial', 'expected_revision': 1, 'document': document})).status_code == 422
-    document['cards'][2]['input_bindings'][0].pop('photography_scope')
-    document['cards'][1]['examples'][0]['file_id'] = 'not-a-project-file'
-    response = await client.put(url, json={'request_id': 'legacy-example', 'expected_revision': 1, 'document': document})
-    assert response.status_code == 200
-    reopened = (await client.get(url)).json()['data']['document']
-    assert not reopened['cards'][1]['examples'], 'old examples are removed instead of adopted'
+    response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 422, response.text

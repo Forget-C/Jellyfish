@@ -1,11 +1,11 @@
-"""旧摄影存量通过公开读写被有限清理，不迁移内容。"""
+"""严格拒绝旧格式保存与执行，Store 读取保留原始文档、身份及修订。"""
 import pytest
 from app.models.generation_canvas import GenerationCanvas
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_legacy_document_is_readable_and_requires_explicit_missing_design_handling(canvas_client, canvas_file_store):
+async def test_store_reads_legacy_photography_without_rewriting(canvas_client, canvas_file_store):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '存量'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -19,23 +19,18 @@ async def test_legacy_document_is_readable_and_requires_explicit_missing_design_
     async with canvas_file_store['sessions'].begin() as db:
         stored = await db.get(GenerationCanvas, canvas['id'])
         stored.document = raw
-    read = (await client.get(url)).json()['data']
-    assert [card['id'] for card in read['document']['cards']] == ['keep', 'consumer']
-    consumer = read['document']['cards'][1]
-    assert consumer['missing_designs'] == ['old']
-    assert consumer['prompt']['segments'] == [{'id': 'p', 'kind': 'text', 'text': '保留正文'}]
-    assert read['document']['cards'][0]['text'] == '原样保留 @旧设计'
-    compiled = (await client.get(url + '/cards/consumer/compile')).json()['data']
-    assert any(issue['code'] == 'DESIGN_BASIS_MISSING' for issue in compiled['diagnostics'])
-    command = {'request_id': 'save-cleaned', 'expected_revision': 0, 'document': read['document']}
-    saved = await client.put(url, json=command)
-    assert saved.status_code == 200, saved.text
-    assert (await client.get(url)).json()['data']['document'] == read['document']
-    assert (await client.put(url, json=command)).json() == saved.json()
-    repaired = read['document'];repaired['cards'][1]['missing_designs'] = []
-    assert (await client.put(url, json={'request_id':'handled','expected_revision':1,'document':repaired})).status_code == 200
-    compiled = (await client.get(url + '/cards/consumer/compile')).json()['data']
-    assert not any(issue['code'] == 'DESIGN_BASIS_MISSING' for issue in compiled['diagnostics'])
+    from copy import deepcopy
+    from app.services.generation_canvas.store import CanvasStore
+    async with canvas_file_store['sessions']() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
+        store = CanvasStore(db, 'p')
+        await store.get(canvas['id'])
+        await store.get(canvas['id'])
+        await store.list()
+        await db.refresh(row)
+        assert (row.document, row.card_types, row.revision) == before
+        assert not db.dirty
 
 
 @pytest.mark.asyncio
@@ -53,6 +48,8 @@ from tests.test_generation_canvas_runs import runtime  # noqa: F401
 @pytest.mark.asyncio
 @pytest.mark.parametrize('legacy', [
     {'id': 'retired', 'type': 'direction.photography'},
+    {'id': 'retired', 'type': 'reference.character', 'title': '旧参考'},
+    {'id': 'retired', 'type': 'content.object', 'category': 'character'},
     {'id': 'retired', 'type': 'direction.criterion', 'examples': [{'id': 'old', 'file_id': 'old'}]},
 ])
 async def test_legacy_fixed_design_is_not_cleaned_into_executable_history(runtime, legacy):
@@ -72,3 +69,82 @@ async def test_legacy_fixed_design_is_not_cleaned_into_executable_history(runtim
     assert nodes['B']['error_code'] == 'LEGACY_DESIGN_SNAPSHOT'
     assert nodes['B']['task_id'] is None
     assert nodes['m']['status'] == 'succeeded'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('old_card', [
+    {'id': 'old', 'type': 'content.object', 'category': 'character'},
+    {'id': 'old', 'type': 'direction.photography'},
+    {'id': 'old', 'type': 'reference.character', 'title': '旧参考'},
+])
+async def test_legacy_save_is_rejected_without_receipt_or_document_change(canvas_client, old_card):
+    from copy import deepcopy
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '严格格式'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = deepcopy(canvas['document'])
+    document['cards'] = [old_card]
+    original = deepcopy(document)
+    response = await canvas_client.put(url, json={'request_id': 'retry', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_DOCUMENT'
+    assert document == original
+    read = (await canvas_client.get(url)).json()['data']
+    assert read['document'] == canvas['document'] and read['revision'] == 0
+    assert (await canvas_client.put(url, json={'request_id': 'retry', 'expected_revision': 0, 'document': canvas['document']})).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_retired_identity_tombstone_survives_save_and_prevents_reuse(canvas_client, canvas_file_store):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '墓碑'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    async with canvas_file_store['sessions'].begin() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        row.card_types = {'retired': 'content.object'}
+    assert (await canvas_client.put(url, json={'request_id': 'empty', 'expected_revision': 0, 'document': canvas['document']})).status_code == 200
+    document = {**canvas['document'], 'cards': [{'id': 'retired', 'type': 'content.character'}]}
+    response = await canvas_client.put(url, json={'request_id': 'reuse', 'expected_revision': 1, 'document': document})
+    assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_CARD_IDENTITY'
+    async with canvas_file_store['sessions']() as db:
+        row = await db.get(GenerationCanvas, canvas['id'])
+        assert row.card_types == {'retired': 'content.object'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['style', 'composition', 'movement', 'camera', 'lighting', 'focus'])
+async def test_visual_design_nonempty_retired_examples_are_rejected(canvas_client, kind):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '严格设计'})).json()['data']
+    document = {**canvas['document'], 'cards': [{'id': 'design', 'type': 'direction.' + kind,
+        'examples': [{'id': 'example', 'file_id': 'missing', 'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}}]}]}
+    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'old-example', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_DOCUMENT'
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_legacy_reference_without_modifying_snapshot_or_calling_provider(runtime, monkeypatch):
+    import asyncio
+    from copy import deepcopy
+    from sqlalchemy import select
+    from app.models.generation_canvas import CanvasRunNode
+    from app.task_worker import TaskWorker
+    from tests.test_generation_canvas_runs import accept
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        node = await db.scalar(select(CanvasRunNode).where(CanvasRunNode.task_id == accepted['task_ids'][0]))
+        snapshot = deepcopy(node.execution_snapshot)
+        snapshot['document']['cards'].append({'id': 'legacy', 'type': 'reference.character', 'title': '旧参考'})
+        node.execution_snapshot = snapshot
+    calls = []
+    def provider(**kwargs):
+        calls.append(kwargs)
+        raise AssertionError('unsupported snapshot must not call provider')
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', provider)
+    worker = TaskWorker(runtime.sessions)
+    try:
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+    finally:
+        worker.text_pool.shutdown(wait=False)
+    assert not calls
+    async with runtime.sessions() as db:
+        node = await db.scalar(select(CanvasRunNode).where(CanvasRunNode.task_id == accepted['task_ids'][0]))
+        assert node.status == 'failed' and node.error_code == 'LEGACY_DESIGN_SNAPSHOT'
+        assert node.execution_snapshot == snapshot
