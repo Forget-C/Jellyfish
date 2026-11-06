@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prototype:movement": "vite --host 127.0.0.1 --port 5178 --open '/projects/prototype/generation-canvas?prototype=movement&variant=A'",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",

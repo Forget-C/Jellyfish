@@ -53,7 +53,6 @@ try {
     await page.keyboard.press('Escape');assert.equal(await detail.isVisible(),true)
     await page.locator('.design-source-inspect:visible').waitFor({state:'hidden'})
     await detail.getByRole('button',{name:'高级设置',exact:true}).click()
-    if(kind==='movement') await detail.getByText('运镜参数',{exact:true}).click()
     const field=detail.getByRole('textbox',{name:label+'内容',exact:true})
     await field.fill('站在 ');await candidate.click();await page.keyboard.type(' 身后')
     await poll(s=>s.document.cards.find(c=>c.id===kind).fields[key].document?.segments.some(segment=>segment.kind==='reference'&&segment.source.card_id==='brief'))
