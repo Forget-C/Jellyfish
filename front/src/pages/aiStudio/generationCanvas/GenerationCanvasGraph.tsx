@@ -24,6 +24,8 @@ import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image }
 import { StudioGenerationCanvasesService as Canvases, StudioFilesService, LlmService } from '../../../services/generated'
 import type { CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
+import { createConnectionSession, type ConnectionState } from './connectionSession'
+import { createMoveTransaction } from './moveTransaction'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
@@ -93,7 +95,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const stackMoved = useRef(false)
   const groupDrag = useRef<{ pointer: number; x: number; y: number; transform: { x: number; y: number }; positions: Record<string, { x: number; y: number }> }>()
   const historicalPositions = useRef<Record<string, { x: number; y: number }>>({})
-  const completeMove = useRef<(cancelled?: boolean) => void>(() => {})
   const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
@@ -109,7 +110,17 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [detailId, document.id])
   const desktop = useWorkbenchDesktop()
   const [activeCategory, setActiveCategory] = useState<string>()
-  const [accessibleConnection, setAccessibleConnection] = useState<{ card: string; side: ConnectionSide }>()
+  const [connectionState, setConnectionState] = useState<ConnectionState>({})
+  const connectionActions = useRef<Omit<Parameters<typeof createConnectionSession>[0], 'change'>>()
+  const [connection] = useState(() => createConnectionSession({
+    change: setConnectionState,
+    options: (source, target) => connectionActions.current!.options(source, target),
+    direct: source => connectionActions.current!.direct(source),
+    issue: (source, target) => connectionActions.current!.issue(source, target),
+    commit: (option, target, source) => connectionActions.current!.commit(option, target, source),
+    end: () => connectionActions.current!.end(),
+  }))
+  const { drag, accessibleConnection, pendingConnection } = connectionState
   const connectionTrigger = useRef<HTMLElement>()
   const connectionMenu = useRef<HTMLDivElement>(null)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
@@ -152,7 +163,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as Element
       if (event.key === 'Escape' || event.isComposing) { spaceTarget.current = null; setSpaceHeld(false); return }
-      if (event.defaultPrevented || autoPanning.current || target.closest('input, textarea, select, [contenteditable], [role="dialog"], .generation-card-menu')) return
+      if (event.defaultPrevented || movement.pointerActive || target.closest('input, textarea, select, [contenteditable], [role="dialog"], .generation-card-menu')) return
       if (event.code === 'Space' && target.closest('button, audio, video')) return
       if (event.code === 'Space' && container.current?.contains(target)) { event.preventDefault(); if (!event.repeat) { spacePanned.current = false; spaceTarget.current = target } setSpaceHeld(true) }
 
@@ -162,7 +173,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       setSpaceHeld(false)
       const armed = spaceTarget.current === event.target
       spaceTarget.current = null
-      if (!armed || event.isComposing || event.defaultPrevented || autoPanning.current) return
+      if (!armed || event.isComposing || event.defaultPrevented || movement.pointerActive) return
       const target = event.target as HTMLElement
       const card = target.matches('[data-card-id]') ? target : undefined
       if (card && !spacePanned.current) {
@@ -196,13 +207,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return filterActive && (!displayFilter.group || definition?.group === displayFilter.group) && (!displayFilter.modality || definition?.modality === displayFilter.modality) && (!displayFilter.problems || problem)
   }).map(card => card.id))
   const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
-  const [drag, setDrag] = useState<{ card: string; side: ConnectionSide; x: number; y: number }>()
-  const connectionPointer = useRef(false)
-  const [pendingConnection, setPendingConnection] = useState<{ target: string; side: ConnectionSide; x: number; y: number }>()
-  const cancelConnection = useCallback(() => {
-    connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined); setAccessibleConnection(undefined)
-    if (connectionTrigger.current?.isConnected && (desktop || !detailId)) connectionTrigger.current.focus({ preventScroll: true })
-  }, [desktop, detailId])
+  const cancelConnection = useCallback(() => connection.cancel(), [connection])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || !(drag || pendingConnection || accessibleConnection)) return
@@ -278,6 +283,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange: arrangeGroups,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
+  const movementHost = useRef({ layout, history })
+  movementHost.current = { layout, history }
+  const [movement] = useState(() => createMoveTransaction({
+    view: () => movementHost.current.layout.view,
+    update: change => movementHost.current.layout.setView(change),
+    record: (undo, redo) => movementHost.current.history?.record(undo, redo),
+  }))
   navigateInspection.current = (cardId: string) => {
     if (stackFor(cardId)) {
       setReason('请先解除堆叠后编辑'); setDetailId(undefined); setSelected([])
@@ -296,24 +308,22 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const current = groupDrag.current
     if (!current) return
     setCardMenuId(undefined)
-    moveSnapshot.current ||= layout.view
-    movingIds.current = Object.keys(current.positions); autoPanning.current = true
+    movement.begin(Object.keys(current.positions), true)
     const delta = { x: (clientX - current.x - transform.x + current.transform.x) / transform.scale, y: (clientY - current.y - transform.y + current.transform.y) / transform.scale }
-    layout.setView(previous => ({ ...previous, positions: { ...previous.positions,
-      ...Object.fromEntries(Object.entries(current.positions).map(([id, origin]) => [id, { x: origin.x + delta.x, y: origin.y + delta.y }])) } }))
+    movement.moveGroup(current.positions, delta)
   }
   const cancelGroupDrag = useCallback(() => {
     const current = groupDrag.current
     if (!current) return
     layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...current.positions } }))
     groupDrag.current = undefined
-    completeMove.current(true)
+    movement.finish(true)
   }, [layout])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (!event.isComposing && event.key === 'Escape' && groupDrag.current) { event.preventDefault(); event.stopPropagation(); cancelGroupDrag() }
     }
-    const blur = () => { if (groupDrag.current) { groupDrag.current = undefined; completeMove.current() } }
+    const blur = () => { if (groupDrag.current) { groupDrag.current = undefined; movement.finish() } }
     window.addEventListener('keydown', cancel, true); window.addEventListener('blur', blur)
     return () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('blur', blur) }
   }, [cancelGroupDrag])
@@ -338,51 +348,24 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
   const revealEditor = useCanvasEditorReveal(transform, offset => layout.setView(previous => ({ ...previous, transform: { ...previous.transform, ...offset } })))
-  const moveSnapshot = useRef<typeof layout.view>()
   const edgePointer = useRef<{x:number;y:number}>()
-  const autoPanning = useRef(false)
-  const movingIds = useRef<string[]>([])
   const beginMove = (id: string, pointer = false) => {
-    autoPanning.current = pointer
-    moveSnapshot.current ||= layout.view
     const selection = selected.includes(id) ? selected : [id]
-    movingIds.current = selection
+    movement.begin(selection, pointer)
     setSelected(selection); setSelectedEdgeId(undefined)
     if (selection.length > 1 || detailId && detailId !== id) setDetailId(undefined)
   }
-  const finishMove = (cancelled = false) => {
-    autoPanning.current = false
-    const before = moveSnapshot.current
-    moveSnapshot.current = undefined
-    if (!before) return
-    if (cancelled) { layout.setView(() => before); return }
-    const after = layout.view
-    if (JSON.stringify(before.positions) !== JSON.stringify(after.positions)) {
-      const restore = (view: typeof after) => layout.setView(current => ({ ...current, positions: view.positions, manuallyPlaced: view.manuallyPlaced }))
-      history?.record(() => restore(before), () => restore(after))
-    }
-  }
-  completeMove.current = finishMove
-  const moveCards = (id: string, position: { x: number; y: number }) => {
-    const origin = layout.view.positions[id] || { x: 0, y: 0 }
-    const ids = selected.includes(id) ? selected : [id]
-    layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(ids.map(member => {
-      const point = previous.positions[member] || { x: 0, y: 0 }
-      return [member, { x: point.x + position.x - origin.x, y: point.y + position.y - origin.y }]
-    })) }, manuallyPlaced: [...new Set([...(previous.manuallyPlaced || []), ...ids])] }))
-  }
+  const finishMove = (cancelled = false) => movement.finish(cancelled)
+  const moveCards = (id: string, position: { x: number; y: number }) => movement.move(id, position)
   const panAtEdge = useRef(() => {})
   panAtEdge.current = () => {
     const pointer = edgePointer.current, surface = viewport.surface.current
-    if (!autoPanning.current || !pointer || !surface) return
+    if (!movement.pointerActive || !pointer || !surface) return
     const box = surface.getBoundingClientRect()
     const speed = (value: number, min: number, max: number) => value < min + 40 ? Math.min(10, (min + 40 - value) / 4) : value > max - 40 ? -Math.min(10, (value - max + 40) / 4) : 0
     const dx = speed(pointer.x, box.left + 80, box.right), dy = speed(pointer.y, box.top + 80, box.bottom - 48)
     if (!dx && !dy) return
-    layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + dx, y: previous.transform.y + dy }, positions: { ...previous.positions, ...Object.fromEntries(movingIds.current.map(id => {
-      const point = previous.positions[id] || { x: 0, y: 0 }
-      return [id, { x: point.x - dx / previous.transform.scale, y: point.y - dy / previous.transform.scale }]
-    })) } }))
+    movement.pan(dx, dy)
   }
   useEffect(() => {
     let frame: number
@@ -453,7 +436,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const removeCard = (id: string) => removeCards([id])
   const zoomAt = (scale: number, x: number, y: number) => {
-    if (moveSnapshot.current) return
+    if (movement.active) return
     layout.setView(previous => {
       const before = previous.transform, next = Math.max(.15, Math.min(2, scale))
       return { ...previous, transform: { scale: next, x: x - (x - before.x) * next / before.scale, y: y - (y - before.y) * next / before.scale } }
@@ -486,7 +469,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         }
         return
       }
-      if (autoPanning.current && event.key !== 'Escape') { event.preventDefault(); event.stopPropagation(); return }
+      if (movement.pointerActive && event.key !== 'Escape') { event.preventDefault(); event.stopPropagation(); return }
       if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeCards(selected); return }
       if ((event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
         event.preventDefault(); if (!readonly) { if (event.shiftKey || event.key.toLowerCase() === 'y') history?.redo(); else history?.undo() } return
@@ -519,7 +502,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       event.preventDefault(); setCardMenuId(undefined)
       container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(cardMenuId)}"] [aria-label="卡片操作"]`)?.focus({ preventScroll: true })
     }
-    const up = (event: KeyboardEvent) => { if (event.key.startsWith('Arrow') && !autoPanning.current) finishMove() }
+    const up = (event: KeyboardEvent) => { if (event.key.startsWith('Arrow') && !movement.pointerActive) finishMove() }
     const blur = () => finishMove()
     window.addEventListener('blur', blur)
     window.addEventListener('keydown', menuEscape); window.addEventListener('keydown', keyboard, true); window.addEventListener('keyup', up)
@@ -636,7 +619,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const ownsCardShortcut = (target: Element) => target === viewport.surface.current
     || target.matches('[data-card-id], [data-keyboard-move]') && !!target.closest('[data-card-id]')
   const clipboardKey = useRef<(event: KeyboardEvent)=>void>();clipboardKey.current=event=>{
-    if(!contextMenu && !autoPanning.current && !drag && !pendingConnection && !accessibleConnection && !selectionStart.current && !panGesture.current && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
+    if(!contextMenu && !movement.pointerActive && !drag && !pendingConnection && !accessibleConnection && !selectionStart.current && !panGesture.current && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
       const target=event.target as Element
       if(!container.current?.contains(target)||!ownsCardShortcut(target)||target.closest('input,textarea,[contenteditable],[data-card-details],[role="dialog"]'))return
       event.preventDefault();event.stopImmediatePropagation()
@@ -644,7 +627,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       if(box){const ids=card?.dataset.cardId ? selected.includes(card.dataset.cardId)?selected:[card.dataset.cardId] : [];if(ids.length)setSelected(ids);setContextMenu({x:box.left+24,y:box.top+24,ids})}return
     }
 
-    if(contextMenu || readonly && event.key.toLowerCase()!=='c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented || autoPanning.current) return
+    if(contextMenu || readonly && event.key.toLowerCase()!=='c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented || movement.pointerActive) return
     const target=event.target as Element
     if(!container.current?.contains(target) || !ownsCardShortcut(target) || target.closest('input,textarea,select,[contenteditable],[data-card-details],[role="dialog"],[role="menu"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
     const key=event.key.toLowerCase()
@@ -683,41 +666,38 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const startAccessibleConnection = (card: string, side: ConnectionSide, trigger: HTMLElement) => {
     if (readonly) return
     setActiveCategory(undefined); connectionTrigger.current = trigger
-    setAccessibleConnection({ card, side }); setReason('选择接收卡以建立来源连接')
-    setPendingConnection(undefined); setDrag(undefined)
+    connection.start({ card, side }); setReason('选择接收卡以建立来源连接')
   }
-  const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => {
-    if (readonly) { setReason('当前只读，不能新建连接'); cancelConnection(); return }
+  const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => connection.commit(option, targetSide)
+  const submitConnection = (option: GenerationEdge, targetSide: ConnectionSide, sourceSide: ConnectionSide) => {
+    if (readonly) { setReason('当前只读，不能新建连接'); return }
     const existing = findConnection(latest.current, option)
-    if (existing) { selectEdge(existing.id); setReason('该候选连接已存在'); cancelConnection(); return }
+    if (existing) { selectEdge(existing.id); setReason('该候选连接已存在'); return }
     const issue = check(option)
-    if (issue) { showConnectionIssue(issue, option.source_card); cancelConnection(); return }
+    if (issue) { showConnectionIssue(issue, option.source_card); return }
     const edge = { ...option, id: crypto.randomUUID() }
-    const sourceSide = drag?.side || accessibleConnection?.side
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
     const uses = sourceOptions(latest.current, option.source_card, option.target_card)
     const designSource = cards.some(card => card.id === option.source_card && card.type?.startsWith('direction.'))
     connectDocument(latest.current, edge); setReason(!designSource ? '已连接候选输入；接收端明确选择后才实际使用' : uses.length === 1 && (option.target_port === 'acceptance_basis' || isIndependentDesignEdge(latest.current, option)) ? '已连接并采用完整设计' : '已连接来源候选，请在接收卡选择用途')
-    cancelConnection()
   }
   const finishDrag = (event: PointerEvent) => {
     if (!drag || pendingConnection) return
-    connectionPointer.current = false
     const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-connection-side]')
     if (!target) { setReason('连接已取消，请拖到目标连接点'); cancelConnection(); return }
-    const targetId = target.dataset.card!, side = target.dataset.connectionSide as ConnectionSide
-    const options = compatibleOptions(drag.card, targetId)
-    if (!options.length) {
-      showConnectionIssue(connectionFailure(drag.card, targetId), drag.card); cancelConnection()
-    } else if (options.length === 1 || cards.find(card => card.id === drag.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
-    else setPendingConnection({ target: targetId, side, x: event.clientX, y: event.clientY })
+    connection.choose(target.dataset.card!, target.dataset.connectionSide as ConnectionSide, { x: event.clientX, y: event.clientY })
   }
   const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
-    if (!accessibleConnection) return
-    const options = compatibleOptions(accessibleConnection.card, targetId)
-    if (!options.length) { showConnectionIssue(connectionFailure(accessibleConnection.card, targetId), accessibleConnection.card); return }
-    if (options.length === 1 || cards.find(card => card.id === accessibleConnection.card)?.type?.startsWith('direction.')) commitConnection(options[0], side)
-    else setPendingConnection({ target: targetId, side, x: 88, y: 180 })
+    if (accessibleConnection) connection.choose(targetId, side, { x: 88, y: 180 })
+  }
+  connectionActions.current = {
+    options: compatibleOptions,
+    direct: source => cards.some(card => card.id === source && card.type?.startsWith('direction.')),
+    issue: (source, target) => showConnectionIssue(connectionFailure(source, target), source),
+    commit: submitConnection,
+    end: () => {
+      if (connectionTrigger.current?.isConnected && (desktop || !detailId)) connectionTrigger.current.focus({ preventScroll: true })
+    },
   }
   // Counts reflect canonical explicit selections, including fixed media associations.
   const edgeAdoptions = (edge: GenerationEdge) => {
@@ -755,9 +735,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (readonly || event.button !== 0 || pendingConnection) return
           if (accessibleConnection) { event.preventDefault(); event.stopPropagation(); chooseAccessibleTarget(card.id, side); return }
           event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
-          connectionPointer.current = true; setActiveCategory(undefined); connectionTrigger.current = event.currentTarget
-          setDrag({ card: card.id, side, x: event.clientX, y: event.clientY }); setReason('拖到接收卡建立来源连接')
-        }} onPointerMove={event => { if (drag && !pendingConnection) setDrag({ ...drag, x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connectionPointer.current) cancelConnection() }}><i aria-hidden>+</i></button>
+          setActiveCategory(undefined); connectionTrigger.current = event.currentTarget
+          connection.start({ card: card.id, side }, { x: event.clientX, y: event.clientY }); setReason('拖到接收卡建立来源连接')
+        }} onPointerMove={event => { if (drag && !pendingConnection) connection.move({ x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connection.pointerActive) cancelConnection() }}><i aria-hidden>+</i></button>
       </Tooltip>
     })
   }
@@ -842,7 +822,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
   const fitVisibleCards = () => {
-    if (moveSnapshot.current) return
+    if (movement.active) return
     const surface = viewport.surface.current
     const visible = cards.filter(card => !hidden.has(card.id))
     if (!surface || !visible.length && !groups.length) { viewport.fit(); return }
@@ -917,7 +897,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   return <div className="generation-graph" ref={container} onContextMenu={event => {
     event.preventDefault()
     const target = event.target as Element
-    if (autoPanning.current || drag || pendingConnection || accessibleConnection || selectionStart.current || panGesture.current || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
+    if (movement.pointerActive || drag || pendingConnection || accessibleConnection || selectionStart.current || panGesture.current || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
     if (!viewport.surface.current?.contains(target)) return
     const id = target.closest<HTMLElement>('[data-card-id]')?.dataset.cardId
     const ids = id ? selected.includes(id) ? selected : [id] : []
@@ -1184,13 +1164,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
             <div className="generation-group-header">
               <button type="button" className="generation-group-title" aria-label={`选择编组 ${group.name}`} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
-              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); moveSnapshot.current ||= layout.view; movingIds.current = members; autoPanning.current = true } }} onPointerUpCapture={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
+              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); movement.begin(members, true) } }} onPointerUpCapture={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
                 <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
-                  moveSnapshot.current ||= layout.view; movingIds.current = members
-                  const start = moveSnapshot.current?.transform || transform
-                  const delta = { x: next.x - (transform.x - start.x) / transform.scale - origin.x, y: next.y - (transform.y - start.y) / transform.scale - origin.y }
-                  layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(members.map(id => [id,
-                    { x: (previous.positions[id]?.x || 0) + delta.x, y: (previous.positions[id]?.y || 0) + delta.y }])) } }))
+                  movement.moveHandle(members, next, origin)
                 }} />
                 <Dropdown trigger={['click']} placement="topLeft" dropdownRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
                   { key: 'name', label: '重命名', disabled: readonly },
