@@ -68,8 +68,6 @@
 .static-design-scope label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--wb-muted); }
 .static-design-relations { margin-top: 16px; }
 
-.movement-design-phase { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--wb-inset); }
-.movement-design-phase > div { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
 
 .design-reference-owner { display: contents; }
 .design-preset-candidates { flex: none; padding-bottom: 12px; }
@@ -147,3 +145,28 @@
 .design-preset-editor .generation-prompt-token { font: inherit; }
 .design-preset-editor :is(.ant-input, .ant-input-number-input)::placeholder { font-family: inherit; font-size: inherit; font-weight: inherit; font-style: normal; color: var(--wb-muted); opacity: 1; }
 .design-preset-editor .ant-select-selection-placeholder, .design-preset-editor .generation-prompt-editor::before { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; font-style: normal; color: var(--wb-muted); }
+
+.movement-scope { margin-bottom: 16px; }
+.movement-scope summary { cursor: pointer; }
+.movement-scope small, .movement-keyframes small, .movement-keyframes p, .movement-scope p { color: var(--wb-muted); font-size: 12px; }
+.movement-keyframes { margin-top: 24px; }
+.movement-keyframes > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.movement-keyframes h3 { margin: 0; }
+.movement-keyframe-layout { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr); gap: 16px; }
+.movement-keyframe-list { position: relative; max-height: 300px; overflow-y: auto; scrollbar-gutter: stable; }
+.movement-keyframe-list button { width: 100%; padding: 12px; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--wb-text); cursor: pointer; }
+.movement-keyframe-list button[aria-pressed="true"] { background: var(--wb-inset); border-color: var(--wb-border); }
+.movement-keyframe-list button:focus-visible { outline: 2px solid var(--ant-color-primary, #1677ff); outline-offset: -2px; }
+.movement-keyframe-list button > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.movement-keyframe-list button > span + span { color: var(--wb-muted); font-size: 12px; margin-top: 4px; }
+.movement-keyframe-edit { min-width: 0; }
+.movement-keyframe-edit > label { display: grid; gap: 8px; margin-bottom: 16px; color: var(--wb-muted); font-size: 12px; }
+.movement-keyframe-edit .generation-prompt-editor { min-height: 100px; max-height: 180px; overflow-y: auto; }
+.movement-keyframe-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.movement-keyframe-mobile { display: none; }
+@media (max-width: 700px) {
+  .movement-keyframe-layout { grid-template-columns: minmax(0, 1fr); }
+  .movement-keyframe-list { display: none; }
+  .movement-keyframe-mobile { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .movement-keyframe-mobile .ant-select { width: 100%; }
+}

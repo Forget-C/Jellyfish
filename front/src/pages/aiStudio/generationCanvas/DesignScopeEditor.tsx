@@ -15,7 +15,7 @@ function ScopeInput({ label, placeholder, options, value, disabled, open, onOpen
 }
 
 /** 用户选择或输入才更新限制；默认提示不写入数据，来源只读展示。 */
-export function DesignScopeEditor<T extends { scope?: DesignScope; source_locator?: string }>({ card, onChange, disabled, labelPrefix = '设计' }: { card: T; onChange: (card: T) => void; disabled?: boolean; labelPrefix?: string }) {
+export function DesignScopeEditor<T extends { scope?: DesignScope; source_locator?: string }>({ card, onChange, disabled, labelPrefix = '设计', productionLabel = '制作阶段' }: { card: T; onChange: (card: T) => void; disabled?: boolean; labelPrefix?: string; productionLabel?: string }) {
   const [active, setActive] = useState<keyof DesignScope>()
   const root = useRef<HTMLElement>(null)
   const changeOpen = (key: keyof DesignScope, open: boolean) => setActive(current => open ? key : current === key ? undefined : current)
@@ -35,7 +35,7 @@ export function DesignScopeEditor<T extends { scope?: DesignScope; source_locato
   const update = (key: keyof DesignScope, value: string) => onChange({ ...card, scope: { ...card.scope, [key]: key === 'phase' && !value ? null : value } })
   return <section ref={root} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setActive(undefined) }} aria-label="范围与来源" className="design-preset-fields static-design-scope">
     <label>内容适用范围<ScopeInput open={active === 'description'} onOpenChange={open => changeOpen('description', open)} label={`${labelPrefix}内容适用范围`} placeholder="不限定范围" options={['全部内容', '主体内容', '背景内容', '动作过程', '最终结果']} value={card.scope?.description || ''} disabled={disabled} onChange={value => update('description', value)} /></label>
-    <label>制作阶段<ScopeInput open={active === 'phase'} onOpenChange={open => changeOpen('phase', open)} label={`${labelPrefix}制作阶段`} placeholder="不限定阶段" options={['画面／视频', '声音', '后期']} value={designPhaseLabel(card.scope?.phase)} disabled={disabled} onChange={value => update('phase', value)} /></label>
+    <label>{productionLabel}<ScopeInput open={active === 'phase'} onOpenChange={open => changeOpen('phase', open)} label={`${labelPrefix}${productionLabel}`} placeholder="不限定阶段" options={['画面／视频', '声音', '后期']} value={designPhaseLabel(card.scope?.phase)} disabled={disabled} onChange={value => update('phase', value)} /></label>
     <label>适用条件<ScopeInput open={active === 'condition'} onOpenChange={open => changeOpen('condition', open)} label={`${labelPrefix}适用条件`} placeholder="无额外条件" options={['全程适用', '对象出现时', '动作发生时', '动作结束后']} value={card.scope?.condition || ''} disabled={disabled} onChange={value => update('condition', value)} /></label>
     {card.source_locator?.trim() && <DesignMetadataLine items={[{ label: '卡片原始来源', text: card.source_locator }]} />}
   </section>
