@@ -64,6 +64,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     history = CanvasHistoricalContent(db, project_id)
     for card in document.cards:
         await history.validate_origin(canvas_id, card, previous_cards.get(card.id))
+    await history.validate_detached_results(document, previous_document)
     for card in document.cards:
         target = getattr(card, 'frame_target', None)
         if target and target.card_id in previous_cards and (not any(source.id == target.card_id for source in document.cards) or any(edge['source_card'] == target.card_id and edge['target_card'] == card.id for edge in canvas.document.get('edges', [])) and not any(edge.source_card == target.card_id and edge.target_card == card.id for edge in document.edges)):
@@ -171,5 +172,10 @@ def _normalize_document(document, previous_document):
     document = synchronize_acceptance(document, previous_document)
     from app.services.generation_canvas.design_connections import synchronize_design_connections
     document = synchronize_design_connections(document, previous_document)
+    edges = {edge.id for edge in document.edges}
+    previous_anchors = {edge.id: edge.order_anchor for edge in previous_document.edges if edge.order_anchor}
+    for edge in document.edges:
+        if edge.order_anchor and edge.order_anchor.edge_id not in edges and previous_anchors.get(edge.id) == edge.order_anchor:
+            edge.order_anchor = None
     validate_stack_edit(previous_document.model_dump(), document)
     return document, previous_document

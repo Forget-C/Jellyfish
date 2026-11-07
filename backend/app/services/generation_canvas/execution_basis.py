@@ -95,7 +95,7 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
     compiled.diagnostics += issues
     compiled.can_run = compiled.can_run and not issues
     model = model_context.model
-    public = {'card': card.model_dump(exclude={'show_result_cards'}), 'input': compiled.model_dump(exclude={'revision', 'diagnostics', 'can_run'}),
+    public = {'card': card.model_dump(exclude={'show_result_cards', 'detached_results'}), 'input': compiled.model_dump(exclude={'revision', 'diagnostics', 'can_run'}),
               'model': {'id': model['id'], 'name': model['name'], 'params': _public_parameters(model['params']) if card.type == 'model.text' else card.config.model_dump()} if model else {}}
     # 展示代号、片段 ID、传输 payload 不改变实际请求或既有成果的依据哈希。
     actual = {'card_id': card.id, 'type': card.type, 'model_id': card.model_id,

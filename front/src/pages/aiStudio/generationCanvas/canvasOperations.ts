@@ -1,11 +1,12 @@
 import { cleanConnectionDocument } from './connectionCleanup'
-import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } from '../../../services/generated'
+import type { CanvasDocument, CanvasModelCapability, CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
 import { findConnection, sourceConnectionEdges } from './graphRules'
 import { resultScopeIncludes, resultScopeWithPosition, sameResultConnection } from './resultConnections'
 import type { GenerationCard, GenerationEdge, createGraphRules } from './graphRules'
 import { referenceProtection, sourceKey } from './promptRules'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { cleanReferenceImageSources } from './referenceCardRules'
+import { retargetResultReferences } from './detachedResults'
 
 type Protection = NonNullable<ReturnType<typeof referenceProtection>>
 export type CanvasOperationResult = { document: CanvasDocument; reason?: never; protection?: never } | { reason: string; protection?: Protection; confirmFrame?: boolean; document?: never }
@@ -48,6 +49,47 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
       const existing = findConnection(document, edge)
       return { document: existing && resultScopeIncludes(existing.result_scope, position)
         ? updateResultScope(document, existing, position, false) : document }
+    },
+    /** 同一文档快照内移交结果、候选和引用，保留原用途内的实际输入排列。 */
+    detachResult(document: CanvasDocument, output: CanvasResolvedOutput, fixed: GenerationCard): CanvasOperationResult {
+      const source = output.source, resultSetId = output.result_set_id
+      const model = document.cards?.find(card => card.id === source.card_id)
+      if (!model || !('prompt' in model) || !resultSetId || source.canvas_id !== document.id || fixed.type !== 'content.' + source.port_id) {
+        return { reason: '当前正式结果不可固定' }
+      }
+      const marker = { position: source.position, result_set_id: resultSetId, content_card_id: fixed.id }
+      if (model.detached_results?.some(item => item.position === marker.position && item.result_set_id === resultSetId)) {
+        return { reason: '此结果已固定' }
+      }
+      if (stackFor(document, model.id)) return { reason: '请先解除生成卡堆叠后固定结果' }
+      const outgoing = (document.edges || []).filter(edge => edge.source_card === source.card_id
+        && edge.source_port === source.port_id && resultScopeIncludes(edge.result_scope, source.position))
+      const targets = new Set(outgoing.map(edge => edge.target_card))
+      if ([...targets].some(id => stackFor(document, id))) return { reason: '请先解除下游堆叠后固定结果' }
+      const nextSource = { canvas_id: document.id, card_id: fixed.id, port_id: source.port_id, position: 0 }
+      let next: CanvasDocument = { ...document, cards: [...(document.cards || []).map(card => card.id === model.id
+        ? { ...model, detached_results: [...(model.detached_results || []).filter(item => item.position !== marker.position), marker] }
+        : retargetResultReferences(card, source, nextSource, targets.has(card.id))), fixed] }
+      for (const target of targets) {
+        const edge = outgoing.find(item => item.target_card === target)!
+        next = updateResultScope(next, edge, source.position, false)
+      }
+      for (const edge of outgoing) {
+        const survives = next.edges?.some(item => item.id === edge.id)
+        const replacement = { id: crypto.randomUUID(), source_card: fixed.id, source_port: source.port_id,
+          target_card: edge.target_card, target_port: edge.target_port,
+          ...(survives ? { order_anchor: { edge_id: edge.id, position: source.position } } : {}) }
+        if (!connectionPolicy(next, replacement)) return { reason: '下游的原用途无法接收此固定内容' }
+        next = connect(next, replacement, false)
+        const priorOrder = document.input_order?.[edge.target_card]?.[edge.target_port] || []
+        const siblings = (document.edges || []).filter(item => item.order_anchor?.edge_id === edge.id)
+        const siblingIds = new Set(siblings.map(item => item.id))
+        const group = [...siblings.map(item => ({ id: item.id, position: item.order_anchor!.position })),
+          { id: replacement.id, position: source.position }].sort((a, b) => a.position - b.position).map(item => item.id)
+        const order = priorOrder.flatMap(id => id === edge.id ? [...(survives ? [id] : []), ...group] : siblingIds.has(id) ? [] : [id])
+        next.input_order = { ...next.input_order, [edge.target_card]: { ...next.input_order?.[edge.target_card], [edge.target_port]: order } }
+      }
+      return { document: next }
     },
     check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability, position?: number) {
       const existing = findConnection(document, edge)
@@ -101,14 +143,21 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
     /** Copy incoming candidates with fresh identities while preserving each port's order. */
     copyIncoming(document: CanvasDocument, sourceId: string, copy: GenerationCard): CanvasOperationResult {
       const incoming = (document.edges || []).filter(edge => edge.target_card === sourceId)
-      const edgeIds = new Map(incoming.map(edge => [edge.id, crypto.randomUUID()]))
       let changed: CanvasDocument = { ...document, cards: [...(document.cards || []), copy] }
       for (const edge of incoming) {
-        const result = addConnection(changed, { ...edge, id: edgeIds.get(edge.id)!, target_card: copy.id })
+        const result = addConnection(changed, { ...edge, id: crypto.randomUUID(), target_card: copy.id, order_anchor: undefined })
         if (!result.document) return result
         changed = result.document
       }
-      return { document: { ...changed, input_order: { ...changed.input_order, [copy.id]: { ...changed.input_order?.[copy.id], ...Object.fromEntries(Object.entries(document.input_order?.[sourceId] || {}).map(([port, ids]) => [port, ids.map(id => { const original = incoming.find(edge => edge.id === id)!; return findConnection(changed, { ...original, target_card: copy.id })!.id })])) } } } }
+      const newIds = new Map(incoming.map(edge => [edge.id, findConnection(changed, { ...edge, target_card: copy.id })!.id]))
+      const anchors = new Map(incoming.flatMap(edge => {
+        const old = edge.order_anchor, edgeId = old && newIds.get(old.edge_id)
+        return old && edgeId ? [[newIds.get(edge.id)!, { ...old, edge_id: edgeId }]] as const : []
+      }))
+      const order = Object.fromEntries(Object.entries(document.input_order?.[sourceId] || {}).map(([port, ids]) => [port, ids.map(id => newIds.get(id)!)]))
+      return { document: { ...changed,
+        edges: changed.edges?.map(edge => anchors.has(edge.id) ? { ...edge, order_anchor: anchors.get(edge.id) } : edge),
+        input_order: { ...changed.input_order, [copy.id]: { ...changed.input_order?.[copy.id], ...order } } } }
     },
     remove(document: CanvasDocument, ids: string[], busyCards: Set<string>, cardLabel: (id: string) => string): CanvasOperationResult {
       const blocked = ids.find(id => stackFor(document, id) || document.edges?.some(edge => edge.source_card === id && stackFor(document, edge.target_card)) || busyCards.has(id))

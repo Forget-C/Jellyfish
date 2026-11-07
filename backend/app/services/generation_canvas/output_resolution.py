@@ -92,6 +92,8 @@ class CanvasOutputContext:
         result, seen, counts = [], set(), {}
         edges = self.edges
         for order in document.input_order.get(card_id, {}).values():
+            order_index = {edge_id: index for index, edge_id in enumerate(order)}
+            candidates = []
             for edge_id in order:
                 edge = edges[edge_id]
                 source = cards[edge.source_card]
@@ -107,16 +109,22 @@ class CanvasOutputContext:
                     for position in display_only:
                         outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=document.id, card_id=source.id,
                             port_id=edge.source_port, position=position), modality=edge.source_port, available=False))
-                for item in sorted(outputs, key=lambda value: value.source.position):
-                    if not edge.includes_position(item.source.position):
-                        continue
-                    key = identity_key(item.source)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    if item.source.position in display_only:
-                        result.append(item)
-                        continue
-                    counts[item.modality] = counts.get(item.modality, 0) + 1
-                    result.append(item.model_copy(update={'token': '@' + LABELS[item.modality] + str(counts[item.modality])}))
+                anchor = edge.order_anchor
+                origin_index = order_index.get(anchor.edge_id) if anchor else None
+                for item in outputs:
+                    position = item.source.position
+                    if edge.includes_position(position):
+                        rank = (order_index[edge_id], position) if origin_index is None else (origin_index, anchor.position)
+                        candidates.append((rank, item, position in display_only))
+            # 先恢复固定项所在的局部顺序，再全局去重并分配代号。
+            for _, item, display_only in sorted(candidates, key=lambda entry: entry[0]):
+                key = identity_key(item.source)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if display_only:
+                    result.append(item)
+                    continue
+                counts[item.modality] = counts.get(item.modality, 0) + 1
+                result.append(item.model_copy(update={'token': '@' + LABELS[item.modality] + str(counts[item.modality])}))
         return result

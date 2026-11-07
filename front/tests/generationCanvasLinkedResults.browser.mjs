@@ -72,7 +72,7 @@ try {
   await start()
   await resultCards.nth(2).waitFor()
   assert.equal(await resultCards.count(), 3)
-  assert.equal(await page.getByRole('img', { name: '随生成更新', exact: true }).count(), 3)
+  assert.equal(await page.getByRole('button', { name: /^随生成更新 · / }).count(), 3)
   assert.equal(await page.getByRole('button', { name: /^结果候选连接/ }).count(), 3)
   assert.equal(await page.locator('[data-generation-edge-id="downstream"]:not([data-generation-result-position])').count(), 0)
   assert.deepEqual(await box(model), originalModelBox)
@@ -221,5 +221,93 @@ try {
   assert.ok(runBox.x >= 0 && runBox.x + runBox.width <= 391)
   assert.equal((await control()).calls.length, 5)
   await page.screenshot({ path: join(output, 'result-display-mobile.png'), fullPage: true })
+  await closeCanvasDetails(page)
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  const readDocument = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const setup = await readDocument()
+  const identity = { canvas_id: canvas.id, card_id: 'm', port_id: 'image', position: 0 }
+  for (const [id, scope] of [['consumer', { mode: 'except', positions: [1] }], ['single', { mode: 'only', positions: [0, 1] }]]) {
+    setup.document.edges.find(edge => edge.source_card === 'm' && edge.target_card === id).result_scope = scope
+    setup.document.cards.find(card => card.id === id).input_bindings = [{ id: 'keep-result', input_port: 'image', source: identity }]
+  }
+  const wired = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: 'wire-before-detach', expected_revision: setup.revision, document: setup.document }) })
+  assert.ok(wired.ok, await wired.text())
+  await page.reload()
+  await result.waitFor()
+  const fixedBox = await box(result)
+  const previous = (await runtime()).current_outputs.m[0]
+  const updateLine = page.getByRole('button', { name: '随生成更新 · 图片生成结果 1', exact: true })
+  await updateLine.press('Enter')
+  await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+  await result.waitFor({ state: 'detached' })
+  await saved.waitFor()
+  const fixed = (await readDocument()).document.cards.find(card => card.type === 'content.image' && card.origin)
+  assert.equal(fixed.file_id, previous.file_id)
+  const independent = page.locator(`[data-card-id="${fixed.id}"]`)
+  await independent.waitFor()
+  assert.equal((await box(independent)).left, fixedBox.left)
+  assert.equal((await box(independent)).top, fixedBox.top)
+  for (const id of ['consumer', 'single']) {
+    const { data } = await (await fetch(`${base}/${canvas.id}/cards/${id}/compile`)).json()
+    assert.deepEqual(data.media.map(item => [item.source.card_id, item.file_id]), [[fixed.id, fixed.file_id]])
+  }
+
+  await open('m')
+  await start()
+  await result.waitFor()
+  assert.notEqual((await box(result)).top, (await box(independent)).top, 'new linked result must not overlap fixed content')
+  assert.notEqual((await runtime()).current_outputs.m[0].result_set_id, previous.result_set_id)
+  assert.deepEqual(await positions('consumer'), [[2, true], [3, true]])
+  assert.deepEqual(await positions('single'), [[1, true]])
+  await closeCanvasDetails(page)
+  await model.focus()
+  await page.keyboard.press('ControlOrMeta+z')
+  await independent.waitFor({ state: 'detached' })
+  await saved.waitFor()
+  assert.equal((await readInputs()).media[0].file_id, (await runtime()).current_outputs.m[0].file_id)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await independent.waitFor()
+  await saved.waitFor()
+  assert.equal((await readInputs()).media[0].file_id, fixed.file_id, 'redo restores the original fixed result')
+  assert.equal((await box(independent)).top, fixedBox.top)
+  await page.reload()
+  await independent.waitFor()
+  await result.waitFor()
+  assert.equal((await readInputs()).media[0].file_id, fixed.file_id)
+  const delayedOutput = (await runtime()).current_outputs.m[1]
+  const delayedImage = resultTwo.getByRole('img', { name: '图片预览', exact: true })
+  const delayedSrc = await delayedImage.getAttribute('src')
+  const historyUrl = /\/runs\/[^/]+\/nodes\/[^/]+\/outputs\/1\/content$/
+  let releaseHistory, requestHistory
+  const historyGate = new Promise(resolve => { releaseHistory = resolve })
+  const historyRequested = new Promise(resolve => { requestHistory = resolve })
+  await page.route(historyUrl, async route => {
+    const response = await route.fetch()
+    requestHistory()
+    await historyGate
+    await route.fulfill({ response })
+  })
+  try {
+    await page.getByRole('button', { name: '随生成更新 · 图片生成结果 2', exact: true }).press('Enter')
+    await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+    await historyRequested
+    await open('m')
+    await start()
+    await page.waitForFunction(previous => {
+      const node = document.querySelector('[aria-label="图片生成结果 2"] img')
+      return node?.getAttribute('src') !== previous
+    }, delayedSrc)
+    releaseHistory()
+    await page.getByText('已固定此结果，原下游连接及引用已保留').waitFor()
+    await saved.waitFor()
+    const delayedFixed = (await readDocument()).document.cards.find(card => card.type === 'content.image' && card.origin?.position === 1)
+    assert.equal(delayedFixed.file_id, delayedOutput.file_id, 'later generation cannot replace the captured content')
+    assert.notEqual((await runtime()).current_outputs.m[1].result_set_id, delayedOutput.result_set_id)
+    assert.deepEqual(await positions('single'), [], 'detached scope does not reconnect when publication races preparation')
+  } finally {
+    releaseHistory()
+    await page.unroute(historyUrl)
+  }
   console.log('PASS formal result display, layout, candidate parity, regeneration and readonly', output)
 } finally { await cleanup() }

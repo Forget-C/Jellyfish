@@ -68,7 +68,9 @@ function disconnect(document: CanvasDocument, id: string): CanvasDocument {
   const edge = document.edges?.find(item => item.id === id)
   const cards = edge && isIndependentDesignEdge(document, edge) ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === 'text' && binding.source.card_id === edge.source_card && binding.source.port_id === 'text')) } : card) : edge && connectionPolicy(document, edge)?.connect === 'associate_acceptance'
     ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === edge.target_port && binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port)) } : card) : document.cards
-  return { ...document, cards, edges: document.edges?.filter(edge => edge.id !== id), input_order: order }
+  const edges = document.edges?.filter(edge => edge.id !== id)
+    .map(edge => edge.order_anchor?.edge_id === id ? { ...edge, order_anchor: undefined } : edge)
+  return { ...document, cards, edges, input_order: order }
 }
 
 /** 清理旧的未采用独立设计及验收候选，避免升级时增加生成输入。 */

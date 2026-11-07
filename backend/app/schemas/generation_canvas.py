@@ -128,10 +128,19 @@ class PromptDocument(BaseModel):
         return self
 
 
+class CanvasDetachedResult(BaseModel):
+    """固定过的结果批次与独立内容身份；同位置的新批次仍可展示。"""
+    model_config = ConfigDict(extra='forbid')
+    position: Annotated[int, Field(ge=0, strict=True)]
+    result_set_id: str = Field(min_length=1, max_length=64)
+    content_card_id: str = Field(min_length=1, max_length=64)
+
+
 class ModelCard(CardDefinition):
     """模型切换只替换模型身份；未完成配置也可持久保存。"""
     model_id: str | None = None
     show_result_cards: bool = Field(default=False, exclude_if=lambda value: not value, description='在画布展开正式结果，仅控制显示')
+    detached_results: list[CanvasDetachedResult] = Field(default_factory=list, exclude_if=lambda value: not value)
     missing_designs: list[str] = Field(default_factory=list, description='已移除设计的稳定身份，补充或明确处理前阻塞运行')
     prompt: PromptDocument = Field(default_factory=PromptDocument)
     input_bindings: list[InputBinding] = Field(default_factory=list)
@@ -139,6 +148,9 @@ class ModelCard(CardDefinition):
     @model_validator(mode='after')
     def resolve_prompt_bindings(self):
         """读取旧文档时规范化来源；写出的提示词只保留绑定身份。"""
+        positions = [result.position for result in self.detached_results]
+        if len(positions) != len(set(positions)):
+            raise ValueError('同一输出位置只能保留最后一次固定记录')
         bindings = {binding.id: binding for binding in self.input_bindings}
         legacy_groups = {binding.id for binding in self.input_bindings if 'subject_name' not in binding.model_fields_set}
         if len(bindings) != len(self.input_bindings):
@@ -257,6 +269,13 @@ class CanvasResultScope(BaseModel):
         return self
 
 
+class CanvasResultOrderAnchor(BaseModel):
+    """固定内容沿用原模型用途边中这一项的位置。"""
+    model_config = ConfigDict(extra='forbid')
+    edge_id: str = Field(min_length=1, max_length=64)
+    position: Annotated[int, Field(ge=0, strict=True)]
+
+
 class GenerationCanvasEdge(BaseModel):
     """候选连接只描述来源和用途，不代表实际使用。"""
     model_config = ConfigDict(extra='forbid')
@@ -266,6 +285,8 @@ class GenerationCanvasEdge(BaseModel):
     target_card: str
     target_port: str
     result_scope: Annotated[CanvasResultScope | None, Field(exclude_if=lambda value: value is None)] = None
+
+    order_anchor: Annotated[CanvasResultOrderAnchor | None, Field(exclude_if=lambda value: value is None)] = None
 
     def includes_position(self, position: int) -> bool:
         """无范围的既有连线接收该端口全部当前及未来结果。"""

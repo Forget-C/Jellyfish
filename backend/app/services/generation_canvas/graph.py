@@ -9,6 +9,7 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
     """校验整图结构；仅保留端点未变且未采用的历史类别不兼容候选，新连线仍严格校验。"""
     cards = {card.id: card for card in document.cards}
     previous_edges = {edge.id: edge for edge in previous.edges} if previous else {}
+    by_edge = {edge.id: edge for edge in document.edges}
     edge_ids, endpoints = set(), set()
     successors = {card_id: set() for card_id in cards}
     expected, result_scopes = {}, {}
@@ -22,6 +23,16 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
         endpoints.add(endpoint)
         if not source or not receiver or edge.source_port not in source.output_ports or edge.target_port not in receiver.input_ports:
             raise diagnostic('INVALID_ENDPOINT', '连接端点不存在', target)
+        anchor = edge.order_anchor
+        if anchor:
+            original = by_edge.get(anchor.edge_id)
+            # 删除原模型连接后，独立内容继续按自己的输入顺序参与候选。
+            removed = original is None and getattr(previous_edges.get(edge.id), 'order_anchor', None) == anchor
+            valid = (getattr(source, 'origin', None) and original and isinstance(cards.get(original.source_card), ModelCard)
+                     and not original.order_anchor and original.source_port == edge.source_port
+                     and original.target_card == edge.target_card and original.target_port == edge.target_port)
+            if not removed and not valid:
+                raise diagnostic('INVALID_RESULT_ORDER', '固定内容的排序必须对应同一输入用途的模型连线', target)
         if edge.result_scope is not None and not isinstance(source, ModelCard):
             raise diagnostic('INVALID_RESULT_SCOPE', '只有模型输出连接可限定结果位置', target)
         scope_key = (edge.source_card, edge.source_port, edge.target_card)

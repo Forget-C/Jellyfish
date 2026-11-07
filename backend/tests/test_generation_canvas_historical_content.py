@@ -154,3 +154,39 @@ async def test_terminal_partial_content_does_not_require_result_set(runtime, sta
     assert response.status_code == 200
     card = response.json()['data']
     assert card['text'] == 'Fixed historical text' and card['origin']['incomplete']
+
+
+@pytest.mark.asyncio
+async def test_detached_result_is_bound_to_its_formal_origin_and_saved_atomically(runtime):
+    run, node = await finished_history(runtime)
+    fixed = (await runtime.client.get(content_url(runtime, run, node['id']))).json()['data']
+    before = (await runtime.client.get(runtime.url)).json()['data']
+    document = deepcopy(before['document'])
+    model = document['cards'][0]
+    model['detached_results'] = [{'position': 0, 'result_set_id': node['result_set_id'], 'content_card_id': fixed['id']}]
+    document['cards'].append(fixed)
+
+    async def save(request_id, revision, value):
+        return await runtime.client.put(runtime.url, json={'request_id': request_id, 'expected_revision': revision, 'document': value})
+
+    forged = deepcopy(document)
+    forged['cards'][0]['detached_results'][0]['position'] = 1
+    invalid = await save('forged-detach', before['revision'], forged)
+    assert invalid.status_code == 422
+    assert invalid.json()['detail']['code'] == 'INVALID_DETACHED_RESULT'
+    conflict = await save('conflicted-detach', before['revision'] - 1, document)
+    assert conflict.status_code == 409
+    assert (await runtime.client.get(runtime.url)).json()['data'] == before
+
+    saved = await save('detach-result', before['revision'], document)
+    assert saved.status_code == 200, saved.text
+    after = (await runtime.client.get(runtime.url)).json()['data']
+    assert after['document']['cards'][0]['detached_results'] == model['detached_results']
+    assert after['document']['cards'][-1]['origin'] == fixed['origin']
+    assert (await runtime.client.get(content_url(runtime, run, node['id']))).json()['data']['text'] == fixed['text']
+
+    # Deleting the independent card must not make the old result linked again.
+    after['document']['cards'].pop()
+    removed = await save('remove-fixed', after['revision'], after['document'])
+    assert removed.status_code == 200, removed.text
+    assert (await runtime.client.get(runtime.url)).json()['data']['document']['cards'][0]['detached_results'] == model['detached_results']

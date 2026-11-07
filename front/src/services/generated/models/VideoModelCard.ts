@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasDetachedResult } from './CanvasDetachedResult';
 import type { DesignMediaUse } from './DesignMediaUse';
 import type { InputBinding } from './InputBinding';
 import type { PromptDocument } from './PromptDocument';
@@ -17,6 +18,7 @@ export type VideoModelCard = {
      * 在画布展开正式结果，仅控制显示
      */
     show_result_cards?: boolean;
+    detached_results?: Array<CanvasDetachedResult>;
     /**
      * 已移除设计的稳定身份，补充或明确处理前阻塞运行
      */

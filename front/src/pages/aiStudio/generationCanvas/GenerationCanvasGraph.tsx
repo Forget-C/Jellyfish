@@ -47,6 +47,7 @@ import { ModelGenerationCard } from './ModelGenerationCard'
 import { GENERATION_CARD_SIZE, generationCardSize } from './GenerationCardFrame'
 import { knownResultPositions, linkedResultCards, placeLinkedResults, retainedResultIds, type LinkedResult } from './linkedResults'
 import { resultScopeIncludes } from './resultConnections'
+import { capturedResult } from './detachedResults'
 import { LinkedResultPreview, linkedResultTitle } from './LinkedResultPreview'
 import { rendererRegistry } from './rendererRegistry'
 import { visibleSourceEdges, sourceConnectionEdges } from './graphRules'
@@ -134,7 +135,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [sourceTarget, setSourceTarget] = useState<string>()
   const [uploadSource, setUploadSource] = useState<string>()
   const [pendingFrameDisconnect, setPendingFrameDisconnect] = useState<GenerationEdge>()
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string>()
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | { resultId: string }>()
+  const detachPending = useRef(false)
+  const [detaching, setDetaching] = useState(false)
+  const readonlyNow = useRef(readonly); readonlyNow.current = readonly
   const [selectedResultPosition, setSelectedResultPosition] = useState<number>()
   const [selectedGroupId, setSelectedGroupId] = useState<string>()
   const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
@@ -150,12 +154,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [selected, detailId, selectedEdgeId, multiSelectMode])
   const selectGroup = (id: string) => { clearSelection(); setSelectedGroupId(id); setGroupPanel(undefined) }
   const [edgeActionPoint, setEdgeActionPoint] = useState<{ x: number; y: number }>()
-  const selectEdge = (id?: string, position?: { x: number; y: number }, resultPosition?: number) => {
+  const selectEdge = (id?: typeof selectedEdgeId, position?: { x: number; y: number }, resultPosition?: number) => {
     const selected = document.edges?.find(edge => edge.id === id)
     if (selected) id = sourceConnectionEdges(document, selected)[0]?.id
     // Keyboard and relation-picker activation use the visible path midpoint; mouse activation supplies its click.
     const resultSelector = resultPosition === undefined ? '' : `[data-generation-result-position="${resultPosition}"]`
-    const path = id ? container.current?.querySelector<SVGPathElement>(`[data-generation-edge-id="${CSS.escape(id)}"]${resultSelector} .canvas-edge-hit`) : undefined
+    const selector = typeof id === 'string'
+      ? `[data-generation-edge-id="${CSS.escape(id)}"]${resultSelector}`
+      : id && `[data-generation-update-id="${CSS.escape(id.resultId)}"]`
+    const path = selector ? container.current?.querySelector<SVGPathElement>(selector + ' .canvas-edge-hit') : undefined
     if (!position && path) {
       const point = path.getPointAtLength(path.getTotalLength() / 2)
       const matrix = path.getScreenCTM(), bounds = container.current?.getBoundingClientRect()
@@ -299,7 +306,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const arrangeCards: GraphArrange = (items, sizes, width, anchorId, retained) => {
     const base = arrangeGroups(items.filter(item => !resultsById.has(item.id)), sizes, width, anchorId, retained)
-    const positions = placeLinkedResults(linkedResults, base, sizes, retained)
+    const positions = placeLinkedResults(linkedResults, base, sizes, retained && { ...historicalPositions.current, ...retained })
     for (const id of cachedResultIds) if (!positions[id] && retained?.[id]) positions[id] = retained[id]
     return positions
   }
@@ -837,6 +844,34 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const edgeLabel = (edge: GenerationEdge) => `${cardLabel(edge.source_card)} → ${cardLabel(edge.target_card)} · ${edgePurpose(edge)}`
   const inspectedEdge = edges.find(edge => edge.id === selectedEdgeId)
+  const inspectedResult = typeof selectedEdgeId === 'object' ? resultsById.get(selectedEdgeId.resultId) : undefined
+  const detachResult = async (result: LinkedResult) => {
+    if (readonly || detachPending.current) return
+    const captured = capturedResult(result.output, runtime?.runs || [])
+    if (!captured) { setReason('当前正式结果不可固定'); return }
+    detachPending.current = true
+    setDetaching(true)
+    const { id: canvasId, project_id: projectId } = latest.current
+    try {
+      const response = await Canvases.canvasOutputContent({ projectId, canvasId, ...captured })
+      if (!container.current || readonlyNow.current || latest.current.id !== canvasId) return
+      const fixed = response.data
+      if (!fixed?.origin || fixed.origin.incomplete) { setReason('当前正式结果不可固定'); return }
+      const changed = operations.detachResult(latest.current, result.output, fixed)
+      if (!changed.document) { setReason(changed.reason); return }
+      const position = retainedPositions.current[result.id] || historicalPositions.current[result.id]
+      if (position) layout.move(fixed.id, position)
+      edit(changed.document)
+      setSelectedEdgeId(previous => typeof previous === 'object' && previous.resultId === result.id ? undefined : previous)
+      setReason('已固定此结果，原下游连接及引用已保留')
+      requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(fixed.id)}"]`)?.focus({ preventScroll: true }))
+    } catch {
+      if (container.current) setReason('无法读取此正式结果，固定未完成')
+    } finally {
+      detachPending.current = false
+      if (container.current) setDetaching(false)
+    }
+  }
   const references = (card: GenerationCard) => <>
     <CandidateOutputStatus document={document} savedDocument={savedDocument} cardId={card.id} savedRevision={savedRevision} published={runtime?.outputs} />
     <Space wrap>{card.type?.startsWith('model.') && <><Button disabled={readonly} size="small" onClick={() => {
@@ -872,7 +907,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         <span title={edge.source_card}>{cardLabel(edge.source_card)}</span> {unsupported && <span>当前模型不支持，候选保留</span>}
         <Button size="small" disabled={readonly || index === 0} aria-label={`前移输入 ${id}`} onClick={() => {
           const next = [...order]; [next[index - 1], next[index]] = [next[index], next[index - 1]]
-          edit({ ...document, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
+          const reorderedEdges = edges.map(edge => edge.target_card === card.id && edge.target_port === name && edge.order_anchor
+            ? { ...edge, order_anchor: undefined } : edge)
+          edit({ ...document, edges: reorderedEdges, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
         }}>↑</Button><Button size="small" disabled={readonly} aria-label={`断开连接 ${id}`} onClick={() => {
           removeEdge(edge)
         }}>断开</Button>
@@ -914,13 +951,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   // Use a real member position so cross-row selections do not occupy an unrelated empty corner.
   const stackOrigin = (ids: string[]) => point(ids[0])
   const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
-  const resultPath = (source: string, target: string, label: string, adopted = false, edge?: GenerationEdge, position?: number) => {
+  const resultPath = (source: string, target: string, label: string, adopted = false, edge?: GenerationEdge, position?: number, update?: LinkedResult) => {
     const sides = defaultSides(point(source), point(target))
-    return <g key={JSON.stringify([source, target])} role={edge ? undefined : 'img'} aria-label={edge ? undefined : label}
+    return <g key={JSON.stringify([source, target])} data-generation-update-id={update?.id}
       data-generation-edge-id={edge?.id} data-generation-result-position={position}>
       <CanvasEdge d={connectionPath(anchor(source, sides.source), anchor(target, sides.target), sides.source, sides.target)}
-        label={label} selected={!!edge && selectedEdgeId === edge.id && selectedResultPosition === position}
-        onInspect={edge ? () => selectEdge(edge.id, undefined, position) : undefined}
+        label={label} selected={update ? inspectedResult?.id === update.id : !!edge && selectedEdgeId === edge.id && selectedResultPosition === position}
+        onInspect={update ? () => selectEdge({ resultId: update.id }) : edge ? () => selectEdge(edge.id, undefined, position) : undefined}
         className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'} />
     </g>
   }
@@ -1071,9 +1108,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           options={visibleSourceEdges(document).map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={id => selectEdge(id)} />
       </CanvasToolbarMenu>
     </nav>
-    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选连接" style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
-      <Tooltip trigger={['hover', 'focus']} title={<span className="generation-edge-hint"><strong>{edgePurpose(inspectedEdge)}</strong><span>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}{readonly ? ' · 只读，无法删除' : ''}</span></span>}>
-        <span><Button aria-label="断开此连接" disabled={readonly} icon={<ScissorOutlined style={{ fontSize: 'calc(var(--wb-icon) * 1.5)' }} />} variant="quiet" onClick={() => removeEdge(inspectedEdge, false, selectedResultPosition)} /></span>
+    {(inspectedEdge || inspectedResult) && <section className="generation-edge-inspector" aria-label="所选连接" style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
+      <Tooltip trigger={['hover', 'focus']} title={<span className="generation-edge-hint">
+        {inspectedResult ? <><strong>断开后保留当前结果为独立内容卡</strong><span>{inspectedResult.output.available === false ? '当前输出缺失' : '保留下游连接及引用'}</span></>
+          : inspectedEdge && <><strong>{edgePurpose(inspectedEdge)}</strong><span>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}{readonly ? ' · 只读，无法删除' : ''}</span></>}
+      </span>}>
+        <span><Button aria-label="断开此连接" disabled={readonly || detaching || inspectedResult?.output.available === false}
+          icon={<ScissorOutlined style={{ fontSize: 'calc(var(--wb-icon) * 1.5)' }} />} variant="quiet"
+          onClick={() => { if (inspectedResult) void detachResult(inspectedResult); else if (inspectedEdge) removeEdge(inspectedEdge, false, selectedResultPosition) }} /></span>
       </Tooltip>
     </section>}
     {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
@@ -1150,7 +1192,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, '--generation-canvas-scale': transform.scale } as CSSProperties}>
         <svg className="generation-edges" width={12000} height={12000}>
-          {linkedResults.map(result => resultPath(result.output.source.card_id, result.id, '随生成更新'))}
+          {linkedResults.map(result => resultPath(result.output.source.card_id, result.id, '随生成更新 · ' + linkedResultTitle(result.output), false, undefined, undefined, result))}
           {projectedConnections.map(({ edge, results, projected }) => {
             if (projected) return results.map(result => {
               const adopted = sourceConnectionEdges(document, edge).some(member =>

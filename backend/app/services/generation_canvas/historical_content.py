@@ -52,3 +52,28 @@ class CanvasHistoricalContent:
                 output['modality'] == 'text' and card.text != output.get('text')) or (
                 output['modality'] != 'text' and card.file_id != output.get('file_id')):
                 raise diagnostic('INVALID_ORIGIN', '另存内容须与固定成果及完成状态一致', {'card_id': card.id})
+
+
+    async def validate_detached_results(self, document, previous):
+        """固定记录必须来自同一模型正式交付的结果，并与独立内容来源一致。"""
+        from app.schemas.generation_canvas import ModelCard
+        cards = {card.id: card for card in document.cards}
+        prior = {card.id: card for card in previous.cards}
+        for model in document.cards:
+            if not isinstance(model, ModelCard):
+                continue
+            for result in model.detached_results:
+                fixed = cards.get(result.content_card_id)
+                if (result in getattr(prior.get(model.id), 'detached_results', ())
+                        and (fixed is None or fixed.id in prior)):
+                    continue
+                origin = getattr(fixed, 'origin', None)
+                if origin and not origin.incomplete:
+                    node = await self._output_node(document.id, origin.run_id, origin.node_id, origin.position)
+                    output = node.outputs[origin.position].get('source', {})
+                    if (node.status == 'succeeded' and node.result_set_id == result.result_set_id
+                            and node.card_id == model.id and output.get('position') == result.position
+                            and output.get('port_id') in model.output_ports):
+                        continue
+                raise diagnostic('INVALID_DETACHED_RESULT', '固定记录必须对应此模型的正式输出与独立内容来源',
+                                 {'card_id': model.id, 'position': result.position, 'path': ['detached_results']})

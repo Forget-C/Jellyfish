@@ -36,11 +36,15 @@ export function linkedResultCards(cards: GenerationCard[], outputs: Record<strin
       }
     }
     for (const output of outputs?.[card.id] || []) values.set(slot(output), output)
-    return [...values.values()].sort((a, b) => a.source.position - b.source.position).map(output => {
-      let id = `${resultPrefix(card.id)}${encodeURIComponent(output.source.port_id)}:${output.source.position}`
+    const detached = 'detached_results' in card ? card.detached_results || [] : []
+    return [...values.values()].sort((a, b) => a.source.position - b.source.position).flatMap(output => {
+      const previous = detached.find(item => item.position === output.source.position)
+      if (previous && output.result_set_id === previous.result_set_id) return []
+      const lineage = previous ? ':' + encodeURIComponent(previous.content_card_id) : ''
+      let id = `${resultPrefix(card.id)}${encodeURIComponent(output.source.port_id)}:${output.source.position}${lineage}`
       while (occupied.has(id)) id += ':'
       occupied.add(id)
-      return { id, output }
+      return [{ id, output }]
     })
   })
 }

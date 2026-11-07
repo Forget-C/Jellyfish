@@ -113,6 +113,8 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
     }
   }
   const byId = new Map(document.edges.map(edge => [edge.id, edge]))
+  document.edges = document.edges.map(edge => edge.order_anchor && !byId.has(edge.order_anchor.edge_id)
+    ? { ...edge, order_anchor: undefined } : edge)
   document.input_order = Object.fromEntries(Object.entries(document.input_order || {}).flatMap(([id, ports]) => {
     const card = document.cards?.find(item => item.id === id)
     if (!card) return []

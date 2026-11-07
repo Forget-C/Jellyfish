@@ -128,3 +128,93 @@ async def test_generated_result_scopes_keep_other_paths_and_protect_actual_refer
             assert await candidates('whole') == [(0, True), (2, True), (3, True)]
         finally:
             worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_fixing_middle_image_preserves_video_media_order_and_subject_aliases(runtime, image_storage):
+    from app.task_worker import TaskWorker
+    await image_card(runtime)
+
+    def provider(_request):
+        return httpx.Response(200, json={'data': [
+            {'b64_json': base64.b64encode(value).decode()} for value in (b'first', b'middle', b'last')
+        ]})
+
+    async def read():
+        return (await runtime.client.get(runtime.url)).json()['data']['document']
+
+    async def save(revision, document):
+        response = await runtime.client.put(runtime.url, json={
+            'request_id': f'ordered-{revision}', 'expected_revision': revision, 'document': document,
+        })
+        assert response.status_code == 200, response.text
+
+    async def compile_video():
+        return (await runtime.client.get(runtime.url + '/cards/video/compile')).json()['data']
+
+    def source(position, card_id='image'):
+        return {'canvas_id': runtime.canvas_id, 'card_id': card_id, 'port_id': 'image', 'position': position}
+
+    await accept(runtime, 'generate-ordered')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=False)
+    document = await read()
+    document['cards'].append({'id': 'video', 'type': 'model.video', 'prompt': {'segments': [
+        {'id': f'ref-{index}', 'kind': 'reference', 'binding_id': f'bind-{index}'} for index in (2, 0, 1)
+    ]}, 'input_bindings': [
+        {'id': f'bind-{index}', 'input_port': 'subject_image', 'source': source(index)} for index in (2, 0, 1)
+    ]})
+    document['edges'].append({'id': 'ordered-images', 'source_card': 'image', 'source_port': 'image',
+                              'target_card': 'video', 'target_port': 'subject_image'})
+    document['input_order']['video'] = {'subject_image': ['ordered-images']}
+    await save(2, document)
+    original = await compile_video()
+    assert original['text'] == '@media3@media1@media2'
+    assert [item['source']['position'] for item in original['media']] == [0, 1, 2]
+
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    run = state['runs'][0]
+    node = run['nodes'][0]
+    response = await runtime.client.get(runtime.url + f"/runs/{run['id']}/nodes/{node['id']}/outputs/1/content")
+    fixed = response.json()['data']
+    document = await read()
+    document['cards'][0]['detached_results'] = [{'position': 1, 'result_set_id': node['result_set_id'], 'content_card_id': fixed['id']}]
+    document['cards'][-1]['input_bindings'][-1]['source'] = source(0, fixed['id'])
+    document['cards'].append(fixed)
+    for edge in [item for item in document['edges'] if item['target_card'] == 'video']:
+        edge['result_scope'] = {'mode': 'except', 'positions': [1]}
+        fixed_edge = dict(edge, id=f"fixed-{edge['target_port']}", source_card=fixed['id'],
+                          order_anchor={'edge_id': edge['id'], 'position': 1})
+        fixed_edge.pop('result_scope')
+        document['edges'].append(fixed_edge)
+        document['input_order']['video'][edge['target_port']].append(fixed_edge['id'])
+    await save(3, document)
+
+    detached = await compile_video()
+    assert detached['text'] == original['text']
+    assert detached['video_media'] == original['video_media']
+    assert [item['file_id'] for item in detached['media']] == [item['file_id'] for item in original['media']]
+    assert [item['source']['card_id'] for item in detached['media']] == ['image', fixed['id'], 'image']
+    outputs = (await runtime.client.get(runtime.url + '/cards/video/outputs')).json()['data']['candidates']
+    assert [(item['source']['card_id'], item['token']) for item in outputs] == [
+        ('image', '@图片1'), (fixed['id'], '@图片2'), ('image', '@图片3'),
+    ]
+
+    # A later deletion of the model clears the ordering anchor without removing the independent input.
+    document = await read()
+    document['cards'] = [card for card in document['cards'] if card['id'] != 'image']
+    video = next(card for card in document['cards'] if card['id'] == 'video')
+    video['prompt']['segments'] = [segment for segment in video['prompt']['segments'] if segment['id'] == 'ref-1']
+    video['input_bindings'] = [binding for binding in video['input_bindings'] if binding['id'] == 'bind-1']
+    removed = {edge['id'] for edge in document['edges'] if edge['source_card'] == 'image'}
+    document['edges'] = [edge for edge in document['edges'] if edge['id'] not in removed]
+    for order in document['input_order']['video'].values():
+        order[:] = [edge_id for edge_id in order if edge_id not in removed]
+    await save(4, document)
+    assert [item['file_id'] for item in (await compile_video())['media']] == [fixed['file_id']]
+    assert not any('order_anchor' in edge for edge in (await read())['edges'])
