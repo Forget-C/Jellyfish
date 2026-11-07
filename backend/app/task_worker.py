@@ -382,10 +382,10 @@ class TaskWorker:
     async def _canvas_check(self, task: Task) -> None:
         """Execute one semantic item and publish only its validated observation."""
         import json
-        from app.services.generation_canvas.check_adoption import ADOPTION_INSTRUCTIONS, parse_observation
         from app.services.generation_canvas.check_product_text import (
             PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_INSTRUCTIONS, parse_product_text,
         )
+        from app.services.generation_canvas.check_text import TEXT_CHECKS
         snapshot = task.input_snapshot
         observation = snapshot['observation']
         category = snapshot.get('check_category', 'P01')
@@ -393,7 +393,7 @@ class TaskWorker:
             item = await self._canvas_reference_check(task, observation)
             result = item.model_dump(mode='json') if item is not None else None
         else:
-            instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else ADOPTION_INSTRUCTIONS
+            instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else TEXT_CHECKS[category][0]
             messages = [SystemMessage(content=instructions),
                         HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
             reply = await self._frozen_text_model(task).ainvoke(messages)
@@ -401,7 +401,7 @@ class TaskWorker:
                 results = parse_product_text(observation, reply.content)
                 result = {'results': {key: value.model_dump(mode='json') for key, value in results.items()}} if results is not None else None
             else:
-                item = parse_observation(snapshot['item_id'], observation, reply.content)
+                item = TEXT_CHECKS[category][1](snapshot['item_id'], observation, reply.content)
                 result = item.model_dump(mode='json') if item is not None else None
         if result is None:
             await self._fail(task.id, 'canvas_check_response_invalid', '检查模型返回无法解析')

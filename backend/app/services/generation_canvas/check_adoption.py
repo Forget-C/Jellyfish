@@ -14,9 +14,8 @@ ADOPTION_CATEGORY = 'P01'
 ADOPTION_LABEL = '已采用要求落实'
 
 
-def adoption_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None):
-    """Return stable field items and the minimum structured requirement for each execution."""
-    items, inputs = [], {}
+def adopted_design_fields(basis: CanvasBasis):
+    """Yield meaningful fields from the effective design subset, including carried criteria."""
     for source in basis.compiled.used:
         design = source.payload
         if not source.available or not isinstance(design, DesignTextPayload):
@@ -27,28 +26,34 @@ def adoption_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None
             if (not isinstance(field, DesignField) or field.state in ('empty', 'not_applicable')
                     or field.purpose == 'background' or not field.text.strip() and field.state != 'absent'):
                 continue
-            identity = source.source
-            suffix = '' if identity.position == 0 and identity.port_id == 'text' and identity.object_id is None else ':' + digest(identity.model_dump())[:16]
-            item_id = f'{ADOPTION_CATEGORY}:{identity.card_id}:{field_id}{suffix}'
-            if item_id in inputs:
-                continue
-            observation = {
-                'source_card_id': identity.card_id, 'field_id': field_id, 'name': name,
-                'text': field.text.strip() or '明确没有',
-                'state': STATE_LABELS[field.state], 'purpose': PURPOSE_LABELS[field.purpose],
-                'source_locator': field.source_locator or design.source_locator,
-                'scope': design.scope.model_dump(exclude_defaults=True),
-                'scope_note': card.scope_notes.get(item_id),
-                'material_uses': _material_uses(basis, design, field_id),
-            }
-            inputs[item_id] = {'requirement': observation, 'submitted_text': basis.compiled.text}
-            item = CanvasCheckItem(id=item_id, category=ADOPTION_CATEGORY, label=ADOPTION_LABEL,
-                                   source=identity, field_id=field_id, requirement=observation['text'],
-                                   enabled=ADOPTION_CATEGORY in card.enabled_categories and item_id not in card.disabled_items,
-                                   availability='unavailable' if unavailable else 'ready', reason=unavailable,
-                                   scope_editable=True, scope_note=observation['scope_note'],
-                                   input_stamp=digest(inputs[item_id]) if not unavailable else None)
-            items.append(item)
+            yield source.source, design, field_id, name, field
+
+
+def adoption_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None):
+    """Return stable field items and the minimum structured requirement for each execution."""
+    items, inputs = [], {}
+    for identity, design, field_id, name, field in adopted_design_fields(basis):
+        suffix = '' if identity.position == 0 and identity.port_id == 'text' and identity.object_id is None else ':' + digest(identity.model_dump())[:16]
+        item_id = f'{ADOPTION_CATEGORY}:{identity.card_id}:{field_id}{suffix}'
+        if item_id in inputs:
+            continue
+        observation = {
+            'source_card_id': identity.card_id, 'field_id': field_id, 'name': name,
+            'text': field.text.strip() or '明确没有',
+            'state': STATE_LABELS[field.state], 'purpose': PURPOSE_LABELS[field.purpose],
+            'source_locator': field.source_locator or design.source_locator,
+            'scope': design.scope.model_dump(exclude_defaults=True),
+            'scope_note': card.scope_notes.get(item_id),
+            'material_uses': _material_uses(basis, design, field_id),
+        }
+        inputs[item_id] = {'requirement': observation, 'submitted_text': basis.compiled.text}
+        item = CanvasCheckItem(id=item_id, category=ADOPTION_CATEGORY, label=ADOPTION_LABEL,
+                               source=identity, field_id=field_id, requirement=observation['text'],
+                               enabled=ADOPTION_CATEGORY in card.enabled_categories and item_id not in card.disabled_items,
+                               availability='unavailable' if unavailable else 'ready', reason=unavailable,
+                               scope_editable=True, scope_note=observation['scope_note'],
+                               input_stamp=digest(inputs[item_id]) if not unavailable else None)
+        items.append(item)
     return items, inputs
 
 

@@ -194,6 +194,7 @@ export type { CanvasCheckProduct } from './models/CanvasCheckProduct';
 export type { CanvasCheckReportRead } from './models/CanvasCheckReportRead';
 export type { CanvasCheckRequest } from './models/CanvasCheckRequest';
 export type { CanvasCheckResult } from './models/CanvasCheckResult';
+export type { CanvasCheckTextEvidence } from './models/CanvasCheckTextEvidence';
 export type { CanvasCompiledInput } from './models/CanvasCompiledInput';
 export type { CanvasConnectionPolicy } from './models/CanvasConnectionPolicy';
 export type { CanvasContentOrigin } from './models/CanvasContentOrigin';
