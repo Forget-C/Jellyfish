@@ -742,6 +742,7 @@ class CheckCard(CardDefinition):
     type: Literal['review.check'] = 'review.check'
     # Read pre-category documents with their original selection; new cards are initialized on save.
     enabled_categories: list[str] = Field(default_factory=lambda: ['P06'], max_length=64)
+    check_model_id: str | None = Field(default=None, min_length=1, max_length=255, exclude_if=lambda value: value is None)
     disabled_items: list[str] = Field(default_factory=list)
     scope_notes: dict[str, Annotated[str, Field(max_length=500)]] = Field(default_factory=dict)
     input_ports: ClassVar[tuple[str, ...]] = ('check_basis',)

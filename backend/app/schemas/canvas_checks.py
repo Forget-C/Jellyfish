@@ -75,6 +75,14 @@ class CanvasCheckResult(BaseModel):
     outcome: Literal['conforming', 'nonconforming', 'risk', 'indeterminate']
     message: str
     boundary: str
+    submitted_excerpt: str | None = None
+
+
+class CanvasCheckExecution(BaseModel):
+    """任务状态独立于观察结论；失败不会填入业务结果。"""
+    item_id: str
+    status: Literal['queued', 'running', 'succeeded', 'failed', 'cancelled']
+    reason: str | None = None
 
 
 class CanvasCheckReportRead(BaseModel):
@@ -87,4 +95,6 @@ class CanvasCheckReportRead(BaseModel):
     items: list[CanvasCheckItem]
     results: list[CanvasCheckResult]
     omitted: list[CanvasCheckOmission] = Field(default_factory=list)
+    check_model_id: str | None = None
+    executions: list[CanvasCheckExecution] = Field(default_factory=list)
     enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')

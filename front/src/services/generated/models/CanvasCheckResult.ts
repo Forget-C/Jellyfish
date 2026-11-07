@@ -10,4 +10,5 @@ export type CanvasCheckResult = {
     outcome: 'conforming' | 'nonconforming' | 'risk' | 'indeterminate';
     message: string;
     boundary: string;
+    submitted_excerpt?: (string | null);
 };
