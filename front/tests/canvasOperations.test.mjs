@@ -47,6 +47,21 @@ test('one adopted source rejects the entire deletion batch without changing the 
   assert.deepEqual(original, before)
 })
 
+test('fixing the same result position again preserves the live result before an older fixed result', () => {
+  const output = { ...source, card_id: 'generator', position: 1 }
+  const live = { ...edge, id: 'live', source_card: 'generator' }
+  const earlier = { ...edge, id: 'earlier', order_anchor: { edge_id: live.id, position: 1 } }
+  const original = document({ cards: [image, model, { id: 'generator', type: 'model.image', prompt: {},
+    detached_results: [{ position: 1, result_set_id: 'first', content_card_id: image.id }] }],
+  edges: [live, earlier], input_order: { model: { image: [live.id, earlier.id] } } })
+  const fixed = { id: 'later', type: 'content.image', file_id: 'second-file' }
+  const result = operations.detachResult(original, { source: output, result_set_id: 'second' }, fixed)
+  assert.ok(result.document, result.reason)
+  const fixedSources = result.document.input_order.model.image.map(id => result.document.edges.find(item => item.id === id))
+    .filter(item => item.order_anchor?.position === 1).map(item => item.source_card)
+  assert.deepEqual(fixedSources, [fixed.id, image.id])
+})
+
 test('updating a reference returns its field changes and both source connections together', () => {
   const character = { id: 'character', type: 'content.character', name: '阿青', text: '人物描述' }
   const reference = { id: 'reference', type: 'reference.character', name: '', image_binding: null }

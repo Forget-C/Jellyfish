@@ -218,3 +218,66 @@ async def test_fixing_middle_image_preserves_video_media_order_and_subject_alias
     await save(4, document)
     assert [item['file_id'] for item in (await compile_video())['media']] == [fixed['file_id']]
     assert not any('order_anchor' in edge for edge in (await read())['edges'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode,initial,reduced,expanded', [
+    ('only', [0, 1], [0], [0, 2]),
+    ('except', [0], [0, 1], [0]),
+])
+async def test_expanding_retained_result_scope_rechecks_model_capability(runtime, image_storage, mode, initial, reduced, expanded):
+    from app.models.llm import Model, Provider
+    from app.task_worker import TaskWorker
+    await image_card(runtime)
+    await accept(runtime, 'publish-for-capability-check')
+
+    def provider(_request):
+        return httpx.Response(200, json={'data': [
+            {'b64_json': base64.b64encode(str(index).encode()).decode()} for index in range(3)
+        ]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=False)
+    async with runtime.sessions.begin() as db:
+        db.add(Provider(id='kling-provider', name='kling', api_key='test', base_url='https://test.invalid'))
+        await db.flush()
+        db.add(Model(id='text-only-video', name='kling-3.0-turbo', category='video', provider_id='kling-provider', params={}))
+
+    async def save(request_id, revision, document):
+        return await runtime.client.put(runtime.url, json={
+            'request_id': request_id, 'expected_revision': revision, 'document': document,
+        })
+
+    async def read():
+        return (await runtime.client.get(runtime.url)).json()['data']
+
+    document = (await read())['document']
+    document['cards'].append({'id': 'video', 'type': 'model.video'})
+    document['edges'] = [{'id': 'images', 'source_card': 'image', 'source_port': 'image',
+                          'target_card': 'video', 'target_port': 'first_frame',
+                          'result_scope': {'mode': mode, 'positions': initial}}]
+    document['input_order'] = {'video': {'first_frame': ['images']}}
+    response = await save('connect-before-selecting-model', 2, document)
+    assert response.status_code == 200, response.text
+
+    document = (await read())['document']
+    document['cards'][-1]['model_id'] = 'text-only-video'
+    response = await save('retain-scoped-connection', 3, document)
+    assert response.status_code == 200, response.text
+    for edge in document['edges']:
+        edge['result_scope']['positions'] = reduced
+    response = await save('reduce-scoped-connection', 4, document)
+    assert response.status_code == 200, response.text
+
+    before = await read()
+    for edge in document['edges']:
+        edge['result_scope']['positions'] = expanded
+    response = await save('expand-scoped-connection', 5, document)
+    assert response.status_code == 422, response.text
+    assert response.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
+    assert await read() == before

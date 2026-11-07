@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from pydantic import ValidationError
 from sqlalchemy import select
-from app.schemas.generation_canvas import CanvasDocument, ModelCard, SoundDirectionCard, PerformanceDirectionCard, MediaContentCard
+from app.schemas.generation_canvas import CanvasDocument, CanvasResultScope, ModelCard, SoundDirectionCard, PerformanceDirectionCard, MediaContentCard
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
 from app.services.generation_canvas.capabilities import model_capability
@@ -64,7 +64,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     history = CanvasHistoricalContent(db, project_id)
     for card in document.cards:
         await history.validate_origin(canvas_id, card, previous_cards.get(card.id))
-    await history.validate_detached_results(document, previous_document)
+    await history.validate_detached_results(document, previous_document, canvas.card_types)
     for card in document.cards:
         target = getattr(card, 'frame_target', None)
         if target and target.card_id in previous_cards and (not any(source.id == target.card_id for source in document.cards) or any(edge['source_card'] == target.card_id and edge['target_card'] == card.id for edge in canvas.document.get('edges', [])) and not any(edge.source_card == target.card_id and edge.target_card == card.id for edge in document.edges)):
@@ -103,11 +103,14 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
                 raise diagnostic('REFERENCE_IN_USE', '请先清理实际引用再断开或删除来源',
                                  {'card_id': receiver.id, 'segment_id': reference_id, 'path': path})
     previous_pairs = {(edge['source_card'], edge['target_card']) for edge in canvas.document.get('edges', [])}
+    previous_scopes = {(edge.source_card, edge.source_port, edge.target_card): edge.result_scope
+                       for edge in previous_document.edges if edge.result_scope}
     by_id = {card.id: card for card in document.cards}
     new_pairs = {}
     for edge in document.edges:
         pair = (edge.source_card, edge.target_card)
-        if pair not in previous_pairs:
+        previous_scope = previous_scopes.get((edge.source_card, edge.source_port, edge.target_card))
+        if pair not in previous_pairs or (previous_scope and _expands_result_scope(previous_scope, edge.result_scope)):
             new_pairs.setdefault(pair, []).append(edge)
     capabilities = {}
 
@@ -158,6 +161,17 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     if document.cover_file_id:
         await validate_media_file(db, project_id, media_references[''][0])
     return PreparedDocument(document, identities, media_references)
+
+
+def _expands_result_scope(previous: CanvasResultScope, current: CanvasResultScope | None) -> bool:
+    """与旧范围比较新增可用位置，包括尚未生成的未来结果。"""
+    if current is None:
+        return True
+    if previous.mode == 'only':
+        return current.mode == 'except' or bool(set(current.positions) - set(previous.positions))
+    if current.mode == 'only':
+        return bool(set(current.positions) & set(previous.positions))
+    return bool(set(previous.positions) - set(current.positions))
 
 
 def _normalize_document(document, previous_document):

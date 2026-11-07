@@ -1,7 +1,7 @@
 """历史成果另存与来源真实性；使用调用方事务，不保存卡片或修改文件保护。"""
 from uuid import uuid4
 from sqlalchemy import select
-from app.models.generation_canvas import CanvasRunNode
+from app.models.generation_canvas import CanvasCurrentOutput, CanvasResultSet, CanvasRunNode
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.events import TERMINAL
 from app.services.generation_canvas.store import CanvasStore
@@ -54,7 +54,7 @@ class CanvasHistoricalContent:
                 raise diagnostic('INVALID_ORIGIN', '另存内容须与固定成果及完成状态一致', {'card_id': card.id})
 
 
-    async def validate_detached_results(self, document, previous):
+    async def validate_detached_results(self, document, previous, saved_card_types):
         """固定记录必须来自同一模型正式交付的结果，并与独立内容来源一致。"""
         from app.schemas.generation_canvas import ModelCard
         cards = {card.id: card for card in document.cards}
@@ -67,13 +67,24 @@ class CanvasHistoricalContent:
                 if (result in getattr(prior.get(model.id), 'detached_results', ())
                         and (fixed is None or fixed.id in prior)):
                     continue
+                output = None
                 origin = getattr(fixed, 'origin', None)
                 if origin and not origin.incomplete:
                     node = await self._output_node(document.id, origin.run_id, origin.node_id, origin.position)
-                    output = node.outputs[origin.position].get('source', {})
-                    if (node.status == 'succeeded' and node.result_set_id == result.result_set_id
-                            and node.card_id == model.id and output.get('position') == result.position
-                            and output.get('port_id') in model.output_ports):
-                        continue
-                raise diagnostic('INVALID_DETACHED_RESULT', '固定记录必须对应此模型的正式输出与独立内容来源',
-                                 {'card_id': model.id, 'position': result.position, 'path': ['detached_results']})
+                    if node.status == 'succeeded' and node.result_set_id == result.result_set_id and node.card_id == model.id:
+                        output = node.outputs[origin.position].get('source', {})
+                elif fixed is None and model.id not in prior and saved_card_types.get(model.id) == model.type:
+                    # 撤销删除模型时，独立内容可以已经删除。用持久卡片身份和正式批次校验其历史位置。
+                    published = await self.db.get(CanvasResultSet, result.result_set_id)
+                    if published and published.canvas_id == document.id and published.card_id == model.id:
+                        output = next((item['source'] for item in published.outputs
+                                       if item['source']['position'] == result.position
+                                       and saved_card_types.get(result.content_card_id) == 'content.' + item['modality']), None)
+                target = {'card_id': model.id, 'position': result.position, 'path': ['detached_results']}
+                if not output or output.get('position') != result.position or output.get('port_id') not in model.output_ports:
+                    raise diagnostic('INVALID_DETACHED_RESULT', '固定记录必须对应此模型的正式输出与独立内容来源', target)
+                if any(edge.source_card == model.id and edge.source_port == output['port_id']
+                       and edge.includes_position(result.position) for edge in document.edges):
+                    current = await self.db.get(CanvasCurrentOutput, (document.id, model.id))
+                    if (fixed and fixed.id not in prior) or (current and current.result_set_id == result.result_set_id):
+                        raise diagnostic('INVALID_DETACHED_RESULT', '固定结果时必须同时移除原结果连接范围', target)

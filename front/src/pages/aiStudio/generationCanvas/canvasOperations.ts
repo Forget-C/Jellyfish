@@ -84,8 +84,9 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
         const priorOrder = document.input_order?.[edge.target_card]?.[edge.target_port] || []
         const siblings = (document.edges || []).filter(item => item.order_anchor?.edge_id === edge.id)
         const siblingIds = new Set(siblings.map(item => item.id))
-        const group = [...siblings.map(item => ({ id: item.id, position: item.order_anchor!.position })),
-          { id: replacement.id, position: source.position }].sort((a, b) => a.position - b.position).map(item => item.id)
+        const group = [...siblings.map(item => ({ id: item.id, position: item.order_anchor!.position, index: priorOrder.indexOf(item.id) })),
+          { id: replacement.id, position: source.position, index: priorOrder.indexOf(edge.id) }]
+          .sort((a, b) => a.position - b.position || a.index - b.index).map(item => item.id)
         const order = priorOrder.flatMap(id => id === edge.id ? [...(survives ? [id] : []), ...group] : siblingIds.has(id) ? [] : [id])
         next.input_order = { ...next.input_order, [edge.target_card]: { ...next.input_order?.[edge.target_card], [edge.target_port]: order } }
       }

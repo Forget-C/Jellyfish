@@ -189,4 +189,52 @@ async def test_detached_result_is_bound_to_its_formal_origin_and_saved_atomicall
     after['document']['cards'].pop()
     removed = await save('remove-fixed', after['revision'], after['document'])
     assert removed.status_code == 200, removed.text
-    assert (await runtime.client.get(runtime.url)).json()['data']['document']['cards'][0]['detached_results'] == model['detached_results']
+    before_delete = (await runtime.client.get(runtime.url)).json()['data']
+    assert before_delete['document']['cards'][0]['detached_results'] == model['detached_results']
+
+    deleted = deepcopy(before_delete['document'])
+    deleted['cards'].clear()
+    removed = await save('remove-model', before_delete['revision'], deleted)
+    assert removed.status_code == 200, removed.text
+    revision = removed.json()['data']['revision']
+    for key, value in [('result_set_id', 'unknown-result'), ('content_card_id', 'unknown-card'), ('position', 1)]:
+        invalid = deepcopy(before_delete['document'])
+        invalid['cards'][0]['detached_results'][0][key] = value
+        rejected = await save(f'invalid-undo-{key}', revision, invalid)
+        assert rejected.status_code == 422, rejected.text
+        assert rejected.json()['detail']['code'] == 'INVALID_DETACHED_RESULT'
+    restored = await save('undo-remove-model', revision, before_delete['document'])
+    assert restored.status_code == 200, restored.text
+    assert (await runtime.client.get(runtime.url)).json()['data']['document'] == before_delete['document']
+
+
+@pytest.mark.asyncio
+async def test_detaching_must_remove_live_scope_and_migrate_existing_binding(runtime):
+    run, node = await finished_history(runtime)
+    before = (await runtime.client.get(runtime.url)).json()['data']
+    document = deepcopy(before['document'])
+    source = {'canvas_id': runtime.canvas_id, 'card_id': 'm', 'port_id': 'text', 'position': 0}
+    document['cards'].append({
+        'id': 'consumer', 'type': 'model.text',
+        'prompt': {'segments': [{'id': 'ref', 'kind': 'reference', 'binding_id': 'binding'}]},
+        'input_bindings': [{'id': 'binding', 'input_port': 'text', 'source': source}],
+    })
+    document['edges'] = [{'id': 'live', 'source_card': 'm', 'source_port': 'text',
+                          'target_card': 'consumer', 'target_port': 'text'}]
+    document['input_order'] = {'consumer': {'text': ['live']}}
+    connected = await runtime.client.put(runtime.url, json={
+        'request_id': 'connect-live', 'expected_revision': before['revision'], 'document': document,
+    })
+    assert connected.status_code == 200, connected.text
+    before = (await runtime.client.get(runtime.url)).json()['data']
+    fixed = (await runtime.client.get(content_url(runtime, run, node['id']))).json()['data']
+    document['cards'].append(fixed)
+    document['cards'][0]['detached_results'] = [{
+        'position': 0, 'result_set_id': node['result_set_id'], 'content_card_id': fixed['id'],
+    }]
+    rejected = await runtime.client.put(runtime.url, json={
+        'request_id': 'partial-detach', 'expected_revision': before['revision'], 'document': document,
+    })
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json()['detail']['code'] == 'INVALID_DETACHED_RESULT'
+    assert (await runtime.client.get(runtime.url)).json()['data'] == before
