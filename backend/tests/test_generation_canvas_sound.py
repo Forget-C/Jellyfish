@@ -4,6 +4,53 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 
 @pytest.mark.asyncio
+async def test_adopted_dialogue_pronunciation_survives_reopening_and_clear(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白发音要求'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    source = {'canvas_id': canvas['id'], 'card_id': 'line', 'port_id': 'text', 'position': 0}
+    doc = canvas['document']
+    doc.update(cards=[
+        {'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'line-1',
+         'content': {'text': '小雪，请等一等', 'authorship': 'user'},
+         'scope': {'condition': '只在雨夜站台的告别时'},
+         'source_locator': '第一章·站台'},
+        {'id': 'unused', 'type': 'direction.dialogue', 'dialogue_id': 'line-2'},
+        {'id': 'model', 'type': 'model.text',
+         'input_bindings': [{'id': 'adopt', 'source': source, 'input_port': 'text'}]},
+    ], edges=[
+        {'id': 'line-edge', 'source_card': 'line', 'source_port': 'text',
+         'target_card': 'model', 'target_port': 'text'},
+    ], input_order={'model': {'text': ['line-edge']}})
+
+    saved = await canvas_client.put(url, json={'request_id': 'legacy', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert '小雪，请等一等' in compiled['text']
+    assert '语言／发音要求' not in compiled['text']
+
+    doc = (await canvas_client.get(url)).json()['data']['document']
+    doc['cards'][0]['language_pronunciation'] = {'text': '普通话，清楚读出人名', 'authorship': 'user'}
+    doc['cards'][1]['language_pronunciation'] = {'text': '未采用的粤语要求', 'authorship': 'user'}
+    saved = await canvas_client.put(url, json={'request_id': 'edit', 'expected_revision': 1, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    doc = (await canvas_client.get(url)).json()['data']['document']
+    assert doc['cards'][0]['language_pronunciation']['text'] == '普通话，清楚读出人名'
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert '语言／发音要求：普通话，清楚读出人名' in compiled['text']
+    assert '适用条件：只在雨夜站台的告别时' in compiled['text']
+    assert '来源：第一章·站台' in compiled['text']
+    assert '未采用的粤语要求' not in compiled['text']
+    assert any(row['source'] == source for row in compiled['mapping'])
+
+    doc['cards'][0]['language_pronunciation'] = {'text': '', 'authorship': 'user'}
+    saved = await canvas_client.put(url, json={'request_id': 'clear', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert '语言／发音要求' not in compiled['text']
+    assert '小雪，请等一等' in compiled['text']
+
+
+@pytest.mark.asyncio
 async def test_dialogue_speaker_and_complete_sound_design(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '对白声音'})).json()['data']

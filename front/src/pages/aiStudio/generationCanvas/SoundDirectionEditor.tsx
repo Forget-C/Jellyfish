@@ -20,9 +20,14 @@ export function SoundDirectionEditor({ card: raw, onChange, disabled, editorOpen
   const fields = Object.fromEntries(designFieldEntries(card))
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.dialogue'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
-    {card.type === 'direction.dialogue' ? <section aria-label="对白条目" className="design-preset-fields design-single-field">
-      <FieldEditor compact label="对白正文" value={card.content} onChange={content => update({ ...card, content })} />
-    </section> : <section aria-label="声音条目" className="design-preset-fields design-preset-fields-compact">
+    {card.type === 'direction.dialogue' ? <>
+      <section aria-label="对白条目" className="design-preset-fields design-single-field">
+        <FieldEditor compact label="对白正文" value={card.content} onChange={content => update({ ...card, content })} />
+      </section>
+      <section aria-label="对白要求" className="design-preset-fields design-preset-fields-compact">
+        <FieldEditor compact label="语言／发音要求" value={card.language_pronunciation} onChange={language_pronunciation => update({ ...card, language_pronunciation })} />
+      </section>
+    </> : <section aria-label="声音条目" className="design-preset-fields design-preset-fields-compact">
       <FieldEditor compact label="声源说明" value={sound.source_description} onChange={source_description => update({ ...sound, source_description })} />
       <FieldEditor compact label="环境声" value={sound.environment} onChange={environment => update({ ...sound, environment })} />
       <FieldEditor compact label="动作声" value={sound.action_sound} onChange={action_sound => update({ ...sound, action_sound })} />
