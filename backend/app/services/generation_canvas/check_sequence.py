@@ -8,7 +8,7 @@ from app.schemas.canvas_checks import CanvasCheckResult
 from app.schemas.generation_canvas import CheckCard
 from app.services.generation_canvas.check_adoption import adopted_design_fields
 from app.services.generation_canvas.check_requirement_quality import (
-    EvidenceQuote, design_requirement, exact_evidence, text_check_item,
+    EvidenceQuote, design_requirement, quoted_evidence, text_check_item,
 )
 from app.services.generation_canvas.execution_basis import CanvasBasis
 
@@ -16,7 +16,7 @@ ACTION_CATEGORY = 'P04'
 ACTION_LABEL = '行动与调度时序'
 CONTINUITY_CATEGORY = 'P05'
 CONTINUITY_LABEL = '连续性状态自洽'
-_ACTION_FIELDS = {
+ACTION_FIELDS = {
     'direction.performance': {'physical_action', 'reaction_order', 'exit_state'},
     'direction.activity': {'task', 'main_action_effect', 'path', 'delay_basis', 'entry_exit', 'exit_state'},
     'direction.beat': {'expected_change', 'audience_must_see'},
@@ -64,6 +64,15 @@ def _related_events(bindings, design, adopted):
             yield identity.card_id
 
 
+def activity_delay_requirement(identity, design):
+    """Expose the exact adopted delay value with the same source wording as compilation."""
+    if isinstance(design.fields, ActivityDesignFields) and design.fields.delay_ms is not None:
+        delay = design.fields.delay_ms
+        field = DesignField(state='fact', text=f'反应延迟毫秒：{delay}')
+        return {**design_requirement(identity, design, 'delay_ms', field), 'value_ms': delay}
+    return None
+
+
 def sequence_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None):
     """Derive one action or continuity item per effective design with traceable requirements."""
     sources = {row.source.card_id: row for row in basis.compiled.used
@@ -72,17 +81,15 @@ def sequence_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None
     bindings = basis.adopted_design_bindings()
     by_source = {}
     for identity, design, field_id, _, field in adopted_design_fields(basis):
-        fields = _CONTINUITY_FIELDS if design.design_type == 'direction.continuity' else _ACTION_FIELDS.get(design.design_type, ())
+        fields = _CONTINUITY_FIELDS if design.design_type == 'direction.continuity' else ACTION_FIELDS.get(design.design_type, ())
         if field_id in fields:
             by_source.setdefault(identity.card_id, []).append(design_requirement(identity, design, field_id, field))
     items, observations = [], {}
     for source_id, design in adopted.items():
         requirements = by_source.get(source_id, [])
         identity = sources[source_id].source
-        if isinstance(design.fields, ActivityDesignFields) and design.fields.delay_ms is not None:
-            delay = design.fields.delay_ms
-            delay_field = DesignField(state='fact', text=f'反应延迟毫秒：{delay}')
-            requirements = [*requirements, {**design_requirement(identity, design, 'delay_ms', delay_field), 'value_ms': delay}]
+        if delay := activity_delay_requirement(identity, design):
+            requirements = [*requirements, delay]
         if not requirements:
             continue
         continuity = design.design_type == 'direction.continuity'
@@ -116,12 +123,10 @@ def _parse_sequence(item_id: str, observation: dict, content: object, boundary: 
         return None, []
     result = CanvasCheckResult(item_id=item_id, outcome=answer.outcome, message=answer.message, boundary=boundary)
     requirements = observation['requirements']
-    cited = {}
-    for quote in answer.quotes:
-        if quote.index >= len(requirements) or (evidence := exact_evidence(requirements[quote.index], quote.excerpt)) is None:
-            result.outcome, result.message = 'indeterminate', '未能核实本次实际采用要求中的引文。'
-            return result, []
-        cited[quote.index] = evidence
+    cited = quoted_evidence(requirements, answer.quotes)
+    if cited is None:
+        result.outcome, result.message = 'indeterminate', '未能核实本次实际采用要求中的引文。'
+        return result, []
     if not any(entry.source.card_id == observation['anchor_card_id'] for entry in cited.values()):
         result.outcome, result.message = 'indeterminate', '未能定位这项检查所依据的已采用要求。'
         return result, []

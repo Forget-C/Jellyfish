@@ -97,6 +97,16 @@ def exact_evidence(requirement: dict, quote: str) -> CanvasCheckTextEvidence | N
     return None
 
 
+def quoted_evidence(requirements: list[dict], quotes: list[EvidenceQuote]) -> dict[int, CanvasCheckTextEvidence] | None:
+    """Validate exact source-indexed excerpts together, preserving distinct evidence rows."""
+    cited = {}
+    for quote in quotes:
+        if quote.index >= len(requirements) or (evidence := exact_evidence(requirements[quote.index], quote.excerpt)) is None:
+            return None
+        cited[quote.index] = evidence
+    return cited
+
+
 def _shared_scope(left: dict, right: dict) -> tuple[bool, list[str]]:
     """Hard conclusions need an explicit common scope and no known disagreement."""
     scopes = [{key: value.strip() for key, value in row['scope'].items() if value and value.strip()}
