@@ -15,4 +15,6 @@ export type CanvasCheckProduct = {
     result_set_id?: (string | null);
     revision: number;
     text?: (string | null);
+    modality?: 'text' | 'image' | 'video';
+    file_id?: (string | null);
 };

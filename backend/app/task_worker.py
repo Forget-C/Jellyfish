@@ -385,6 +385,7 @@ class TaskWorker:
         from app.services.generation_canvas.check_product_text import (
             PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_INSTRUCTIONS, parse_product_text,
         )
+        from app.services.generation_canvas.check_product_visual import VISUAL_PRODUCT_CHECK
         from app.services.generation_canvas.check_text import TEXT_CHECKS
         snapshot = task.input_snapshot
         observation = snapshot['observation']
@@ -392,6 +393,9 @@ class TaskWorker:
         if category == 'P03':
             item = await self._canvas_reference_check(task, observation)
             result = item.model_dump(mode='json') if item is not None else None
+        elif category == VISUAL_PRODUCT_CHECK:
+            results = await self._canvas_product_visual(task, observation)
+            result = {'results': {key: value.model_dump(mode='json') for key, value in results.items()}} if results is not None else None
         else:
             instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else TEXT_CHECKS[category][0]
             context = observation
@@ -434,6 +438,38 @@ class TaskWorker:
         ])]
         reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
         return parse_reference_reply(item_id, file_id, reply.content)
+
+    async def _canvas_product_visual(self, task: Task, observation: dict):
+        """Read the fixed image or one actual decoded video frame, plus a required reference."""
+        import json
+        from app.services.generation_canvas.check_media import load_check_image, load_check_video_frame
+        from app.services.generation_canvas.check_product_visual import (
+            VISUAL_PRODUCT_INSTRUCTIONS, parse_product_visual, unavailable_visual_results,
+        )
+
+        file_id, modality = observation['file_id'], observation['modality']
+        at_ms = None
+        if modality == 'video':
+            frame = await load_check_video_frame(self.sessions, task.project_id, file_id, observation['frame_edge'])
+            image, at_ms = frame if frame else (None, None)
+        else:
+            image = await load_check_image(self.sessions, task.project_id, file_id)
+        if image is None:
+            return unavailable_visual_results(observation, '固定产物的画面无法读取，本项未观察到媒体。')
+        images = [image]
+        reference_id = observation['reference_file_id']
+        if reference_id:
+            reference = await load_check_image(self.sessions, task.project_id, reference_id)
+            if reference is None:
+                return unavailable_visual_results(observation, '原生成依据的对照图片无法读取，本项未观察到媒体。')
+            images.append(reference)
+        context = {'requirements': observation['requirements'], 'frame_at_ms': at_ms,
+                   'incomplete': observation['incomplete']}
+        content = [{'type': 'text', 'text': json.dumps(context, ensure_ascii=False)}]
+        content += [{'type': 'image_url', 'image_url': {'url': value}} for value in images]
+        messages = [SystemMessage(content=VISUAL_PRODUCT_INSTRUCTIONS), HumanMessage(content=content)]
+        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        return parse_product_visual(observation, reply.content, at_ms)
 
     async def _canvas_text(self, task: Task) -> None:
         """Use the admitted private config and persist chunks in short transactions."""

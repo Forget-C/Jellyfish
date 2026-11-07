@@ -6,7 +6,7 @@ import { HistoricalCheckProduct } from './PostCheckPanel'
 import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
-const recheckTextCategories = new Set(['P01', 'P02', 'P06', 'P08', 'P09'])
+const recheckTextCategories = new Set(['P01', 'P02', 'P04', 'P05', 'P06', 'P08', 'P09'])
 const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 const parameterLabels: Record<string, string> = {
   seconds: '时长（秒）', ratio: '画幅', target_ratio: '画幅', count: '数量', seed: '种子', resolution_profile: '分辨率',
@@ -73,7 +73,8 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
         {result.submitted_excerpt && <blockquote aria-label={report.product ? '产物片段' : '提交片段'}>{result.submitted_excerpt}</blockquote>}
         {!!result.observed_media?.length && <ul aria-label="本轮观察素材">
           {result.observed_media.map((media, index) => <li key={index}>
-            {media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
+            {media.frame_at_ms != null ? `视频静帧 ${media.frame_at_ms} 毫秒`
+              : media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
             {media.description && ` · ${media.description}`}
           </li>)}
         </ul>}

@@ -75,8 +75,8 @@ try {
 
   await page.goto(`http://127.0.0.1:4317/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   await openCanvasCard(page, 'check')
-  const panel = page.getByRole('region', { name: '生成后文字检查', exact: true })
-  assert.equal(await panel.getByRole('button', { name: '检查所选文字产物', exact: true }).count(), 0)
+  const panel = page.getByRole('region', { name: '生成后检查', exact: true })
+  assert.equal(await panel.getByRole('button', { name: '检查所选产物', exact: true }).count(), 0)
   const choose = async label => {
     await panel.locator('.ant-select-selector').click()
     await page.locator('.ant-select-dropdown:visible').getByText(label).click()
@@ -84,7 +84,7 @@ try {
   await choose(/修订 1.*完整交付/)
   await panel.getByText('产物 1 份 · 文字模型检查 · 预计调用 1 次', { exact: true }).waitFor()
   await panel.getByText(/来源 shot\/visible_result · 保留红伞/).waitFor()
-  const check = panel.getByRole('button', { name: '检查所选文字产物', exact: true })
+  const check = panel.getByRole('button', { name: '检查所选产物', exact: true })
   await check.click()
   const report = page.getByRole('region', { name: '检查报告', exact: true })
   await report.getByText('此结论仅适用于固定历史产物', { exact: true }).waitFor()
