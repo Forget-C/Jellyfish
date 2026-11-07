@@ -8,6 +8,8 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
 export function RunPreview({ preview, canvas, submitting, disabled, onSubmit, onLocate }: { preview: CanvasPrecheck; canvas?: CanvasDocument; submitting: boolean; disabled: boolean; onSubmit: () => void; onLocate?: (target: Record<string, unknown>) => void }) {
+  const methods = { text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查',
+    video_sequence: '视频序列检查', video_mixed: '视频序列与静帧检查' }
   const labels = canvas ? referenceLabels(canvas, preview.input.used || [], preview.card_id) : new Map<string, string>()
   const mediaKinds = new Map((preview.input.used || []).map(output => [sourceKey(output.source), output.modality]))
   const awaitingUpstream = preview.input.used?.some(item => preview.execution_nodes.includes(item.source.card_id))
@@ -39,6 +41,14 @@ export function RunPreview({ preview, canvas, submitting, disabled, onSubmit, on
     {(preview.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
       message={`${diagnostic.code}: ${diagnostic.message}`} description={`阻止：${diagnostic.blocks.map(action => ({ run: '运行', save: '保存' }[action] || action)).join('、') || '无'}`}
       action={<Button size="small" onClick={() => locate(diagnostic.target)}>定位问题</Button>} />)}
+    {!!preview.automatic_checks?.length && <section aria-label="本次自动生成后检查">
+      <h4>完整交付后自动检查</h4>
+      {preview.automatic_checks.map(plan => <p key={plan.check_card_id}>
+        检查卡 {plan.check_card_id} · 生成目标 {plan.target_card_id} · 产物 {plan.product_count} 份 · {methods[plan.observation_method]}
+        {` · 预计调用 ${plan.estimated_calls} 次`}
+        {plan.reason && ` · ${plan.reason}`}
+      </p>)}
+    </section>}
     <Space><Button variant="primary" loading={submitting} disabled={disabled || !preview.can_run || !preview.preview_token} onClick={onSubmit}>确认执行</Button>
       {!preview.can_run && <span>请修正阻塞问题并重新预检</span>}</Space>
   </section>

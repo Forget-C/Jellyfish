@@ -1,5 +1,6 @@
 """Real HTTP/DB/TaskWorker media harness; only external HTTP/storage use local fakes."""
 import asyncio
+import json
 import struct
 import zlib
 import os
@@ -20,7 +21,7 @@ from app.task_worker import TaskWorker
 
 engine = create_async_engine('sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'])
 sessions = async_sessionmaker(engine, expire_on_commit=False)
-control = {'calls': [], 'stream_connections': 0, 'fail_next': False, 'response_delay': 0}
+control = {'calls': [], 'stream_connections': 0, 'fail_next': False, 'response_delay': 0, 'check_calls': []}
 objects = {}
 media_dir = Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'])
 def image_bytes(index):
@@ -54,9 +55,18 @@ async def download(*, key):
 
 
 async def external(request):
+    if request.url.host == 'auto-vision.test':
+        body = json.loads(request.content)
+        requirements = json.loads(body['messages'][1]['content'][0]['text'])['requirements']
+        control['check_calls'].append(requirements)
+        return httpx.Response(200, json={'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+            'role': 'assistant', 'content': json.dumps({'results': [
+                {'item_id': item['item_id'], 'outcome': 'risk', 'message': '仅核对当前固定图片', 'visible_evidence': '背景颜色可见'}
+                for item in requirements
+            ]}),
+        }}]})
     if request.method == 'POST':
         await asyncio.sleep(control['response_delay'])
-        import json
         body = json.loads(request.content)
         control['calls'].append(body)
         count = body['n'] if os.environ.get('CANVAS_BROWSER_VARIABLE_IMAGE_COUNT') else 3
@@ -123,7 +133,12 @@ async def prepare():
         db.add(Project(id='canvas-project', name='图片画布项目', style='真人都市'))
         db.add(Provider(id='canvas-video-provider', name='vidu', api_key='fixture-private', base_url='https://fixture.test'))
         db.add(Provider(id='canvas-image-provider', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
+        if os.environ.get('CANVAS_BROWSER_AUTO_CHECKS'):
+            db.add(Provider(id='auto-vision-provider', name='aliyun_bailian', api_key='vision-fixture',
+                            base_url='https://auto-vision.test/v1'))
         await db.flush()
+        if os.environ.get('CANVAS_BROWSER_AUTO_CHECKS'):
+            db.add(Model(id='auto-vision', name='qwen3-vl-plus', provider_id='auto-vision-provider', category='text'))
         db.add(Model(id='canvas-image-model', name='image-model', provider_id='canvas-image-provider', category='image'))
         db.add(Model(id='canvas-carried-video-model', name='video-model', provider_id='canvas-image-provider', category='video'))
         db.add(Model(id='canvas-subject-model', name='viduq2-pro', provider_id='canvas-video-provider', category='video'))

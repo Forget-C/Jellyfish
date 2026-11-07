@@ -742,6 +742,8 @@ class CheckCard(CardDefinition):
     type: Literal['review.check'] = 'review.check'
     # Read pre-category documents with their original selection; new cards are initialized on save.
     enabled_categories: list[str] = Field(default_factory=lambda: ['P06'], max_length=64)
+    auto_post_check: bool = Field(default=False, exclude_if=lambda value: not value)
+    post_check_categories: list[str] = Field(default_factory=lambda: ['R01', 'R02', 'R03', 'R04', 'R05', 'R06'], max_length=64)
     check_model_id: str | None = Field(default=None, min_length=1, max_length=255, exclude_if=lambda value: value is None)
     disabled_items: list[str] = Field(default_factory=list)
     scope_notes: dict[str, Annotated[str, Field(max_length=500)]] = Field(default_factory=dict)
@@ -877,6 +879,16 @@ class CanvasPrecheckRequest(BaseModel):
     card_ids: list[str] = Field(default_factory=list, max_length=1000)
 
 
+class CanvasAutomaticCheckEstimate(BaseModel):
+    """One linked check card's planned post-generation coverage."""
+    check_card_id: str
+    target_card_id: str
+    product_count: int
+    observation_method: Literal['text', 'image', 'video_frame', 'video_sequence', 'video_mixed']
+    estimated_calls: int
+    reason: str | None = None
+
+
 class CanvasPrecheck(BaseModel):
     """可展示的固定输入；秘密供应商配置不进入协议。"""
     revision: int
@@ -888,6 +900,7 @@ class CanvasPrecheck(BaseModel):
     diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
     can_run: bool
     preview_token: str | None = None
+    automatic_checks: list[CanvasAutomaticCheckEstimate] = Field(default_factory=list)
 
 
 class CanvasRunSubmit(BaseModel):
@@ -920,6 +933,7 @@ class CanvasNodeRead(BaseModel):
     outputs: list[CanvasResolvedOutput]
     result_set_id: str | None
     current_output_updated: bool
+    automatic_check_card_ids: list[str] = Field(default_factory=list)
     error_code: str | None
     error_message: str | None
 

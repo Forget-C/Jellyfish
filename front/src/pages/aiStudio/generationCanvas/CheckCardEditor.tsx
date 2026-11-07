@@ -18,7 +18,7 @@ function applicability(previous: CanvasCheckItem | undefined, current: CanvasChe
 }
 
 /** 保存后的依据用于检查；卡片选择与执行报告分别管理。 */
-export function CheckCardEditor({ card: raw, document, savedRevision, documentPending, disabled, editorOpen, models, onChange }: CardRendererProps) {
+export function CheckCardEditor({ card: raw, document, savedRevision, documentPending, disabled, editorOpen, models, automaticCheckRunId, onChange }: CardRendererProps) {
   const card = raw as CheckCard
   const [preview, setPreview] = useState<CanvasCheckPreview>()
   const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
@@ -51,10 +51,13 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   }, [projectId, canvasId, cardId, savedRevision, editorOpen, refresh])
 
   const checking = reports.some(entry => entry.executions?.some(item => item.status === 'queued' || item.status === 'running'))
+  const awaitingAutomatic = !!automaticCheckRunId && !reports.some(entry =>
+    entry.automatic && entry.product?.run_id === automaticCheckRunId)
   useEffect(() => {
-    if (!editorOpen || !checking || cancelling) return
+    if (!editorOpen || (!checking && !awaitingAutomatic) || cancelling) return
     let active = true
     let timer: ReturnType<typeof setTimeout>
+    let attempts = 0
     const poll = async () => {
       try {
         const response = await Canvases.canvasCheckReports({ projectId, canvasId, cardId })
@@ -65,12 +68,12 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       } catch {
         // An interrupted read leaves the last known report and tries reading again.
       } finally {
-        if (active) timer = setTimeout(() => void poll(), 1200)
+        if (active && (checking || ++attempts < 24)) timer = setTimeout(() => void poll(), 1200)
       }
     }
     timer = setTimeout(() => void poll(), 1200)
     return () => { active = false; clearTimeout(timer) }
-  }, [projectId, canvasId, cardId, editorOpen, checking, cancelling])
+  }, [projectId, canvasId, cardId, editorOpen, checking, awaitingAutomatic, automaticCheckRunId, cancelling])
 
   const basis = preview?.basis
   const report = reports.find(item => item.id === selectedReportId) || reports[0]
@@ -176,10 +179,12 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       {reports.some(row => !row.product) ? '重新检查' : '检查'}
     </Button>
     <PostCheckPanel projectId={projectId} canvasId={canvasId} cardId={cardId} savedRevision={savedRevision}
-      active={!!editorOpen} disabled={!!disabled || !!documentPending || cancelling} reports={reports} onReport={showReport} />
+      active={!!editorOpen} disabled={!!disabled || !!documentPending || cancelling} reports={reports} onReport={showReport}
+      card={card} updateCard={onChange} configDisabled={!!disabled || cancelling} automaticCheckRunId={automaticCheckRunId}
+      onRefreshReports={() => setRefresh(value => value + 1)} />
     {report && <section className="generation-check-report" aria-label="检查报告">
       <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
-        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · ${entry.product ? '生成后' : '生成前'} · 修订 ${entry.basis.revision}` }))} /></label>
+        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · ${entry.automatic ? '自动生成后' : entry.product ? '生成后' : '生成前'} · 修订 ${entry.basis.revision}` }))} /></label>
       {selectionChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
       {report.executions?.some(item => (item.status === 'queued' || item.status === 'running') && !item.cancel_requested)
         && <Button size="small" variant="quiet" loading={cancelling} disabled={disabled || loading || running}

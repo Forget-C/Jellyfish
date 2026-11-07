@@ -29,4 +29,5 @@ export type CanvasCheckReportRead = {
     enabled_item_ids?: (Array<string> | null);
     product?: (CanvasCheckProduct | null);
     recheck?: (CanvasCheckRecheck | null);
+    automatic?: boolean;
 };

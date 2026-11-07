@@ -65,18 +65,22 @@ class CanvasStore:
             return receipt.response
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
-        from app.services.generation_canvas.checks import CanvasChecks
+        from app.services.generation_canvas.checks import CanvasChecks, changed_check_connections
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
         prepared = await prepare_document(self.db, self.project_id, canvas, command.document)
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
+        changed = changed_check_connections(prepared.previous_document, prepared.document)
+        check_edge_revisions = canvas.check_edge_revisions
+        if changed:
+            check_edge_revisions = {**(check_edge_revisions or {}), **dict.fromkeys(changed, command.expected_revision + 1)}
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(
                 document=prepared.document.model_dump(), revision=command.expected_revision + 1,
-                card_types=prepared.identities, detached_proofs=prepared.detached_proofs))
+                card_types=prepared.identities, detached_proofs=prepared.detached_proofs, check_edge_revisions=check_edge_revisions))
         if result.rowcount != 1:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
-        await CanvasChecks(self.db, self.project_id).cancel_changed_targets(prepared.previous_document, prepared.document)
+        await CanvasChecks(self.db, self.project_id).cancel_changed_targets(canvas_id, changed)
         response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'revision': command.expected_revision + 1}
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()

@@ -16,6 +16,7 @@ from app.schemas.generation_canvas import (
     CanvasNodeRead, CanvasPrecheck, CanvasPrecheckRequest,
     CanvasRunRead, CanvasRunSubmit, CanvasSnapshot,
 )
+from app.services.generation_canvas.automatic_checks import automatic_check_plan
 from app.services.generation_canvas.execution_basis import digest
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.store import CanvasStore
@@ -23,6 +24,10 @@ from app.services.generation_canvas.current_state import CanvasCurrentState
 from app.services.task_service import utcnow
 from app.services.generation_canvas.events import event_head, append_event
 
+
+
+def _admission_hash(generation_hash: str, checks: dict) -> str:
+    return digest({'generation': generation_hash, 'automatic_checks': checks}) if checks else generation_hash
 
 
 class CanvasRuntime:
@@ -36,16 +41,17 @@ class CanvasRuntime:
         from app.services.generation_canvas.planner import plan
         prepared = await plan(CanvasCurrentState(self.db, self.project_id), canvas, command)
         card_id = command.card_id if command.card_id in prepared['nodes'] else next(iter(prepared['nodes']))
+        automatic, estimates = await automatic_check_plan(self.db, canvas, prepared['nodes'])
         token = uuid4().hex if prepared['can_run'] else None
         if token:
             self.db.add(CanvasPreview(token=token, canvas_id=canvas_id, card_id=card_id, kind=command.kind,
                 card_ids=list(prepared['nodes']) if command.kind == 'selection' else None,
-                revision=canvas.revision, basis_hash=prepared['hash'], expires_at=utcnow() + timedelta(minutes=10)))
+                revision=canvas.revision, basis_hash=_admission_hash(prepared['hash'], automatic), expires_at=utcnow() + timedelta(minutes=10)))
             await self.db.flush()
         target = prepared['nodes'][card_id]
         return CanvasPrecheck(revision=canvas.revision, card_id=card_id, execution_nodes=list(prepared['nodes']),
             reused_results=prepared['reused'], input=target['compiled'], model=target['basis']['model'],
-            diagnostics=prepared['diagnostics'], can_run=prepared['can_run'], preview_token=token)
+            diagnostics=prepared['diagnostics'], can_run=prepared['can_run'], preview_token=token, automatic_checks=estimates)
 
     async def submit(self, canvas_id: str, command: CanvasRunSubmit) -> dict:
         """原子固定全部节点；等待输入只能来自本轮固定生产者。"""
@@ -61,7 +67,8 @@ class CanvasRuntime:
         if preview is None or preview.canvas_id != canvas_id or preview.revision != canvas.revision or preview.expires_at <= utcnow():
             raise diagnostic('PREVIEW_STALE', '执行预检已过期，请重新预检', {'canvas_id': canvas_id}, status=409, blocks=['run'])
         prepared = await plan(CanvasCurrentState(self.db, self.project_id), canvas, CanvasPrecheckRequest(card_id=preview.card_id, kind=preview.kind, card_ids=preview.card_ids or []), lock_config=True)
-        if not prepared['can_run'] or prepared['hash'] != preview.basis_hash:
+        automatic, _ = await automatic_check_plan(self.db, canvas, prepared['nodes'])
+        if not prepared['can_run'] or _admission_hash(prepared['hash'], automatic) != preview.basis_hash:
             raise diagnostic('PREVIEW_STALE', '实际输入或有效模型配置已变，请重新预检', {'card_id': preview.card_id}, status=409, blocks=['run'])
         for card_id in prepared['nodes']:
             occupancy = await self.db.get(CanvasScopeOccupancy, (canvas_id, card_id))
@@ -84,6 +91,8 @@ class CanvasRuntime:
         for card_id, item in prepared['nodes'].items():
             private = item['private']
             private['dependencies'] = item['dependencies']
+            if card_id in automatic:
+                private['automatic_checks'] = automatic[card_id]
             # Private admission order survives timestamp ties and event-log pruning.
             private['admitted_cursor'] = head.cursor + 1
             node = CanvasRunNode(id=uuid4().hex, run_id=run.id, canvas_id=canvas_id, card_id=card_id,

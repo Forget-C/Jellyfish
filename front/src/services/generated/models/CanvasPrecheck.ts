@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAutomaticCheckEstimate } from './CanvasAutomaticCheckEstimate';
 import type { CanvasCompiledInput } from './CanvasCompiledInput';
 import type { CanvasDiagnostic } from './CanvasDiagnostic';
 /**
@@ -17,4 +18,5 @@ export type CanvasPrecheck = {
     diagnostics?: Array<CanvasDiagnostic>;
     can_run: boolean;
     preview_token?: (string | null);
+    automatic_checks?: Array<CanvasAutomaticCheckEstimate>;
 };
