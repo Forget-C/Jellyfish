@@ -39,7 +39,11 @@ test('continuity categories offer distinct instructions while leaving factual st
   for (const [category, expected] of cases) {
     const card = { type: 'direction.continuity', category, before: { state: 'fact', text: '已确认前态' } }
     const original = structuredClone(card)
-    const [preset] = soundConstraintPresets(card)
+    const presets = soundConstraintPresets(card)
+    assert.equal(presets.length, 6)
+    assert.deepEqual(presets, soundConstraintPresets({ type: 'direction.continuity', category: 'space' }))
+    const preset = presets.find(value => value.category === category)
+    assert.ok(preset)
     assert.deepEqual(Object.keys(preset.fields), ['following_constraints'])
     assert.ok(preset.fields.following_constraints.text.includes(expected))
     assert.deepEqual(card, original)

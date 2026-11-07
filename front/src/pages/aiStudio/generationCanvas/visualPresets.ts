@@ -1,9 +1,9 @@
 import { userDesignField } from './designFieldMetadata'
-import type { DesignField, CompositionDesignFields, CameraDesignFields, MovementDesignFields, LightingDesignFields, FocusDesignFields, StyleDesignFields } from '../../../services/generated'
+import type { ContinuityCard, DesignField, CompositionDesignFields, CameraDesignFields, MovementDesignFields, LightingDesignFields, FocusDesignFields, StyleDesignFields } from '../../../services/generated'
 
 type VisualPresetFields = CompositionDesignFields & CameraDesignFields & MovementDesignFields & LightingDesignFields & FocusDesignFields & StyleDesignFields
 
-export type VisualPreset = { id: string; name: string; explanation: string; look: string; fields: Partial<VisualPresetFields> & Record<string, (DesignField & { size?: string | null }) | undefined>; video?: string; steps?: string[]; diagram?: string }
+export type VisualPreset = { category?: ContinuityCard['category']; id: string; name: string; explanation: string; look: string; fields: Partial<VisualPresetFields> & Record<string, (DesignField & { size?: string | null }) | undefined>; video?: string; steps?: string[]; diagram?: string }
 const field = (text: string): DesignField => userDesignField({ text })
 export const styleLabels: Record<keyof StyleDesignFields, string> = { direction: '风格方向', visual_features: '视觉特征', materials: '材质倾向', colors: '色彩倾向', notes: '自定义说明' }
 export const stylePresets: VisualPreset[] = [

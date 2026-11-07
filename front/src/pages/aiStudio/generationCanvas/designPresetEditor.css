@@ -255,3 +255,6 @@
 .design-media-reference-settings > .ant-select { width: 100%; }
 
 .design-media-reference-settings label { font-size: 12px; font-weight: 400; color: var(--wb-muted); }
+
+.design-continuity-category { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 400; color: var(--wb-muted); }
+.design-continuity-category .ant-select { width: 136px; }
