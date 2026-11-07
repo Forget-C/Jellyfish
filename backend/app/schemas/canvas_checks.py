@@ -83,12 +83,25 @@ class CanvasCheckTextEvidence(BaseModel):
     excerpt: str
 
 
+class CanvasCheckMediaInterval(BaseModel):
+    """Time bounds in the retained product's millisecond timeline."""
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+
+
+class CanvasCheckVideoRange(CanvasCheckMediaInterval):
+    """Original range submitted as video and requested provider sampling rate."""
+    sampling_fps: int = Field(gt=0)
+
+
 class CanvasCheckMediaObservation(BaseModel):
     """Public identity and visible evidence for media supplied to a check model."""
     modality: Literal['image', 'video']
     file_id: str
     description: str | None = None
     frame_at_ms: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
+    video_range: CanvasCheckVideoRange | None = Field(default=None, exclude_if=lambda value: value is None)
+    evidence_range: CanvasCheckMediaInterval | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasPostCheckRequest(CanvasCheckRequest):
@@ -143,7 +156,7 @@ class CanvasPostCheckPreview(BaseModel):
     basis: CanvasCheckBasis
     items: list[CanvasCheckItem]
     estimated_calls: int
-    observation_method: Literal['text', 'image', 'video_frame'] = 'text'
+    observation_method: Literal['text', 'image', 'video_frame', 'video_sequence', 'video_mixed'] = 'text'
     reason: str | None = None
 
 
