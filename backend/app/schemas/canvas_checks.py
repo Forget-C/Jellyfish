@@ -74,6 +74,7 @@ class CanvasCheckMediaObservation(BaseModel):
     modality: Literal['image', 'video']
     file_id: str
     description: str | None = None
+    frame_at_ms: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
 
 
 class CanvasPostCheckRequest(CanvasCheckRequest):
@@ -109,6 +110,8 @@ class CanvasCheckProduct(BaseModel):
     result_set_id: str | None = None
     revision: int
     text: str | None = None
+    modality: Literal['text', 'image', 'video'] = 'text'
+    file_id: str | None = None
 
 
 class CanvasPostCheckPreview(BaseModel):
@@ -118,6 +121,7 @@ class CanvasPostCheckPreview(BaseModel):
     basis: CanvasCheckBasis
     items: list[CanvasCheckItem]
     estimated_calls: int
+    observation_method: Literal['text', 'image', 'video_frame'] = 'text'
     reason: str | None = None
 
 

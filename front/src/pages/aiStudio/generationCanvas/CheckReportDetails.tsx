@@ -58,7 +58,8 @@ export function CheckReportDetails({ report, applicability, retry }: {
         {result.submitted_excerpt && <blockquote aria-label={report.product ? '产物片段' : '提交片段'}>{result.submitted_excerpt}</blockquote>}
         {!!result.observed_media?.length && <ul aria-label="本轮观察素材">
           {result.observed_media.map((media, index) => <li key={index}>
-            {media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
+            {media.frame_at_ms != null ? `视频静帧 ${media.frame_at_ms} 毫秒`
+              : media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
             {media.description && ` · ${media.description}`}
           </li>)}
         </ul>}

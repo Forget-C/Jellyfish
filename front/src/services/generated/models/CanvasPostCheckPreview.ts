@@ -14,5 +14,6 @@ export type CanvasPostCheckPreview = {
     basis: CanvasCheckBasis;
     items: Array<CanvasCheckItem>;
     estimated_calls: number;
+    observation_method?: 'text' | 'image' | 'video_frame';
     reason?: (string | null);
 };
