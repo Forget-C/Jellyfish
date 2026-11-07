@@ -94,6 +94,14 @@ class CanvasCheckVideoRange(CanvasCheckMediaInterval):
     sampling_fps: int = Field(gt=0)
 
 
+class CanvasCheckVideoMoment(BaseModel):
+    """A model-estimated visible point in the retained source timeline."""
+    model_config = ConfigDict(extra='forbid')
+    phase: Literal['before', 'during', 'after']
+    at_ms: int = Field(strict=True)
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
 class CanvasCheckMediaObservation(BaseModel):
     """Public identity and visible evidence for media supplied to a check model."""
     modality: Literal['image', 'video']
@@ -102,6 +110,7 @@ class CanvasCheckMediaObservation(BaseModel):
     frame_at_ms: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
     video_range: CanvasCheckVideoRange | None = Field(default=None, exclude_if=lambda value: value is None)
     evidence_range: CanvasCheckMediaInterval | None = Field(default=None, exclude_if=lambda value: value is None)
+    moments: list[CanvasCheckVideoMoment] = Field(default_factory=list, exclude_if=lambda value: not value)
 
 
 class CanvasPostCheckRequest(CanvasCheckRequest):
