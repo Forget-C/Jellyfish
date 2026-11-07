@@ -1,5 +1,6 @@
 import type { GenerationCard } from './graphRules'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
+import type { CanvasResolvedOutput } from '../../../services/generated'
 export type CardClipboard = { schema: 1; projectId: string; cards: GenerationCard[]; positions: CanvasPoint[] }
 const storageKey = (projectId: string) => `jellyfish:card-clipboard:${projectId}`
 /** 所有采用都必须显式解除；候选边不属于卡片配置，不影响资格。 */
@@ -20,6 +21,13 @@ export function readCardClipboard(projectId: string): CardClipboard | undefined 
   } catch { /* 无法读取时保持粘贴禁用。 */ }
 }
 export function writeCardClipboard(value: CardClipboard) { sessionStorage.setItem(storageKey(value.projectId), JSON.stringify(value)) }
+/** 捕获当前结果内容，交给普通内容卡剪贴板。粘贴时才分配持久身份。 */
+export function resultClipboardCard(id: string, output: CanvasResolvedOutput): GenerationCard | undefined {
+  if (output.available === false) return undefined
+  if (output.modality === 'text') return output.text ? { id, type: 'content.text', text: output.text } : undefined
+  if (output.file_id) return { id, type: `content.${output.modality}`, file_id: output.file_id }
+}
+
 /** 副本具有新的领域身份；文件本身复用，运行成果按新卡 ID 自然隔离。 */
 export function cloneCard(card: GenerationCard): GenerationCard {
   const copy = structuredClone(card)

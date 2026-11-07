@@ -34,7 +34,7 @@ import { editorPrompt } from './inputBindings'
 import type { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CanvasOutputActions, downloadOutputs, type DownloadOutput } from './CanvasOutputActions'
-import { cloneCard, copyRestriction, readCardClipboard, writeCardClipboard, type CardClipboard } from './cardClipboard'
+import { cloneCard, copyRestriction, readCardClipboard, resultClipboardCard, writeCardClipboard, type CardClipboard } from './cardClipboard'
 import { CanvasContextMenu } from './CanvasContextMenu'
 import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
@@ -140,7 +140,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [cardMenuId, setCardMenuId] = useState<string>()
-  useEffect(() => { if (cardMenuId && !cards.some(card => card.id === cardMenuId)) setCardMenuId(undefined) }, [cards, cardMenuId])
   const [surfaceState, setSurfaceState] = useState<{ spaceHeld: boolean; selectionBox?: { x: number; y: number; width: number; height: number } }>({ spaceHeld: false })
   const [surfaceGesture] = useState(() => createSurfaceGesture(setSurfaceState))
   const { spaceHeld, selectionBox } = surfaceState
@@ -257,7 +256,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
   const knownPositions = useMemo(() => knownResultPositions(runtime?.runs || []), [runtime?.runs])
   const linkedResults = useMemo(() => linkedResultCards(cards, runtime?.outputs, hidden, edges, knownPositions), [cards, runtime?.outputs, hidden, edges, knownPositions])
-  const resultsById = new Map(linkedResults.map(result => [result.id, result]))
+  const resultsById = useMemo(() => new Map(linkedResults.map(result => [result.id, result])), [linkedResults])
+  useEffect(() => {
+    if (cardMenuId && !cards.some(card => card.id === cardMenuId) && !resultsById.has(cardMenuId)) setCardMenuId(undefined)
+  }, [cards, cardMenuId, resultsById])
   const cardIdentity = [...cards, ...linkedResults].map(card => card.id).join('|')
   const layoutKey = `jellyfish:generation-layout:${document.project_id}:${document.id}`
   const cachedResultIds = retainedResultIds(cards, readStoredGraphView(`${layoutKey}:view:canvas`)?.positions || {})
@@ -630,17 +632,32 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const screenX=origin.x*pasteTransform.scale+pasteTransform.x,screenY=origin.y*pasteTransform.scale+pasteTransform.y
     if(box && (screenX>box.width || screenY>box.height || screenX+300*pasteTransform.scale<0 || screenY+250*pasteTransform.scale<0))layout.setView(previous=>({...previous,transform:{...previous.transform,x:previous.transform.x+Math.max(16,Math.min(screenX,box.width-80))-screenX,y:previous.transform.y+Math.max(16,Math.min(screenY,box.height-80))-screenY}}))
   }
-  const copyReason = (ids: string[]) => ids.map(id => {
-    const card=latest.current.cards?.find(card=>card.id===id)
-    return !card ? '卡片已不存在' : stackFor(id) ? '请先解除堆叠' : copyRestriction(card)
-  }).find(Boolean)
+  const copyTarget = (id: string): { card?: GenerationCard; reason?: string } => {
+    const result = resultsById.get(id)
+    if (result) {
+      const card = resultClipboardCard(id, result.output)
+      return card ? { card } : { reason: '当前输出不可用，无法复制' }
+    }
+    const card = latest.current.cards?.find(card => card.id === id)
+    if (!card) return { reason: '卡片已不存在' }
+    return { card, reason: stackFor(id) ? '请先解除堆叠' : copyRestriction(card) }
+  }
+  const copyReason = (ids: string[]) => ids.map(id => copyTarget(id).reason).find(Boolean)
   const copyCards = (ids: string[], duplicate=false) => {
-    const targets=ids.map(id=>latest.current.cards?.find(card=>card.id===id)).filter((card):card is GenerationCard=>!!card)
-    const reason=copyReason(ids)
+    const entries = ids.map(copyTarget)
+    const targets = entries.flatMap(({ card }) => card ? [card] : [])
+    const reason = entries.find(entry => entry.reason)?.reason
     if (!targets.length || reason) {setReason(reason || '请选择卡片');return}
     const value:CardClipboard={schema:1,projectId:document.project_id,cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
     if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
     else try {writeCardClipboard(value);setReason('已复制，可在画布粘贴')} catch {setReason('卡片剪贴板保存失败，请重试')}
+  }
+  const openCardContext = (id: string, trigger: HTMLElement) => {
+    const box = trigger.getBoundingClientRect()
+    const ids = selected.includes(id) ? selected : [id]
+    setCardMenuId(undefined)
+    setSelected(ids)
+    setContextMenu({ x: box.left, y: box.bottom, ids })
   }
   // 容器后代不等于画布焦点；编组、堆叠、连线及独立控件保留各自键盘行为。
   const ownsCardShortcut = (target: Element) => target === viewport.surface.current
@@ -1247,7 +1264,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const { id, output } = result
           const title = linkedResultTitle(output)
           return <CardShell key={id} id={id} type={`result.${output.modality}`} title={title} label={title} contextKey={document.id}
-            menu={false} point={point(id)} scale={transform.scale} viewportOffset={transform}
+            menu={cardMenuId === id} onMenuChange={open => setCardMenuId(open ? id : undefined)}
+            onContextActions={trigger => openCardContext(id, trigger)} readonly={readonly}
+            point={point(id)} scale={transform.scale} viewportOffset={transform}
             width={GENERATION_CARD_SIZE.width} height={GENERATION_CARD_SIZE.height} selected={selected.includes(id)}
             onOpen={() => { setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined); setDetailId(undefined) }}
             onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, id])] : previous.filter(value => value !== id)) }}
@@ -1264,7 +1283,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
           const visualDesign = isReferenceDesign(card)
-          return <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger=>{const box=trigger.getBoundingClientRect();setCardMenuId(undefined);const ids=selected.includes(card.id)?selected:[card.id];setSelected(ids);setContextMenu({x:box.left,y:box.bottom,ids})}} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
+          return <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger => openCardContext(card.id, trigger)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             viewportOffset={transform} scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (visualDesign ? 360 : focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : visualDesign ? undefined : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') && !visualDesign ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
