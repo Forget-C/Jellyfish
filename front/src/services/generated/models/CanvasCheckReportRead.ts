@@ -18,4 +18,8 @@ export type CanvasCheckReportRead = {
     items: Array<CanvasCheckItem>;
     results: Array<CanvasCheckResult>;
     omitted?: Array<CanvasCheckOmission>;
+    /**
+     * 执行时启用的项目；可与本轮实际执行范围不同。
+     */
+    enabled_item_ids?: (Array<string> | null);
 };

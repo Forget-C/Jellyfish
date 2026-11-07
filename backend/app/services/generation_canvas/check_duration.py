@@ -6,7 +6,7 @@ from decimal import Decimal
 from app.core.contracts.generation_canvas import DesignTextPayload, ShotDesignFields
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckResult
 from app.schemas.generation_canvas import CheckCard, VideoModelCard
-from app.services.generation_canvas.execution_basis import CanvasBasis
+from app.services.generation_canvas.execution_basis import CanvasBasis, digest
 
 _DURATION = re.compile(r'(预计|固定|至少|最低)?\s*(\d{1,4}(?:\.\d{1,3})?)\s*秒')
 _BOUNDARY = '仅核对同一直接采用镜头的明确时长数值，不预测动作可行性或生成结果。'
@@ -63,11 +63,21 @@ def duration_checks(basis: CanvasBasis, card: CheckCard) -> tuple[list[CanvasChe
             continue
         item_id = f'{DURATION_CATEGORY}:{source.source.card_id}:estimated_duration'
         comparison, reason = _comparison(field, source.payload.scope, basis.card.config.seconds, len(shots) == 1)
+        # 仅标记数值规则使用的证据，排除无关修订和卡片选择。
+        input_stamp = digest({
+            'source': source.source.model_dump(mode='json'),
+            'source_locator': source.payload.source_locator,
+            'field_source_locator': field.source_locator,
+            'requirement': field.text,
+            'state': field.state,
+            'purpose': field.purpose,
+            'seconds': basis.card.config.seconds,
+        }) if comparison else None
         item = CanvasCheckItem(id=item_id, category=DURATION_CATEGORY, label=DURATION_LABEL,
                               source=source.source, field_id='estimated_duration', requirement=field.text,
                               enabled=DURATION_CATEGORY in card.enabled_categories and item_id not in card.disabled_items,
                               availability='ready' if comparison else 'unavailable', reason=reason,
-                              scope_note=card.scope_notes.get(item_id))
+                              scope_note=card.scope_notes.get(item_id), input_stamp=input_stamp)
         items.append(item)
         if comparison:
             comparisons[item_id] = DurationCheck(item, *comparison)
