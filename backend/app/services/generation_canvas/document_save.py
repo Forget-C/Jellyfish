@@ -1,5 +1,6 @@
 """文档保存策略：按原顺序规范化及校验；在调用方事务内读数据库和锁定媒体。"""
 from dataclasses import dataclass
+from typing import Any
 from pydantic import ValidationError
 from sqlalchemy import select
 from app.schemas.generation_canvas import CanvasDocument, CanvasResultScope, ModelCard, SoundDirectionCard, PerformanceDirectionCard, MediaContentCard
@@ -15,6 +16,7 @@ class PreparedDocument:
     document: CanvasDocument
     identities: dict[str, str]
     media_references: dict[str, list[SavedMediaReference]]
+    detached_proofs: dict[str, dict[str, Any]]
 
 
 async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> PreparedDocument:
@@ -63,13 +65,15 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     from app.services.generation_canvas.historical_content import CanvasHistoricalContent
     history = CanvasHistoricalContent(db, project_id)
     for card in document.cards:
-        await history.validate_origin(canvas_id, card, previous_cards.get(card.id))
-    await history.validate_detached_results(document, previous_document, canvas.card_types)
+        await history.validate_origin(canvas_id, card, previous_cards.get(card.id), (canvas.detached_proofs or {}).get(card.id))
     for card in document.cards:
         target = getattr(card, 'frame_target', None)
         if target and target.card_id in previous_cards and (not any(source.id == target.card_id for source in document.cards) or any(edge['source_card'] == target.card_id and edge['target_card'] == card.id for edge in canvas.document.get('edges', [])) and not any(edge.source_card == target.card_id and edge.target_card == card.id for edge in document.edges)):
             raise diagnostic('REFERENCE_IN_USE', '请先解除构图的运镜关联再删除来源', {'card_id': card.id, 'path': ['frame_target']})
     validate_graph(document, previous_document)
+    detached_proofs, moved_sources = await history.validate_detached_results(
+        document, previous_document, canvas.detached_proofs,
+    )
     from app.services.generation_canvas.result_positions import known_result_positions
     scoped_edges = [edge for edge in document.edges if edge.result_scope]
     if scoped_edges:
@@ -105,10 +109,38 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     previous_pairs = {(edge['source_card'], edge['target_card']) for edge in canvas.document.get('edges', [])}
     previous_scopes = {(edge.source_card, edge.source_port, edge.target_card): edge.result_scope
                        for edge in previous_document.edges if edge.result_scope}
+    endpoint = lambda edge: (edge.source_card, edge.source_port, edge.target_card, edge.target_port)
+    previous_edges = {endpoint(edge): edge for edge in previous_document.edges}
+    next_edges = {endpoint(edge): edge for edge in document.edges}
+    fixed_ids = {result.content_card_id for card in document.cards if isinstance(card, ModelCard)
+                 for result in card.detached_results}
+    former_fixed = {result.content_card_id for card in previous_document.cards if isinstance(card, ModelCard)
+                    for result in card.detached_results} - fixed_ids
+    restored_slots = {}
+    for edge in previous_document.edges:
+        proof = detached_proofs.get(edge.source_card) if edge.source_card in former_fixed else None
+        if proof and endpoint(edge) not in next_edges and [edge.target_card, edge.target_port] in proof['routes']:
+            original = (proof['model_id'], edge.source_port, edge.target_card, edge.target_port)
+            restored_slots.setdefault(original, set()).add(proof['position'])
     by_id = {card.id: card for card in document.cards}
     new_pairs = {}
     for edge in document.edges:
         pair = (edge.source_card, edge.target_card)
+        source = moved_sources.get(edge.source_card)
+        if source and source['port_id'] == edge.source_port:
+            original = (source['card_id'], source['port_id'], edge.target_card, edge.target_port)
+            prior, remaining = previous_edges.get(original), next_edges.get(original)
+            position = source['position']
+            # 保留旧用途的候选，不借固定操作扩大不兼容模型的输入范围。
+            if prior and prior.includes_position(position) and not (remaining and remaining.includes_position(position)):
+                proof = detached_proofs[edge.source_card]
+                route = [edge.target_card, edge.target_port]
+                if route not in proof['routes']:
+                    proof['routes'] = [*proof['routes'], route]
+                continue
+        key = endpoint(edge)
+        if key in restored_slots and _restores_only_moved_slots(previous_edges.get(key), edge.result_scope, restored_slots[key]):
+            continue
         previous_scope = previous_scopes.get((edge.source_card, edge.source_port, edge.target_card))
         if pair not in previous_pairs or (previous_scope and _expands_result_scope(previous_scope, edge.result_scope)):
             new_pairs.setdefault(pair, []).append(edge)
@@ -160,7 +192,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
             await validate_media_file(db, project_id, media_references[card.id][0])
     if document.cover_file_id:
         await validate_media_file(db, project_id, media_references[''][0])
-    return PreparedDocument(document, identities, media_references)
+    return PreparedDocument(document, identities, media_references, detached_proofs)
 
 
 def _expands_result_scope(previous: CanvasResultScope, current: CanvasResultScope | None) -> bool:
@@ -172,6 +204,23 @@ def _expands_result_scope(previous: CanvasResultScope, current: CanvasResultScop
     if current.mode == 'only':
         return bool(set(current.positions) & set(previous.positions))
     return bool(set(previous.positions) - set(current.positions))
+
+
+def _restores_only_moved_slots(previous, current: CanvasResultScope | None, positions: set[int]) -> bool:
+    """撤销可补回经证明的旧位置，但不能扩大到额外位置或未来输出。"""
+    if previous is None:
+        return bool(current and current.mode == 'only' and set(current.positions) <= positions)
+    scope = previous.result_scope
+    if scope is None:
+        return True
+    if scope.mode == 'only':
+        return bool(current and current.mode == 'only' and set(current.positions) <= set(scope.positions) | positions)
+    still_excluded = set(scope.positions) - positions
+    if current is None:
+        return not still_excluded
+    if current.mode == 'only':
+        return not still_excluded.intersection(current.positions)
+    return still_excluded <= set(current.positions)
 
 
 def _normalize_document(document, previous_document):

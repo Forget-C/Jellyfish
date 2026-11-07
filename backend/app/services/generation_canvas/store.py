@@ -71,7 +71,8 @@ class CanvasStore:
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(
-                document=prepared.document.model_dump(), revision=command.expected_revision + 1, card_types=prepared.identities))
+                document=prepared.document.model_dump(), revision=command.expected_revision + 1,
+                card_types=prepared.identities, detached_proofs=prepared.detached_proofs))
         if result.rowcount != 1:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'revision': command.expected_revision + 1}

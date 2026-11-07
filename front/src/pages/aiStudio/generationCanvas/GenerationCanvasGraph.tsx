@@ -279,8 +279,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     // A scope may retain future candidates even after the last current path is disconnected.
     const known = [...(knownPositions.get(edge.source_card)?.values() || []), ...(runtime?.outputs[edge.source_card] || [])]
       .filter(output => members.some(member => member.source_port === output.source.port_id))
-    return { edge, projected: displayed.length > 0 || known.length > 0 && !known.some(output => covered(output.source)),
-      results: displayed.filter(result => covered(result.output.source)) }
+    // 显式连接模型仍能提供已固定批次的正式输出，其结果卡不再展开。
+    const source = cards.find(card => card.id === edge.source_card)
+    const expanded = source && 'show_result_cards' in source && source.show_result_cards && !hidden.has(source.id)
+    const direct = expanded ? (runtime?.outputs[edge.source_card] || []).filter(output =>
+      covered(output.source) && !displayed.some(({ output: item }) =>
+        item.source.port_id === output.source.port_id && item.source.position === output.source.position)) : []
+    return { edge, projected: displayed.length > 0 || direct.length > 0 || known.length > 0 && !known.some(output => covered(output.source)),
+      results: displayed.filter(result => covered(result.output.source)), direct }
   })
   const groupIdentity = groups.map(group => `${group.id}:${group.kind}:${group.collapsed}`).join('|')
   // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
@@ -961,14 +967,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   // Use a real member position so cross-row selections do not occupy an unrelated empty corner.
   const stackOrigin = (ids: string[]) => point(ids[0])
   const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
-  const resultPath = (source: string, target: string, label: string, result: LinkedResult, adopted = false, edge?: GenerationEdge) => {
+  const resultPath = (source: string, target: string, label: string, result: LinkedResult, adopted = false, edge?: GenerationEdge, lane = 0) => {
     const sides = defaultSides(point(source), point(target))
     const resultSource = edge ? result.output.source : undefined
     const selected = edge ? selectedEdgeId === edge.id && selectedResultSource?.port_id === resultSource?.port_id
       && selectedResultSource?.position === resultSource?.position : inspectedResult?.id === result.id
-    return <g key={JSON.stringify([source, target])} data-generation-update-id={edge ? undefined : result.id}
+    return <g key={JSON.stringify([source, target, resultSource?.port_id, resultSource?.position])} data-generation-update-id={edge ? undefined : result.id}
       data-generation-edge-id={edge?.id} data-generation-result-port={resultSource?.port_id} data-generation-result-position={resultSource?.position}>
-      <CanvasEdge d={connectionPath(anchor(source, sides.source), anchor(target, sides.target), sides.source, sides.target)}
+      <CanvasEdge d={connectionPath(anchor(source, sides.source), anchor(target, sides.target), sides.source, sides.target, lane)}
         label={label} selected={selected}
         onInspect={() => edge ? selectEdge(edge.id, undefined, resultSource) : selectEdge({ resultId: result.id })}
         className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'} />
@@ -1211,11 +1217,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, '--generation-canvas-scale': transform.scale } as CSSProperties}>
         <svg className="generation-edges" width={12000} height={12000}>
           {linkedResults.map(result => resultPath(result.output.source.card_id, result.id, '随生成更新 · ' + linkedResultTitle(result.output), result))}
-          {projectedConnections.map(({ edge, results, projected }) => {
-            if (projected) return results.map(result => {
+          {projectedConnections.map(({ edge, results, projected, direct }) => {
+            if (projected) return [...results, ...direct.map(output => ({ id: edge.source_card, output }))].map((result, index) => {
               const adopted = sourceConnectionEdges(document, edge).some(member =>
                 member.source_port === result.output.source.port_id && resultScopeIncludes(member.result_scope, result.output.source.position) && edgeAdoptions(member, result.output.source.position) > 0)
-              return resultPath(result.id, edge.target_card, `结果候选连接 · ${linkedResultTitle(result.output)} → ${cardLabel(edge.target_card)}`, result, adopted, edge)
+              const modelPath = index >= results.length
+              const label = modelPath ? '模型输出候选' : '结果候选连接'
+              const lane = modelPath ? (index - results.length - (direct.length - 1) / 2) * 36 : 0
+              return resultPath(result.id, edge.target_card, `${label} · ${linkedResultTitle(result.output)} → ${cardLabel(edge.target_card)}`, result, adopted, edge, lane)
             })
             const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
             const from = anchor(edge.source_card, sides.source), to = anchor(edge.target_card, sides.target)

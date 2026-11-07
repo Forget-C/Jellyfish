@@ -1,6 +1,7 @@
 """Result position scopes through document save, candidate reads and compilation."""
 import asyncio
 import base64
+from copy import deepcopy
 import json
 import httpx
 import pytest
@@ -193,6 +194,23 @@ async def test_fixing_middle_image_preserves_video_media_order_and_subject_alias
         fixed_edge.pop('result_scope')
         document['edges'].append(fixed_edge)
         document['input_order']['video'][edge['target_port']].append(fixed_edge['id'])
+    for wrong_model in (False, True):
+        invalid = deepcopy(document)
+        anchored = next(edge for edge in invalid['edges'] if edge.get('order_anchor'))
+        if wrong_model:
+            invalid['cards'].append({'id': 'unrelated-model', 'type': 'model.image'})
+            original_edge = next(edge for edge in invalid['edges'] if edge['id'] == anchored['order_anchor']['edge_id'])
+            original_edge.update(id='other-anchor', source_card='unrelated-model')
+            original_edge.pop('result_scope')
+            invalid['input_order']['video'][original_edge['target_port']][0] = 'other-anchor'
+            anchored['order_anchor']['edge_id'] = 'other-anchor'
+        else:
+            anchored['order_anchor']['position'] = 9876
+        rejected = await runtime.client.put(runtime.url, json={
+            'request_id': f'wrong-anchor-{wrong_model}', 'expected_revision': 3, 'document': invalid,
+        })
+        assert rejected.status_code == 422, rejected.text
+        assert rejected.json()['detail']['code'] == 'INVALID_RESULT_ORDER'
     await save(3, document)
 
     detached = await compile_video()
@@ -281,3 +299,57 @@ async def test_expanding_retained_result_scope_rechecks_model_capability(runtime
     assert response.status_code == 422, response.text
     assert response.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
     assert await read() == before
+
+    # The existing candidate may move to its fixed content even after a capability change.
+    position = 0 if mode == 'only' else 2
+    run = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['runs'][0]
+    node = run['nodes'][0]
+    url = runtime.url + f"/runs/{run['id']}/nodes/{node['id']}/outputs/{position}/content"
+    fixed = (await runtime.client.get(url)).json()['data']
+    document = deepcopy(before['document'])
+    document['cards'][0]['detached_results'] = [{
+        'position': position, 'result_set_id': node['result_set_id'], 'content_card_id': fixed['id'],
+    }]
+    document['cards'].append(fixed)
+    original_edges = list(document['edges'])
+    if mode == 'only':
+        document['edges'] = []
+    for edge in original_edges:
+        replacement = {**edge, 'id': 'fixed-' + edge['target_port'], 'source_card': fixed['id']}
+        replacement.pop('result_scope')
+        order = document['input_order']['video'][edge['target_port']]
+        if mode == 'only':
+            order.clear()
+        else:
+            edge['result_scope']['positions'].append(position)
+            replacement['order_anchor'] = {'edge_id': edge['id'], 'position': position}
+        order.append(replacement['id'])
+        document['edges'].append(replacement)
+    migrated = await save('preserve-existing-candidate', 5, document)
+    assert migrated.status_code == 200, migrated.text
+    candidates = (await runtime.client.get(runtime.url + '/cards/video/outputs')).json()['data']['candidates']
+    assert [(item['source']['card_id'], item['file_id']) for item in candidates] == [(fixed['id'], fixed['file_id'])]
+
+    # Prior eligibility of the migrated route grants no exception for another consumer.
+    document = (await read())['document']
+    document['cards'].append({'id': 'new-video', 'type': 'model.video', 'model_id': 'text-only-video'})
+    document['edges'].append({'id': 'new-fixed-edge', 'source_card': fixed['id'], 'source_port': 'image',
+                              'target_card': 'new-video', 'target_port': 'first_frame'})
+    document['input_order']['new-video'] = {'first_frame': ['new-fixed-edge']}
+    invalid = await save('cannot-extend-migrated-candidate', 6, document)
+    assert invalid.status_code == 422, invalid.text
+    assert invalid.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
+
+    frozen = (await read())['document']
+    expanded_undo = deepcopy(before['document'])
+    for edge in expanded_undo['edges']:
+        edge['result_scope']['positions'] = [0, 1] if mode == 'only' else [0]
+    invalid = await save('undo-with-extra-slot', 6, expanded_undo)
+    assert invalid.status_code == 422, invalid.text
+    assert invalid.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
+    undone = await save('undo-migrated-candidate', 6, before['document'])
+    assert undone.status_code == 200, undone.text
+    assert await read() == {**before, 'revision': 7}
+    redone = await save('redo-migrated-candidate', 7, frozen)
+    assert redone.status_code == 200, redone.text
+    assert (await read())['document'] == frozen

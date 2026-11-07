@@ -14,6 +14,7 @@ class GenerationCanvas(Base, TimestampMixin):
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     card_types: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    detached_proofs: Mapped[dict[str, dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
 
 class CanvasSaveReceipt(Base):

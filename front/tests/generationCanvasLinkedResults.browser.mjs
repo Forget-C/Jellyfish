@@ -399,5 +399,45 @@ try {
   await independent.waitFor()
   assert.equal(await resultCards.count(), 0)
   assert.deepEqual((await singleInputs()).map(item => item.file_id), [fixed.file_id])
+
+  // Explicitly connecting the model can expose a formal output whose result card was fixed.
+  const reconnectDocument = structuredClone(protectedDocument.document)
+  for (const id of ['reconnect', 'all-fixed-target']) {
+    reconnectDocument.cards.push({ id, type: 'model.image', model_id: 'canvas-image-model' })
+  }
+  const restored = await saveDeletion('restore-for-explicit-reconnect', (await readDocument()).revision, reconnectDocument)
+  assert.ok(restored.ok, await restored.text())
+  await page.reload()
+  await page.getByRole('button', { name: '随生成更新 · 图片生成结果 3', exact: true }).press('Enter')
+  await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+  await page.getByText('已固定此结果，原下游连接及引用已保留').waitFor()
+  await saved.waitFor()
+  await model.getByRole('button', { name: '右侧连接点' }).press('Enter')
+  await page.locator('[data-card-id="reconnect"]').getByRole('button', { name: '左侧连接点' }).press('Enter')
+  await saved.waitFor()
+  assert.deepEqual((await positions('reconnect')).map(([position]) => position), [0, 1, 2, 3])
+  assert.equal(await page.getByRole('article', { name: '图片生成结果 3', exact: true }).count(), 0)
+  const reconnected = (await readDocument()).document.edges.find(edge => edge.source_card === 'm' && edge.target_card === 'reconnect')
+  const direct = page.locator(`[data-generation-edge-id="${reconnected.id}"][data-generation-result-position="2"]`)
+  await direct.getByRole('button').press('Enter')
+  await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+  await saved.waitFor()
+  assert.deepEqual((await positions('reconnect')).map(([position]) => position), [0, 1, 3])
+
+  for (const number of [1, 2, 4]) {
+    await page.getByRole('button', { name: '随生成更新 · 图片生成结果 ' + number, exact: true }).press('Enter')
+    await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+    await page.getByRole('article', { name: '图片生成结果 ' + number, exact: true }).waitFor({ state: 'detached' })
+    await saved.waitFor()
+  }
+  assert.equal(await resultCards.count(), 0)
+  await model.getByRole('button', { name: '右侧连接点' }).press('Enter')
+  await page.locator('[data-card-id="all-fixed-target"]').getByRole('button', { name: '左侧连接点' }).press('Enter')
+  await saved.waitFor()
+  const allFixed = (await readDocument()).document.edges.find(edge => edge.source_card === 'm' && edge.target_card === 'all-fixed-target')
+  await page.locator(`[data-generation-edge-id="${allFixed.id}"][data-generation-result-position="0"]`).getByRole('button').press('Enter')
+  await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+  await saved.waitFor()
+  assert.deepEqual((await positions('all-fixed-target')).map(([position]) => position), [1, 2, 3])
   console.log('PASS formal result display, linked result lifecycle, deletion and readonly', output)
 } finally { await cleanup() }

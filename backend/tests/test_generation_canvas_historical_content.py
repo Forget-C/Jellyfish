@@ -165,6 +165,7 @@ async def test_detached_result_is_bound_to_its_formal_origin_and_saved_atomicall
     model = document['cards'][0]
     model['detached_results'] = [{'position': 0, 'result_set_id': node['result_set_id'], 'content_card_id': fixed['id']}]
     document['cards'].append(fixed)
+    document['cards'].append({'id': 'unrelated', 'type': 'content.text', 'text': '手填正文'})
 
     async def save(request_id, revision, value):
         return await runtime.client.put(runtime.url, json={'request_id': request_id, 'expected_revision': revision, 'document': value})
@@ -182,11 +183,11 @@ async def test_detached_result_is_bound_to_its_formal_origin_and_saved_atomicall
     assert saved.status_code == 200, saved.text
     after = (await runtime.client.get(runtime.url)).json()['data']
     assert after['document']['cards'][0]['detached_results'] == model['detached_results']
-    assert after['document']['cards'][-1]['origin'] == fixed['origin']
+    assert after['document']['cards'][-2]['origin'] == fixed['origin']
     assert (await runtime.client.get(content_url(runtime, run, node['id']))).json()['data']['text'] == fixed['text']
 
     # Deleting the independent card must not make the old result linked again.
-    after['document']['cards'].pop()
+    after['document']['cards'] = [card for card in after['document']['cards'] if card['id'] == model['id']]
     removed = await save('remove-fixed', after['revision'], after['document'])
     assert removed.status_code == 200, removed.text
     before_delete = (await runtime.client.get(runtime.url)).json()['data']
@@ -197,15 +198,29 @@ async def test_detached_result_is_bound_to_its_formal_origin_and_saved_atomicall
     removed = await save('remove-model', before_delete['revision'], deleted)
     assert removed.status_code == 200, removed.text
     revision = removed.json()['data']['revision']
-    for key, value in [('result_set_id', 'unknown-result'), ('content_card_id', 'unknown-card'), ('position', 1)]:
+    for key, value in [('result_set_id', 'unknown-result'), ('content_card_id', 'unknown-card'),
+                       ('content_card_id', 'unrelated'), ('position', 1)]:
         invalid = deepcopy(before_delete['document'])
         invalid['cards'][0]['detached_results'][0][key] = value
-        rejected = await save(f'invalid-undo-{key}', revision, invalid)
+        rejected = await save(f'invalid-undo-{key}-{value}', revision, invalid)
         assert rejected.status_code == 422, rejected.text
         assert rejected.json()['detail']['code'] == 'INVALID_DETACHED_RESULT'
     restored = await save('undo-remove-model', revision, before_delete['document'])
     assert restored.status_code == 200, restored.text
     assert (await runtime.client.get(runtime.url)).json()['data']['document'] == before_delete['document']
+
+    # An explicit new connection may still use the model's original formal output.
+    reconnected = deepcopy(before_delete['document'])
+    reconnected['cards'].append({'id': 'consumer', 'type': 'model.text'})
+    reconnected['edges'] = [{'id': 'reconnected', 'source_card': model['id'], 'source_port': 'text',
+                             'target_card': 'consumer', 'target_port': 'text'}]
+    reconnected['input_order'] = {'consumer': {'text': ['reconnected']}}
+    assert (await save('reconnect-model', revision + 1, reconnected)).status_code == 200
+    persisted = (await runtime.client.get(runtime.url)).json()['data']['document']
+    assert (await save('delete-reconnected-model', revision + 2, deleted)).status_code == 200
+    restored = await save('undo-delete-after-reconnect', revision + 3, persisted)
+    assert restored.status_code == 200, restored.text
+    assert (await runtime.client.get(runtime.url)).json()['data']['document'] == persisted
 
 
 @pytest.mark.asyncio
@@ -238,3 +253,32 @@ async def test_detaching_must_remove_live_scope_and_migrate_existing_binding(run
     assert rejected.status_code == 422, rejected.text
     assert rejected.json()['detail']['code'] == 'INVALID_DETACHED_RESULT'
     assert (await runtime.client.get(runtime.url)).json()['data'] == before
+
+
+@pytest.mark.asyncio
+async def test_restore_edited_fixed_content_keeps_provenance(runtime):
+    run, node = await finished_history(runtime)
+    fixed = (await runtime.client.get(content_url(runtime, run, node['id']))).json()['data']
+    before = (await runtime.client.get(runtime.url)).json()['data']
+    document = before['document']
+    document['cards'][0]['detached_results'] = [{
+        'position': 0, 'result_set_id': node['result_set_id'], 'content_card_id': fixed['id'],
+    }]
+    document['cards'].append(fixed)
+
+    async def save(request_id, offset, value):
+        return await runtime.client.put(runtime.url, json={
+            'request_id': request_id, 'expected_revision': before['revision'] + offset, 'document': value,
+        })
+
+    assert (await save('detach', 0, document)).status_code == 200
+    fixed['text'] = '独立编辑后的正文'
+    assert (await save('edit-fixed', 1, document)).status_code == 200
+    assert (await save('delete-fixed', 2, {**document, 'cards': document['cards'][:-1]})).status_code == 200
+    forged = deepcopy(document)
+    forged['cards'][-1].pop('origin')
+    assert (await save('restore-without-origin', 3, forged)).status_code == 422
+    restored = await save('restore-edited-fixed', 3, document)
+    assert restored.status_code == 200, restored.text
+    saved = (await runtime.client.get(runtime.url)).json()['data']['document']['cards'][-1]
+    assert saved['text'] == fixed['text'] and saved['origin'] == fixed['origin']
