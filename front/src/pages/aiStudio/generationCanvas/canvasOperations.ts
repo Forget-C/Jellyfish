@@ -165,7 +165,11 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
       // Only retained consumers can protect a source from a batch deletion.
       for (const id of ids) {
         const protection = referenceProtection(document, connectionPolicy, id, undefined, ids)
-        if (protection) return { reason: protection.message, protection }
+        if (protection) {
+          const model = document.cards?.some(card => card.id === id && card.type?.startsWith('model.'))
+          const message = model ? `${protection.message}。如需保留生成结果，请显示结果卡并断开它与生成卡的连线` : protection.message
+          return { reason: message, protection: { ...protection, message } }
+        }
       }
       let next = document
       for (const edge of next.edges || []) if (ids.includes(edge.source_card) || ids.includes(edge.target_card)) next = disconnect(next, edge.id)

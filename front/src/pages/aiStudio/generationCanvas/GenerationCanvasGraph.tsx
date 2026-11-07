@@ -459,16 +459,23 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const removeCards = (ids: string[], confirmed = false) => {
     if (readonly || !ids.length) return
-    if (ids.some(id => resultsById.has(id))) { setReason('关联结果由生成卡管理'); return }
-    const result = operations.remove(latest.current, ids, runtime?.busyCards || new Set(), cardLabel)
+    const selectedIds = new Set(ids)
+    if (ids.some(id => {
+      const owner = resultsById.get(id)?.output.source.card_id
+      return owner && !selectedIds.has(owner)
+    })) { setReason('请先断开与生成卡的连线，再删除此结果卡'); return }
+    // 关联结果只随所属模型移除，文档删除始终按真实卡片及最终保留的消费者检查。
+    const cardIds = (latest.current.cards || []).filter(card => selectedIds.has(card.id)).map(card => card.id)
+    if (!cardIds.length) return
+    const result = operations.remove(latest.current, cardIds, runtime?.busyCards || new Set(), cardLabel)
     if (!result.document) {
       if (result.protection) showProtection(result.protection)
       else setReason(result.reason)
       return
     }
-    if (!confirmed) { setPendingDeletion(ids); return }
+    if (!confirmed) { setPendingDeletion(cardIds); return }
     edit(result.document)
-      clearSelection(); viewport.surface.current?.focus({ preventScroll: true })
+    clearSelection(); viewport.surface.current?.focus({ preventScroll: true })
   }
   const removeCard = (id: string) => removeCards([id])
   const zoomAt = (scale: number, x: number, y: number) => {
@@ -1048,6 +1055,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     <WorkbenchModal title="解除定位并断开？" open={!!pendingFrameDisconnect} onCancel={() => setPendingFrameDisconnect(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingFrameDisconnect(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const edge = pendingFrameDisconnect; setPendingFrameDisconnect(undefined); if (edge) removeEdge(edge, true) }}>解除定位并断开</Button></WorkbenchDialogActions>}><p>当前构图使用此运镜画面定位，可通过撤销恢复。</p></WorkbenchModal>
     <WorkbenchModal title={`删除 ${pendingDeletion?.length || 0} 张卡片？`} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>确认删除</Button></WorkbenchDialogActions>}>
       相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。
+      {cards.some(card => card.type?.startsWith('model.') && pendingDeletion?.includes(card.id)) && <p>关联结果卡会随生成卡一并移除，已独立的内容卡按本次选择处理。</p>}
       {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>将解除 {cardLabel(card.id)} 的验收关联，后续生成不再自动带入该要求。</p>)}
     </WorkbenchModal>
     <Modal title="堆叠内容（只读）" open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>

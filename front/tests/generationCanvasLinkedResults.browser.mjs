@@ -309,5 +309,89 @@ try {
     releaseHistory()
     await page.unroute(historyUrl)
   }
-  console.log('PASS formal result display, layout, candidate parity, regeneration and readonly', output)
+  const beforeDeletion = await readDocument()
+  await closeCanvasDetails(page)
+  await result.press('Enter')
+  await result.press('Delete')
+  await page.getByRole('status').filter({ hasText: '请先断开与生成卡的连线，再删除此结果卡' }).waitFor()
+  assert.deepEqual(await readDocument(), beforeDeletion)
+  await result.waitFor()
+
+  // Keep an actual reference to the model while retaining an independent consumer.
+  const deletionSetup = structuredClone(beforeDeletion.document)
+  deletionSetup.cards.find(item => item.id === 'consumer').input_bindings.push({
+    id: 'keep-model-result', input_port: 'image', source: { ...identity, position: 2 },
+  })
+  deletionSetup.groups = [{ id: 'deletion-group', name: '删除测试编组', card_ids: ['m', 'consumer', 'text'] }]
+  const saveDeletion = (request_id, expected_revision, document) => fetch(`${base}/${canvas.id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id, expected_revision, document }),
+  })
+  const grouped = await saveDeletion('group-before-deletion', beforeDeletion.revision, deletionSetup)
+  assert.ok(grouped.ok, await grouped.text())
+  const protectedDocument = await readDocument()
+  const bypass = structuredClone(protectedDocument.document)
+  bypass.cards = bypass.cards.filter(item => item.id !== 'm')
+  bypass.edges = bypass.edges.filter(edge => edge.source_card !== 'm')
+  const edgeIds = new Set(bypass.edges.map(edge => edge.id))
+  for (const ports of Object.values(bypass.input_order)) {
+    for (const port of Object.keys(ports)) ports[port] = ports[port].filter(id => edgeIds.has(id))
+  }
+  bypass.groups[0].card_ids = ['consumer', 'text']
+  const blocked = await saveDeletion('delete-model-with-retained-reference', protectedDocument.revision, bypass)
+  assert.equal(blocked.status, 422)
+  assert.equal((await blocked.json()).data.code, 'REFERENCE_IN_USE')
+  assert.deepEqual(await readDocument(), protectedDocument, 'failed save leaves the entire document intact')
+
+  await page.reload()
+  await result.waitFor()
+  await independent.press('Enter')
+  await independent.press('Delete')
+  await page.getByRole('status').filter({ hasText: '实际输入绑定 keep-result' }).waitFor()
+  await closeCanvasDetails(page)
+  await model.press('Enter')
+  await model.press('Delete')
+  await page.getByRole('status').filter({ hasText: /keep-model-result.*断开它与生成卡的连线/ }).waitFor()
+  assert.deepEqual(await readDocument(), protectedDocument)
+  await closeCanvasDetails(page)
+
+  // Removing the referenced consumer in the same action releases its protection.
+  const consumer = page.locator('[data-card-id="consumer"]')
+  await model.getByRole('button', { name: '卡片操作' }).press('Enter')
+  await model.getByRole('button', { name: '选择多个' }).press('Enter')
+  await result.press('Enter')
+  await consumer.press('Enter')
+  await page.getByRole('toolbar', { name: '所选卡片操作' }).getByText('3 张卡片', { exact: true }).waitFor()
+  const runsBeforeDeletion = (await runtime()).runs.map(run => run.id)
+  await consumer.press('Delete')
+  await page.getByRole('dialog', { name: '删除 2 张卡片？' }).getByRole('button', { name: '确认删除' }).click()
+  await model.waitFor({ state: 'detached' })
+  await resultCards.first().waitFor({ state: 'detached' })
+  await saved.waitFor()
+  await independent.waitFor()
+  const deleted = (await readDocument()).document
+  assert.deepEqual(deleted.cards.map(item => item.id).sort(), ['single', 'text', ...beforeDeletion.document.cards
+    .filter(item => item.origin).map(item => item.id)].sort())
+  assert.deepEqual(deleted.groups[0].card_ids, ['text'])
+  assert.ok(deleted.edges.every(edge => edge.source_card !== 'm' && edge.target_card !== 'consumer'))
+  assert.equal(deleted.input_order.consumer, undefined)
+  assert.deepEqual((await runtime()).runs.map(run => run.id), runsBeforeDeletion, 'deleting cards retains all run history')
+  const singleInputs = async () => (await (await fetch(`${base}/${canvas.id}/cards/single/compile`)).json()).data.media
+  assert.deepEqual((await singleInputs()).map(item => item.file_id), [fixed.file_id])
+
+  await independent.press('ControlOrMeta+z')
+  await model.waitFor()
+  await result.waitFor()
+  await consumer.waitFor()
+  await saved.waitFor()
+  assert.deepEqual((await readDocument()).document, protectedDocument.document)
+  assert.deepEqual((await runtime()).runs.map(run => run.id), runsBeforeDeletion)
+  await independent.press('ControlOrMeta+Shift+z')
+  await model.waitFor({ state: 'detached' })
+  await saved.waitFor()
+  await page.reload()
+  await independent.waitFor()
+  assert.equal(await resultCards.count(), 0)
+  assert.deepEqual((await singleInputs()).map(item => item.file_id), [fixed.file_id])
+  console.log('PASS formal result display, linked result lifecycle, deletion and readonly', output)
 } finally { await cleanup() }
