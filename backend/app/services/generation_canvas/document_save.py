@@ -14,6 +14,7 @@ from app.services.generation_canvas.saved_media import SavedMediaReference
 class PreparedDocument:
     """全部校验通过后的文档、累积身份与文件保护清单；不代表已保存。"""
     document: CanvasDocument
+    previous_document: CanvasDocument
     identities: dict[str, str]
     media_references: dict[str, list[SavedMediaReference]]
     detached_proofs: dict[str, dict[str, Any]]
@@ -196,7 +197,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
             await validate_media_file(db, project_id, media_references[card.id][0])
     if document.cover_file_id:
         await validate_media_file(db, project_id, media_references[''][0])
-    return PreparedDocument(document, identities, media_references, detached_proofs)
+    return PreparedDocument(document, previous_document, identities, media_references, detached_proofs)
 
 
 def _expands_result_scope(previous: CanvasResultScope, current: CanvasResultScope | None) -> bool:
