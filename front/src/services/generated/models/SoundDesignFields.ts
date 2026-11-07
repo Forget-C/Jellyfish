@@ -9,6 +9,7 @@ import type { ReferenceDesignField } from './ReferenceDesignField';
 export type SoundDesignFields = {
     content?: (ReferenceDesignField | null);
     language_pronunciation?: (ReferenceDesignField | null);
+    audiovisual_relation?: (ReferenceDesignField | null);
     source_description?: (ReferenceDesignField | null);
     environment?: (ReferenceDesignField | null);
     action_sound?: (ReferenceDesignField | null);
