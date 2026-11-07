@@ -52,6 +52,8 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
             node.outputs = [{**item, 'result_set_id': result.id} for item in node.outputs]
             result.outputs = node.outputs
             await db.flush()
+            from app.services.generation_canvas.automatic_checks import enqueue_automatic_checks
+            await enqueue_automatic_checks(db, node, task.project_id)
             canvas = await db.get(GenerationCanvas, node.canvas_id, populate_existing=True)
             current_state = CanvasCurrentState(db, canvas.project_id)
             try:

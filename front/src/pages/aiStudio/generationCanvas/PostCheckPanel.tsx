@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Alert, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCheckProduct, CanvasCheckReportRead, CanvasPostCheckPreview } from '../../../services/generated'
+import type { CanvasCheckProduct, CanvasCheckReportRead, CanvasPostCheckPreview, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 
+const postCategories = [
+  { id: 'R01', label: '明确内容与结果落实' },
+  { id: 'R02', label: '对象与外观落实' },
+  { id: 'R03', label: '静态摄影与风格落实' },
+]
 const productLabels = { text: '文字', image: '图片', video: '视频' }
 const observationLabels = { text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查' }
 const statuses = { succeeded: '完整交付', failed: '生成失败 · 保留片段', cancelled: '生成取消 · 保留片段' }
@@ -25,12 +30,17 @@ type Props = {
   savedRevision?: number
   active: boolean
   disabled: boolean
+  card: CheckCard
+  updateCard: (card: CheckCard) => void
+  configDisabled: boolean
+  automaticCheckRunId?: string
+  onRefreshReports: () => void
   reports: CanvasCheckReportRead[]
   onReport: (report: CanvasCheckReportRead) => void
 }
 
 /** Preview the chosen product before any provider work, with the call count visible. */
-export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, active, disabled, reports, onReport }: Props) {
+export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, active, disabled, reports, onReport, card, updateCard, configDisabled, automaticCheckRunId, onRefreshReports }: Props) {
   const [products, setProducts] = useState<CanvasCheckProduct[]>()
   const [selected, setSelected] = useState<string>()
   const [preview, setPreview] = useState<CanvasPostCheckPreview>()
@@ -49,7 +59,7 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
       if (current) { setProducts(undefined); setError('读取历史产物失败') }
     })
     return () => { current = false }
-  }, [projectId, canvasId, cardId, savedRevision, refresh, active])
+  }, [projectId, canvasId, cardId, savedRevision, refresh, active, automaticCheckRunId])
 
   const product = products?.find(row => productKey(row) === selected)
   const runId = product?.run_id
@@ -84,7 +94,19 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
     }
   }
 
+  const selectedCategories = card.post_check_categories ?? postCategories.map(item => item.id)
   return <section className="generation-check-category" aria-label="生成后检查">
+    <label><input type="checkbox" checked={!!card.auto_post_check} disabled={configDisabled || running}
+      onChange={event => updateCard({ ...card, auto_post_check: event.currentTarget.checked })} />
+      完整交付后自动检查
+    </label>
+    <p>自动检查仅适用于启用后提交且完整交付的生成。项目范围同时用于手动检查。</p>
+    <fieldset aria-label="生成后检查项目范围">{postCategories.map(category => <label key={category.id}>
+      <input type="checkbox" checked={selectedCategories.includes(category.id)} disabled={configDisabled || running}
+        onChange={event => updateCard({ ...card, post_check_categories: event.currentTarget.checked
+          ? [...new Set([...selectedCategories, category.id])] : selectedCategories.filter(id => id !== category.id) })} />
+      {category.label}
+    </label>)}</fieldset>
     <p>手动选择一个历史产物，按其原生成依据检查。</p>
     {error && <Alert type="warning" showIcon message={error} />}
     <label>历史产物
@@ -94,7 +116,7 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
           label: `${productLabels[row.modality ?? 'text']} · 修订 ${row.revision} · ${statuses[row.generation_status]} · 运行 ${row.run_id.slice(0, 8)} · 位置 ${row.position + 1}` }))} />
     </label>
     <Button size="small" variant="quiet" disabled={disabled || running}
-      onClick={() => { setPreview(undefined); setError(''); setRefresh(value => value + 1) }}>刷新历史产物</Button>
+      onClick={() => { setPreview(undefined); setError(''); setRefresh(value => value + 1); onRefreshReports() }}>刷新历史产物和报告</Button>
     {products?.length === 0 && <p>暂无此生成目标的历史产物</p>}
     {selected && !fixed && !error && <p role="status">正在读取所选产物</p>}
     {fixed && <>
@@ -103,9 +125,14 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
       {fixed.observation_method === 'video_frame' && <p>只观察实际解码的静帧。其他时刻、动作过程和音轨未核验。</p>}
       {fixed.reason && <p>{fixed.reason}</p>}
       {fixed.items.map(item => <div className="generation-check-item" key={item.id}>
-        <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>
+        <label><input type="checkbox" aria-label={`纳入生成后检查：${item.source.card_id}/${item.field_id}`}
+          checked={!card.disabled_items?.includes(item.id)} disabled={configDisabled || running}
+          onChange={event => updateCard({ ...card, disabled_items: event.currentTarget.checked
+            ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })} />
+          {item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</label>
+        {!item.enabled && <p>此项已关闭</p>}
         {item.availability !== 'ready' && <p>无法判断 · {item.reason}</p>}
-        <Button size="small" disabled={disabled || running || item.availability !== 'ready'}
+        <Button size="small" disabled={disabled || running || !item.enabled || item.availability !== 'ready'}
           onClick={() => void submit(item.id)}>{alreadyChecked ? '重新检查此项' : '检查此项'}</Button>
       </div>)}
       <Button variant="primary" disabled={disabled || running} loading={running} onClick={() => void submit()}>

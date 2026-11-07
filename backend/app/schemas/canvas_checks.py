@@ -162,3 +162,4 @@ class CanvasCheckReportRead(BaseModel):
     enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')
     product: CanvasCheckProduct | None = None
     recheck: CanvasCheckRecheck | None = None
+    automatic: bool = False

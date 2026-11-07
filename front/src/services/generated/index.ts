@@ -179,6 +179,7 @@ export type { CameraCard } from './models/CameraCard';
 export type { CameraDesignFields } from './models/CameraDesignFields';
 export type { CameraShot_Input } from './models/CameraShot_Input';
 export type { CameraShot_Output } from './models/CameraShot_Output';
+export type { CanvasAutomaticCheckEstimate } from './models/CanvasAutomaticCheckEstimate';
 export type { CanvasBasisTarget } from './models/CanvasBasisTarget';
 export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
 export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition';

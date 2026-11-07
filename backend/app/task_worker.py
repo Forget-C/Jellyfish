@@ -34,7 +34,7 @@ from app.services.generation.media_execution import build_media_input, deliver_m
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
-from app.services.task_service import MEDIA_KINDS, TASK_KINDS, TaskService, utcnow
+from app.services.task_service import AUTO_CHECK_DISPATCH, MEDIA_KINDS, TASK_KINDS, TaskService, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +218,11 @@ class TaskWorker:
                             except HTTPException as error:
                                 await self._fail(task.id, error.detail['code'], error.detail['message'])
                                 return
+                if task.kind == AUTO_CHECK_DISPATCH:
+                    from app.services.generation_canvas.automatic_checks import dispatch_automatic_checks
+                    async with self.sessions.begin() as db:
+                        await dispatch_automatic_checks(db, task)
+                    return
                 if task.kind == 'scene_export':
                     await execute_scene_export(self.sessions, task,
                         lambda content, sources, profile: self._render_scene(task, content, sources, profile),
@@ -246,7 +251,10 @@ class TaskWorker:
             async with self.sessions() as db:
                 current = await db.get(Task, task_id)
                 if current is not None and not (current.execution_mode == "remote" and current.provider_task_id):
-                    await TaskService(db).finish(task_id, error_code="execution_interrupted", error="执行进程已停止，请重新提交")
+                    service = TaskService(db)
+                    requeued = current.kind == AUTO_CHECK_DISPATCH and await service.requeue_automatic_dispatch(task_id)
+                    if not requeued:
+                        await service.finish(task_id, error_code="execution_interrupted", error="执行进程已停止，请重新提交")
                     await db.commit()
             raise
         except TimeoutError:

@@ -14,6 +14,7 @@ class GenerationCanvas(Base, TimestampMixin):
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     card_types: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    check_edge_revisions: Mapped[dict[str, int] | None] = mapped_column(JSON, nullable=True)
     detached_proofs: Mapped[dict[str, dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
 
@@ -63,6 +64,12 @@ class CanvasRunNode(Base):
     current_output_updated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+    @property
+    def automatic_check_card_ids(self) -> list[str]:
+        """Expose only linked check identities, never the frozen routes or credentials."""
+        return [plan['card']['id'] for plan in (self.execution_snapshot or {}).get('automatic_checks', ())]
 
 
 class CanvasScopeOccupancy(Base):

@@ -19,6 +19,7 @@ export type CanvasNodeRead = {
     outputs: Array<CanvasResolvedOutput>;
     result_set_id: (string | null);
     current_output_updated: boolean;
+    automatic_check_card_ids?: Array<string>;
     error_code: (string | null);
     error_message: (string | null);
 };

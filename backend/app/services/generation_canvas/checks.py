@@ -59,6 +59,13 @@ def check_target(context: CanvasOutputContext, card_id: str) -> tuple[CheckCard,
     return card, relation.source_card if relation else None
 
 
+def changed_check_connections(previous: CanvasDocument, current: CanvasDocument) -> dict[str, str]:
+    """Find removed or replaced observation edges, retaining their original targets."""
+    before = {edge.target_card: (edge.id, edge.source_card) for edge in previous.edges if edge.target_port == 'check_basis'}
+    after = {edge.target_card: (edge.id, edge.source_card) for edge in current.edges if edge.target_port == 'check_basis'}
+    return {card_id: target for card_id, (edge_id, target) in before.items() if after.get(card_id) != (edge_id, target)}
+
+
 async def persist_check_report(db: AsyncSession, canvas_id: str, report: CanvasCheckReportRead, tasks: dict[str, str]):
     """Publish the fixed public report and its private task index in the admission transaction."""
     stored = report.model_dump(mode='json')
@@ -205,15 +212,12 @@ class CanvasChecks:
         ).order_by(CanvasCheckReport.created_at.desc(), CanvasCheckReport.id.desc()))
         return await self.read_reports(list(rows))
 
-    async def cancel_changed_targets(self, previous: CanvasDocument, current: CanvasDocument) -> None:
+    async def cancel_changed_targets(self, canvas_id: str, changed: dict[str, str]) -> None:
         """Called during CAS save with the canvas locked; only original changed targets stop."""
-        before = {edge.target_card: edge.source_card for edge in previous.edges if edge.target_port == 'check_basis'}
-        after = {edge.target_card: edge.source_card for edge in current.edges if edge.target_port == 'check_basis'}
-        changed = {card_id: target for card_id, target in before.items() if after.get(card_id) != target}
         if not changed:
             return
         rows = await self.db.scalars(select(CanvasCheckReport).where(
-            CanvasCheckReport.canvas_id == previous.id, CanvasCheckReport.check_card_id.in_(changed),
+            CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id.in_(changed),
         ))
         related = [row for row in rows
                    if row.report['basis']['target_card_id'] == changed[row.check_card_id]]

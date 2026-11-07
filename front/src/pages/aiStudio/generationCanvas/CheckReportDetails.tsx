@@ -44,6 +44,7 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
       <p>原结论 {outcomes[report.recheck.original_result.outcome]} · {report.recheck.original_result.message}</p>
       <p>本次复核说明 {report.recheck.clarification}</p>
     </details>}
+    {report.automatic && <p>完整交付后自动检查</p>}
     {report.product && <HistoricalCheckProduct product={report.product} />}
     {!!report.executions?.length && <ul aria-label="模型检查执行状态">
       {report.executions.map(execution => {

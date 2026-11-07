@@ -16,8 +16,10 @@ from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskExecutionMode, T
 from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
+AUTO_CHECK_DISPATCH = 'canvas_auto_check'
+
 TASK_KINDS = frozenset({
-    "text_chat", "canvas_check", "image_generation", "video_generation", "scene_export",
+    "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation", "scene_export",
     "script_consistency",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
@@ -251,9 +253,22 @@ class TaskService:
             or_(Task.execution_mode == TaskExecutionMode.direct, Task.provider_task_id.is_(None)),
         )))
         for row in rows:
+            if row.kind == AUTO_CHECK_DISPATCH and await self.requeue_automatic_dispatch(row.id):
+                continue
             await self.finish(row.id, error_code="submission_interrupted" if row.execution_mode == "remote" else "execution_interrupted",
                               error="服务重启，任务已中断，请重新提交")
         return len(rows)
+
+    async def requeue_automatic_dispatch(self, task_id: str) -> bool:
+        """Retry a DB-only dispatch whose report writes and terminal status commit together."""
+        row = await self._lock(task_id)
+        if row is None or row.kind != AUTO_CHECK_DISPATCH or row.status != TaskStatus.running or row.cancel_requested_at:
+            return False
+        row.status, row.stage = TaskStatus.queued, 'queued'
+        row.worker_instance_id, row.started_at = None, None
+        row.deadline_at = utcnow() + timedelta(seconds=86400)
+        await self.db.flush()
+        return True
 
     async def expire_tasks(self) -> int:
         """结束超期排队/本地执行，远端跟踪期限由 Poller 最后核对后结束。"""
