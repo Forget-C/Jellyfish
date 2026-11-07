@@ -4,7 +4,7 @@ from app.schemas.generation_canvas import CanvasResolvedOutput, DialogueCard, So
 from app.services.generation_canvas.formatting import scope_source_lines, design_field_line
 from app.services.generation_canvas.errors import diagnostic
 
-FIELD_LABELS = {'content': '对白正文', 'source_description': '声源说明', 'environment': '环境声', 'action_sound': '动作声', 'music': '音乐约束'}
+FIELD_LABELS = {'content': '对白正文', 'language_pronunciation': '语言／发音要求', 'source_description': '声源说明', 'environment': '环境声', 'action_sound': '动作声', 'music': '音乐约束'}
 
 
 def publish_sound(canvas_id, card, adopted_inputs):
