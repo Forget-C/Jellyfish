@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.core.contracts.provider import ProviderKey
 from app.core.contracts.provider_media import ProviderVideoInput
-from app.core.contracts.video_generation import VideoGenerationInput, VideoRatio
+from app.core.contracts.video_generation import AudioCapability, VideoGenerationInput, VideoRatio
 
 ALLOWED_RATIOS = {"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}
 DEFAULT_RATIO_TO_SIZE_MAPPING: dict[str, str] = {
@@ -57,6 +57,8 @@ class VideoModelCapability:
     max_videos_per_subject: int | None = None
     max_media_per_subject: int | None = None
     max_total_subject_videos: int | None = None
+    native_audio_output: AudioCapability = field(default_factory=AudioCapability)
+    audio_switch: AudioCapability = field(default_factory=AudioCapability)
 
 
 def register_video_model_capability(

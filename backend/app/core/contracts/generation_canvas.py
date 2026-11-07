@@ -327,9 +327,11 @@ class SpatialDesignRelations(BaseModel):
     trigger_event_id: str | None = None
 
 class SoundDesignFields(BaseModel):
-    """对白正文与声音安排的具体字段。"""
+    """对白与声音安排的具体设计字段。"""
     model_config = ConfigDict(extra='forbid')
     content: ReferenceDesignField | None = None
+    language_pronunciation: ReferenceDesignField | None = Field(default=None, exclude_if=lambda value: value is None)
+    audiovisual_relation: ReferenceDesignField | None = Field(default=None, exclude_if=lambda value: value is None)
     source_description: ReferenceDesignField | None = None
     environment: ReferenceDesignField | None = None
     action_sound: ReferenceDesignField | None = None

@@ -4,6 +4,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
+from app.core.contracts.video_generation import AudioCapability
 from app.core.contracts.generation_canvas import DesignMediaUse, CompositionDesignFields, DesignFrameTarget, DesignMediaOrigin, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
@@ -309,6 +310,8 @@ class CanvasModelCapability(BaseModel):
     model_id: str
     modality: Literal['text', 'image', 'video']
     input_ports: list[str]
+    native_audio_output: AudioCapability = Field(default_factory=AudioCapability)
+    audio_switch: AudioCapability = Field(default_factory=AudioCapability)
     ratios: list[str] = Field(default_factory=list)
     resolution_profiles: dict[str, dict[str, str]] = Field(default_factory=dict)
     min_count: int = 1
@@ -567,6 +570,8 @@ class DialogueCard(SoundDirectionCard):
     type: Literal['direction.dialogue'] = Field(default='direction.dialogue', json_schema_extra={'enum': ['direction.dialogue']})
     dialogue_id: str = Field(min_length=1, max_length=64)
     content: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    language_pronunciation: ReferenceDesignField = Field(default_factory=ReferenceDesignField, description='随对白采用的可选语言与发音设计要求。')
+    audiovisual_relation: ReferenceDesignField = Field(default_factory=ReferenceDesignField, description='随对白采用的可选说话与画面关系。')
     input_ports: ClassVar[tuple[str, ...]] = ('speaker', 'video_example', 'audio_example', 'text')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'dialogue')
 

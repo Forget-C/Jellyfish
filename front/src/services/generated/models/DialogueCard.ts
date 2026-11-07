@@ -19,4 +19,12 @@ export type DialogueCard = {
     type?: 'direction.dialogue';
     dialogue_id: string;
     content?: ReferenceDesignField;
+    /**
+     * 随对白采用的可选语言与发音设计要求。
+     */
+    language_pronunciation?: ReferenceDesignField;
+    /**
+     * 随对白采用的可选说话与画面关系。
+     */
+    audiovisual_relation?: ReferenceDesignField;
 };

@@ -4,7 +4,7 @@ import { InputBindingReferences } from './InputBindingReferences'
 import { DesignVideoMediaUses } from './DesignVideoMediaUses'
 import { Alert, Select, Space, Switch } from 'antd'
 import { ArrowUpOutlined } from '@ant-design/icons'
-import type { CanvasResolvedOutput, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
+import type { AudioCapability, CanvasResolvedOutput, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
 import { PhotographyInputScope } from './PhotographyInputScope'
@@ -26,6 +26,11 @@ import type { ReactNode } from 'react'
 import { CardComposer } from './CardComposer'
 import './materialComposer.css'
 
+function audioCapabilityStatus(capability?: AudioCapability) {
+  if (capability?.declaration === 'supported') return capability.connected ? '可用' : '模型支持，当前适配器未接入'
+  return capability?.declaration === 'unsupported' ? '不支持' : '未知'
+}
+
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
 export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId, onLocateDesign, editorOpen }: CardRendererProps) {
   const promptEditor = useRef<PromptEditorHandle>(null)
@@ -45,6 +50,9 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   let parameters: ReactNode = null
   if (card.type === 'model.image') parameters = <ImageModelParameters card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
   if (card.type === 'model.video') parameters = <VideoModelParameters card={card as VideoModelCard} capability={capability} disabled={disabled} onChange={onChange} />
+  const hasSavedSoundDesign = !resolved.loading && resolved.compiled?.used?.some(item =>
+    item.available !== false && !!item.text && item.payload && 'design_type' in item.payload &&
+    ['direction.dialogue', 'direction.sound'].includes(item.payload.design_type))
   const bindings = card.input_bindings || []
   const adoptedImages = resolved.candidates.filter(output => output.modality === 'image' && bindings.some(binding => sourceKey(binding.source) === sourceKey(output.source)))
   const move = (id: string, offset: number) => {
@@ -200,6 +208,12 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     submit={<WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={submitDisabled} onClick={submit} />}>
     {!!card.missing_designs?.length && <Alert type="warning" message="旧摄影设计已移除，需要补充设计依据" description={<><p>缺失设计：{card.missing_designs.join('、')}</p><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, missing_designs: [] })}>已处理缺失设计</WorkbenchButton></>} />}
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
+    {card.type === 'model.video' && card.model_id && <small aria-label="原生声音输出能力">
+      {hasSavedSoundDesign && '已保存输入采用声音设计 · '}原生声音输出：{audioCapabilityStatus(capability?.native_audio_output)}
+    </small>}
+    {card.type === 'model.video' && card.model_id && <small aria-label="声音开关能力">
+      声音开关：{audioCapabilityStatus(capability?.audio_switch)}
+    </small>}
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
     {node?.error_message && <Alert type="error" message={`${node.error_message} · 可在素材管理或运行历史查看详情`} />}

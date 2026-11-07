@@ -4,6 +4,53 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 
 @pytest.mark.asyncio
+async def test_adopted_dialogue_pronunciation_survives_reopening_and_clear(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白发音要求'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    source = {'canvas_id': canvas['id'], 'card_id': 'line', 'port_id': 'text', 'position': 0}
+    doc = canvas['document']
+    doc.update(cards=[
+        {'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'line-1',
+         'content': {'text': '小雪，请等一等', 'authorship': 'user'},
+         'scope': {'condition': '只在雨夜站台的告别时'},
+         'source_locator': '第一章·站台'},
+        {'id': 'unused', 'type': 'direction.dialogue', 'dialogue_id': 'line-2'},
+        {'id': 'model', 'type': 'model.text',
+         'input_bindings': [{'id': 'adopt', 'source': source, 'input_port': 'text'}]},
+    ], edges=[
+        {'id': 'line-edge', 'source_card': 'line', 'source_port': 'text',
+         'target_card': 'model', 'target_port': 'text'},
+    ], input_order={'model': {'text': ['line-edge']}})
+
+    saved = await canvas_client.put(url, json={'request_id': 'legacy', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert '小雪，请等一等' in compiled['text']
+    assert '语言／发音要求' not in compiled['text']
+
+    doc = (await canvas_client.get(url)).json()['data']['document']
+    doc['cards'][0]['language_pronunciation'] = {'text': '普通话，清楚读出人名', 'authorship': 'user'}
+    doc['cards'][1]['language_pronunciation'] = {'text': '未采用的粤语要求', 'authorship': 'user'}
+    saved = await canvas_client.put(url, json={'request_id': 'edit', 'expected_revision': 1, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    doc = (await canvas_client.get(url)).json()['data']['document']
+    assert doc['cards'][0]['language_pronunciation']['text'] == '普通话，清楚读出人名'
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert '语言／发音要求：普通话，清楚读出人名' in compiled['text']
+    assert '适用条件：只在雨夜站台的告别时' in compiled['text']
+    assert '来源：第一章·站台' in compiled['text']
+    assert '未采用的粤语要求' not in compiled['text']
+    assert any(row['source'] == source for row in compiled['mapping'])
+
+    doc['cards'][0]['language_pronunciation'] = {'text': '', 'authorship': 'user'}
+    saved = await canvas_client.put(url, json={'request_id': 'clear', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
+    assert '语言／发音要求' not in compiled['text']
+    assert '小雪，请等一等' in compiled['text']
+
+
+@pytest.mark.asyncio
 async def test_dialogue_speaker_and_complete_sound_design(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '对白声音'})).json()['data']
@@ -260,3 +307,51 @@ async def test_sound_retires_object_use_and_adopts_complete_field_reference_is_r
         input_order={'sound': {'effect_object': ['old']}, 'model': {'text': ['use']}})
     saved = await client.put(url, json={'request_id': 'old', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 422, saved.text
+
+
+@pytest.mark.asyncio
+async def test_audiovisual_relation_follows_only_the_adopted_dialogue(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白声画关系'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    first_note = '画外说话，画面保持在听者身上'
+    second_note = '说话人始终留在画内'
+    first_line = {'id': 'offscreen', 'type': 'direction.dialogue', 'dialogue_id': 'offscreen-line',
+                  'content': {'text': '请留在这儿', 'authorship': 'user'},
+                  'scope': {'condition': '只在站台告别时'}, 'source_locator': '第一章·站台'}
+    second_line = {'id': 'onscreen', 'type': 'direction.dialogue', 'dialogue_id': 'onscreen-line',
+                   'content': {'text': '我在这里', 'authorship': 'user'}}
+    target = {'id': 'model', 'type': 'model.text', 'model_id': 'canvas-text'}
+
+    def adopt(dialogue_id):
+        source = {'canvas_id': canvas['id'], 'card_id': dialogue_id, 'port_id': 'text', 'position': 0}
+        target['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': source}]
+        doc.update(edges=[{'id': 'line-edge', 'source_card': dialogue_id, 'source_port': 'text',
+                           'target_card': 'model', 'target_port': 'text'}],
+                   input_order={'model': {'text': ['line-edge']}})
+
+    async def save_and_compile(revision):
+        response = await canvas_client.put(url, json={'request_id': f'save-{revision}',
+                                                        'expected_revision': revision, 'document': doc})
+        assert response.status_code == 200, response.text
+        response = await canvas_client.get(url + '/cards/model/compile')
+        assert response.status_code == 200, response.text
+        return response.json()['data']['text']
+
+    doc['cards'] = [first_line, second_line, target]
+    adopt('offscreen')
+    assert '声画关系说明' not in await save_and_compile(0)
+
+    first_line['audiovisual_relation'] = {'text': first_note, 'authorship': 'user'}
+    second_line['audiovisual_relation'] = {'text': second_note, 'authorship': 'user'}
+    compiled = await save_and_compile(1)
+    reopened = (await canvas_client.get(url)).json()['data']['document']
+    assert reopened['cards'][0]['audiovisual_relation']['text'] == first_note
+    assert f'声画关系说明：{first_note}' in compiled and second_note not in compiled
+    assert '适用条件：只在站台告别时' in compiled and '来源：第一章·站台' in compiled
+
+    adopt('onscreen')
+    compiled = await save_and_compile(2)
+    assert f'声画关系说明：{second_note}' in compiled and first_note not in compiled
+    second_line['audiovisual_relation'] = {'text': '', 'authorship': 'user'}
+    assert '声画关系说明' not in await save_and_compile(3)
