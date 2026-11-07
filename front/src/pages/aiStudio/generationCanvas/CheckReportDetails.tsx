@@ -7,6 +7,7 @@ import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
 const recheckTextCategories = new Set(['P01', 'P02', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09'])
+const videoPhases = { before: '前态', during: '过程', after: '后态' }
 const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 const parameterLabels: Record<string, string> = {
   seconds: '时长（秒）', ratio: '画幅', target_ratio: '画幅', count: '数量', seed: '种子', resolution_profile: '分辨率',
@@ -78,6 +79,11 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
                 : media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
             {media.evidence_range && <p>模型估计证据区间 {media.evidence_range.start_ms}–{media.evidence_range.end_ms} 毫秒</p>}
             {media.description && <span> · {media.description}</span>}
+            {!!media.moments?.length && <ol aria-label="模型估计的可见时刻">
+              {media.moments.map(moment => <li key={moment.phase}>
+                {videoPhases[moment.phase]} · {moment.at_ms} 毫秒 · {moment.description}
+              </li>)}
+            </ol>}
           </li>)}
         </ul>}
         <small>{result.boundary}</small>
