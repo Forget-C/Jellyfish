@@ -17,7 +17,7 @@ async def test_store_reads_mixed_design_roles_without_rewriting(canvas_client, c
     cards += [{'id': kind, 'type': 'direction.' + kind} for kind in retired + retained]
     by_id = {card['id']: card for card in cards}
     by_id['criterion'].update(name='清晰可见', criterion_id='visible', standard={'text': '手部必须清晰'})
-    by_id['dialogue'].update(dialogue_id='dialogue', version=1)
+    by_id['dialogue'].update(dialogue_id='dialogue')
     edges, order = [], {}
 
     def connect(ident, target, port):

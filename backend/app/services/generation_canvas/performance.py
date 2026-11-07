@@ -37,8 +37,8 @@ def publish_design(canvas_id, card, adopted_inputs):
     if card.source_locator:
         lines.append('来源：' + card.source_locator)
     lines.extend(acceptance_lines(acceptance))
-    lines.extend(f'对白依据：{item.dialogue_id} · 版本 {item.version} · 说话对象：{item.speaker.name if item.speaker else "待确定"}' for item in dialogues)
-    basis = [DialogueBasis(dialogue_id=item.dialogue_id, version=item.version, speaker=item.speaker) for item in dialogues]
+    lines.extend(f'对白依据：{item.dialogue_id} · 说话对象：{item.speaker.name if item.speaker else "待确定"}' for item in dialogues)
+    basis = [DialogueBasis(dialogue_id=item.dialogue_id, speaker=item.speaker) for item in dialogues]
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=PerformanceDesignFields(**fields),
                                 scope=card.scope, objects=objects, participant_id=participant, narrative_relations=relations, source_locator=card.source_locator, dialogue_basis=basis, acceptance_basis=acceptance,
                                 frame_states=[FrameState(id='field:exit_state', label='结束状态')] if any(key == 'exit_state' for key, _ in active) else [])

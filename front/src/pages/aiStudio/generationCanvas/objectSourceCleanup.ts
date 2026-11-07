@@ -9,7 +9,14 @@ const candidatePort = (type: string) => type.startsWith('reference.') || ['conte
 
 /** 只撤回已废弃用途；同源其他采用保持，剩余来源成为合法候选而非自动引用。 */
 export function cleanObjectSources(value: CanvasDocument): CanvasDocument {
-  const document = cleanExamples(value)
+  const cleaned = cleanExamples(value)
+  const hasRetired = cleaned.cards?.some(card => card.type === 'direction.dialogue' && 'version' in card || card.type === 'direction.sound' && 'production' in card)
+  const document = hasRetired ? structuredClone(cleaned) : cleaned
+  if (hasRetired) for (const card of document.cards || []) {
+    const record = card as unknown as Record<string, unknown>
+    if (card.type === 'direction.dialogue') delete record.version
+    if (card.type === 'direction.sound') delete record.production
+  }
   const retired = new Set(document.cards?.filter(card => retiredObjectTypes.has(card.type || '')).map(card => card.id))
   const dropped = document.edges?.filter(edge => retired.has(edge.target_card) && edge.target_port === 'effect_object') || []
   if (!dropped.length && !document.cards?.some(card => retired.has(card.id) && 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'effect_object'))) return document

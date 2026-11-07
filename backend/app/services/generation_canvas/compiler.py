@@ -103,7 +103,7 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
             identity = '，'.join(value for value in (description.object_id, description.category) if value)
             return f'对象：{description.name}（{identity}）\n{description.text}'
         if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in ('direction.dialogue', 'direction.sound'):
-            note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
+            note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行，不代表已生成声音。' if card.type == 'model.video' else ''
             return item.text + ('\n' + note if note else '')
         return ('来源卡：' + item.source.card_id + '\n' if label_sources and primary_designs else '') + (item.text or '') if item.text else ''
     for item in result.used:
@@ -208,7 +208,7 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
 
     if primary_designs:
         supplementary = result.text.strip()
-        sound_note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
+        sound_note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行，不代表已生成声音。' if card.type == 'model.video' else ''
         result.text = '导演设计 · 主要依据\n' + '\n'.join(('设计卡：' + item.source.card_id + '\n' if label_sources else '') + item.text + ('\n' + sound_note if sound_note and item.payload.design_type in ('direction.dialogue', 'direction.sound') else '') for item in primary_designs)
         if supplementary:
             result.text += '\n\n模型正文 · 补充说明\n' + supplementary

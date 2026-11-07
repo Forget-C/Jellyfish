@@ -17,10 +17,10 @@ export type MediaContentEditorProps = {
 }
 
 /** 固定文件的原生预览保留视频音轨，音频不走图片兜底。 */
-export function MediaPreview({ fileId, type }: { fileId: string; type: string }) {
+export function MediaPreview({ fileId, type, onDuration }: { fileId: string; type: string; onDuration?: (seconds: number) => void }) {
   const src = buildFileDownloadUrl(fileId)
-  if (type === 'audio') return <audio aria-label="音频预览" src={src} controls preload="metadata" style={{ width: '100%' }} />
-  if (type === 'video') return <video aria-label="视频预览" src={src} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 260 }} />
+  if (type === 'audio') return <audio aria-label="音频预览" src={src} controls onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%' }} />
+  if (type === 'video') return <video aria-label="视频预览" src={src} controls playsInline onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%', maxHeight: 260 }} />
   return <img alt="图片预览" src={src} style={{ maxWidth: '100%', maxHeight: 260 }} />
 }
 

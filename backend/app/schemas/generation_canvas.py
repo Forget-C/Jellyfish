@@ -520,23 +520,21 @@ class SoundDirectionCard(CardDefinition):
 
 
 class DialogueCard(SoundDirectionCard):
-    """一条稳定对白，正文修订由创作者显式记录版本。"""
+    """一条稳定身份的对白，内容随画布修订保存。"""
     type: Literal['direction.dialogue'] = Field(default='direction.dialogue', json_schema_extra={'enum': ['direction.dialogue']})
     dialogue_id: str = Field(min_length=1, max_length=64)
-    version: int = Field(default=1, ge=1)
     content: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     input_ports: ClassVar[tuple[str, ...]] = ('speaker', 'video_example', 'audio_example', 'text')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'dialogue')
 
 
 class SoundArrangementCard(SoundDirectionCard):
-    """声源、环境声、动作声和音乐约束保持各自用途及制作安排。"""
+    """声源、环境声、动作声和音乐约束保持各自用途。"""
     type: Literal['direction.sound'] = Field(default='direction.sound', json_schema_extra={'enum': ['direction.sound']})
     source_description: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     environment: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     action_sound: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     music: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
-    production: Literal['synchronous', 'postproduction', 'undecided'] = 'undecided'
     input_ports: ClassVar[tuple[str, ...]] = ('audio_example', 'text', 'image', 'video', 'anchor')
 
 

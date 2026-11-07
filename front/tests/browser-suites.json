@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-sound-reference": { "file": "generationCanvasSoundReference.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },
     "generation-canvas-anchor-reference": {"file":"generationCanvasAnchorReference.browser.mjs","ports":[4287,8287],"timeoutMs":180000},
     "generation-canvas-parameter-groups": {"file":"generationCanvasParameterGroups.browser.mjs","ports":[4285,8285],"timeoutMs":180000},
     "generation-canvas-multipath-protection": {"file":"generationCanvasMultipathProtection.browser.mjs","ports":[4758,8758],"timeoutMs":180000},

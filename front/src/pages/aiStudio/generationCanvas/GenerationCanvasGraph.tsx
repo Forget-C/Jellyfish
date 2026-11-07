@@ -511,7 +511,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       : type === 'direction.narrative' ? { id: crypto.randomUUID(), type, name: '', input_bindings: [], examples: [], scope: {} }
       : type === 'direction.anchor' ? { id: crypto.randomUUID(), type, anchor_id: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
       : type === 'direction.blocking' ? { id: crypto.randomUUID(), type, blocking_id: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
-      : type === 'direction.dialogue' ? { id: crypto.randomUUID(), type, type_version: 1, dialogue_id: crypto.randomUUID(), version: 1, input_bindings: [], examples: [], scope: {} }
+      : type === 'direction.dialogue' ? { id: crypto.randomUUID(), type, type_version: 1, dialogue_id: crypto.randomUUID(), input_bindings: [], examples: [], scope: {} }
       : type.startsWith('direction.') ? { id: crypto.randomUUID(), type, type_version: 1, input_bindings: [], examples: [], scope: {} }
       : type.startsWith('reference.') ? { id: crypto.randomUUID(), type, type_version: 2, name: '', angle: '正面' }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }

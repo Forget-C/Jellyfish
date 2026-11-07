@@ -29,6 +29,9 @@ def require_supported_snapshot(snapshot):
     """Worker 与历史等待节点共用；沿用示例、验收、摄影诊断优先级，拒绝旧对象及参考结构。"""
     document = snapshot.get('document', {})
     cards = document.get('cards', [])
+    if any(card.get('type') == 'direction.dialogue' and 'version' in card or
+           card.get('type') == 'direction.sound' and 'production' in card for card in cards):
+        raise HTTPException(422, {'code': 'LEGACY_SOUND_SNAPSHOT', 'message': '旧对白版本或制作安排已移除，请从当前画布重新提交'})
     by_id = {card.get('id'): card for card in cards}
     retired_examples = {card.get('id') for card in cards if card.get('type') in RETIRED_EXAMPLE_TYPES}
     edges = document.get('edges', [])

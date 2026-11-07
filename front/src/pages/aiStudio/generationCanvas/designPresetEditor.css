@@ -248,3 +248,10 @@
 .movement-phase-tab > button:hover, .movement-phase-tab > button:active { color: var(--wb-text); }
 .movement-phase-tab > button:active { background: var(--wb-secondary); }
 @media (pointer: coarse) { .design-parameter-tabs .ant-tabs-tab { height: 36px; } }
+
+.design-single-field { grid-template-columns: minmax(0, 1fr); }
+.design-single-field .generation-prompt-editor { min-height: 180px; }
+.design-media-reference-settings { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.design-media-reference-settings > .ant-select { width: 100%; }
+
+.design-media-reference-settings label { font-size: 12px; font-weight: 400; color: var(--wb-muted); }

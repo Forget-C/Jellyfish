@@ -8,6 +8,5 @@ import type { ObjectReferencePayload } from './ObjectReferencePayload';
  */
 export type DialogueBasis = {
     dialogue_id: string;
-    version: number;
     speaker?: (ObjectReferencePayload | null);
 };

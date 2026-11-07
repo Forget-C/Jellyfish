@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
- * 对白正文与声音安排的具体字段；制作安排不代表生成成果。
+ * 对白正文与声音安排的具体字段。
  */
 export type SoundDesignFields = {
     content?: (ReferenceDesignField | null);
@@ -12,5 +12,4 @@ export type SoundDesignFields = {
     environment?: (ReferenceDesignField | null);
     action_sound?: (ReferenceDesignField | null);
     music?: (ReferenceDesignField | null);
-    production?: ('synchronous' | 'postproduction' | 'undecided' | null);
 };

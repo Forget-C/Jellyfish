@@ -59,7 +59,6 @@ export type DesignTextPayload = {
     narrative_relations?: Array<NarrativeDesignRelation>;
     participant_id?: (string | null);
     dialogue_id?: (string | null);
-    version?: (number | null);
     source_locator?: string;
     acceptance_basis?: Array<CriterionReferencePayload>;
     dialogue_basis?: Array<DialogueBasis>;

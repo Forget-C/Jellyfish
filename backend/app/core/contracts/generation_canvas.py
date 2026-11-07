@@ -327,21 +327,19 @@ class SpatialDesignRelations(BaseModel):
     trigger_event_id: str | None = None
 
 class SoundDesignFields(BaseModel):
-    """对白正文与声音安排的具体字段；制作安排不代表生成成果。"""
+    """对白正文与声音安排的具体字段。"""
     model_config = ConfigDict(extra='forbid')
     content: ReferenceDesignField | None = None
     source_description: ReferenceDesignField | None = None
     environment: ReferenceDesignField | None = None
     action_sound: ReferenceDesignField | None = None
     music: ReferenceDesignField | None = None
-    production: Literal['synchronous', 'postproduction', 'undecided'] | None = None
 
 
 class DialogueBasis(BaseModel):
     """表演明确采用的对白依据；不携带参考素材或祖先内容。"""
     model_config = ConfigDict(extra='forbid')
     dialogue_id: str
-    version: int
     speaker: ObjectReferencePayload | None = None
 
     @model_validator(mode='before')
@@ -352,7 +350,7 @@ class DialogueBasis(BaseModel):
 
 
 class DialogueReferencePayload(DialogueBasis):
-    """对白关系出口只声明身份、版本与说话对象。"""
+    """对白关系出口只声明身份与说话对象。"""
     kind: Literal['dialogue_reference'] = Field(default='dialogue_reference', json_schema_extra={'enum': ['dialogue_reference']})
 
 
@@ -593,7 +591,6 @@ class DesignTextPayload(BaseModel):
     narrative_relations: list[NarrativeDesignRelation] = Field(default_factory=list, exclude_if=lambda value: not value)
     participant_id: str | None = None
     dialogue_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
-    version: int | None = Field(default=None, exclude_if=lambda value: value is None)
     source_locator: str = ''
     acceptance_basis: list[CriterionReferencePayload] = Field(default_factory=list, exclude_if=lambda value: not value)
     dialogue_basis: list[DialogueBasis] = Field(default_factory=list, exclude_if=lambda value: not value)

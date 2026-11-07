@@ -1,5 +1,6 @@
+import { DesignMediaReferenceSettings } from './DesignMediaReferenceSettings'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Input, InputNumber, Select, Space } from 'antd'
+import { Alert, InputNumber, Select, Space } from 'antd'
 import type { CanvasResolvedOutput, SpatialAnchorCard } from '../../../services/generated'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -53,14 +54,11 @@ export function AnchorReferenceCandidate({ card, item, disabled, onChange, expan
       {!example && <WorkbenchButton disabled={disabled || item.available === false || !fileId} onClick={() => { if (fileId) { const id = crypto.randomUUID(); setSelectedId(id); onChange({ ...card, examples: [...(card.examples || []), { id, source: item.source, file_id: fileId }] }) } }}>设为本地参考</WorkbenchButton>}
     </Space>
     {example && <>
-      <div className="anchor-reference-settings"><Select aria-label="素材用途" disabled={disabled} value={example.purpose} options={[{ value: 'positive', label: '正向示例' }, { value: 'negative', label: '反例' }]} onChange={purpose => update({ purpose })} />
-        <Select aria-label="素材定位字段" placeholder="对应字段" disabled={disabled} allowClear value={example.field_id || undefined} options={cardDefinitions['direction.anchor'].fields.map(field => ({ value: field.id, label: field.label }))} onChange={field_id => update({ field_id: field_id ?? null })} />
-      </div>
-      <Input aria-label="素材说明" placeholder="参考说明" disabled={disabled} value={example.description || ''} onChange={event => update({ description: event.target.value })} />
+      <DesignMediaReferenceSettings key={example.id} example={example} fields={cardDefinitions['direction.anchor'].fields} disabled={disabled} onChange={update} />
       {!video ? <><Space wrap><WorkbenchButton disabled={disabled || failed} variant="quiet" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? '完成标记' : marker ? '调整标记' : '标记位置'}</WorkbenchButton>
         <WorkbenchButton disabled={disabled || !marker} variant="quiet" onClick={() => saveMarker()}>清除标记</WorkbenchButton></Space>
         <details><summary>精确坐标</summary><Space wrap>{(['x', 'y'] as const).map(axis => <label key={axis}>{axis === 'x' ? '横向' : '纵向'} % <InputNumber aria-label={axis === 'x' ? '标记横坐标百分比' : '标记纵坐标百分比'} disabled={disabled || failed} min={0} max={100} step={1} value={marker ? marker[axis] * 100 : undefined} onChange={value => { if (value !== null) saveMarker({ x: marker?.x ?? 0.5, y: marker?.y ?? 0.5, [axis]: value / 100 }) }} /></label>)}</Space></details>
-      </> : <Space wrap><InputNumber aria-label="素材起点毫秒" disabled={disabled} min={0} value={example.start_ms} onChange={start => update(start === null ? { start_ms: null, end_ms: null } : { start_ms: start, end_ms: Math.max(example.end_ms || 0, start + 1) })} /><InputNumber aria-label="素材终点毫秒" disabled={disabled} min={(example.start_ms || 0) + 1} value={example.end_ms} onChange={end => update(end === null ? { start_ms: null, end_ms: null } : { start_ms: example.start_ms || 0, end_ms: end })} /></Space>}
+      </> : null}
       <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => onChange({ ...card, examples: card.examples?.filter(value => value.id !== example.id), markers: card.markers?.filter(value => value.example_id !== example.id) })}>取消本地参考</WorkbenchButton>
     </>}
   </div>

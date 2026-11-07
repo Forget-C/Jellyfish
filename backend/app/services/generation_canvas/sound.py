@@ -5,25 +5,21 @@ from app.services.generation_canvas.formatting import scope_source_lines, design
 from app.services.generation_canvas.errors import diagnostic
 
 FIELD_LABELS = {'content': '对白正文', 'source_description': '声源说明', 'environment': '环境声', 'action_sound': '动作声', 'music': '音乐约束'}
-PRODUCTION_LABELS = {'synchronous': '同期生成意图（按模型实际能力执行，不代表已生成声音）', 'postproduction': '待后期（本次不视为已生成声音）', 'undecided': '待确定'}
 
 
 def publish_sound(canvas_id, card, adopted_inputs):
-    """完整保留字段用途和制作安排，身份仅来自直接选择。"""
+    """完整保留字段用途，身份仅来自直接选择。"""
     fields = {key: getattr(card, key) for key in FIELD_LABELS if isinstance(getattr(card, key, None), DesignField)}
     active = [(key, value) for key, value in fields.items() if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
-    if not active and (isinstance(card, DialogueCard) or card.production == 'undecided'):
+    if not active:
         return []
     objects = list({item.payload.object_id: item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available}.values())
     speaker = next((binding.source.object_id for binding in card.input_bindings if binding.input_port == 'speaker'), None)
     lines = [f'对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects]
     values = {}
     if isinstance(card, DialogueCard):
-        values = {'dialogue_id': card.dialogue_id, 'version': card.version}
-        lines.append(f'对白：{card.dialogue_id} · 版本 {card.version} · 说话对象：{speaker or "待确定"}')
-    else:
-        fields['production'] = card.production
-        lines.append('制作安排：' + PRODUCTION_LABELS[card.production])
+        values = {'dialogue_id': card.dialogue_id}
+        lines.append(f'对白：{card.dialogue_id} · 说话对象：{speaker or "待确定"}')
     lines.extend(design_field_line(FIELD_LABELS[key], value) for key, value in active)
     lines.extend(scope_source_lines(card.scope, card.source_locator))
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=SoundDesignFields(**fields), scope=card.scope,
@@ -31,7 +27,7 @@ def publish_sound(canvas_id, card, adopted_inputs):
     outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]
     if isinstance(card, DialogueCard):
         outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='dialogue', position=0), modality='text',
-            payload=DialogueReferencePayload(dialogue_id=card.dialogue_id, version=card.version, speaker=next((obj for obj in objects if obj.object_id == speaker), None))))
+            payload=DialogueReferencePayload(dialogue_id=card.dialogue_id, speaker=next((obj for obj in objects if obj.object_id == speaker), None))))
     return outputs
 
 
@@ -47,8 +43,6 @@ def validate_sound_relations(document, published, previous, *, context=None):
             if card.dialogue_id in identities or old and old.get('dialogue_id') != card.dialogue_id:
                 raise diagnostic('INVALID_DIALOGUE_IDENTITY', '对白身份必须唯一且保存后不可替换', {'card_id': card.id, 'path': ['dialogue_id']})
             identities.add(card.dialogue_id)
-            if old and card.version < old['version']:
-                raise diagnostic('INVALID_DIALOGUE_VERSION', '对白版本不可倒退', {'card_id': card.id, 'path': ['version']})
         speakers = set()
         for check in inspect_design_bindings(document, card, card.input_bindings, published, context=context):
             binding, item = check.binding, check.output

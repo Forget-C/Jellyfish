@@ -25,9 +25,7 @@ export function FlatDesignCardBody({ card, document, readonly, onEdit }: { card:
     if (field.authorship === 'user') return [{ label, text: text || '' }]
     return [{ label, text: field.state === 'empty' ? '未填写（保留内容）' : [states[field.state || ''], text || field.source_locator].filter(Boolean).join('：') }]
   })
-  if ('production' in card && card.production !== 'undecided') rows.push({ label: '制作安排', text: card.production === 'postproduction' ? '待后期' : '同期生成意图' })
   if ('category' in card && card.category !== 'space') rows.push({ label: '连续性分类', text: { space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', photography: '摄影', dialogue_sound: '对白与声音' }[card.category || 'space'] })
-  if (rows.length && 'version' in card) rows.push({ label: '对白版本', text: String(card.version || 1) })
   if ('name' in card && card.name?.trim()) rows.unshift({ label: '名称', text: card.name.trim() })
   for (const binding of card.input_bindings || []) rows.push({ label: portLabels[binding.input_port] || '关联关系', text: sourceName(binding.source.card_id) })
   if ('delay_ms' in card && card.delay_ms !== undefined && card.delay_ms !== null) rows.push({ label: '反应延迟', text: `${card.delay_ms} 毫秒` })

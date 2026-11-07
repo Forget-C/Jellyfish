@@ -132,7 +132,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       }
       const response = await Canvases.canvasGet({ projectId, canvasId: baseline.id })
       if (!response.data || s !== state.current) return
-      if (response.data.revision !== baseline.revision || !same(response.data.document, baseline.document)) {
+      if (response.data.revision !== baseline.revision || !same(cleanObjectSources(response.data.document), cleanObjectSources(baseline.document))) {
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
       s.current = response.data; s.document = cleanObjectSources(saved.document); s.pending = undefined; s.recovery = undefined

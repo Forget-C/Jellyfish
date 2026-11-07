@@ -7,7 +7,7 @@ import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
 import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
- * 一条稳定对白，正文修订由创作者显式记录版本。
+ * 一条稳定身份的对白，内容随画布修订保存。
  */
 export type DialogueCard = {
     id: string;
@@ -18,6 +18,5 @@ export type DialogueCard = {
     examples?: Array<DesignMediaExample>;
     type?: 'direction.dialogue';
     dialogue_id: string;
-    version?: number;
     content?: ReferenceDesignField;
 };
