@@ -54,7 +54,7 @@ try {
   await page.goto(`http://127.0.0.1:4694/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const failures = []
   let checked = 0
-  const retainedExamples = new Set(['anchor', 'dialogue', 'sound'])
+  const retainedExamples = new Set(['dialogue', 'sound'])
   const inspectFocus = async (control, kind, viewport) => {
     await control.scrollIntoViewIfNeeded()
     await control.focus()

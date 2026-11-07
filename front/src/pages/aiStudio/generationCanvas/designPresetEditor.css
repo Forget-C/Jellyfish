@@ -93,14 +93,8 @@
 .design-preset-relations small { color: var(--wb-muted); }
 .design-preset-advanced > section { margin-bottom: 16px; }
 .performance-preset-illustration { color: var(--wb-muted); }
-.performance-identity { grid-column: 1 / -1; }
-.design-anchor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
-.design-anchor-layout > div { min-width: 0; }
-.design-anchor-layout .design-preset-fields { grid-template-columns: minmax(0, 1fr); }
-.design-anchor-layout details > summary { margin-bottom: 12px; }
 @media (max-width: 700px) {
-  .design-anchor-layout { grid-template-columns: minmax(0, 1fr); }
-  .design-preset-relations { max-height: 100px; }
+    .design-preset-relations { max-height: 100px; }
 }
 .design-reference-issue { display: block; margin-top: 6px; font-size: 12px; }
 
@@ -234,3 +228,15 @@
 .design-parameter-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--wb-text); text-shadow: none; }
 .design-parameter-tabs .ant-tabs-ink-bar { background: var(--wb-text); }
 .design-parameter-tabs .design-preset-fields section > strong { min-height: 24px; display: flex; align-items: center; }
+
+.anchor-reference-candidate { display: flex; flex-direction: column; gap: 8px; }
+.anchor-marker-image { position: relative; width: fit-content; max-width: 100%; margin: auto; line-height: 0; }
+.anchor-marker-image img { display: block; max-width: 100%; max-height: 260px; }
+.anchor-marker-image[data-editing="true"] { cursor: crosshair; touch-action: none; }
+.anchor-marker-image [data-anchor-marker] { position: absolute; transform: translate(-50%, -50%); color: var(--wb-text); background: var(--wb-surface); border-radius: 50%; font-size: 20px; line-height: 20px; }
+.anchor-reference-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.anchor-reference-settings .ant-select { min-width: 0; }
+.design-source-expanded .ant-popover-inner-content > div { width: min(680px, calc(100vw - 64px)); }
+.design-source-expanded .anchor-marker-image img { max-height: min(55dvh, 520px); }
+.design-source-inspect .ant-popover-inner { max-height: calc(100dvh - 40px); overflow-y: auto; }
+@media (max-width: 700px) { .anchor-reference-settings { grid-template-columns: 1fr; } }

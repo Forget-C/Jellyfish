@@ -31,7 +31,6 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const beatSort = useOrderedDesignItems(beats.map(binding => binding.id), orderBeats, disabled || editorOpen === false)
   const moveBeat = (id: string, offset: number) => orderBeats(moveDesignItem(beats.map(binding => binding.id), id, beats.findIndex(binding => binding.id === id) + offset))
   const field = (key: string, label: string) => <FieldEditor compact key={key} label={label} value={(card as unknown as Record<string, ReferenceDesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />
-  const identity = 'beat_id' in card ? card.beat_id : 'event_id' in card ? card.event_id : 'shot_id' in card ? card.shot_id : undefined
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <>
     <DesignNameField label={{ 'direction.narrative': '叙事名称', 'direction.beat': '节拍名称', 'direction.event': '事件名称', 'direction.shot': '镜头名称' }[card.type!]} placeholder={{ 'direction.narrative': '例如：车站告别', 'direction.beat': '例如：发现钥匙', 'direction.event': '例如：门外响起脚步声', 'direction.shot': '例如：手部取钥匙特写' }[card.type!]} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />
@@ -50,6 +49,5 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
     {card.type === 'direction.event' && field('action_change', '动作或变化说明')}
     {card.type === 'direction.shot' && <>{field('narrative_role', '叙事作用')}{field('visible_result', '可见结果')}{field('estimated_duration', '预计时长')}</>}
     </div>
-    {identity && <details><summary>稳定身份</summary>{identity}</details>}
   </DesignPresetEditor>
 }

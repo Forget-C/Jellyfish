@@ -30,7 +30,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={soundConstraintPresets(card)} direct={card.type === 'direction.dialogue'} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as typeof card)}>
 
     {resolved.error && <Alert type="warning" message={resolved.error} />}
-    {card.type === 'direction.dialogue' ? <section aria-label="对白条目"><p>对白身份：{card.dialogue_id}</p>
+    {card.type === 'direction.dialogue' ? <section aria-label="对白条目">
       <strong>对白版本</strong><InputNumber aria-label="对白版本" min={1} value={card.version || 1} onChange={version => update({ ...card, version: version || 1 })} />
       <FieldEditor compact label="对白正文" value={card.content} onChange={content => update({ ...card, content })} />
     </section> : <section aria-label="声音条目" className="design-preset-fields design-preset-fields-compact">
