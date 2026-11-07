@@ -740,7 +740,10 @@ class ImmutableFactCard(ConstraintDirectionCard):
 class CheckCard(CardDefinition):
     """观察单一模型生成目标。目标身份来自专用连线，报告不属于编辑文档。"""
     type: Literal['review.check'] = 'review.check'
+    # Read pre-category documents with their original selection; new cards are initialized on save.
+    enabled_categories: list[str] = Field(default_factory=lambda: ['P06'], max_length=64)
     disabled_items: list[str] = Field(default_factory=list)
+    scope_notes: dict[str, Annotated[str, Field(max_length=500)]] = Field(default_factory=dict)
     input_ports: ClassVar[tuple[str, ...]] = ('check_basis',)
 
 

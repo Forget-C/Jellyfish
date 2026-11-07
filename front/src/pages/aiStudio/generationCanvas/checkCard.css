@@ -10,3 +10,6 @@
 .generation-check-basis dd { margin: 0; }
 .generation-check-basis pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .generation-check-report { display: grid; gap: 8px; }
+.generation-check-category { display: grid; gap: 8px; }
+.generation-check-category > label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.generation-check-category > p { margin: 0; }

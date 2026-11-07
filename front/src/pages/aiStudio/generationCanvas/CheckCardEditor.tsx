@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Select } from 'antd'
+import { Alert, Input, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckBasis, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -63,7 +63,16 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const basis = preview?.basis
   const report = reports.find(item => item.id === selectedReportId) || reports[0]
   const items = preview?.items || []
-  const enabled = (itemId: string) => !card.disabled_items?.includes(itemId)
+  const categories = preview?.categories || []
+  const selectedCategories = card.enabled_categories || categories.filter(entry => entry.enabled).map(entry => entry.id)
+  const included = (itemId: string) => !card.disabled_items?.includes(itemId)
+  const ready = items.some(item => selectedCategories.includes(item.category) && included(item.id) && item.availability !== 'unavailable')
+  const updateScope = (id: string, value: string) => {
+    const scopeNotes = { ...card.scope_notes }
+    if (value.trim()) scopeNotes[id] = value
+    else delete scopeNotes[id]
+    onChange({ ...card, scope_notes: scopeNotes })
+  }
   const blocked = disabled || running || loading || documentPending || !basis || basis.revision !== savedRevision
   const run = async (itemId?: string) => {
     if (blocked || !basis) return
@@ -93,19 +102,31 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     {documentPending && <p role="status">保存修改后可检查</p>}
     {!loading && preview?.reason && <p>{preview.reason}</p>}
     {basis && <BasisDetails basis={basis} label="生成检查依据" />}
-    {items.map(item => {
-      const action = reports.some(entry => entry.results.some(result => result.item_id === item.id)) ? '重新检查此项' : '检查此项'
-      return <div className="generation-check-item" key={item.id}>
-        <label><input type="checkbox" checked={enabled(item.id)} disabled={disabled || running}
-          onChange={event => onChange({ ...card, disabled_items: event.currentTarget.checked
-            ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })} />
-          {item.label}
-        </label>
-        <p>来源 {item.source.card_id} · {item.requirement}</p>
-        <Button size="small" disabled={blocked} aria-label={`${action}：${item.label}`} onClick={() => void run(item.id)}>{action}</Button>
-      </div>
-    })}
-    <Button variant="primary" loading={running} disabled={blocked || !items.some(item => enabled(item.id))} onClick={() => void run()}>
+    {categories.map(category => <section key={category.id} className="generation-check-category" aria-label={category.label}>
+      <label><input type="checkbox" aria-label={`启用类别：${category.label}`} checked={selectedCategories.includes(category.id)} disabled={disabled || running}
+        onChange={event => onChange({ ...card, enabled_categories: event.currentTarget.checked
+          ? [...new Set([...selectedCategories, category.id])] : selectedCategories.filter(id => id !== category.id) })} />
+        {category.label}
+      </label>
+      {category.availability !== 'ready' && <p>{category.availability === 'not_applicable' ? '不适用' : '暂不可执行'} · {category.reason}</p>}
+      {items.filter(item => item.category === category.id).map(item => {
+        const action = reports.some(entry => entry.results.some(result => result.item_id === item.id)) ? '重新检查此项' : '检查此项'
+        return <div className="generation-check-item" key={item.id}>
+          <label><input type="checkbox" aria-label={`纳入整卡检查：${item.source.card_id}`} checked={included(item.id)} disabled={disabled || running}
+            onChange={event => onChange({ ...card, disabled_items: event.currentTarget.checked
+              ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })} />
+            来源 {item.source.card_id} · {item.requirement}
+          </label>
+          {item.availability === 'unavailable' && <p>{item.reason}</p>}
+          {item.scope_editable && <label>检查范围说明
+            <Input.TextArea rows={2} maxLength={500} disabled={disabled || running} value={card.scope_notes?.[item.id] || ''}
+              onChange={event => updateScope(item.id, event.currentTarget.value)} />
+          </label>}
+          <Button size="small" disabled={blocked || item.availability === 'unavailable'} aria-label={`${action}：${item.label}`} onClick={() => void run(item.id)}>{action}</Button>
+        </div>
+      })}
+    </section>)}
+    <Button variant="primary" loading={running} disabled={blocked || !ready} onClick={() => void run()}>
       {reports.length ? '重新检查' : '检查'}
     </Button>
     {report && <section className="generation-check-report" aria-label="检查报告">
@@ -116,9 +137,13 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
         const item = report.items.find(row => row.id === result.item_id)
         return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
           {item && <p>{item.label} · 来源 {item.source.card_id} · {item.requirement}</p>}
+          {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
           <p>{result.message}</p><small>{result.boundary}</small>
         </article>
       })}
+      {!!report.omitted?.length && <ul aria-label="本轮未执行">
+        {report.omitted.map(item => <li key={item.item_id}>{item.label} · {item.source_card_id} · {item.reason}</li>)}
+      </ul>}
       <BasisDetails basis={report.basis} label="本报告固定依据" />
     </section>}
   </section>

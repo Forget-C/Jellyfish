@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasCheckBasis } from './CanvasCheckBasis';
 import type { CanvasCheckItem } from './CanvasCheckItem';
+import type { CanvasCheckOmission } from './CanvasCheckOmission';
 import type { CanvasCheckResult } from './CanvasCheckResult';
 /**
  * 固定本轮目标、依据、所选项目与结果；重查形成新身份。
@@ -16,4 +17,5 @@ export type CanvasCheckReportRead = {
     basis: CanvasCheckBasis;
     items: Array<CanvasCheckItem>;
     results: Array<CanvasCheckResult>;
+    omitted?: Array<CanvasCheckOmission>;
 };
