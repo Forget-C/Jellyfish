@@ -17,9 +17,13 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
     document['cards'].extend([
         {'id': 'shot', 'type': 'direction.shot', 'visible_result': {'text': '红伞留在门边', 'state': 'fact'}},
         {'id': 'check', 'type': 'review.check', 'check_model_id': runtime.model_id},
+        {'id': 'fact', 'type': 'direction.fact', 'fact': {'text': '有一把伞', 'state': 'fact'}},
     ])
-    document['edges'] = [{'id': 'adopt', 'source_card': 'shot', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}]
-    document['input_order'] = {'m': {'text': ['adopt']}}
+    document['edges'] = [
+        {'id': 'adopt', 'source_card': 'shot', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'},
+        {'id': 'fact-link', 'source_card': 'fact', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'},
+    ]
+    document['input_order'] = {'m': {'text': ['adopt', 'fact-link']}}
     connect_check(document, source='m')
     await save_canvas(client, url, document, 1)
     checks = f'{url}/checks/check'
@@ -34,6 +38,8 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         async def astream(self, messages):
             if '红伞' in messages[0].content:
                 yield SimpleNamespace(content='门边放着一把红伞。')
+            elif '仅供背景' in messages[0].content:
+                yield SimpleNamespace(content='一份新正文。')
             else:
                 yield SimpleNamespace(content='保留片段。')
                 raise RuntimeError('controlled failure after a partial result')
@@ -76,7 +82,8 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         old_url = f"{products}/{old['run_id']}/{old['node_id']}/{old['position']}"
         prepared = await get(old_url)
         assert prepared['estimated_calls'] == 1 and prepared['product']['text'] == '门边放着一把红伞。'
-        assert prepared['items'][0]['category'] == 'R01' and not calls
+        assert {item['category'] for item in prepared['items']} == {'R01'}
+        assert {item['field_id'] for item in prepared['items']} == {'visible_result', 'fact'} and not calls
 
         document = (await get(url))['document']
         document['cards'][1]['visible_result']['text'] = '蓝伞留在门边'
@@ -107,11 +114,12 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         latest, historical = await get(checks + '/reports')
         assert len(calls) == 2
         complete_call = next(call for call in calls if not call['incomplete'])
-        assert complete_call['requirements'][0]['text'] == '红伞留在门边'
+        assert {item['text'] for item in complete_call['requirements']} == {'红伞留在门边', '有一把伞'}
         assert complete_call['output_text'] == '门边放着一把红伞。'
         assert next(call for call in calls if call['incomplete'])['output_text'] == '保留片段。'
         assert historical['id'] == submitted['id'] and historical['basis'] == fixed['basis']
-        assert historical['results'][0]['submitted_excerpt'] == '门边放着一把红伞。'
+        assert len(historical['results']) == 2
+        assert {item['submitted_excerpt'] for item in historical['results']} == {'门边放着一把红伞。'}
         assert latest['results'][0]['outcome'] == 'indeterminate'
         assert 'private-secret' not in str(historical)
         fail_check = True
@@ -128,10 +136,14 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
 
         document = (await get(url))['document']
         document['cards'][1]['visible_result'] = {'text': '仅供背景', 'state': 'fact', 'purpose': 'background'}
+        document['cards'][3]['fact'] = {'text': '仅供背景', 'state': 'fact', 'purpose': 'background'}
         await save_canvas(client, url, document, 3)
         no_requirement, _ = await accept(runtime, 'no-requirement')
         await advance()
         product = next(product for product in await get(products) if product['run_id'] == no_requirement['run_id'])
+        assert product['generation_status'] == 'succeeded' and product['result_set_id'] != old['result_set_id']
+        current = (await get(url + '/runtime'))['current_outputs']['m'][0]
+        assert current['result_set_id'] == product['result_set_id'] and current['text'] == '一份新正文。'
         empty_url = f"{products}/{product['run_id']}/{product['node_id']}/{product['position']}"
         empty = await get(empty_url)
         assert empty['items'] == [] and empty['estimated_calls'] == 0
@@ -140,5 +152,13 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert '依据缺失' in unavailable['omitted'][0]['reason']
         await advance()
         assert len(calls) == 3
+
+        document = (await get(url))['document']
+        document['cards'] = [card for card in document['cards'] if card['id'] != 'check']
+        document['edges'] = [edge for edge in document['edges'] if edge['target_card'] != 'check']
+        del document['input_order']['check']
+        await save_canvas(client, url, document, 4)
+        archived = await get(url + '/check-reports/archived')
+        assert archived[-1] == historical
     finally:
         worker.text_pool.shutdown(wait=False)

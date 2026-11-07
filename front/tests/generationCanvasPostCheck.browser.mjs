@@ -78,7 +78,7 @@ try {
   const panel = page.getByRole('region', { name: '生成后文字检查', exact: true })
   assert.equal(await panel.getByRole('button', { name: '检查所选文字产物', exact: true }).count(), 0)
   const choose = async label => {
-    await panel.getByRole('combobox', { name: '历史文字产物' }).click()
+    await panel.locator('.ant-select-selector').click()
     await page.locator('.ant-select-dropdown:visible').getByText(label).click()
   }
   await choose(/修订 1.*完整交付/)

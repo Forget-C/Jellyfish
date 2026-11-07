@@ -1,34 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Alert, Input, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
+import type { CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
-import { HistoricalCheckProduct, PostCheckPanel } from './PostCheckPanel'
+import { PostCheckPanel } from './PostCheckPanel'
 import type { CardRendererProps } from './rendererRegistry'
+import { BasisDetails, CheckReportDetails } from './CheckReportDetails'
 import './checkCard.css'
-
-const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
-const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
-const parameterLabels: Record<string, string> = {
-  seconds: '时长（秒）', ratio: '画幅', target_ratio: '画幅', count: '数量', seed: '种子', resolution_profile: '分辨率',
-}
-
-function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label: string }) {
-  return <details className="generation-check-basis"><summary>{label}</summary>
-    <p>生成目标 {basis.target_card_id} · 修订 {basis.revision}{basis.model_id && ` · 模型 ${basis.model_id}`}</p>
-    <dl>{Object.entries(basis.parameters).filter(([, value]) => value !== null).map(([key, value]) =>
-      <div key={key}><dt>{parameterLabels[key] || key}</dt><dd>{String(value)}</dd></div>)}</dl>
-    {basis.capability && <p>已接入输入：{basis.capability.input_ports.join('、') || '无'}</p>}
-    <pre aria-label="实际提交文本">{basis.input.text || '尚未填写生成文本'}</pre>
-    <p>已采用来源：{basis.input.used?.map(item => item.source.card_id).join('、') || '无'}</p>
-    {!!basis.input.mapping?.length && <ul aria-label="实际参考素材及用途">{basis.input.mapping.map((item, index) =>
-      <li key={index}>{'source' in item ? `${item.source.card_id} · ${item.media_position === null ? '文本' : `素材 ${item.media_position}`}`
-        : `${item.name || item.object_id} · ${item.input_port || '参考图片'} · 素材 ${item.media_position}`}</li>)}</ul>}
-    {basis.input.video_media && <details><summary>实际视频素材用途</summary><pre>{JSON.stringify(basis.input.video_media, null, 2)}</pre></details>}
-    {!!basis.input.diagnostics?.length && <ul aria-label="默认技术诊断">{basis.input.diagnostics.map((issue, index) =>
-      <li key={index}>{issue.message}</li>)}</ul>}
-  </details>
-}
 
 function applicability(previous: CanvasCheckItem | undefined, current: CanvasCheckItem | undefined, sameTarget: boolean) {
   if (!sameTarget) return '原生成目标已变更或断开'
@@ -46,6 +24,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
   const [selectedReportId, setSelectedReportId] = useState<string>()
   const [running, setRunning] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refresh, setRefresh] = useState(0)
   const [error, setError] = useState('')
@@ -73,7 +52,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
 
   const checking = reports.some(entry => entry.executions?.some(item => item.status === 'queued' || item.status === 'running'))
   useEffect(() => {
-    if (!editorOpen || !checking) return
+    if (!editorOpen || !checking || cancelling) return
     let active = true
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
@@ -91,7 +70,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     }
     timer = setTimeout(() => void poll(), 1200)
     return () => { active = false; clearTimeout(timer) }
-  }, [projectId, canvasId, cardId, editorOpen, checking])
+  }, [projectId, canvasId, cardId, editorOpen, checking, cancelling])
 
   const basis = preview?.basis
   const report = reports.find(item => item.id === selectedReportId) || reports[0]
@@ -117,7 +96,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const originalEnabled = report?.enabled_item_ids
   const selectionChanged = !report?.product && comparable && sameTarget && originalEnabled != null
     && (originalEnabled.length !== currentEnabled.length || originalEnabled.some(id => !currentEnabled.includes(id)))
-  const blocked = disabled || running || !comparable || !basis
+  const blocked = disabled || running || cancelling || !comparable || !basis
   const showReport = (accepted: CanvasCheckReportRead) => {
     setReports(previous => [accepted, ...previous.filter(item => item.id !== accepted.id)])
     setSelectedReportId(accepted.id)
@@ -136,6 +115,22 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       setRefresh(value => value + 1)
     } finally {
       setRunning(false)
+    }
+  }
+
+  const cancel = async (reportId: string) => {
+    if (cancelling || disabled) return
+    setCancelling(true)
+    setError('')
+    try {
+      const response = await Canvases.canvasCheckCancel({ projectId, canvasId, cardId, reportId })
+      const updated = response.data
+      if (updated) setReports(previous => previous.map(entry => entry.id === updated.id ? updated : entry))
+    } catch {
+      setError('取消请求结果待核实，请查看刷新后的检查状态')
+      setRefresh(value => value + 1)
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -181,44 +176,18 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       {reports.some(row => !row.product) ? '重新检查' : '检查'}
     </Button>
     <PostCheckPanel projectId={projectId} canvasId={canvasId} cardId={cardId} savedRevision={savedRevision}
-      active={!!editorOpen} disabled={!!disabled || !!documentPending} reports={reports} onReport={showReport} />
+      active={!!editorOpen} disabled={!!disabled || !!documentPending || cancelling} reports={reports} onReport={showReport} />
     {report && <section className="generation-check-report" aria-label="检查报告">
       <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
         options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · ${entry.product ? '生成后' : '生成前'} · 修订 ${entry.basis.revision}` }))} /></label>
-      <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
-        {originalEnabled != null && ` · 执行时启用 ${originalEnabled.length} 项`}
-        {report.check_model_id && ` · 检查模型 ${report.check_model_id}`}</p>
-      {report.product && <HistoricalCheckProduct product={report.product} />}
       {selectionChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
-      {!!report.executions?.length && <ul aria-label="模型检查执行状态">
-        {report.executions.map(execution => {
-          const item = report.items.find(row => row.id === execution.item_id)
-          const current = items.find(row => row.id === execution.item_id)
-          return <li key={execution.item_id}>
-            {item && <span>{item.source.card_id}/{item.field_id} · </span>}{executionStates[execution.status]}
-            {execution.reason && ` · ${execution.reason}`}
-            {execution.status === 'failed' && current?.availability === 'ready' && <Button size="small" disabled={blocked}
-              onClick={() => void run(execution.item_id)}>重新检查此项</Button>}
-          </li>
-        })}
-      </ul>}
-      {report.results.map(result => {
-        const item = report.items.find(row => row.id === result.item_id)
-        const current = items.find(row => row.id === result.item_id)
-        return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
-          {report.product ? <p>此结论仅适用于固定历史产物</p>
-            : <p role="status">{comparable ? applicability(item, current, sameTarget) : '待核对当前检查依据'}</p>}
-          {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
-          {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
-          <p>{result.message}</p>
-          {result.submitted_excerpt && <blockquote aria-label={report.product ? '产物片段' : '提交片段'}>{result.submitted_excerpt}</blockquote>}
-          <small>{result.boundary}</small>
-        </article>
-      })}
-      {!!report.omitted?.length && <ul aria-label="本轮未执行">
-        {report.omitted.map(item => <li key={item.item_id}>{item.label} · {item.source_card_id} · {item.reason}</li>)}
-      </ul>}
-      <BasisDetails basis={report.basis} label="本报告固定依据" />
+      {report.executions?.some(item => (item.status === 'queued' || item.status === 'running') && !item.cancel_requested)
+        && <Button size="small" variant="quiet" loading={cancelling} disabled={disabled || loading || running}
+          onClick={() => void cancel(report.id)}>取消本轮检查</Button>}
+      <CheckReportDetails report={report}
+        applicability={report.product ? undefined : item => comparable ? applicability(item, items.find(row => row.id === item?.id), sameTarget) : '待核对当前检查依据'}
+        retry={itemId => !report.product && items.some(item => item.id === itemId && item.availability === 'ready')
+          && <Button size="small" disabled={blocked} onClick={() => void run(itemId)}>重新检查此项</Button>} />
     </section>}
   </section>
 }

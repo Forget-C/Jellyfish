@@ -8,5 +8,6 @@
 export type CanvasCheckExecution = {
     item_id: string;
     status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    cancel_requested?: boolean;
     reason?: (string | null);
 };

@@ -696,4 +696,60 @@ export class StudioGenerationCanvasesService {
             },
         });
     }
+    /**
+     * Cancel Canvas Check
+     * 请求停止该报告尚未完成的检查任务，并返回当前执行事实。
+     * @returns ApiResponse_CanvasCheckReportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckCancel({
+        projectId,
+        canvasId,
+        cardId,
+        reportId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+        reportId: string,
+    }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/reports/{report_id}/cancel',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+                'report_id': reportId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Archived Canvas Check Reports
+     * 读取当前画布中已删检查卡留下的原报告。
+     * @returns ApiResponse_list_CanvasCheckReportRead__ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckArchivedReports({
+        projectId,
+        canvasId,
+    }: {
+        projectId: string,
+        canvasId: string,
+    }): CancelablePromise<ApiResponse_list_CanvasCheckReportRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/check-reports/archived',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }

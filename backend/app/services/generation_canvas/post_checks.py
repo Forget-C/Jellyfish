@@ -13,11 +13,12 @@ from app.schemas.canvas_checks import (
 )
 from app.schemas.generation_canvas import CanvasCompiledInput, CanvasDocument
 from app.services.generation_canvas.check_product_text import (
-    PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_LABEL, product_basis_hash, text_product_items,
+    PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_LABEL, text_product_items,
 )
 from app.services.generation_canvas.check_selection import select_check_items
 from app.services.generation_canvas.checks import CHECK_REPORT_TARGET, CanvasChecks, check_target, persist_check_report
 from app.services.generation_canvas.errors import diagnostic
+from app.services.generation_canvas.execution_basis import digest
 from app.services.generation_canvas.historical_content import CanvasHistoricalContent
 from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.task_service import TaskService
@@ -46,7 +47,7 @@ def _historical_basis(node: CanvasRunNode, product: CanvasCheckProduct) -> Canva
                                        text=raw.get('text', '') if isinstance(raw.get('text'), str) else '')
     return CanvasCheckBasis(target_card_id=node.card_id, revision=product.revision, model_id=model.get('id'),
                             input=compiled, parameters=parameters,
-                            basis_hash=product_basis_hash(original, product.model_dump(mode='json')))
+                            basis_hash=digest({'original_basis': original, 'product': product.model_dump(mode='json')}))
 
 
 class CanvasPostChecks:

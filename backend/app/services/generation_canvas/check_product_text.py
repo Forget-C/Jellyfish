@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.core.contracts.generation_canvas import DesignField, DesignTextPayload
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckResult
 from app.schemas.generation_canvas import CanvasCompiledInput
-from app.services.generation_canvas.execution_basis import digest
 from app.services.generation_canvas.formatting import PURPOSE_LABELS, STATE_LABELS
 
 PRODUCT_TEXT_CATEGORY = 'R01'
@@ -99,8 +98,3 @@ def parse_product_text(observation: dict, content: object) -> dict[str, CanvasCh
         results[answer.item_id] = CanvasCheckResult(item_id=answer.item_id, outcome=outcome, message=message,
                                                     submitted_excerpt=excerpt if verified else None, boundary=boundary)
     return results
-
-
-def product_basis_hash(basis: dict, product: dict) -> str:
-    """A historical observation stamp is unique to the retained product and original basis."""
-    return digest({'original_basis': basis, 'product': product})
