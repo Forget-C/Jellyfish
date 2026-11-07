@@ -23,7 +23,7 @@ CONSISTENCY_INSTRUCTIONS = (
 )
 
 
-def _requirement(identity, design, field_id, field):
+def design_requirement(identity, design, field_id, field):
     """Project one adopted field and its authored scope, with no media or private settings."""
     return {
         'source': identity.model_dump(mode='json'),
@@ -41,7 +41,7 @@ def _requirement(identity, design, field_id, field):
     }
 
 
-def _check_item(card: CheckCard, category: str, label: str, source: OutputIdentity, field_id: str,
+def text_check_item(card: CheckCard, category: str, label: str, source: OutputIdentity, field_id: str,
                 requirement: str, observation: dict, unavailable: str | None) -> CanvasCheckItem:
     """Identify an item by its category and actual observation source."""
     suffix = '' if source.position == 0 and source.object_id is None else ':' + digest(source.model_dump())[:16]
@@ -54,7 +54,7 @@ def _check_item(card: CheckCard, category: str, label: str, source: OutputIdenti
 
 def consistency_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None):
     """Derive one request-level comparison so the same pair cannot produce duplicate findings."""
-    requirements = [_requirement(identity, design, field_id, field)
+    requirements = [design_requirement(identity, design, field_id, field)
                     for identity, design, field_id, _, field in adopted_design_fields(basis)
                     if not (isinstance(field, CompositionFramingField) and field.size)]
     if not requirements:
@@ -70,12 +70,12 @@ def consistency_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | N
     if len(requirements) < 2:
         return [], {}
     observation = {'requirements': requirements}
-    item = _check_item(card, CONSISTENCY_CATEGORY, CONSISTENCY_LABEL, target, 'requirements',
+    item = text_check_item(card, CONSISTENCY_CATEGORY, CONSISTENCY_LABEL, target, 'requirements',
                        f'本次采用与补充的 {len(requirements)} 条要求', observation, unavailable)
     return [item], {item.id: observation}
 
 
-class _EvidenceQuote(BaseModel):
+class EvidenceQuote(BaseModel):
     model_config = ConfigDict(extra='forbid')
     index: int = Field(ge=0)
     excerpt: str = Field(min_length=1, max_length=500)
@@ -85,11 +85,11 @@ class _ConsistencyReply(BaseModel):
     model_config = ConfigDict(extra='forbid')
     outcome: Literal['conforming', 'nonconforming', 'risk', 'indeterminate']
     message: str = Field(min_length=1, max_length=800)
-    left: _EvidenceQuote | None = None
-    right: _EvidenceQuote | None = None
+    left: EvidenceQuote | None = None
+    right: EvidenceQuote | None = None
 
 
-def _evidence(requirement: dict, quote: str) -> CanvasCheckTextEvidence | None:
+def exact_evidence(requirement: dict, quote: str) -> CanvasCheckTextEvidence | None:
     """Only expose quotes that resolve exactly to the frozen source field."""
     excerpt = quote.strip()
     if excerpt and excerpt in requirement['text']:
@@ -134,7 +134,7 @@ def parse_consistency(item_id: str, observation: dict, content: object) -> Canva
         result.outcome, result.message = 'indeterminate', '未能定位两条不同的实际采用或补充要求。'
         return result
     left, right = requirements[left_quote.index], requirements[right_quote.index]
-    left_evidence, right_evidence = _evidence(left, left_quote.excerpt), _evidence(right, right_quote.excerpt)
+    left_evidence, right_evidence = exact_evidence(left, left_quote.excerpt), exact_evidence(right, right_quote.excerpt)
     if left_evidence is None or right_evidence is None:
         result.outcome, result.message = 'indeterminate', '未能在本次实际要求中核实双方引文。'
         return result
@@ -172,9 +172,9 @@ def reviewability_checks(basis: CanvasBasis, card: CheckCard, unavailable: str |
             field_id in ('standard', 'visible_result') or field.purpose == 'constraint'
         ):
             continue
-        requirement = _requirement(identity, design, field_id, field)
+        requirement = design_requirement(identity, design, field_id, field)
         observation = {'requirement': requirement, 'submitted_text': basis.compiled.text}
-        item = _check_item(card, REVIEWABILITY_CATEGORY, REVIEWABILITY_LABEL, identity, field_id,
+        item = text_check_item(card, REVIEWABILITY_CATEGORY, REVIEWABILITY_LABEL, identity, field_id,
                            requirement['text'], observation, unavailable)
         if item.id not in observations:
             items.append(item)
@@ -201,7 +201,7 @@ def parse_reviewability(item_id: str, observation: dict, content: object) -> Can
         return None
     result = CanvasCheckResult(item_id=item_id, outcome='indeterminate',
                                message='当前依据不足以核实这条已采用要求是否具备可核对条件。', boundary=REVIEWABILITY_BOUNDARY)
-    evidence = _evidence(observation['requirement'], answer.requirement_excerpt or '')
+    evidence = exact_evidence(observation['requirement'], answer.requirement_excerpt or '')
     if evidence is None:
         return result
     result.text_evidence = [evidence]
