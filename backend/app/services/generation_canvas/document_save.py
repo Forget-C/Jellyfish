@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 from pydantic import ValidationError
 from sqlalchemy import select
-from app.schemas.generation_canvas import CanvasDocument, CanvasResultScope, ModelCard, SoundDirectionCard, PerformanceDirectionCard, MediaContentCard
+from app.schemas.generation_canvas import CanvasDocument, CanvasResultScope, CheckCard, ModelCard, SoundDirectionCard, PerformanceDirectionCard, MediaContentCard
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
 from app.services.generation_canvas.capabilities import model_capability
@@ -29,6 +29,10 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
         raise diagnostic('INVALID_DOCUMENT', error['msg'], {'canvas_id': canvas_id, 'path': list(error['loc'])}) from exc
     if document.id != canvas_id or document.project_id != project_id:
         raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
+    for card in document.cards:
+        if isinstance(card, CheckCard) and card.id not in canvas.card_types and 'enabled_categories' not in card.model_fields_set:
+            from app.services.generation_canvas.check_selection import initial_check_categories
+            card.enabled_categories = initial_check_categories()
     previous_document = CanvasDocument.model_validate(canvas.document)
     document, previous_document = _normalize_document(document, previous_document)
     identities = dict(canvas.card_types)

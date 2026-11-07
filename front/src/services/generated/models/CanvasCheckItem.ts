@@ -14,4 +14,8 @@ export type CanvasCheckItem = {
     field_id: string;
     requirement: string;
     enabled: boolean;
+    availability?: 'ready' | 'unavailable';
+    reason?: (string | null);
+    scope_note?: (string | null);
+    scope_editable?: boolean;
 };

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasCheckReport, GenerationCanvas
 from app.schemas.canvas_checks import CanvasCheckBasis, CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest
 from app.schemas.generation_canvas import CheckCard, CanvasDocument, TextModelCard
-from app.services.generation_canvas.check_duration import duration_check
+from app.services.generation_canvas.check_selection import check_items, select_check_items
 from app.services.generation_canvas.current_state import CanvasCurrentState
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.execution_basis import CanvasBasis, digest
@@ -62,9 +62,8 @@ class CanvasChecks:
         card, basis = await self._basis(canvas, card_id)
         if basis is None:
             return CanvasCheckPreview(reason='请连接模型生成卡的生成检查依据')
-        duration = duration_check(basis, card)
-        return CanvasCheckPreview(basis=public_check_basis(basis), items=[duration.item] if duration else [],
-                                  reason=None if duration else '暂无可明确比较的镜头时长数值')
+        categories, items, _ = check_items(basis, card)
+        return CanvasCheckPreview(basis=public_check_basis(basis), categories=categories, items=items)
 
     async def run(self, canvas_id: str, card_id: str, request: CanvasCheckRequest) -> CanvasCheckReportRead:
         """比较版本后执行本轮所选范围；不同检查拥有不同报告身份。"""
@@ -78,16 +77,16 @@ class CanvasChecks:
         public = public_check_basis(basis)
         if public.basis_hash != request.basis_hash:
             raise diagnostic('CHECK_BASIS_CHANGED', '检查依据已变，请刷新后再检查', target, status=409, blocks=['check'])
-        duration = duration_check(basis, card)
-        if not duration:
-            raise diagnostic('CHECK_ITEM_UNAVAILABLE', '没有可执行的时长检查项', target, blocks=['check'])
-        item = duration.item
-        if (request.item_id is None and not item.enabled) or (request.item_id is not None and request.item_id != item.id):
-            raise diagnostic('CHECK_ITEM_UNAVAILABLE', '本轮没有所选的可执行检查项', target, blocks=['check'])
+        _, items, comparisons = check_items(basis, card)
+        selected, omitted = select_check_items(items, request.item_id)
+        if not selected:
+            unavailable = next((item.reason for item in items if item.id == request.item_id), None)
+            raise diagnostic('CHECK_ITEM_UNAVAILABLE', unavailable or '本轮没有所选的可执行检查项', target, blocks=['check'])
 
         report = CanvasCheckReportRead(id=uuid4().hex, check_card_id=card_id, created_at=datetime.now(UTC),
                                        scope='item' if request.item_id is not None else 'all',
-                                       basis=public, items=[item], results=[duration.evaluate()])
+                                       basis=public, items=selected, omitted=omitted,
+                                       results=[comparisons[item.id].evaluate() for item in selected])
         self.db.add(CanvasCheckReport(id=report.id, canvas_id=canvas_id, check_card_id=card_id,
                                       created_at=report.created_at.replace(tzinfo=None), report=report.model_dump(mode='json')))
         await self.db.flush()

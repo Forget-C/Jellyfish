@@ -28,12 +28,35 @@ class CanvasCheckItem(BaseModel):
     field_id: str
     requirement: str
     enabled: bool
+    availability: Literal['ready', 'unavailable'] = 'ready'
+    reason: str | None = None
+    scope_note: str | None = None
+    scope_editable: bool = False
+
+
+class CanvasCheckCategory(BaseModel):
+    """类别选择与当前依据适用性独立表达。"""
+    id: str
+    label: str
+    enabled: bool
+    availability: Literal['ready', 'unavailable', 'not_applicable']
+    reason: str | None = None
+
+
+class CanvasCheckOmission(BaseModel):
+    """整卡检查只记录未纳入执行的理由，不将跳过项标作通过。"""
+    item_id: str
+    label: str
+    source_card_id: str
+    status: Literal['disabled', 'unavailable']
+    reason: str
 
 
 class CanvasCheckPreview(BaseModel):
     """连接后列项，用户显式发起执行。"""
     basis: CanvasCheckBasis | None = None
     items: list[CanvasCheckItem] = Field(default_factory=list)
+    categories: list[CanvasCheckCategory] = Field(default_factory=list)
     reason: str | None = None
 
 
@@ -62,3 +85,4 @@ class CanvasCheckReportRead(BaseModel):
     basis: CanvasCheckBasis
     items: list[CanvasCheckItem]
     results: list[CanvasCheckResult]
+    omitted: list[CanvasCheckOmission] = Field(default_factory=list)

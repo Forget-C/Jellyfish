@@ -9,5 +9,7 @@ export type CheckCard = {
     id: string;
     type_version?: number;
     type?: string;
+    enabled_categories?: Array<string>;
     disabled_items?: Array<string>;
+    scope_notes?: Record<string, string>;
 };
