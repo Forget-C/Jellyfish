@@ -48,6 +48,26 @@ def public_check_basis(basis: CanvasBasis) -> CanvasCheckBasis:
     return CanvasCheckBasis(**data, basis_hash=digest(data))
 
 
+def check_target(context: CanvasOutputContext, card_id: str) -> tuple[CheckCard, str | None]:
+    """Resolve the saved observation connection without reading the current generation input."""
+    card = context.cards.get(card_id)
+    if not isinstance(card, CheckCard):
+        raise diagnostic('CHECK_CARD_NOT_FOUND', '检查卡不存在', {'card_id': card_id}, status=404, blocks=['check'])
+    relation = next((edge for edge in context.incoming.get(card_id, ()) if edge.target_port == 'check_basis'), None)
+    return card, relation.source_card if relation else None
+
+
+async def persist_check_report(db: AsyncSession, canvas_id: str, report: CanvasCheckReportRead, tasks: dict[str, str]):
+    """Publish the fixed public report and its private task index in the admission transaction."""
+    stored = report.model_dump(mode='json')
+    if tasks:
+        stored['_tasks'] = tasks
+    db.add(CanvasCheckReport(id=report.id, canvas_id=canvas_id, check_card_id=report.check_card_id,
+                             created_at=report.created_at.replace(tzinfo=None), report=stored))
+    await db.flush()
+    return report
+
+
 class CanvasChecks:
     """与画布保存使用相同项目边界，规则执行与报告写入处于同一事务。"""
 
@@ -58,17 +78,14 @@ class CanvasChecks:
 
     async def _basis(self, canvas: GenerationCanvas, card_id: str, *, lock_config: bool = False):
         context = CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
-        card = context.cards.get(card_id)
-        if not isinstance(card, CheckCard):
-            raise diagnostic('CHECK_CARD_NOT_FOUND', '检查卡不存在', {'card_id': card_id}, status=404, blocks=['check'])
-        relation = next((edge for edge in context.incoming.get(card_id, ()) if edge.target_port == 'check_basis'), None)
-        if relation is None:
+        card, target_id = check_target(context, card_id)
+        if target_id is None:
             return card, None
         outputs = await self.current.current_outputs(canvas, context=context)
-        return card, await self.current.current_basis(canvas, relation.source_card, outputs,
+        return card, await self.current.current_basis(canvas, target_id, outputs,
                                                       lock_config=lock_config, context=context)
 
-    async def _check_model(self, card: CheckCard) -> tuple[FrozenGenerationConfig | None, str | None]:
+    async def check_model(self, card: CheckCard) -> tuple[FrozenGenerationConfig | None, str | None]:
         """Resolve the explicitly selected text route, keeping credentials server-side."""
         if not card.check_model_id:
             return None, '请选择独立的文字检查模型'
@@ -94,7 +111,7 @@ class CanvasChecks:
         card, basis = await self._basis(canvas, card_id)
         if basis is None:
             return CanvasCheckPreview(reason='请连接模型生成卡的生成检查依据')
-        _, reason = await self._check_model(card)
+        _, reason = await self.check_model(card)
         categories, items, _, _ = check_items(basis, card, reason)
         return CanvasCheckPreview(basis=public_check_basis(basis), categories=categories, items=items)
 
@@ -110,7 +127,7 @@ class CanvasChecks:
         public = public_check_basis(basis)
         if public.basis_hash != request.basis_hash:
             raise diagnostic('CHECK_BASIS_CHANGED', '检查依据已变，请刷新后再检查', target, status=409, blocks=['check'])
-        check_model, reason = await self._check_model(card)
+        check_model, reason = await self.check_model(card)
         _, items, comparisons, observations = check_items(basis, card, reason)
         selected, omitted = select_check_items(items, request.item_id)
         if not selected:
@@ -137,13 +154,7 @@ class CanvasChecks:
                     })
                 tasks[item.id] = task.id
                 report.executions.append(CanvasCheckExecution(item_id=item.id, status='queued'))
-        stored = report.model_dump(mode='json')
-        if tasks:
-            stored['_tasks'] = tasks
-        self.db.add(CanvasCheckReport(id=report.id, canvas_id=canvas_id, check_card_id=card_id,
-                                      created_at=report.created_at.replace(tzinfo=None), report=stored))
-        await self.db.flush()
-        return report
+        return await persist_check_report(self.db, canvas_id, report, tasks)
 
     async def reports(self, canvas_id: str, card_id: str) -> list[CanvasCheckReportRead]:
         """保留断线前报告，按检查卡原身份查询，不用当前目标覆盖历史依据。"""
@@ -174,6 +185,9 @@ class CanvasChecks:
                 else:
                     execution.status, execution.reason = TaskStatus(fact.status).value, fact.error_message
                     if fact.status == TaskStatus.succeeded:
-                        report.results.append(CanvasCheckResult.model_validate(fact.result))
+                        results = fact.result.get('results')
+                        result = results.get(execution.item_id) if isinstance(results, dict) else fact.result
+                        if result:
+                            report.results.append(CanvasCheckResult.model_validate(result))
             reports.append(report)
         return reports

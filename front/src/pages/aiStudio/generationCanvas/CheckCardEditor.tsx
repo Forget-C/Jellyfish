@@ -3,6 +3,7 @@ import { Alert, Input, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { HistoricalCheckProduct, PostCheckPanel } from './PostCheckPanel'
 import type { CardRendererProps } from './rendererRegistry'
 import './checkCard.css'
 
@@ -114,9 +115,13 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const sameTarget = !!basis && basis.target_card_id === report?.basis.target_card_id
   const currentEnabled = items.filter(item => item.enabled).map(item => item.id)
   const originalEnabled = report?.enabled_item_ids
-  const selectionChanged = comparable && sameTarget && originalEnabled != null
+  const selectionChanged = !report?.product && comparable && sameTarget && originalEnabled != null
     && (originalEnabled.length !== currentEnabled.length || originalEnabled.some(id => !currentEnabled.includes(id)))
   const blocked = disabled || running || !comparable || !basis
+  const showReport = (accepted: CanvasCheckReportRead) => {
+    setReports(previous => [accepted, ...previous.filter(item => item.id !== accepted.id)])
+    setSelectedReportId(accepted.id)
+  }
   const run = async (itemId?: string) => {
     if (blocked || !basis) return
     setRunning(true)
@@ -125,11 +130,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       const response = await Canvases.canvasCheckRun({ projectId, canvasId, cardId, requestBody: {
         expected_revision: basis.revision, basis_hash: basis.basis_hash, item_id: itemId,
       } })
-      if (response.data) {
-        const completed = response.data
-        setReports(previous => [completed, ...previous.filter(item => item.id !== completed.id)])
-        setSelectedReportId(completed.id)
-      }
+      if (response.data) showReport(response.data)
     } catch (issue) {
       setError(issue instanceof ApiError && issue.status === 409 ? '检查依据已变，请核对更新后的内容再重查' : '本次检查未完成，历史报告保留')
       setRefresh(value => value + 1)
@@ -177,14 +178,17 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       })}
     </section>)}
     <Button variant="primary" loading={running} disabled={blocked || !ready} onClick={() => void run()}>
-      {reports.length ? '重新检查' : '检查'}
+      {reports.some(row => !row.product) ? '重新检查' : '检查'}
     </Button>
+    <PostCheckPanel projectId={projectId} canvasId={canvasId} cardId={cardId} savedRevision={savedRevision}
+      active={!!editorOpen} disabled={!!disabled || !!documentPending} reports={reports} onReport={showReport} />
     {report && <section className="generation-check-report" aria-label="检查报告">
       <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
-        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · 修订 ${entry.basis.revision}` }))} /></label>
+        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · ${entry.product ? '生成后' : '生成前'} · 修订 ${entry.basis.revision}` }))} /></label>
       <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
         {originalEnabled != null && ` · 执行时启用 ${originalEnabled.length} 项`}
         {report.check_model_id && ` · 检查模型 ${report.check_model_id}`}</p>
+      {report.product && <HistoricalCheckProduct product={report.product} />}
       {selectionChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
       {!!report.executions?.length && <ul aria-label="模型检查执行状态">
         {report.executions.map(execution => {
@@ -202,11 +206,12 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
         const item = report.items.find(row => row.id === result.item_id)
         const current = items.find(row => row.id === result.item_id)
         return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
-          <p role="status">{comparable ? applicability(item, current, sameTarget) : '待核对当前检查依据'}</p>
+          {report.product ? <p>此结论仅适用于固定历史产物</p>
+            : <p role="status">{comparable ? applicability(item, current, sameTarget) : '待核对当前检查依据'}</p>}
           {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
           {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
           <p>{result.message}</p>
-          {result.submitted_excerpt && <blockquote aria-label="提交片段">{result.submitted_excerpt}</blockquote>}
+          {result.submitted_excerpt && <blockquote aria-label={report.product ? '产物片段' : '提交片段'}>{result.submitted_excerpt}</blockquote>}
           <small>{result.boundary}</small>
         </article>
       })}

@@ -381,17 +381,26 @@ class TaskWorker:
         """Execute one semantic item and publish only its validated observation."""
         import json
         from app.services.generation_canvas.check_adoption import ADOPTION_INSTRUCTIONS, parse_observation
+        from app.services.generation_canvas.check_product_text import (
+            PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_INSTRUCTIONS, parse_product_text,
+        )
         snapshot = task.input_snapshot
         observation = snapshot['observation']
-        messages = [SystemMessage(content=ADOPTION_INSTRUCTIONS),
-                    HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
+        category = snapshot.get('check_category', 'P01')
+        instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else ADOPTION_INSTRUCTIONS
+        messages = [SystemMessage(content=instructions), HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
         reply = await self._frozen_text_model(task).ainvoke(messages)
-        result = parse_observation(snapshot['item_id'], observation, reply.content)
+        if category == PRODUCT_TEXT_CATEGORY:
+            results = parse_product_text(observation, reply.content)
+            result = {'results': {key: value.model_dump(mode='json') for key, value in results.items()}} if results is not None else None
+        else:
+            item = parse_observation(snapshot['item_id'], observation, reply.content)
+            result = item.model_dump(mode='json') if item is not None else None
         if result is None:
             await self._fail(task.id, 'canvas_check_response_invalid', '检查模型返回无法解析')
             return
         async with self.sessions() as db:
-            await TaskService(db).finish(task.id, result=result.model_dump(mode='json'))
+            await TaskService(db).finish(task.id, result=result)
             await db.commit()
 
     async def _canvas_text(self, task: Task) -> None:

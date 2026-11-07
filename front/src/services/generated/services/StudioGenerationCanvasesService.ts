@@ -8,6 +8,7 @@ import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_Canv
 import type { ApiResponse_CanvasCheckReportRead_ } from '../models/ApiResponse_CanvasCheckReportRead_';
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
+import type { ApiResponse_CanvasPostCheckPreview_ } from '../models/ApiResponse_CanvasPostCheckPreview_';
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_CanvasRunAccepted_ } from '../models/ApiResponse_CanvasRunAccepted_';
@@ -15,12 +16,14 @@ import type { ApiResponse_CanvasRunRead_ } from '../models/ApiResponse_CanvasRun
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
+import type { ApiResponse_list_CanvasCheckProduct__ } from '../models/ApiResponse_list_CanvasCheckProduct__';
 import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
+import type { CanvasPostCheckRequest } from '../models/CanvasPostCheckRequest';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
 import type { CanvasRuntimeEvent } from '../models/CanvasRuntimeEvent';
@@ -583,6 +586,113 @@ export class StudioGenerationCanvasesService {
             },
             errors: {
                 422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Canvas Check Products
+     * List retained text outputs for the saved observation target.
+     * @returns ApiResponse_list_CanvasCheckProduct__ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckProducts({
+        projectId,
+        canvasId,
+        cardId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+    }): CancelablePromise<ApiResponse_list_CanvasCheckProduct__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/products',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Canvas Post Check Preview
+     * Show one pinned product, original basis and estimated model calls.
+     * @returns ApiResponse_CanvasPostCheckPreview_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasPostCheckPreview({
+        projectId,
+        canvasId,
+        cardId,
+        runId,
+        nodeId,
+        position,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+        runId: string,
+        nodeId: string,
+        position: number,
+    }): CancelablePromise<ApiResponse_CanvasPostCheckPreview_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+                'run_id': runId,
+                'node_id': nodeId,
+                'position': position,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Canvas Post Check Run
+     * Admit an explicit historical product inspection.
+     * @returns ApiResponse_CanvasCheckReportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasPostCheckRun({
+        projectId,
+        canvasId,
+        cardId,
+        runId,
+        nodeId,
+        position,
+        requestBody,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+        runId: string,
+        nodeId: string,
+        position: number,
+        requestBody: CanvasPostCheckRequest,
+    }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}/runs',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+                'run_id': runId,
+                'node_id': nodeId,
+                'position': position,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                409: `Conflict`,
+                422: `Unprocessable Entity`,
             },
         });
     }

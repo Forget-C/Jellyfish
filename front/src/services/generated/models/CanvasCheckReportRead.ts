@@ -6,6 +6,7 @@ import type { CanvasCheckBasis } from './CanvasCheckBasis';
 import type { CanvasCheckExecution } from './CanvasCheckExecution';
 import type { CanvasCheckItem } from './CanvasCheckItem';
 import type { CanvasCheckOmission } from './CanvasCheckOmission';
+import type { CanvasCheckProduct } from './CanvasCheckProduct';
 import type { CanvasCheckResult } from './CanvasCheckResult';
 /**
  * 固定本轮目标、依据、所选项目与结果；重查形成新身份。
@@ -25,4 +26,5 @@ export type CanvasCheckReportRead = {
      * 执行时启用的项目；可与本轮实际执行范围不同。
      */
     enabled_item_ids?: (Array<string> | null);
+    product?: (CanvasCheckProduct | null);
 };

@@ -21,7 +21,7 @@ class CanvasHistoricalContent:
     async def prepare_content(self, canvas_id: str, run_id: str, node_id: str, position: int):
         """返回一次明确另存的独立内容；文档仍通过普通 CAS 队列保存。"""
         from app.schemas.generation_canvas import CanvasContentOrigin, TextContentCard, ImageContentCard, VideoContentCard
-        node = await self._output_node(canvas_id, run_id, node_id, position)
+        node = await self.output_node(canvas_id, run_id, node_id, position)
         output = node.outputs[position]
         origin = CanvasContentOrigin(canvas_id=canvas_id, run_id=run_id, node_id=node_id,
                                      position=position, incomplete=node.status != 'succeeded')
@@ -32,7 +32,7 @@ class CanvasHistoricalContent:
         kind = ImageContentCard if output['modality'] == 'image' else VideoContentCard
         return kind(id=uuid4().hex, file_id=output['file_id'], origin=origin)
 
-    async def _output_node(self, canvas_id: str, run_id: str, node_id: str, position: int):
+    async def output_node(self, canvas_id: str, run_id: str, node_id: str, position: int):
         """按项目和画布校验历史输出；运行中内容不伪装成固定成果。"""
         await CanvasStore(self.db, self.project_id).get(canvas_id)
         node = await self.db.scalar(select(CanvasRunNode).where(CanvasRunNode.id == node_id,
@@ -52,7 +52,7 @@ class CanvasHistoricalContent:
         if origin and not previous:
             if origin.canvas_id != canvas_id:
                 raise diagnostic('INVALID_ORIGIN', '历史来源必须属于当前画布', {'card_id': card.id})
-            node = await self._output_node(canvas_id, origin.run_id, origin.node_id, origin.position)
+            node = await self.output_node(canvas_id, origin.run_id, origin.node_id, origin.position)
             output = node.outputs[origin.position]
             restored = _matches_proof(proof, node.card_id, node.result_set_id, output.get('source', {}).get('position'))
             matches_content = (getattr(card, 'text', None) == output.get('text') if output['modality'] == 'text'
@@ -82,7 +82,7 @@ class CanvasHistoricalContent:
                 origin = getattr(cards.get(card_id), 'origin', None)
                 result = None
                 if origin and not origin.incomplete:
-                    node = await self._output_node(document.id, origin.run_id, origin.node_id, origin.position)
+                    node = await self.output_node(document.id, origin.run_id, origin.node_id, origin.position)
                     if node.status == 'succeeded' and node.result_set_id:
                         result = (node.result_set_id, node.outputs[origin.position].get('source', {}))
                 sources[card_id] = result

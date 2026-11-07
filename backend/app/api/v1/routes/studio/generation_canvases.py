@@ -173,3 +173,32 @@ async def get_canvas_check_reports(project_id: str, canvas_id: str, card_id: str
                                    db: AsyncSession = Depends(get_db, scope='function')):
     """按原检查卡身份读取该项目画布内的报告。"""
     return success_response(await CanvasChecks(db, project_id).reports(canvas_id, card_id))
+
+
+from app.schemas.canvas_checks import CanvasCheckProduct, CanvasPostCheckPreview, CanvasPostCheckRequest
+from app.services.generation_canvas.post_checks import CanvasPostChecks
+
+
+@router.get('/{project_id}/{canvas_id}/checks/{card_id}/products', response_model=ApiResponse[list[CanvasCheckProduct]],
+            operation_id='canvas_check_products')
+async def canvas_check_products(project_id: str, canvas_id: str, card_id: str,
+                                db: AsyncSession = Depends(get_db, scope='function')):
+    """List retained text outputs for the saved observation target."""
+    return success_response(await CanvasPostChecks(db, project_id).products(canvas_id, card_id))
+
+
+@router.get('/{project_id}/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}',
+            response_model=ApiResponse[CanvasPostCheckPreview], operation_id='canvas_post_check_preview')
+async def canvas_post_check_preview(project_id: str, canvas_id: str, card_id: str, run_id: str, node_id: str, position: int,
+                                    db: AsyncSession = Depends(get_db, scope='function')):
+    """Show one pinned product, original basis and estimated model calls."""
+    return success_response(await CanvasPostChecks(db, project_id).preview(canvas_id, card_id, run_id, node_id, position))
+
+
+@router.post('/{project_id}/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}/runs',
+             response_model=ApiResponse[CanvasCheckReportRead], operation_id='canvas_post_check_run',
+             responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
+async def canvas_post_check_run(project_id: str, canvas_id: str, card_id: str, run_id: str, node_id: str, position: int,
+                                body: CanvasPostCheckRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """Admit an explicit historical product inspection."""
+    return success_response(await CanvasPostChecks(db, project_id).run(canvas_id, card_id, run_id, node_id, position, body))
