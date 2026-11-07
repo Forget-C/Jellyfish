@@ -109,7 +109,7 @@ try {
     await closeCanvasDetails(page)
     await page.getByRole('button',{name:'适应全部',exact:true}).click()
     await page.locator(`[data-generation-edge-id="${imageEdge.id}"]`).getByRole('button').press('Enter')
-    await page.getByRole('button',{name:'删除此候选连接',exact:true}).click()
+    await page.getByRole('button',{name:'断开此连接',exact:true}).click()
   }
   await disconnect()
   await page.getByRole('status').filter({hasText:/先取消|仍被|已被|采用|引用/}).waitFor()

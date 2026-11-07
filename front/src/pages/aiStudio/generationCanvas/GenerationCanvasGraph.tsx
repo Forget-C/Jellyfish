@@ -22,7 +22,7 @@ import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, StudioFilesService, LlmService } from '../../../services/generated'
-import type { CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { createSurfaceGesture } from './surfaceGesture'
 import { createConnectionSession, type ConnectionState } from './connectionSession'
@@ -46,7 +46,7 @@ import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
 import { generationCardSize } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
-import { findConnection, isIndependentDesignEdge, visibleSourceEdges, sourceConnectionEdges } from './graphRules'
+import { findConnection, visibleSourceEdges, sourceConnectionEdges } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
@@ -66,12 +66,13 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
-  const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels, sourceOptions } = useGraphRules()
-  const operations = createCanvasOperations({ connectionReason, sourceOptions })
+  const rules = useGraphRules()
+  const { connectionPolicy, catalog, cardDefinitions, cardTitles, inputPorts, outputPorts, portLabels, sourceOptions } = rules
+  const operations = createCanvasOperations(rules)
   const clean = operations.clean
   const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
   const stacks = groups.filter(group => group.kind === 'stack')
@@ -670,9 +671,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (issue) { showConnectionIssue(issue, option.source_card); return }
     const edge = { ...option, id: crypto.randomUUID() }
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    const uses = sourceOptions(latest.current, option.source_card, option.target_card)
-    const designSource = cards.some(card => card.id === option.source_card && card.type?.startsWith('direction.'))
-    connectDocument(latest.current, edge); setReason(!designSource ? '已连接候选输入；接收端明确选择后才实际使用' : uses.length === 1 && (option.target_port === 'acceptance_basis' || isIndependentDesignEdge(latest.current, option)) ? '已连接并采用完整设计' : '已连接来源候选，请在接收卡选择用途')
+    connectDocument(latest.current, edge); setReason(connectionPolicy(latest.current, option)?.message || '端点不兼容')
   }
   const finishDrag = (event: PointerEvent) => {
     if (!drag || pendingConnection) return
@@ -735,15 +734,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     })
   }
   const removeEdge = (edge: GenerationEdge, confirmed = false) => {
-    const target = latest.current.cards?.find(card => card.id === edge.target_card)
-    const composition = target?.type === 'direction.composition' ? target as CompositionCard : undefined
-    const positioned = composition?.frame_target?.card_id === edge.source_card
-    if (positioned && designReferences(composition!).some(reference => reference.reference.source.card_id === edge.source_card)) { setReason('此连线仍被字段引用，请先解除字段引用'); return }
-    if (positioned && !confirmed) { setPendingFrameDisconnect(edge); return }
-    const current = positioned ? { ...latest.current, cards: latest.current.cards?.map(card => card.id === composition!.id ? { ...composition!, frame_target: null } : card) } : latest.current
     const members = sourceConnectionEdges(latest.current, edge)
-    const result = operations.disconnect(current, edge)
-    if (!result.document) { setReason(result.reason); return }
+    const result = operations.disconnect(latest.current, edge, confirmed)
+    if (!result.document) {
+      if (result.confirmFrame) setPendingFrameDisconnect(edge)
+      else setReason(result.reason)
+      return
+    }
     edit(result.document)
     if (members.some(member => member.id === selectedEdgeId)) setSelectedEdgeId(undefined)
     requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(edge.target_card)}"]`)?.focus({ preventScroll: true }))
@@ -946,10 +943,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       </div>
     </Modal>
     <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
-      <p>{sourceTargetCard && isReferenceDesign(sourceTargetCard) ? '选择只建立候选，在参数中引用后才使用。' : '选择只建立候选，实际使用仍需明确采用。'}</p>
+      <p>选择来源前请核对连接用途；具体生效方式见各项提示。</p>
       {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
         commitConnection(option, 'left'); setSourceTarget(undefined)
-      }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)}</Button>))}
+      }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)} · {connectionPolicy(document, option)?.message}</Button>))}
     </Modal>
     <Modal title="上传文本参考" open={!!uploadTextCard} onCancel={() => setUploadText(undefined)} footer={null}>
       {uploadTextCard && <TextContentEditor card={uploadTextCard} disabled={readonly} onChange={next => edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })} />}
@@ -962,13 +959,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     {connectionLayout.error && <span role="status">{connectionLayout.error}</span>}
     {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
-      <p>连接只提供候选，实际使用仍需明确选择。</p>
+      <p>选择接收卡后查看连接用途及生效方式。</p>
       {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
       <Button onClick={cancelConnection}>取消连接</Button>
     </div>}
     {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
       <strong>选择连接用途</strong>
-      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → {option.target_port === 'acceptance_basis' ? '关联验收要求' : isIndependentDesignEdge(document, option) ? '采用完整设计' : <>作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</>}</Button>)}
+      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → {inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)} · {connectionPolicy(document, option)?.message}</Button>)}
       <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
     </div>}
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
@@ -984,13 +981,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
         <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
         <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
-        <Select aria-label="选择候选连线" placeholder="选择候选连线" value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}
+        <Select aria-label="选择连线" placeholder="选择连线" value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}
           options={visibleSourceEdges(document).map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={id => selectEdge(id)} />
       </CanvasToolbarMenu>
     </nav>
-    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选候选连接" style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
+    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选连接" style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
       <Tooltip trigger={['hover', 'focus']} title={<span className="generation-edge-hint"><strong>{edgePurpose(inspectedEdge)}</strong><span>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}{readonly ? ' · 只读，无法删除' : ''}</span></span>}>
-        <span><Button aria-label="删除此候选连接" disabled={readonly} icon={<ScissorOutlined style={{ fontSize: 'calc(var(--wb-icon) * 1.5)' }} />} variant="quiet" onClick={() => removeEdge(inspectedEdge)} /></span>
+        <span><Button aria-label="断开此连接" disabled={readonly} icon={<ScissorOutlined style={{ fontSize: 'calc(var(--wb-icon) * 1.5)' }} />} variant="quiet" onClick={() => removeEdge(inspectedEdge)} /></span>
       </Tooltip>
     </section>}
     {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
@@ -1235,7 +1232,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
 
 export function GenerationCanvasGraph(props: ComponentProps<typeof GenerationCanvasGraphContent>) {
-  return <CanvasCatalogProvider key={`${props.document.project_id}:${props.document.id}`} projectId={props.document.project_id} canvasId={props.document.id}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
+  return <CanvasCatalogProvider key={`${props.document.project_id}:${props.document.id}`} projectId={props.document.project_id} canvasId={props.document.id} onReady={props.onCatalogReady}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
 }
 
 function DesignReferenceBoundary({ children, ...props }: ComponentProps<typeof DesignReferenceEditor>) {

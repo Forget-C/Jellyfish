@@ -16,12 +16,13 @@ class CanvasDesignFieldDefinition(BaseModel):
 
 
 class CanvasInputPortDefinition(BaseModel):
-    """候选入口及明确允许的值种类；连线仍不表示采用。"""
+    """接收端点及允许的值种类；连线生效语义由公开连接策略声明。"""
     model_config = ConfigDict(extra='forbid')
     id: str
     label: str
     relation: Literal['generation_input', 'business_reference', 'material_association']
     accepts: list[CanvasValueKind]
+    max_sources: int | None = None
 
 
 class CanvasOutputPortDefinition(BaseModel):
@@ -48,8 +49,23 @@ class CanvasCardTypeDefinition(BaseModel):
     entries: list[CanvasDesignFieldDefinition]
 
 
+class CanvasConnectionPolicy(BaseModel):
+    """一个兼容端点组合的连接与解除语义；多用途必须明确采用。"""
+    model_config = ConfigDict(extra='forbid')
+    source_type: str
+    source_port: str
+    target_type: str
+    target_port: str
+    adoption_allowed: bool
+    connect: Literal['candidate', 'adopt_design', 'associate_acceptance']
+    cancel: Literal['keep_connection', 'remove_connection']
+    disconnect: Literal['protect', 'release', 'confirm_frame']
+    message: str
+
+
 class CanvasCatalog(BaseModel):
     """当前应用版本的权威类型目录；不随画布编辑修订变化。"""
     model_config = ConfigDict(extra='forbid')
     version: Literal[1] = 1
     cards: list[CanvasCardTypeDefinition]
+    connection_policies: list[CanvasConnectionPolicy]

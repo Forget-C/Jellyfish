@@ -32,7 +32,7 @@ def synchronize_acceptance(document, previous):
     """唯一验收用途随线生效；多用途由接收端选择，断线同步解除弱关联。"""
     old_edges = {(edge.source_card, edge.target_card) for edge in previous.edges
                  if edge.source_port == 'criterion' and edge.target_port == 'acceptance_basis'}
-    from app.services.generation_canvas.design_connections import multiple_source_uses
+    from app.services.generation_canvas.connection_policy import connection_policy
     previous_cards = {card.id: card for card in previous.cards}
     old_candidates = {(source, target) for source, target in old_edges
         if not any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source
@@ -42,7 +42,8 @@ def synchronize_acceptance(document, previous):
     for edge in document.edges:
         if edge.source_port != 'criterion' or edge.target_port != 'acceptance_basis':
             continue
-        if multiple_source_uses(document, edge.source_card, edge.target_card):
+        policy = connection_policy(edge, cards)
+        if not policy or policy.connect != 'associate_acceptance':
             continue
         source, target = cards.get(edge.source_card), cards.get(edge.target_card)
         if not source or source.type != 'direction.criterion' or not hasattr(target, 'input_bindings'):

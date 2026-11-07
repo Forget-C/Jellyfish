@@ -1,17 +1,18 @@
+import { cleanConnectionDocument } from './connectionCleanup'
 import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } from '../../../services/generated'
-import { connect, disconnect, findConnection, cleanDirectDesignCandidates, isIndependentDesignEdge, sourceConnectionEdges } from './graphRules'
-import type { GenerationCard, GenerationEdge } from './graphRules'
+import { findConnection, sourceConnectionEdges } from './graphRules'
+import type { GenerationCard, GenerationEdge, createGraphRules } from './graphRules'
 import { referenceProtection } from './promptRules'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { cleanReferenceImageSources } from './referenceCardRules'
 
 type Protection = NonNullable<ReturnType<typeof referenceProtection>>
-export type CanvasOperationResult = { document: CanvasDocument; reason?: never; protection?: never } | { reason: string; protection?: Protection; document?: never }
-type ConnectionReason = (document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability) => string | undefined
+export type CanvasOperationResult = { document: CanvasDocument; reason?: never; protection?: never } | { reason: string; protection?: Protection; confirmFrame?: boolean; document?: never }
+
 
 /** Stateless document operations. Callers commit successful results once and retain
  * ownership, confirmation, geometry and history; server validation remains authoritative. */
-export function createCanvasOperations({ connectionReason, sourceOptions }: { connectionReason: ConnectionReason; sourceOptions?: (document: CanvasDocument, sourceId: string, targetId: string) => GenerationEdge[] }) {
+export function createCanvasOperations({ connectionReason, sourceOptions, connectionPolicy, cardDefinitions, connect, disconnect, cleanDirectDesignCandidates }: ReturnType<typeof createGraphRules>) {
   const stackFor = (document: CanvasDocument, id: string) => document.groups?.find(group => group.kind === 'stack' && group.card_ids?.includes(id))
   const addConnection = (document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability): CanvasOperationResult => {
     const design = document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))
@@ -31,16 +32,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions }: { co
     return reason ? { reason } : { document: connect(document, edge) }
   }
   return {
-    clean: (document: CanvasDocument) => {
-      let changed = cleanReferenceImageSources(cleanObjectSources(document))
-      if (sourceOptions) for (const edge of document.edges || []) {
-        if (!document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))) continue
-        const options = sourceOptions(document, edge.source_card, edge.target_card)
-        if (options.length < 2) continue
-        for (const option of options) if (!findConnection(changed, option)) changed = connect(changed, { ...option, id: crypto.randomUUID() }, false)
-      }
-      return cleanDirectDesignCandidates(changed)
-    },
+    clean: (document: CanvasDocument) => cleanConnectionDocument(cleanReferenceImageSources(cleanObjectSources(document)), { connectionPolicy, cardDefinitions, cleanDirectDesignCandidates, sourceOptions }),
     connect: addConnection,
     check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability) {
       if (findConnection(document, edge)) return undefined
@@ -51,8 +43,16 @@ export function createCanvasOperations({ connectionReason, sourceOptions }: { co
     update(document: CanvasDocument, next: GenerationCard): CanvasOperationResult {
       if (stackFor(document, next.id)) return { reason: '请先解除堆叠后编辑' }
       let changed: CanvasDocument = { ...document, cards: document.cards?.map(card => card.id === next.id ? next : card) }
-      if (next.type?.startsWith('model.') && 'input_bindings' in next) {
-        for (const edge of document.edges || []) if (edge.target_card === next.id && isIndependentDesignEdge(document, edge) && !next.input_bindings?.some(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port)) changed = disconnect(changed, edge.id)
+      if ('input_bindings' in next) {
+        for (const edge of document.edges || []) if (edge.target_card === next.id && connectionPolicy(document, edge)?.cancel === 'remove_connection' && !next.input_bindings?.some(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port)) changed = disconnect(changed, edge.id)
+      }
+      // 已明确选择内容与用途时，一次更新同时补足直接来源边。
+      if ('input_bindings' in next) for (const binding of next.input_bindings || []) {
+        const edge = { id: crypto.randomUUID(), source_card: binding.source.card_id, source_port: binding.source.port_id, target_card: next.id, target_port: binding.input_port }
+        if (findConnection(changed, edge)) continue
+        const result = addConnection(changed, edge)
+        if (!result.document) return result
+        changed = result.document
       }
       if ('name' in next) changed.cards = changed.cards?.map(card => card.type?.startsWith('reference.') && 'name_binding' in card && card.name_binding?.card_id === next.id ? { ...card, name: next.name } : card)
       // 名称选择或画布选图同次保存直接来源边；既有候选、几何与采用身份不改写。
@@ -85,7 +85,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions }: { co
       if (blocked) return { reason: `${cardLabel(blocked)}：${busyCards.has(blocked) ? '卡片正在运行，结束前不可删除' : '请先解除相关堆叠后删除'}` }
       // Only retained consumers can protect a source from a batch deletion.
       for (const id of ids) {
-        const protection = referenceProtection(document, id, undefined, undefined, undefined, ids)
+        const protection = referenceProtection(document, connectionPolicy, id, undefined, undefined, undefined, ids)
         if (protection) return { reason: protection.message, protection }
       }
       let next = document
@@ -94,13 +94,17 @@ export function createCanvasOperations({ connectionReason, sourceOptions }: { co
       return { document: { ...next, cards: next.cards?.filter(card => !ids.includes(card.id)), input_order: order,
         groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => !ids.includes(card)) })) } }
     },
-    disconnect(document: CanvasDocument, edge: GenerationEdge): CanvasOperationResult {
+    disconnect(document: CanvasDocument, edge: GenerationEdge, confirmed = false): CanvasOperationResult {
       if (stackFor(document, edge.target_card)) return { reason: '请先解除堆叠后删除输入连线' }
       const members = sourceConnectionEdges(document, edge)
       const design = document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))
-      const protection = design ? referenceProtection(document, edge.source_card, edge.target_card) : referenceProtection(document, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
-      if (protection) return { reason: '此连线仍有输入被引用，请先解除全部引用：' + protection.message, protection }
-      let changed = document
+      const protection = design ? referenceProtection(document, connectionPolicy, edge.source_card, edge.target_card) : referenceProtection(document, connectionPolicy, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
+      const target = document.cards?.find(card => card.id === edge.target_card)
+      const frame = members.some(member => connectionPolicy(document, member)?.disconnect === 'confirm_frame') && target && 'frame_target' in target && target.frame_target?.card_id === edge.source_card
+      const blockers = protection?.blockers.filter(item => !frame || item.referenceId !== 'frame_target') || []
+      if (blockers.length) return { reason: '此连线仍有输入被引用，请先解除全部引用：' + blockers.map(item => item.message).join('；'), protection: { ...blockers[0], blockers } }
+      if (frame && !confirmed) return { reason: '解除定位并断开？', confirmFrame: true }
+      let changed = frame ? { ...document, cards: document.cards?.map(card => card.id === edge.target_card && 'frame_target' in card ? { ...card, frame_target: null } : card) } : document
       for (const member of members) changed = disconnect(changed, member.id)
       return { document: changed }
     },

@@ -39,15 +39,45 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   const sourceOptions = (document: CanvasDocument, sourceId: string, targetId: string): GenerationEdge[] => {
     const source = document.cards?.find(card => card.id === sourceId), target = document.cards?.find(card => card.id === targetId)
     if (!source || !target) return []
-    return (cardDefinitions[source.type || '']?.outputs || []).flatMap(output => (cardDefinitions[target.type || '']?.inputs || []).filter(input => input.accepts.includes(output.value_kind) && !(source.type === 'direction.criterion' && target.type?.startsWith('direction.') && output.id === 'text')).map(input => ({ id: '', source_card: sourceId, source_port: output.id, target_card: targetId, target_port: input.id })))
+    return catalog.connection_policies.filter(policy => policy.source_type === source.type && policy.target_type === target.type).map(policy => ({ id: '', source_card: sourceId, source_port: policy.source_port, target_card: targetId, target_port: policy.target_port }))
   }
-  return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions }
+  const connectionPolicy = (document: CanvasDocument, edge: GenerationEdge) => {
+    const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
+    return catalog.connection_policies.find(policy => policy.source_type === source?.type && policy.target_type === target?.type && policy.source_port === edge.source_port && policy.target_port === edge.target_port)
+  }
+  const isIndependentDesignEdge = (document: CanvasDocument, edge: GenerationEdge) => connectionPolicy(document, edge)?.connect === 'adopt_design'
+
+/** 每个接收端口独立排序；位置、分组和模型身份均不参与排序。 */
+function connect(document: CanvasDocument, edge: GenerationEdge, automatic = true): CanvasDocument {
+  const source = document.cards?.find(card => card.id === edge.source_card)
+  const independent = isIndependentDesignEdge(document, edge)
+  const cards = !automatic ? document.cards : independent ? document.cards?.map(card => card.id === edge.target_card && 'prompt' in card && !card.input_bindings?.some(binding => binding.input_port === 'text' && binding.source.card_id === edge.source_card && binding.source.port_id === 'text') ? { ...card, input_bindings: [...(card.input_bindings || []), { id: 'design:' + edge.id, input_port: 'text', prompt_owned: false, source: { canvas_id: document.id, card_id: edge.source_card, port_id: 'text', position: 0 } }] } : card) : connectionPolicy(document, edge)?.connect === 'associate_acceptance' && source && 'criterion_id' in source
+    ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: [...(card.input_bindings || []).filter(binding => !(binding.input_port === 'acceptance_basis' && binding.source.card_id === source.id)), { id: 'acceptance:' + edge.id, input_port: 'acceptance_basis', source: { canvas_id: document.id, card_id: source.id, port_id: 'criterion', position: 0, object_id: source.criterion_id } }] } : card) : document.cards
+  return { ...document, cards, edges: [...(document.edges || []), edge], input_order: { ...document.input_order,
+    [edge.target_card]: { ...document.input_order?.[edge.target_card], [edge.target_port]: [...(document.input_order?.[edge.target_card]?.[edge.target_port] || []), edge.id] } } }
+}
+function disconnect(document: CanvasDocument, id: string): CanvasDocument {
+  const order = Object.fromEntries(Object.entries(document.input_order || {}).map(([card, ports]) => [card,
+    Object.fromEntries(Object.entries(ports).map(([port, ids]) => [port, ids.filter(edge => edge !== id)]))]))
+  const edge = document.edges?.find(item => item.id === id)
+  const cards = edge && isIndependentDesignEdge(document, edge) ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === 'text' && binding.source.card_id === edge.source_card && binding.source.port_id === 'text')) } : card) : edge && connectionPolicy(document, edge)?.connect === 'associate_acceptance'
+    ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === edge.target_port && binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port)) } : card) : document.cards
+  return { ...document, cards, edges: document.edges?.filter(edge => edge.id !== id), input_order: order }
 }
 
-/** 设计正文仅在模型独立文本输入中随线生效，业务身份和素材仍为候选。 */
-export function isIndependentDesignEdge(document: CanvasDocument, edge: GenerationEdge) {
-  const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
-  return !!source?.type?.startsWith('direction.') && edge.source_port === 'text' && !!target?.type?.startsWith('model.') && edge.target_port === 'text'
+/** 清理旧的未采用独立设计及验收候选，避免升级时增加生成输入。 */
+function cleanDirectDesignCandidates(document: CanvasDocument): CanvasDocument {
+  let next = document
+  for (const edge of document.edges || []) {
+    if (!isIndependentDesignEdge(document, edge) && connectionPolicy(document, edge)?.connect !== 'associate_acceptance') continue
+    const card = document.cards?.find(item => item.id === edge.target_card)
+    if (!card || !('input_bindings' in card) || !card.input_bindings?.some(binding => binding.input_port === edge.target_port && binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port)) next = disconnect(next, edge.id)
+    else if (isIndependentDesignEdge(document, edge) && card.input_bindings?.some(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port && binding.prompt_owned !== false)) next = { ...next, cards: next.cards?.map(item => item.id === card.id && 'input_bindings' in item ? { ...item, input_bindings: item.input_bindings?.map(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port ? { ...binding, prompt_owned: false } : binding) } : item) }
+  }
+  return next
+}
+
+  return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions, connectionPolicy, isIndependentDesignEdge, connect, disconnect, cleanDirectDesignCandidates }
 }
 
 /** 设计来源在卡间共享一条来源连接，内部用途边保留原身份和独立顺序。 */
@@ -58,35 +88,4 @@ export function sourceConnectionEdges(document: CanvasDocument, edge: Generation
 
 export function visibleSourceEdges(document: CanvasDocument) {
   return (document.edges || []).filter(edge => sourceConnectionEdges(document, edge)[0]?.id === edge.id)
-}
-
-/** 每个接收端口独立排序；位置、分组和模型身份均不参与排序。 */
-export function connect(document: CanvasDocument, edge: GenerationEdge, automatic = true): CanvasDocument {
-  const source = document.cards?.find(card => card.id === edge.source_card)
-  const independent = isIndependentDesignEdge(document, edge)
-  const cards = !automatic ? document.cards : independent ? document.cards?.map(card => card.id === edge.target_card && 'prompt' in card && !card.input_bindings?.some(binding => binding.input_port === 'text' && binding.source.card_id === edge.source_card && binding.source.port_id === 'text') ? { ...card, input_bindings: [...(card.input_bindings || []), { id: 'design:' + edge.id, input_port: 'text', prompt_owned: false, source: { canvas_id: document.id, card_id: edge.source_card, port_id: 'text', position: 0 } }] } : card) : edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && source && 'criterion_id' in source
-    ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: [...(card.input_bindings || []).filter(binding => !(binding.input_port === 'acceptance_basis' && binding.source.card_id === source.id)), { id: 'acceptance:' + edge.id, input_port: 'acceptance_basis', source: { canvas_id: document.id, card_id: source.id, port_id: 'criterion', position: 0, object_id: source.criterion_id } }] } : card) : document.cards
-  return { ...document, cards, edges: [...(document.edges || []), edge], input_order: { ...document.input_order,
-    [edge.target_card]: { ...document.input_order?.[edge.target_card], [edge.target_port]: [...(document.input_order?.[edge.target_card]?.[edge.target_port] || []), edge.id] } } }
-}
-export function disconnect(document: CanvasDocument, id: string): CanvasDocument {
-  const order = Object.fromEntries(Object.entries(document.input_order || {}).map(([card, ports]) => [card,
-    Object.fromEntries(Object.entries(ports).map(([port, ids]) => [port, ids.filter(edge => edge !== id)]))]))
-  const edge = document.edges?.find(item => item.id === id)
-  const cards = edge && isIndependentDesignEdge(document, edge) ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === 'text' && binding.source.card_id === edge.source_card && binding.source.port_id === 'text')) } : card) : edge?.source_port === 'criterion' && edge.target_port === 'acceptance_basis'
-    ? document.cards?.map(card => card.id === edge.target_card && 'input_bindings' in card ? { ...card, input_bindings: card.input_bindings?.filter(binding => !(binding.input_port === edge.target_port && binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port)) } : card) : document.cards
-  return { ...document, cards, edges: document.edges?.filter(edge => edge.id !== id), input_order: order }
-}
-
-/** 清理旧的未采用独立设计及验收候选，避免升级时增加生成输入。 */
-export function cleanDirectDesignCandidates(document: CanvasDocument): CanvasDocument {
-  let next = document
-  for (const edge of document.edges || []) {
-    if (sourceConnectionEdges(document, edge).length > 1) continue
-    if (!isIndependentDesignEdge(document, edge) && (edge.source_port !== 'criterion' || edge.target_port !== 'acceptance_basis')) continue
-    const card = document.cards?.find(item => item.id === edge.target_card)
-    if (!card || !('input_bindings' in card) || !card.input_bindings?.some(binding => binding.input_port === edge.target_port && binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port)) next = disconnect(next, edge.id)
-    else if (isIndependentDesignEdge(document, edge) && card.input_bindings?.some(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port && binding.prompt_owned !== false)) next = { ...next, cards: next.cards?.map(item => item.id === card.id && 'input_bindings' in item ? { ...item, input_bindings: item.input_bindings?.map(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port ? { ...binding, prompt_owned: false } : binding) } : item) }
-  }
-  return next
 }

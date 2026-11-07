@@ -376,7 +376,7 @@ try {
     await layout.click()
     await layout.dispatchEvent('keydown',{key:'Escape',code:'Escape',keyCode:27,isComposing:true})
     assert.equal(await layout.getAttribute('aria-expanded'),'true');assert.equal(await point.getAttribute('data-connecting'),'true')
-    const picker=page.getByRole('combobox',{name:'选择候选连线',exact:true});await picker.press('ArrowDown')
+    const picker=page.getByRole('combobox',{name:'选择连线',exact:true});await picker.press('ArrowDown')
     assert.equal(await picker.getAttribute('aria-expanded'),'true');await picker.press('Escape')
     assert.equal(await picker.getAttribute('aria-expanded'),'false')
     assert.equal(await layout.getAttribute('aria-expanded'),'true');assert.equal(await point.getAttribute('data-connecting'),'true')

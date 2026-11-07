@@ -2,15 +2,6 @@ import type { CanvasDocument, CanvasResolvedOutput, InputBinding } from '../../.
 import type { GenerationCard } from './graphRules'
 import { sourceKey } from './promptRules'
 
-const singles: Record<string, string[]> = {
-  situation: ['participant', 'beat', 'shot'], performance: ['participant', 'beat', 'shot'],
-  anchor: ['space', 'participant', 'area_anchor', 'change_event', 'trigger_event'],
-  blocking: ['space', 'participant', 'area_anchor', 'change_event', 'trigger_event'],
-  activity: ['space', 'participant', 'area_anchor', 'change_event', 'trigger_event'],
-  space_rule: ['space', 'participant', 'related_event'], continuity: ['space', 'participant', 'related_event'],
-  dialogue: ['speaker'], camera: ['shot'], lighting: ['shot'], focus: ['shot'], movement: ['shot'], composition: ['shot'],
-}
-
 /** Only connected business ports or retained bindings offer adoption; text references are separate. */
 export function candidateRelationPorts(card: GenerationCard, document: CanvasDocument, item: CanvasResolvedOutput) {
   if (['direction.camera', 'direction.lighting', 'direction.focus', 'direction.movement', 'direction.composition', 'direction.visual_style'].includes(card.type || '')) return []
@@ -28,15 +19,11 @@ export function candidateRelationPorts(card: GenerationCard, document: CanvasDoc
   return [...new Set([...connected, ...retained])].filter(port => !excluded.has(port))
 }
 
-export function isSingleDesignRelation(card: GenerationCard, port: string) {
-  return singles[card.type?.replace('direction.', '') || '']?.includes(port) || false
-}
-
 /** Replace a single role atomically; removing a role never edits edges or field references. */
-export function withDesignRelation(card: GenerationCard, item: CanvasResolvedOutput, port: string): GenerationCard {
+export function withDesignRelation(card: GenerationCard, item: CanvasResolvedOutput, port: string, single: boolean): GenerationCard {
   const bindings = 'input_bindings' in card ? card.input_bindings || [] : []
   const existing = bindings.find(binding => binding.input_port === port && sourceKey(binding.source) === sourceKey(item.source))
   const next: InputBinding[] = existing ? bindings.filter(binding => binding.id !== existing.id)
-    : [...bindings.filter(binding => !isSingleDesignRelation(card, port) || binding.input_port !== port), { id: crypto.randomUUID(), input_port: port, source: item.source }]
+    : [...bindings.filter(binding => !single || binding.input_port !== port), { id: crypto.randomUUID(), input_port: port, source: item.source }]
   return { ...card, input_bindings: next } as GenerationCard
 }

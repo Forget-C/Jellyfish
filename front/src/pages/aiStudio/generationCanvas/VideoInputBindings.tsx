@@ -1,28 +1,24 @@
+import { InputBindingReferences } from './InputBindingReferences'
 import { NamedImageSummary } from './NamedImageSummary'
 import { useState } from 'react'
 import { Input, Space } from 'antd'
 import type { CanvasModelCapability, CanvasResolvedOutput, InputBinding, VideoModelCard } from '../../../services/generated'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { editorPrompt, withEditorPrompt } from './inputBindings'
+import { editorPrompt, withoutInputBinding } from './inputBindings'
 import { sourceKey, referencesIn } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 
 /** 直接候选只在明确选择用途和主体后采用；所有实际顺序及分组保存在绑定中。 */
-export function VideoInputBindings({ card, candidates, labels, capability, loading, disabled, onChange, independentSources = [] }: {
-  independentSources?: string[]; card: VideoModelCard; candidates: CanvasResolvedOutput[]; labels: Map<string, string>; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
+export function VideoInputBindings({ card, candidates, labels, capability, loading, disabled, onChange }: {
+  card: VideoModelCard; candidates: CanvasResolvedOutput[]; labels: Map<string, string>; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
 }) {
   const { portLabels } = useGraphRules()
   const [names, setNames] = useState<Record<string, string>>({})
   const bindings = card.input_bindings || []
   const change = (input_bindings: InputBinding[]) => onChange({ ...card, input_bindings })
-  const remove = (id: string) => {
-    const prompt = editorPrompt(card)
-    const next = withEditorPrompt(card, { segments: prompt.segments?.filter(segment => segment.kind !== 'reference' || segment.binding_id !== id)
-      .map(segment => segment.kind === 'instruction' ? { ...segment, references: segment.references?.filter(reference => reference.binding_id !== id) } : segment) }) as VideoModelCard
-    onChange({ ...next, input_bindings: next.input_bindings?.filter(binding => binding.id !== id) })
-  }
+  const remove = (id: string) => onChange(withoutInputBinding(card, id) as VideoModelCard)
   return <section role="region" aria-label="视频实际输入">
-    <small>连接只提供候选。明确采用用途；关键帧与同组媒体按下列顺序提交。视频保留原音轨，不自动取帧。</small>
+    <small>素材连接提供候选，需明确采用用途；关键帧与同组媒体按下列顺序提交。视频保留原音轨，不自动取帧。</small>
     {loading && <p role="status">正在读取直接候选，实际绑定已保留</p>}
     {!capability && <p>选择模型并加载能力后可采用输入</p>}
     {candidates.map(output => {
@@ -39,7 +35,7 @@ export function VideoInputBindings({ card, candidates, labels, capability, loadi
           const subject_name = port.startsWith('subject_') ? (names[key] || '').trim() : undefined
           const selected = bindings.some(binding => sourceKey(binding.source) === key && binding.input_port === port && (binding.subject_name || '') === (subject_name || ''))
           return <WorkbenchButton key={port} size="small" disabled={disabled || loading || !output.available || selected || port.startsWith('subject_') && !subject_name}
-            onClick={() => change([...bindings, { id: crypto.randomUUID(), source: output.source, input_port: port, subject_name }])}>采用 {label} 为{portLabels[port]}</WorkbenchButton>
+            onClick={() => change([...bindings, { id: crypto.randomUUID(), prompt_owned: false, source: output.source, input_port: port, subject_name }])}>采用 {label} 为{portLabels[port]}</WorkbenchButton>
         })}</Space>
         {!supported.length && <small>当前模型不支持此候选用途</small>}
       </div>
@@ -47,7 +43,7 @@ export function VideoInputBindings({ card, candidates, labels, capability, loadi
     {bindings.map((binding, index) => {
       const output = candidates.find(candidate => sourceKey(candidate.source) === sourceKey(binding.source))
       const label = labels.get(sourceKey(binding.source)) || output?.token || binding.source.card_id
-      const protectedReference = independentSources.includes(binding.source.card_id) && referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
+      const protectedReference = referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
       const move = (offset: number) => { const next = [...bindings]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; change(next) }
       return <div key={binding.id} data-input-binding-id={binding.id} tabIndex={-1}>
         <strong>{portLabels[binding.input_port]} · {label}</strong>
@@ -58,6 +54,7 @@ export function VideoInputBindings({ card, candidates, labels, capability, loadi
           <WorkbenchButton size="small" disabled={disabled || index === 0} onClick={() => move(-1)}>前移{portLabels[binding.input_port]} {label}</WorkbenchButton>
           <WorkbenchButton size="small" disabled={disabled || index === bindings.length - 1} onClick={() => move(1)}>后移{portLabels[binding.input_port]} {label}</WorkbenchButton>
           <WorkbenchButton size="small" title={protectedReference ? '请先清理正文引用再解除关联' : undefined} disabled={disabled || protectedReference} onClick={() => remove(binding.id)}>取消{portLabels[binding.input_port]} {label}</WorkbenchButton>
+          <InputBindingReferences card={card} bindingId={binding.id} />
         </Space>
       </div>
     })}

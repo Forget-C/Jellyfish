@@ -14,7 +14,12 @@ const { createGraphRules } = await import(await moduleUrl('graphRules'))
 const port = (id, value_kind) => ({ id, value_kind, label: id })
 const input = (id, value_kind) => ({ id, accepts: [value_kind], label: id })
 const definition = (type, outputs = [], inputs = []) => ({ type, title: type, outputs, inputs })
-const rules = createGraphRules({ cards: [
+const connection_policies = [
+  ...['direction.guidance', 'direction.criterion'].flatMap(source_type => ['model.text', 'model.image', 'model.video'].map(target_type => ({ source_type, source_port: 'text', target_type, target_port: 'text', adoption_allowed: true, connect: 'adopt_design', cancel: 'remove_connection', disconnect: 'release' }))),
+  { source_type: 'direction.criterion', source_port: 'criterion', target_type: 'direction.shot', target_port: 'acceptance_basis', adoption_allowed: true, connect: 'associate_acceptance', cancel: 'remove_connection', disconnect: 'release' },
+  { source_type: 'direction.movement', source_port: 'text', target_type: 'direction.composition', target_port: 'text', adoption_allowed: true, connect: 'candidate', cancel: 'keep_connection', disconnect: 'confirm_frame' },
+]
+const rules = createGraphRules({ connection_policies, cards: [
   definition('direction.criterion', [port('criterion', 'criterion')]),
   definition('direction.shot', [], [input('acceptance_basis', 'criterion')]),
   definition('content.image', [port('image', 'image')]),
@@ -158,7 +163,7 @@ test('acceptance connections immediately associate, disconnect atomically and al
 })
 
 test('independent design connections adopt immediately and protect explicit whole-card references', async () => {
-  const { connect } = await import(await moduleUrl('graphRules'))
+  const { connect } = rules
   const design = { id: 'design', type: 'direction.guidance' }
   const receiver = { ...model, input_bindings: [] }
   const link = { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' }
@@ -182,7 +187,7 @@ test('whole movement target protects deletion until composition releases its ref
 })
 
 test('a newly created model draft adopts independent design before its first save', async () => {
-  const { connect } = await import(await moduleUrl('graphRules'))
+  const { connect } = rules
   const draft = { id: 'model', type: 'model.text', prompt: { segments: [] }, config: {} }
   const original = document({ cards: [{ id: 'design', type: 'direction.guidance' }, draft], edges: [], input_order: {} })
   const connected = connect(original, { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' })
@@ -191,7 +196,7 @@ test('a newly created model draft adopts independent design before its first sav
 })
 
 test('clearing a prompt reference keeps the independent design association until explicitly disconnected', async () => {
-  const { connect } = await import(await moduleUrl('graphRules'))
+  const { connect } = rules
   const { withEditorPrompt } = await import(await moduleUrl('inputBindings'))
   const receiver = { id: 'model', type: 'model.video', prompt: { segments: [] }, input_bindings: [] }
   const connected = connect(document({ cards: [{ id: 'design', type: 'direction.guidance' }, receiver], edges: [], input_order: {} }), { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' })
@@ -204,7 +209,7 @@ test('clearing a prompt reference keeps the independent design association until
 })
 
 test('acceptance source has a single directly adopted use and disconnect removes it', async () => {
-  const rules = createGraphRules({ cards: [definition('direction.criterion', [port('text', 'text'), port('criterion', 'criterion')]), definition('direction.shot', [], [input('text', 'text'), input('acceptance_basis', 'criterion')])] })
+  const rules = createGraphRules({ connection_policies, cards: [definition('direction.criterion', [port('text', 'text'), port('criterion', 'criterion')]), definition('direction.shot', [], [input('text', 'text'), input('acceptance_basis', 'criterion')])] })
   const operations = createCanvasOperations(rules)
   const cards = [{ id: 'criterion', type: 'direction.criterion', criterion_id: 'rule', name: '可见' }, { id: 'shot', type: 'direction.shot', input_bindings: [] }]
   const edge = { id: 'source', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
@@ -220,7 +225,7 @@ test('empty acceptance names reject connection before changing the document', ()
   for (const name of ['', '   ', undefined]) {
     const cards = [{ id: 'criterion', type: 'direction.criterion', criterion_id: 'rule', name }, { id: 'shot', type: 'direction.shot', input_bindings: [] }]
     const edge = { id: 'source', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
-    const rules = createGraphRules({ cards: [definition('direction.criterion', [port('text', 'text'), port('criterion', 'criterion')]), definition('direction.shot', [], [input('text', 'text'), input('acceptance_basis', 'criterion')])] })
+    const rules = createGraphRules({ connection_policies, cards: [definition('direction.criterion', [port('text', 'text'), port('criterion', 'criterion')]), definition('direction.shot', [], [input('text', 'text'), input('acceptance_basis', 'criterion')])] })
     const original = document({ cards, edges: [], input_order: {} })
     const before = structuredClone(original)
     const result = createCanvasOperations(rules).connect(original, edge)
@@ -228,4 +233,57 @@ test('empty acceptance names reject connection before changing the document', ()
     assert.equal(result.document, undefined)
     assert.deepEqual(original, before)
   }
+})
+
+
+test('composition disconnect protects all other uses before asking to clear its frame', () => {
+  const movement = { id: 'movement', type: 'direction.movement' }
+  const edge = { id: 'frame', source_card: 'movement', source_port: 'text', target_card: 'composition', target_port: 'text' }
+  const composition = { id: 'composition', type: 'direction.composition', frame_target: { card_id: 'movement', state_id: 'field:end_frame' }, input_bindings: [] }
+  const doc = document({ cards: [movement, composition], edges: [edge], input_order: {} })
+  assert.equal(operations.disconnect(doc, edge).confirmFrame, true)
+  const removed = operations.disconnect(doc, edge, true).document
+  assert.equal(removed.cards[1].frame_target, null)
+  assert.equal(removed.edges.length, 0)
+  const protectedDoc = structuredClone(doc)
+  protectedDoc.cards[1].input_bindings = [
+    { id: 'one', input_port: 'text', source: { canvas_id: 'canvas', card_id: 'movement', port_id: 'text', position: 0 } },
+    { id: 'two', input_port: 'text', source: { canvas_id: 'canvas', card_id: 'movement', port_id: 'text', position: 1 } },
+  ]
+  const blocked = operations.disconnect(protectedDoc, edge)
+  assert.equal(blocked.confirmFrame, undefined)
+  assert.equal(blocked.protection.blockers.length, 2)
+  assert.match(blocked.reason, /one/)
+  assert.match(blocked.reason, /two/)
+  assert.equal(protectedDoc.edges.length, 1)
+})
+
+test('direct acceptance cancellation removes the connection in the same update', () => {
+  const source = { id: 'criterion', type: 'direction.criterion', criterion_id: 'rule', name: '清晰' }
+  const target = { id: 'shot', type: 'direction.shot', input_bindings: [] }
+  const edge = { id: 'rule', source_card: 'criterion', source_port: 'criterion', target_card: 'shot', target_port: 'acceptance_basis' }
+  const connected = operations.connect(document({ cards: [source, target], edges: [], input_order: {} }), edge).document
+  const removed = operations.update(connected, { ...connected.cards[1], input_bindings: [] }).document
+  assert.equal(removed.edges.length, 0)
+  assert.equal(removed.cards[1].input_bindings.length, 0)
+})
+
+
+test('restoring equal multi-use source documents produces equal stable edge identities', () => {
+  const connection_policies = ['text', 'beat'].map(port => ({ source_type: 'direction.beat', source_port: port, target_type: 'direction.performance', target_port: port, connect: 'candidate', cancel: 'keep_connection', disconnect: 'protect', adoption_allowed: true }))
+  const localRules = createGraphRules({ connection_policies, cards: [definition('direction.beat', [port('text', 'text'), port('beat', 'beat')]), definition('direction.performance', [], [input('text', 'text'), input('beat', 'beat')])] })
+  const localOperations = createCanvasOperations(localRules)
+  const original = document({ cards: [{ id: 'beat', type: 'direction.beat' }, { id: 'performance', type: 'direction.performance', input_bindings: [] }], edges: [{ id: 'old', source_card: 'beat', source_port: 'text', target_card: 'performance', target_port: 'text' }], input_order: {} })
+  const first = localOperations.clean(structuredClone(original)), second = localOperations.clean(structuredClone(original))
+  assert.deepEqual(first, second)
+  assert.equal(first.edges.length, 2)
+  assert.equal(localOperations.clean(first), first)
+  const adoptedOnly = structuredClone(original)
+  adoptedOnly.edges = []
+  adoptedOnly.cards[0].beat_id = 'beat-id'
+  adoptedOnly.cards[1].input_bindings = [{ id: 'adopted', input_port: 'beat', source: { canvas_id: 'canvas', card_id: 'beat', port_id: 'beat', object_id: 'beat-id', position: 0 } }]
+  const restored = localOperations.clean(adoptedOnly)
+  assert.equal(restored.edges.length, 2)
+  assert.equal(localOperations.clean(restored), restored)
+
 })

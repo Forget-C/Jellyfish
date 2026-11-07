@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { createGraphRules } from './graphRules'
+import { createCanvasOperations } from './canvasOperations'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
@@ -25,6 +27,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [recovery, setRecovery] = useState<Recovery>()
   const [conflict, setConflict] = useState(false)
   const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; blocked?: CanvasDocument; recovery?: Recovery; conflict: boolean }>({ scope: key, conflict: false })
+  const cleaner = useRef<(value: CanvasDocument) => CanvasDocument>()
+  const configureCatalog = useCallback((catalog: CanvasCatalog) => { cleaner.current = createCanvasOperations(createGraphRules(catalog)).clean }, [])
   const inFlight = useRef<Promise<boolean>>()
   const history = useRef<{ scope: string; past: HistoryEntry[]; future: HistoryEntry[] }>({ scope: key, past: [], future: [] })
   const dirty = !!document && !!current && !same(document, current.document)
@@ -39,7 +43,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   useEffect(() => {
     let active = true
-    state.current = { scope: key, conflict: false }; inFlight.current = undefined
+    state.current = { scope: key, conflict: false }; inFlight.current = undefined; cleaner.current = undefined
     history.current = { scope: key, past: [], future: [] }
     setCurrent(undefined); setDocument(undefined); setError(''); setConflict(false); setRecovery(undefined); setSaving(false)
     if (canvasId) void Canvases.canvasGet({ projectId, canvasId }).then(response => {
@@ -76,7 +80,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   // 文档和布局按操作顺序撤销；普通视口浏览不进入历史。
   const travel = (direction: 'past' | 'future') => {
     const s = state.current, h = history.current
-    if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key || h.scope !== key) return
+    if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key || h.scope !== key || !cleaner.current) return
     const next = h[direction].pop()
     if (!next) return
     if ('apply' in next) {
@@ -84,7 +88,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       next.apply(); refreshHistory(value => value + 1); return 'layout' as const
     } else {
       h[direction === 'past' ? 'future' : 'past'].push({ document: s.document })
-      s.document = cleanObjectSources(next.document); setDocument(s.document); persist(); return 'document' as const
+      s.document = cleaner.current!(next.document); setDocument(s.document); persist(); return 'document' as const
     }
   }
   const save = (): Promise<boolean> => {
@@ -132,10 +136,16 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       }
       const response = await Canvases.canvasGet({ projectId, canvasId: baseline.id })
       if (!response.data || s !== state.current) return
-      if (response.data.revision !== baseline.revision || !same(cleanObjectSources(response.data.document), cleanObjectSources(baseline.document))) {
+      if (!cleaner.current) {
+        const catalog = await Canvases.canvasCatalog({ projectId, canvasId: baseline.id })
+        if (s !== state.current) return
+        if (!catalog.data) throw new Error('empty catalog')
+        configureCatalog(catalog.data)
+      }
+      if (response.data.revision !== baseline.revision || !same(cleaner.current!(response.data.document), cleaner.current!(baseline.document))) {
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
-      s.current = response.data; s.document = cleanObjectSources(saved.document); s.pending = undefined; s.recovery = undefined
+      s.current = response.data; s.document = cleaner.current!(saved.document); s.pending = undefined; s.recovery = undefined
       history.current = { scope: key, past: [], future: [] }
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
     } catch (reason) {
@@ -187,6 +197,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }, [key])
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
   useEffect(() => { if (blocker.state === 'blocked') void latest.current.requestLeave().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
-  return { current, document, edit, recordAction, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
+  return { configureCatalog, current, document, edit, recordAction, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

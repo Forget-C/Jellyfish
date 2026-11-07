@@ -82,7 +82,7 @@ try {
   await page.screenshot({path:join(output,'ports-hover.png'),animations:'disabled'})
   await page.mouse.move(1000,900)
   await drag(sourceCard,'right',modelCard,'left','ports-dragging.png')
-  await page.getByRole('status').filter({hasText:'已连接候选输入'}).waitFor()
+  await page.getByRole('status').filter({hasText:'连接提供候选'}).waitFor()
   await savedEdges(1)
   assert.doesNotMatch((await precheck()).input.text,/被隐藏但明确采用的内容/)
   await modelCard.press('Enter')

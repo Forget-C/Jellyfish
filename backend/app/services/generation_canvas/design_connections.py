@@ -32,16 +32,11 @@ def expand_design_source_connections(document, previous):
     return document
 
 
-def multiple_source_uses(document, source_id, target_id):
-    """兼容用途在保存前已完整展开；多用途不自动选择任何一项。"""
-    return sum(edge.source_card == source_id and edge.target_card == target_id for edge in document.edges) > 1
-
-
 def independent_design_edge(edge, cards):
     """只允许设计正文进入模型的独立文本输入，不扩展资产或业务身份关系。"""
-    source, target = cards.get(edge.source_card), cards.get(edge.target_card)
-    return bool(source and source.type.startswith('direction.') and edge.source_port == 'text'
-                and target and target.type.startswith('model.') and edge.target_port == 'text')
+    from app.services.generation_canvas.connection_policy import connection_policy
+    policy = connection_policy(edge, cards)
+    return bool(policy and policy.connect == 'adopt_design')
 
 
 def synchronize_design_connections(document, previous):

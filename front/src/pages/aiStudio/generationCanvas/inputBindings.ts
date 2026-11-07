@@ -26,7 +26,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
     : segment.kind === 'instruction' ? (segment.references || []).map(reference => reference.binding_id) : []))
   // 正文只移除它原先引用而本次取消的绑定，保留输入区独立采用的记录。
   const bindings: InputBinding[] = (card.input_bindings || []).filter(binding => !mentioned.has(binding.id) || binding.prompt_owned === false)
-    .map(binding => card.type === 'model.image' && !mentioned.has(binding.id) ? { ...binding, prompt_owned: binding.prompt_owned ?? false } : binding)
+    .map(binding => !mentioned.has(binding.id) ? { ...binding, prompt_owned: binding.prompt_owned ?? false } : binding)
   const bind = (reference: EditorPromptReference, command?: string, subject_name?: string): PromptReference => {
     let input_port = command ? commandPorts[command] || reference.source.port_id : reference.source.port_id
     if (card.type === 'model.video' && ['image', 'video'].includes(input_port)) input_port = 'subject_' + input_port
@@ -34,7 +34,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
     let binding = bindings.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
     if (!binding) {
       const existing = card.input_bindings?.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
-      binding = { ...existing, id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name, ...(card.type === 'model.image' ? { prompt_owned: existing?.prompt_owned ?? (!existing || mentioned.has(existing.id)) } : {}) }
+      binding = { ...existing, id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name, prompt_owned: existing?.prompt_owned ?? (!existing || mentioned.has(existing.id)) }
       bindings.push(binding)
     }
     return { id: reference.id, kind: 'reference', binding_id: binding.id }
@@ -48,10 +48,16 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
   return { ...card, prompt: next, input_bindings: bindings }
 }
 
-/** 取消采用同时移除正文中的同一绑定引用，不保留第二份选择状态。 */
+/** 取消采用前列出正文和指令依赖；普通编辑不能静默删除引用。 */
+export function bindingReferences(card: GenerationCard, id: string) {
+  if (!('prompt' in card)) return []
+  return (card.prompt?.segments || []).flatMap(segment => segment.kind === 'reference'
+    ? segment.binding_id === id ? [{ segmentId: segment.id, referenceId: segment.id, label: '正文引用' }] : []
+    : segment.kind === 'instruction' ? (segment.references || []).filter(ref => ref.binding_id === id).map(ref => ({ segmentId: segment.id, referenceId: ref.id, label: `${segment.command}指令引用` })) : [])
+}
+
+/** 解除没有显式引用的采用，仅移除绑定拥有的配置，保留候选来源。 */
 export function withoutInputBinding(card: GenerationCard, id: string): GenerationCard {
-  if (!('prompt' in card)) return card
-  return { ...card, ...('frame_targets' in card ? { frame_targets: card.frame_targets?.filter(target => target.binding_id !== id) } : {}), input_bindings: card.input_bindings?.filter(binding => binding.id !== id),
-    prompt: { segments: card.prompt?.segments?.filter(segment => segment.kind !== 'reference' || segment.binding_id !== id)
-      .map(segment => segment.kind === 'instruction' ? { ...segment, references: segment.references?.filter(reference => reference.binding_id !== id) } : segment) } }
+  if (!('prompt' in card) || bindingReferences(card, id).length) return card
+  return { ...card, ...('frame_targets' in card ? { frame_targets: card.frame_targets?.filter(target => target.binding_id !== id) } : {}), input_bindings: card.input_bindings?.filter(binding => binding.id !== id) }
 }

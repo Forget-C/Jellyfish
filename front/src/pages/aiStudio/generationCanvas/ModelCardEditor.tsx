@@ -1,3 +1,4 @@
+import { InputBindingReferences } from './InputBindingReferences'
 import { DesignVideoMediaUses } from './DesignVideoMediaUses'
 import { MaterialReferenceButton } from './MaterialReferenceButton'
 import { Alert, Select, Space } from 'antd'
@@ -15,7 +16,6 @@ import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import { ImageModelParameters, VideoModelParameters } from './ModelParameters'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
-import { isIndependentDesignEdge } from './graphRules'
 import { sourceKey, referencesIn } from './promptRules'
 import { referenceLabels } from './referenceLabels'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
@@ -32,7 +32,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
-  const { cardTitles, cardDefinitions } = useGraphRules()
+  const { isIndependentDesignEdge, cardTitles, cardDefinitions } = useGraphRules()
   const adopted = card.input_bindings || []
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs
   const category = card.type?.split('.')[1]
@@ -124,7 +124,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
       {sources.map(output => {
         const binding = bindings.find(value => sourceKey(value.source) === sourceKey(output.source))
         const independent = document.edges?.some(edge => edge.source_card === output.source.card_id && edge.source_port === output.source.port_id && edge.target_card === card.id && isIndependentDesignEdge(document, edge))
-        const protectedReference = independent && binding && referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
+        const protectedReference = binding && referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
         const index = binding ? bindings.indexOf(binding) : -1
         return <div key={sourceKey(output.source)} data-reference-source={sourceKey(output.source)}>
           <strong>{displayLabel(output)} · {binding ? '已采用' : '候选'}</strong>
@@ -136,9 +136,10 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
           {card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {displayLabel(output)}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
           {card.type !== 'model.video' && ['text', 'image'].includes(output.modality) && <Space wrap>
             <WorkbenchButton title={protectedReference ? '请先清理正文引用再解除关联' : undefined} disabled={disabled || !!protectedReference || !binding && (resolved.loading || output.available === false || !capability?.input_ports?.includes(output.modality))}
-              onClick={() => onChange(binding ? withoutInputBinding(card, binding.id) : { ...card, input_bindings: [...bindings, { id: crypto.randomUUID(), input_port: output.modality, source: output.source }] })}>
+              onClick={() => onChange(binding ? withoutInputBinding(card, binding.id) : { ...card, input_bindings: [...bindings, { id: crypto.randomUUID(), prompt_owned: false, input_port: output.modality, source: output.source }] })}>
               {`${binding ? independent ? '解除关联' : '取消采用' : '采用'} ${displayLabel(output)}`}
             </WorkbenchButton>
+            {binding && <InputBindingReferences card={card} bindingId={binding.id} />}
             {binding && <><span>采用顺序 {index + 1}</span>
               <WorkbenchButton aria-label={`前移 ${displayLabel(output)}`} disabled={disabled || index === 0} onClick={() => move(binding.id, -1)}>前移</WorkbenchButton>
               <WorkbenchButton aria-label={`后移 ${displayLabel(output)}`} disabled={disabled || index === bindings.length - 1} onClick={() => move(binding.id, 1)}>后移</WorkbenchButton></>}
@@ -156,7 +157,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
     {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
-    {card.type === 'model.video' && <VideoInputBindings independentSources={document.edges?.filter(edge => edge.target_card === card.id && isIndependentDesignEdge(document, edge)).map(edge => edge.source_card)} labels={labels} card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
+    {card.type === 'model.video' && <VideoInputBindings labels={labels} card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
     <details className="generation-material-results"><summary>运行状态与正式输出</summary>
 
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>

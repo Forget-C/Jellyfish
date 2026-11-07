@@ -22,13 +22,14 @@ CATEGORIES = {
 
 def input_definition(card_type, port):
     """同一声明用于保存图校验与前端候选提示，不借用模态表达业务身份。"""
+    from app.services.generation_canvas.connection_policy import single_source_port
     accepts = [VALUE_KINDS[port]]
     if port == 'effect_object' and card_type in ('direction.space_rule', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion'):
         accepts += ['anchor', 'blocking', 'beat', 'event']
         if card_type != 'direction.criterion':
             accepts.append('shot')
     relation = 'generation_input' if port in ('text', 'image', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video') else 'material_association' if port in ('image_source', 'image_example', 'video_example', 'audio_example') else 'business_reference'
-    return CanvasInputPortDefinition(id=port, label='所属镜头' if port == 'shot' else PORT_LABELS[port], relation=relation, accepts=accepts)
+    return CanvasInputPortDefinition(id=port, label='所属镜头' if port == 'shot' else PORT_LABELS[port], relation=relation, accepts=accepts, max_sources=1 if single_source_port(card_type, port) else None)
 
 
 def ports_compatible(source_port, receiver_type, target_port, source_type=None):
@@ -77,4 +78,5 @@ def canvas_catalog():
                 inputs=[input_definition(card_type, port) for port in card_model.input_ports],
                 outputs=[CanvasOutputPortDefinition(id=port, label=PORT_LABELS[port], value_kind=VALUE_KINDS[port], adoption='whole_card' if category and port == 'text' else 'object' if VALUE_KINDS[port] not in ('text', 'image', 'video', 'audio') else 'item') for port in card_model.output_ports],
                 fields=design_fields(card_model), entries=[]))
-    return CanvasCatalog(cards=cards)
+    from app.services.generation_canvas.connection_policy import connection_policies
+    return CanvasCatalog(cards=cards, connection_policies=connection_policies(cards))

@@ -69,7 +69,7 @@ try {
     }
   }
   await dragPort('a', 'text', 'm', 'text')
-  await page.getByRole('status').filter({ hasText: '已连接候选输入' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '连接提供候选' }).waitFor()
   await dragPort('a', 'text', 'm', 'text')
   await page.getByRole('status').filter({ hasText: '该候选连接已存在' }).waitFor()
   await dragPort('b', 'text', 'm', 'text')
@@ -158,7 +158,7 @@ try {
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await dragPort('i', 'image', 'v', 'subject_image')
   await card('v').press('Enter')
-  await page.getByRole('status').filter({ hasText: '已连接候选输入' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '连接提供候选' }).waitFor()
   await page.getByRole('combobox', { name: '选择模型', exact: true }).press('ArrowDown')
   await page.getByText('graph-video-alt', { exact: true }).last().click()
   await page.getByText('当前模型不支持，候选保留', { exact: true }).waitFor()

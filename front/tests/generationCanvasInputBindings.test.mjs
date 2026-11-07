@@ -32,12 +32,32 @@ test('repeated mentions share a stable binding until the last mention is removed
   assert.deepEqual(withEditorPrompt(reopen(once), { segments: [] }).input_bindings, [])
 })
 
-test('explicit cancellation removes every mention but preserves unrelated adoption and configuration', () => {
+test('explicit cancellation protects every mention and unrelated adoption', () => {
   const selected = withEditorPrompt({ ...card(), input_bindings: [{ id: 'other', source: { ...image, card_id: 'other' }, input_port: 'image' }] }, { segments: [reference('first'), reference('second')] })
   const id = selected.input_bindings.find(binding => binding.source.card_id === 'picture').id
   const canceled = withoutInputBinding(reopen(selected), id)
-  assert.deepEqual(canceled.prompt.segments, [])
-  assert.equal(canceled.input_bindings.length, 1)
-  assert.equal(canceled.input_bindings[0].id, 'other')
+  assert.deepEqual(canceled, reopen(selected))
   assert.deepEqual(canceled.config, { count: 1 })
+})
+
+
+test('unreferenced cancellation removes owned frame configuration only', () => {
+  const original = { ...card(), type: 'model.video', input_bindings: [{ id: 'one', source: image, input_port: 'key_frame' }, { id: 'two', source: image, input_port: 'first_frame' }], frame_targets: [{ binding_id: 'one' }, { binding_id: 'two' }] }
+  const canceled = withoutInputBinding(original, 'one')
+  assert.deepEqual(canceled.frame_targets, [{ binding_id: 'two' }])
+  assert.equal(canceled.input_bindings[0].id, 'two')
+  const referenced = { ...original, prompt: { segments: [{ kind: 'instruction', id: 'instruction', command: '关键帧参考', references: [{ kind: 'reference', id: 'ref', binding_id: 'one' }] }] } }
+  assert.equal(withoutInputBinding(referenced, 'one'), referenced)
+})
+
+
+test('independent video and text selections survive their last prompt mention', () => {
+  for (const type of ['model.video', 'model.text']) {
+    const source = { ...image, port_id: 'text' }
+    const original = { ...card(), type, input_bindings: [{ id: 'independent', input_port: 'text', source, prompt_owned: false }] }
+    const mentioned = withEditorPrompt(original, { segments: [{ id: 'ref', kind: 'reference', source }] })
+    const cleared = withEditorPrompt(mentioned, { segments: [] })
+    assert.equal(cleared.input_bindings[0].id, 'independent')
+    assert.deepEqual(withoutInputBinding(cleared, 'independent').input_bindings, [])
+  }
 })

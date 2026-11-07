@@ -153,7 +153,7 @@ with sqlite3.connect(sys.argv[1]) as db:
   assert.ok((await read()).document.cards.find(card=>card.id==='side').name_binding)
   await closeCanvasDetails(page)
   await page.locator('[data-generation-edge-id="side-name"]').getByRole('button').press('Enter')
-  await page.getByRole('button',{name:'删除此候选连接',exact:true}).click()
+  await page.getByRole('button',{name:'断开此连接',exact:true}).click()
   await page.getByRole('status').filter({hasText:'先取消'}).waitFor()
   assert.ok((await read()).document.edges.some(edge=>edge.id==='side-name'))
   await open('basis');assert.equal(await editor.getByRole('textbox',{name:'卡片文本',exact:true}).count()>0||await editor.getByRole('textbox').count()>0,true)

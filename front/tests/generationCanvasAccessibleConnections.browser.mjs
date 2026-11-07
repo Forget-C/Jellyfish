@@ -38,7 +38,7 @@ try {
   await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
   const canvas=(await response.json()).data
-  const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'用于候选的正文'}, {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'person',type:'content.object',object_id:'actor',name:'张三',category:'character',text:'人物描述'}, {id:'photo',type:'direction.focus',input_bindings:[],examples:[],scope:{}}],edges:[],input_order:{}}
+  const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'用于候选的正文'}, {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'person',type:'content.character',object_id:'actor',name:'张三',text:'人物描述'}, {id:'photo',type:'direction.focus',input_bindings:[],examples:[],scope:{}}],edges:[],input_order:{}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok,await seed.clone().text())
   await page.goto(`http://127.0.0.1:4482/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -48,7 +48,7 @@ try {
   await source.getByRole('button',{name:'连接到…',exact:true}).click()
   await page.getByRole('dialog',{name:'选择连接目标',exact:true}).waitFor()
   await page.getByRole('button',{name:'连接到文本模型卡 · 卡片 2',exact:true}).first().click()
-  await page.getByRole('status').filter({hasText:'已连接候选输入'}).waitFor()
+  await page.getByRole('status').filter({hasText:'连接提供候选'}).waitFor()
   await delay(1400)
   const saved=(await(await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.edges.length,1)
@@ -56,7 +56,7 @@ try {
   await source.getByRole('button',{name:'左侧连接点',exact:true}).press('Enter')
   await page.getByRole('dialog',{name:'选择连接目标',exact:true}).waitFor()
   await page.locator('[data-card-id="other"]').press('Enter')
-  await page.getByRole('status').filter({hasText:'已连接候选输入'}).waitFor()
+  await page.getByRole('status').filter({hasText:'连接提供候选'}).waitFor()
   assert.equal(await page.locator('.wb-details:visible').count(),0,'choosing a target does not open details')
   await delay(1300)
   assert.equal((await(await fetch(`${base}/${canvas.id}`)).json()).data.document.edges.length,2)

@@ -121,7 +121,7 @@ try {
   await page.getByRole('switch',{name:'高亮问题卡片',exact:true}).click()
   await page.keyboard.press('Escape')
   await page.getByRole('button',{name:'布局',exact:true}).click()
-  await page.getByRole('combobox',{name:'选择候选连线',exact:true}).press('ArrowDown')
+  await page.getByRole('combobox',{name:'选择连线',exact:true}).press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click()
   await page.getByRole('button',{name:'布局',exact:true}).click()
   await filter('卡片分类','基础内容')

@@ -178,6 +178,7 @@ export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
 export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition';
 export type { CanvasCatalog } from './models/CanvasCatalog';
 export type { CanvasCompiledInput } from './models/CanvasCompiledInput';
+export type { CanvasConnectionPolicy } from './models/CanvasConnectionPolicy';
 export type { CanvasContentOrigin } from './models/CanvasContentOrigin';
 export type { CanvasCreate } from './models/CanvasCreate';
 export type { CanvasDesignFieldDefinition } from './models/CanvasDesignFieldDefinition';
