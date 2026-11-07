@@ -9,4 +9,5 @@ export type CanvasCheckMediaObservation = {
     modality: 'image' | 'video';
     file_id: string;
     description?: (string | null);
+    frame_at_ms?: (number | null);
 };
