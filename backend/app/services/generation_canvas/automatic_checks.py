@@ -28,13 +28,13 @@ async def automatic_check_plan(db, canvas, nodes):
         generation = node['basis']['card']
         modality = generation['type'].removeprefix('model.')
         count = generation['config']['count'] if modality == 'image' else 1
-        model, reason = await checks.check_model(card)
-        method, calls, reason = estimate_product_calls(node['compiled'], modality, card, model, reason)
+        model, unavailable = await checks.check_model(card)
+        method, calls, reason = estimate_product_calls(node['compiled'], modality, card, model, unavailable)
         plans.setdefault(edge.source_card, []).append({
             'edge_id': edge.id, 'edge_revision': revisions.get(card.id),
             'card': card.model_dump(mode='json', include={'id', 'type', 'check_model_id', 'post_check_categories', 'disabled_items'}),
             'execution_config': model.model_dump(mode='json') if model else None,
-            'reason': reason, 'count': count,
+            'reason': unavailable, 'count': count,
         })
         estimates.append(CanvasAutomaticCheckEstimate(check_card_id=card.id, target_card_id=edge.source_card,
             product_count=count, observation_method=method, estimated_calls=count * calls,

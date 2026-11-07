@@ -743,7 +743,7 @@ class CheckCard(CardDefinition):
     # Read pre-category documents with their original selection; new cards are initialized on save.
     enabled_categories: list[str] = Field(default_factory=lambda: ['P06'], max_length=64)
     auto_post_check: bool = Field(default=False, exclude_if=lambda value: not value)
-    post_check_categories: list[str] = Field(default_factory=lambda: ['R01', 'R02', 'R03'], max_length=64)
+    post_check_categories: list[str] = Field(default_factory=lambda: ['R01', 'R02', 'R03', 'R04'], max_length=64)
     check_model_id: str | None = Field(default=None, min_length=1, max_length=255, exclude_if=lambda value: value is None)
     disabled_items: list[str] = Field(default_factory=list)
     scope_notes: dict[str, Annotated[str, Field(max_length=500)]] = Field(default_factory=dict)
@@ -884,7 +884,7 @@ class CanvasAutomaticCheckEstimate(BaseModel):
     check_card_id: str
     target_card_id: str
     product_count: int
-    observation_method: Literal['text', 'image', 'video_frame']
+    observation_method: Literal['text', 'image', 'video_frame', 'video_sequence', 'video_mixed']
     estimated_calls: int
     reason: str | None = None
 

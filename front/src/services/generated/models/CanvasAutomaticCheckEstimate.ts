@@ -9,7 +9,7 @@ export type CanvasAutomaticCheckEstimate = {
     check_card_id: string;
     target_card_id: string;
     product_count: number;
-    observation_method: 'text' | 'image' | 'video_frame';
+    observation_method: 'text' | 'image' | 'video_frame' | 'video_sequence' | 'video_mixed';
     estimated_calls: number;
     reason?: (string | null);
 };

@@ -8,7 +8,8 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
 export function RunPreview({ preview, canvas, submitting, disabled, onSubmit, onLocate }: { preview: CanvasPrecheck; canvas?: CanvasDocument; submitting: boolean; disabled: boolean; onSubmit: () => void; onLocate?: (target: Record<string, unknown>) => void }) {
-  const methods = { text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查' }
+  const methods = { text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查',
+    video_sequence: '视频序列检查', video_mixed: '视频序列与静帧检查' }
   const labels = canvas ? referenceLabels(canvas, preview.input.used || [], preview.card_id) : new Map<string, string>()
   const mediaKinds = new Map((preview.input.used || []).map(output => [sourceKey(output.source), output.modality]))
   const awaitingUpstream = preview.input.used?.some(item => preview.execution_nodes.includes(item.source.card_id))

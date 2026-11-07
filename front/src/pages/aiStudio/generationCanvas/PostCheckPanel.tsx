@@ -8,9 +8,13 @@ const postCategories = [
   { id: 'R01', label: '明确内容与结果落实' },
   { id: 'R02', label: '对象与外观落实' },
   { id: 'R03', label: '静态摄影与风格落实' },
+  { id: 'R04', label: '表演、行动与调度落实' },
 ]
 const productLabels = { text: '文字', image: '图片', video: '视频' }
-const observationLabels = { text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查' }
+const observationLabels = {
+  text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查',
+  video_sequence: '视频序列检查', video_mixed: '视频序列与静帧检查',
+}
 const statuses = { succeeded: '完整交付', failed: '生成失败 · 保留片段', cancelled: '生成取消 · 保留片段' }
 const productKey = (product: CanvasCheckProduct) => `${product.node_id}:${product.position}`
 
@@ -123,6 +127,8 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
       <HistoricalCheckProduct product={fixed.product} />
       <p>产物 1 份 · {observationLabels[fixed.observation_method ?? 'text']} · 预计调用 {fixed.estimated_calls} 次</p>
       {fixed.observation_method === 'video_frame' && <p>只观察实际解码的静帧。其他时刻、动作过程和音轨未核验。</p>}
+      {(fixed.observation_method === 'video_sequence' || fixed.observation_method === 'video_mixed')
+        && <p>视频序列按采样画面核对可见过程，证据时间为模型估计。音轨和声画同步未核验。</p>}
       {fixed.reason && <p>{fixed.reason}</p>}
       {fixed.items.map(item => <div className="generation-check-item" key={item.id}>
         <label><input type="checkbox" aria-label={`纳入生成后检查：${item.source.card_id}/${item.field_id}`}

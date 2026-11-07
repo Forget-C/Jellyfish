@@ -9,6 +9,7 @@ from app.core.contracts.generation_canvas import (
 )
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckMediaObservation, CanvasCheckResult
 from app.services.generation_canvas.check_product_text import PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_LABEL, text_product_items
+from app.services.generation_canvas.check_product_video import VIDEO_SEQUENCE, process_items
 from app.services.generation_canvas.composition import SHOT_SIZE_LABELS
 from app.services.generation_canvas.formatting import PURPOSE_LABELS, STATE_LABELS
 
@@ -121,16 +122,17 @@ def _object_items(compiled, modality):
             yield item, {**requirement, 'text': text}, edge, media.file_id, None
 
 
-def visual_product_items(compiled, modality, unavailable):
+def visual_product_items(compiled, modality, unavailable, *, sequence_unavailable=None):
     """Find checkable historical fields and group only the same sample and reference."""
     items, groups = {}, {}
     text_items, requirements = text_product_items(compiled, unavailable=None)
     text_rows = [(item, requirements[item.id], 'start' if modality == 'video' else None, None, None) for item in text_items]
-    for rows in (text_rows, _design_items(compiled, modality), _object_items(compiled, modality)):
+    video_rows = process_items(compiled) if modality == 'video' else ()
+    for rows in (text_rows, _design_items(compiled, modality), _object_items(compiled, modality), video_rows):
         for item, requirement, edge, reference_id, reason in rows:
             if item.id in items:
                 continue
-            reason = reason or unavailable
+            reason = reason or (sequence_unavailable if edge == VIDEO_SEQUENCE else unavailable)
             if reason:
                 item.availability, item.reason = 'unavailable', reason
             items[item.id] = item
