@@ -78,5 +78,18 @@ try {
   await page.screenshot({path:join(output,'sound-reference-desktop.png')})
   await page.setViewportSize({width:390,height:844})
   await page.screenshot({path:join(output,'sound-reference-mobile.png')})
-  console.log('Sound reference adoption, range application, undo, multiple references and re-adoption passed:',output)
+  await page.setViewportSize({width:1440,height:1000})
+  await page.reload()
+  await openCanvasCard(page,'dialogue')
+  const relation = detail.getByRole('textbox',{name:'声画关系说明内容',exact:true})
+  const note = '画外说话，画面保持在听者身上'
+  const savedRelation = state => state.document.cards.find(card=>card.id==='dialogue').audiovisual_relation
+  await relation.fill(note)
+  await poll(state=>savedRelation(state)?.text===note)
+  await page.reload()
+  await openCanvasCard(page,'dialogue')
+  await relation.getByText(note,{exact:true}).waitFor()
+  await relation.fill('')
+  await poll(state=>savedRelation(state)?.state==='empty' && !savedRelation(state).text?.trim())
+  console.log('Sound reference adoption and dialogue audiovisual relation save, reopen and clear passed:',output)
 } finally { await cleanup() }

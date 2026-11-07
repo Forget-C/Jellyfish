@@ -137,7 +137,9 @@ async def test_fixed_reference_interval_and_file_retention_do_not_propagate(canv
     doc['cards'][0]['file_id'] = files[1]
     assert (await client.put(url, json={'request_id': 'replace', 'expected_revision': 1, 'document': doc})).status_code == 200
     output = (await client.get(url + '/cards/sound/outputs')).json()['data']['outputs']
-    assert files[0] not in str(output) and '900' not in str(output)
+    published = str(output)
+    assert files[0] not in published
+    assert "'start_ms':" not in published and "'end_ms':" not in published
     assert (await client.delete(f'/files/{files[0]}/upload-retention?project_id=p')).status_code == 409
     doc['cards'] = doc['cards'][1:]
     doc.update(edges=[], input_order={})
@@ -307,3 +309,51 @@ async def test_sound_retires_object_use_and_adopts_complete_field_reference_is_r
         input_order={'sound': {'effect_object': ['old']}, 'model': {'text': ['use']}})
     saved = await client.put(url, json={'request_id': 'old', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 422, saved.text
+
+
+@pytest.mark.asyncio
+async def test_audiovisual_relation_follows_only_the_adopted_dialogue(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白声画关系'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    first_note = '画外说话，画面保持在听者身上'
+    second_note = '说话人始终留在画内'
+    first_line = {'id': 'offscreen', 'type': 'direction.dialogue', 'dialogue_id': 'offscreen-line',
+                  'content': {'text': '请留在这儿', 'authorship': 'user'},
+                  'scope': {'condition': '只在站台告别时'}, 'source_locator': '第一章·站台'}
+    second_line = {'id': 'onscreen', 'type': 'direction.dialogue', 'dialogue_id': 'onscreen-line',
+                   'content': {'text': '我在这里', 'authorship': 'user'}}
+    target = {'id': 'model', 'type': 'model.text', 'model_id': 'canvas-text'}
+
+    def adopt(dialogue_id):
+        source = {'canvas_id': canvas['id'], 'card_id': dialogue_id, 'port_id': 'text', 'position': 0}
+        target['input_bindings'] = [{'id': 'use', 'input_port': 'text', 'source': source}]
+        doc.update(edges=[{'id': 'line-edge', 'source_card': dialogue_id, 'source_port': 'text',
+                           'target_card': 'model', 'target_port': 'text'}],
+                   input_order={'model': {'text': ['line-edge']}})
+
+    async def save_and_compile(revision):
+        response = await canvas_client.put(url, json={'request_id': f'save-{revision}',
+                                                        'expected_revision': revision, 'document': doc})
+        assert response.status_code == 200, response.text
+        response = await canvas_client.get(url + '/cards/model/compile')
+        assert response.status_code == 200, response.text
+        return response.json()['data']['text']
+
+    doc['cards'] = [first_line, second_line, target]
+    adopt('offscreen')
+    assert '声画关系说明' not in await save_and_compile(0)
+
+    first_line['audiovisual_relation'] = {'text': first_note, 'authorship': 'user'}
+    second_line['audiovisual_relation'] = {'text': second_note, 'authorship': 'user'}
+    compiled = await save_and_compile(1)
+    reopened = (await canvas_client.get(url)).json()['data']['document']
+    assert reopened['cards'][0]['audiovisual_relation']['text'] == first_note
+    assert f'声画关系说明：{first_note}' in compiled and second_note not in compiled
+    assert '适用条件：只在站台告别时' in compiled and '来源：第一章·站台' in compiled
+
+    adopt('onscreen')
+    compiled = await save_and_compile(2)
+    assert f'声画关系说明：{second_note}' in compiled and first_note not in compiled
+    second_line['audiovisual_relation'] = {'text': '', 'authorship': 'user'}
+    assert '声画关系说明' not in await save_and_compile(3)

@@ -26,6 +26,7 @@ export function SoundDirectionEditor({ card: raw, onChange, disabled, editorOpen
       </section>
       <section aria-label="对白要求" className="design-preset-fields design-preset-fields-compact">
         <FieldEditor compact label="语言／发音要求" value={card.language_pronunciation} onChange={language_pronunciation => update({ ...card, language_pronunciation })} />
+        <FieldEditor compact label="声画关系说明" value={card.audiovisual_relation} onChange={audiovisual_relation => update({ ...card, audiovisual_relation })} />
       </section>
     </> : <section aria-label="声音条目" className="design-preset-fields design-preset-fields-compact">
       <FieldEditor compact label="声源说明" value={sound.source_description} onChange={source_description => update({ ...sound, source_description })} />
