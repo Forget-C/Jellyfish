@@ -63,6 +63,24 @@ class CanvasBasis:
                     if item.available and isinstance(item.payload, DesignTextPayload)}
         return {card.id: card.input_bindings for card in self._document.cards if card.id in used_ids}
 
+    def observed_model_inputs(self) -> list[str]:
+        """Identify adopted model outputs, including ones that have yet to be published."""
+        from app.services.generation_canvas.design_dependencies import dependency_sources
+        cards = {card.id: card for card in self._document.cards}
+        pending = [reference.source.card_id for reference, _ in prompt_references(self.card)]
+        seen, observed = set(), set()
+        while pending:
+            card_id = pending.pop()
+            if card_id in seen or card_id not in cards:
+                continue
+            seen.add(card_id)
+            source = cards[card_id]
+            if isinstance(source, ModelCard):
+                observed.add(card_id)
+            else:
+                pending.extend(ref.card_id for ref in dependency_sources(source, self._document.id))
+        return sorted(observed)
+
     def to_snapshot(self) -> dict:
         """固定直接来源及所采用设计的有效字段来源，不遍历任意祖先。"""
         used_sources = {ref.source.card_id for ref, _ in prompt_references(self.card)}

@@ -180,3 +180,19 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
         assert next(row for row in await history() if row['id'] == finished['id']) == finished
     finally:
         worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.parametrize('state', ['proposal', 'undecided'])
+@pytest.mark.asyncio
+async def test_adoption_check_does_not_enforce_tentative_content(runtime, monkeypatch, state):
+    from tests.test_generation_canvas_check_consistency import check_category, save_requirements
+    from tests.test_generation_canvas_check_sequence import text_provider
+
+    statement = '可考虑让红伞留在门边'
+    checks = await save_requirements(runtime, [{'id': 'shot', 'type': 'direction.shot',
+        'visible_result': {'text': statement, 'state': state}}])
+    text_provider(monkeypatch, lambda body: {
+        'outcome': 'nonconforming', 'message': '未明确要求采用提议', 'submitted_excerpt': body['requirement']['text'],
+    })
+    result = await check_category(runtime, checks, 'P01')
+    assert result['outcome'] == 'risk' and result['submitted_excerpt'] == statement

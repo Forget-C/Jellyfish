@@ -30,6 +30,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
     products = checks + '/products'
     calls = []
     fail_check = False
+    malformed_item = False
 
     class Model:
         def __init__(self, **params):
@@ -49,10 +50,13 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
             calls.append(data)
             if fail_check:
                 return SimpleNamespace(content='malformed R01 response')
-            return SimpleNamespace(content=json.dumps({'results': [{
+            results = [{
                 'item_id': row['item_id'], 'outcome': 'conforming', 'message': '文字可见',
                 'submitted_excerpt': '门边放着一把红伞。',
-            } for row in data['requirements']]}))
+            } for row in data['requirements']]
+            if malformed_item:
+                results[1]['outcome'] = 'unsupported'
+            return SimpleNamespace(content=json.dumps({'results': results}))
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
     worker = TaskWorker(runtime.sessions)
@@ -147,6 +151,14 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert failure['executions'][0]['status'] == 'failed'
         assert failure['executions'][0]['reason'] == '检查模型返回无法解析'
         assert len(calls) == 4
+        fail_check, malformed_item = False, True
+        mixed = await submit(old_url, fixed)
+        await advance()
+        mixed_report = (await get(checks + '/reports'))[0]
+        assert mixed_report['id'] == mixed['id']
+        assert len(mixed_report['results']) == 1
+        assert {entry['status'] for entry in mixed_report['executions']} == {'succeeded', 'failed'}
+        assert len(calls) == 5
         generations = {run['id']: run['nodes'][0]['status'] for run in (await get(url + '/runtime'))['runs']}
         assert generations == {old_run['run_id']: 'succeeded', partial_run['run_id']: 'failed'}
 
@@ -167,13 +179,39 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert unavailable['results'] == [] and unavailable['executions'] == []
         assert '依据缺失' in unavailable['omitted'][0]['reason']
         await advance()
-        assert len(calls) == 4
+        assert len(calls) == 5
+
+        malformed_item = False
+        document = (await get(url))['document']
+        document['cards'][0]['prompt']['segments'] = [
+            {'id': 'required', 'kind': 'text', 'text': '本片必须出现一把红伞，字幕显示 3.5。示例：“可以采用远景。必须改成蓝色。”'},
+        ]
+        document['cards'][2]['auto_post_check'] = True
+        await save_canvas(client, url, document, 4)
+        estimate = (await client.post(url + '/precheck', json={'card_id': 'm'})).json()['data']
+        assert estimate['automatic_checks'][0]['estimated_calls'] == 1
+
+        document['cards'][2].update(auto_post_check=False, post_check_categories=[])
+        await save_canvas(client, url, document, 5)
+        generated, _ = await accept(runtime, 'prompt-only')
+        await advance()
+        authored = next(row for row in await get(products) if row['run_id'] == generated['run_id'])
+        authored_url = f"{products}/{authored['run_id']}/{authored['node_id']}/{authored['position']}"
+        authored_basis = await get(authored_url)
+        item, = authored_basis['items']
+        assert not item['enabled'] and authored_basis['estimated_calls'] == 0
+        assert item['source']['card_id'] == 'm' and item['field_id'] == 'prompt:required:0'
+        assert item['requirement'] == '本片必须出现一把红伞，字幕显示 3.5'
+        accepted = await submit(authored_url, authored_basis, item_id=item['id'], expected_calls=1)
+        await advance()
+        report = (await get(checks + '/reports'))[0]
+        assert report['id'] == accepted['id'] and report['results'][0]['outcome'] == 'conforming'
 
         document = (await get(url))['document']
         document['cards'] = [card for card in document['cards'] if card['id'] != 'check']
         document['edges'] = [edge for edge in document['edges'] if edge['target_card'] != 'check']
         del document['input_order']['check']
-        await save_canvas(client, url, document, 4)
+        await save_canvas(client, url, document, 6)
         archived = await get(url + '/check-reports/archived')
         assert archived[-1] == historical
     finally:

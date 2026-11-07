@@ -1,11 +1,12 @@
 """Observe motion and continuity in one retained, time-verified video stream."""
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.contracts.generation_canvas import DesignField, DesignTextPayload
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckMediaInterval, CanvasCheckMediaObservation, CanvasCheckResult
 from app.schemas.canvas_checks import CanvasCheckVideoMoment, CanvasCheckVideoRange
+from app.services.generation_canvas.check_group_reply import parse_group_reply
 from app.services.generation_canvas.formatting import PURPOSE_LABELS, STATE_LABELS
 
 VIDEO_PRODUCT_CHECK = 'product_video'
@@ -141,11 +142,6 @@ class _VideoAnswer(BaseModel):
     visibility: Literal['visible', 'occluded', 'unknown'] | None = None
 
 
-class _VideoAnswers(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    results: list[_VideoAnswer]
-
-
 def _video_boundary(requirement):
     kind = requirement.get('evidence_kind')
     if kind == 'camera_path':
@@ -176,14 +172,9 @@ def _source_moments(answer, interval, bounds):
 
 def parse_product_video(observation, content, sequence):
     """Record the submitted bounds and only model estimates supported by the requested sampling window."""
-    if not isinstance(content, str):
-        return None
-    try:
-        answers = _VideoAnswers.model_validate_json(content).results
-    except ValidationError:
-        return None
     requirements = {row['item_id']: row for row in observation['requirements']}
-    if len(answers) != len(requirements) or {answer.item_id for answer in answers} != requirements.keys():
+    answers = parse_group_reply(content, _VideoAnswer, requirements)
+    if not answers:
         return None
     sampling_fps = observation['sampling_fps']
     bounds = CanvasCheckVideoRange(start_ms=sequence.start_ms, end_ms=sequence.end_ms, sampling_fps=sampling_fps)

@@ -7,7 +7,7 @@ import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import { CheckReportDetails } from './CheckReportDetails'
 
 /** A deleted check card's reports are reachable from the canvas that owns them. */
-export function CheckArchive({ projectId, canvasId, revision }: { projectId: string; canvasId: string; revision: number }) {
+export function CheckArchive({ projectId, canvasId, revision, targetReportId }: { projectId: string; canvasId: string; revision: number; targetReportId?: string }) {
   const [open, setOpen] = useState(false)
   const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
   const [newReportId, setNewReportId] = useState<string>()
@@ -15,6 +15,7 @@ export function CheckArchive({ projectId, canvasId, revision }: { projectId: str
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [refresh, setRefresh] = useState(0)
+  useEffect(() => { if (targetReportId) { setOpen(true); setNewReportId(targetReportId) } }, [targetReportId])
   useEffect(() => {
     if (!open) return
     let active = true
@@ -29,7 +30,7 @@ export function CheckArchive({ projectId, canvasId, revision }: { projectId: str
 
   const activeReport = reports.some(report => report.executions?.some(execution => execution.status === 'queued' || execution.status === 'running'))
   useEffect(() => {
-    if (!open || !activeReport) return
+    if (!open || !activeReport || cancelling) return
     let active = true
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
@@ -47,7 +48,7 @@ export function CheckArchive({ projectId, canvasId, revision }: { projectId: str
     }
     timer = setTimeout(() => void poll(), 1200)
     return () => { active = false; clearTimeout(timer) }
-  }, [open, activeReport, projectId, canvasId])
+  }, [open, activeReport, projectId, canvasId, cancelling])
   const showReport = (report: CanvasCheckReportRead) => {
     setReports(previous => [report, ...previous.filter(row => row.id !== report.id)])
     setNewReportId(report.id)

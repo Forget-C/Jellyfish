@@ -23,7 +23,7 @@ from app.services.generation_canvas.check_product_visual import (
     VISUAL_PRODUCT_CHECK, VISUAL_PRODUCT_LABEL, visual_check_groups, visual_product_items,
 )
 from app.services.generation_canvas.check_selection import select_check_items
-from app.services.generation_canvas.checks import CHECK_REPORT_TARGET, CanvasChecks, check_target, persist_check_report
+from app.services.generation_canvas.checks import CHECK_REPORT_TARGET, CanvasChecks, check_configuration, check_target, persist_check_report
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.execution_basis import digest
 from app.services.generation_canvas.historical_content import CanvasHistoricalContent
@@ -91,14 +91,15 @@ def _visual_capability_reasons(model, unavailable, modality):
     return image, sequence
 
 
-def estimate_product_calls(compiled, modality, card, model, unavailable):
+def estimate_product_calls(compiled, modality, card, model, unavailable, *, generation, canvas_id):
     """Estimate per-product work before a result exists, using the same observation grouping."""
     if modality == 'text':
-        items, _ = text_product_items(compiled, unavailable=unavailable)
+        items, _ = text_product_items(compiled, unavailable=unavailable, generation=generation, canvas_id=canvas_id)
         select_product_scope(card, items)
         return 'text', int(any(item.enabled and item.availability == 'ready' for item in items)), unavailable
     image, sequence = _visual_capability_reasons(model, unavailable, modality)
-    items, observations = visual_product_items(compiled, modality, image, sequence_unavailable=sequence)
+    items, observations = visual_product_items(compiled, modality, image, sequence_unavailable=sequence,
+                                               generation=generation, canvas_id=canvas_id)
     select_product_scope(card, items)
     selected, _ = select_check_items(items, None)
     method, calls = _visual_method(modality, selected, observations)
@@ -146,14 +147,16 @@ class CanvasPostChecks:
         """Derive reports from an immutable product, with either manual or admitted check settings."""
         product = _product(node, node.outputs[position], position, generated_revision, include_text=True)
         basis = _historical_basis(node, product)
+        generation = (node.basis or {}).get('card')
         if product.modality == 'text':
-            items, requirements = text_product_items(basis.input, unavailable=unavailable)
+            items, requirements = text_product_items(basis.input, unavailable=unavailable, generation=generation, canvas_id=node.canvas_id)
             reason = unavailable if items else '依据缺失：原生成依据未保留可用的明确文字要求'
             select_product_scope(card, items)
             selected, _ = select_check_items(items, None)
             method, calls = 'text', int(bool(selected and model))
         else:
-            items, requirements, reason = await self._visual_items(basis, product, model, unavailable, lock_files=lock_files)
+            items, requirements, reason = await self._visual_items(basis, product, model, unavailable,
+                                                                 generation=generation, canvas_id=node.canvas_id, lock_files=lock_files)
             select_product_scope(card, items)
             selected, _ = select_check_items(items, None)
             method, calls = _visual_method(product.modality, selected, requirements)
@@ -161,10 +164,11 @@ class CanvasPostChecks:
                                          estimated_calls=calls, observation_method=method, reason=reason)
         return preview, requirements
 
-    async def _visual_items(self, basis, product, model, unavailable, *, lock_files=False):
+    async def _visual_items(self, basis, product, model, unavailable, *, generation, canvas_id, lock_files=False):
         """Keep missing capabilities and inaccessible project files local to the affected items."""
         reason, sequence_reason = _visual_capability_reasons(model, unavailable, product.modality)
-        items, requirements = visual_product_items(basis.input, product.modality, reason, sequence_unavailable=sequence_reason)
+        items, requirements = visual_product_items(basis.input, product.modality, reason, sequence_unavailable=sequence_reason,
+                                                    generation=generation, canvas_id=canvas_id)
         if not items:
             return items, requirements, '依据缺失：原生成依据未保留可核对的视觉要求'
         ready = [item for item in items if item.availability == 'ready']
@@ -197,7 +201,7 @@ class CanvasPostChecks:
         card, preview, requirements, model = await self._prepare(canvas, card_id, run_id, node_id, position, lock_files=True)
         if preview.basis.basis_hash != request.basis_hash:
             raise diagnostic('CHECK_BASIS_CHANGED', '产物版本与检查依据不一致', target, status=409, blocks=['check'])
-        if request.item_id is not None and not any(item.id == request.item_id and item.enabled and item.availability == 'ready'
+        if request.item_id is not None and not any(item.id == request.item_id and item.availability == 'ready'
                                                    for item in preview.items):
             raise diagnostic('CHECK_ITEM_UNAVAILABLE', '所选检查项不可执行', target, blocks=['check'])
         expected_calls = 1 if request.item_id is not None else preview.estimated_calls
@@ -214,6 +218,7 @@ class CanvasPostChecks:
         report = CanvasCheckReportRead(id=report_id or uuid4().hex, check_card_id=card.id, created_at=datetime.now(UTC),
             scope='item' if item_id is not None else 'all', basis=preview.basis, product=preview.product,
             items=selected, results=[], omitted=omitted, check_model_id=card.check_model_id,
+            configuration=check_configuration(card, product=True),
             enabled_item_ids=[item.id for item in preview.items if item.enabled], automatic=automatic)
         tasks = {}
         if selected and model and preview.product.modality == 'text':

@@ -43,7 +43,10 @@ class ReferenceComparison:
     def item_id(self) -> str:
         """The current file can change without changing the check item's identity."""
         suffix = digest([self.source.model_dump(), self.media.source.model_dump()])[:16]
-        return f'{REFERENCE_CATEGORY}:{self.source.card_id}:{self.field_id}:{suffix}'
+        item_id = f'{REFERENCE_CATEGORY}:{self.source.card_id}:{self.field_id}:{suffix}'
+        if len(item_id) <= 256:
+            return item_id
+        return f'{REFERENCE_CATEGORY}:source:{digest(item_id)}'
 
     def observation(self) -> dict:
         """Freeze the requirement and only the associated adopted reference."""
@@ -116,6 +119,22 @@ def _named_references(basis: CanvasBasis):
                                       {'object_id': mapping.object_id, 'category': mapping.category, 'angle': mapping.angle})
 
 
+def _adjacent_clause(segments, index, step):
+    """Leave a shared clause between two media references unattributed."""
+    parts = []
+    neighbor = index + step
+    while 0 <= neighbor < len(segments) and isinstance(segments[neighbor], PromptText):
+        parts.append(segments[neighbor].text)
+        neighbor += step
+    text = ''.join(parts if step > 0 else reversed(parts))
+    other = segments[neighbor] if 0 <= neighbor < len(segments) else None
+    clauses = _CLAUSE_BOUNDARY.split(text)
+    if (len(clauses) == 1 and isinstance(other, PromptReference) and other.source is not None
+            and other.source.port_id in ('image', 'video')):
+        return ''
+    return clauses[0] if step > 0 else clauses[-1]
+
+
 def _prompt_references(basis: CanvasBasis):
     if basis.card.type not in ('model.image', 'model.video'):
         return
@@ -124,10 +143,8 @@ def _prompt_references(basis: CanvasBasis):
     for index, segment in enumerate(segments):
         if not isinstance(segment, PromptReference) or segment.source is None or segment.source.port_id not in ('image', 'video'):
             continue
-        previous = segments[index - 1] if index else None
-        following = segments[index + 1] if index + 1 < len(segments) else None
-        prefix = _CLAUSE_BOUNDARY.split(previous.text)[-1] if isinstance(previous, PromptText) else ''
-        suffix = _CLAUSE_BOUNDARY.split(following.text)[0] if isinstance(following, PromptText) else ''
+        prefix = _adjacent_clause(segments, index, -1)
+        suffix = _adjacent_clause(segments, index, 1)
         requirement = ' '.join(part.strip() for part in (prefix, suffix) if any(character.isalnum() for character in part))
         if not requirement:
             continue
@@ -160,7 +177,7 @@ def unavailable_reference(item_id: str) -> CanvasCheckResult:
                              boundary=REFERENCE_BOUNDARY)
 
 
-def parse_reference_reply(item_id: str, file_id: str, content: object) -> CanvasCheckResult | None:
+def parse_reference_reply(item_id: str, source: dict, content: object) -> CanvasCheckResult | None:
     """Require a visible description before publishing a definite image conclusion."""
     if not isinstance(content, str):
         return None
@@ -169,9 +186,11 @@ def parse_reference_reply(item_id: str, file_id: str, content: object) -> Canvas
     except ValidationError:
         return None
     evidence = (answer.visible_evidence or '').strip()
-    observation = CanvasCheckMediaObservation(modality='image', file_id=file_id, description=evidence or None)
+    observation = CanvasCheckMediaObservation(modality='image', file_id=source['file_id'], description=evidence or None)
     outcome, message = answer.outcome, answer.message
     if not evidence and outcome != 'indeterminate':
         outcome, message = 'indeterminate', '检查模型未指出可见特征，无法核对本项要求。'
+    elif outcome == 'nonconforming' and (source.get('context') or {}).get('state') in ('proposal', 'undecided'):
+        outcome = 'risk'
     return CanvasCheckResult(item_id=item_id, outcome=outcome, message=message, boundary=REFERENCE_BOUNDARY,
                              observed_media=[observation])

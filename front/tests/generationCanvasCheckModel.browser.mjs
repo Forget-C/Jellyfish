@@ -41,12 +41,18 @@ try {
   const document = { ...canvas.document, cards: [
     { id: 'shot', type: 'direction.shot', estimated_duration: { text: '12 秒', state: 'proposal' },
       visible_result: { text: '保留灯光', state: 'fact' } },
-    { id: 'target', type: 'model.video', config: { seconds: 5 } },
+    { id: 'target', type: 'model.video', config: { seconds: 5 }, input_bindings: [
+      { id: 'upstream-binding', input_port: 'text',
+        source: { canvas_id: canvas.id, card_id: 'upstream', port_id: 'text', position: 0 } },
+    ] },
+    { id: 'upstream', type: 'model.text', model_id: 'canvas-runtime-text',
+      prompt: { segments: [{ id: 'source-text', kind: 'text', text: '检查依赖的独立来源' }] } },
     { id: 'check', type: 'review.check', enabled_categories: ['P01', 'P06'] },
   ], edges: [
     { id: 'adopt', source_card: 'shot', source_port: 'text', target_card: 'target', target_port: 'text' },
+    { id: 'adopt-upstream', source_card: 'upstream', source_port: 'text', target_card: 'target', target_port: 'text' },
     { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
-  ], input_order: { target: { text: ['adopt'] }, check: { check_basis: ['observe'] } } }
+  ], input_order: { target: { text: ['adopt', 'adopt-upstream'] }, check: { check_basis: ['observe'] } } }
   const seed = await fetch(canvasUrl, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seed.ok, await seed.text())
   await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
@@ -85,6 +91,49 @@ try {
   assert.equal(history.data.length, 2)
   assert.equal(history.data[1].results.length, 2)
   assert.ok(history.data[1].executions.some(execution => execution.status === 'failed'))
+  const currentBasis = (await (await fetch(`${canvasUrl}/checks/check`)).json()).data.basis
+  assert.deepEqual(currentBasis.observed_model_inputs, ['upstream'])
+  const basisRequests = []
+  page.on('request', request => {
+    if (request.method() === 'GET' && request.url().endsWith(`${canvas.id}/checks/check`)) basisRequests.push(request.url())
+  })
+  for (let attempt = 0; ; attempt++) {
+    assert.ok(attempt < 50, 'canvas SSE was not connected')
+    if ((await (await fetch(controlUrl)).json()).stream_connections > 0) break
+    await delay(100)
+  }
+  const upstream = await (await fetch(`${canvasUrl}/precheck`, { method: 'POST', headers: json,
+    body: JSON.stringify({ card_id: 'upstream' }) })).json()
+  assert.ok(upstream.data.can_run)
+  const generated = await fetch(`${canvasUrl}/runs`, { method: 'POST', headers: json,
+    body: JSON.stringify({ request_id: 'upstream-output', preview_token: upstream.data.preview_token }) })
+  assert.ok(generated.ok, await generated.text())
+  await fetch(controlUrl, { method: 'POST', headers: json, body: JSON.stringify({ release: 1 }) })
+  for (let attempt = 0; ; attempt++) {
+    assert.ok(attempt < 50)
+    const runtime = (await (await fetch(`${canvasUrl}/runtime`)).json()).data
+    if (JSON.stringify(runtime.runs).includes('第二段')) break
+    await delay(100)
+  }
+  assert.equal(basisRequests.length, 0, 'provisional upstream text does not reload the check basis')
+  const refreshed = page.waitForResponse(response => response.url().endsWith(`${canvas.id}/checks/check`))
+  await fetch(controlUrl, { method: 'POST', headers: json, body: JSON.stringify({ release: 2 }) })
+  assert.ok((await refreshed).ok())
+  await editor.getByText('生成检查依据', { exact: true }).click()
+  await editor.getByRole('region', { name: '实际提交文本' }).getByText(/第一段第二段第三段/).waitFor()
+  const taskList = (await (await fetch(`${api}/api/v1/film/tasks?project_id=canvas-project&target_id=${history.data[1].id}`)).json()).data
+  assert.equal(taskList.items[0].source.check_report_id, history.data[1].id)
+  const params = new URLSearchParams({ tab: 'generation', canvas: canvas.id, check: taskList.items[0].source.check_card_id,
+    report: taskList.items[0].source.check_report_id })
+  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?${params}`)
+  await report.getByText(/整卡检查/).waitFor()
+  await page.screenshot({ path: join(output, 'check-task-link-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+  await report.getByText(/整卡检查/).waitFor()
+  assert.equal(await page.locator('.wb-details:visible').evaluate(node => node.scrollWidth <= node.clientWidth), true)
+  await page.screenshot({ path: join(output, 'check-task-link-mobile.png') })
+  await page.setViewportSize({ width: 1440, height: 1000 })
   const sound = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '声音能力检查' }) })).json()).data
   const soundDocument = { ...sound.document, cards: [
     { id: 'sound', type: 'direction.guidance', sound_strategy: { text: '使用音频参考', state: 'fact' } },

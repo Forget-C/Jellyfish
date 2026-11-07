@@ -34,6 +34,8 @@ class TaskSourceRead(BaseModel):
     canvas_id: str | None = None
     run_id: str | None = None
     node_id: str | None = None
+    check_card_id: str | None = None
+    check_report_id: str | None = None
 
 
 class TaskListItemRead(TaskStatusRead):

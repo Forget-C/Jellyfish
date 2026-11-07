@@ -79,7 +79,8 @@ class CanvasCheckRechecks:
         recheck = CanvasCheckRecheck(report_id=report_id, clarification=request.clarification, original_result=result)
         report = CanvasCheckReportRead(id=uuid4().hex, check_card_id=card_id, created_at=datetime.now(UTC),
             scope='item', basis=original.basis, product=original.product, check_model_id=original.check_model_id,
-            items=[item], results=[], enabled_item_ids=original.enabled_item_ids, recheck=recheck)
+            items=[item], results=[], enabled_item_ids=original.enabled_item_ids,
+            configuration=original.configuration, recheck=recheck)
         tasks = {}
         rules = {DURATION_CATEGORY: recheck_duration, SOUND_CAPABILITY_CATEGORY: recheck_sound_capability}
         if item.category in rules and original_task_id is None:
@@ -126,7 +127,7 @@ class CanvasCheckRechecks:
             return None
         queued = await TaskService(self.db).submit(kind='canvas_check', project_id=self.project_id,
             target_type=CHECK_REPORT_TARGET, target_id=report.id, title=f'复核 · {item.label}',
-            provider_id=config.provider_id, expected_target_version=task.expected_target_version,
+            provider_id=task.provider_id, expected_target_version=task.expected_target_version,
             retry_of_task_id=task.id, snapshot={
                 'check_category': category, 'item_id': item.id, 'execution_config': config.model_dump(mode='json'),
                 'observation': observation, 'recheck': report.recheck.model_dump(mode='json'),

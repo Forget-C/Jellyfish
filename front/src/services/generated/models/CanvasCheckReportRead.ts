@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasCheckBasis } from './CanvasCheckBasis';
+import type { CanvasCheckConfiguration } from './CanvasCheckConfiguration';
 import type { CanvasCheckExecution } from './CanvasCheckExecution';
 import type { CanvasCheckItem } from './CanvasCheckItem';
 import type { CanvasCheckOmission } from './CanvasCheckOmission';
@@ -22,6 +23,8 @@ export type CanvasCheckReportRead = {
     results: Array<CanvasCheckResult>;
     omitted?: Array<CanvasCheckOmission>;
     check_model_id?: (string | null);
+    configuration?: (CanvasCheckConfiguration | null);
+    recheck_item_ids?: Array<string>;
     executions?: Array<CanvasCheckExecution>;
     /**
      * 执行时启用的项目；可与本轮实际执行范围不同。

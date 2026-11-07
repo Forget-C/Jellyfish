@@ -14,6 +14,7 @@ from app.core.contracts.task import TERMINAL_TASK_STATUSES
 from app.core.contracts.generation_delivery import DeliveredArtifact, GenerationDeliveryResult
 from app.models.task import Task, TaskOutput
 from app.services.task_sources import resolve_task_sources
+from app.services.task_service import AUTO_CHECK_DISPATCH
 from app.models.studio_prompts_files_timeline import FileItem
 from app.schemas.task import TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead
 
@@ -87,7 +88,8 @@ class TaskQueries:
             case(*[(Task.kind == kind, Task.input_snapshot[key]['unit_id'].as_string())
                 for kind, key in [('directing_instruction', 'scene_instruction'),
                     ('directing_instruction_check', 'instruction_check')]]).label('scene_unit_id'),
-            Task.input_snapshot['scene_unit_design']['request']['shot_id'].as_string().label('scene_shot_id'))
+            Task.input_snapshot['scene_unit_design']['request']['shot_id'].as_string().label('scene_shot_id')
+        ).where(Task.kind != AUTO_CHECK_DISPATCH)
         for column, value in ((Task.kind, task_kind), (Task.target_type, target_type),
                               (Task.target_id, target_id), (Task.project_id, project_id)):
             if value is not None:

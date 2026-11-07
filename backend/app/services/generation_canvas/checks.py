@@ -13,12 +13,14 @@ from app.models.generation_canvas import CanvasCheckReport, GenerationCanvas
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.schemas.canvas_checks import (
-    CanvasCheckBasis, CanvasCheckExecution, CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest, CanvasCheckResult,
+    CanvasCheckBasis, CanvasCheckConfiguration, CanvasCheckExecution, CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest, CanvasCheckResult,
 )
 from app.schemas.generation_canvas import CheckCard, CanvasDocument, TextModelCard
+from app.services.generation_canvas.check_duration import DURATION_CATEGORY
 from app.services.generation_canvas.check_media import owned_check_files, supports_check_image
 from app.services.generation_canvas.check_reference_media import REFERENCE_CATEGORY, reference_checks
 from app.services.generation_canvas.check_selection import check_items, describe_category, select_check_items
+from app.services.generation_canvas.check_sound_capability import SOUND_CAPABILITY_CATEGORY
 from app.services.generation_canvas.current_state import CanvasCurrentState
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.execution_basis import CanvasBasis, digest
@@ -46,8 +48,26 @@ def public_check_basis(basis: CanvasBasis) -> CanvasCheckBasis:
         'model_id': basis.card.model_id, 'parameters': parameters,
         'capability': basis.capability.model_dump() if basis.capability else None,
         'input': basis.compiled.model_dump(mode='json'),
+        'observed_model_inputs': basis.observed_model_inputs(),
     }
     return CanvasCheckBasis(**data, basis_hash=digest(data))
+
+
+def check_configuration(card: CheckCard, *, product: bool = False) -> CanvasCheckConfiguration:
+    """Freeze the public scope controls independently of the observation and model route."""
+    return CanvasCheckConfiguration(
+        categories=card.post_check_categories if product else card.enabled_categories,
+        disabled_items=[item for item in card.disabled_items if item.startswith('R') == product],
+        scope_notes={} if product else card.scope_notes,
+        auto_post_check=card.auto_post_check if product else None,
+    )
+
+
+def _rule_rechecks(report: CanvasCheckReportRead) -> list[str]:
+    """Known rule results can be recomputed without a worker task."""
+    concluded = {row.item_id for row in report.results}
+    return [item.id for item in report.items if item.id in concluded and not report.product
+            and item.category in (DURATION_CATEGORY, SOUND_CAPABILITY_CATEGORY)]
 
 
 def check_target(context: CanvasOutputContext, card_id: str) -> tuple[CheckCard, str | None]:
@@ -68,6 +88,7 @@ def changed_check_connections(previous: CanvasDocument, current: CanvasDocument)
 
 async def persist_check_report(db: AsyncSession, canvas_id: str, report: CanvasCheckReportRead, tasks: dict[str, str]):
     """Publish the fixed public report and its private task index in the admission transaction."""
+    report.recheck_item_ids = _rule_rechecks(report)
     stored = report.model_dump(mode='json')
     if tasks:
         stored['_tasks'] = tasks
@@ -172,7 +193,7 @@ class CanvasChecks:
                                        scope='item' if request.item_id is not None else 'all',
                                        basis=public, items=selected, omitted=omitted,
                                        results=[comparisons[item.id].evaluate() for item in selected if item.id in comparisons],
-                                       check_model_id=card.check_model_id,
+                                       check_model_id=card.check_model_id, configuration=check_configuration(card),
                                        enabled_item_ids=[item.id for item in items if item.enabled])
         tasks = {}
         if check_model is not None:
@@ -267,6 +288,7 @@ class CanvasChecks:
         reports = []
         for row in rows:
             report = CanvasCheckReportRead.model_validate(row.report)
+            report.recheck_item_ids = _rule_rechecks(report)
             for execution in report.executions:
                 task_id = row.report.get('_tasks', {}).get(execution.item_id)
                 fact = tasks.get((report.id, task_id))
@@ -280,5 +302,8 @@ class CanvasChecks:
                         result = results.get(execution.item_id) if isinstance(results, dict) else fact.result
                         if result:
                             report.results.append(CanvasCheckResult.model_validate(result))
+                            report.recheck_item_ids.append(execution.item_id)
+                        else:
+                            execution.status, execution.reason = 'failed', '检查模型未返回可解析的本项结论'
             reports.append(report)
         return reports
