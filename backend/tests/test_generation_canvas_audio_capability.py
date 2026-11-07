@@ -1,14 +1,14 @@
-"""原生声音能力及提示通过生成画布公开接口验收。"""
+"""模型声音能力与实际输入约束通过生成画布公开接口验收。"""
 import pytest
 from app.models.llm import Model, Provider
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_native_audio_declaration_and_connected_path_are_distinct(canvas_client, canvas_file_store):
+async def test_audio_declarations_do_not_open_unconnected_reference_input(canvas_client, canvas_file_store):
     async with canvas_file_store['sessions']() as db:
         db.add_all([
-            Provider(id='ark', name='volcengine', base_url='https://ark.example.test'),
+            Provider(id='ark', name='volcengine', base_url='https://ark.example.test', api_key='test-key'),
             Provider(id='vidu', name='vidu', base_url='https://vidu.example.test'),
         ])
         await db.flush()
@@ -19,11 +19,11 @@ async def test_native_audio_declaration_and_connected_path_are_distinct(canvas_c
         await db.commit()
     canvas = (await canvas_client.post('/canvases/p', json={'name': '原生声音能力'})).json()['data']
     base = f"/canvases/p/{canvas['id']}/models"
-    for model_id, declaration, connected, audio_switch in [
-        ('canvas-image', 'unsupported', False, 'unsupported'),
-        ('canvas-video', 'unknown', False, 'unknown'),
-        ('q3', 'supported', False, 'unknown'),
-        ('seedance', 'supported', True, 'supported'),
+    for model_id, declaration, connected, audio_switch, reference in [
+        ('canvas-image', 'unsupported', False, 'unsupported', 'unsupported'),
+        ('canvas-video', 'unknown', False, 'unknown', 'unknown'),
+        ('q3', 'supported', False, 'unknown', 'unknown'),
+        ('seedance', 'supported', True, 'supported', 'supported'),
     ]:
         response = await canvas_client.get(f'{base}/{model_id}/capability')
         assert response.status_code == 200, response.text
@@ -32,6 +32,39 @@ async def test_native_audio_declaration_and_connected_path_are_distinct(canvas_c
             'declaration': declaration, 'connected': connected,
         }
         assert capability['audio_switch'] == {'declaration': audio_switch, 'connected': False}
+        assert capability['audio_reference_input'] == {'declaration': reference, 'connected': False}
+        assert 'audio_reference' not in capability['input_ports']
+
+    upload = await canvas_client.post(
+        '/files/upload', files={'file': ('voice.mp3', b'local-audio', 'audio/mpeg')},
+        data={'project_id': 'p', 'usage_kind': 'generation_upload'},
+    )
+    assert upload.status_code == 201, upload.text
+    audio_file = upload.json()['data']['id']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    model = {'id': 'video', 'type': 'model.video', 'model_id': 'seedance',
+             'config': {'ratio': '16:9', 'seconds': 5},
+             'prompt': {'segments': [{'id': 'scene', 'kind': 'text', 'text': '远景'}]}}
+    doc['cards'] = [{'id': 'audio', 'type': 'content.audio', 'file_id': audio_file}, model]
+    saved = await canvas_client.put(url, json={'request_id': 'valid', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+
+    source = {'canvas_id': canvas['id'], 'card_id': 'audio', 'port_id': 'audio', 'position': 0}
+    model['input_bindings'] = [{'id': 'audio-ref', 'input_port': 'audio_reference', 'source': source}]
+    doc.update(edges=[{'id': 'audio-edge', 'source_card': 'audio', 'source_port': 'audio',
+                       'target_card': 'video', 'target_port': 'audio_reference'}],
+               input_order={'video': {'audio_reference': ['audio-edge']}})
+    invalid = await canvas_client.put(url, json={'request_id': 'bind', 'expected_revision': 1, 'document': doc})
+    assert invalid.status_code == 422, invalid.text
+    assert invalid.json()['detail']['blocks'] == ['save']
+    reopened = (await canvas_client.get(url)).json()['data']
+    assert reopened['revision'] == 1 and not reopened['document']['edges']
+    assert (await canvas_client.get(f'/files/{audio_file}/download')).headers['content-type'] == 'audio/mpeg'
+    preview = await canvas_client.post(url + '/precheck', json={'card_id': 'video'})
+    assert preview.status_code == 200, preview.text
+    result = preview.json()['data']
+    assert result['can_run'] and not result['input']['media'], result
 
 
 @pytest.mark.asyncio

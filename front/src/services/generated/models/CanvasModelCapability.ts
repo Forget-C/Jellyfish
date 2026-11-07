@@ -12,6 +12,7 @@ export type CanvasModelCapability = {
     input_ports: Array<string>;
     native_audio_output?: AudioCapability;
     audio_switch?: AudioCapability;
+    audio_reference_input?: AudioCapability;
     ratios?: Array<string>;
     resolution_profiles?: Record<string, Record<string, string>>;
     min_count?: number;

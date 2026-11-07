@@ -59,6 +59,7 @@ class VideoModelCapability:
     max_total_subject_videos: int | None = None
     native_audio_output: AudioCapability = field(default_factory=AudioCapability)
     audio_switch: AudioCapability = field(default_factory=AudioCapability)
+    audio_reference_input: AudioCapability = field(default_factory=AudioCapability)
 
 
 def register_video_model_capability(
