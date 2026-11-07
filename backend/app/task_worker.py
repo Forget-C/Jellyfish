@@ -380,13 +380,14 @@ class TaskWorker:
     async def _canvas_check(self, task: Task) -> None:
         """Execute one semantic item and publish only its validated observation."""
         import json
-        from app.services.generation_canvas.check_adoption import ADOPTION_INSTRUCTIONS, parse_observation
+        from app.services.generation_canvas.check_text import TEXT_CHECKS
         snapshot = task.input_snapshot
+        instructions, parse = TEXT_CHECKS[snapshot.get('check_category', 'P01')]
         observation = snapshot['observation']
-        messages = [SystemMessage(content=ADOPTION_INSTRUCTIONS),
+        messages = [SystemMessage(content=instructions),
                     HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
         reply = await self._frozen_text_model(task).ainvoke(messages)
-        result = parse_observation(snapshot['item_id'], observation, reply.content)
+        result = parse(snapshot['item_id'], observation, reply.content)
         if result is None:
             await self._fail(task.id, 'canvas_check_response_invalid', '检查模型返回无法解析')
             return

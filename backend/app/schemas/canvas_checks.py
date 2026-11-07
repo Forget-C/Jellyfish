@@ -69,6 +69,13 @@ class CanvasCheckRequest(BaseModel):
     item_id: str | None = Field(default=None, min_length=1, max_length=256)
 
 
+class CanvasCheckTextEvidence(BaseModel):
+    """Exact excerpt and location in a frozen check input."""
+    source: OutputIdentity
+    field_id: str
+    excerpt: str
+
+
 class CanvasCheckResult(BaseModel):
     """结论只覆盖这一项的已观测依据。"""
     item_id: str
@@ -76,6 +83,7 @@ class CanvasCheckResult(BaseModel):
     message: str
     boundary: str
     submitted_excerpt: str | None = None
+    text_evidence: list[CanvasCheckTextEvidence] = Field(default_factory=list)
 
 
 class CanvasCheckExecution(BaseModel):

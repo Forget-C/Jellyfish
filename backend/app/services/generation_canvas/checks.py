@@ -132,7 +132,7 @@ class CanvasChecks:
                     kind='canvas_check', project_id=self.project_id, target_type=CHECK_REPORT_TARGET, target_id=report.id,
                     title=f'{item.label} · {item.source.card_id}/{item.field_id}', provider_id=check_model.provider_id,
                     expected_target_version=canvas.revision, snapshot={
-                        'item_id': item.id, 'execution_config': check_model.model_dump(mode='json'),
+                        'item_id': item.id, 'check_category': item.category, 'execution_config': check_model.model_dump(mode='json'),
                         'observation': observations[item.id],
                     })
                 tasks[item.id] = task.id
