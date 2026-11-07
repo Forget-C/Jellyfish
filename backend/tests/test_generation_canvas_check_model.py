@@ -77,11 +77,19 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
     assert accepted['check_model_id'] == runtime.model_id
     assert len(accepted['results']) == 1
     assert {item['status'] for item in accepted['executions']} == {'queued'}
+    assert set(accepted['enabled_item_ids']) == {item['id'] for item in accepted['items']}
+    assert all(item['input_stamp'] for item in accepted['items'])
     assert not calls
 
     document = (await client.get(url)).json()['data']['document']
     document['cards'][0]['visible_result']['text'] = '已修改的内容'
     await save_canvas(client, url, document, 4)
+    latest = {item['id']: item for item in (await preview())['items']}
+    for item in accepted['items']:
+        if item['category'] == 'P06':
+            assert latest[item['id']]['input_stamp'] == item['input_stamp']
+        else:
+            assert latest[item['id']]['input_stamp'] != item['input_stamp']
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.name, model.params = 'changed-model', {'temperature': 0.9}

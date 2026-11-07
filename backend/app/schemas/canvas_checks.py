@@ -32,6 +32,7 @@ class CanvasCheckItem(BaseModel):
     reason: str | None = None
     scope_note: str | None = None
     scope_editable: bool = False
+    input_stamp: str | None = Field(default=None, description='本项实际核对的依据标记，用于与当前项目比较。')
 
 
 class CanvasCheckCategory(BaseModel):
@@ -96,3 +97,4 @@ class CanvasCheckReportRead(BaseModel):
     omitted: list[CanvasCheckOmission] = Field(default_factory=list)
     check_model_id: str | None = None
     executions: list[CanvasCheckExecution] = Field(default_factory=list)
+    enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')

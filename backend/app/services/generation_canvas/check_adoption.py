@@ -32,20 +32,23 @@ def adoption_checks(basis: CanvasBasis, card: CheckCard, unavailable: str | None
             item_id = f'{ADOPTION_CATEGORY}:{identity.card_id}:{field_id}{suffix}'
             if item_id in inputs:
                 continue
-            requirement = field.text.strip() or '明确没有'
-            item = CanvasCheckItem(id=item_id, category=ADOPTION_CATEGORY, label=ADOPTION_LABEL,
-                                   source=identity, field_id=field_id, requirement=requirement,
-                                   enabled=ADOPTION_CATEGORY in card.enabled_categories and item_id not in card.disabled_items,
-                                   availability='unavailable' if unavailable else 'ready', reason=unavailable,
-                                   scope_editable=True, scope_note=card.scope_notes.get(item_id))
-            items.append(item)
-            inputs[item_id] = {
-                'source_card_id': identity.card_id, 'field_id': field_id, 'name': name, 'text': requirement,
+            observation = {
+                'source_card_id': identity.card_id, 'field_id': field_id, 'name': name,
+                'text': field.text.strip() or '明确没有',
                 'state': STATE_LABELS[field.state], 'purpose': PURPOSE_LABELS[field.purpose],
-                'source_locator': field.source_locator or design.source_locator, 'scope': design.scope.model_dump(exclude_defaults=True),
-                'scope_note': item.scope_note,
+                'source_locator': field.source_locator or design.source_locator,
+                'scope': design.scope.model_dump(exclude_defaults=True),
+                'scope_note': card.scope_notes.get(item_id),
                 'material_uses': _material_uses(basis, design, field_id),
             }
+            inputs[item_id] = {'requirement': observation, 'submitted_text': basis.compiled.text}
+            item = CanvasCheckItem(id=item_id, category=ADOPTION_CATEGORY, label=ADOPTION_LABEL,
+                                   source=identity, field_id=field_id, requirement=observation['text'],
+                                   enabled=ADOPTION_CATEGORY in card.enabled_categories and item_id not in card.disabled_items,
+                                   availability='unavailable' if unavailable else 'ready', reason=unavailable,
+                                   scope_editable=True, scope_note=observation['scope_note'],
+                                   input_stamp=digest(inputs[item_id]) if not unavailable else None)
+            items.append(item)
     return items, inputs
 
 

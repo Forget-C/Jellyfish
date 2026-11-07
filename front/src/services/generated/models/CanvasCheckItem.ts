@@ -18,4 +18,8 @@ export type CanvasCheckItem = {
     reason?: (string | null);
     scope_note?: (string | null);
     scope_editable?: boolean;
+    /**
+     * 本项实际核对的依据标记，用于与当前项目比较。
+     */
+    input_stamp?: (string | null);
 };

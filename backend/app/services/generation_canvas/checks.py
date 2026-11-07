@@ -121,7 +121,8 @@ class CanvasChecks:
                                        scope='item' if request.item_id is not None else 'all',
                                        basis=public, items=selected, omitted=omitted,
                                        results=[comparisons[item.id].evaluate() for item in selected if item.id in comparisons],
-                                       check_model_id=card.check_model_id)
+                                       check_model_id=card.check_model_id,
+                                       enabled_item_ids=[item.id for item in items if item.enabled])
         tasks = {}
         if check_model is not None:
             for item in selected:
@@ -132,7 +133,7 @@ class CanvasChecks:
                     title=f'{item.label} · {item.source.card_id}/{item.field_id}', provider_id=check_model.provider_id,
                     expected_target_version=canvas.revision, snapshot={
                         'item_id': item.id, 'execution_config': check_model.model_dump(mode='json'),
-                        'observation': {'requirement': observations[item.id], 'submitted_text': basis.compiled.text},
+                        'observation': observations[item.id],
                     })
                 tasks[item.id] = task.id
                 report.executions.append(CanvasCheckExecution(item_id=item.id, status='queued'))
