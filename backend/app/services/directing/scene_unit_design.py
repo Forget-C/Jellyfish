@@ -1,6 +1,6 @@
 """六岗设计到单元执行方案的组织；提交与预览均不改写场次。"""
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC
 from uuid import uuid4
 
@@ -315,9 +315,26 @@ class SceneUnitDesignService(SceneDesignService):
         if not capability.allowed_ratios:
             raise ValueError('目标视频模型的画幅能力尚未核实')
         references = await ProductionService(self.db, self.project_id).reference_capabilities(model.id)
-        values = asdict(capability)
-        values['allowed_ratios'] = sorted(capability.allowed_ratios)
-        values['references'] = references.model_dump(mode='json')
+        # 保持历史单元建议可比较，只固定单元编排已有的视频能力字段。
+        size_mapping = capability.ratio_to_size_mapping
+        values = {
+            'supports_seed': capability.supports_seed,
+            'supports_watermark': capability.supports_watermark,
+            'allowed_ratios': sorted(capability.allowed_ratios),
+            'default_ratio': capability.default_ratio,
+            'ratio_to_size_mapping': dict(size_mapping) if size_mapping is not None else None,
+            'min_seconds': capability.min_seconds,
+            'max_seconds': capability.max_seconds,
+            'supports_subject_image_reference': capability.supports_subject_image_reference,
+            'supports_subject_video_reference': capability.supports_subject_video_reference,
+            'supports_subject_reference_with_frame_reference': capability.supports_subject_reference_with_frame_reference,
+            'max_subjects': capability.max_subjects,
+            'max_images_per_subject': capability.max_images_per_subject,
+            'max_videos_per_subject': capability.max_videos_per_subject,
+            'max_media_per_subject': capability.max_media_per_subject,
+            'max_total_subject_videos': capability.max_total_subject_videos,
+            'references': references.model_dump(mode='json'),
+        }
         return model, config.provider_key, values
 
     async def submit_unit_design(self, sequence_id, version_id, body: SceneUnitDesignRequest):
