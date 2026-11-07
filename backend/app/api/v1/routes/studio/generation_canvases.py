@@ -173,3 +173,19 @@ async def get_canvas_check_reports(project_id: str, canvas_id: str, card_id: str
                                    db: AsyncSession = Depends(get_db, scope='function')):
     """按原检查卡身份读取该项目画布内的报告。"""
     return success_response(await CanvasChecks(db, project_id).reports(canvas_id, card_id))
+
+
+@router.post('/{project_id}/{canvas_id}/checks/{card_id}/reports/{report_id}/cancel',
+             response_model=ApiResponse[CanvasCheckReportRead], operation_id='canvas_check_cancel')
+async def cancel_canvas_check(project_id: str, canvas_id: str, card_id: str, report_id: str,
+                              db: AsyncSession = Depends(get_db, scope='function')):
+    """请求停止该报告尚未完成的检查任务，并返回当前执行事实。"""
+    return success_response(await CanvasChecks(db, project_id).cancel(canvas_id, card_id, report_id))
+
+
+@router.get('/{project_id}/{canvas_id}/check-reports/archived', response_model=ApiResponse[list[CanvasCheckReportRead]],
+            operation_id='canvas_check_archived_reports')
+async def get_archived_canvas_check_reports(project_id: str, canvas_id: str,
+                                            db: AsyncSession = Depends(get_db, scope='function')):
+    """读取当前画布中已删检查卡留下的原报告。"""
+    return success_response(await CanvasChecks(db, project_id).archived_reports(canvas_id))

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import FrozenGenerationConfig
-from app.core.contracts.task import TaskStatus
+from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.generation_canvas import CanvasCheckReport, GenerationCanvas
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
@@ -184,13 +184,65 @@ class CanvasChecks:
         ).order_by(CanvasCheckReport.created_at.desc(), CanvasCheckReport.id.desc()))
         return await self._read_reports(list(rows))
 
+    async def archived_reports(self, canvas_id: str) -> list[CanvasCheckReportRead]:
+        """List reports whose original check card is absent from the saved canvas."""
+        canvas = await self.store.get(canvas_id)
+        document = CanvasDocument.model_validate(canvas.document)
+        live = [card.id for card in document.cards if isinstance(card, CheckCard)]
+        rows = await self.db.scalars(select(CanvasCheckReport).where(
+            CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id.not_in(live),
+        ).order_by(CanvasCheckReport.created_at.desc(), CanvasCheckReport.id.desc()))
+        return await self._read_reports(list(rows))
+
+    async def cancel_changed_targets(self, previous: CanvasDocument, current: CanvasDocument) -> None:
+        """Called during CAS save with the canvas locked; only original changed targets stop."""
+        before = {edge.target_card: edge.source_card for edge in previous.edges if edge.target_port == 'check_basis'}
+        after = {edge.target_card: edge.source_card for edge in current.edges if edge.target_port == 'check_basis'}
+        changed = {card_id: target for card_id, target in before.items() if after.get(card_id) != target}
+        if not changed:
+            return
+        rows = await self.db.scalars(select(CanvasCheckReport).where(
+            CanvasCheckReport.canvas_id == previous.id, CanvasCheckReport.check_card_id.in_(changed),
+        ))
+        related = [row for row in rows
+                   if row.report['basis']['target_card_id'] == changed[row.check_card_id]]
+        await self._cancel_tasks(related, '原检查目标已断开或变更')
+
+    async def cancel(self, canvas_id: str, card_id: str, report_id: str) -> CanvasCheckReportRead:
+        """Cancel unfinished tasks belonging to the original report only."""
+        await self.store.get(canvas_id)
+        row = await self.db.scalar(select(CanvasCheckReport).where(
+            CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id == card_id,
+            CanvasCheckReport.id == report_id,
+        ))
+        if row is None:
+            raise diagnostic('CHECK_REPORT_NOT_FOUND', '检查报告不存在', {'card_id': card_id}, status=404, blocks=[])
+        await self._cancel_tasks([row], '用户取消检查')
+        return (await self._read_reports([row]))[0]
+
+    async def _cancel_tasks(self, reports: list[CanvasCheckReport], reason: str) -> None:
+        """Request task cancellation in stable order, without acquiring generation locks."""
+        targets = {task_id: row.id for row in reports for task_id in row.report.get('_tasks', {}).values()}
+        if not targets:
+            return
+        tasks = await self.db.execute(select(Task.id, Task.target_id).where(
+            Task.id.in_(targets), Task.project_id == self.project_id, Task.kind == 'canvas_check',
+            Task.target_type == CHECK_REPORT_TARGET, Task.status.not_in(TERMINAL_TASK_STATUSES),
+        ).order_by(Task.id))
+        service = TaskService(self.db)
+        for task_id, report_id in tasks:
+            if targets[task_id] == report_id:
+                await service.request_cancel(task_id, reason=reason)
+
     async def _read_reports(self, rows: list[CanvasCheckReport]) -> list[CanvasCheckReportRead]:
         """Project task facts without a canvas lock or copying task-private snapshots."""
         task_ids = {task_id for row in rows for task_id in row.report.get('_tasks', {}).values()}
         tasks = {}
         if task_ids:
-            facts = await self.db.execute(select(Task.id, Task.target_id, Task.status, Task.result, Task.error_message)
-                .where(Task.id.in_(task_ids), Task.project_id == self.project_id, Task.target_type == CHECK_REPORT_TARGET))
+            facts = await self.db.execute(select(Task.id, Task.target_id, Task.status, Task.result, Task.error_message,
+                                                      Task.cancel_requested_at)
+                .where(Task.id.in_(task_ids), Task.project_id == self.project_id, Task.kind == 'canvas_check',
+                       Task.target_type == CHECK_REPORT_TARGET))
             tasks = {(fact.target_id, fact.id): fact for fact in facts}
         reports = []
         for row in rows:
@@ -202,6 +254,7 @@ class CanvasChecks:
                     execution.status, execution.reason = 'failed', '检查任务记录不可用'
                 else:
                     execution.status, execution.reason = TaskStatus(fact.status).value, fact.error_message
+                    execution.cancel_requested = fact.cancel_requested_at is not None
                     if fact.status == TaskStatus.succeeded:
                         report.results.append(CanvasCheckResult.model_validate(fact.result))
             reports.append(report)

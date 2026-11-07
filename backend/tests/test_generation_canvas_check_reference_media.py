@@ -84,9 +84,9 @@ async def test_p03_only_sends_relevant_adopted_image_and_records_observed_eviden
     item, = [item for item in current['items'] if item['category'] == 'P03']
     assert item['availability'] == 'ready' and item['source']['card_id'] == 'style'
     accepted = await run(runtime, current)
-    assert accepted['results'] == [] and accepted['executions'] == [
-        {'item_id': item['id'], 'status': 'queued', 'reason': None},
-    ]
+    assert accepted['results'] == []
+    execution, = accepted['executions']
+    assert execution['item_id'] == item['id'] and execution['status'] == 'queued'
 
     def provider(request):
         assert request.url.host == 'vision.test' and request.url.path.endswith('/chat/completions')

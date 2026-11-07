@@ -65,6 +65,7 @@ class CanvasStore:
             return receipt.response
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
+        from app.services.generation_canvas.checks import CanvasChecks
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
         prepared = await prepare_document(self.db, self.project_id, canvas, command.document)
@@ -75,6 +76,7 @@ class CanvasStore:
                 card_types=prepared.identities, detached_proofs=prepared.detached_proofs))
         if result.rowcount != 1:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
+        await CanvasChecks(self.db, self.project_id).cancel_changed_targets(prepared.previous_document, prepared.document)
         response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'revision': command.expected_revision + 1}
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()

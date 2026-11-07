@@ -90,6 +90,7 @@ class CanvasCheckExecution(BaseModel):
     """任务状态独立于观察结论；失败不会填入业务结果。"""
     item_id: str
     status: Literal['queued', 'running', 'succeeded', 'failed', 'cancelled']
+    cancel_requested: bool = False
     reason: str | None = None
 
 
