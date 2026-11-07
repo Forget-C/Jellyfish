@@ -1,4 +1,5 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
+import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -343,5 +344,63 @@ try {
   await smallMenu.waitFor({state:'hidden'})
   assert.equal(await small.locator('[data-card-id]').count(),countBeforeSpace+1,'narrow Space navigates both levels and creates one node')
   await touch.close()
+
+  const resultCanvas = await request('', { name: '复制关联结果' })
+  const path = '/' + resultCanvas.id
+  const sourceModel = { id: 'image-source', type: 'model.image', show_result_cards: true, model_id: 'canvas-image-model', prompt: { segments: [{ id: 'p', kind: 'text', text: '生成图片' }] }, config: { count: 3, target_ratio: '1:1', resolution_profile: 'standard' } }
+  const consumer = { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model' }
+  const incoming = { id: 'source-candidate', source_card: sourceModel.id, source_port: 'image', target_card: consumer.id, target_port: 'image' }
+  await request(path, { request_id: 'seed-results', expected_revision: 0, document: {
+    ...resultCanvas.document, cards: [sourceModel, consumer], edges: [incoming], input_order: { [consumer.id]: { image: [incoming.id] } },
+  } }, 'PUT')
+  const generate = async request_id => {
+    const { preview_token } = await request(path + '/precheck', { card_id: sourceModel.id })
+    await request(path + '/runs', { request_id, preview_token })
+  }
+  await generate('first-generation')
+  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${resultCanvas.id}`)
+  const linked = page.getByRole('article', { name: '图片生成结果 1', exact: true })
+  await linked.waitFor()
+  const details = await openCanvasCard(page, consumer.id)
+  await details.getByRole('button', { name: '采用 @图片1', exact: true }).click()
+  const savedStatus = page.getByRole('status', { name: '画布保存状态', exact: true }).filter({ hasText: '已保存' })
+  await savedStatus.waitFor()
+  await closeCanvasDetails(page)
+  const beforeCopy = (await request(path)).document
+  const capturedFile = (await request(path + '/runtime')).current_outputs[sourceModel.id][0].file_id
+  const previousPreview = await linked.getByRole('img', { name: '图片预览', exact: true }).getAttribute('src')
+  await linked.press('Shift+F10')
+  const copyResult = cardMenu.getByRole('menuitem', { name: '复制', exact: true })
+  await copyResult.waitFor()
+  assert.equal(await copyResult.isEnabled(), true, 'linked result supports ordinary card copy')
+  await copyResult.click()
+  await page.getByRole('status').filter({ hasText: '已复制，可在画布粘贴' }).waitFor()
+  assert.equal((await request(path)).document.cards.length, 2, 'copy alone creates no card')
+  await generate('second-generation')
+  await page.waitForFunction(previous => {
+    const current = document.querySelector('[aria-label="图片生成结果 1"] img')?.getAttribute('src')
+    return current && current !== previous
+  }, previousPreview)
+  await page.getByLabel('生成画布视口', { exact: true }).press(process.platform === 'darwin' ? 'Meta+v' : 'Control+v')
+  const independent = page.locator('[data-card-type="content.image"]')
+  await independent.waitFor()
+  await savedStatus.waitFor()
+  const afterCopy = (await request(path)).document
+  const resultCopy = afterCopy.cards.find(card => card.type === 'content.image')
+  assert.equal(resultCopy.file_id, capturedFile, 'paste uses the copied result even after regeneration')
+  assert.equal(resultCopy.origin, undefined)
+  assert.deepEqual(afterCopy.edges, beforeCopy.edges)
+  assert.deepEqual(afterCopy.cards.find(card => card.id === consumer.id).input_bindings, beforeCopy.cards.find(card => card.id === consumer.id).input_bindings)
+  const copyOutputs = (await request(`${path}/cards/${resultCopy.id}/outputs`)).outputs
+  assert.equal(copyOutputs[0].source.card_id, resultCopy.id)
+  assert.equal(copyOutputs[0].file_id, capturedFile)
+  const consumerInputs = (await request(`${path}/cards/${consumer.id}/compile`)).media
+  assert.equal(consumerInputs[0].source.card_id, sourceModel.id)
+  assert.notEqual(consumerInputs[0].file_id, capturedFile)
+  await page.reload()
+  await independent.waitFor()
+  await linked.waitFor()
+  assert.equal(await independent.getAttribute('data-card-id'), resultCopy.id)
+  assert.equal((await request(path + '/runtime')).runs.length, 2, 'copy and paste do not run the model')
   console.log('context creation, copy, paste, history, reload, reference protection, cover and batch download passed')
 } catch(error) { if(page) { await page.screenshot({path:join(output,'failure.png')});console.log((await page.locator('body').innerText()).slice(-6000)) } throw error } finally { await cleanup() }
