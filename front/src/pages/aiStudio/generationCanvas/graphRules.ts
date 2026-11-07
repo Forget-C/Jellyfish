@@ -1,4 +1,4 @@
-import type { CanvasCatalog, CanvasDocument, CanvasModelCapability } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, CanvasModelCapability, OutputIdentity } from '../../../services/generated'
 
 export type GenerationCard = NonNullable<CanvasDocument['cards']>[number]
 export type GenerationEdge = NonNullable<CanvasDocument['edges']>[number]
@@ -17,13 +17,13 @@ export function createGraphRules(catalog: CanvasCatalog) {
 function connectionReason(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability): string | undefined {
   const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
   if (!source || !target || !outputPorts(source).includes(edge.source_port) || !inputPorts(target).includes(edge.target_port)) return '连接端点不存在'
-  if (target.type?.startsWith('reference.') && edge.target_port === 'image_source' && source.type !== 'content.image') return '参考图仅支持图片内容卡，请先另存为图片内容卡'
-  if (target.type?.startsWith('reference.') && edge.target_port === 'name' && source.type !== 'content.' + target.type.split('.')[1]) return '名称候选必须来自同类型描述卡'
-  if (source.type === 'direction.criterion' && target.type?.startsWith('direction.') && edge.source_port === 'text') return '验收要求仅支持验收关联'
   if (source.id === target.id) return '卡片不能连接自身'
-  const output = cardDefinitions[source.type || '']?.outputs.find(port => port.id === edge.source_port)
-  const input = cardDefinitions[target.type || '']?.inputs.find(port => port.id === edge.target_port)
-  if (!output || !input?.accepts.includes(output.value_kind)) return '端口值种类不匹配，不提供隐式转换'
+  if (!connectionPolicy(document, edge)) {
+    if (target.type?.startsWith('reference.') && edge.target_port === 'image_source') return '参考图仅支持图片内容卡，请先另存为图片内容卡'
+    if (target.type?.startsWith('reference.') && edge.target_port === 'name') return '名称候选必须来自同类型描述卡'
+    if (source.type === 'direction.criterion' && target.type?.startsWith('direction.') && edge.source_port === 'text') return '验收要求仅支持验收关联'
+    return '端口值种类不匹配，不提供隐式转换'
+  }
   if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return '请先填写验收要求名称'
   if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return '所选模型未接入该输入用途'
   const edges = document.edges || []
@@ -45,6 +45,11 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
     const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
     return catalog.connection_policies.find(policy => policy.source_type === source?.type && policy.target_type === target?.type && policy.source_port === edge.source_port && policy.target_port === edge.target_port)
   }
+  /** Supported purposes come from the established source connection and current capability. */
+  const candidatePorts = (document: CanvasDocument, source: OutputIdentity, targetId: string, capability: CanvasModelCapability | undefined) =>
+    source.canvas_id === document.id && capability ? (document.edges || []).filter(edge =>
+      edge.source_card === source.card_id && edge.source_port === source.port_id && edge.target_card === targetId
+      && capability.input_ports.includes(edge.target_port) && connectionPolicy(document, edge)?.adoption_allowed).map(edge => edge.target_port) : []
   const isIndependentDesignEdge = (document: CanvasDocument, edge: GenerationEdge) => connectionPolicy(document, edge)?.connect === 'adopt_design'
 
 /** 每个接收端口独立排序；位置、分组和模型身份均不参与排序。 */
@@ -77,15 +82,20 @@ function cleanDirectDesignCandidates(document: CanvasDocument): CanvasDocument {
   return next
 }
 
-  return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions, connectionPolicy, isIndependentDesignEdge, connect, disconnect, cleanDirectDesignCandidates }
+  return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions, connectionPolicy, candidatePorts, isIndependentDesignEdge, connect, disconnect, cleanDirectDesignCandidates }
 }
 
-/** 设计来源在卡间共享一条来源连接，内部用途边保留原身份和独立顺序。 */
+/** 卡片之间共享一条来源连接，内部用途边保留原身份和独立顺序。 */
 export function sourceConnectionEdges(document: CanvasDocument, edge: GenerationEdge) {
-  return document.cards?.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))
-    ? (document.edges || []).filter(item => item.source_card === edge.source_card && item.target_card === edge.target_card) : [edge]
+  return (document.edges || []).filter(item => item.source_card === edge.source_card && item.target_card === edge.target_card)
 }
 
 export function visibleSourceEdges(document: CanvasDocument) {
-  return (document.edges || []).filter(edge => sourceConnectionEdges(document, edge)[0]?.id === edge.id)
+  const seen = new Set<string>()
+  return (document.edges || []).filter(edge => {
+    const key = JSON.stringify([edge.source_card, edge.target_card])
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }

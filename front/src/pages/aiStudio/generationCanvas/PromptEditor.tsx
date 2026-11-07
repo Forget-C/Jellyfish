@@ -1,3 +1,4 @@
+import { promptInputPort } from './inputBindings'
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import type { Ref } from 'react'
 import { FileTextOutlined, PictureOutlined } from '@ant-design/icons'
@@ -184,7 +185,10 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         // 全角限定括号属于名称标签语法；即使当前候选中没有该名称，也不解释其编号前缀。
         const position = offset + match.index!
         if (textRun[position + match[0].length] === '（' || nameRanges.some(([from, to]) => position >= from && position < to)) continue
-        const candidate = currentCandidates.find(item => item.token === match[0] && item.available && !item.disabledReason)
+        const command = card.type === 'model.video' ? textRun.slice(0, position).match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:[ \t]+"[^"]*")?[ \t]*$/)?.[1] : undefined
+        if (command && !finalize) continue
+        const candidate = currentCandidates.find(item => item.token === match[0] && item.available &&
+          (command ? item.inputPorts?.includes(promptInputPort(card, item.source, command)) : !item.disabledReason))
         if (!candidate) continue
         if (match.index! > start) segments.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start, match.index) })
         segments.push({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source }); start = match.index! + match[0].length; changed = true
@@ -283,7 +287,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       <strong>/{instruction.command}</strong>
       {instruction.command === '主体参考' && <Input disabled={disabled} aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
       <Select<string[]> disabled={disabled} aria-label={`指令引用 ${instruction.command}`} mode="multiple" value={(instruction.references || []).map(reference => sourceKey(reference.source))}
-        options={candidates.filter(candidate => candidate.available).map(candidate => ({ value: sourceKey(candidate.source), label: candidate.displayLabel || candidate.token }))}
+        options={candidates.filter(candidate => candidate.available && (!candidate.inputPorts || candidate.inputPorts.includes(promptInputPort(card, candidate.source, instruction.command)))).map(candidate => ({ value: sourceKey(candidate.source), label: candidate.displayLabel || candidate.token }))}
         onChange={keys => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, references: keys.map(key => instruction.references?.find(reference => sourceKey(reference.source) === key) || { id: crypto.randomUUID(), kind: 'reference', source: candidates.find(candidate => sourceKey(candidate.source) === key)!.source }) } : segment) }, true)} />
       <Button disabled={disabled} size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>删除指令</Button>
       {!instruction.references?.length && <small role="alert">指令缺少引用，可继续编辑保存</small>}
@@ -359,7 +363,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           range.insertNode(fragment); publish(read()); if (!segments) confirm()
         }
       }} />
-    {(!imageMentions || allReferences) && (value.segments || []).filter(segment => segment.kind === 'text' && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
+    {(value.segments || []).filter(segment => segment.kind === 'text' && (!imageMentions || allReferences || segment.text?.includes('〔引用失效：')) && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
     {referencesIn(value).map(segment => referenceIssue(document, card, segment.source, candidates) && <small role="alert" key={segment.id} data-diagnostic-segment={segment.id}>{label(segment)}：{referenceIssue(document, card, segment.source, candidates)}</small>)}
   </>
 }

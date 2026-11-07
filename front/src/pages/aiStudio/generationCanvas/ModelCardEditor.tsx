@@ -11,7 +11,7 @@ import { PhotographyInputScope } from './PhotographyInputScope'
 import { NamedImageSummary } from './NamedImageSummary'
 import { VideoInputBindings } from './VideoInputBindings'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor'
-import { editorPrompt, withEditorPrompt, withoutInputBinding } from './inputBindings'
+import { editorPrompt, promptInputPort, withEditorPrompt, withoutInputBinding } from './inputBindings'
 import { useCardCandidates } from './useCardCandidates'
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
@@ -33,7 +33,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
-  const { isIndependentDesignEdge, cardTitles, cardDefinitions } = useGraphRules()
+  const { isIndependentDesignEdge, cardTitles, cardDefinitions, candidatePorts } = useGraphRules()
   const adopted = card.input_bindings || []
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs
   const category = card.type?.split('.')[1]
@@ -76,12 +76,13 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     const named = output.payload?.kind === 'named_image' && 'objects' in output.payload ? output.payload.objects?.map(object => object.name).join('、') : ''
     return name || named || cardTitles[source?.type || ''] || output.token || '来源'
   }
+  const supportedPorts = (output: CanvasResolvedOutput) => candidatePorts(document, output.source, card.id, capability)
   const candidateIssue = (output: CanvasResolvedOutput) => {
     if (output.source.canvas_id !== document.id) return '来源属于其他画布'
     const source = document.cards?.find(item => item.id === output.source.card_id)
     if (!source || !(document.edges || []).some(edge => edge.target_card === card.id && edge.source_card === source.id && edge.source_port === output.source.port_id)) return '来源未连接'
     if (output.available === false) return '来源输出缺失'
-    if (!capability?.input_ports?.includes(output.modality)) return '当前模型不支持此输入'
+    if (!supportedPorts(output).includes(promptInputPort(card, output.source))) return '当前模型不支持直接引用此输入'
     if ('uploading' in source && source.uploading) return '上传中'
     if ('file_id' in source && source.file_id !== output.file_id) return '正在更新候选'
     if (output.basis_current === false) return '来源依据已变，需重新生成'
@@ -145,7 +146,8 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const entries: AssociationEntry[] = associationSources(document, card.id, sources).map(entry => {
     const selected = entry.outputs.some(output => bindings.some(binding => sourceKey(binding.source) === sourceKey(output.source)))
     const name = labelFor(entry.outputs[0])
-    const issue = [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
+    const empty = !selected && entry.outputs.every(output => output.available === false) && document.cards?.find(source => source.id === entry.outputs[0].source.card_id)
+    const issue = empty ? empty.type?.startsWith('model.') ? '尚无生成结果' : '暂无可用内容' : [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
     return { ...entry, label: entry.kind === 'design' ? name : displayLabel(entry.outputs[0]), description: `${name} ${displayLabel(entry.outputs[0])} · ${selected ? '使用中' : '候选'}`, used: selected, issue }
   })
   const status = <><details ref={management} className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用">关联 {entries.length} · 已采用 {adopted.length}{resolved.compiled?.media?.some(item => item.design_sources?.length) && ` · 携带 ${resolved.compiled.media.filter(item => item.design_sources?.length).length}`}</summary>
@@ -159,7 +161,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
     {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
-    {card.type === 'model.video' && <VideoInputBindings labels={labels} card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
+    {card.type === 'model.video' && <VideoInputBindings document={document} labels={labels} card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
     <details className="generation-material-results"><summary>运行状态与正式输出</summary>
 
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>
@@ -182,7 +184,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     const keys = new Set(entry.outputs.map(output => sourceKey(output.source)))
     return <>
       {entry.outputs.map(output => directInput(output, context))}
-      {card.type === 'model.video' && <VideoInputBindings labels={labels} card={card as VideoModelCard} candidates={entry.outputs} sourceOnly={keys} onLocate={() => context.close(false)} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
+      {card.type === 'model.video' && <VideoInputBindings document={document} labels={labels} card={card as VideoModelCard} candidates={entry.outputs} sourceOnly={keys} onLocate={() => context.close(false)} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
       {card.type !== 'model.video' && entry.outputs.map(output => <WorkbenchButton key={sourceKey(output.source)} disabled={disabled || resolved.loading || !!candidateIssue(output)} onClick={() => {
         context.close(false)
         promptEditor.current?.insertReference(output.source)
@@ -203,7 +205,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
 
     <div className="generation-material-prompt">
       {resolved.error && <Alert type="warning" message={resolved.error} />}
-      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)), disabledReason: candidateIssue(item) } : {}) }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
+      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, inputPorts: supportedPorts(item), disabledReason: candidateIssue(item), ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)) } : {}) }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </div>
     {(disabled || busy || runDisabled) && <small role="status">{busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
   </CardComposer>

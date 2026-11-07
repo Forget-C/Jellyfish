@@ -50,7 +50,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   for (const binding of bindings) if (!sources.some(item => sourceKey(item.source) === sourceKey(binding.source))) sources.push({ source: binding.source, modality: 'text', available: false })
   const composition = card.type === 'direction.composition' ? card as CompositionCard : undefined
   if (composition?.frame_target && !sources.some(item => item.source.card_id === composition!.frame_target!.card_id)) sources.push({ source: { canvas_id: document.id, card_id: composition!.frame_target.card_id, port_id: 'text', position: 0 }, modality: 'text', available: false })
-  if (['direction.anchor', 'direction.dialogue', 'direction.sound'].includes(card.type || '') && 'examples' in card) for (const example of card.examples || []) if (!sources.some(item => sourceKey(item.source) === sourceKey(example.source))) sources.push({ source: example.source, file_id: example.file_id, modality: example.source.port_id === 'video' ? 'video' : example.source.port_id === 'audio' ? 'audio' : 'image', available: false })
+  if ('examples' in card) for (const example of card.examples || []) if (!sources.some(item => sourceKey(item.source) === sourceKey(example.source))) sources.push({ source: example.source, file_id: example.file_id, modality: example.source.port_id === 'video' ? 'video' : example.source.port_id === 'audio' ? 'audio' : 'image', available: false })
   sources = includeConnectedSources(document, card.id, sources)
   const labels = referenceLabels(document, sources, card.id, isFlatDesign(card))
   const labelFor = (item: CanvasResolvedOutput) => item.token ? labels.get(sourceKey(item.source)) || item.token : cardDefinitions[document.cards?.find(source => source.id === item.source.card_id)?.type || '']?.title || '@缺失来源'
@@ -81,7 +81,8 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     const example = 'examples' in card && card.examples?.some(value => entry.outputs.some(output => sourceKey(output.source) === sourceKey(value.source)))
     const target = composition?.frame_target?.card_id === source?.id
     const inUse = !!example || !!target || entry.outputs.some(output => used.has(sourceKey(output.source)))
-    const issue = [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
+    const empty = source && !inUse && entry.outputs.every(output => output.available === false)
+    const issue = empty ? source.type?.startsWith('model.') ? '尚无生成结果' : '暂无可用内容' : [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
     return { ...entry, label: source && 'name' in source && source.name || (entry.kind === 'design' ? cardDefinitions[source?.type || '']?.title : undefined) || labelFor(entry.outputs[0]),
       description: `候选 ${entry.kind === 'design' ? `${cardDefinitions[source?.type || '']?.title || ''} ${name}`.trim() : name} · ${usages.length ? usages.join('；') : inUse ? '使用中' : '候选'}`,
       used: inUse, issue,
@@ -96,7 +97,8 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
       const anchorMedia = card.type === 'direction.anchor' && ['image', 'video'].includes(item.modality)
       const soundMedia = (card.type === 'direction.dialogue' && ['audio', 'video'].includes(item.modality) || card.type === 'direction.sound' && item.modality === 'audio')
       const connected = !!document.edges?.some(edge => edge.target_card === card.id && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
-      const localExample = 'examples' in card && card.examples?.some(example => sourceKey(example.source) === key)
+      const localExample = 'examples' in card ? card.examples?.find(example => sourceKey(example.source) === key) : undefined
+      const exampleConnected = document.edges?.some(edge => edge.target_card === card.id && edge.target_port === item.source.port_id + '_example' && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
       const movement = source?.type === 'direction.movement' ? source as MovementCard : undefined
       const frameCandidate = card.type === 'direction.composition' && (!!movement || composition!.frame_target?.card_id === item.source.card_id)
       const target = frameCandidate && composition!.frame_target?.card_id === item.source.card_id ? composition!.frame_target : undefined
@@ -117,6 +119,12 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
           : item.file_id && item.modality !== 'text' ? <MediaPreview fileId={item.file_id} type={item.modality} />
           : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label="来源内容" lines={6} />}
         {onChange && <>
+          {!anchorMedia && !soundMedia && 'examples' in card && (exampleConnected || localExample) && <WorkbenchButton
+            disabled={disabled || !localExample && (!item.available || !item.file_id)}
+            onClick={() => {
+              if (localExample) onChange({ ...card, examples: card.examples?.filter(example => example.id !== localExample.id) } as GenerationCard)
+              else if (item.file_id) onChange({ ...card, examples: [...(card.examples || []), { id: crypto.randomUUID(), source: item.source, file_id: item.file_id }] } as GenerationCard)
+            }}>{localExample ? '取消本地参考' : '设为本地参考'}</WorkbenchButton>}
           <DesignCandidateRelations card={card} document={document} item={item} disabled={disabled} onChange={onChange} />
           {['direction.camera', 'direction.lighting', 'direction.focus', 'direction.movement', 'direction.composition'].includes(card.type || '') && <VisualDesignRelations card={card as CameraCard | LightingCard | FocusCard | MovementCard | CompositionCard} document={document} item={item} disabled={disabled} onChange={onChange} />}
           {frameCandidate ? <CompositionFrameCandidate card={composition!} movement={movement} sourceId={item.source.card_id} disabled={disabled} onChange={onChange} onLocate={(id, field) => { close(false); onLocateDesign?.(id, field) }} reference={reference} /> : reference}

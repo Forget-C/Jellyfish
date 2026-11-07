@@ -8,6 +8,16 @@ export type EditorPromptDocument = { segments?: ((PromptText & { literal?: boole
 const key = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.object_id || source.position])
 const commandPorts: Record<string, string> = { 首帧参考: 'first_frame', 尾帧参考: 'last_frame', 关键帧参考: 'key_frame', 主体参考: 'subject_image' }
 
+/** Default body input and explicit commands resolve the same receiving purpose. */
+export function promptInputPort(card: GenerationCard, source: OutputIdentity, command?: string) {
+  const port = command ? commandPorts[command] || source.port_id : source.port_id
+  if (card.type !== 'model.video') return port
+  if (port === 'image') return 'subject_image'
+  if (port === 'video' || port === 'subject_image' && source.port_id === 'video') return 'subject_video'
+  return port
+}
+
+
 export function editorPrompt(card: GenerationCard): EditorPromptDocument {
   if (!('prompt' in card)) return { segments: [] }
   const bindings = new Map((card.input_bindings || []).map(binding => [binding.id, binding]))
@@ -28,9 +38,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
   const bindings: InputBinding[] = (card.input_bindings || []).filter(binding => !mentioned.has(binding.id) || binding.prompt_owned === false)
     .map(binding => !mentioned.has(binding.id) ? { ...binding, prompt_owned: binding.prompt_owned ?? false } : binding)
   const bind = (reference: EditorPromptReference, command?: string, subject_name?: string): PromptReference => {
-    let input_port = command ? commandPorts[command] || reference.source.port_id : reference.source.port_id
-    if (card.type === 'model.video' && ['image', 'video'].includes(input_port)) input_port = 'subject_' + input_port
-    if (input_port === 'subject_image' && reference.source.port_id === 'video') input_port = 'subject_video'
+    const input_port = promptInputPort(card, reference.source, command)
     let binding = bindings.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
     if (!binding) {
       const existing = card.input_bindings?.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))

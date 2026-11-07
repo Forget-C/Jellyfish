@@ -33,7 +33,9 @@ async def test_image_model_receives_only_design_referenced_image_without_direct_
     assert '人物参考：image 1' in compiled['text']
     assert compiled['text'].index('导演设计 · 主要依据') < compiled['text'].index('模型正文 · 补充说明') < compiled['text'].index('低优先补充')
     assert 'DESIGN_MEDIA_CARRY_NOT_READY' not in {issue['code'] for issue in compiled['diagnostics']}
-    assert (await client.get(url)).json()['data']['document']['edges'] == doc['edges']
+    saved = (await client.get(url)).json()['data']['document']['edges']
+    assert {(edge['source_card'], edge['target_card']) for edge in saved} == {('image', 'style'), ('style', 'model')}
+    assert all(edge in saved for edge in doc['edges'])
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ SINGLE_SOURCE_PORTS = {
     'blocking': ('space', 'participant', 'area_anchor', 'change_event', 'trigger_event'),
     'activity': ('space', 'participant', 'area_anchor', 'change_event', 'trigger_event'),
     'space_rule': ('space', 'participant', 'related_event'), 'continuity': ('space', 'participant', 'related_event'),
+    'model.video': ('first_frame', 'last_frame'),
     'dialogue': ('speaker',), 'camera': ('shot',), 'lighting': ('shot',), 'focus': ('shot',), 'movement': ('shot',), 'composition': ('shot',),
 }
 
@@ -69,3 +70,10 @@ def connection_policy(edge, cards):
     """未知或不兼容的端点没有策略，由图校验报告非法连接。"""
     source, target = cards.get(edge.source_card), cards.get(edge.target_card)
     return _policies().get((source.type, edge.source_port, target.type, edge.target_port)) if source and target else None
+
+
+@lru_cache(maxsize=None)
+def source_connection_policies(source_type, target_type):
+    """All static purposes of one source connection, in catalog order."""
+    return tuple(rule for (source, _, target, _), rule in _policies().items()
+                 if source == source_type and target == target_type)

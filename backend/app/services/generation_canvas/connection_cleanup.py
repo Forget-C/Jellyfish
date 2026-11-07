@@ -2,6 +2,7 @@
 from copy import deepcopy
 
 from app.services.generation_canvas.catalog import canvas_catalog
+from app.services.generation_canvas.connection_policy import source_connection_policies
 
 
 def clean_connection_document(original):
@@ -14,7 +15,7 @@ def clean_connection_document(original):
 
     def policy(source, target, port):
         origin = cards.get(source.get('card_id'), {})
-        if source.get('canvas_id') != document['id']:
+        if source.get('canvas_id') != document['id'] or source.get('card_id') == target['id']:
             return None
         rule = policies.get((origin.get('type'), source.get('port_id'), target.get('type'), port))
         if target.get('type', '').startswith('reference.'):
@@ -50,19 +51,30 @@ def clean_connection_document(original):
         definition = definitions.get(card.get('type'))
         singles = {p.id for p in definition.inputs if p.max_sources == 1} if definition else set()
         bindings = card.get('input_bindings', [])
-        conflicts = {port for port in singles if len({b['source'].get('object_id') or (b['source'].get('card_id'), b['source'].get('position', 0)) for b in bindings if b['input_port'] == port}) > 1}
-        removed = {b['id'] for b in bindings if b['input_port'] in conflicts or not adopted_policy(b['source'], card, b['input_port'])}
+        valid = [b for b in bindings if adopted_policy(b['source'], card, b['input_port'])]
+        conflicts = {port for port in singles if len({identity_key(b['source']) for b in valid if b['input_port'] == port}) > 1}
+        kept = {}
+        remapped = {}
+        frames = {item['binding_id']: item.get('state_id') for item in card.get('frame_targets', [])}
+        for binding in valid:
+            if binding['input_port'] in conflicts:
+                continue
+            key = (binding['input_port'], identity_key(binding['source']), binding.get('subject_name') or '', frames.get(binding['id']))
+            if key not in kept:
+                kept[key] = binding
+            else:
+                canonical = kept[key]
+                remapped[binding['id']] = canonical['id']
+                if binding.get('prompt_owned') is False:
+                    canonical['prompt_owned'] = False
+        retained_ids = {binding['id'] for binding in kept.values()}
+        removed = {binding['id']: binding for binding in bindings if binding['id'] not in retained_ids and binding['id'] not in remapped}
         if 'input_bindings' in card:
-            card['input_bindings'] = [b for b in bindings if b['id'] not in removed]
-        if removed:
-            if 'prompt' in card:
-                segments = card['prompt'].get('segments', [])
-                card['prompt']['segments'] = [s for s in segments if s.get('kind') != 'reference' or s.get('binding_id') not in removed]
-                for segment in card['prompt']['segments']:
-                    if segment.get('kind') == 'instruction':
-                        segment['references'] = [ref for ref in segment.get('references', []) if ref.get('binding_id') not in removed]
-            if 'frame_targets' in card:
-                card['frame_targets'] = [item for item in card['frame_targets'] if item['binding_id'] not in removed]
+            card['input_bindings'] = list(kept.values())
+        if (removed or remapped) and 'prompt' in card:
+            _repair_prompt(card['prompt'], removed, remapped)
+        if 'frame_targets' in card and (removed or remapped):
+            card['frame_targets'] = [item for item in card['frame_targets'] if item['binding_id'] in retained_ids]
         for binding in card.get('input_bindings', []):
             add(binding['source'], card, binding['input_port'])
             if policy(binding['source'], card, binding['input_port']).connect == 'adopt_design':
@@ -104,22 +116,20 @@ def clean_connection_document(original):
                         source = segment.get('source')
                         if segment.get('kind') != 'reference' or not source:
                             segments.append(segment)
-                        elif adopted_policy(source, card, source.get('port_id')):
+                        else:
                             segments.append(segment)
-                            add(source, card, source['port_id'])
+                            if adopted_policy(source, card, source.get('port_id')):
+                                add(source, card, source['port_id'])
                     field_document['segments'] = segments
                 for key, item in value.items():
                     if key != 'document':
                         fields(item)
         fields(card)
-    for edge in list(edges):
-        source, target = cards[edge['source_card']], cards[edge['target_card']]
-        if not source.get('type', '').startswith('direction.'):
-            continue
-        options = [rule for rule in policies.values() if rule.source_type == source['type'] and rule.target_type == target['type']]
-        if len(options) > 1:
-            for rule in options:
-                add(dict(canvas_id=document['id'], card_id=source['id'], port_id=rule.source_port), target, rule.target_port)
+    pairs = dict.fromkeys((edge['source_card'], edge['target_card']) for edge in edges)
+    for source_id, target_id in pairs:
+        source, target = cards[source_id], cards[target_id]
+        for rule in source_connection_policies(source['type'], target['type']):
+            add(dict(canvas_id=document['id'], card_id=source_id, port_id=rule.source_port), target, rule.target_port)
     retained = []
     for edge in edges:
         card = cards[edge['target_card']]
@@ -128,13 +138,47 @@ def clean_connection_document(original):
         if rule.connect == 'candidate' or adopted:
             retained.append(edge)
     document['edges'] = retained
-    ids = {edge['id'] for edge in retained}
-    order = document.setdefault('input_order', {})
-    for ports in order.values():
-        for port, values in ports.items():
-            ports[port] = [value for value in values if value in ids]
+    endpoints_by_id = {edge['id']: (edge['target_card'], edge['target_port']) for edge in retained}
+    order = {}
+    for target_id, ports in document.get('input_order', {}).items():
+        definition = definitions.get(cards.get(target_id, {}).get('type'))
+        if not definition:
+            continue
+        inputs = {port.id for port in definition.inputs}
+        order[target_id] = {port: [value for value in dict.fromkeys(values) if endpoints_by_id.get(value) == (target_id, port)]
+                            for port, values in ports.items() if port in inputs}
+    document['input_order'] = order
     for edge in retained:
         values = order.setdefault(edge['target_card'], {}).setdefault(edge['target_port'], [])
         if edge['id'] not in values:
             values.append(edge['id'])
     return document
+
+
+def identity_key(source):
+    """Stable output identity; position is secondary to a typed object identity."""
+    return (source.get('canvas_id'), source.get('card_id'), source.get('port_id'), source.get('object_id') or source.get('position', 0))
+
+
+def _repair_prompt(prompt, removed, remapped):
+    """Keep an unconfirmed token for each lost reference so preflight still flags it."""
+    def fallback(reference):
+        source = removed[reference['binding_id']]['source']
+        label = {'image': '图片', 'video': '视频', 'audio': '音频'}.get(source.get('port_id'), '文本')
+        return dict(id=reference['id'], kind='text', text=f"@{label}〔引用失效：{source.get('card_id')}〕")
+
+    def redirect(reference):
+        identifier = reference.get('binding_id')
+        return {**reference, 'binding_id': remapped[identifier]} if identifier in remapped else reference
+
+    segments = []
+    for segment in prompt.get('segments', []):
+        if segment.get('kind') == 'reference':
+            segments.append(fallback(segment) if segment.get('binding_id') in removed else redirect(segment))
+        elif segment.get('kind') == 'instruction':
+            refs = segment.get('references', [])
+            segments.append({**segment, 'references': [redirect(ref) for ref in refs if ref.get('binding_id') not in removed]})
+            segments.extend(fallback(ref) for ref in refs if ref.get('binding_id') in removed)
+        else:
+            segments.append(segment)
+    prompt['segments'] = segments

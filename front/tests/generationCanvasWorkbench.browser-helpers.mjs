@@ -275,13 +275,12 @@ export async function selectReferenceName(page, name) {
   await field.fill(name); await field.press('Enter')
 }
 /** 参考卡候选关系通过已有画布连线交互建立。 */
-export async function connectCanvasCards(page, source, target, port) {
+export async function connectCanvasCards(page, source, target) {
   await closeCanvasDetails(page)
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   await openCardMenu(page, source)
   await page.locator(`[data-card-id="${source}"]`).getByRole('button', { name: '连接到…', exact: true }).press('Enter')
   await page.locator(`[data-card-id="${target}"]`).press('Enter')
-  if (await page.getByRole('menu', { name: '选择连接用途', exact: true }).count()) await page.getByRole('menuitem').filter({ hasText: `作为${port}候选` }).click()
 }
 export async function selectCanvasReferenceImage(page, label) {
   const editor = page.locator('.wb-details:visible')

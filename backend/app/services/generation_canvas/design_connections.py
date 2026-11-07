@@ -3,24 +3,21 @@ from app.core.contracts.generation_canvas import InputBinding, OutputIdentity
 from app.services.generation_canvas.output_resolution import prompt_references
 
 
-def expand_design_source_connections(document, previous):
-    """一对设计来源卡保留全部兼容用途候选；旧边身份和各用途顺序不变。"""
+def expand_source_connections(document, previous):
+    """一对来源与接收卡保留全部兼容用途候选；旧边身份和各用途顺序不变。"""
     from uuid import uuid4
     from app.schemas.generation_canvas import GenerationCanvasEdge
-    from app.services.generation_canvas.catalog import ports_compatible
+    from app.services.generation_canvas.connection_policy import source_connection_policies
     cards = {card.id: card for card in document.cards}
     endpoints = {(edge.source_card, edge.source_port, edge.target_card, edge.target_port) for edge in document.edges}
     old = {(edge.source_card, edge.source_port, edge.target_card, edge.target_port): edge for edge in previous.edges}
     pairs = list(dict.fromkeys((edge.source_card, edge.target_card) for edge in document.edges))
     for source_id, target_id in pairs:
         source, target = cards.get(source_id), cards.get(target_id)
-        if not source or not target or not source.type.startswith('direction.'):
+        if not source or not target:
             continue
-        options = [(output, input_port) for output in source.output_ports for input_port in target.input_ports
-                   if ports_compatible(output, target.type, input_port, source.type)]
-        if len(options) < 2:
-            continue
-        for output, input_port in options:
+        for rule in source_connection_policies(source.type, target.type):
+            output, input_port = rule.source_port, rule.target_port
             endpoint = (source_id, output, target_id, input_port)
             if endpoint in endpoints:
                 continue

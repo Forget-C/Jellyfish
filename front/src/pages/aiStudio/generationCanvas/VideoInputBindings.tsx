@@ -2,17 +2,17 @@ import { InputBindingReferences } from './InputBindingReferences'
 import { NamedImageSummary } from './NamedImageSummary'
 import { useState } from 'react'
 import { Input, Space } from 'antd'
-import type { CanvasModelCapability, CanvasResolvedOutput, InputBinding, VideoModelCard } from '../../../services/generated'
+import type { CanvasDocument, CanvasModelCapability, CanvasResolvedOutput, InputBinding, VideoModelCard } from '../../../services/generated'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
-import { editorPrompt, withoutInputBinding } from './inputBindings'
-import { sourceKey, referencesIn } from './promptRules'
+import { bindingReferences, withoutInputBinding } from './inputBindings'
+import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 
 /** 直接候选只在明确选择用途和主体后采用；所有实际顺序及分组保存在绑定中。 */
-export function VideoInputBindings({ card, candidates, labels, capability, loading, disabled, onChange, sourceOnly, onLocate }: {
-  sourceOnly?: Set<string>; onLocate?: () => void; card: VideoModelCard; candidates: CanvasResolvedOutput[]; labels: Map<string, string>; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
+export function VideoInputBindings({ document, card, candidates, labels, capability, loading, disabled, onChange, sourceOnly, onLocate }: {
+  document: CanvasDocument; sourceOnly?: Set<string>; onLocate?: () => void; card: VideoModelCard; candidates: CanvasResolvedOutput[]; labels: Map<string, string>; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
 }) {
-  const { portLabels } = useGraphRules()
+  const { portLabels, cardDefinitions, candidatePorts } = useGraphRules()
   const [names, setNames] = useState<Record<string, string>>({})
   const bindings = card.input_bindings || []
   const change = (input_bindings: InputBinding[]) => onChange({ ...card, input_bindings })
@@ -24,8 +24,7 @@ export function VideoInputBindings({ card, candidates, labels, capability, loadi
     {candidates.map(output => {
       const key = sourceKey(output.source)
       const label = labels.get(key) || output.token
-      const ports = output.modality === 'text' ? ['text'] : output.modality === 'image' ? ['first_frame', 'last_frame', 'key_frame', 'subject_image'] : output.modality === 'video' ? ['subject_video'] : []
-      const supported = ports.filter(port => capability?.input_ports.includes(port))
+      const supported = candidatePorts(document, output.source, card.id, capability)
       return <div key={key}>
         <strong>{label} · {output.available ? '候选' : '来源输出缺失'}</strong>
         <NamedImageSummary output={output} displayLabel={label} />
@@ -34,8 +33,13 @@ export function VideoInputBindings({ card, candidates, labels, capability, loadi
         <Space wrap>{supported.map(port => {
           const subject_name = port.startsWith('subject_') ? (names[key] || '').trim() : undefined
           const selected = bindings.some(binding => sourceKey(binding.source) === key && binding.input_port === port && (binding.subject_name || '') === (subject_name || ''))
-          return <WorkbenchButton key={port} size="small" disabled={disabled || loading || !output.available || selected || port.startsWith('subject_') && !subject_name}
-            onClick={() => change([...bindings, { id: crypto.randomUUID(), prompt_owned: false, source: output.source, input_port: port, subject_name }])}>采用 {label} 为{portLabels[port]}</WorkbenchButton>
+          const single = cardDefinitions[card.type || '']?.inputs.some(input => input.id === port && input.max_sources === 1)
+          const prior = single ? bindings.filter(binding => binding.input_port === port) : []
+          const protectedBinding = prior.find(binding => bindingReferences(card, binding.id).length)
+          return <div key={port}><WorkbenchButton size="small" disabled={disabled || loading || !output.available || selected || !!protectedBinding || port.startsWith('subject_') && !subject_name}
+            onClick={() => change([...bindings.filter(binding => !prior.includes(binding)), { id: crypto.randomUUID(), prompt_owned: false, source: output.source, input_port: port, subject_name }])}>{prior.length && !selected ? `替换${portLabels[port]}为 ${label}` : `采用 ${label} 为${portLabels[port]}`}</WorkbenchButton>
+            {protectedBinding && !selected && <InputBindingReferences card={card} bindingId={protectedBinding.id} onLocate={onLocate} />}
+          </div>
         })}</Space>
         {!supported.length && <small>当前模型不支持此候选用途</small>}
       </div>
@@ -44,12 +48,13 @@ export function VideoInputBindings({ card, candidates, labels, capability, loadi
       if (sourceOnly && !sourceOnly.has(sourceKey(binding.source))) return null
       const output = candidates.find(candidate => sourceKey(candidate.source) === sourceKey(binding.source))
       const label = labels.get(sourceKey(binding.source)) || output?.token || binding.source.card_id
-      const protectedReference = referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
+      const protectedReference = bindingReferences(card, binding.id).length > 0
       const move = (offset: number) => { const next = [...bindings]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; change(next) }
       return <div key={binding.id} data-input-binding-id={binding.id} tabIndex={-1}>
         <strong>{portLabels[binding.input_port]} · {label}</strong>
         {binding.input_port.startsWith('subject_') && <Input aria-label={`已采用主体分组 ${label}`} value={binding.subject_name || ''} disabled={disabled}
           onChange={event => change(bindings.map(value => value.id === binding.id ? { ...value, subject_name: event.target.value } : value))} />}
+        {capability && !capability.input_ports.includes(binding.input_port) && <small role="alert">当前模型不支持此用途，已保留采用</small>}
         {!loading && !output?.available && <small role="alert">来源输出缺失，请替换或取消采用</small>}
         <Space wrap>
           <WorkbenchButton size="small" disabled={disabled || index === 0} onClick={() => move(-1)}>前移{portLabels[binding.input_port]} {label}</WorkbenchButton>

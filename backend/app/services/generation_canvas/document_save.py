@@ -92,21 +92,31 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
             if source.canvas_id == canvas_id and was_connected and not connected:
                 raise diagnostic('REFERENCE_IN_USE', '请先清理实际引用再断开或删除来源',
                                  {'card_id': receiver.id, 'segment_id': reference_id, 'path': path})
-    previous_edges = {(edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port'])
-                      for edge in canvas.document.get('edges', [])}
+    previous_pairs = {(edge['source_card'], edge['target_card']) for edge in canvas.document.get('edges', [])}
     by_id = {card.id: card for card in document.cards}
-    previous_models = {card['id']: card.get('model_id') for card in canvas.document.get('cards', [])}
+    new_pairs = {}
     for edge in document.edges:
-        endpoint = (edge.source_card, edge.source_port, edge.target_card, edge.target_port)
-        card = by_id[edge.target_card]
-        # 完整文档不带操作日志；模型已切换时也保留尚未单独保存的候选。
-        # 同模型新建连接校验动态能力，实际使用的能力由运行预检再次核实。
-        model_changed = card.id in previous_models and isinstance(card, ModelCard) and previous_models[card.id] != card.model_id
-        if endpoint not in previous_edges and isinstance(card, ModelCard) and card.model_id and not model_changed:
-            cap = await model_capability(db, card.model_id)
-            if edge.target_port not in cap.input_ports or card.type != 'model.' + cap.modality:
-                raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
-                                 {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
+        pair = (edge.source_card, edge.target_card)
+        if pair not in previous_pairs:
+            new_pairs.setdefault(pair, []).append(edge)
+    capabilities = {}
+
+    async def supports(model_id, card, edges):
+        if model_id not in capabilities:
+            capabilities[model_id] = await model_capability(db, model_id)
+        cap = capabilities[model_id]
+        return card.type == 'model.' + cap.modality and any(edge.target_port in cap.input_ports for edge in edges)
+
+    for (_, target_id), edges in new_pairs.items():
+        card = by_id[target_id]
+        if not isinstance(card, ModelCard) or not card.model_id or await supports(card.model_id, card, edges):
+            continue
+        # 一次保存可包含连线后切换模型，旧模型支持该来源时保留已建立的候选。
+        prior_model = previous_cards.get(target_id, {}).get('model_id')
+        if prior_model and prior_model != card.model_id and await supports(prior_model, card, edges):
+            continue
+        raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该来源的任何输入用途',
+                         {'edge_id': edges[0].id, 'card_id': target_id, 'port_id': edges[0].target_port})
     from app.services.generation_canvas.output_resolution import CanvasOutputContext
     context = CanvasOutputContext(document)
     from app.services.generation_canvas.saved_media import collect_media_references, validate_media_file
@@ -146,8 +156,8 @@ def _normalize_document(document, previous_document):
     from app.services.generation_canvas.reference_rules import clean_reference_image_sources
     document = clean_reference_image_sources(document, previous_document)
     previous_document = clean_reference_image_sources(previous_document)
-    from app.services.generation_canvas.design_connections import expand_design_source_connections
-    document = expand_design_source_connections(document, previous_document)
+    from app.services.generation_canvas.design_connections import expand_source_connections
+    document = expand_source_connections(document, previous_document)
     from app.services.generation_canvas.acceptance import synchronize_acceptance
     document = synchronize_acceptance(document, previous_document)
     from app.services.generation_canvas.design_connections import synchronize_design_connections

@@ -15,6 +15,8 @@ const port = (id, value_kind) => ({ id, value_kind, label: id })
 const input = (id, value_kind) => ({ id, accepts: [value_kind], label: id })
 const definition = (type, outputs = [], inputs = []) => ({ type, title: type, outputs, inputs })
 const connection_policies = [
+  ...[['content.character', 'text', 'name'], ['content.image', 'image', 'image_source']].map(([source_type, source_port, target_port]) => ({ source_type, source_port, target_type: 'reference.character', target_port, adoption_allowed: true, connect: 'candidate' })),
+  ...['image', 'first_frame'].map(target_port => ({ source_type: 'content.image', source_port: 'image', target_type: 'model.image', target_port, adoption_allowed: true, connect: 'candidate', cancel: 'keep_connection', disconnect: 'protect' })),
   ...['direction.guidance', 'direction.criterion'].flatMap(source_type => ['model.text', 'model.image', 'model.video'].map(target_type => ({ source_type, source_port: 'text', target_type, target_port: 'text', adoption_allowed: true, connect: 'adopt_design', cancel: 'remove_connection', disconnect: 'release' }))),
   { source_type: 'direction.criterion', source_port: 'criterion', target_type: 'direction.shot', target_port: 'acceptance_basis', adoption_allowed: true, connect: 'associate_acceptance', cancel: 'remove_connection', disconnect: 'release' },
   { source_type: 'direction.movement', source_port: 'text', target_type: 'direction.composition', target_port: 'text', adoption_allowed: true, connect: 'candidate', cancel: 'keep_connection', disconnect: 'confirm_frame' },
@@ -72,26 +74,22 @@ test('a rejected source connection does not partially apply the reference update
   assert.deepEqual(original, before)
 })
 
-test('candidate connection preserves adoption, ignores duplicates and orders only the receiving port', () => {
+test('one source connection opens all compatible purposes without adopting any', () => {
   const original = document({ edges: [], input_order: {}, cards: [image, { ...model, input_bindings: [] }] })
   const connected = operations.connect(original, edge).document
-  assert.deepEqual(connected.input_order, { model: { image: ['edge'] } })
+  assert.deepEqual(connected.edges.map(edge => edge.target_port), ['image', 'first_frame'])
   assert.deepEqual(connected.cards[1].input_bindings, [])
   assert.equal(operations.connect(connected, { ...edge, id: 'duplicate' }).document, connected)
-  const second = { ...edge, id: 'second', target_port: 'first_frame' }
-  const paired = operations.connect(connected, second).document
-  assert.deepEqual(paired.input_order, { model: { image: ['edge'], first_frame: ['second'] } })
   assert.deepEqual(original.edges, [])
 })
 
-test('disconnect protects the adopted purpose but permits an unused purpose from the same source', () => {
+test('disconnect from any purpose protects all active uses, then removes the entire source', () => {
   const candidate = { ...edge, id: 'candidate', target_port: 'first_frame' }
   const original = document({ edges: [edge, candidate], input_order: { model: { image: ['edge'], first_frame: ['candidate'] } } })
   assert.match(operations.disconnect(original, edge).reason, /仍有输入被引用/)
-  const result = operations.disconnect(original, candidate).document
-  assert.deepEqual(result.edges, [edge])
-  assert.deepEqual(result.input_order, { model: { image: ['edge'], first_frame: [] } })
-  assert.deepEqual(result.cards[2].input_bindings, model.input_bindings)
+  assert.match(operations.disconnect(original, candidate).reason, /仍有输入被引用/)
+  const unused = document({ ...original, cards: [image, text, { ...model, input_bindings: [] }] })
+  assert.deepEqual(operations.disconnect(unused, candidate).document.edges, [])
 })
 
 test('deletion removes candidate edges, input order and group membership while preserving unrelated cards', () => {
@@ -133,7 +131,7 @@ test('copying incoming connections preserves explicit input order rather than ed
   const copy = { ...model, id: 'copy' }
   const result = operations.copyIncoming(original, 'model', copy).document
   const incoming = result.edges.filter(edge => edge.target_card === 'copy')
-  assert.equal(incoming.length, 2)
+  assert.equal(incoming.length, 4)
   assert.ok(incoming.every(edge => !['edge', 'second-edge'].includes(edge.id)))
   assert.deepEqual(result.input_order.copy.image.map(id => incoming.find(edge => edge.id === id).source_card), ['second-image', 'image'])
   assert.deepEqual(result.input_order.model.image, ['second-edge', 'edge'])

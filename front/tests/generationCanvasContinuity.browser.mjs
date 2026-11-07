@@ -72,8 +72,6 @@ try {
   assert.ok(from && to)
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down()
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 }); await page.mouse.up()
-  const purposes = page.getByRole('menu', { name: '选择连接用途', exact: true })
-  if (await purposes.isVisible()) await purposes.getByRole('menuitem').filter({ hasText: '作用对象' }).click()
   await poll(state => state.document.edges.some(edge => edge.source_card === 'anchor' && edge.target_card === 'fact'))
   assert.equal((await read()).document.cards.find(item => item.id === 'fact').input_bindings.length, 0)
   await open('rule')

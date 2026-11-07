@@ -31,7 +31,7 @@ async def get_canvas(project_id: str, canvas_id: str, db: AsyncSession = Depends
 @router.put('/{project_id}/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_save',
             responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
 async def save_canvas(project_id: str, canvas_id: str, body: CanvasSave, db: AsyncSession = Depends(get_db, scope='function')):
-    """CAS 保存完整文档并返回持久原回执。"""
+    """CAS 保存完整文档并返回持久原回执。补齐同源兼容候选，新建来源须满足接收模型能力。"""
     return success_response(await CanvasStore(db, project_id).save(canvas_id, body))
 
 
@@ -142,6 +142,6 @@ from app.services.generation_canvas.catalog import canvas_catalog
 
 @router.get('/{project_id}/{canvas_id}/catalog', response_model=ApiResponse[CanvasCatalog], operation_id='canvas_catalog')
 async def get_canvas_catalog(project_id: str, canvas_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """核实画布归属后提供当前系统卡片与端点声明。"""
+    """核实画布归属后提供卡片、兼容用途、采用策略及单值输入约束。"""
     await CanvasStore(db, project_id).get(canvas_id)
     return success_response(canvas_catalog())

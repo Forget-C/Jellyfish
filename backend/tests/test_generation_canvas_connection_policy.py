@@ -1,6 +1,8 @@
 """Public policies and destructive cleanup have one explicit, repeatable boundary."""
 from copy import deepcopy
 
+import pytest
+
 from app.services.generation_canvas.catalog import canvas_catalog
 from app.services.generation_canvas.connection_cleanup import clean_connection_document
 
@@ -51,7 +53,7 @@ def test_cleanup_conflicts_and_owned_references_without_deleting_other_uses():
          'frame_targets': [{'binding_id': 'invalid'}], 'prompt': {'segments': [
              {'id': 'text', 'kind': 'text', 'text': 'keep'},
              {'id': 'ref', 'kind': 'reference', 'binding_id': 'invalid'},
-             {'id': 'instruction', 'kind': 'instruction', 'references': [{'binding_id': 'invalid'}, {'binding_id': 'valid'}]}]}}
+             {'id': 'instruction', 'kind': 'instruction', 'references': [{'id': 'invalid-instruction-ref', 'binding_id': 'invalid'}, {'binding_id': 'valid'}]}]}}
     ], 'edges': []}
     cleaned = clean_connection_document(document)
     assert cleaned['cards'][2]['input_bindings'] == []
@@ -59,7 +61,9 @@ def test_cleanup_conflicts_and_owned_references_without_deleting_other_uses():
     assert [b['id'] for b in model['input_bindings']] == ['valid']
     assert model['frame_targets'] == []
     assert model['prompt']['segments'][0]['text'] == 'keep'
-    assert model['prompt']['segments'][1]['references'] == [{'binding_id': 'valid'}]
+    assert '引用失效' in model['prompt']['segments'][1]['text']
+    assert model['prompt']['segments'][2]['references'] == [{'binding_id': 'valid'}]
+    assert '引用失效' in model['prompt']['segments'][3]['text']
     assert len(cleaned['edges']) == 1
     assert clean_connection_document(cleaned) == cleaned
 
@@ -72,7 +76,7 @@ def test_object_candidates_and_accepted_criterion_survive_cleanup():
             {'id': 'accepted', 'input_port': 'acceptance_basis', 'source': {'canvas_id': 'canvas', 'card_id': 'criterion', 'port_id': 'criterion', 'object_id': 'rule', 'position': 0}}]}],
         'edges': [{'id': 'candidate', 'source_card': 'person', 'source_port': 'object', 'target_card': 'design', 'target_port': 'participant'}]}
     cleaned = clean_connection_document(document)
-    assert {edge['id'] for edge in cleaned['edges']} == {'candidate', 'connection:design:acceptance_basis:criterion:criterion'}
+    assert {edge['target_port'] for edge in cleaned['edges']} == {'participant', 'acceptance_basis', 'text'}
     assert cleaned['cards'][2]['input_bindings'][0]['id'] == 'accepted'
     assert clean_connection_document(cleaned) == cleaned
 
@@ -88,13 +92,17 @@ def test_wrong_business_category_is_cleared_without_removing_candidate():
     assert clean_connection_document(cleaned) == cleaned
 
 
-def test_migration_backs_up_and_invalidates_stale_revisions(monkeypatch):
+@pytest.mark.parametrize(('migration', 'backup_name'), [
+    ('b62f4c901dea_unify_connection_policy.py', 'generation_canvas_connection_backup'),
+    ('c73e5da012bf_unify_source_connections.py', 'generation_canvas_source_connection_backup'),
+])
+def test_migration_backs_up_and_invalidates_stale_revisions(monkeypatch, migration, backup_name):
     import importlib.util
     from pathlib import Path
     import sqlalchemy as sa
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
-    path = Path(__file__).parents[1] / 'alembic/versions/b62f4c901dea_unify_connection_policy.py'
+    path = Path(__file__).parents[1] / 'alembic/versions' / migration
     spec = importlib.util.spec_from_file_location('connection_migration', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -110,7 +118,25 @@ def test_migration_backs_up_and_invalidates_stale_revisions(monkeypatch):
         row = connection.execute(sa.select(table)).mappings().one()
         assert row['revision'] == 8 and row['document']['edges'] == []
         assert connection.execute(table.update().where(table.c.revision == 7).values(document=document)).rowcount == 0
-        backup = sa.Table('generation_canvas_connection_backup', sa.MetaData(), autoload_with=connection)
+        backup = sa.Table(backup_name, sa.MetaData(), autoload_with=connection)
         saved = connection.execute(sa.select(backup)).mappings().one()
         assert saved['document'] == document and saved['revision'] == 7
     engine.dispose()
+
+
+
+def test_image_source_normalization_preserves_adoption_and_remaps_duplicate_references():
+    source = dict(canvas_id='canvas', card_id='image', port_id='image', position=0)
+    binding = dict(id='first', input_port='first_frame', source=source)
+    edge = dict(id='original', source_card='image', source_port='image', target_card='video', target_port='first_frame')
+    document = dict(id='canvas', cards=[
+        dict(id='image', type='content.image'),
+        dict(id='video', type='model.video', input_bindings=[binding, {**binding, 'id': 'duplicate'}],
+             prompt={'segments': [{'id': 'ref', 'kind': 'reference', 'binding_id': 'duplicate'}]}),
+    ], edges=[edge, {**edge, 'id': 'duplicate-edge'}], input_order={'video': {'first_frame': ['original', 'duplicate-edge']}})
+    cleaned = clean_connection_document(document)
+    assert {item['target_port'] for item in cleaned['edges']} == {'first_frame', 'last_frame', 'key_frame', 'subject_image'}
+    assert cleaned['input_order']['video']['first_frame'] == ['original']
+    assert cleaned['cards'][1]['input_bindings'] == [binding]
+    assert cleaned['cards'][1]['prompt']['segments'][0]['binding_id'] == 'first'
+    assert clean_connection_document(cleaned) == cleaned

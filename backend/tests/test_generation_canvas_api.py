@@ -382,7 +382,7 @@ async def test_upload_rejects_missing_project_before_retaining_file(canvas_clien
     assert response.status_code == 404
 
 @pytest.mark.asyncio
-async def test_model_switch_preserves_candidate_added_since_last_save(canvas_client):
+async def test_new_source_during_model_switch_requires_supported_purpose(canvas_client):
     canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
     base = f"/canvases/p/{canvas['id']}"
     doc = {**canvas['document'], 'cards': [{'id': 'a', 'type': 'model.video'},
@@ -391,9 +391,11 @@ async def test_model_switch_preserves_candidate_added_since_last_save(canvas_cli
     doc['cards'][1]['model_id'] = 'canvas-video'
     doc['edges'] = [{'id': 'e', 'source_card': 'a', 'source_port': 'video', 'target_card': 'm', 'target_port': 'subject_video'}]
     doc['input_order'] = {'m': {'subject_video': ['e']}}
-    # 新模型不支持这个候选，但模型切换必须保留同一未保存文档中的现场。
-    assert (await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})).status_code == 200
-    assert (await canvas_client.get(base)).json()['data']['document']['edges'] == doc['edges']
+    response = await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
+    assert (await canvas_client.get(base)).json()['data']['document']['edges'] == []
+
 
 @pytest.mark.asyncio
 async def test_reference_protects_disconnect_but_final_document_cleanup_saves_once(canvas_client):

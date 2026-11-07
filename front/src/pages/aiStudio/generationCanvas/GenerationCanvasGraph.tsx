@@ -46,7 +46,7 @@ import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
 import { generationCardSize } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
-import { findConnection, visibleSourceEdges, sourceConnectionEdges } from './graphRules'
+import { visibleSourceEdges, sourceConnectionEdges } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
@@ -117,12 +117,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [connection] = useState(() => createConnectionSession({
     change: setConnectionState,
     options: (source, target) => connectionActions.current!.options(source, target),
-    direct: source => connectionActions.current!.direct(source),
     issue: (source, target) => connectionActions.current!.issue(source, target),
     commit: (option, target, source) => connectionActions.current!.commit(option, target, source),
     end: () => connectionActions.current!.end(),
   }))
-  const { drag, accessibleConnection, pendingConnection } = connectionState
+  const { drag, accessibleConnection } = connectionState
   const connectionTrigger = useRef<HTMLElement>()
   const connectionMenu = useRef<HTMLDivElement>(null)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
@@ -204,23 +203,23 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const cancelConnection = useCallback(() => connection.cancel(), [connection])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || !(drag || pendingConnection || accessibleConnection)) return
+      if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || !(drag || accessibleConnection)) return
       // Menus consume Escape before connection cancellation, including when focus has left the menu.
       if (container.current?.closest('[inert]') || container.current?.querySelector('.generation-card-menu, .canvas-toolbar-popover:not([hidden])') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
       event.preventDefault(); event.stopPropagation(); cancelConnection()
     }
     window.addEventListener('keydown', cancel)
     return () => window.removeEventListener('keydown', cancel)
-  }, [drag, pendingConnection, accessibleConnection, cancelConnection])
+  }, [drag, accessibleConnection, cancelConnection])
   // 仅隐藏详情外壳，编辑器会话仍挂载；连接期间为所有目标让出空间。
   const detailsSuppressed = !!(drag || accessibleConnection || !desktop && activeCategory)
   useEffect(() => {
     if (detailsSuppressed) window.document.querySelectorAll<HTMLMediaElement>(`[data-canvas-details="${CSS.escape(document.id)}"] audio, [data-canvas-details="${CSS.escape(document.id)}"] video`).forEach(media => media.pause())
   }, [detailsSuppressed, document.id])
   useEffect(() => {
-    if (!accessibleConnection && !pendingConnection) return
+    if (!accessibleConnection) return
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
-  }, [accessibleConnection, pendingConnection])
+  }, [accessibleConnection])
   const inspectCardId = inspectTarget?.cardId, inspectSerial = inspectTarget?.serial, inspectSegmentId = inspectTarget?.segmentId
   const [designFieldTarget, setDesignFieldTarget] = useState<{ cardId: string; fieldId: string; serial: number }>()
   const navigateInspection = useRef<(cardId: string) => void>(() => undefined)
@@ -402,7 +401,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [cardIdentity, groupIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => {
-    const result = operations.update(latest.current, next)
+    const result = operations.update(latest.current, next, capability(next))
     if (result.document) {
       edit(result.document)
       if (invalidRequirementNames.has(next.id) && next.type === 'direction.criterion' && 'name' in next && next.name?.trim() && reason === '请先填写验收要求名称') setReason('')
@@ -454,7 +453,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const target = event.target as HTMLElement
       if (contextMenu || event.defaultPrevented || event.isComposing || !container.current?.contains(target)) return
       const toolbarMenuOpen = !!container.current?.querySelector('.canvas-toolbar-popover:not([hidden])')
-      if ((cardMenuId || toolbarMenuOpen || drag || pendingConnection || accessibleConnection) && event.key === 'Escape') return // Inner controls consume Escape before the window bubble listener.
+      if ((cardMenuId || toolbarMenuOpen || drag || accessibleConnection) && event.key === 'Escape') return // Inner controls consume Escape before the window bubble listener.
       if (target.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"],[role="combobox"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
       if (cardMenuId || toolbarMenuOpen) {
         const activation = ['Enter', ' '].includes(event.key) && !target.closest('button, a, summary, [role="button"], audio, video')
@@ -613,7 +612,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const ownsCardShortcut = (target: Element) => target === viewport.surface.current
     || target.matches('[data-card-id], [data-keyboard-move]') && !!target.closest('[data-card-id]')
   const clipboardKey = useRef<(event: KeyboardEvent)=>void>();clipboardKey.current=event=>{
-    if(!contextMenu && !movement.pointerActive && !drag && !pendingConnection && !accessibleConnection && !surfaceGesture.selecting && !surfaceGesture.pan && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
+    if(!contextMenu && !movement.pointerActive && !drag && !accessibleConnection && !surfaceGesture.selecting && !surfaceGesture.pan && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
       const target=event.target as Element
       if(!container.current?.contains(target)||!ownsCardShortcut(target)||target.closest('input,textarea,[contenteditable],[data-card-details],[role="dialog"]'))return
       event.preventDefault();event.stopImmediatePropagation()
@@ -645,7 +644,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const source = cards.find(card => card.id === sourceId), target = cards.find(card => card.id === targetId)
     return source && target ? outputPorts(source).flatMap(source_port => inputPorts(target).map(target_port => ({ id: 'preview', source_card: sourceId, source_port, target_card: targetId, target_port }))) : []
   }
-  const compatibleOptions = (sourceId: string, targetId: string) => connectionOptions(sourceId, targetId).filter(edge => !check(edge))
+  const existingSource = (sourceId: string, targetId: string) =>
+    latest.current.edges?.find(edge => edge.source_card === sourceId && edge.target_card === targetId)
+  const compatibleOptions = (sourceId: string, targetId: string) => {
+    const existing = existingSource(sourceId, targetId)
+    return existing ? [existing] : sourceOptions(latest.current, sourceId, targetId).filter(edge => !check(edge))
+  }
   // Hover, pointer release and keyboard activation report the same compatible-use failure.
   const connectionFailure = (sourceId: string, targetId: string) => {
     const options = sourceOptions(latest.current, sourceId, targetId)
@@ -662,29 +666,28 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     setActiveCategory(undefined); connectionTrigger.current = trigger
     connection.start({ card, side }); setReason('选择接收卡以建立来源连接')
   }
-  const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => connection.commit(option, targetSide)
   const submitConnection = (option: GenerationEdge, targetSide: ConnectionSide, sourceSide: ConnectionSide) => {
     if (readonly) { setReason('当前只读，不能新建连接'); return }
-    const existing = findConnection(latest.current, option)
-    if (existing) { selectEdge(existing.id); setReason('该候选连接已存在'); return }
+    const existing = existingSource(option.source_card, option.target_card)
+    if (existing) { selectEdge(existing.id); setReason('该来源已连接'); return }
     const issue = check(option)
     if (issue) { showConnectionIssue(issue, option.source_card); return }
     const edge = { ...option, id: crypto.randomUUID() }
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    connectDocument(latest.current, edge); setReason(connectionPolicy(latest.current, option)?.message || '端点不兼容')
+    const target = latest.current.cards?.find(card => card.id === edge.target_card)
+    if (connectDocument(latest.current, edge, target && capability(target))) setReason(connectionPolicy(latest.current, option)?.message || '来源已连接')
   }
   const finishDrag = (event: PointerEvent) => {
-    if (!drag || pendingConnection) return
+    if (!drag) return
     const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-connection-side]')
     if (!target) { setReason('连接已取消，请拖到目标连接点'); cancelConnection(); return }
-    connection.choose(target.dataset.card!, target.dataset.connectionSide as ConnectionSide, { x: event.clientX, y: event.clientY })
+    connection.choose(target.dataset.card!, target.dataset.connectionSide as ConnectionSide)
   }
   const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
-    if (accessibleConnection) connection.choose(targetId, side, { x: 88, y: 180 })
+    if (accessibleConnection) connection.choose(targetId, side)
   }
   connectionActions.current = {
     options: compatibleOptions,
-    direct: source => cards.some(card => card.id === source && card.type?.startsWith('direction.')),
     issue: (source, target) => showConnectionIssue(connectionFailure(source, target), source),
     commit: submitConnection,
     end: () => {
@@ -710,8 +713,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const sourceConnection = drag || accessibleConnection
     const options = sourceConnection && card.id !== sourceConnection.card ? compatibleOptions(sourceConnection.card, card.id) : []
     const outputName = ({ text: '文本', image: '图片', video: '视频', audio: '音频' })[definition?.modality || 'text']
-    const hoveredPoint = drag && !pendingConnection ? window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]') : undefined
-    const summary = sourceConnection && card.id !== sourceConnection.card ? options.length ? `可作为${[...new Set(options.map(edge => inputLabel(card, edge.target_port)))].join('／')}候选` : connectionFailure(sourceConnection.card, card.id) : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
+    const hoveredPoint = drag ? window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]') : undefined
+    const summary = sourceConnection && card.id !== sourceConnection.card
+      ? existingSource(sourceConnection.card, card.id) ? '已连接，选择可定位连线'
+        : options[0] ? connectionPolicy(document, options[0])?.message : connectionFailure(sourceConnection.card, card.id)
+      : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
     return connectionSides.map(side => {
       const connected = edges.some(edge => {
         const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
@@ -724,12 +730,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (accessibleConnection) chooseAccessibleTarget(card.id, side)
           else startAccessibleConnection(card.id, side, event.currentTarget)
         }} onPointerDown={event => {
-          if (readonly || event.button !== 0 || pendingConnection) return
+          if (readonly || event.button !== 0) return
           if (accessibleConnection) { event.preventDefault(); event.stopPropagation(); chooseAccessibleTarget(card.id, side); return }
           event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
           setActiveCategory(undefined); connectionTrigger.current = event.currentTarget
           connection.start({ card: card.id, side }, { x: event.clientX, y: event.clientY }); setReason('拖到接收卡建立来源连接')
-        }} onPointerMove={event => { if (drag && !pendingConnection) connection.move({ x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connection.pointerActive) cancelConnection() }}><i aria-hidden>+</i></button>
+        }} onPointerMove={event => { if (drag) connection.move({ x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connection.pointerActive) cancelConnection() }}><i aria-hidden>+</i></button>
       </Tooltip>
     })
   }
@@ -748,7 +754,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const edgePurpose = (edge: GenerationEdge) => {
     const target = cards.find(card => card.id === edge.target_card)
     const members = sourceConnectionEdges(document, edge)
-    if (!cards.some(card => card.id === edge.source_card && card.type?.startsWith('direction.'))) return `${target ? inputLabel(target, edge.target_port) : edge.target_port} · ${edgeAdoptions(edge) ? '已明确选择' : '候选'}`
     const used = members.filter(member => edgeAdoptions(member)).map(member => target ? inputLabel(target, member.target_port) : member.target_port)
     const fields = target ? designReferences(target).filter(({ reference }) => reference.source.card_id === edge.source_card).map(({ field }) => '正文引用 · ' + (cardDefinitions[target.type || '']?.fields?.find(item => item.id === field)?.label || field)) : []
     const prompt = target ? (editorPrompt(target).segments || []).flatMap((segment, index) => {
@@ -756,7 +761,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return references.some(reference => reference.source?.card_id === edge.source_card && members.some(member => member.source_port === reference.source?.port_id)) ? [segment.kind === 'instruction' ? '指令引用 · ' + segment.command : `模型正文引用 · 第 ${index + 1} 段`] : []
     }) : []
     const frame = target && 'frame_target' in target && target.frame_target?.card_id === edge.source_card ? ['画面定位 · ' + target.frame_target.state_id] : []
-    return [...new Set([...used, ...fields, ...prompt, ...frame])].join('／') || '来源候选 · 在接收卡选择用途'
+    return [...new Set([...used, ...fields, ...prompt, ...frame])].join('／') || (members.length === 1 && target ? `${inputLabel(target, edge.target_port)} · 候选` : '来源候选 · 在接收卡选择用途')
   }
   const edgeLabel = (edge: GenerationEdge) => `${cardLabel(edge.source_card)} → ${cardLabel(edge.target_card)} · ${edgePurpose(edge)}`
   const inspectedEdge = edges.find(edge => edge.id === selectedEdgeId)
@@ -776,11 +781,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         connectDocument({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort })
       }} />
     </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={null} disabled={readonly} style={{ width: 160 }}
-      options={cards.flatMap(source => {
-        const options = compatibleOptions(source.id, card.id)
-        return (source.type?.startsWith('direction.') ? options.slice(0, 1) : options).map(option => ({ value: `${source.id}|${option.source_port}|${option.target_port}`, label: source.type?.startsWith('direction.') ? cardLabel(source.id) : `${cardLabel(source.id)} → ${inputLabel(card, option.target_port)}` }))
-      })}
-      onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); commitConnection({ id: 'candidate', source_card, source_port, target_card: card.id, target_port }, 'left') }} />
+      options={cards.filter(source => compatibleOptions(source.id, card.id).length).map(source => ({ value: source.id, label: cardLabel(source.id) + (existingSource(source.id, card.id) ? ' · 已连接' : '') }))}
+      onChange={sourceId => {
+        const option = compatibleOptions(sourceId, card.id)[0]
+        if (!option) return
+        const sides = defaultSides(point(sourceId), point(card.id))
+        submitConnection(option, sides.target, sides.source)
+      }} />
     </Space>
     {inputPorts(card).map(name => {
     const order = document.input_order?.[card.id]?.[name] || []
@@ -852,7 +859,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const sourcePorts = (card: GenerationCard) => isReferenceDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio', ...(isFlatDesign(card) ? ['anchor', 'participant', 'effect_object', 'space', 'position_anchor', 'area_anchor', 'beat', 'received_event', 'change_event', 'trigger_event', 'dialogue_basis', 'acceptance_basis', 'covered_beat', 'related_event', 'blocking_basis', 'speaker', 'audio_example', 'video_example', 'image_example'] : [])].includes(port)) : capability(card)?.input_ports || []
   const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" overlayStyle={{ minWidth: 200 }} disabled={readonly} menu={{ items: [
     { key: 'upload', label: '上传参考素材', children: [
-      { key: 'upload:text', label: '上传文本参考' },
+      { key: 'upload:text', label: '上传文本参考', disabled: !sourcePorts(card).includes('text') },
       ...designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port).replace(/素材$/, '')}素材` })),
     ] },
     { key: 'library', label: '从素材库添加', disabled: !designMediaSourcePorts(sourcePorts(card)).length, children: designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port).replace(/素材$/, '')}素材` })) },
@@ -863,8 +870,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const [mode, key] = action.split(':')
     if (key === 'text') {
       const source = { id: crypto.randomUUID(), type: 'content.text' as const, text: '' }
-      connectDocument({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' })
-      setUploadText(source.id); return
+      if (connectDocument({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' }, capability(card))) setUploadText(source.id)
+      return
     }
     setUploadLibrary(mode === 'library')
     const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(key) ? 'image' : key === 'subject_video' ? 'video' : key.replace(/_example$/, '')
@@ -879,7 +886,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   return <div className="generation-graph" ref={container} onContextMenu={event => {
     event.preventDefault()
     const target = event.target as Element
-    if (movement.pointerActive || drag || pendingConnection || accessibleConnection || surfaceGesture.selecting || surfaceGesture.pan || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
+    if (movement.pointerActive || drag || accessibleConnection || surfaceGesture.selecting || surfaceGesture.pan || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
     if (!viewport.surface.current?.contains(target)) return
     const id = target.closest<HTMLElement>('[data-card-id]')?.dataset.cardId
     const ids = id ? selected.includes(id) ? selected : [id] : []
@@ -943,11 +950,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       </div>
     </Modal>
     <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
-      <p>选择来源前请核对连接用途；具体生效方式见各项提示。</p>
-      {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
+      <p>选择来源建立连接。候选用途在接收卡的关联区选择。</p>
+      {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).slice(0, 1).map(option => <Button key={source.id} disabled={readonly} onClick={() => {
         const sides = defaultSides(point(option.source_card), point(option.target_card))
         submitConnection(option, sides.target, sides.source); setSourceTarget(undefined)
-      }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)} · {connectionPolicy(document, option)?.message}</Button>))}
+      }}>{cardLabel(source.id)} · {existingSource(source.id, sourceTargetCard.id) ? '已连接' : connectionPolicy(document, option)?.message}</Button>))}
     </Modal>
     <Modal title="上传文本参考" open={!!uploadTextCard} onCancel={() => setUploadText(undefined)} footer={null}>
       {uploadTextCard && <TextContentEditor card={uploadTextCard} disabled={readonly} onChange={next => edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })} />}
@@ -958,17 +965,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       }} />}
     </Modal>
     {connectionLayout.error && <span role="status">{connectionLayout.error}</span>}
-    {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
+    {accessibleConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
-      <p>选择接收卡后查看连接用途及生效方式。</p>
+      <p>选择接收卡建立连接。候选用途在接收卡的关联区选择。</p>
       {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
       <Button onClick={cancelConnection}>取消连接</Button>
     </div>}
-    {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
-      <strong>选择连接用途</strong>
-      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → {inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)} · {connectionPolicy(document, option)?.message}</Button>)}
-      <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
-    </div>}
+
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
     <CardList catalog={catalog} readonly={readonly} active={activeCategory} onActiveChange={category => { cancelConnection(); setActiveCategory(category) }} onAdd={(type, entry) => add(type, undefined, entry)} />
     <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
@@ -1027,7 +1030,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         if (!event.currentTarget.contains(event.target as Node)) return
         // 空白画布接收焦点，释放连接点的焦点圈与提示；Escape 仍返回连接起点。
         if (event.button === 0 && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea, audio, video, .canvas-edge-hit')) {
-          if (drag || pendingConnection || accessibleConnection) cancelConnection()
+          if (drag || accessibleConnection) cancelConnection()
           event.currentTarget.focus({ preventScroll: true })
         }
         if (spaceHeld && event.button === 0 && event.currentTarget.contains(event.target as Node)
@@ -1200,9 +1203,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         const from = { x: origin.x * transform.scale + transform.x, y: origin.y * transform.scale + transform.y }
         const target = window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]')
         const targetCard = target?.dataset.card, side = target?.dataset.connectionSide as ConnectionSide | undefined
-        const snapped = pendingConnection ? anchor(pendingConnection.target, pendingConnection.side) : targetCard && side && compatibleOptions(drag.card, targetCard).length ? anchor(targetCard, side) : undefined
+        const snapped = targetCard && side && compatibleOptions(drag.card, targetCard).length ? anchor(targetCard, side) : undefined
         const to = snapped ? { x: snapped.x * transform.scale + transform.x, y: snapped.y * transform.scale + transform.y } : { x: drag.x - (rect?.left || 0), y: drag.y - (rect?.top || 0) }
-        return connectionPath(from, to, drag.side, pendingConnection?.side || side)
+        return connectionPath(from, to, drag.side, side)
       })()} fill="none" stroke="var(--wb-focus)" strokeWidth="2" markerEnd="url(#generation-preview-arrow)" /><defs><marker id="generation-preview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="var(--wb-focus)" /></marker></defs></svg>}
 
     </div>

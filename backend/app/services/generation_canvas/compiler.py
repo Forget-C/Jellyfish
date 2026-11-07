@@ -53,13 +53,15 @@ def compile_card(document: CanvasDocument, card_id: str, *,
         if isinstance(source, NamedImageReferenceCard) and (problem := reference_name_issue(document, source)):
             result.diagnostics.append(CanvasDiagnostic(code=problem[0], message=problem[1], severity='error', target={'card_id': source.id, 'path': ['name']}, blocks=['run']))
     if capability:
-        used_ports = {(binding.source.card_id, binding.source.port_id, binding.input_port) for binding in card.input_bindings}
-        for edge in context.incoming.get(card_id, ()):
-            if edge.target_port not in capability.input_ports:
-                used = (edge.source_card, edge.source_port, edge.target_port) in used_ports
-                result.diagnostics.append(CanvasDiagnostic(code='UNSUPPORTED_INPUT' if used else 'UNUSED_INCOMPATIBLE_INPUT',
-                    message='当前模型不支持此输入用途', severity='error' if used else 'warning',
-                    target={'card_id': card_id, 'path': ['edges', edge.id]}, blocks=['run'] if used else []))
+        incoming = context.incoming.get(card_id, ())
+        supported_sources = {edge.source_card for edge in incoming if edge.target_port in capability.input_ports}
+        warned = set()
+        for edge in incoming:
+            if edge.source_card not in supported_sources and edge.source_card not in warned:
+                warned.add(edge.source_card)
+                result.diagnostics.append(CanvasDiagnostic(code='UNUSED_INCOMPATIBLE_INPUT',
+                    message='当前模型不支持此来源的候选用途', severity='warning',
+                    target={'card_id': card_id, 'path': ['edges', edge.id]}, blocks=[]))
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
 
@@ -188,9 +190,10 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
 
     mentioned = {reference.binding_id for segment in card.prompt.segments
         for reference in ([segment] if isinstance(segment, PromptReference) else segment.references if isinstance(segment, PromptInstruction) else [])}
+    from app.services.generation_canvas.connection_policy import single_source_port
     frame_counts = {}
     for binding in card.input_bindings:
-        if card.type == 'model.video' and binding.input_port in ('first_frame', 'last_frame'):
+        if single_source_port(card.type, binding.input_port):
             frame_counts[binding.input_port] = frame_counts.get(binding.input_port, 0) + 1
             if frame_counts[binding.input_port] > 1:
                 issue('FRAME_COUNT_EXCEEDED', '首尾帧各至多一项', binding.id, ['input_bindings', binding.id])

@@ -100,7 +100,7 @@ export class StudioGenerationCanvasesService {
     }
     /**
      * Save Canvas
-     * CAS 保存完整文档并返回持久原回执。
+     * CAS 保存完整文档并返回持久原回执。补齐同源兼容候选，新建来源须满足接收模型能力。
      * @returns ApiResponse_CanvasSaved_ Successful Response
      * @throws ApiError
      */
@@ -470,7 +470,7 @@ export class StudioGenerationCanvasesService {
     }
     /**
      * Get Canvas Catalog
-     * 核实画布归属后提供当前系统卡片与端点声明。
+     * 核实画布归属后提供卡片、兼容用途、采用策略及单值输入约束。
      * @returns ApiResponse_CanvasCatalog_ Successful Response
      * @throws ApiError
      */

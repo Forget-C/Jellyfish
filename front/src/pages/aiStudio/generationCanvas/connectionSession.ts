@@ -6,12 +6,10 @@ type Point = { x: number; y: number }
 export type ConnectionState = {
   drag?: Source & Point
   accessibleConnection?: Source
-  pendingConnection?: Point & { target: string; side: ConnectionSide }
 }
 type ConnectionHost = {
   change: (state: ConnectionState) => void
   options: (source: string, target: string) => GenerationEdge[]
-  direct: (source: string) => boolean
   issue: (source: string, target: string) => void
   // 提交端按当前文档复核只读、重复连接与兼容性，再写入文档历史。
   commit: (option: GenerationEdge, target: ConnectionSide, source: ConnectionSide) => void
@@ -37,9 +35,9 @@ export function createConnectionSession(host: ConnectionHost) {
       change(point ? { drag: { ...source, ...point } } : { accessibleConnection: source })
     },
     move(point: Point) {
-      if (state.drag && !state.pendingConnection) change({ ...state, drag: { ...state.drag, ...point } })
+      if (state.drag) change({ ...state, drag: { ...state.drag, ...point } })
     },
-    choose(target: string, side: ConnectionSide, point: Point) {
+    choose(target: string, side: ConnectionSide) {
       const source = state.drag || state.accessibleConnection
       if (!source) return
       pointer = false
@@ -47,10 +45,8 @@ export function createConnectionSession(host: ConnectionHost) {
       if (!options.length) {
         host.issue(source.card, target)
         if (state.drag) cancel()
-      } else if (options.length === 1 || host.direct(source.card)) commit(options[0], side)
-      else change({ ...state, pendingConnection: { target, side, ...point } })
+      } else commit(options[0], side)
     },
-    commit,
     cancel,
   }
 }

@@ -1,4 +1,4 @@
-import { closeCardList, openCardMenu, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, closeCardList, openCardMenu, openCanvasCard, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -47,7 +47,7 @@ try {
   const card = id => page.locator(`[data-card-id="${id}"]`)
   await openCanvasCard(page, 'a')
   await page.getByRole('textbox', { name: '文本内容', exact: true }).waitFor()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await closeCardList(page)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   console.log('graph loaded')
@@ -62,16 +62,12 @@ try {
     await page.mouse.down()
     await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
     await page.mouse.up()
-    const purposes = page.getByRole('menu', { name: '选择连接用途', exact: true })
-    if (await purposes.isVisible()) {
-      const option = purposes.getByRole('menuitem').filter({ hasText: input === 'subject_image' ? '主体图片' : '文本' })
-      if (await option.count()) await option.click()
-    }
+
   }
   await dragPort('a', 'text', 'm', 'text')
   await page.getByRole('status').filter({ hasText: '连接提供候选' }).waitFor()
   await dragPort('a', 'text', 'm', 'text')
-  await page.getByRole('status').filter({ hasText: '该候选连接已存在' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '该来源已连接' }).waitFor()
   await dragPort('b', 'text', 'm', 'text')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
@@ -79,8 +75,9 @@ try {
   assert.equal(saved.document.edges.length, 2)
   const order = saved.document.input_order.m.text
   await card('m').press('Enter')
+  await openModelInspection(page)
   await page.getByRole('button', { name: `前移输入 ${order[1]}`, exact: true }).click()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   let puts = 0
@@ -89,11 +86,11 @@ try {
   // 新卡片使用有限默认尺寸；布局与视口仍须独立恢复。
   assert.ok(beforeMove.width >= 200 && beforeMove.height >= 100)
   await card('a').getByRole('button', { name: '移动布局：文本内容卡', exact: true }).press('ArrowDown')
+  assert.ok((await card('a').boundingBox()).y > beforeMove.y, 'keyboard move updates position before zoom')
   await page.getByRole('button', { name: '放大', exact: true }).click()
   await delay(5200)
   assert.equal(puts, 0, 'layout/viewport does not save content')
   const afterMove = await card('a').boundingBox()
-  assert.ok(afterMove.y > beforeMove.y)
   await page.reload()
   await card('a').waitFor()
   const reopened = await card('a').boundingBox()
@@ -155,30 +152,27 @@ try {
   await page.getByRole('button', { name: '缩小', exact: true }).click()
   await page.getByRole('button', { name: '缩小', exact: true }).click()
   await page.getByRole('combobox', { name: '视频画幅', exact: true }).waitFor()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await dragPort('i', 'image', 'v', 'subject_image')
   await card('v').press('Enter')
   await page.getByRole('status').filter({ hasText: '连接提供候选' }).waitFor()
   await page.getByRole('combobox', { name: '选择模型', exact: true }).press('ArrowDown')
   await page.getByText('graph-video-alt', { exact: true }).last().click()
-  await page.getByText('当前模型不支持，候选保留', { exact: true }).waitFor()
+  await openModelInspection(page)
+  await page.getByText('当前模型不支持，候选保留', { exact: true }).first().waitFor()
   assert.equal(await page.getByRole('textbox', { name: '模型正文', exact: true }).textContent(), '保留正文')
   await page.getByText('当前模型不支持已有视频画幅，配置已保留', { exact: true }).waitFor()
   await page.getByText('视频时长超出模型范围，配置已保留', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await dragPort('j', 'image', 'v', 'subject_image')
-  const purposes = page.getByRole('menu', { name: '选择连接用途', exact: true })
-  await purposes.waitFor()
-  assert.equal(await purposes.getByRole('menuitem').filter({ hasText: '主体图片' }).count(), 0, 'unsupported model purpose is not offered')
-  await page.keyboard.press('Escape')
+  assert.equal(await page.getByRole('menu', { name: '选择连接用途', exact: true }).count(), 0)
+  await page.getByRole('status').filter({ hasText: '连接提供候选' }).waitFor()
   await dragPort('i', 'image', 'v', 'text')
-  await purposes.waitFor()
-  assert.equal(await purposes.getByRole('menuitem').filter({ hasText: '文本' }).count(), 0, 'image cannot be implicitly converted into text input')
-  await page.keyboard.press('Escape')
+  await page.getByRole('status').filter({ hasText: '该来源已连接' }).waitFor()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const switched = (await (await fetch(`${base}/${second.id}`)).json()).data.document
-  assert.equal(switched.edges.length, 1)
+  assert.equal(switched.edges.length, 8)
   assert.equal(switched.cards[2].model_id, 'graph-video-alt')
   assert.deepEqual(switched.cards[2].config, { ratio: '9:16', seconds: 4, seed: 7 })
   await page.screenshot({ path: join(output, 'model-switch-preserved.png'), fullPage: true })
