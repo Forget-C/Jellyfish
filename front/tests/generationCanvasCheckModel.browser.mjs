@@ -42,7 +42,7 @@ try {
     { id: 'shot', type: 'direction.shot', estimated_duration: { text: '12 秒', state: 'proposal' },
       visible_result: { text: '保留灯光', state: 'fact' } },
     { id: 'target', type: 'model.video', config: { seconds: 5 } },
-    { id: 'check', type: 'review.check' },
+    { id: 'check', type: 'review.check', enabled_categories: ['P01', 'P06'] },
   ], edges: [
     { id: 'adopt', source_card: 'shot', source_port: 'text', target_card: 'target', target_port: 'text' },
     { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
@@ -52,7 +52,8 @@ try {
   await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   await openCanvasCard(page, 'check')
   const editor = page.getByRole('region', { name: '生成前检查', exact: true })
-  await editor.getByText('暂不可执行 · 请选择独立的文字检查模型', { exact: true }).waitFor()
+  await editor.getByRole('region', { name: '已采用要求落实', exact: true })
+    .getByText('暂不可执行 · 请选择独立的文字检查模型', { exact: true }).waitFor()
   await editor.getByRole('combobox', { name: '文字检查模型' }).click()
   await page.locator('.ant-select-dropdown:visible').getByText('controlled-text', { exact: true }).click()
   await closeCanvasDetails(page)
@@ -84,7 +85,32 @@ try {
   assert.equal(history.data.length, 2)
   assert.equal(history.data[1].results.length, 2)
   assert.ok(history.data[1].executions.some(execution => execution.status === 'failed'))
-  console.log('check model selection, queued/rule results, partial failure and single-item retry passed')
+  const sound = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '声音能力检查' }) })).json()).data
+  const soundDocument = { ...sound.document, cards: [
+    { id: 'sound', type: 'direction.guidance', sound_strategy: { text: '使用音频参考', state: 'fact' } },
+    { id: 'target', type: 'model.text', model_id: 'canvas-runtime-text' },
+    { id: 'check', type: 'review.check', enabled_categories: ['P08'] },
+  ], edges: [
+    { id: 'adopt', source_card: 'sound', source_port: 'text', target_card: 'target', target_port: 'text' },
+    { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
+  ], input_order: { target: { text: ['adopt'] }, check: { check_basis: ['observe'] } } }
+  const soundSaved = await fetch(`${base}/${sound.id}`, { method: 'PUT', headers: json,
+    body: JSON.stringify({ request_id: 'seed-sound', expected_revision: 0, document: soundDocument }) })
+  assert.ok(soundSaved.ok, await soundSaved.text())
+  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${sound.id}`)
+  await openCanvasCard(page, 'check')
+  await editor.getByRole('checkbox', { name: '启用类别：声音要求与已声明能力匹配', exact: true }).waitFor()
+  await editor.getByRole('button', { name: '检查', exact: true }).click()
+  await report.getByText(/音频参考输入：明确不支持/).waitFor()
+  await report.getByText(/实际音轨的对白准确性.*未核验/).waitFor()
+  await report.getByRole('list', { name: '要求证据', exact: true }).getByText(/使用音频参考/).waitFor()
+  await report.getByRole('button', { name: '补充说明后重新检查', exact: true }).click()
+  await report.getByRole('textbox', { name: '本次复核说明', exact: true }).fill('请按原模型能力复核')
+  await report.getByRole('button', { name: '按原报告复核', exact: true }).click()
+  await report.getByText(/原报告复核 · /).waitFor()
+  await report.getByText(/音频参考输入：明确不支持/).filter({ visible: true }).waitFor()
+  assert.equal((await (await fetch(controlUrl)).json()).check_calls.length, 3, 'explicit P08 and recheck required no provider call')
+  console.log('check model, partial failure, single-item retry, and sound capability rule passed')
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   throw error

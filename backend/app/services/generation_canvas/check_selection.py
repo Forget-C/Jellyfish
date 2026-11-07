@@ -8,10 +8,18 @@ from app.services.generation_canvas.check_requirement_quality import (
     CONSISTENCY_CATEGORY, CONSISTENCY_LABEL, REVIEWABILITY_CATEGORY, REVIEWABILITY_LABEL,
     consistency_checks, reviewability_checks,
 )
+from app.services.generation_canvas.check_sequence import (
+    ACTION_CATEGORY, ACTION_LABEL, CONTINUITY_CATEGORY, CONTINUITY_LABEL, sequence_checks,
+)
+from app.services.generation_canvas.check_sound_capability import (
+    SOUND_CAPABILITY_CATEGORY, SOUND_CAPABILITY_LABEL, sound_capability_checks,
+)
 
 CHECK_CATEGORY_LABELS = {
     DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL, CONSISTENCY_CATEGORY: CONSISTENCY_LABEL,
     REVIEWABILITY_CATEGORY: REVIEWABILITY_LABEL, REFERENCE_CATEGORY: REFERENCE_LABEL,
+    ACTION_CATEGORY: ACTION_LABEL, CONTINUITY_CATEGORY: CONTINUITY_LABEL,
+    SOUND_CAPABILITY_CATEGORY: SOUND_CAPABILITY_LABEL,
 }
 
 
@@ -40,8 +48,15 @@ def check_items(basis, card: CheckCard, model_unavailable: str | None):
     categories.append(describe_category(card, CONSISTENCY_CATEGORY, consistency, '未采用两条可对照的设计或补充要求'))
     reviewability, reviewability_observations = reviewability_checks(basis, card, model_unavailable)
     categories.append(describe_category(card, REVIEWABILITY_CATEGORY, reviewability, '未采用需要核对的验收要求、约束或可见结果'))
-    return (categories, items + adopted + consistency + reviewability, comparisons,
-            observations | consistency_observations | reviewability_observations)
+    sequence, sequence_observations = sequence_checks(basis, card, model_unavailable)
+    categories += [
+        describe_category(card, ACTION_CATEGORY, sequence, '未采用可核对的动作、反应或调度要求'),
+        describe_category(card, CONTINUITY_CATEGORY, sequence, '未采用可核对的前后态、变化或保持要求'),
+    ]
+    sound, sound_rules, sound_observations = sound_capability_checks(basis, card, model_unavailable)
+    categories.append(describe_category(card, SOUND_CAPABILITY_CATEGORY, sound, '未采用有效对白、声音安排或声音策略'))
+    return (categories, items + adopted + consistency + reviewability + sequence + sound, comparisons | sound_rules,
+            observations | consistency_observations | reviewability_observations | sequence_observations | sound_observations)
 
 
 def select_check_items(items: list[CanvasCheckItem], item_id: str | None) -> tuple[list[CanvasCheckItem], list[CanvasCheckOmission]]:

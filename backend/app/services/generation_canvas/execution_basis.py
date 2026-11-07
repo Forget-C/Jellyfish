@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 from fastapi import HTTPException
+from app.core.contracts.generation_canvas import DesignTextPayload, InputBinding
 from app.schemas.generation_canvas import (
     CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasModelCapability,
     CanvasResolvedOutput, ModelCard,
@@ -55,6 +56,12 @@ class CanvasBasis:
     def capability(self) -> CanvasModelCapability | None:
         """供检查和预览复用已解析的公开能力。"""
         return self._model_context.capability
+
+    def adopted_design_bindings(self) -> dict[str, list[InputBinding]]:
+        """Stable direct relations of available designs included in the compiled input."""
+        used_ids = {item.source.card_id for item in self.compiled.used
+                    if item.available and isinstance(item.payload, DesignTextPayload)}
+        return {card.id: card.input_bindings for card in self._document.cards if card.id in used_ids}
 
     def to_snapshot(self) -> dict:
         """固定直接来源及所采用设计的有效字段来源，不遍历任意祖先。"""
