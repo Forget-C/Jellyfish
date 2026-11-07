@@ -38,6 +38,13 @@ class VideoAdapterUsage:
     model_supported: bool
 
 
+class AudioCapability(BaseModel):
+    """供应商模型声明与当前适配器是否接入该项声音能力。"""
+
+    declaration: Literal['supported', 'unsupported', 'unknown'] = 'unknown'
+    connected: bool = False
+
+
 class VideoReferenceCapabilities(BaseModel):
     """当前适配器可传递的参考范围；空数量上限表示未知，不保证模型创作效果。"""
 

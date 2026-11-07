@@ -156,6 +156,7 @@ export type { AssetPromptAudit } from './models/AssetPromptAudit';
 export type { AssetPromptReference } from './models/AssetPromptReference';
 export type { AssetSummary } from './models/AssetSummary';
 export type { AsyncTaskCreateRead } from './models/AsyncTaskCreateRead';
+export type { AudioCapability } from './models/AudioCapability';
 export type { AudioContentCard } from './models/AudioContentCard';
 export type { BasisTextOutputPayload } from './models/BasisTextOutputPayload';
 export type { BatchItemInput } from './models/BatchItemInput';
