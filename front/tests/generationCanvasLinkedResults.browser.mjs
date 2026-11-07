@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-result-cards-')
 const api = 'http://127.0.0.1:8302', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8302' }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8302', CANVAS_BROWSER_VARIABLE_IMAGE_COUNT: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
 let server, browser, page
@@ -178,10 +178,11 @@ try {
     await page.reload()
     await open('m')
     await start()
-    await page.waitForFunction(async ({ base, id, count }) => {
-      const { data } = await (await fetch(`${base}/${id}/runtime`)).json()
-      return data.current_outputs.m?.length === count
-    }, { base: new URL(base).pathname, id: canvas.id, count })
+    for (let attempt = 0; attempt < 60; attempt++) {
+      if ((await runtime()).current_outputs.m?.length === count) break
+      await delay(100)
+    }
+    assert.equal((await runtime()).current_outputs.m?.length, count)
   }
   await changeCount(2)
   await page.getByRole('article', { name: '图片生成结果 3' }).getByText('当前输出缺失').waitFor()
