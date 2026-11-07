@@ -186,5 +186,24 @@ async def test_post_visual_check_shares_real_media_preserves_evidence_and_leaves
             assert unavailable['estimated_calls'] == 0
             assert all(item['availability'] == 'unavailable' for item in unavailable['items'])
             assert '图片读取能力' in unavailable['reason']
+
+            selected_category = 'R02' if with_reference else 'R03'
+            item_id = next(item['id'] for item in history['items'] if item['category'] == selected_category)
+            original_result = next(result for result in history['results'] if result['item_id'] == item_id)
+            response = await client.post(f"{url}/checks/check/reports/{history['id']}/recheck", json={
+                'item_id': item_id, 'clarification': '请复看原画面的红色区域',
+            })
+            assert response.status_code == 200, response.text
+            await advance()
+            reviewed, retained = (await client.get(url + '/checks/check/reports')).json()['data']
+            assert retained == history and reviewed['product'] == history['product']
+            assert reviewed['recheck']['original_result'] == original_result
+            assert reviewed['results'] == [original_result]
+            original_call = comparison if with_reference else general
+            assert len(calls) == (3 if with_reference else 2)
+            assert calls[-1][1:] == original_call[1:]
+            context = json.loads(calls[-1][0]['text'])
+            assert [row['item_id'] for row in context['requirements']] == [item_id]
+            assert context['recheck']['clarification'] == '请复看原画面的红色区域'
         finally:
             worker.text_pool.shutdown(wait=False)

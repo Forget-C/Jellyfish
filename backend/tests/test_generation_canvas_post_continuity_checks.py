@@ -181,5 +181,22 @@ async def test_r05_endpoints_and_r06_occlusion_use_their_own_evidence(runtime, i
             assert limited['observation_method'] == 'video_frame' and limited['estimated_calls'] == 2
             assert {item['field_id'] for item in limited['items'] if item['availability'] == 'ready'} == {'movement_start', 'end_frame'}
             assert all('视频序列' in item['reason'] for item in limited['items'] if item['availability'] == 'unavailable')
+
+            only_endpoints = False
+            for item_id, media_type in [('R05:movement:end_frame', 'image_url'), ('R06:change:continuity', 'video_url')]:
+                call_count = len(calls)
+                response = await client.post(f"{checks}/reports/{report['id']}/recheck", json={
+                    'item_id': item_id, 'clarification': '请复看原视频中对应的画面依据',
+                })
+                assert response.status_code == 200, response.text
+                await advance()
+                records = await get(checks + '/reports')
+                reviewed = next(entry for entry in records if entry['id'] == response.json()['data']['id'])
+                assert reviewed['product'] == report['product'] and reviewed['results'] == [results[item_id]]
+                assert reviewed['recheck']['original_result'] == results[item_id]
+                assert len(calls) == call_count + 1
+                kind, observed_requirements = calls[-1]
+                assert kind == media_type
+                assert [row['item_id'] for row in observed_requirements] == [item_id]
         finally:
             worker.text_pool.shutdown(wait=False)

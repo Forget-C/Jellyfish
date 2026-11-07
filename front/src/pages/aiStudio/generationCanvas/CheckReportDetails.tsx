@@ -61,6 +61,8 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
     </ul>}
     {report.results.map(result => {
       const item = report.items.find(row => row.id === result.item_id)
+      const canRecheck = item && (recheckTextCategories.has(item.category) ||
+        (item.category === 'P03' || !!report.product) && report.executions?.some(entry => entry.item_id === result.item_id))
       return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
         {report.product ? <p>此结论仅适用于固定历史产物</p> : applicability && <p role="status">{applicability(item)}</p>}
         {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
@@ -88,7 +90,7 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
           </li>)}
         </ul>}
         <small>{result.boundary}</small>
-        {recheck && item && (recheckTextCategories.has(item.category) || item.category === 'R01' && report.product?.text != null)
+        {recheck && canRecheck
           && <CheckRecheckForm key={report.id} {...recheck} cardId={report.check_card_id} reportId={report.id} itemId={result.item_id} />}
       </article>
     })}

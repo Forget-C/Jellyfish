@@ -395,6 +395,7 @@ class TaskWorker:
         )
         from app.services.generation_canvas.check_product_video import VIDEO_PRODUCT_CHECK
         from app.services.generation_canvas.check_product_visual import VISUAL_PRODUCT_CHECK
+        from app.services.generation_canvas.check_rechecks import recheck_prompt
         from app.services.generation_canvas.check_text import TEXT_CHECKS
         snapshot = task.input_snapshot
         observation = snapshot['observation']
@@ -408,11 +409,7 @@ class TaskWorker:
             result = {'results': {key: value.model_dump(mode='json') for key, value in results.items()}} if results is not None else None
         else:
             instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else TEXT_CHECKS[category][0]
-            context = observation
-            if 'recheck' in snapshot:
-                from app.services.generation_canvas.check_rechecks import RECHECK_INSTRUCTIONS
-                instructions += RECHECK_INSTRUCTIONS
-                context = {**observation, 'recheck': snapshot['recheck']}
+            instructions, context = recheck_prompt(instructions, observation, snapshot)
             messages = [SystemMessage(content=instructions),
                         HumanMessage(content=json.dumps(context, ensure_ascii=False))]
             reply = await self._frozen_text_model(task).ainvoke(messages)
@@ -433,6 +430,7 @@ class TaskWorker:
         """Read only the associated image and report whether any pixels were supplied."""
         import json
         from app.services.generation_canvas.check_media import load_check_image
+        from app.services.generation_canvas.check_rechecks import recheck_prompt
         from app.services.generation_canvas.check_reference_media import (
             REFERENCE_INSTRUCTIONS, parse_reference_reply, unavailable_reference,
         )
@@ -442,7 +440,8 @@ class TaskWorker:
         if image_url is None:
             return unavailable_reference(item_id)
         context = {key: observation[key] for key in ('requirement', 'purposes', 'context') if observation.get(key)}
-        messages = [SystemMessage(content=REFERENCE_INSTRUCTIONS), HumanMessage(content=[
+        instructions, context = recheck_prompt(REFERENCE_INSTRUCTIONS, context, task.input_snapshot)
+        messages = [SystemMessage(content=instructions), HumanMessage(content=[
             {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
             {'type': 'image_url', 'image_url': {'url': image_url}},
         ])]
@@ -453,6 +452,7 @@ class TaskWorker:
         """Read the fixed image or one actual decoded video frame, plus a required reference."""
         import json
         from app.services.generation_canvas.check_media import load_check_image, load_check_video_frame
+        from app.services.generation_canvas.check_rechecks import original_media_observation, recheck_prompt
         from app.services.generation_canvas.check_product_visual import (
             VISUAL_PRODUCT_INSTRUCTIONS, parse_product_visual, unavailable_visual_results,
         )
@@ -466,6 +466,9 @@ class TaskWorker:
             image = await load_check_image(self.sessions, task.project_id, file_id)
         if image is None:
             return unavailable_visual_results(observation, '固定产物的画面无法读取，本项未观察到媒体。')
+        previous_frame = original_media_observation(task.input_snapshot, file_id).get('frame_at_ms')
+        if previous_frame is not None and at_ms != previous_frame:
+            return unavailable_visual_results(observation, '无法重新定位原报告的静帧时刻，未提交替代画面。')
         images = [image]
         reference_id = observation['reference_file_id']
         if reference_id:
@@ -475,9 +478,10 @@ class TaskWorker:
             images.append(reference)
         context = {'requirements': observation['requirements'], 'frame_at_ms': at_ms,
                    'incomplete': observation['incomplete']}
+        instructions, context = recheck_prompt(VISUAL_PRODUCT_INSTRUCTIONS, context, task.input_snapshot)
         content = [{'type': 'text', 'text': json.dumps(context, ensure_ascii=False)}]
         content += [{'type': 'image_url', 'image_url': {'url': value}} for value in images]
-        messages = [SystemMessage(content=VISUAL_PRODUCT_INSTRUCTIONS), HumanMessage(content=content)]
+        messages = [SystemMessage(content=instructions), HumanMessage(content=content)]
         reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
         return parse_product_visual(observation, reply.content, at_ms)
 
@@ -485,6 +489,7 @@ class TaskWorker:
         """Submit one actual audio-free video and validate returned temporal evidence."""
         import json
         from app.services.generation_canvas.check_media import load_check_video_sequence
+        from app.services.generation_canvas.check_rechecks import original_media_observation, recheck_prompt
         from app.services.generation_canvas.check_product_video import (
             VIDEO_PRODUCT_INSTRUCTIONS, parse_product_video, unavailable_video_results,
         )
@@ -492,13 +497,19 @@ class TaskWorker:
         sequence = await load_check_video_sequence(self.sessions, task.project_id, observation['file_id'])
         if sequence is None:
             return unavailable_video_results(observation, '无法读取有可核对时间依据的视频序列，未观察动作过程。')
+        previous_range = original_media_observation(task.input_snapshot, observation['file_id']).get('video_range')
+        if previous_range and previous_range != {
+            'start_ms': sequence.start_ms, 'end_ms': sequence.end_ms, 'sampling_fps': observation['sampling_fps'],
+        }:
+            return unavailable_video_results(observation, '无法重新定位原报告的连续视频区间，未提交替代片段。')
         context = {'requirements': observation['requirements'], 'duration_ms': sequence.end_ms - sequence.start_ms,
                    'incomplete': observation['incomplete']}
+        instructions, context = recheck_prompt(VIDEO_PRODUCT_INSTRUCTIONS, context, task.input_snapshot)
         content = [
             {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
             {'type': 'video_url', 'video_url': {'url': sequence.data_url}, 'fps': observation['sampling_fps']},
         ]
-        messages = [SystemMessage(content=VIDEO_PRODUCT_INSTRUCTIONS), HumanMessage(content=content)]
+        messages = [SystemMessage(content=instructions), HumanMessage(content=content)]
         reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
         return parse_product_video(observation, reply.content, sequence)
 
