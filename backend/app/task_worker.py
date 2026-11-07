@@ -385,6 +385,7 @@ class TaskWorker:
         from app.services.generation_canvas.check_product_text import (
             PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_INSTRUCTIONS, parse_product_text,
         )
+        from app.services.generation_canvas.check_product_video import VIDEO_PRODUCT_CHECK
         from app.services.generation_canvas.check_product_visual import VISUAL_PRODUCT_CHECK
         from app.services.generation_canvas.check_text import TEXT_CHECKS
         snapshot = task.input_snapshot
@@ -393,8 +394,9 @@ class TaskWorker:
         if category == 'P03':
             item = await self._canvas_reference_check(task, observation)
             result = item.model_dump(mode='json') if item is not None else None
-        elif category == VISUAL_PRODUCT_CHECK:
-            results = await self._canvas_product_visual(task, observation)
+        elif category in (VISUAL_PRODUCT_CHECK, VIDEO_PRODUCT_CHECK):
+            results = await (self._canvas_product_video(task, observation) if category == VIDEO_PRODUCT_CHECK
+                             else self._canvas_product_visual(task, observation))
             result = {'results': {key: value.model_dump(mode='json') for key, value in results.items()}} if results is not None else None
         else:
             instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else TEXT_CHECKS[category][0]
@@ -470,6 +472,27 @@ class TaskWorker:
         messages = [SystemMessage(content=VISUAL_PRODUCT_INSTRUCTIONS), HumanMessage(content=content)]
         reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
         return parse_product_visual(observation, reply.content, at_ms)
+
+    async def _canvas_product_video(self, task: Task, observation: dict):
+        """Submit one actual audio-free video and validate returned temporal evidence."""
+        import json
+        from app.services.generation_canvas.check_media import load_check_video_sequence
+        from app.services.generation_canvas.check_product_video import (
+            VIDEO_PRODUCT_INSTRUCTIONS, parse_product_video, unavailable_video_results,
+        )
+
+        sequence = await load_check_video_sequence(self.sessions, task.project_id, observation['file_id'])
+        if sequence is None:
+            return unavailable_video_results(observation, '无法读取有可核对时间依据的视频序列，未观察动作过程。')
+        context = {'requirements': observation['requirements'], 'duration_ms': sequence.end_ms - sequence.start_ms,
+                   'incomplete': observation['incomplete']}
+        content = [
+            {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
+            {'type': 'video_url', 'video_url': {'url': sequence.data_url}, 'fps': observation['sampling_fps']},
+        ]
+        messages = [SystemMessage(content=VIDEO_PRODUCT_INSTRUCTIONS), HumanMessage(content=content)]
+        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        return parse_product_video(observation, reply.content, sequence)
 
     async def _canvas_text(self, task: Task) -> None:
         """Use the admitted private config and persist chunks in short transactions."""

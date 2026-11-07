@@ -1,8 +1,12 @@
-"""Bounded private image access and capability for canvas observations."""
+"""Bounded private media access for canvas observations."""
 import asyncio
 import base64
+import json
+from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
 import subprocess
-from tempfile import TemporaryFile
+from tempfile import TemporaryDirectory, TemporaryFile
 
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import select
@@ -17,12 +21,18 @@ _IMAGE_MODELS = frozenset({'qwen3-vl-plus', 'qwen3-vl-flash'})
 _IMAGE_PREFIX = {'image/png': b'\x89PNG\r\n\x1a\n', 'image/jpeg': b'\xff\xd8\xff', 'image/webp': b'RIFF'}
 _MAX_IMAGE_BYTES = 7 * 1024 * 1024
 _MAX_VIDEO_BYTES = 32 * 1024 * 1024
+_MAX_VIDEO_DATA_BYTES = 7 * 1024 * 1024
 _VIDEO_MIME = frozenset({'video/mp4', 'video/quicktime', 'video/webm'})
 
 
 def supports_check_image(model: FrozenGenerationConfig | None) -> bool:
     """Only the explicit Bailian Chat Completions image routes are connected."""
     return bool(model and model.provider_key == 'aliyun_bailian' and model.model_name in _IMAGE_MODELS)
+
+
+def supports_check_video(model: FrozenGenerationConfig | None) -> bool:
+    """Connect only the documented Bailian model used for video-file input."""
+    return bool(model and model.provider_key == 'aliyun_bailian' and model.model_name == 'qwen3-vl-plus')
 
 
 async def owned_check_files(db, project_id, file_ids, *, lock=False) -> dict[str, FileItem]:
@@ -94,3 +104,57 @@ async def load_check_video_frame(sessions, project_id: str, file_id: str, edge: 
         return None
     url = _image_url('image/png', image)
     return (url, at_ms) if url else None
+
+
+@dataclass(frozen=True)
+class CheckVideoSequence:
+    """A private audio-free video and its verified original presentation interval."""
+    data_url: str
+    start_ms: int
+    end_ms: int
+
+
+def _packet_timing(path):
+    """Use the video packet PTS and duration, independent of any audio timeline."""
+    result = subprocess.run(['ffprobe', '-v', 'error', '-protocol_whitelist', 'pipe,file', '-f', 'mov',
+        '-select_streams', 'V:0', '-show_entries', 'packet=pts_time,duration_time', '-of', 'json', str(path)],
+        capture_output=True, timeout=30, check=True)
+    return sorted((round(Decimal(packet['pts_time']) * 1000), round(Decimal(packet['duration_time']) * 1000))
+                  for packet in json.loads(result.stdout)['packets'])
+
+
+def _video_sequence(content):
+    """Remux without audio, then verify every packet retains its relative timing."""
+    with TemporaryDirectory() as directory:
+        source = Path(directory) / 'source'
+        output = Path(directory) / 'visual.mp4'
+        source.write_bytes(content)
+        original = _packet_timing(source)
+        if len(original) < 2 or original[0][0] == original[-1][0] or any(duration <= 0 for _, duration in original):
+            return None
+        start_ms = original[0][0]
+        end_ms = max(pts + duration for pts, duration in original)
+        if start_ms < 0 or not 2_000 <= end_ms - start_ms <= 40_000:
+            return None
+        offset = str(Decimal(-start_ms) / 1000)
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-protocol_whitelist', 'pipe,file', '-f', 'mov',
+            '-itsoffset', offset, '-i', str(source), '-copyts', '-avoid_negative_ts', 'disabled', '-map', '0:V:0', '-an', '-sn', '-dn', '-c:v', 'copy', '-map_metadata', '-1', '-map_chapters', '-1',
+            '-movflags', '+faststart', str(output)], capture_output=True, timeout=30, check=True)
+        if not 0 < output.stat().st_size <= _MAX_VIDEO_DATA_BYTES:
+            return None
+        mapped = _packet_timing(output)
+        if not mapped or mapped[0][0] != 0 or mapped != [(pts - start_ms, duration) for pts, duration in original]:
+            return None
+        encoded = base64.b64encode(output.read_bytes()).decode('ascii')
+        return CheckVideoSequence(data_url=f'data:video/mp4;base64,{encoded}', start_ms=start_ms, end_ms=end_ms)
+
+
+async def load_check_video_sequence(sessions, project_id: str, file_id: str) -> CheckVideoSequence | None:
+    """Load and validate one owned video; no fallback to sparse images or inferred timing."""
+    media = await load_check_video(sessions, project_id, file_id)
+    if media is None or media[0] not in ('video/mp4', 'video/quicktime') or media[1][4:8] != b'ftyp':
+        return None
+    try:
+        return await asyncio.to_thread(_video_sequence, media[1])
+    except (OSError, ValueError, TypeError, KeyError, ArithmeticError, subprocess.SubprocessError):
+        return None

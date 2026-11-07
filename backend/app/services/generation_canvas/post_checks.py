@@ -12,9 +12,12 @@ from app.schemas.canvas_checks import (
     CanvasCheckReportRead, CanvasPostCheckPreview, CanvasPostCheckRequest,
 )
 from app.schemas.generation_canvas import CanvasCompiledInput, CanvasDocument
-from app.services.generation_canvas.check_media import owned_check_files, supports_check_image
+from app.services.generation_canvas.check_media import owned_check_files, supports_check_image, supports_check_video
 from app.services.generation_canvas.check_product_text import (
     PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_LABEL, text_product_items,
+)
+from app.services.generation_canvas.check_product_video import (
+    VIDEO_PRODUCT_CHECK, VIDEO_PRODUCT_LABEL, VIDEO_SAMPLE_FPS, VIDEO_SEQUENCE,
 )
 from app.services.generation_canvas.check_product_visual import (
     VISUAL_PRODUCT_CHECK, VISUAL_PRODUCT_LABEL, visual_check_groups, visual_product_items,
@@ -107,7 +110,10 @@ class CanvasPostChecks:
             items, requirements, reason = await self._visual_items(basis, product, model, unavailable, lock_files=lock_files)
             method = 'image' if product.modality == 'image' else 'video_frame'
             selected, _ = select_check_items(items, None)
-            calls = len(visual_check_groups(selected, requirements))
+            groups = visual_check_groups(selected, requirements)
+            calls = len(groups)
+            if (VIDEO_SEQUENCE, None) in groups:
+                method = 'video_mixed' if calls > 1 else 'video_sequence'
         preview = CanvasPostCheckPreview(revision=canvas.revision, product=product, basis=basis, items=items,
                                          estimated_calls=calls, observation_method=method, reason=reason)
         return card, preview, requirements, model
@@ -117,7 +123,10 @@ class CanvasPostChecks:
         reason = unavailable
         if not reason and not supports_check_image(model):
             reason = '所选检查模型未接入图片读取能力，无法判断画面'
-        items, requirements = visual_product_items(basis.input, product.modality, reason)
+        sequence_reason = unavailable
+        if product.modality == 'video' and not sequence_reason and not supports_check_video(model):
+            sequence_reason = '所选检查模型未接入视频序列读取能力，无法判断动作过程'
+        items, requirements = visual_product_items(basis.input, product.modality, reason, sequence_unavailable=sequence_reason)
         if not items:
             return items, requirements, '依据缺失：原生成依据未保留可核对的视觉要求'
         ready = [item for item in items if item.availability == 'ready']
@@ -193,10 +202,14 @@ class CanvasPostChecks:
             observation = {'file_id': product.file_id, 'modality': product.modality, 'frame_edge': edge,
                            'reference_file_id': reference_id, 'requirements': requirements,
                            'incomplete': product.generation_status != 'succeeded'}
+            category, title = VISUAL_PRODUCT_CHECK, VISUAL_PRODUCT_LABEL
+            if edge == VIDEO_SEQUENCE:
+                category, title = VIDEO_PRODUCT_CHECK, VIDEO_PRODUCT_LABEL
+                observation['sampling_fps'] = VIDEO_SAMPLE_FPS
             task = await TaskService(self.db).submit(kind='canvas_check', project_id=self.project_id,
-                target_type=CHECK_REPORT_TARGET, target_id=report.id, title=VISUAL_PRODUCT_LABEL,
+                target_type=CHECK_REPORT_TARGET, target_id=report.id, title=title,
                 provider_id=model.provider_id, expected_target_version=revision, snapshot={
-                    'check_category': VISUAL_PRODUCT_CHECK, 'execution_config': model.model_dump(mode='json'),
+                    'check_category': category, 'execution_config': model.model_dump(mode='json'),
                     'observation': observation,
                 }, inputs=inputs)
             tasks.update((row['item_id'], task.id) for row in requirements)
