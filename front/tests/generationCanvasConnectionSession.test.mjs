@@ -30,17 +30,21 @@ test('single use commits once and repeated release cannot create another connect
   s.flow.choose('target', 'left', point)
   s.flow.choose('target', 'left', point)
   assert.equal(s.commits.length, 1)
-  assert.deepEqual(s.commits[0].slice(1), ['left', 'right'])
+  assert.deepEqual(s.commits[0].slice(1), ['left', 'right', 'source'])
   assert.deepEqual(s.state(), {})
 })
-test('multiple uses connect immediately for pointer and keyboard without a second choice', () => {
+test('multiple uses connect once with the selected result identity for pointer and keyboard', () => {
   for (const pointer of [false, true]) {
     const s = session(2)
-    s.flow.start(origin, pointer ? point : undefined)
+    const option = { id: 'first-use', source_card: 'model' }
+    s.options([option, { id: 'second-use', source_card: 'model' }])
+    const projected = { card: 'linked-result:model:image:1', side: 'right' }
+    s.flow.start(projected, pointer ? point : undefined)
+    s.flow.choose('target', 'top', point)
     s.flow.choose('target', 'top', point)
     assert.equal(s.flow.pointerActive, false)
     assert.equal(s.commits.length, 1)
-    assert.deepEqual(s.commits[0].slice(1), ['top', 'right'])
+    assert.deepEqual(s.commits[0], [option, 'top', 'right', projected.card])
     assert.deepEqual(s.state(), {})
   }
 })
