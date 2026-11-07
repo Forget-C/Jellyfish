@@ -12,4 +12,5 @@ export type SoundDesignFields = {
     environment?: (ReferenceDesignField | null);
     action_sound?: (ReferenceDesignField | null);
     music?: (ReferenceDesignField | null);
+    hierarchy?: (ReferenceDesignField | null);
 };

@@ -27,6 +27,7 @@ export function SoundDirectionEditor({ card: raw, onChange, disabled, editorOpen
       <FieldEditor compact label="环境声" value={sound.environment} onChange={environment => update({ ...sound, environment })} />
       <FieldEditor compact label="动作声" value={sound.action_sound} onChange={action_sound => update({ ...sound, action_sound })} />
       <FieldEditor compact label="音乐约束" purpose="constraint" value={sound.music} onChange={music => update({ ...sound, music })} />
+      <FieldEditor compact label="声音层次／主次关系" value={sound.hierarchy} onChange={hierarchy => update({ ...sound, hierarchy })} />
 
     </section>}
 

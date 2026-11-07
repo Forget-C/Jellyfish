@@ -334,6 +334,7 @@ class SoundDesignFields(BaseModel):
     environment: ReferenceDesignField | None = None
     action_sound: ReferenceDesignField | None = None
     music: ReferenceDesignField | None = None
+    hierarchy: ReferenceDesignField | None = None
 
 
 class DialogueBasis(BaseModel):
