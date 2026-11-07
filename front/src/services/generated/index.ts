@@ -191,6 +191,8 @@ export type { CanvasCheckMediaObservation } from './models/CanvasCheckMediaObser
 export type { CanvasCheckOmission } from './models/CanvasCheckOmission';
 export type { CanvasCheckPreview } from './models/CanvasCheckPreview';
 export type { CanvasCheckProduct } from './models/CanvasCheckProduct';
+export type { CanvasCheckRecheck } from './models/CanvasCheckRecheck';
+export type { CanvasCheckRecheckRequest } from './models/CanvasCheckRecheckRequest';
 export type { CanvasCheckReportRead } from './models/CanvasCheckReportRead';
 export type { CanvasCheckRequest } from './models/CanvasCheckRequest';
 export type { CanvasCheckResult } from './models/CanvasCheckResult';
