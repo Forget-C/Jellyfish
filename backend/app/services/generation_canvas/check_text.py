@@ -9,6 +9,9 @@ from app.services.generation_canvas.check_rhythm import RHYTHM_CATEGORY, RHYTHM_
 from app.services.generation_canvas.check_sequence import (
     ACTION_CATEGORY, ACTION_INSTRUCTIONS, CONTINUITY_CATEGORY, CONTINUITY_INSTRUCTIONS, parse_action, parse_continuity,
 )
+from app.services.generation_canvas.check_sound_capability import (
+    SOUND_CAPABILITY_CATEGORY, SOUND_CAPABILITY_INSTRUCTIONS, parse_sound_capability,
+)
 
 TEXT_CHECKS = {
     ADOPTION_CATEGORY: (ADOPTION_INSTRUCTIONS, parse_observation),
@@ -18,4 +21,5 @@ TEXT_CHECKS = {
     CONTINUITY_CATEGORY: (CONTINUITY_INSTRUCTIONS, parse_continuity),
     DURATION_CATEGORY: (DURATION_TEXT_INSTRUCTIONS, parse_duration_text),
     RHYTHM_CATEGORY: (RHYTHM_INSTRUCTIONS, parse_rhythm),
+    SOUND_CAPABILITY_CATEGORY: (SOUND_CAPABILITY_INSTRUCTIONS, parse_sound_capability),
 }

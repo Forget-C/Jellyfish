@@ -19,6 +19,7 @@ from app.services.generation_canvas.check_product_text import PRODUCT_TEXT_CATEG
 from app.services.generation_canvas.checks import CHECK_REPORT_TARGET, CanvasChecks, persist_check_report
 from app.services.generation_canvas.errors import CanvasDomainError, diagnostic
 from app.services.generation_canvas.execution_basis import digest
+from app.services.generation_canvas.check_sound_capability import SOUND_CAPABILITY_CATEGORY, recheck_sound_capability
 from app.services.generation_canvas.check_text import TEXT_CHECKS
 from app.services.generation_canvas.historical_content import CanvasHistoricalContent
 from app.services.task_service import TaskService
@@ -63,8 +64,9 @@ class CanvasCheckRechecks:
             scope='item', basis=original.basis, product=original.product, check_model_id=original.check_model_id,
             items=[item], results=[], enabled_item_ids=original.enabled_item_ids, recheck=recheck)
         tasks = {}
-        if item.category == DURATION_CATEGORY and original_task_id is None:
-            result = recheck_duration(original.basis, item)
+        rules = {DURATION_CATEGORY: recheck_duration, SOUND_CAPABILITY_CATEGORY: recheck_sound_capability}
+        if item.category in rules and original_task_id is None:
+            result = rules[item.category](original.basis, item)
             if result is None:
                 raise _missing_basis(report_id, item.id)
             report.results = [result]
