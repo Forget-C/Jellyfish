@@ -16,7 +16,9 @@ from app.schemas.canvas_checks import (
     CanvasCheckBasis, CanvasCheckExecution, CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest, CanvasCheckResult,
 )
 from app.schemas.generation_canvas import CheckCard, CanvasDocument, TextModelCard
-from app.services.generation_canvas.check_selection import check_items, select_check_items
+from app.services.generation_canvas.check_media import owned_check_files, supports_check_image
+from app.services.generation_canvas.check_reference_media import REFERENCE_CATEGORY, reference_checks
+from app.services.generation_canvas.check_selection import check_items, describe_category, select_check_items
 from app.services.generation_canvas.current_state import CanvasCurrentState
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.execution_basis import CanvasBasis, digest
@@ -88,14 +90,39 @@ class CanvasChecks:
                 pass
         return None, '所选检查模型的供应商配置不可用'
 
+    async def _items(self, basis, card, check_model, model_reason, *, lock_files=False):
+        categories, items, comparisons, observations = check_items(basis, card, model_reason)
+        references = reference_checks(basis)
+        model_ready = supports_check_image(check_model)
+        owned = await owned_check_files(self.db, self.project_id,
+            {ref.media.file_id for ref in references if ref.media.modality == 'image' and ref.media.file_id} if model_ready else set(),
+            lock=lock_files)
+        for ref in references:
+            file = owned.get(ref.media.file_id)
+            if ref.media.modality != 'image':
+                reason = '当前参考素材检查未接入此媒体模态'
+            elif not ref.media.available or not ref.media.basis_current or not ref.media.file_id:
+                reason = '实际采用的参考素材不可用'
+            elif not ref.purposes:
+                reason = '实际提交中没有可核对的素材用途'
+            elif not model_ready:
+                reason = model_reason or '所选检查模型未接入图片读取能力'
+            else:
+                reason = None if file and file.type == 'image' else '实际采用的参考素材不可用'
+            items.append(ref.item(card, reason))
+            if reason is None:
+                observations[ref.item_id] = ref.observation()
+        categories.append(describe_category(card, REFERENCE_CATEGORY, items, '未采用具备明确关联要求的参考素材'))
+        return categories, items, comparisons, observations
+
     async def preview(self, canvas_id: str, card_id: str) -> CanvasCheckPreview:
         """读取保存后的当前目标和适用项，不启动模型或写报告。"""
         canvas = await self.store.get(canvas_id)
         card, basis = await self._basis(canvas, card_id)
         if basis is None:
             return CanvasCheckPreview(reason='请连接模型生成卡的生成检查依据')
-        _, reason = await self._check_model(card)
-        categories, items, _, _ = check_items(basis, card, reason)
+        check_model, reason = await self._check_model(card)
+        categories, items, _, _ = await self._items(basis, card, check_model, reason)
         return CanvasCheckPreview(basis=public_check_basis(basis), categories=categories, items=items)
 
     async def run(self, canvas_id: str, card_id: str, request: CanvasCheckRequest) -> CanvasCheckReportRead:
@@ -111,7 +138,7 @@ class CanvasChecks:
         if public.basis_hash != request.basis_hash:
             raise diagnostic('CHECK_BASIS_CHANGED', '检查依据已变，请刷新后再检查', target, status=409, blocks=['check'])
         check_model, reason = await self._check_model(card)
-        _, items, comparisons, observations = check_items(basis, card, reason)
+        _, items, comparisons, observations = await self._items(basis, card, check_model, reason, lock_files=True)
         selected, omitted = select_check_items(items, request.item_id)
         if not selected:
             unavailable = next((item.reason for item in items if item.id == request.item_id), None)
@@ -128,13 +155,15 @@ class CanvasChecks:
             for item in selected:
                 if item.id not in observations:
                     continue
+                observation = observations[item.id]
+                inputs = [('check_reference', 0, observation['file_id'])] if item.category == REFERENCE_CATEGORY else ()
                 task = await TaskService(self.db).submit(
                     kind='canvas_check', project_id=self.project_id, target_type=CHECK_REPORT_TARGET, target_id=report.id,
                     title=f'{item.label} · {item.source.card_id}/{item.field_id}', provider_id=check_model.provider_id,
                     expected_target_version=canvas.revision, snapshot={
                         'item_id': item.id, 'execution_config': check_model.model_dump(mode='json'),
-                        'observation': observations[item.id],
-                    })
+                        'observation': observation, 'check_category': item.category,
+                    }, inputs=inputs)
                 tasks[item.id] = task.id
                 report.executions.append(CanvasCheckExecution(item_id=item.id, status='queued'))
         stored = report.model_dump(mode='json')

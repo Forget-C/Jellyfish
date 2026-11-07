@@ -54,6 +54,12 @@ export function CheckReportDetails({ report, applicability, retry }: {
         {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
         <p>{result.message}</p>
         {result.submitted_excerpt && <blockquote aria-label="提交片段">{result.submitted_excerpt}</blockquote>}
+        {!!result.observed_media?.length && <ul aria-label="本轮观察素材">
+          {result.observed_media.map((media, index) => <li key={index}>
+            {media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
+            {media.description && ` · ${media.description}`}
+          </li>)}
+        </ul>}
         <small>{result.boundary}</small>
       </article>
     })}

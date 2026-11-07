@@ -367,7 +367,7 @@ class TaskWorker:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
             await db.commit()
 
-    def _frozen_text_model(self, task: Task) -> ChatOpenAI:
+    def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> ChatOpenAI:
         """Use only the provider and model configuration captured at admission."""
         from app.core.contracts.generation import FrozenGenerationConfig
         frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
@@ -375,6 +375,8 @@ class TaskWorker:
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
         params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
+        if multimodal:
+            params['use_responses_api'] = False
         return ChatOpenAI(**params)
 
     async def _canvas_check(self, task: Task) -> None:
@@ -383,16 +385,39 @@ class TaskWorker:
         from app.services.generation_canvas.check_adoption import ADOPTION_INSTRUCTIONS, parse_observation
         snapshot = task.input_snapshot
         observation = snapshot['observation']
-        messages = [SystemMessage(content=ADOPTION_INSTRUCTIONS),
-                    HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
-        reply = await self._frozen_text_model(task).ainvoke(messages)
-        result = parse_observation(snapshot['item_id'], observation, reply.content)
+        if snapshot.get('check_category', 'P01') == 'P03':
+            result = await self._canvas_reference_check(task, observation)
+        else:
+            messages = [SystemMessage(content=ADOPTION_INSTRUCTIONS),
+                        HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
+            reply = await self._frozen_text_model(task).ainvoke(messages)
+            result = parse_observation(snapshot['item_id'], observation, reply.content)
         if result is None:
             await self._fail(task.id, 'canvas_check_response_invalid', '检查模型返回无法解析')
             return
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result.model_dump(mode='json'))
             await db.commit()
+
+    async def _canvas_reference_check(self, task: Task, observation: dict):
+        """Read only the associated image and report whether any pixels were supplied."""
+        import json
+        from app.services.generation_canvas.check_media import load_check_image
+        from app.services.generation_canvas.check_reference_media import (
+            REFERENCE_INSTRUCTIONS, parse_reference_reply, unavailable_reference,
+        )
+
+        item_id, file_id = task.input_snapshot['item_id'], observation['file_id']
+        image_url = await load_check_image(self.sessions, task.project_id, file_id)
+        if image_url is None:
+            return unavailable_reference(item_id)
+        context = {key: observation[key] for key in ('requirement', 'purposes', 'context') if observation.get(key)}
+        messages = [SystemMessage(content=REFERENCE_INSTRUCTIONS), HumanMessage(content=[
+            {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
+            {'type': 'image_url', 'image_url': {'url': image_url}},
+        ])]
+        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        return parse_reference_reply(item_id, file_id, reply.content)
 
     async def _canvas_text(self, task: Task) -> None:
         """Use the admitted private config and persist chunks in short transactions."""
