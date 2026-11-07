@@ -8,6 +8,7 @@ from app.services.generation_canvas.check_requirement_quality import (
     CONSISTENCY_CATEGORY, CONSISTENCY_LABEL, REVIEWABILITY_CATEGORY, REVIEWABILITY_LABEL,
     consistency_checks, reviewability_checks,
 )
+from app.services.generation_canvas.check_rhythm import RHYTHM_CATEGORY, RHYTHM_LABEL, rhythm_checks
 from app.services.generation_canvas.check_sequence import (
     ACTION_CATEGORY, ACTION_LABEL, CONTINUITY_CATEGORY, CONTINUITY_LABEL, sequence_checks,
 )
@@ -18,7 +19,7 @@ from app.services.generation_canvas.check_sound_capability import (
 CHECK_CATEGORY_LABELS = {
     DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL, CONSISTENCY_CATEGORY: CONSISTENCY_LABEL,
     REVIEWABILITY_CATEGORY: REVIEWABILITY_LABEL, REFERENCE_CATEGORY: REFERENCE_LABEL,
-    ACTION_CATEGORY: ACTION_LABEL, CONTINUITY_CATEGORY: CONTINUITY_LABEL,
+    ACTION_CATEGORY: ACTION_LABEL, CONTINUITY_CATEGORY: CONTINUITY_LABEL, RHYTHM_CATEGORY: RHYTHM_LABEL,
     SOUND_CAPABILITY_CATEGORY: SOUND_CAPABILITY_LABEL,
 }
 
@@ -40,7 +41,7 @@ def describe_category(card: CheckCard, category: str, items: list[CanvasCheckIte
 
 def check_items(basis, card: CheckCard, model_unavailable: str | None):
     """共用来源派生结果，使预览、整卡和单项执行使用同一范围。"""
-    items, comparisons = duration_checks(basis, card)
+    items, comparisons, duration_observations = duration_checks(basis, card, model_unavailable)
     categories = [describe_category(card, DURATION_CATEGORY, items, '未采用可核对时长的镜头设计')]
     adopted, observations = adoption_checks(basis, card, model_unavailable)
     categories.append(describe_category(card, ADOPTION_CATEGORY, adopted, '未采用可核对的设计或验收要求'))
@@ -53,10 +54,13 @@ def check_items(basis, card: CheckCard, model_unavailable: str | None):
         describe_category(card, ACTION_CATEGORY, sequence, '未采用可核对的动作、反应或调度要求'),
         describe_category(card, CONTINUITY_CATEGORY, sequence, '未采用可核对的前后态、变化或保持要求'),
     ]
+    rhythm, rhythm_observations = rhythm_checks(basis, card, model_unavailable)
+    categories.append(describe_category(card, RHYTHM_CATEGORY, rhythm, '未采用可核对的动作、运镜或对白要求'))
     sound, sound_rules, sound_observations = sound_capability_checks(basis, card, model_unavailable)
     categories.append(describe_category(card, SOUND_CAPABILITY_CATEGORY, sound, '未采用有效对白、声音安排或声音策略'))
-    return (categories, items + adopted + consistency + reviewability + sequence + sound, comparisons | sound_rules,
-            observations | consistency_observations | reviewability_observations | sequence_observations | sound_observations)
+    return (categories, items + adopted + consistency + reviewability + sequence + rhythm + sound, comparisons | sound_rules,
+            observations | consistency_observations | reviewability_observations | sequence_observations
+            | duration_observations | rhythm_observations | sound_observations)
 
 
 def select_check_items(items: list[CanvasCheckItem], item_id: str | None) -> tuple[list[CanvasCheckItem], list[CanvasCheckOmission]]:

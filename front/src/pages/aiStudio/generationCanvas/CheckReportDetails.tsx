@@ -6,7 +6,7 @@ import { HistoricalCheckProduct } from './PostCheckPanel'
 import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
-const recheckTextCategories = new Set(['P01', 'P02', 'P04', 'P05', 'P06', 'P08', 'P09'])
+const recheckTextCategories = new Set(['P01', 'P02', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09'])
 const videoPhases = { before: '前态', during: '过程', after: '后态' }
 const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 const parameterLabels: Record<string, string> = {

@@ -26,10 +26,11 @@ async def save_requirements(runtime, cards, prompt=''):
     return f'{runtime.url}/checks/check'
 
 
-async def check_category(runtime, checks, category, *, recheck=False):
+async def check_category(runtime, checks, category, *, recheck=False, source_card_id=None):
     client = runtime.client
     preview = (await client.get(checks)).json()['data']
-    item, = (item for item in preview['items'] if item['category'] == category)
+    item, = (item for item in preview['items'] if item['category'] == category
+             and (source_card_id is None or item['source']['card_id'] == source_card_id))
     response = await client.post(f'{checks}/runs', json={
         'expected_revision': preview['basis']['revision'], 'basis_hash': preview['basis']['basis_hash'],
         'item_id': item['id'],
