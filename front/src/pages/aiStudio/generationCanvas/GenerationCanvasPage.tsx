@@ -9,6 +9,7 @@ import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { RunHistory } from './RunHistory'
+import { CheckArchive } from './CheckArchive'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDetailsProvider } from '../directing/ui/WorkbenchDetails'
@@ -155,6 +156,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         <div ref={setPrimaryHost} className="generation-primary-host" />
         {document && <RunHistory onClose={closeRunHistory} key={document.id} runs={runtime.snapshot.runs} targetRun={search.get('run')} targetNode={search.get('node')}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
+        {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} />}
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
           <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
