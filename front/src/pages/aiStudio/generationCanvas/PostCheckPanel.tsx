@@ -9,6 +9,8 @@ const postCategories = [
   { id: 'R02', label: '对象与外观落实' },
   { id: 'R03', label: '静态摄影与风格落实' },
   { id: 'R04', label: '表演、行动与调度落实' },
+  { id: 'R05', label: '运镜过程与落幅落实' },
+  { id: 'R06', label: '片段内连续性落实' },
 ]
 const productLabels = { text: '文字', image: '图片', video: '视频' }
 const observationLabels = {
