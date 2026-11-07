@@ -4,7 +4,11 @@ from app.schemas.generation_canvas import CheckCard
 from app.services.generation_canvas.check_adoption import ADOPTION_CATEGORY, ADOPTION_LABEL, adoption_checks
 from app.services.generation_canvas.check_duration import DURATION_CATEGORY, DURATION_LABEL, duration_checks
 
-CHECK_CATEGORY_LABELS = {DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL}
+from app.services.generation_canvas.check_reference_media import REFERENCE_CATEGORY, REFERENCE_LABEL
+
+CHECK_CATEGORY_LABELS = {
+    DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL, REFERENCE_CATEGORY: REFERENCE_LABEL,
+}
 
 
 def initial_check_categories() -> list[str]:

@@ -185,6 +185,7 @@ export type { CanvasCheckBasis } from './models/CanvasCheckBasis';
 export type { CanvasCheckCategory } from './models/CanvasCheckCategory';
 export type { CanvasCheckExecution } from './models/CanvasCheckExecution';
 export type { CanvasCheckItem } from './models/CanvasCheckItem';
+export type { CanvasCheckMediaObservation } from './models/CanvasCheckMediaObservation';
 export type { CanvasCheckOmission } from './models/CanvasCheckOmission';
 export type { CanvasCheckPreview } from './models/CanvasCheckPreview';
 export type { CanvasCheckReportRead } from './models/CanvasCheckReportRead';
