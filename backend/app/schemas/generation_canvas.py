@@ -572,12 +572,13 @@ class DialogueCard(SoundDirectionCard):
 
 
 class SoundArrangementCard(SoundDirectionCard):
-    """声源、环境声、动作声和音乐约束保持各自用途。"""
+    """声音要素和层次分别保留创作要求。"""
     type: Literal['direction.sound'] = Field(default='direction.sound', json_schema_extra={'enum': ['direction.sound']})
     source_description: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     environment: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     action_sound: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     music: ReferenceDesignField = Field(default_factory=lambda: ReferenceDesignField(purpose='constraint'))
+    hierarchy: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     input_ports: ClassVar[tuple[str, ...]] = ('audio_example', 'text', 'image', 'video', 'anchor')
 
 

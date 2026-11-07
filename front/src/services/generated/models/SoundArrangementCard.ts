@@ -7,7 +7,7 @@ import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
 import type { ReferenceDesignField } from './ReferenceDesignField';
 /**
- * 声源、环境声、动作声和音乐约束保持各自用途。
+ * 声音要素和层次分别保留创作要求。
  */
 export type SoundArrangementCard = {
     id: string;
@@ -21,4 +21,5 @@ export type SoundArrangementCard = {
     environment?: ReferenceDesignField;
     action_sound?: ReferenceDesignField;
     music?: ReferenceDesignField;
+    hierarchy?: ReferenceDesignField;
 };
