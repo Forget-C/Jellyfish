@@ -8,7 +8,7 @@
 export type CanvasInputPortDefinition = {
     id: string;
     label: string;
-    relation: 'generation_input' | 'business_reference' | 'material_association';
-    accepts: Array<'text' | 'image' | 'video' | 'audio' | 'object_reference' | 'anchor' | 'blocking' | 'beat' | 'event' | 'shot' | 'dialogue' | 'criterion'>;
+    relation: 'generation_input' | 'business_reference' | 'material_association' | 'observation';
+    accepts: Array<'text' | 'image' | 'video' | 'audio' | 'object_reference' | 'anchor' | 'blocking' | 'beat' | 'event' | 'shot' | 'dialogue' | 'criterion' | 'check_basis'>;
     max_sources?: (number | null);
 };

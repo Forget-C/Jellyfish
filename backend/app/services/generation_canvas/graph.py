@@ -1,5 +1,5 @@
 """候选图结构校验与目标端口语义；不将候选误当实际运行依赖。"""
-from app.schemas.generation_canvas import CanvasDocument, ModelCard, ObjectDescriptionCard, NamedImageReferenceCard
+from app.schemas.generation_canvas import CanvasDocument, CheckCard, ModelCard, ObjectDescriptionCard, NamedImageReferenceCard
 from app.services.generation_canvas.errors import diagnostic
 
 from app.services.generation_canvas.catalog import ports_compatible
@@ -23,6 +23,11 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
         endpoints.add(endpoint)
         if not source or not receiver or edge.source_port not in source.output_ports or edge.target_port not in receiver.input_ports:
             raise diagnostic('INVALID_ENDPOINT', '连接端点不存在', target)
+        if isinstance(receiver, CheckCard):
+            if expected.get(receiver.id):
+                raise diagnostic('CHECK_TARGET_LIMIT', '每张检查卡只连接一张模型生成卡', target)
+            if edge.result_scope is not None or edge.order_anchor is not None:
+                raise diagnostic('INVALID_CHECK_CONNECTION', '生成检查依据连接不接受产物位置或排序', target)
         anchor = edge.order_anchor
         if anchor:
             original = by_edge.get(anchor.edge_id)

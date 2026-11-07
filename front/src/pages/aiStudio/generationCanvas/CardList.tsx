@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Input } from 'antd'
-import { AppstoreOutlined, CloseOutlined, IdcardOutlined, ThunderboltOutlined, CameraOutlined, NodeIndexOutlined, VideoCameraOutlined, SoundOutlined, SafetyCertificateOutlined, FileTextOutlined, PictureOutlined, PlaySquareOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, CloseOutlined, IdcardOutlined, ThunderboltOutlined, CameraOutlined, NodeIndexOutlined, VideoCameraOutlined, SoundOutlined, SafetyCertificateOutlined, FileTextOutlined, PictureOutlined, PlaySquareOutlined, FileSearchOutlined } from '@ant-design/icons'
 import type { CanvasCatalog } from '../../../services/generated'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 
@@ -12,7 +12,7 @@ export const cardCategories = [
   { title: '基础卡', icon: <AppstoreOutlined /> }, { title: '参考卡', icon: <IdcardOutlined /> },
   { title: '模型生成', icon: <ThunderboltOutlined /> }, { title: '画面设计', icon: <CameraOutlined /> },
   { title: '表演与调度', icon: <NodeIndexOutlined /> }, { title: '叙事与镜头', icon: <VideoCameraOutlined /> },
-  { title: '声音设计', icon: <SoundOutlined /> }, { title: '连续性与约束', icon: <SafetyCertificateOutlined /> },
+  { title: '声音设计', icon: <SoundOutlined /> }, { title: '连续性与约束', icon: <SafetyCertificateOutlined /> }, { title: '检查', icon: <FileSearchOutlined /> },
 ]
 
 /** 左侧添加与右键菜单共用目录投影，包括摄影的独立创建入口。 */
@@ -23,7 +23,7 @@ export function cardCategoryEntries(catalog: CanvasCatalog, category?: string): 
 }
 export const cardEntryIcon = (modality: string) => modality === 'image' ? <PictureOutlined /> : modality === 'video' ? <PlaySquareOutlined /> : modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />
 
-/** 八组只组织添加导航；摄影的五入口创建独立设计而非五种内容类型。 */
+/** 分组只组织添加导航；摄影的五入口创建独立设计而非五种内容类型。 */
 export function CardList({ catalog, readonly, onAdd, active, onActiveChange: setActive }: { catalog: CanvasCatalog; readonly: boolean; onAdd: (type: string, entry?: string) => void; active?: string; onActiveChange: (category?: string) => void }) {
   const [query, setQuery] = useState('')
   const triggers = useRef<Record<string, HTMLElement | null>>({})

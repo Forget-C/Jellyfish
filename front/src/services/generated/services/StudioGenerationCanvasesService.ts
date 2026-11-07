@@ -4,6 +4,8 @@
 /* eslint-disable */
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
+import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
+import type { ApiResponse_CanvasCheckReportRead_ } from '../models/ApiResponse_CanvasCheckReportRead_';
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
@@ -13,9 +15,11 @@ import type { ApiResponse_CanvasRunRead_ } from '../models/ApiResponse_CanvasRun
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
+import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
+import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
@@ -487,6 +491,95 @@ export class StudioGenerationCanvasesService {
             path: {
                 'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Canvas Check
+     * 查看该检查卡连接的已保存模型及可用项目。
+     * @returns ApiResponse_CanvasCheckPreview_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckPreview({
+        projectId,
+        canvasId,
+        cardId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+    }): CancelablePromise<ApiResponse_CanvasCheckPreview_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Run Canvas Check
+     * 执行用户选择的检查范围，写入独立报告。
+     * @returns ApiResponse_CanvasCheckReportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckRun({
+        projectId,
+        canvasId,
+        cardId,
+        requestBody,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+        requestBody: CanvasCheckRequest,
+    }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/runs',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                409: `Conflict`,
+                422: `Unprocessable Entity`,
+            },
+        });
+    }
+    /**
+     * Get Canvas Check Reports
+     * 按原检查卡身份读取该项目画布内的报告。
+     * @returns ApiResponse_list_CanvasCheckReportRead__ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckReports({
+        projectId,
+        canvasId,
+        cardId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+    }): CancelablePromise<ApiResponse_list_CanvasCheckReportRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/reports',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
             },
             errors: {
                 422: `Validation Error`,

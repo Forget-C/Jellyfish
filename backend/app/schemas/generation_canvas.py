@@ -226,7 +226,7 @@ class TextModelCard(ModelCard):
     type: Literal['model.text'] = 'model.text'
     config: TextModelConfig = Field(default_factory=TextModelConfig)
     input_ports: ClassVar[tuple[str, ...]] = ('text',)
-    output_ports: ClassVar[tuple[str, ...]] = ('text',)
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'check_basis')
 
 
 class ImageModelCard(ModelCard):
@@ -235,7 +235,7 @@ class ImageModelCard(ModelCard):
     config: ImageModelConfig = Field(default_factory=ImageModelConfig)
     frame_targets: list[ImageFrameTarget] = Field(default_factory=list)
     input_ports: ClassVar[tuple[str, ...]] = ('text', 'image')
-    output_ports: ClassVar[tuple[str, ...]] = ('image',)
+    output_ports: ClassVar[tuple[str, ...]] = ('image', 'check_basis')
 
 
 class VideoModelCard(ModelCard):
@@ -244,7 +244,7 @@ class VideoModelCard(ModelCard):
     config: VideoModelConfig = Field(default_factory=VideoModelConfig)
     design_media_uses: list[DesignMediaUse] = Field(default_factory=list)
     input_ports: ClassVar[tuple[str, ...]] = ('text', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video')
-    output_ports: ClassVar[tuple[str, ...]] = ('video',)
+    output_ports: ClassVar[tuple[str, ...]] = ('video', 'check_basis')
 
     @model_validator(mode='after')
     def unique_design_uses(self):
@@ -737,6 +737,13 @@ class ImmutableFactCard(ConstraintDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('text', 'image', 'video', 'audio', 'anchor')
 
 
+class CheckCard(CardDefinition):
+    """观察单一模型生成目标。目标身份来自专用连线，报告不属于编辑文档。"""
+    type: Literal['review.check'] = 'review.check'
+    disabled_items: list[str] = Field(default_factory=list)
+    input_ports: ClassVar[tuple[str, ...]] = ('check_basis',)
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -745,7 +752,7 @@ class CanvasDocument(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
-    cards: list[MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard | CheckCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)

@@ -121,3 +121,13 @@ class CanvasEvent(Base):
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), primary_key=True)
     cursor: Mapped[int] = mapped_column(Integer, primary_key=True)
     envelope: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class CanvasCheckReport(Base):
+    """每轮检查有独立身份，保存时不改写画布或生成状态。"""
+    __tablename__ = 'generation_canvas_check_reports'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
+    check_card_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(DateTime, nullable=False)
+    report: Mapped[dict] = mapped_column(JSON, nullable=False)

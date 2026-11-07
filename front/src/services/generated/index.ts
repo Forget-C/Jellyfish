@@ -22,6 +22,8 @@ export type { ApiResponse_AsyncTaskCreateRead_ } from './models/ApiResponse_Asyn
 export type { ApiResponse_BatchRead_ } from './models/ApiResponse_BatchRead_';
 export type { ApiResponse_CanvasCardOutputs_ } from './models/ApiResponse_CanvasCardOutputs_';
 export type { ApiResponse_CanvasCatalog_ } from './models/ApiResponse_CanvasCatalog_';
+export type { ApiResponse_CanvasCheckPreview_ } from './models/ApiResponse_CanvasCheckPreview_';
+export type { ApiResponse_CanvasCheckReportRead_ } from './models/ApiResponse_CanvasCheckReportRead_';
 export type { ApiResponse_CanvasCompiledInput_ } from './models/ApiResponse_CanvasCompiledInput_';
 export type { ApiResponse_CanvasModelCapability_ } from './models/ApiResponse_CanvasModelCapability_';
 export type { ApiResponse_CanvasPrecheck_ } from './models/ApiResponse_CanvasPrecheck_';
@@ -66,6 +68,7 @@ export type { ApiResponse_InstructionCheckConfirmation_ } from './models/ApiResp
 export type { ApiResponse_LedgerRead_ } from './models/ApiResponse_LedgerRead_';
 export type { ApiResponse_list_AssetSummary__ } from './models/ApiResponse_list_AssetSummary__';
 export type { ApiResponse_list_BatchRead__ } from './models/ApiResponse_list_BatchRead__';
+export type { ApiResponse_list_CanvasCheckReportRead__ } from './models/ApiResponse_list_CanvasCheckReportRead__';
 export type { ApiResponse_list_CanvasRead__ } from './models/ApiResponse_list_CanvasRead__';
 export type { ApiResponse_list_ExperimentMessageRead__ } from './models/ApiResponse_list_ExperimentMessageRead__';
 export type { ApiResponse_list_ExperimentSessionRead__ } from './models/ApiResponse_list_ExperimentSessionRead__';
@@ -178,6 +181,12 @@ export type { CanvasBasisTarget } from './models/CanvasBasisTarget';
 export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
 export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition';
 export type { CanvasCatalog } from './models/CanvasCatalog';
+export type { CanvasCheckBasis } from './models/CanvasCheckBasis';
+export type { CanvasCheckItem } from './models/CanvasCheckItem';
+export type { CanvasCheckPreview } from './models/CanvasCheckPreview';
+export type { CanvasCheckReportRead } from './models/CanvasCheckReportRead';
+export type { CanvasCheckRequest } from './models/CanvasCheckRequest';
+export type { CanvasCheckResult } from './models/CanvasCheckResult';
 export type { CanvasCompiledInput } from './models/CanvasCompiledInput';
 export type { CanvasConnectionPolicy } from './models/CanvasConnectionPolicy';
 export type { CanvasContentOrigin } from './models/CanvasContentOrigin';
@@ -236,6 +245,7 @@ export type { CharacterSituation_Input } from './models/CharacterSituation_Input
 export type { CharacterSituation_Output } from './models/CharacterSituation_Output';
 export type { CharacterSituationCard } from './models/CharacterSituationCard';
 export type { CharacterUpdate } from './models/CharacterUpdate';
+export type { CheckCard } from './models/CheckCard';
 export type { CompilationDecision } from './models/CompilationDecision';
 export type { CompileRequest } from './models/CompileRequest';
 export type { CompileResult } from './models/CompileResult';

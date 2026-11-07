@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
+from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Project
 from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard, CanvasDiagnostic, CanvasCompiledInput
 from app.services.common import get_or_404
@@ -129,6 +129,7 @@ class CanvasStore:
         # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
         from app.services.generation_canvas.runtime import delete_runtime
         await delete_runtime(self.db, canvas_id)
+        await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
         await self.db.execute(delete(FileUsage).where(
             FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
