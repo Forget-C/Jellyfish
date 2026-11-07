@@ -3,6 +3,7 @@ import asyncio
 import os
 import uvicorn
 from app.models.llm import Model, Provider
+from app.core.contracts.video_generation import AudioCapability
 from app.core.integrations.video_capabilities import register_video_model_capability, VideoModelCapability
 from tests.generation_canvas_browser_server import app, database, prepare, sessions, get_db
 
@@ -10,7 +11,8 @@ async def seed():
     """仅准备模型目录，不调用供应商。"""
     await prepare()
     register_video_model_capability(provider='vidu', model_prefix='graph-video-main', capability=VideoModelCapability(
-        supports_subject_image_reference=True, allowed_ratios={'9:16', '16:9'}, max_seconds=10))
+        supports_subject_image_reference=True, allowed_ratios={'9:16', '16:9'}, max_seconds=10,
+        native_audio_output=AudioCapability(declaration='supported')))
     register_video_model_capability(provider='vidu', model_prefix='graph-video-alt', capability=VideoModelCapability(
         supports_subject_image_reference=False, allowed_ratios={'16:9'}, supports_seed=False, max_seconds=3))
     async with sessions.begin() as db:

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AudioCapability } from './AudioCapability';
 /**
  * 当前适配器真正接入的模态、用途、组合、数量及参数范围。
  */
@@ -9,6 +10,7 @@ export type CanvasModelCapability = {
     model_id: string;
     modality: 'text' | 'image' | 'video';
     input_ports: Array<string>;
+    native_audio_output?: AudioCapability;
     ratios?: Array<string>;
     resolution_profiles?: Record<string, Record<string, string>>;
     min_count?: number;

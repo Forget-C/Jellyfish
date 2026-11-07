@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
+
+from app.core.contracts.video_generation import AudioCapability
 
 from app.core.integrations.video_capabilities import VideoModelCapability
 
@@ -124,10 +127,13 @@ def clear_vidu_video_capability_overrides() -> None:
 def resolve_vidu_video_capability(model: str | None) -> VideoModelCapability:
     """按最长模型前缀选择 Vidu 视频能力，未知模型采用通用交集。"""
     value = (model or "").strip().lower()
-    for prefix, capability in sorted(_VIDU_MODEL_OVERRIDES.items(), key=lambda item: len(item[0]), reverse=True):
-        if value.startswith(prefix):
-            return capability
-    return _VIDU_DEFAULT
+    capability = next((cap for prefix, cap in sorted(_VIDU_MODEL_OVERRIDES.items(), key=lambda item: len(item[0]), reverse=True)
+                       if value.startswith(prefix)), _VIDU_DEFAULT)
+    # Q3 Pro declares audio output, but defaults vary by endpoint and the adapter does not request it.
+    # https://platform.vidu.com/docs/api-reference/video-models/vidu-q3/reference-to-video
+    if value == 'viduq3-pro' and capability.native_audio_output.declaration == 'unknown':
+        return replace(capability, native_audio_output=AudioCapability(declaration='supported'))
+    return capability
 
 
 def validate_vidu_video_options(input_: VideoGenerationInput) -> None:

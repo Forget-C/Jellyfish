@@ -96,6 +96,17 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
     from app.services.generation_canvas.design_references import FLAT_DESIGN_TYPES, REFERENCE_DESIGN_TYPES
     primary_designs = [item for item in result.used if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in REFERENCE_DESIGN_TYPES]
+    if card.type == 'model.video' and capability:
+        audio = capability.native_audio_output
+        if not audio.connected and any(isinstance(item.payload, DesignTextPayload)
+                                       and item.payload.design_type in ('direction.dialogue', 'direction.sound')
+                                       and item.available and item.text for item in result.used):
+            detail = {
+                'supported': '模型声明支持原生声音输出，当前适配器未接入该能力',
+                'unsupported': '当前模型不支持原生声音输出',
+                'unknown': '当前模型的原生声音输出能力未知',
+            }[audio.declaration]
+            issue('NATIVE_AUDIO_OUTPUT_UNAVAILABLE', f'已采用声音设计：{detail}。', None, ['model_id'], warning=True)
     def design_text(item):
         if item in primary_designs:
             return ''
