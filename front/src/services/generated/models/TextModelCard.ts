@@ -13,6 +13,10 @@ export type TextModelCard = {
     type_version?: number;
     model_id?: (string | null);
     /**
+     * 在画布展开正式结果，仅控制显示
+     */
+    show_result_cards?: boolean;
+    /**
      * 已移除设计的稳定身份，补充或明确处理前阻塞运行
      */
     missing_designs?: Array<string>;

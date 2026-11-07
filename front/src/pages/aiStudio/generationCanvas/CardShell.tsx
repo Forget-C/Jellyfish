@@ -6,9 +6,9 @@ import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchB
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */
-export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
-  { id: string; type?: string; title: string; name?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
-    onContextActions: (trigger: HTMLElement) => void; menu: boolean; onMenuChange: (open: boolean) => void; viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove: () => void;
+export function CardShell({ id, title, name, label, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
+  { id: string; type?: string; title: string; name?: string; label?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
+    onContextActions?: (trigger: HTMLElement) => void; menu: boolean; onMenuChange?: (open: boolean) => void; viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect?: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect?: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove?: () => void;
     connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, fromKeyboard?: boolean) => void }) {
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; viewport?: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
@@ -23,7 +23,7 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
   }, [])
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (!event.isComposing && event.key === 'Escape' && gesture.current) { event.preventDefault(); event.stopPropagation(); menuChange.current(false); cancel() }
+      if (!event.isComposing && event.key === 'Escape' && gesture.current) { event.preventDefault(); event.stopPropagation(); menuChange.current?.(false); cancel() }
     }
     const blur = () => { if (gesture.current?.ready) end.current?.(); gesture.current = undefined; setHolding(false) }
     window.addEventListener('blur', blur)
@@ -45,7 +45,7 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
     const dx = event.clientX - current.x, dy = event.clientY - current.y
     if (!current.ready) {
       if (Math.hypot(dx, dy) <= current.tolerance) return
-      current.ready = true; setMenu(false); onDragStart(); setHolding(true)
+      current.ready = true; setMenu?.(false); onDragStart(); setHolding(true)
     }
     onMove({ x: current.origin.x + (dx - ((viewportOffset?.x || 0) - (current.viewport?.x || 0))) / scale, y: current.origin.y + (dy - ((viewportOffset?.y || 0) - (current.viewport?.y || 0))) / scale })
   }} onPointerUp={event => {
@@ -58,18 +58,18 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
     if (current.ready) onDragEnd?.()
   }} onPointerCancel={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onLostPointerCapture={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onKeyDown={event => {
     if (!event.defaultPrevented && !event.nativeEvent.isComposing && !gesture.current?.ready && event.target === event.currentTarget && event.key === 'Enter') { event.preventDefault(); if (multiSelectMode) onSelect(!selected); else onOpen(event.currentTarget, true) }
-    if (!event.nativeEvent.isComposing && event.key === 'Escape' && menu) { event.preventDefault(); event.stopPropagation(); setMenu(false); event.currentTarget.querySelector<HTMLButtonElement>('[aria-expanded]')?.focus() }
-  }} data-card-id={id} data-card-type={type} data-canvas-node={id} data-selected={selected} data-filter-match={filterMatch} aria-description={filterMatch ? '符合筛选' : undefined} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, minHeight: height }}>
+    if (!event.nativeEvent.isComposing && event.key === 'Escape' && menu) { event.preventDefault(); event.stopPropagation(); setMenu?.(false); event.currentTarget.querySelector<HTMLButtonElement>('[aria-expanded]')?.focus() }
+  }} aria-label={label} data-card-id={id} data-card-type={type} data-canvas-node={id} data-selected={selected} data-filter-match={filterMatch} aria-description={filterMatch ? '符合筛选' : undefined} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, minHeight: height }}>
     <header><button type="button" data-keyboard-move aria-label={`移动布局：${name || title}`} title="拖动卡片，或用方向键移动">{type?.startsWith('direction.') ? <CameraOutlined /> : type?.endsWith('image') || type?.startsWith('reference.') ? <PictureOutlined /> : type?.endsWith('video') ? <VideoCameraOutlined /> : type?.endsWith('audio') ? <AudioOutlined /> : <FileTextOutlined />}</button>
       <strong title={name || title}>{name || title}</strong>{name && <small>{title}</small>}
-      <WorkbenchIconButton label="卡片操作" icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)} />
+      {setMenu && <WorkbenchIconButton label="卡片操作" icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)} />}
       {menu && <div className="generation-card-menu" onPointerDown={event => event.stopPropagation()}>
-        <WorkbenchButton onClick={event=>onContextActions(event.currentTarget)}>复制、封面与下载…</WorkbenchButton>
-        <WorkbenchButton onClick={() => { onStartMultiSelect(); setMenu(false) }}>选择多个</WorkbenchButton>
-        <WorkbenchButton aria-pressed={selected} onClick={() => { onSelect(!selected); setMenu(false) }}>{selected ? '取消选择卡片' : '选择卡片'}</WorkbenchButton>
-        {onExpand && <WorkbenchButton onClick={event => { onExpand(event.currentTarget.closest('article')!); setMenu(false) }}>展开编辑</WorkbenchButton>}
-        <WorkbenchButton disabled={readonly} onClick={event => { onConnect(event.currentTarget.closest('article')!); setMenu(false) }}>连接到…</WorkbenchButton>
-        <WorkbenchButton variant="danger" disabled={readonly || removeDisabled} onClick={() => { onRemove(); setMenu(false) }}>删除卡片</WorkbenchButton>
+        {onContextActions && <WorkbenchButton onClick={event=>onContextActions(event.currentTarget)}>复制、封面与下载…</WorkbenchButton>}
+        {onStartMultiSelect && <WorkbenchButton onClick={() => { onStartMultiSelect(); setMenu?.(false) }}>选择多个</WorkbenchButton>}
+        <WorkbenchButton aria-pressed={selected} onClick={() => { onSelect(!selected); setMenu?.(false) }}>{selected ? '取消选择卡片' : '选择卡片'}</WorkbenchButton>
+        {onExpand && <WorkbenchButton onClick={event => { onExpand(event.currentTarget.closest('article')!); setMenu?.(false) }}>展开编辑</WorkbenchButton>}
+        {onConnect && <WorkbenchButton disabled={readonly} onClick={event => { onConnect(event.currentTarget.closest('article')!); setMenu?.(false) }}>连接到…</WorkbenchButton>}
+        {onRemove && <WorkbenchButton variant="danger" disabled={readonly || removeDisabled} onClick={() => { onRemove(); setMenu?.(false) }}>删除卡片</WorkbenchButton>}
       </div>}
     </header>
     {connections}

@@ -39,6 +39,7 @@
 .generation-material-parameters .ant-select-selection-item { font-size: 12px; }
 .generation-material-parameters .ant-input-number { width: 64px; flex: 0 0 64px; }
 .generation-material-parameters .ant-input-number-input { font-size: 12px; }
+.generation-result-display { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--wb-text); font-size: 11px; white-space: nowrap; }
 .generation-material-parameters > span { color: var(--wb-muted); font-size: 11px; white-space: nowrap; }
 .generation-material-parameters > details { flex: none; font-size: 11px; }
 .generation-material-parameters > details[open] { position: absolute; bottom: 48px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); padding: 12px; z-index: 3; }

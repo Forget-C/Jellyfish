@@ -2,7 +2,7 @@ import { CanvasAssociations, type AssociationEntry, type AssociationDetailContex
 import { associationSources, includeConnectedSources, associationIssues } from './associationSources'
 import { InputBindingReferences } from './InputBindingReferences'
 import { DesignVideoMediaUses } from './DesignVideoMediaUses'
-import { Alert, Select, Space } from 'antd'
+import { Alert, Select, Space, Switch } from 'antd'
 import { ArrowUpOutlined } from '@ant-design/icons'
 import type { CanvasResolvedOutput, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -99,7 +99,9 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const submit = () => { if (!submitDisabled) onPrecheck?.() }
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
-      onChange={id => onChange({ ...card, model_id: id })} />{parameters}</>
+      onChange={id => onChange({ ...card, model_id: id })} />{parameters}
+    <label className="generation-result-display"><Switch size="small" aria-label="显示结果卡" checked={!!card.show_result_cards} disabled={disabled}
+      onChange={checked => onChange({ ...card, show_result_cards: checked })} />显示结果卡</label></>
   const compiledCriteria = resolved.compiled?.used?.filter(item => item.payload && 'design_type' in item.payload && item.payload.design_type === 'direction.criterion') || []
   const carriedInputs = (sourceId: string, close: AssociationDetailContext['close']) => {
     const media = resolved.compiled?.media?.filter(item => item.design_sources?.some(origin => origin.source.card_id === sourceId)) || []

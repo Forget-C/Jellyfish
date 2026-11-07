@@ -131,6 +131,7 @@ class PromptDocument(BaseModel):
 class ModelCard(CardDefinition):
     """模型切换只替换模型身份；未完成配置也可持久保存。"""
     model_id: str | None = None
+    show_result_cards: bool = Field(default=False, exclude_if=lambda value: not value, description='在画布展开正式结果，仅控制显示')
     missing_designs: list[str] = Field(default_factory=list, description='已移除设计的稳定身份，补充或明确处理前阻塞运行')
     prompt: PromptDocument = Field(default_factory=PromptDocument)
     input_bindings: list[InputBinding] = Field(default_factory=list)
