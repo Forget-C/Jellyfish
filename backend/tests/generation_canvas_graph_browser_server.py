@@ -13,7 +13,8 @@ async def seed():
     register_video_model_capability(provider='vidu', model_prefix='graph-video-main', capability=VideoModelCapability(
         supports_subject_image_reference=True, allowed_ratios={'9:16', '16:9'}, max_seconds=10,
         native_audio_output=AudioCapability(declaration='supported'),
-        audio_switch=AudioCapability(declaration='unsupported')))
+        audio_switch=AudioCapability(declaration='unsupported'),
+        audio_reference_input=AudioCapability(declaration='supported')))
     register_video_model_capability(provider='vidu', model_prefix='graph-video-alt', capability=VideoModelCapability(
         supports_subject_image_reference=False, allowed_ratios={'16:9'}, supports_seed=False, max_seconds=3))
     async with sessions.begin() as db:

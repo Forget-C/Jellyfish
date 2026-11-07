@@ -214,6 +214,9 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {card.type === 'model.video' && card.model_id && <small aria-label="声音开关能力">
       声音开关：{audioCapabilityStatus(capability?.audio_switch)}
     </small>}
+    {card.type === 'model.video' && card.model_id && <small aria-label="音频参考输入能力">
+      音频参考输入：{audioCapabilityStatus(capability?.audio_reference_input)}
+    </small>}
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
     {node?.error_message && <Alert type="error" message={`${node.error_message} · 可在素材管理或运行历史查看详情`} />}

@@ -53,10 +53,11 @@ def resolve_volcengine_video_capability(model: str | None) -> VideoModelCapabili
     # Ark documents generate_audio=true by default; this adapter keeps the resulting video intact.
     # https://docs.volcengine.com/docs/ark/create-video-generation-task-api
     if (model or '').strip().lower() == 'doubao-seedance-2-0-260128':
-        # The current request builder does not map the optional generate_audio parameter.
+        # The current request builder does not map generate_audio or reference_audio.
         return replace(_VOLCENGINE_DEFAULT,
                        native_audio_output=AudioCapability(declaration='supported', connected=True),
-                       audio_switch=AudioCapability(declaration='supported'))
+                       audio_switch=AudioCapability(declaration='supported'),
+                       audio_reference_input=AudioCapability(declaration='supported'))
     return _VOLCENGINE_DEFAULT
 
 

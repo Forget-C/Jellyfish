@@ -137,7 +137,9 @@ async def test_fixed_reference_interval_and_file_retention_do_not_propagate(canv
     doc['cards'][0]['file_id'] = files[1]
     assert (await client.put(url, json={'request_id': 'replace', 'expected_revision': 1, 'document': doc})).status_code == 200
     output = (await client.get(url + '/cards/sound/outputs')).json()['data']['outputs']
-    assert files[0] not in str(output) and '900' not in str(output)
+    published = str(output)
+    assert files[0] not in published
+    assert "'start_ms':" not in published and "'end_ms':" not in published
     assert (await client.delete(f'/files/{files[0]}/upload-retention?project_id=p')).status_code == 409
     doc['cards'] = doc['cards'][1:]
     doc.update(edges=[], input_order={})
