@@ -7,6 +7,7 @@ from app.services.generation_canvas.errors import diagnostic
 FIELD_LABELS = {
     'content': '对白正文',
     'language_pronunciation': '语言／发音要求',
+    'audiovisual_relation': '声画关系说明',
     'source_description': '声源说明',
     'environment': '环境声',
     'action_sound': '动作声',

@@ -331,6 +331,7 @@ class SoundDesignFields(BaseModel):
     model_config = ConfigDict(extra='forbid')
     content: ReferenceDesignField | None = None
     language_pronunciation: ReferenceDesignField | None = Field(default=None, exclude_if=lambda value: value is None)
+    audiovisual_relation: ReferenceDesignField | None = Field(default=None, exclude_if=lambda value: value is None)
     source_description: ReferenceDesignField | None = None
     environment: ReferenceDesignField | None = None
     action_sound: ReferenceDesignField | None = None

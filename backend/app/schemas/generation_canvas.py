@@ -571,6 +571,7 @@ class DialogueCard(SoundDirectionCard):
     dialogue_id: str = Field(min_length=1, max_length=64)
     content: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
     language_pronunciation: ReferenceDesignField = Field(default_factory=ReferenceDesignField, description='随对白采用的可选语言与发音设计要求。')
+    audiovisual_relation: ReferenceDesignField = Field(default_factory=ReferenceDesignField, description='随对白采用的可选说话与画面关系。')
     input_ports: ClassVar[tuple[str, ...]] = ('speaker', 'video_example', 'audio_example', 'text')
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'dialogue')
 
