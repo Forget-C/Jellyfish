@@ -32,6 +32,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint regression guard
         run: pnpm run lint:check
+      - name: Install Chromium for visual evidence tests
+        run: pnpm exec playwright install --with-deps chromium
       - name: Pure logic and command regressions
         run: pnpm run test:unit
       - name: Typecheck
