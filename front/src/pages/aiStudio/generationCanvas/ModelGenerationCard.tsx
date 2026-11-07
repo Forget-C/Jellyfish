@@ -6,7 +6,7 @@ import { CardStatusSummary } from './CardStatusSummary'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import './modelGenerationCard.css'
 
-import { GenerationCardFrame, MODEL_CARD_SIZE } from './GenerationCardFrame'
+import { GenerationCardFrame } from './GenerationCardFrame'
 
 /** 三类模型的只读展示：预览限于固定区域，状态独立靠底；所有画布交互仍由 CardShell 管理。 */
 export function ModelGenerationCard({ card, node, outputs, readonly }: {
@@ -17,7 +17,7 @@ export function ModelGenerationCard({ card, node, outputs, readonly }: {
   const media = outputs.filter(output => output.file_id)
   const text = outputs.filter(output => output.text)
   // 节点总高扣除 32px 标题及 2px 边框，底部状态仍由公共骨架固定。
-  return <GenerationCardFrame height={MODEL_CARD_SIZE.height - 34} label="模型输出预览" status={<><CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />{media.some(output => output.modality === 'image') && <span className="generation-model-image-action" ref={setImageActionHost} />}</>}>
+  return <GenerationCardFrame label="模型输出预览" status={<><CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />{media.some(output => output.modality === 'image') && <span className="generation-model-image-action" ref={setImageActionHost} />}</>}>
       {!outputs.length && !temporary && <div className="generation-model-empty">
         {card.type === 'model.image' ? <PictureOutlined aria-hidden /> : card.type === 'model.video' ? <VideoCameraOutlined aria-hidden /> : <FileTextOutlined aria-hidden />}
         <span>尚未生成</span>

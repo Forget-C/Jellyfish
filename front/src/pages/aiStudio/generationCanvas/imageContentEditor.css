@@ -19,10 +19,8 @@
 .generation-image-empty .generation-image-actions{width:auto;margin-top:8px}
 .generation-image-empty .generation-image-actions .wb-action{width:auto;align-self:center}
 .generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{height:min(520px,calc(100dvh - 240px));min-height:0}
-.generation-workbench .generation-card[data-card-type="content.image"] .generation-card-body{padding:0;min-height:0;max-height:none;overflow:hidden}
-.generation-card[data-card-type="content.image"] .generation-basic-image-preview{display:block;width:100%;height:185px;max-height:none;object-fit:contain;margin:0}
-.generation-card[data-card-type="content.image"] .generation-card-footer{padding:4px 10px;margin:0}
-.generation-basic-image-empty{height:185px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--wb-muted);font-size:12px}
+.generation-card[data-card-type="content.image"] .generation-basic-image-preview{display:block;width:100%;height:100%;max-height:none;object-fit:contain;margin:0}
+.generation-basic-image-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--wb-muted);font-size:12px}
 .generation-basic-image-empty>.anticon{font-size:24px}
 @media(max-width:767px){.generation-image-content{flex-direction:column}.generation-image-preview{flex:none;width:100%;height:min(240px,35dvh);min-height:0;max-height:35dvh}.generation-image-preview>img{max-height:35dvh}.generation-image-file-info{flex:none;width:100%}.generation-image-content[data-empty="true"] .generation-image-preview{flex:none;max-height:none;min-height:260px}.generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{height:min(280px,35dvh);min-height:0}}
 

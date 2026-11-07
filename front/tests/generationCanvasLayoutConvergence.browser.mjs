@@ -57,7 +57,7 @@ try {
   page.on('pageerror', error => pageErrors.push(error.message))
   const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '画布交互回归' })
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...canvas.document, cards: [
-          { id: 'place', type: 'reference.place', title: '', angle: '正面', objects: [] },
+          { id: 'place', type: 'reference.place', name: '', angle: '正面' },
           { id: 'spare', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: {} },
         ], edges: [], input_order: {} } }) })
   assert.ok(seeded.ok, await seeded.text())

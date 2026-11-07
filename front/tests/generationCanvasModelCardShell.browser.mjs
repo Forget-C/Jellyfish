@@ -44,11 +44,17 @@ try {
   const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '模型卡统一尺寸与底部状态' })
   const ids = ['short', 'long', 'empty', 'image', 'video']
   const positions = Object.fromEntries([...ids, 'content'].map((id, index) => [id, { x: 120 + index % 3 * 400, y: 200 + Math.floor(index / 3) * 500 }]))
-  const sizes = { short: {width:560,height:400}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
+  const contentCards = [
+    {id:'content',type:'content.text',text:'长文本摘要。'.repeat(500)},
+    {id:'description',type:'content.costume',object_id:'costume',name:'服装',text:'长描述。'.repeat(500)},
+    {id:'basis',type:'content.basis',text:'长原文。'.repeat(500)},
+  ]
+  Object.assign(positions,{description:{x:1500,y:200},basis:{x:1500,y:450}})
+  const sizes = { description:{width:440,height:204}, basis:{width:480,height:250}, short: {width:560,height:400}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
   const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   const transform = {x:0,y:0,scale:1}
   const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[
-    ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`})), {id:'content',type:'content.text',text:'保留原布局与尺寸'}
+    ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`,...(id==='long'?{show_result_cards:true}:{})})), ...contentCards
   ],edges:[{id:'caption',source_card:'short',source_port:'text',target_card:'image',target_port:'text'}],input_order:{image:{text:['caption']}}}})})
   assert.ok(seeded.ok,await seeded.text())
   const upload = async (name, data, type) => {
@@ -87,7 +93,12 @@ try {
     assert.ok(Math.min(Math.abs(endpoint.x-endpoint.left),Math.abs(endpoint.x-endpoint.right))<1,'edge ends on the image card side')
     assert.ok(Math.abs(endpoint.y-endpoint.middle)<1,'edge follows the resized image card center')
     const layout=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
-    assert.deepEqual(layout.positions,positions);assert.deepEqual(layout.sizes.content,sizes.content);assert.deepEqual(layout.manuallyPlaced,['short','video'])
+    for (const [id, point] of Object.entries(positions)) assert.deepEqual(layout.positions[id],point)
+    for (const [id, expected] of [['content',{width:300,height:251}],['description',{width:400,height:172}],['basis',{width:400,height:172}]]) {
+      assert.deepEqual(layout.sizes[id],expected)
+      assert.deepEqual(await page.locator(`[data-card-id="${id}"]`).evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),expected)
+    }
+    assert.deepEqual(layout.manuallyPlaced,['short','video'])
     for(const id of ids) assert.deepEqual(layout.sizes[id],{width:360,height:424})
   }
   for (scenario of ['succeeded','empty','running','failed','cancelled']) {
@@ -97,6 +108,8 @@ try {
     if(scenario!=='empty') assert.equal(await page.locator('[data-card-id="image"] .generation-image-result > img').evaluate(e=>getComputedStyle(e).objectFit),'contain','generated image remains fully visible')
     await checkGeometry()
     if(scenario==='succeeded') {
+      const linkedText = page.getByRole('article',{name:'文本生成结果 1',exact:true}).locator('.generation-linked-text')
+      assert.ok(await linkedText.evaluate(preview=>preview.scrollHeight>preview.clientHeight),'long generated text remains scrollable')
       const imageCard=page.locator('[data-card-id="image"]');await imageCard.getByRole('button',{name:'预览下一张图片',exact:true}).click();await imageCard.getByText('2 / 2',{exact:true}).waitFor()
       await imageCard.getByRole('button',{name:'打开完整图片',exact:true}).click();await page.getByRole('dialog',{name:'图片预览',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('dialog',{name:'图片预览',exact:true}).waitFor({state:'hidden'})
       const video=page.locator('[data-card-id="video"] video');await video.evaluate(e=>{e.muted=true;return e.play()});assert.equal(await video.evaluate(e=>e.paused),false);await video.evaluate(e=>e.pause())

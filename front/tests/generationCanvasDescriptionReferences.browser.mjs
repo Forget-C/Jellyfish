@@ -41,7 +41,7 @@ try {
   const canvas = await json('/api/v1/studio/generation-canvases/canvas-project','POST',{name:'四类描述与参考关联'})
   const endpoint=`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`
   const kinds=['character','place','prop','costume']
-  const cards=[...kinds.map(kind=>({id:'d-'+kind,type:kind==='place'?'content.place':'content.object',category:kind,object_id:'entity-'+kind,name:'名称-'+kind,text:'保密正文-'+kind})),
+  const cards=[...kinds.map(kind=>({id:'d-'+kind,type:'content.'+kind,category:kind,object_id:'entity-'+kind,name:'名称-'+kind,text:'保密正文-'+kind})),
     ...kinds.map(kind=>({id:'r-'+kind,type:'reference.'+kind,name:'',angle:'正面'})),
     {id:'side',type:'reference.character',name:'',angle:'正面'},
     {id:'basis',type:'content.basis',text:'保留原文依据',source_locator:'第3章'}]
@@ -66,8 +66,13 @@ with sqlite3.connect(sys.argv[1]) as db:
   await page.locator('[data-card-id="basis"]').waitFor()
   writeFileSync(join(output,'description-geometry.json'),JSON.stringify(await page.locator('[data-card-type^="content."]').evaluateAll(cards=>cards.filter(card=>['content.character','content.place','content.prop','content.costume'].includes(card.dataset.cardType)).map(card=>({id:card.dataset.cardId,width:card.offsetWidth,height:card.offsetHeight,bodyHeight:card.querySelector('.generation-card-body').offsetHeight}))),null,2))
   const geometry=await page.locator('[data-card-type^="content."]').evaluateAll(cards=>cards.filter(card=>['content.character','content.place','content.prop','content.costume'].includes(card.dataset.cardType)).map(card=>({id:card.dataset.cardId,width:card.offsetWidth,height:card.offsetHeight})))
-  for(const item of geometry)assert.deepEqual({width:item.width,height:item.height},item.id==='d-costume'?{width:440,height:204}:{width:400,height:172},'description size remains unchanged')
+  for(const item of geometry)assert.deepEqual({width:item.width,height:item.height},{width:400,height:172},'legacy and new descriptions use the same geometry')
   assert.deepEqual(await page.locator('[data-card-id="r-character"]').evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),{width:300,height:251},'reference geometry remains independent')
+  assert.deepEqual(await page.locator('[data-card-id="basis"]').evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),{width:400,height:172},'creative basis uses the compact text geometry')
+  const restored=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
+  assert.deepEqual(restored.positions,positions)
+  assert.deepEqual(restored.transform,{x:0,y:0,scale:.8})
+  assert.deepEqual(restored.manuallyPlaced,['d-character'])
   const editor=page.locator('.wb-details:visible')
   const read=()=>json(endpoint)
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('saved state not reached')}
@@ -173,7 +178,7 @@ with sqlite3.connect(sys.argv[1]) as db:
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   await page.screenshot({path:join(output,'description-mobile.png')})
   const cached=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
-  assert.deepEqual(cached.sizes['d-costume'],{width:440,height:204})
+  assert.deepEqual(cached.sizes['d-costume'],{width:400,height:172})
   for(const id of Object.keys(positions))assert.deepEqual(cached.positions[id],positions[id])
-  console.log('PASS four shared description editors, legacy migration, selected same-type names, shared multi-angle identity, live rename, independent names, adoption protection, basis and layout')
+  console.log('PASS four shared description editors, legacy candidate cleanup, selected same-type names, shared multi-angle identity, live rename, independent names, adoption protection, basis and layout')
 } catch(error) { if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error } finally {await cleanup()}

@@ -27,6 +27,7 @@ export async function verifyIndependentDesigns(scenario, port) {
     const fieldKeys=['direction','composition','viewpoint','movement_path','light_sources','depth_focus']
     const fieldLabels=['风格方向','构图重心','观察视点','运动路径','光源','景深与焦点']
     const cards=types.map((kind,i)=>({id:kind,type:'direction.'+kind,fields:{[fieldKeys[i]]:{text:`独立设计${i}`,state:'fact'}}}))
+    if(scenario==='summaries') Object.assign(cards[0], { scope:{description:'整场适用'}, source_locator:'第3章' })
     if(scenario==='summaries')cards.push(
       ...types.map(kind=>({id:'empty-'+kind,type:'direction.'+kind})),
       {id:'stage-only',type:'direction.movement',phases:[{id:'draft',name:'待定落幅'.repeat(30),frame:{state:'empty'}}]},
@@ -38,6 +39,12 @@ export async function verifyIndependentDesigns(scenario, port) {
       {id:'person',type:'content.character',object_id:'person-id',name:'张三'},
       {id:'relation-only',type:'direction.focus',input_bindings:[{id:'person-use',input_port:'focus_object',source:{canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'person-id'}}]}
     )
+    if(scenario==='summaries') {
+      const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards
+      const otherDesigns=catalog.filter(card=>card.type.startsWith('direction.') && !types.includes(card.type.slice('direction.'.length)))
+      assert.equal(otherDesigns.length,19)
+      cards.push(...otherDesigns.map(card=>({id:card.type.slice('direction.'.length),type:card.type,...(card.type==='direction.dialogue'?{dialogue_id:'geometry-dialogue'}:{})})))
+    }
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
     if(scenario==='summaries'){document.edges.push({id:'person-focus',source_card:'person',source_port:'object',target_card:'relation-only',target_port:'focus_object'});document.input_order['relation-only']={focus_object:['person-focus']}}
@@ -55,6 +62,20 @@ export async function verifyIndependentDesigns(scenario, port) {
       assert.ok((await (await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data.diagnostics.some(item=>item.code==='DESIGN_BASIS_MISSING'))
       await detail.getByRole('button',{name:'已处理缺失设计',exact:true}).click();await poll(s=>s.document.cards.find(c=>c.id==='model').missing_designs.length===0)
       await page.keyboard.press('Escape');await detail.waitFor({state:'hidden'})
+    }
+    const assertDesignGeometry = async (target, touch = false) => {
+      const boxes = await target.locator('[data-card-type^="direction."]').evaluateAll(cards => cards.map(card => {
+        const body = card.querySelector('.generation-card-body')
+        const action = body.querySelector('.design-card-entry')
+        return { id: card.dataset.cardId, width: card.offsetWidth, height: card.offsetHeight, actionHeight: action.offsetHeight,
+          overflow: body.scrollHeight - body.clientHeight }
+      }))
+      assert.equal(boxes.length, cards.length - 1)
+      for (const { id, width, height, actionHeight, overflow } of boxes) {
+        assert.deepEqual({ width, height }, { width: 360, height: 368 }, id)
+        assert.ok(overflow <= 1, id + ': card body contains its full summary and actions')
+        if (touch) assert.ok(actionHeight >= 44, id + ': retains the touch action target')
+      }
     }
     if(scenario==='summaries') {
       const names=['画面风格','景别与构图','机位与视角','运镜','光影与色彩','焦点与成像']
@@ -76,6 +97,8 @@ export async function verifyIndependentDesigns(scenario, port) {
       assert.equal(new Set(figures).size,1,'type-specific illustrations keep the same visible height')
       assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=2)),true,'cards keep at most two labelled summary rows')
       assert.equal(await page.locator('.visual-design-card dl > div').evaluateAll(nodes=>nodes.every(node=>{const row=node.getBoundingClientRect();return [...node.children].every(child=>{const r=child.getBoundingClientRect();return r.left>=row.left-1&&r.right<=row.right+1})})),true,'long stage labels and values remain inside the summary')
+      await page.locator('[data-card-id="style"]').getByText('另有 1 项配置').waitFor({state:'attached'})
+      await assertDesignGeometry(page)
       await page.screenshot({path:join(output,'unified-design-cards-desktop.png'),animations:'disabled'})
     }
     for(let i=0;i<types.length;i++){
@@ -96,9 +119,17 @@ export async function verifyIndependentDesigns(scenario, port) {
     await page.setViewportSize({width:390,height:844});await page.locator('[data-card-id="composition"]').press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
     await page.screenshot({path:join(output,`${scenario}-mobile.png`)});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
     if(scenario==='summaries') {
-      const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url())
+      const observer=await context.newPage()
+      await observer.setViewportSize({width:390,height:844})
+      const touch=await context.newCDPSession(observer)
+      await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1})
+      await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url())
       await observer.getByText('此画布当前只读',{exact:true}).waitFor()
       for(const kind of types) await observer.locator(`[data-card-id="${kind}"]`).getByRole('button',{name:'查看设计',exact:true}).waitFor({state:'attached'})
+      assert.equal(await observer.evaluate(()=>matchMedia('(pointer: coarse)').matches),true)
+      await assertDesignGeometry(observer, true)
+      await observer.getByRole('button',{name:'适应全部',exact:true}).click()
+      await observer.screenshot({path:join(output,'unified-design-cards-readonly-touch.png'),animations:'disabled'})
       await observer.close()
     }
     const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards.filter(c=>c.category==='画面设计');assert.equal(catalog.length,6);assert.ok(catalog.every(c=>c.outputs[0].adoption==='whole_card'&&c.entries.length===0))

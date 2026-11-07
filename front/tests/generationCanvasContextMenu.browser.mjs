@@ -70,9 +70,11 @@ try {
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   await page.reload();await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   await page.getByLabel('生成画布视口',{exact:true}).waitFor()
-  await page.mouse.click(1300,900,{button:'right'})
+  await page.mouse.click(1300,650,{button:'right'})
   await menu.getByRole('menuitem',{name:'粘贴',exact:true}).click()
   await page.waitForFunction(()=>document.querySelectorAll('[data-card-type="content.text"]').length===3)
+  const dimensions = await page.locator('[data-card-type="content.text"]').evaluateAll(cards => cards.map(card => [card.offsetWidth, card.offsetHeight]))
+  assert.deepEqual(dimensions, [[300, 251], [300, 251], [300, 251]], 'new, pasted and restored text cards share their dimensions')
   await page.screenshot({path:join(output,'context-menu.png')})
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   const request=async(path,body,method='POST')=>{const response=await fetch(base+path,body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);assert.ok(response.ok,await response.clone().text());return(await response.json()).data}

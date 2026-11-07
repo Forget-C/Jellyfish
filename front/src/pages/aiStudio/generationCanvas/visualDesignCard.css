@@ -12,4 +12,4 @@
 .visual-design-empty strong { font-size: 13px; }
 .visual-design-empty p { margin: 8px 0 0; }
 .visual-design-card .design-card-entry { width: 100%; margin-top: 4px; }
-@media (pointer: coarse) { .visual-design-card .design-card-entry { min-height: 44px; } }
+@media (pointer: coarse) { .visual-design-card .design-card-entry.wb-action.ant-btn { min-height: 44px; } }

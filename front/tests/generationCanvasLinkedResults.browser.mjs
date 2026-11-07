@@ -261,8 +261,7 @@ try {
   assert.equal(fixed.file_id, previous.file_id)
   const independent = page.locator(`[data-card-id="${fixed.id}"]`)
   await independent.waitFor()
-  assert.equal((await box(independent)).left, fixedBox.left)
-  assert.equal((await box(independent)).top, fixedBox.top)
+  assert.deepEqual(await box(independent), fixedBox, 'detaching preserves the whole card box')
   for (const id of ['consumer', 'single']) {
     const { data } = await (await fetch(`${base}/${canvas.id}/cards/${id}/compile`)).json()
     assert.deepEqual(data.media.map(item => [item.source.card_id, item.file_id]), [[fixed.id, fixed.file_id]])
@@ -285,7 +284,7 @@ try {
   await independent.waitFor()
   await saved.waitFor()
   assert.equal((await readInputs()).media[0].file_id, fixed.file_id, 'redo restores the original fixed result')
-  assert.equal((await box(independent)).top, fixedBox.top)
+  assert.deepEqual(await box(independent), fixedBox, 'redo preserves the whole card box')
   await page.reload()
   await independent.waitFor()
   await result.waitFor()

@@ -11,9 +11,9 @@ export function isDescriptionCard(card: GenerationCard): card is DescriptionCard
   return DESCRIPTION_CARD_TYPES.some(type => type === card.type)
 }
 
-/** 四类描述共享卡面；沿用 400×172 默认尺寸或既有缓存高度，不采用模型卡几何。 */
-export function DescriptionCard({ card, readonly, height }: { card: DescriptionCardData; readonly: boolean; height?: number }) {
-  return <GenerationCardFrame label="描述正文预览" height={Math.max(140, (height || 172) - 32) - 2}
+/** 四类描述共享摘要和底部状态。 */
+export function DescriptionCard({ card, readonly }: { card: DescriptionCardData; readonly: boolean }) {
+  return <GenerationCardFrame label="描述正文预览"
     status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />}>
     <div className="generation-output-text generation-description-preview"><p className="canvas-card-summary">{card.text || '未填写描述'}</p></div>
   </GenerationCardFrame>

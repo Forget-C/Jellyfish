@@ -65,7 +65,11 @@ export async function verifyLinkedResultCopy(modality, port, apiPort) {
       await linked.press('Enter')
       await linked.press('ControlOrMeta+d')
     }
-    await page.locator(`[data-card-type="content.${modality}"]`).waitFor()
+    const copyCard = page.locator(`[data-card-type="content.${modality}"]`)
+    await copyCard.waitFor()
+    const dimensions = card => card.evaluate(node => [node.offsetWidth, node.offsetHeight])
+    assert.deepEqual(await dimensions(linked), [300, 251])
+    assert.deepEqual(await dimensions(copyCard), [300, 251])
     await page.getByRole('status', { name: '画布保存状态', exact: true }).filter({ hasText: '已保存' }).waitFor()
     const copy = (await request(path)).document.cards.find(card => card.type === `content.${modality}`)
     if (video) {

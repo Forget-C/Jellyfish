@@ -1,7 +1,6 @@
 import type { CanvasResolvedOutput, CanvasRunRead } from '../../../services/generated'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { GraphSize } from '../directing/graphLayout'
-import { GENERATION_CARD_SIZE } from './GenerationCardFrame'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { resultScopeIncludes } from './resultConnections'
 
@@ -58,15 +57,15 @@ export function retainedResultIds(cards: GenerationCard[], positions: Record<str
 /** 首次展开从来源右侧找空位，既有卡片和已移动结果均保持原位。 */
 export function placeLinkedResults(results: LinkedResult[], positions: Record<string, CanvasPoint>, sizes: Record<string, GraphSize>, retained: Record<string, CanvasPoint> = {}) {
   const placed = { ...positions }
-  const sizeOf = (id: string) => sizes[id] || GENERATION_CARD_SIZE
   for (const result of results) {
     const id = result.id, sourceId = result.output.source.card_id
     if (retained[id]) { placed[id] = retained[id]; continue }
-    const source = placed[sourceId] || { x: 0, y: 0 }, size = sizeOf(id)
-    const x = source.x + sizeOf(sourceId).width + 64
+    const source = placed[sourceId] || { x: 0, y: 0 }, size = sizes[id]
+    const x = source.x + sizes[sourceId].width + 64
     let y = source.y
     for (const [otherId, point] of Object.entries(placed).sort(([, a], [, b]) => a.y - b.y)) {
-      const other = sizeOf(otherId)
+      const other = sizes[otherId]
+      if (!other) continue
       if (x < point.x + other.width + 24 && x + size.width + 24 > point.x
         && y < point.y + other.height + 24 && y + size.height + 24 > point.y) y = point.y + other.height + 24
     }

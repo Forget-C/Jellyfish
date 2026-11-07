@@ -29,7 +29,7 @@ import { createConnectionSession, type ConnectionState } from './connectionSessi
 import { createMoveTransaction } from './moveTransaction'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { readStoredGraphView, useGraphLayout } from '../directing/useGraphLayout'
-import type { GraphArrange, GraphSize } from '../directing/graphLayout'
+import type { GraphArrange } from '../directing/graphLayout'
 import { editorPrompt } from './inputBindings'
 import type { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
@@ -44,7 +44,7 @@ import { referenceNameError } from './referenceCardRules'
 import { ReferenceCard } from './ReferenceCard'
 import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
-import { GENERATION_CARD_SIZE, generationCardSize } from './GenerationCardFrame'
+import { generationCardSize } from './cardGeometry'
 import { knownResultPositions, linkedResultCards, placeLinkedResults, retainedResultIds, type LinkedResult } from './linkedResults'
 import { resultScopeIncludes } from './resultConnections'
 import { capturedResult } from './detachedResults'
@@ -209,7 +209,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const problem = !!runtime?.outputs[card.id]?.some(output => output.basis_current === false) || !!(node && ['failed', 'blocked', 'cancelled'].includes(node.status)) || !!('model_id' in card && card.model_id && capabilityErrors[card.model_id])
     return filterActive && (!displayFilter.group || definition?.group === displayFilter.group) && (!displayFilter.modality || definition?.modality === displayFilter.modality) && (!displayFilter.problems || problem)
   }).map(card => card.id))
-  const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
   const cancelConnection = useCallback(() => connection.cancel(), [connection])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
@@ -266,7 +265,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     if (cardMenuId && !cards.some(card => card.id === cardMenuId) && !resultsById.has(cardMenuId)) setCardMenuId(undefined)
   }, [cards, cardMenuId, resultsById])
-  const cardIdentity = [...cards, ...linkedResults].map(card => card.id).join('|')
   const layoutKey = `jellyfish:generation-layout:${document.project_id}:${document.id}`
   const cachedResultIds = retainedResultIds(cards, readStoredGraphView(`${layoutKey}:view:canvas`)?.positions || {})
   const visibleSourceConnections = visibleSourceEdges(document).filter(edge =>
@@ -288,9 +286,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return { edge, projected: displayed.length > 0 || direct.length > 0 || known.length > 0 && !known.some(output => covered(output.source)),
       results: displayed.filter(result => covered(result.output.source)), direct }
   })
-  const groupIdentity = groups.map(group => `${group.id}:${group.kind}:${group.collapsed}`).join('|')
-  // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
-  const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
   // 整理把编组当一个布局单元，成员仅平移，避免公共网格排布打散组内位置。
   const arrangeGroups: GraphArrange = (items, sizes, width, anchorId, retained) => {
     if (retained || !groups.length) return arrange(items, sizes, width, anchorId, retained ? { ...Object.fromEntries(items.filter(item => historicalPositions.current[item.id]).map(item => [item.id, historicalPositions.current[item.id]])), ...retained } : retained)
@@ -316,13 +311,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return positions
   }
   const nodes = useMemo(() => [
-    ...cards.map(card => ({ id: card.id, ...(card.type?.startsWith('model.') || card.type?.startsWith('reference.') ? { size: generationCardSize(card.type) } : {}) })),
-    ...linkedResults.map(result => ({ id: result.id, size: GENERATION_CARD_SIZE })),
+    ...cards.map(card => ({ id: card.id, size: generationCardSize(card.type) })),
+    ...linkedResults.map(result => ({ id: result.id, size: generationCardSize(`result.${result.output.modality}`) })),
   ], [cards, linkedResults])
+  const cardSizes = useMemo(() => Object.fromEntries(nodes.map(({ id, size }) => [id, size])), [nodes])
   const layout = useGraphLayout({ storageKey: layoutKey, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '',
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
-    onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
+    onStorageError: setStorageError }, nodes, cardSizes, container.current?.clientWidth || 1200)
   const movementHost = useRef({ layout, history })
   movementHost.current = { layout, history }
   const [movement] = useState(() => createMoveTransaction({
@@ -372,11 +368,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
   const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
   useLayoutEffect(() => {
-    if (!creationView.current || !layout.ready || !measured[creationView.current.cardId]) return
+    if (!creationView.current || !layout.ready || !layout.view.positions[creationView.current.cardId]) return
     const retained = creationView.current.transform
     creationView.current = undefined
     layout.setView(previous => ({ ...previous, transform: retained }))
-  }, [layout, measured])
+  }, [layout])
   useEffect(() => {
     if (!layout.ready) return
     const missing = edges.filter(edge => !connectionLayout.sides[edge.id])
@@ -431,21 +427,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }
     return () => { active = false }
   }, [document.id, document.project_id, modelIds])
-  useEffect(() => {
-    const root = container.current
-    if (!root) return
-    const observer = new ResizeObserver(entries => setMeasured(previous => {
-      const next = { ...previous }; let changed = false
-      for (const entry of entries) {
-        const id = (entry.target as HTMLElement).dataset.cardId!
-        const width = (entry.target as HTMLElement).offsetWidth, height = (entry.target as HTMLElement).offsetHeight
-        if (id && (next[id]?.width !== width || next[id]?.height !== height)) { next[id] = { width, height }; changed = true }
-      }
-      return changed ? next : previous
-    }))
-    root.querySelectorAll('[data-card-id]').forEach(card => observer.observe(card))
-    return () => observer.disconnect()
-  }, [cardIdentity, groupIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => {
     const result = operations.update(latest.current, next, capability(next))
@@ -580,14 +561,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const top = ((box.width > 700 ? 180 : 300) - transform.y) / transform.scale
       const availableWidth = Math.max(320, (box.width - (box.width > 700 ? 600 : 140)) / transform.scale)
       const availableHeight = Math.max(250, (box.height - 320) / transform.scale)
+      const newSize = generationCardSize(card.type)
       point = { x: left, y: top }
       for (let y = top; y < top + availableHeight; y += 40) {
         let found = false
         for (let x = left; x < left + availableWidth; x += 40) {
-          if (!cards.some(existing => {
+          if (!nodes.some(existing => {
             const occupied = layout.view.positions[existing.id]
-            const size = measured[existing.id] || { width: 400, height: 350 }
-            return occupied && x < occupied.x + size.width + 16 && x + 400 + 16 > occupied.x && y < occupied.y + size.height + 16 && y + 350 + 16 > occupied.y
+            const size = cardSizes[existing.id]
+            return occupied && x < occupied.x + size.width + 16 && x + newSize.width + 16 > occupied.x && y < occupied.y + size.height + 16 && y + newSize.height + 16 > occupied.y
           })) { point = { x, y }; found = true; break }
         }
         if (found) break
@@ -648,8 +630,18 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     layout.setView(previous=>({...previous,positions:{...previous.positions,...positions}}))
     edit({...latest.current,cards:[...(latest.current.cards || []),...copies]})
     setSelected(copies.map(card=>card.id));setDetailId(undefined);setSelectedEdgeId(undefined)
-    const screenX=origin.x*pasteTransform.scale+pasteTransform.x,screenY=origin.y*pasteTransform.scale+pasteTransform.y
-    if(box && (screenX>box.width || screenY>box.height || screenX+300*pasteTransform.scale<0 || screenY+250*pasteTransform.scale<0))layout.setView(previous=>({...previous,transform:{...previous.transform,x:previous.transform.x+Math.max(16,Math.min(screenX,box.width-80))-screenX,y:previous.transform.y+Math.max(16,Math.min(screenY,box.height-80))-screenY}}))
+    if (box && copies.every(card => {
+      const point = positions[card.id], size = generationCardSize(card.type)
+      const x = point.x * pasteTransform.scale + pasteTransform.x
+      const y = point.y * pasteTransform.scale + pasteTransform.y
+      return x >= box.width || y >= box.height || x + size.width * pasteTransform.scale <= 0 || y + size.height * pasteTransform.scale <= 0
+    })) {
+      const x = origin.x * pasteTransform.scale + pasteTransform.x
+      const y = origin.y * pasteTransform.scale + pasteTransform.y
+      layout.setView(previous => ({ ...previous, transform: { ...previous.transform,
+        x: previous.transform.x + Math.max(16, Math.min(x, box.width - 80)) - x,
+        y: previous.transform.y + Math.max(16, Math.min(y, box.height - 80)) - y } }))
+    }
   }
   const copyTarget = (id: string): { card?: GenerationCard; reason?: string } => {
     const result = resultsById.get(id)
@@ -943,7 +935,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     // Focus/scrollIntoView can scroll an overflow-hidden surface independently of the saved transform.
     surface.scrollTo(0, 0)
     const bounds = visible.map(card => {
-      const origin = point(card.id), size = measured[card.id] || { width: 400, height: 200 }
+      const origin = point(card.id), size = cardSizes[card.id]
       return { left: origin.x, top: origin.y - 36, right: origin.x + size.width, bottom: origin.y + size.height }
     })
     // 分组标题高于成员卡；收起组也需参与适应范围，避免操作落在顶部导航后。
@@ -966,7 +958,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
   // Use a real member position so cross-row selections do not occupy an unrelated empty corner.
   const stackOrigin = (ids: string[]) => point(ids[0])
-  const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
+  const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), cardSizes[id]?.width || 400, cardSizes[id]?.height || 172, side)
   const resultPath = (source: string, target: string, label: string, result: LinkedResult, adopted = false, edge?: GenerationEdge, lane = 0) => {
     const sides = defaultSides(point(source), point(target))
     const resultSource = edge ? result.output.source : undefined
@@ -982,10 +974,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
   const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }
-  const mapLeft = Math.min(0, visibleWorld.x, ...cards.map(card => point(card.id).x))
-  const mapTop = Math.min(0, visibleWorld.y, ...cards.map(card => point(card.id).y))
-  const mapWidth = Math.max(visibleWorld.x + visibleWorld.width, ...cards.map(card => point(card.id).x + (layout.view.sizes[card.id]?.width || 400))) - mapLeft
-  const mapHeight = Math.max(visibleWorld.y + visibleWorld.height, ...cards.map(card => point(card.id).y + (layout.view.sizes[card.id]?.height || 160))) - mapTop
+  const mapCards = [...cards.filter(card => !hidden.has(card.id)), ...linkedResults]
+  const mapBoundsCards = [...cards, ...linkedResults]
+  const mapLeft = Math.min(0, visibleWorld.x, ...mapBoundsCards.map(card => point(card.id).x))
+  const mapTop = Math.min(0, visibleWorld.y, ...mapBoundsCards.map(card => point(card.id).y))
+  const mapWidth = Math.max(visibleWorld.x + visibleWorld.width, ...mapBoundsCards.map(card => point(card.id).x + cardSizes[card.id].width)) - mapLeft
+  const mapHeight = Math.max(visibleWorld.y + visibleWorld.height, ...mapBoundsCards.map(card => point(card.id).y + cardSizes[card.id].height)) - mapTop
   const panMap = (event: PointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect()
     const x = mapLeft + (event.clientX - box.left) / box.width * mapWidth
@@ -1143,9 +1137,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       </Tooltip>
     </section>}
     {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
-      const chosen = selected.map(id => ({ point: point(id), size: measured[id] || { width: 400, height: 200 } }))
-      const left = (chosen.length ? Math.min(...chosen.map(item => item.point.x)) : 0) * transform.scale + transform.x
-      const top = (chosen.length ? Math.min(...chosen.map(item => item.point.y)) : 0) * transform.scale + transform.y - 16
+      const chosen = selected.map(point)
+      const left = (chosen.length ? Math.min(...chosen.map(item => item.x)) : 0) * transform.scale + transform.x
+      const top = (chosen.length ? Math.min(...chosen.map(item => item.y)) : 0) * transform.scale + transform.y - 16
       return { left: Math.max(12, Math.min(left, width - 300)), top: Math.max(160, top), transform: 'translateY(-100%)' }
     })()}>
       <span>{selected.length} 张卡片</span>
@@ -1279,8 +1273,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const positions = members.map(point)
           const origin = { x: positions.length ? Math.min(...positions.map(pos => pos.x)) - 16 : 0,
             y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 48 : 0 }
-          const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (layout.view.sizes[id]?.width || 400) - origin.x + 16))
-          const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (layout.view.sizes[id]?.height || 350) - origin.y + 16))
+          const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (cardSizes[id]?.width || 400) - origin.x + 16))
+          const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (cardSizes[id]?.height || 350) - origin.y + 16))
           return <section key={group.id} data-group-id={group.id} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
             if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
@@ -1336,7 +1330,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             menu={cardMenuId === id} onMenuChange={open => setCardMenuId(open ? id : undefined)}
             onContextActions={trigger => openCardContext(id, trigger)} readonly={readonly}
             point={point(id)} scale={transform.scale} viewportOffset={transform}
-            width={GENERATION_CARD_SIZE.width} height={GENERATION_CARD_SIZE.height} selected={selected.includes(id)}
+            width={cardSizes[id].width} height={cardSizes[id].height} selected={selected.includes(id)}
             onOpen={() => { setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined); setDetailId(undefined) }}
             onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, id])] : previous.filter(value => value !== id)) }}
             multiSelectMode={multiSelectMode} onDragStart={() => beginMove(id, true)} onDragEnd={finishMove}
@@ -1345,7 +1339,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           </CardShell>
         })}
         {cards.filter(card => !hidden.has(card.id)).map(card => {
-          const size = layout.view.sizes[card.id]
+          const size = cardSizes[card.id]
           const isReference = card.type?.startsWith('reference.')
           const isDescription = isDescriptionCard(card)
           const outputs = runtime?.outputs[card.id] || []
@@ -1353,7 +1347,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const isModel = card.type?.startsWith('model.')
           const visualDesign = isReferenceDesign(card)
           return <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger => openCardContext(card.id, trigger)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            viewportOffset={transform} scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (visualDesign ? 360 : focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : visualDesign ? undefined : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') && !visualDesign ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={(trigger, fromKeyboard) => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(!fromKeyboard && card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
@@ -1364,7 +1358,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
-            {isDescription && <DescriptionCard card={card} readonly={readonly} height={size?.height} />}
+            {isDescription && <DescriptionCard card={card} readonly={readonly} />}
             {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly} />}
           </CardShell>
@@ -1388,7 +1382,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
       onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
       <title>小地图导航；方向键平移画布</title>
-      {[...cards.filter(card => !hidden.has(card.id)), ...linkedResults].map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
+      {mapCards.map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={cardSizes[card.id].width} height={cardSizes[card.id].height} />)}
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
