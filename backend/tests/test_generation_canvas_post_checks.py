@@ -122,15 +122,31 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert {item['submitted_excerpt'] for item in historical['results']} == {'门边放着一把红伞。'}
         assert latest['results'][0]['outcome'] == 'indeterminate'
         assert 'private-secret' not in str(historical)
+        original = next(item for item in historical['results'] if item['item_id'].endswith(':visible_result'))
+        response = await client.post(f"{checks}/reports/{historical['id']}/recheck", json={
+            'item_id': original['item_id'], 'clarification': '核对门边物件',
+        })
+        assert response.status_code == 200, response.text
+        accepted_recheck = response.json()['data']
+        await advance()
+        reviewed = (await get(checks + '/reports'))[0]
+        assert reviewed['id'] == accepted_recheck['id']
+        assert reviewed['product'] == historical['product'] and reviewed['basis'] == historical['basis']
+        assert reviewed['results'] == [original]
+        assert len(calls[-1]['requirements']) == 1 and calls[-1]['requirements'][0]['text'] == '红伞留在门边'
+        assert calls[-1]['recheck']['original_result'] == original
+        assert calls[-1]['output_text'] == '门边放着一把红伞。'
+
         fail_check = True
         failed_check = await submit(old_url, fixed)
         await advance()
-        failure, old_partial, old_complete = await get(checks + '/reports')
+        failure, rechecked, old_partial, old_complete = await get(checks + '/reports')
+        assert rechecked == reviewed and 'recheck' not in calls[-1]
         assert old_partial == latest and old_complete == historical
         assert failure['id'] == failed_check['id'] and failure['results'] == []
         assert failure['executions'][0]['status'] == 'failed'
         assert failure['executions'][0]['reason'] == '检查模型返回无法解析'
-        assert len(calls) == 3
+        assert len(calls) == 4
         generations = {run['id']: run['nodes'][0]['status'] for run in (await get(url + '/runtime'))['runs']}
         assert generations == {old_run['run_id']: 'succeeded', partial_run['run_id']: 'failed'}
 
@@ -151,7 +167,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert unavailable['results'] == [] and unavailable['executions'] == []
         assert '依据缺失' in unavailable['omitted'][0]['reason']
         await advance()
-        assert len(calls) == 3
+        assert len(calls) == 4
 
         document = (await get(url))['document']
         document['cards'] = [card for card in document['cards'] if card['id'] != 'check']

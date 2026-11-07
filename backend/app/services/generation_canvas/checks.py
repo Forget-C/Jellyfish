@@ -193,7 +193,7 @@ class CanvasChecks:
         rows = await self.db.scalars(select(CanvasCheckReport).where(
             CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id == card_id
         ).order_by(CanvasCheckReport.created_at.desc(), CanvasCheckReport.id.desc()))
-        return await self._read_reports(list(rows))
+        return await self.read_reports(list(rows))
 
     async def archived_reports(self, canvas_id: str) -> list[CanvasCheckReportRead]:
         """List reports whose original check card is absent from the saved canvas."""
@@ -203,7 +203,7 @@ class CanvasChecks:
         rows = await self.db.scalars(select(CanvasCheckReport).where(
             CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id.not_in(live),
         ).order_by(CanvasCheckReport.created_at.desc(), CanvasCheckReport.id.desc()))
-        return await self._read_reports(list(rows))
+        return await self.read_reports(list(rows))
 
     async def cancel_changed_targets(self, previous: CanvasDocument, current: CanvasDocument) -> None:
         """Called during CAS save with the canvas locked; only original changed targets stop."""
@@ -222,14 +222,19 @@ class CanvasChecks:
     async def cancel(self, canvas_id: str, card_id: str, report_id: str) -> CanvasCheckReportRead:
         """Cancel unfinished tasks belonging to the original report only."""
         await self.store.get(canvas_id)
+        row = await self.report_row(canvas_id, card_id, report_id)
+        await self._cancel_tasks([row], '用户取消检查')
+        return (await self.read_reports([row]))[0]
+
+    async def report_row(self, canvas_id: str, card_id: str, report_id: str) -> CanvasCheckReport:
+        """Find a report in the caller's already authorized canvas, including deleted card identities."""
         row = await self.db.scalar(select(CanvasCheckReport).where(
             CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id == card_id,
             CanvasCheckReport.id == report_id,
         ))
         if row is None:
             raise diagnostic('CHECK_REPORT_NOT_FOUND', '检查报告不存在', {'card_id': card_id}, status=404, blocks=[])
-        await self._cancel_tasks([row], '用户取消检查')
-        return (await self._read_reports([row]))[0]
+        return row
 
     async def _cancel_tasks(self, reports: list[CanvasCheckReport], reason: str) -> None:
         """Request task cancellation in stable order, without acquiring generation locks."""
@@ -245,7 +250,7 @@ class CanvasChecks:
             if targets[task_id] == report_id:
                 await service.request_cancel(task_id, reason=reason)
 
-    async def _read_reports(self, rows: list[CanvasCheckReport]) -> list[CanvasCheckReportRead]:
+    async def read_reports(self, rows: list[CanvasCheckReport]) -> list[CanvasCheckReportRead]:
         """Project task facts without a canvas lock or copying task-private snapshots."""
         task_ids = {task_id for row in rows for task_id in row.report.get('_tasks', {}).values()}
         tasks = {}

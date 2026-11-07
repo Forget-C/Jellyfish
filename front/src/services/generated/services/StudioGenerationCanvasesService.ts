@@ -21,6 +21,7 @@ import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResp
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
+import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
 import type { CanvasPostCheckRequest } from '../models/CanvasPostCheckRequest';
@@ -749,6 +750,41 @@ export class StudioGenerationCanvasesService {
             },
             errors: {
                 422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Recheck Canvas Report
+     * Run one completed finding against the evidence of its original report.
+     * @returns ApiResponse_CanvasCheckReportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCheckRecheck({
+        projectId,
+        canvasId,
+        cardId,
+        reportId,
+        requestBody,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+        reportId: string,
+        requestBody: CanvasCheckRecheckRequest,
+    }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/reports/{report_id}/recheck',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
+                'report_id': reportId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Unprocessable Entity`,
             },
         });
     }

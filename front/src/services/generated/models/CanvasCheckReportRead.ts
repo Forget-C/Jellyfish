@@ -7,6 +7,7 @@ import type { CanvasCheckExecution } from './CanvasCheckExecution';
 import type { CanvasCheckItem } from './CanvasCheckItem';
 import type { CanvasCheckOmission } from './CanvasCheckOmission';
 import type { CanvasCheckProduct } from './CanvasCheckProduct';
+import type { CanvasCheckRecheck } from './CanvasCheckRecheck';
 import type { CanvasCheckResult } from './CanvasCheckResult';
 /**
  * 固定本轮目标、依据、所选项目与结果；重查形成新身份。
@@ -27,4 +28,5 @@ export type CanvasCheckReportRead = {
      */
     enabled_item_ids?: (Array<string> | null);
     product?: (CanvasCheckProduct | null);
+    recheck?: (CanvasCheckRecheck | null);
 };

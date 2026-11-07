@@ -398,8 +398,13 @@ class TaskWorker:
             result = {'results': {key: value.model_dump(mode='json') for key, value in results.items()}} if results is not None else None
         else:
             instructions = PRODUCT_TEXT_INSTRUCTIONS if category == PRODUCT_TEXT_CATEGORY else TEXT_CHECKS[category][0]
+            context = observation
+            if 'recheck' in snapshot:
+                from app.services.generation_canvas.check_rechecks import RECHECK_INSTRUCTIONS
+                instructions += RECHECK_INSTRUCTIONS
+                context = {**observation, 'recheck': snapshot['recheck']}
             messages = [SystemMessage(content=instructions),
-                        HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
+                        HumanMessage(content=json.dumps(context, ensure_ascii=False))]
             reply = await self._frozen_text_model(task).ainvoke(messages)
             if category == PRODUCT_TEXT_CATEGORY:
                 results = parse_product_text(observation, reply.content)

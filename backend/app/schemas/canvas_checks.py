@@ -1,8 +1,8 @@
 """检查卡的公开输入投影及独立报告契约。"""
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.core.contracts.generation_canvas import OutputIdentity
 from app.schemas.generation_canvas import CanvasCompiledInput, CanvasModelCapability
@@ -69,6 +69,13 @@ class CanvasCheckRequest(BaseModel):
     item_id: str | None = Field(default=None, min_length=1, max_length=256)
 
 
+class CanvasCheckRecheckRequest(BaseModel):
+    """One supplemental lead for one completed result in a pinned report."""
+    model_config = ConfigDict(extra='forbid')
+    item_id: str = Field(min_length=1, max_length=256)
+    clarification: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
 class CanvasCheckTextEvidence(BaseModel):
     """Exact excerpt and location in a frozen check input."""
     source: OutputIdentity
@@ -98,6 +105,13 @@ class CanvasCheckResult(BaseModel):
     submitted_excerpt: str | None = None
     text_evidence: list[CanvasCheckTextEvidence] = Field(default_factory=list)
     observed_media: list[CanvasCheckMediaObservation] = Field(default_factory=list)
+
+
+class CanvasCheckRecheck(BaseModel):
+    """Original finding and the lead used exclusively in this recheck."""
+    report_id: str
+    clarification: str
+    original_result: CanvasCheckResult
 
 
 class CanvasCheckExecution(BaseModel):
@@ -147,3 +161,4 @@ class CanvasCheckReportRead(BaseModel):
     executions: list[CanvasCheckExecution] = Field(default_factory=list)
     enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')
     product: CanvasCheckProduct | None = None
+    recheck: CanvasCheckRecheck | None = None

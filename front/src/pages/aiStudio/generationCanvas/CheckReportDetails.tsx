@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
 import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckReportRead } from '../../../services/generated'
+import { CheckRecheckForm } from './CheckRecheckForm'
+import type { RecheckContext } from './CheckRecheckForm'
 import { HistoricalCheckProduct } from './PostCheckPanel'
 import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
+const recheckTextCategories = new Set(['P01', 'P02', 'P06', 'P09'])
 const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 const parameterLabels: Record<string, string> = {
   seconds: '时长（秒）', ratio: '画幅', target_ratio: '画幅', count: '数量', seed: '种子', resolution_profile: '分辨率',
@@ -26,15 +29,21 @@ export function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label:
   </details>
 }
 
-export function CheckReportDetails({ report, applicability, retry }: {
+export function CheckReportDetails({ report, applicability, retry, recheck }: {
   report: CanvasCheckReportRead
   applicability?: (item: CanvasCheckItem | undefined) => string
   retry?: (itemId: string) => ReactNode
+  recheck?: RecheckContext
 }) {
   return <>
     <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
       {report.enabled_item_ids != null && ` · 执行时启用 ${report.enabled_item_ids.length} 项`}
       {report.check_model_id && ` · 检查模型 ${report.check_model_id}`}</p>
+    {report.recheck && <details>
+      <summary>原报告复核 · {report.recheck.report_id}</summary>
+      <p>原结论 {outcomes[report.recheck.original_result.outcome]} · {report.recheck.original_result.message}</p>
+      <p>本次复核说明 {report.recheck.clarification}</p>
+    </details>}
     {report.product && <HistoricalCheckProduct product={report.product} />}
     {!!report.executions?.length && <ul aria-label="模型检查执行状态">
       {report.executions.map(execution => {
@@ -70,6 +79,8 @@ export function CheckReportDetails({ report, applicability, retry }: {
           </li>)}
         </ul>}
         <small>{result.boundary}</small>
+        {recheck && item && (recheckTextCategories.has(item.category) || item.category === 'R01' && report.product?.text != null)
+          && <CheckRecheckForm key={report.id} {...recheck} cardId={report.check_card_id} reportId={report.id} itemId={result.item_id} />}
       </article>
     })}
     {!!report.omitted?.length && <ul aria-label="本轮未执行">
