@@ -15,7 +15,10 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
     if (!resultScopeIncludes(existing?.result_scope, source.position)) return false
     if (card.type?.startsWith('reference.') && (port === 'image_source' && origin.type !== 'content.image' || port === 'name' && origin.type !== card.type.replace('reference.', 'content.'))) return false
     const record = origin as unknown as Record<string, unknown>
-    const identity = ['object_id', 'anchor_id', 'blocking_id', 'beat_id', 'event_id', 'shot_id', 'dialogue_id', 'criterion_id'].map(key => record[key]).find(Boolean)
+    // 命名参考在关联期间发布来源描述的对象 ID。
+    const identity = origin.type?.startsWith('reference.')
+      ? ('name_binding' in origin && origin.name_binding?.object_id) || record.object_id || origin.id
+      : ['object_id', 'anchor_id', 'blocking_id', 'beat_id', 'event_id', 'shot_id', 'dialogue_id', 'criterion_id'].map(key => record[key]).find(Boolean)
     return ['text', 'image', 'video', 'audio'].includes(source.port_id) || !!identity && identity === source.object_id
   }
   const endpoints = new Set<string>()

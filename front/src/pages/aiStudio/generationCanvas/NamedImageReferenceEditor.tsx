@@ -1,4 +1,3 @@
-import { useGraphRules } from './CanvasCatalogContext'
 import { EditorAttribute } from './EditorAttribute'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Select } from 'antd'
@@ -23,7 +22,6 @@ function ImageOption({ fileId, name }: { fileId: string; name: string }) {
 
 /** 四类共用名称与单图选择；新图片只从图片内容卡采用，旧的固定图片继续展示。 */
 export function NamedImageReferenceEditor({ card: raw, document, projectId, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
-  const { connectionPolicy } = useGraphRules()
   const fieldId = useId()
   const card = raw as NamedImageReferenceCard
   const resolved = useCardCandidates(projectId, document.id, card.id, savedRevision, modelOutputs, false)
@@ -56,7 +54,8 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   const name = (linkedSource && 'name' in linkedSource ? linkedSource.name : card.name) || ''
   const changeNameBinding = (candidate?: CanvasResolvedOutput) => {
     if (disabled) return
-    const protection = referenceProtection(document, connectionPolicy, card.id)
+    // 改绑会替换输出对象身份，仍在使用的弱关联也需要先解除。
+    const protection = referenceProtection(document, undefined, card.id)
     if (protection) { setSelectionError('请先取消下游采用，再切换或取消名称关联'); return }
     pendingName.current = undefined
     setSelectionError('')

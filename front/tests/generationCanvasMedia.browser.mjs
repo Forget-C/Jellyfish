@@ -61,7 +61,9 @@ try {
     else await route.continue()
   })
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await page.getByText(/TEST_SAVE_FAILURE/).waitFor()
+  const saveFailure = /TEST_SAVE_FAILURE: 保存失败/
+  await page.getByRole('alert').filter({ hasText: saveFailure }).waitFor()
+  await detail.getByRole('status').filter({ hasText: saveFailure }).waitFor()
   await detail.getByRole('button', { name: '选择素材', exact: true }).click()
   await page.getByRole('button', { name: '选用 first', exact: true }).click()
   assert.equal(await detail.locator('img[alt="图片预览"]').getAttribute('src'), original)

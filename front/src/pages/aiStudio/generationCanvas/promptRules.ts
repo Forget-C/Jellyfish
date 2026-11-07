@@ -12,8 +12,8 @@ export function referenceIssue(document: CanvasDocument, _receiver: GenerationCa
   return !item ? '来源未连接' : !item.available ? item.disabledReason || '来源输出缺失' : ''
 }
 export type ConnectionBlocker = { message: string; cardId: string; segmentId: string; referenceId: string }
-/** 收集全部保留消费者的依赖；调用方只能原子解除，不做部分删除。 */
-export function referenceProtection(document: CanvasDocument, policy: ReturnType<typeof createGraphRules>['connectionPolicy'], sourceCard: string, receiverId?: string, removedConsumers: string[] = [], result?: Pick<OutputIdentity, 'port_id' | 'position'>) {
+/** 收集保留消费者的依赖；未提供断线策略时，所有实际采用均受保护。 */
+export function referenceProtection(document: CanvasDocument, disconnectPolicy: ReturnType<typeof createGraphRules>['connectionPolicy'] | undefined, sourceCard: string, receiverId?: string, removedConsumers: string[] = [], result?: Pick<OutputIdentity, 'port_id' | 'position'>) {
   const blockers: ConnectionBlocker[] = []
   const add = (cardId: string, id: string, message: string, segmentId = id) => {
     if (!blockers.some(item => item.cardId === cardId && item.referenceId === id)) blockers.push({ cardId, segmentId, referenceId: id, message })
@@ -32,7 +32,7 @@ export function referenceProtection(document: CanvasDocument, policy: ReturnType
     for (const binding of 'input_bindings' in card ? card.input_bindings || [] : []) {
       if (!matches(binding.source)) continue
       const refs = referencesIn(editorPrompt(card)).filter(reference => reference.binding_id === binding.id)
-      const rule = policy(document, { id: '', source_card: sourceCard, source_port: binding.source.port_id, target_card: card.id, target_port: binding.input_port })
+      const rule = disconnectPolicy?.(document, { id: '', source_card: sourceCard, source_port: binding.source.port_id, target_card: card.id, target_port: binding.input_port })
       if (!refs.length && rule?.disconnect === 'release') continue
       if (refs.length) for (const ref of refs) add(card.id, ref.id, `请先清理 ${card.id} 的引用 ${ref.id}`)
       else add(card.id, binding.id, '请先清理 ' + card.id + ' 的实际输入绑定 ' + binding.id)

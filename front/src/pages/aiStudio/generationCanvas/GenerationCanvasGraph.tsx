@@ -169,33 +169,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }
     setMultiSelectMode(false); setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setSelectedResultSource(resultSource); setEdgeActionPoint(position)
   }
-  useEffect(() => {
-    const keydown = (event: KeyboardEvent) => {
-      const target = event.target as Element
-      if (event.key === 'Escape' || event.isComposing) { surfaceGesture.spaceReset(); return }
-      if (event.defaultPrevented || movement.pointerActive || target.closest('input, textarea, select, [contenteditable], [role="dialog"], .generation-card-menu')) return
-      if (event.code === 'Space' && target.closest('button, audio, video')) return
-      if (event.code === 'Space' && container.current?.contains(target)) { event.preventDefault(); surfaceGesture.spaceDown(target, event.repeat) }
-
-    }
-    const keyup = (event: KeyboardEvent) => {
-      if (event.code !== 'Space') return
-      if (!surfaceGesture.spaceUp(event.target, event.isComposing || event.defaultPrevented || movement.pointerActive)) return
-      const target = event.target as HTMLElement
-      const card = target.matches('[data-card-id]') ? target : undefined
-      if (card) {
-        const id = card.dataset.cardId!
-        if (multiSelectMode) setSelected(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id])
-        else { setSelected([id]); setDetailTrigger(card); setDetailId(id) }
-      }
-    }
-    const focus = (event: FocusEvent) => {
-      surfaceGesture.focus(!!(event.target as Element).closest('input, textarea, select, [contenteditable], [role="dialog"]'))
-    }
-    const blur = () => { if (viewport.surface.current) delete viewport.surface.current.dataset.panning; surfaceGesture.blur() }
-    window.addEventListener('focusin', focus); window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur)
-    return () => { window.removeEventListener('focusin', focus); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur) }
-  }, [clearSelection, multiSelectMode])
   const [selecting, setSelecting] = useState(false)
   const [storageError, setStorageError] = useState('')
   const [modelDefaults, setModelDefaults] = useState<ModelSettingsRead>()
@@ -354,7 +327,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...current.positions } }))
     groupDrag.current = undefined
     movement.finish(true)
-  }, [layout])
+  }, [layout, movement])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (!event.isComposing && event.key === 'Escape' && groupDrag.current) { event.preventDefault(); event.stopPropagation(); cancelGroupDrag() }
@@ -362,7 +335,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const blur = () => { if (groupDrag.current) { groupDrag.current = undefined; movement.finish() } }
     window.addEventListener('keydown', cancel, true); window.addEventListener('blur', blur)
     return () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('blur', blur) }
-  }, [cancelGroupDrag])
+  }, [cancelGroupDrag, movement])
   historicalPositions.current = { ...historicalPositions.current, ...layout.view.positions }
   retainedPositions.current = layout.view.positions
   const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
@@ -383,6 +356,34 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const currentTransform = useRef(transform); currentTransform.current = transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
+  const surfaceRef = viewport.surface
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      const target = event.target as Element
+      if (event.key === 'Escape' || event.isComposing) { surfaceGesture.spaceReset(); return }
+      if (event.defaultPrevented || movement.pointerActive || target.closest('input, textarea, select, [contenteditable], [role="dialog"], .generation-card-menu')) return
+      if (event.code === 'Space' && target.closest('button, audio, video')) return
+      if (event.code === 'Space' && container.current?.contains(target)) { event.preventDefault(); surfaceGesture.spaceDown(target, event.repeat) }
+
+    }
+    const keyup = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      if (!surfaceGesture.spaceUp(event.target, event.isComposing || event.defaultPrevented || movement.pointerActive)) return
+      const target = event.target as HTMLElement
+      const card = target.matches('[data-card-id]') ? target : undefined
+      if (card) {
+        const id = card.dataset.cardId!
+        if (multiSelectMode) setSelected(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id])
+        else { setSelected([id]); setDetailTrigger(card); setDetailId(id) }
+      }
+    }
+    const focus = (event: FocusEvent) => {
+      surfaceGesture.focus(!!(event.target as Element).closest('input, textarea, select, [contenteditable], [role="dialog"]'))
+    }
+    const blur = () => { if (surfaceRef.current) delete surfaceRef.current.dataset.panning; surfaceGesture.blur() }
+    window.addEventListener('focusin', focus); window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur)
+    return () => { window.removeEventListener('focusin', focus); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur) }
+  }, [movement, multiSelectMode, surfaceGesture, surfaceRef])
   const revealEditor = useCanvasEditorReveal(transform, offset => layout.setView(previous => ({ ...previous, transform: { ...previous.transform, ...offset } })))
   const edgePointer = useRef<{x:number;y:number}>()
   const beginMove = (id: string, pointer = false) => {
