@@ -26,7 +26,7 @@ async def save_requirements(runtime, cards, prompt=''):
     return f'{runtime.url}/checks/check'
 
 
-async def check_category(runtime, checks, category):
+async def check_category(runtime, checks, category, *, recheck=False):
     client = runtime.client
     preview = (await client.get(checks)).json()['data']
     item, = (item for item in preview['items'] if item['category'] == category)
@@ -43,7 +43,20 @@ async def check_category(runtime, checks, category):
         report = (await client.get(f'{checks}/reports')).json()['data'][0]
         assert report['executions'][0]['status'] == 'succeeded', report['executions']
         assert report['items'][0]['input_stamp'] == item['input_stamp']
-        return report['results'][0]
+        result = report['results'][0]
+        if recheck:
+            response = await client.post(f"{checks}/reports/{report['id']}/recheck", json={
+                'item_id': item['id'], 'clarification': '再核对同一范围',
+            })
+            assert response.status_code == 200, response.text
+            accepted = response.json()['data']
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            reviewed, original = (await client.get(f'{checks}/reports')).json()['data']
+            assert original == report and reviewed['id'] == accepted['id']
+            assert reviewed['basis'] == report['basis'] and reviewed['results'] == [result]
+            assert reviewed['recheck']['original_result'] == result
+        return result
     finally:
         worker.text_pool.shutdown(wait=False)
 
@@ -82,7 +95,7 @@ async def test_consistency_requires_two_real_requirements_with_common_scope(runt
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
     checks = await save_requirements(runtime, [camera, movement])
-    result = await check_category(runtime, checks, 'P02')
+    result = await check_category(runtime, checks, 'P02', recheck=difference is None)
     assert result['outcome'] == outcome
     if difference is None:
         assert [(entry['source']['card_id'], entry['field_id'], entry['excerpt']) for entry in result['text_evidence']] == [
@@ -116,7 +129,7 @@ async def test_reviewability_is_anchored_to_adopted_criterion_and_actual_prompt(
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
     checks = await save_requirements(runtime, [criterion], prompt=prompt)
-    result = await check_category(runtime, checks, 'P09')
+    result = await check_category(runtime, checks, 'P09', recheck=outcome == 'conforming')
     assert result['outcome'] == outcome
     assert '机位卡' not in result['message']
     if outcome in ('conforming', 'risk'):

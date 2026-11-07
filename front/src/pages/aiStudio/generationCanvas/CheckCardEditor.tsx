@@ -185,6 +185,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
         && <Button size="small" variant="quiet" loading={cancelling} disabled={disabled || loading || running}
           onClick={() => void cancel(report.id)}>取消本轮检查</Button>}
       <CheckReportDetails report={report}
+        recheck={{ projectId, canvasId, disabled: disabled || cancelling, onReport: showReport }}
         applicability={report.product ? undefined : item => comparable ? applicability(item, items.find(row => row.id === item?.id), sameTarget) : '待核对当前检查依据'}
         retry={itemId => !report.product && items.some(item => item.id === itemId && item.availability === 'ready')
           && <Button size="small" disabled={blocked} onClick={() => void run(itemId)}>重新检查此项</Button>} />
