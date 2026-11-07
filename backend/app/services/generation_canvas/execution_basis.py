@@ -51,6 +51,11 @@ class CanvasBasis:
     _include_acceptance: bool = field(default=True, repr=False)
     _include_dependencies: bool = field(default=True, repr=False)
 
+    @property
+    def capability(self) -> CanvasModelCapability | None:
+        """供检查和预览复用已解析的公开能力。"""
+        return self._model_context.capability
+
     def to_snapshot(self) -> dict:
         """固定直接来源及所采用设计的有效字段来源，不遍历任意祖先。"""
         used_sources = {ref.source.card_id for ref, _ in prompt_references(self.card)}

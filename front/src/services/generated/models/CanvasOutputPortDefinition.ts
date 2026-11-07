@@ -8,6 +8,6 @@
 export type CanvasOutputPortDefinition = {
     id: string;
     label: string;
-    value_kind: 'text' | 'image' | 'video' | 'audio' | 'object_reference' | 'anchor' | 'blocking' | 'beat' | 'event' | 'shot' | 'dialogue' | 'criterion';
-    adoption: 'whole_card' | 'declared_scope' | 'object' | 'item';
+    value_kind: 'text' | 'image' | 'video' | 'audio' | 'object_reference' | 'anchor' | 'blocking' | 'beat' | 'event' | 'shot' | 'dialogue' | 'criterion' | 'check_basis';
+    adoption: 'whole_card' | 'declared_scope' | 'object' | 'item' | 'observation';
 };

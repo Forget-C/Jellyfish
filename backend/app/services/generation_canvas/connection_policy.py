@@ -10,7 +10,7 @@ SINGLE_SOURCE_PORTS = {
     'blocking': ('space', 'participant', 'area_anchor', 'change_event', 'trigger_event'),
     'activity': ('space', 'participant', 'area_anchor', 'change_event', 'trigger_event'),
     'space_rule': ('space', 'participant', 'related_event'), 'continuity': ('space', 'participant', 'related_event'),
-    'model.video': ('first_frame', 'last_frame'),
+    'model.video': ('first_frame', 'last_frame'), 'review.check': ('check_basis',),
     'dialogue': ('speaker',), 'camera': ('shot',), 'lighting': ('shot',), 'focus': ('shot',), 'movement': ('shot',), 'composition': ('shot',),
 }
 
@@ -22,6 +22,8 @@ def single_source_port(card_type, port):
 
 def adoption_allowed(source_type, source_port, target_port):
     """对象候选可供预览；具体业务用途仍要求正确对象类别。"""
+    if source_port == 'check_basis':
+        return False
     if source_port != 'object':
         return True
     category = source_type.split('.')[-1]
@@ -54,8 +56,8 @@ def connection_policies(cards):
                 frame = source.type == 'direction.movement' and target.type == 'direction.composition'
                 policies.append(CanvasConnectionPolicy(source_type=source.type, source_port=output, target_type=target.type, target_port=port,
                     adoption_allowed=adoption_allowed(source.type, output, port), connect=mode, cancel='keep_connection' if mode == 'candidate' else 'remove_connection',
-                    disconnect='confirm_frame' if frame else 'release' if mode != 'candidate' else 'protect',
-                    message={'candidate': '连接提供候选，请明确选择内容和用途', 'adopt_design': '连接即采用完整设计', 'associate_acceptance': '连接即关联验收要求'}[mode]))
+                    disconnect='release' if port == 'check_basis' else 'confirm_frame' if frame else 'release' if mode != 'candidate' else 'protect',
+                    message='已连接生成检查依据' if port == 'check_basis' else {'candidate': '连接提供候选，请明确选择内容和用途', 'adopt_design': '连接即采用完整设计', 'associate_acceptance': '连接即关联验收要求'}[mode]))
     return policies
 
 

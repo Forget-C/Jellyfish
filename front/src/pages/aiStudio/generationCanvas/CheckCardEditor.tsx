@@ -1,0 +1,125 @@
+import { useEffect, useState } from 'react'
+import { Alert, Select } from 'antd'
+import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
+import type { CanvasCheckBasis, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
+import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import type { CardRendererProps } from './rendererRegistry'
+import './checkCard.css'
+
+const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
+const parameterLabels: Record<string, string> = {
+  seconds: '时长（秒）', ratio: '画幅', target_ratio: '画幅', count: '数量', seed: '种子', resolution_profile: '分辨率',
+}
+
+function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label: string }) {
+  return <details className="generation-check-basis"><summary>{label}</summary>
+    <p>生成目标 {basis.target_card_id} · 修订 {basis.revision}{basis.model_id && ` · 模型 ${basis.model_id}`}</p>
+    <dl>{Object.entries(basis.parameters).filter(([, value]) => value !== null).map(([key, value]) =>
+      <div key={key}><dt>{parameterLabels[key] || key}</dt><dd>{String(value)}</dd></div>)}</dl>
+    {basis.capability && <p>已接入输入：{basis.capability.input_ports.join('、') || '无'}</p>}
+    <pre aria-label="实际提交文本">{basis.input.text || '尚未填写生成文本'}</pre>
+    <p>已采用来源：{basis.input.used?.map(item => item.source.card_id).join('、') || '无'}</p>
+    {!!basis.input.mapping?.length && <ul aria-label="实际参考素材及用途">{basis.input.mapping.map((item, index) =>
+      <li key={index}>{'source' in item ? `${item.source.card_id} · ${item.media_position === null ? '文本' : `素材 ${item.media_position}`}`
+        : `${item.name || item.object_id} · ${item.input_port || '参考图片'} · 素材 ${item.media_position}`}</li>)}</ul>}
+    {basis.input.video_media && <details><summary>实际视频素材用途</summary><pre>{JSON.stringify(basis.input.video_media, null, 2)}</pre></details>}
+    {!!basis.input.diagnostics?.length && <ul aria-label="默认技术诊断">{basis.input.diagnostics.map((issue, index) =>
+      <li key={index}>{issue.message}</li>)}</ul>}
+  </details>
+}
+
+/** 保存后的依据用于检查；卡片选择与执行报告分别管理。 */
+export function CheckCardEditor({ card: raw, document, savedRevision, documentPending, disabled, editorOpen, onChange }: CardRendererProps) {
+  const card = raw as CheckCard
+  const [preview, setPreview] = useState<CanvasCheckPreview>()
+  const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
+  const [selectedReportId, setSelectedReportId] = useState<string>()
+  const [running, setRunning] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [refresh, setRefresh] = useState(0)
+  const [error, setError] = useState('')
+  const { project_id: projectId, id: canvasId } = document
+  const cardId = card.id
+  useEffect(() => {
+    if (!editorOpen || savedRevision === undefined) return
+    let active = true
+    setLoading(true)
+    const options = { projectId, canvasId, cardId }
+    Promise.all([Canvases.canvasCheckPreview(options), Canvases.canvasCheckReports(options)])
+      .then(([basis, history]) => {
+        if (active) {
+          setPreview(basis.data || undefined)
+          setReports(previous => {
+            const fetched = history.data || []
+            return [...previous.filter(entry => !fetched.some(row => row.id === entry.id)), ...fetched]
+          })
+        }
+      })
+      .catch(() => { if (active) { setPreview(undefined); setError('读取检查依据或报告失败，请重试') } })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [projectId, canvasId, cardId, savedRevision, editorOpen, refresh])
+
+  const basis = preview?.basis
+  const report = reports.find(item => item.id === selectedReportId) || reports[0]
+  const items = preview?.items || []
+  const enabled = (itemId: string) => !card.disabled_items?.includes(itemId)
+  const blocked = disabled || running || loading || documentPending || !basis || basis.revision !== savedRevision
+  const run = async (itemId?: string) => {
+    if (blocked || !basis) return
+    setRunning(true)
+    setError('')
+    try {
+      const response = await Canvases.canvasCheckRun({ projectId, canvasId, cardId, requestBody: {
+        expected_revision: basis.revision, basis_hash: basis.basis_hash, item_id: itemId,
+      } })
+      if (response.data) {
+        const completed = response.data
+        setReports(previous => [completed, ...previous.filter(item => item.id !== completed.id)])
+        setSelectedReportId(completed.id)
+      }
+    } catch (issue) {
+      setError(issue instanceof ApiError && issue.status === 409 ? '检查依据已变，请核对更新后的内容再重查' : '本次检查未完成，历史报告保留')
+      setRefresh(value => value + 1)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return <section className="generation-check-editor" aria-label="生成前检查">
+    <p>仅核对本次采用的要求。检查结论供生成决策参考。</p>
+    {error && <Alert type="warning" showIcon message={error} action={<Button size="small" onClick={() => setRefresh(value => value + 1)}>刷新</Button>} />}
+    {loading && <p role="status">正在读取检查依据</p>}
+    {documentPending && <p role="status">保存修改后可检查</p>}
+    {!loading && preview?.reason && <p>{preview.reason}</p>}
+    {basis && <BasisDetails basis={basis} label="生成检查依据" />}
+    {items.map(item => {
+      const action = reports.some(entry => entry.results.some(result => result.item_id === item.id)) ? '重新检查此项' : '检查此项'
+      return <div className="generation-check-item" key={item.id}>
+        <label><input type="checkbox" checked={enabled(item.id)} disabled={disabled || running}
+          onChange={event => onChange({ ...card, disabled_items: event.currentTarget.checked
+            ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })} />
+          {item.label}
+        </label>
+        <p>来源 {item.source.card_id} · {item.requirement}</p>
+        <Button size="small" disabled={blocked} aria-label={`${action}：${item.label}`} onClick={() => void run(item.id)}>{action}</Button>
+      </div>
+    })}
+    <Button variant="primary" loading={running} disabled={blocked || !items.some(item => enabled(item.id))} onClick={() => void run()}>
+      {reports.length ? '重新检查' : '检查'}
+    </Button>
+    {report && <section className="generation-check-report" aria-label="检查报告">
+      <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
+        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · 修订 ${entry.basis.revision}` }))} /></label>
+      <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮执行 {report.results.length} 项</p>
+      {report.results.map(result => {
+        const item = report.items.find(row => row.id === result.item_id)
+        return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
+          {item && <p>{item.label} · 来源 {item.source.card_id} · {item.requirement}</p>}
+          <p>{result.message}</p><small>{result.boundary}</small>
+        </article>
+      })}
+      <BasisDetails basis={report.basis} label="本报告固定依据" />
+    </section>}
+  </section>
+}

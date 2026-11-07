@@ -13,7 +13,7 @@ export type CanvasCardTypeDefinition = {
     type_version?: number;
     title: string;
     group: '基础内容' | '模型生成' | '导演工具箱';
-    category?: ('画面设计' | '表演与调度' | '叙事与镜头' | '声音设计' | '连续性与约束' | null);
+    category?: ('画面设计' | '表演与调度' | '叙事与镜头' | '声音设计' | '连续性与约束' | '检查' | null);
     modality: 'text' | 'image' | 'video' | 'audio';
     inputs: Array<CanvasInputPortDefinition>;
     outputs: Array<CanvasOutputPortDefinition>;

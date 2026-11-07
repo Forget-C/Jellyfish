@@ -29,6 +29,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return '所选模型未接入该输入用途'
   const edges = document.edges || []
   if (!expanding && findConnection(document, edge)) return '同一端口连接已存在'
+  if (edge.target_port === 'check_basis' && edges.some(item => item.target_card === edge.target_card && item.target_port === 'check_basis')) return '每张检查卡只连接一张模型生成卡'
   const pending = [edge.target_card], seen = new Set<string>()
   while (pending.length) {
     const id = pending.pop()!

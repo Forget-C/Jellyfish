@@ -145,3 +145,31 @@ async def get_canvas_catalog(project_id: str, canvas_id: str, db: AsyncSession =
     """核实画布归属后提供卡片、兼容用途、采用策略及单值输入约束。"""
     await CanvasStore(db, project_id).get(canvas_id)
     return success_response(canvas_catalog())
+
+
+from app.schemas.canvas_checks import CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest
+from app.services.generation_canvas.checks import CanvasChecks
+
+
+@router.get('/{project_id}/{canvas_id}/checks/{card_id}', response_model=ApiResponse[CanvasCheckPreview],
+            operation_id='canvas_check_preview')
+async def preview_canvas_check(project_id: str, canvas_id: str, card_id: str,
+                               db: AsyncSession = Depends(get_db, scope='function')):
+    """查看该检查卡连接的已保存模型及可用项目。"""
+    return success_response(await CanvasChecks(db, project_id).preview(canvas_id, card_id))
+
+
+@router.post('/{project_id}/{canvas_id}/checks/{card_id}/runs', response_model=ApiResponse[CanvasCheckReportRead],
+             operation_id='canvas_check_run', responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
+async def run_canvas_check(project_id: str, canvas_id: str, card_id: str, body: CanvasCheckRequest,
+                           db: AsyncSession = Depends(get_db, scope='function')):
+    """执行用户选择的检查范围，写入独立报告。"""
+    return success_response(await CanvasChecks(db, project_id).run(canvas_id, card_id, body))
+
+
+@router.get('/{project_id}/{canvas_id}/checks/{card_id}/reports', response_model=ApiResponse[list[CanvasCheckReportRead]],
+            operation_id='canvas_check_reports')
+async def get_canvas_check_reports(project_id: str, canvas_id: str, card_id: str,
+                                   db: AsyncSession = Depends(get_db, scope='function')):
+    """按原检查卡身份读取该项目画布内的报告。"""
+    return success_response(await CanvasChecks(db, project_id).reports(canvas_id, card_id))

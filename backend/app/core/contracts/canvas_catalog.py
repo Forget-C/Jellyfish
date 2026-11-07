@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.contracts.generation_canvas import DesignField
 
-CanvasValueKind = Literal['text', 'image', 'video', 'audio', 'object_reference', 'anchor', 'blocking', 'beat', 'event', 'shot', 'dialogue', 'criterion']
+CanvasValueKind = Literal['text', 'image', 'video', 'audio', 'object_reference', 'anchor', 'blocking', 'beat', 'event', 'shot', 'dialogue', 'criterion', 'check_basis']
 
 
 class CanvasDesignFieldDefinition(BaseModel):
@@ -20,7 +20,7 @@ class CanvasInputPortDefinition(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str
     label: str
-    relation: Literal['generation_input', 'business_reference', 'material_association']
+    relation: Literal['generation_input', 'business_reference', 'material_association', 'observation']
     accepts: list[CanvasValueKind]
     max_sources: int | None = None
 
@@ -31,7 +31,7 @@ class CanvasOutputPortDefinition(BaseModel):
     id: str
     label: str
     value_kind: CanvasValueKind
-    adoption: Literal['whole_card', 'declared_scope', 'object', 'item']
+    adoption: Literal['whole_card', 'declared_scope', 'object', 'item', 'observation']
 
 
 class CanvasCardTypeDefinition(BaseModel):
@@ -41,7 +41,7 @@ class CanvasCardTypeDefinition(BaseModel):
     type_version: Literal[1] = 1
     title: str
     group: Literal['基础内容', '模型生成', '导演工具箱']
-    category: Literal['画面设计', '表演与调度', '叙事与镜头', '声音设计', '连续性与约束'] | None = None
+    category: Literal['画面设计', '表演与调度', '叙事与镜头', '声音设计', '连续性与约束', '检查'] | None = None
     modality: Literal['text', 'image', 'video', 'audio']
     inputs: list[CanvasInputPortDefinition]
     outputs: list[CanvasOutputPortDefinition]
