@@ -5,8 +5,13 @@ from app.services.generation_canvas.check_requirement_quality import (
     parse_consistency, parse_reviewability,
 )
 
+from app.services.generation_canvas.check_sound_capability import (
+    SOUND_CAPABILITY_CATEGORY, SOUND_CAPABILITY_INSTRUCTIONS, parse_sound_capability,
+)
+
 TEXT_CHECKS = {
     ADOPTION_CATEGORY: (ADOPTION_INSTRUCTIONS, parse_observation),
     CONSISTENCY_CATEGORY: (CONSISTENCY_INSTRUCTIONS, parse_consistency),
     REVIEWABILITY_CATEGORY: (REVIEWABILITY_INSTRUCTIONS, parse_reviewability),
+    SOUND_CAPABILITY_CATEGORY: (SOUND_CAPABILITY_INSTRUCTIONS, parse_sound_capability),
 }
