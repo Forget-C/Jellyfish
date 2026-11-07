@@ -58,6 +58,7 @@ class VideoModelCapability:
     max_media_per_subject: int | None = None
     max_total_subject_videos: int | None = None
     native_audio_output: AudioCapability = field(default_factory=AudioCapability)
+    audio_switch: AudioCapability = field(default_factory=AudioCapability)
 
 
 def register_video_model_capability(

@@ -311,6 +311,7 @@ class CanvasModelCapability(BaseModel):
     modality: Literal['text', 'image', 'video']
     input_ports: list[str]
     native_audio_output: AudioCapability = Field(default_factory=AudioCapability)
+    audio_switch: AudioCapability = Field(default_factory=AudioCapability)
     ratios: list[str] = Field(default_factory=list)
     resolution_profiles: dict[str, dict[str, str]] = Field(default_factory=dict)
     min_count: int = 1

@@ -11,6 +11,7 @@ export type CanvasModelCapability = {
     modality: 'text' | 'image' | 'video';
     input_ports: Array<string>;
     native_audio_output?: AudioCapability;
+    audio_switch?: AudioCapability;
     ratios?: Array<string>;
     resolution_profiles?: Record<string, Record<string, string>>;
     min_count?: number;

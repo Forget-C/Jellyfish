@@ -18,6 +18,7 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
     result = CanvasModelCapability(model_id=model.id, modality=model.category, input_ports=['text'])
     if model.category != 'video':
         result.native_audio_output = AudioCapability(declaration='unsupported')
+        result.audio_switch = AudioCapability(declaration='unsupported')
     if model.category == 'image':
         cap = resolve_image_capability(provider=key, model=model.name)
         profiles = cap.ratio_size_profiles or DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
@@ -31,6 +32,7 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
         cap = resolve_video_capability(provider=key, model=model.name)
         usage = resolve_video_adapter_usage(provider=key, model=model.name)
         result.native_audio_output = cap.native_audio_output
+        result.audio_switch = cap.audio_switch
         # 画布用途按原展示顺序投影；OpenAI 有意只开放首帧。
         roles = [role for role in ('first_frame', 'last_frame', 'key_frame') if role in usage.frame_roles
                  and (key != 'openai' or role == 'first_frame')]

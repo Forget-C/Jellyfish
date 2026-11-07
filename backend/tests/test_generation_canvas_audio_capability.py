@@ -19,17 +19,19 @@ async def test_native_audio_declaration_and_connected_path_are_distinct(canvas_c
         await db.commit()
     canvas = (await canvas_client.post('/canvases/p', json={'name': '原生声音能力'})).json()['data']
     base = f"/canvases/p/{canvas['id']}/models"
-    for model_id, declaration, connected in [
-        ('canvas-image', 'unsupported', False),
-        ('canvas-video', 'unknown', False),
-        ('q3', 'supported', False),
-        ('seedance', 'supported', True),
+    for model_id, declaration, connected, audio_switch in [
+        ('canvas-image', 'unsupported', False, 'unsupported'),
+        ('canvas-video', 'unknown', False, 'unknown'),
+        ('q3', 'supported', False, 'unknown'),
+        ('seedance', 'supported', True, 'supported'),
     ]:
         response = await canvas_client.get(f'{base}/{model_id}/capability')
         assert response.status_code == 200, response.text
-        assert response.json()['data']['native_audio_output'] == {
+        capability = response.json()['data']
+        assert capability['native_audio_output'] == {
             'declaration': declaration, 'connected': connected,
         }
+        assert capability['audio_switch'] == {'declaration': audio_switch, 'connected': False}
 
 
 @pytest.mark.asyncio
@@ -44,7 +46,8 @@ async def test_adopted_sound_with_unknown_capability_is_a_nonblocking_warning(ca
         'input_bindings': [{'id': 'sound-binding', 'input_port': 'text', 'source': source}],
     }
     document.update(
-        cards=[{'id': 'sound', 'type': 'direction.sound', 'environment': {'state': 'fact', 'text': '细雨'}}, model],
+        cards=[{'id': 'sound', 'type': 'direction.sound', 'environment': {'state': 'fact', 'text': '细雨'},
+                'scope': {'phase': '后期制作'}}, model],
         edges=[{'id': 'sound-edge', 'source_card': 'sound', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
         input_order={'model': {'text': ['sound-edge']}},
     )
@@ -52,6 +55,17 @@ async def test_adopted_sound_with_unknown_capability_is_a_nonblocking_warning(ca
     assert saved.status_code == 200, saved.text
     compiled = (await canvas_client.get(url + '/cards/model/compile')).json()['data']
     assert compiled['can_run'] and '细雨' in compiled['text']
+    assert '制作阶段：后期制作' in compiled['text']
+    preview = await canvas_client.post(url + '/precheck', json={'card_id': 'model'})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()['data']['model']['params'] == {'ratio': '16:9', 'seconds': 5, 'seed': None}
+
+    model['config']['generate_audio'] = False
+    illegal = await canvas_client.put(url, json={'request_id': 'illegal-audio', 'expected_revision': 1, 'document': document})
+    assert illegal.status_code == 422, illegal.text
+    assert (await canvas_client.get(url)).json()['data']['revision'] == 1
+    del model['config']['generate_audio']
+
     warning = next(item for item in compiled['diagnostics'] if item['code'] == 'NATIVE_AUDIO_OUTPUT_UNAVAILABLE')
     assert warning['severity'] == 'warning' and warning['blocks'] == []
     assert '未知' in warning['message']
