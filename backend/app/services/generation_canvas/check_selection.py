@@ -3,11 +3,15 @@ from app.schemas.canvas_checks import CanvasCheckCategory, CanvasCheckItem, Canv
 from app.schemas.generation_canvas import CheckCard
 from app.services.generation_canvas.check_adoption import ADOPTION_CATEGORY, ADOPTION_LABEL, adoption_checks
 from app.services.generation_canvas.check_duration import DURATION_CATEGORY, DURATION_LABEL, duration_checks
-
 from app.services.generation_canvas.check_reference_media import REFERENCE_CATEGORY, REFERENCE_LABEL
+from app.services.generation_canvas.check_requirement_quality import (
+    CONSISTENCY_CATEGORY, CONSISTENCY_LABEL, REVIEWABILITY_CATEGORY, REVIEWABILITY_LABEL,
+    consistency_checks, reviewability_checks,
+)
 
 CHECK_CATEGORY_LABELS = {
-    DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL, REFERENCE_CATEGORY: REFERENCE_LABEL,
+    DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL, CONSISTENCY_CATEGORY: CONSISTENCY_LABEL,
+    REVIEWABILITY_CATEGORY: REVIEWABILITY_LABEL, REFERENCE_CATEGORY: REFERENCE_LABEL,
 }
 
 
@@ -32,7 +36,12 @@ def check_items(basis, card: CheckCard, model_unavailable: str | None):
     categories = [describe_category(card, DURATION_CATEGORY, items, '未采用可核对时长的镜头设计')]
     adopted, observations = adoption_checks(basis, card, model_unavailable)
     categories.append(describe_category(card, ADOPTION_CATEGORY, adopted, '未采用可核对的设计或验收要求'))
-    return categories, items + adopted, comparisons, observations
+    consistency, consistency_observations = consistency_checks(basis, card, model_unavailable)
+    categories.append(describe_category(card, CONSISTENCY_CATEGORY, consistency, '未采用两条可对照的设计或补充要求'))
+    reviewability, reviewability_observations = reviewability_checks(basis, card, model_unavailable)
+    categories.append(describe_category(card, REVIEWABILITY_CATEGORY, reviewability, '未采用需要核对的验收要求、约束或可见结果'))
+    return (categories, items + adopted + consistency + reviewability, comparisons,
+            observations | consistency_observations | reviewability_observations)
 
 
 def select_check_items(items: list[CanvasCheckItem], item_id: str | None) -> tuple[list[CanvasCheckItem], list[CanvasCheckOmission]]:

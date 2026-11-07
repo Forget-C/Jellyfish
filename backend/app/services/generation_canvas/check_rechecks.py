@@ -18,6 +18,8 @@ from app.services.generation_canvas.check_duration import DURATION_CATEGORY, rec
 from app.services.generation_canvas.check_product_text import PRODUCT_TEXT_CATEGORY
 from app.services.generation_canvas.checks import CHECK_REPORT_TARGET, CanvasChecks, persist_check_report
 from app.services.generation_canvas.errors import CanvasDomainError, diagnostic
+from app.services.generation_canvas.execution_basis import digest
+from app.services.generation_canvas.check_text import TEXT_CHECKS
 from app.services.generation_canvas.historical_content import CanvasHistoricalContent
 from app.services.task_service import TaskService
 
@@ -61,13 +63,13 @@ class CanvasCheckRechecks:
             scope='item', basis=original.basis, product=original.product, check_model_id=original.check_model_id,
             items=[item], results=[], enabled_item_ids=original.enabled_item_ids, recheck=recheck)
         tasks = {}
-        if item.category == DURATION_CATEGORY:
+        if item.category == DURATION_CATEGORY and original_task_id is None:
             result = recheck_duration(original.basis, item)
             if result is None:
                 raise _missing_basis(report_id, item.id)
             report.results = [result]
-        elif item.category == ADOPTION_CATEGORY or (item.category == PRODUCT_TEXT_CATEGORY
-                                                    and original.product and original.product.text is not None):
+        elif item.category in TEXT_CHECKS or (item.category == PRODUCT_TEXT_CATEGORY
+                                              and original.product and original.product.text is not None):
             tasks[item.id] = await self._submit(canvas_id, original, original_task_id, item, report)
         else:
             raise diagnostic('CHECK_RECHECK_UNAVAILABLE', '此检查项的复核暂不可用',
@@ -90,11 +92,8 @@ class CanvasCheckRechecks:
             observation = snapshot['observation']
             if item.category == PRODUCT_TEXT_CATEGORY:
                 observation = await self._text_product_observation(canvas_id, original, observation, item)
-            elif (snapshot['item_id'] != item.id or observation['submitted_text'] != original.basis.input.text
-                  or observation['requirement']['field_id'] != item.field_id
-                  or observation['requirement']['source_card_id'] != item.source.card_id
-                  or observation['requirement']['text'] != item.requirement
-                  or not isinstance(observation['requirement']['material_uses'], list)):
+            elif (snapshot['item_id'] != item.id or not isinstance(observation, dict) or not observation
+                  or item.input_stamp != digest(observation)):
                 raise ValueError('item basis mismatch')
         except (CanvasDomainError, KeyError, TypeError, ValueError) as error:
             raise _missing_basis(original.id, item.id) from error

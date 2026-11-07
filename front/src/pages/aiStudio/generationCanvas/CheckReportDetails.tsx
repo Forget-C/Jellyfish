@@ -6,6 +6,7 @@ import { HistoricalCheckProduct } from './PostCheckPanel'
 import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
+const recheckTextCategories = new Set(['P01', 'P02', 'P06', 'P09'])
 const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 const parameterLabels: Record<string, string> = {
   seconds: '时长（秒）', ratio: '画幅', target_ratio: '画幅', count: '数量', seed: '种子', resolution_profile: '分辨率',
@@ -63,6 +64,12 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
         {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
         {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
         <p>{result.message}</p>
+        {!!result.text_evidence?.length && <ul aria-label="要求证据">
+          {result.text_evidence.map(evidence => <li key={`${evidence.source.card_id}:${evidence.field_id}`}>
+            <p>来源 {evidence.source.card_id}/{evidence.field_id}</p>
+            <blockquote>{evidence.excerpt}</blockquote>
+          </li>)}
+        </ul>}
         {result.submitted_excerpt && <blockquote aria-label={report.product ? '产物片段' : '提交片段'}>{result.submitted_excerpt}</blockquote>}
         {!!result.observed_media?.length && <ul aria-label="本轮观察素材">
           {result.observed_media.map((media, index) => <li key={index}>
@@ -71,7 +78,7 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
           </li>)}
         </ul>}
         <small>{result.boundary}</small>
-        {recheck && (item?.category === 'P06' || item?.category === 'P01' || item?.category === 'R01' && report.product?.text != null)
+        {recheck && item && (recheckTextCategories.has(item.category) || item.category === 'R01' && report.product?.text != null)
           && <CheckRecheckForm key={report.id} {...recheck} cardId={report.check_card_id} reportId={report.id} itemId={result.item_id} />}
       </article>
     })}
