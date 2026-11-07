@@ -3,7 +3,7 @@ from app.schemas.canvas_checks import CanvasCheckCategory, CanvasCheckItem, Canv
 from app.schemas.generation_canvas import CheckCard
 from app.services.generation_canvas.check_adoption import ADOPTION_CATEGORY, ADOPTION_LABEL, adoption_checks
 from app.services.generation_canvas.check_duration import DURATION_CATEGORY, DURATION_LABEL, duration_checks
-
+from app.services.generation_canvas.check_reference_media import REFERENCE_CATEGORY, REFERENCE_LABEL
 from app.services.generation_canvas.check_requirement_quality import (
     CONSISTENCY_CATEGORY, CONSISTENCY_LABEL, REVIEWABILITY_CATEGORY, REVIEWABILITY_LABEL,
     consistency_checks, reviewability_checks,
@@ -11,7 +11,7 @@ from app.services.generation_canvas.check_requirement_quality import (
 
 CHECK_CATEGORY_LABELS = {
     DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL, CONSISTENCY_CATEGORY: CONSISTENCY_LABEL,
-    REVIEWABILITY_CATEGORY: REVIEWABILITY_LABEL,
+    REVIEWABILITY_CATEGORY: REVIEWABILITY_LABEL, REFERENCE_CATEGORY: REFERENCE_LABEL,
 }
 
 

@@ -76,6 +76,18 @@ class CanvasCheckTextEvidence(BaseModel):
     excerpt: str
 
 
+class CanvasCheckMediaObservation(BaseModel):
+    """Public identity and visible evidence for media supplied to a check model."""
+    modality: Literal['image', 'video']
+    file_id: str
+    description: str | None = None
+
+
+class CanvasPostCheckRequest(CanvasCheckRequest):
+    """Require acknowledgement of the call estimate for the selected product."""
+    expected_calls: int = Field(ge=0)
+
+
 class CanvasCheckResult(BaseModel):
     """结论只覆盖这一项的已观测依据。"""
     item_id: str
@@ -84,6 +96,7 @@ class CanvasCheckResult(BaseModel):
     boundary: str
     submitted_excerpt: str | None = None
     text_evidence: list[CanvasCheckTextEvidence] = Field(default_factory=list)
+    observed_media: list[CanvasCheckMediaObservation] = Field(default_factory=list)
 
 
 class CanvasCheckExecution(BaseModel):
@@ -91,6 +104,28 @@ class CanvasCheckExecution(BaseModel):
     item_id: str
     status: Literal['queued', 'running', 'succeeded', 'failed', 'cancelled']
     cancel_requested: bool = False
+    reason: str | None = None
+
+
+class CanvasCheckProduct(BaseModel):
+    """历史产物身份由具体运行、节点和产物位置固定。"""
+    run_id: str
+    node_id: str
+    position: int
+    source: OutputIdentity
+    generation_status: Literal['succeeded', 'failed', 'cancelled']
+    result_set_id: str | None = None
+    revision: int
+    text: str | None = None
+
+
+class CanvasPostCheckPreview(BaseModel):
+    """分别显示当前检查卡修订及历史生成依据，执行由用户明确触发。"""
+    revision: int
+    product: CanvasCheckProduct
+    basis: CanvasCheckBasis
+    items: list[CanvasCheckItem]
+    estimated_calls: int
     reason: str | None = None
 
 
@@ -107,3 +142,4 @@ class CanvasCheckReportRead(BaseModel):
     check_model_id: str | None = None
     executions: list[CanvasCheckExecution] = Field(default_factory=list)
     enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')
+    product: CanvasCheckProduct | None = None

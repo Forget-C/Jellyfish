@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasCheckMediaObservation } from './CanvasCheckMediaObservation';
 import type { CanvasCheckTextEvidence } from './CanvasCheckTextEvidence';
 /**
  * 结论只覆盖这一项的已观测依据。
@@ -13,4 +14,5 @@ export type CanvasCheckResult = {
     boundary: string;
     submitted_excerpt?: (string | null);
     text_evidence?: Array<CanvasCheckTextEvidence>;
+    observed_media?: Array<CanvasCheckMediaObservation>;
 };

@@ -3,6 +3,7 @@ import { Alert, Input, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { PostCheckPanel } from './PostCheckPanel'
 import type { CardRendererProps } from './rendererRegistry'
 import { BasisDetails, CheckReportDetails } from './CheckReportDetails'
 import './checkCard.css'
@@ -93,9 +94,13 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const sameTarget = !!basis && basis.target_card_id === report?.basis.target_card_id
   const currentEnabled = items.filter(item => item.enabled).map(item => item.id)
   const originalEnabled = report?.enabled_item_ids
-  const selectionChanged = comparable && sameTarget && originalEnabled != null
+  const selectionChanged = !report?.product && comparable && sameTarget && originalEnabled != null
     && (originalEnabled.length !== currentEnabled.length || originalEnabled.some(id => !currentEnabled.includes(id)))
   const blocked = disabled || running || cancelling || !comparable || !basis
+  const showReport = (accepted: CanvasCheckReportRead) => {
+    setReports(previous => [accepted, ...previous.filter(item => item.id !== accepted.id)])
+    setSelectedReportId(accepted.id)
+  }
   const run = async (itemId?: string) => {
     if (blocked || !basis) return
     setRunning(true)
@@ -104,11 +109,7 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       const response = await Canvases.canvasCheckRun({ projectId, canvasId, cardId, requestBody: {
         expected_revision: basis.revision, basis_hash: basis.basis_hash, item_id: itemId,
       } })
-      if (response.data) {
-        const completed = response.data
-        setReports(previous => [completed, ...previous.filter(item => item.id !== completed.id)])
-        setSelectedReportId(completed.id)
-      }
+      if (response.data) showReport(response.data)
     } catch (issue) {
       setError(issue instanceof ApiError && issue.status === 409 ? '检查依据已变，请核对更新后的内容再重查' : '本次检查未完成，历史报告保留')
       setRefresh(value => value + 1)
@@ -172,18 +173,20 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
       })}
     </section>)}
     <Button variant="primary" loading={running} disabled={blocked || !ready} onClick={() => void run()}>
-      {reports.length ? '重新检查' : '检查'}
+      {reports.some(row => !row.product) ? '重新检查' : '检查'}
     </Button>
+    <PostCheckPanel projectId={projectId} canvasId={canvasId} cardId={cardId} savedRevision={savedRevision}
+      active={!!editorOpen} disabled={!!disabled || !!documentPending || cancelling} reports={reports} onReport={showReport} />
     {report && <section className="generation-check-report" aria-label="检查报告">
       <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
-        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · 修订 ${entry.basis.revision}` }))} /></label>
+        options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · ${entry.product ? '生成后' : '生成前'} · 修订 ${entry.basis.revision}` }))} /></label>
       {selectionChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
       {report.executions?.some(item => (item.status === 'queued' || item.status === 'running') && !item.cancel_requested)
         && <Button size="small" variant="quiet" loading={cancelling} disabled={disabled || loading || running}
           onClick={() => void cancel(report.id)}>取消本轮检查</Button>}
       <CheckReportDetails report={report}
-        applicability={item => comparable ? applicability(item, items.find(row => row.id === item?.id), sameTarget) : '待核对当前检查依据'}
-        retry={itemId => items.some(item => item.id === itemId && item.availability === 'ready')
+        applicability={report.product ? undefined : item => comparable ? applicability(item, items.find(row => row.id === item?.id), sameTarget) : '待核对当前检查依据'}
+        retry={itemId => !report.product && items.some(item => item.id === itemId && item.availability === 'ready')
           && <Button size="small" disabled={blocked} onClick={() => void run(itemId)}>重新检查此项</Button>} />
     </section>}
   </section>
