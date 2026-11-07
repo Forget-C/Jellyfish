@@ -2,12 +2,13 @@
 from collections import defaultdict
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.contracts.generation_canvas import (
     CompositionFramingField, DescriptionTextPayload, DesignField, DesignTextPayload, NamedImageMapping, SoundDesignFields,
 )
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckMediaObservation, CanvasCheckResult
+from app.services.generation_canvas.check_group_reply import parse_group_reply
 from app.services.generation_canvas.check_product_text import PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_LABEL, text_product_items
 from app.services.generation_canvas.check_product_video import VIDEO_SEQUENCE, process_items
 from app.services.generation_canvas.composition import SHOT_SIZE_LABELS
@@ -123,10 +124,10 @@ def _object_items(compiled, modality):
             yield item, {**requirement, 'text': text}, edge, media.file_id, None
 
 
-def visual_product_items(compiled, modality, unavailable, *, sequence_unavailable=None):
+def visual_product_items(compiled, modality, unavailable, *, sequence_unavailable=None, generation=None, canvas_id=None):
     """Find checkable historical fields and group only the same sample and reference."""
     items, groups = {}, {}
-    text_items, requirements = text_product_items(compiled, unavailable=None)
+    text_items, requirements = text_product_items(compiled, unavailable=None, generation=generation, canvas_id=canvas_id)
     text_rows = [(item, requirements[item.id], 'start' if modality == 'video' else None, None, None) for item in text_items]
     video_rows = process_items(compiled) if modality == 'video' else ()
     for rows in (text_rows, _design_items(compiled, modality), _object_items(compiled, modality), video_rows):
@@ -166,11 +167,6 @@ class _VisualAnswer(BaseModel):
     visible_evidence: str | None = Field(default=None, max_length=500)
 
 
-class _VisualAnswers(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    results: list[_VisualAnswer]
-
-
 def unavailable_visual_results(observation, reason):
     """Keep each applicable item's reason when the bytes cannot be observed."""
     return {row['item_id']: CanvasCheckResult(item_id=row['item_id'], outcome='indeterminate', message=reason,
@@ -178,15 +174,10 @@ def unavailable_visual_results(observation, reason):
 
 
 def parse_product_visual(observation, content, frame_at_ms):
-    """Require the full group and a per-item visible statement before publishing a verdict."""
-    if not isinstance(content, str):
-        return None
-    try:
-        answers = _VisualAnswers.model_validate_json(content).results
-    except ValidationError:
-        return None
+    """Publish only valid rows with per-item visible evidence."""
     requirements = {row['item_id']: row for row in observation['requirements']}
-    if len(answers) != len(requirements) or {answer.item_id for answer in answers} != requirements.keys():
+    answers = parse_group_reply(content, _VisualAnswer, requirements)
+    if not answers:
         return None
     modality = observation['modality']
     boundary = visual_boundary(modality)

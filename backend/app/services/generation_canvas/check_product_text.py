@@ -1,16 +1,26 @@
 """R01 only observes textual evidence in a specific retained generation output."""
+import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.contracts.generation_canvas import DesignField, DesignTextPayload
+from app.core.contracts.generation_canvas import DesignField, DesignTextPayload, OutputIdentity
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckResult
 from app.schemas.generation_canvas import CanvasCompiledInput
+from app.services.generation_canvas.check_group_reply import parse_group_reply
+from app.services.generation_canvas.execution_basis import digest
 from app.services.generation_canvas.formatting import PURPOSE_LABELS, STATE_LABELS
 
 PRODUCT_TEXT_CATEGORY = 'R01'
 PRODUCT_TEXT_LABEL = '明确内容与结果落实'
 PRODUCT_TEXT_BOUNDARY = '仅核对这份历史文本及其原生成要求，叙事效果供参考。'
+_CLAUSES = re.compile(r'[。！？；\n!?;]|\.(?=\s|$)')
+_QUOTED = re.compile(r'“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"')
+_EXPLICIT_CLAUSE = re.compile(
+    r'^(?:(?:本片|本次生成|本镜头|本段|视频中?|画面中?|输出中?|产物中?)\s*)?'
+    r'(必须|务必|不得|禁止|不允许)\s*(.+)$'
+)
+_ENGLISH_CLAUSE = re.compile(r'^(?:(?:the )?(?:output|video|clip|shot|frame)\s+)?(must(?: not)?|do not)\s+(.+)$', re.I)
 
 _REQUIRED_FIELDS = {
     'direction.beat': ('audience_must_see',),
@@ -29,7 +39,7 @@ PRODUCT_TEXT_INSTRUCTIONS = (
 )
 
 
-def text_product_items(compiled: CanvasCompiledInput, *, unavailable: str | None):
+def text_product_items(compiled: CanvasCompiledInput, *, unavailable: str | None, generation=None, canvas_id=None):
     """Read explicit requirements from the historical compiled payload, not current design cards."""
     items, requirements = [], {}
     for source in compiled.used:
@@ -54,6 +64,39 @@ def text_product_items(compiled: CanvasCompiledInput, *, unavailable: str | None
             items.append(CanvasCheckItem(id=item_id, category=PRODUCT_TEXT_CATEGORY, label=PRODUCT_TEXT_LABEL,
                                          source=source.source, field_id=field_id, requirement=text, enabled=True,
                                          availability='unavailable' if unavailable else 'ready', reason=unavailable))
+    prompt = generation.get('prompt') if isinstance(generation, dict) else None
+    segments = prompt.get('segments') if isinstance(prompt, dict) else None
+    if isinstance(segments, list) and canvas_id:
+        existing = {re.sub(r'\s+', '', row['text']).strip('。.!！') for row in requirements.values()}
+        source = OutputIdentity(canvas_id=canvas_id, card_id=compiled.card_id, port_id='text', position=0)
+        for segment in segments:
+            if (not isinstance(segment, dict) or segment.get('kind') != 'text'
+                    or not isinstance(segment.get('id'), str) or not isinstance(segment.get('text'), str)):
+                continue
+            content = segment['text']
+            quoted = [part.span() for part in _QUOTED.finditer(content)]
+            offset = 0
+            for index, raw in enumerate(_CLAUSES.split(content)):
+                start = offset + len(raw) - len(raw.lstrip())
+                offset += len(raw) + 1
+                text = raw.strip()
+                match = _EXPLICIT_CLAUSE.fullmatch(text) or _ENGLISH_CLAUSE.fullmatch(text)
+                if match is None or any(begin <= start < end for begin, end in quoted):
+                    continue
+                key = re.sub(r'\s+', '', text)
+                positive = match[1].lower() in ('必须', '务必', 'must')
+                if key in existing or (positive and re.sub(r'\s+', '', match[2]) in existing):
+                    continue
+                existing.add(key)
+                field_id = f"prompt:{segment['id']}:{index}"
+                item_id = f'{PRODUCT_TEXT_CATEGORY}:{compiled.card_id}:prompt:{digest(field_id)[:24]}'
+                requirements[item_id] = {
+                    'item_id': item_id, 'source_card_id': compiled.card_id, 'field_id': field_id, 'text': text,
+                    'state': STATE_LABELS['fact'], 'purpose': PURPOSE_LABELS['constraint'], 'source_locator': field_id,
+                }
+                items.append(CanvasCheckItem(id=item_id, category=PRODUCT_TEXT_CATEGORY, label=PRODUCT_TEXT_LABEL,
+                                             source=source, field_id=field_id, requirement=text, enabled=True,
+                                             availability='unavailable' if unavailable else 'ready', reason=unavailable))
     return items, requirements
 
 
@@ -65,21 +108,11 @@ class _TextObservation(BaseModel):
     submitted_excerpt: str | None = Field(default=None, max_length=500)
 
 
-class _TextObservations(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    results: list[_TextObservation]
-
-
 def parse_product_text(observation: dict, content: object) -> dict[str, CanvasCheckResult] | None:
-    """Validate the full group and retain only evidence located in the pinned output."""
-    if not isinstance(content, str):
-        return None
-    try:
-        answers = _TextObservations.model_validate_json(content).results
-    except ValidationError:
-        return None
+    """Preserve independently valid rows and evidence located in the pinned output."""
     requirements = {row['item_id']: row for row in observation['requirements']}
-    if len(answers) != len(requirements) or {answer.item_id for answer in answers} != requirements.keys():
+    answers = parse_group_reply(content, _TextObservation, requirements)
+    if not answers:
         return None
     results = {}
     boundary = PRODUCT_TEXT_BOUNDARY

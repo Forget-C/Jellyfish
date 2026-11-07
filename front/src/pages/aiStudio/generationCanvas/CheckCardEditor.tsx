@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Alert, Input, Select } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { Alert, Checkbox, Input, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -18,7 +18,7 @@ function applicability(previous: CanvasCheckItem | undefined, current: CanvasChe
 }
 
 /** 保存后的依据用于检查；卡片选择与执行报告分别管理。 */
-export function CheckCardEditor({ card: raw, document, savedRevision, documentPending, disabled, editorOpen, models, automaticCheckRunId, onChange }: CardRendererProps) {
+export function CheckCardEditor({ card: raw, document, savedRevision, savedCard, documentPending, disabled, editorOpen, models, modelOutputs, targetReportId, automaticCheckRunId, onChange }: CardRendererProps) {
   const card = raw as CheckCard
   const [preview, setPreview] = useState<CanvasCheckPreview>()
   const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
@@ -30,6 +30,21 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const [error, setError] = useState('')
   const { project_id: projectId, id: canvasId } = document
   const cardId = card.id
+  const observedIds = preview?.basis?.observed_model_inputs || []
+  const observedKey = JSON.stringify(observedIds)
+  // Only published outputs enter this signature. Provisional text deltas and layout events are neutral.
+  const observedStamp = JSON.stringify(observedIds.map(id => modelOutputs?.[id]?.map(output =>
+    [output.result_set_id, output.basis_current, output.available, output.source.position, output.file_id])))
+  const observed = useRef<{ key: string; stamp: string }>()
+  const outputChanged = observed.current?.key === observedKey && observed.current.stamp !== observedStamp
+  useEffect(() => {
+    observed.current = { key: observedKey, stamp: observedStamp }
+    if (outputChanged) {
+      setPreview(undefined)
+      setRefresh(value => value + 1)
+    }
+  }, [observedKey, observedStamp, outputChanged])
+  useEffect(() => { if (targetReportId) setSelectedReportId(targetReportId) }, [targetReportId])
   useEffect(() => {
     if (!editorOpen || savedRevision === undefined) return
     let active = true
@@ -93,12 +108,22 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     else delete scopeNotes[id]
     onChange({ ...card, scope_notes: scopeNotes })
   }
-  const comparable = !loading && !documentPending && !!preview && (!basis || basis.revision === savedRevision)
+  const comparable = !loading && !documentPending && !outputChanged && !!preview && (!basis || basis.revision === savedRevision)
   const sameTarget = !!basis && basis.target_card_id === report?.basis.target_card_id
   const currentEnabled = items.filter(item => item.enabled).map(item => item.id)
   const originalEnabled = report?.enabled_item_ids
   const selectionChanged = !report?.product && comparable && sameTarget && originalEnabled != null
     && (originalEnabled.length !== currentEnabled.length || originalEnabled.some(id => !currentEnabled.includes(id)))
+  const saved = savedCard?.type === 'review.check' ? savedCard as CheckCard : undefined
+  const savedConfig = report?.configuration
+  const sorted = (values: string[] | undefined) => JSON.stringify([...(values || [])].sort())
+  const modelChanged = saved && report && (saved.check_model_id ?? null) !== (report.check_model_id ?? null)
+  const rangeChanged = saved && savedConfig && (
+    sorted(savedConfig.categories) !== sorted(report?.product ? saved.post_check_categories : saved.enabled_categories)
+    || sorted(savedConfig.disabled_items) !== sorted(saved.disabled_items?.filter(id => id.startsWith('R') === !!report?.product))
+    || !report?.product && JSON.stringify(Object.entries(savedConfig.scope_notes).sort()) !== JSON.stringify(Object.entries(saved.scope_notes || {}).sort())
+  )
+  const automaticChanged = saved && savedConfig && report?.product && !!saved.auto_post_check !== !!savedConfig.auto_post_check
   const blocked = disabled || running || cancelling || !comparable || !basis
   const showReport = (accepted: CanvasCheckReportRead) => {
     setReports(previous => [accepted, ...previous.filter(item => item.id !== accepted.id)])
@@ -152,20 +177,20 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     {report && <Button size="small" variant="quiet" disabled={loading || running || documentPending}
       onClick={() => { setError(''); setRefresh(value => value + 1) }}>刷新检查依据</Button>}
     {categories.map(category => <section key={category.id} className="generation-check-category" aria-label={category.label}>
-      <label><input type="checkbox" aria-label={`启用类别：${category.label}`} checked={selectedCategories.includes(category.id)} disabled={disabled || running}
-        onChange={event => onChange({ ...card, enabled_categories: event.currentTarget.checked
-          ? [...new Set([...selectedCategories, category.id])] : selectedCategories.filter(id => id !== category.id) })} />
+      <Checkbox aria-label={`启用类别：${category.label}`} checked={selectedCategories.includes(category.id)} disabled={disabled || running}
+        onChange={event => onChange({ ...card, enabled_categories: event.target.checked
+          ? [...new Set([...selectedCategories, category.id])] : selectedCategories.filter(id => id !== category.id) })}>
         {category.label}
-      </label>
+      </Checkbox>
       {category.availability !== 'ready' && <p>{category.availability === 'not_applicable' ? '不适用' : '暂不可执行'} · {category.reason}</p>}
       {items.filter(item => item.category === category.id).map(item => {
         const action = reports.some(entry => (entry.results.some(result => result.item_id === item.id) || entry.executions?.some(execution => execution.item_id === item.id))) ? '重新检查此项' : '检查此项'
         return <div className="generation-check-item" key={item.id}>
-          <label><input type="checkbox" aria-label={`纳入整卡检查：${item.source.card_id}`} checked={included(item.id)} disabled={disabled || running}
-            onChange={event => onChange({ ...card, disabled_items: event.currentTarget.checked
-              ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })} />
+          <Checkbox aria-label={`纳入整卡检查：${item.source.card_id}`} checked={included(item.id)} disabled={disabled || running}
+            onChange={event => onChange({ ...card, disabled_items: event.target.checked
+              ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })}>
             来源 {item.source.card_id}/{item.field_id} · {item.requirement}
-          </label>
+          </Checkbox>
           {item.availability === 'unavailable' && <p>{item.reason}</p>}
           {item.scope_editable && <label>检查范围说明
             <Input.TextArea rows={2} maxLength={500} disabled={disabled || running} value={card.scope_notes?.[item.id] || ''}
@@ -185,7 +210,10 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     {report && <section className="generation-check-report" aria-label="检查报告">
       <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
         options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · ${entry.automatic ? '自动生成后' : entry.product ? '生成后' : '生成前'} · 修订 ${entry.basis.revision}` }))} /></label>
-      {selectionChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
+      {selectionChanged && !rangeChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
+      {modelChanged && <p role="status">当前检查模型与本报告使用的模型不同。</p>}
+      {rangeChanged && <p role="status">当前检查范围设置与本报告不同。</p>}
+      {automaticChanged && <p role="status">当前自动检查开关与本报告的配置不同。</p>}
       {report.executions?.some(item => (item.status === 'queued' || item.status === 'running') && !item.cancel_requested)
         && <Button size="small" variant="quiet" loading={cancelling} disabled={disabled || loading || running}
           onClick={() => void cancel(report.id)}>取消本轮检查</Button>}

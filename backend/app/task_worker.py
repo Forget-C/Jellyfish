@@ -446,7 +446,7 @@ class TaskWorker:
             {'type': 'image_url', 'image_url': {'url': image_url}},
         ])]
         reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
-        return parse_reference_reply(item_id, file_id, reply.content)
+        return parse_reference_reply(item_id, observation, reply.content)
 
     async def _canvas_product_visual(self, task: Task, observation: dict):
         """Read the fixed image or one actual decoded video frame, plus a required reference."""

@@ -3,10 +3,10 @@ import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckReportRead } from '.
 import { CheckRecheckForm } from './CheckRecheckForm'
 import type { RecheckContext } from './CheckRecheckForm'
 import { HistoricalCheckProduct } from './PostCheckPanel'
+import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
-const recheckTextCategories = new Set(['P01', 'P02', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09'])
 const videoPhases = { before: '前态', during: '过程', after: '后态' }
 const outcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 const parameterLabels: Record<string, string> = {
@@ -19,7 +19,7 @@ export function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label:
     <dl>{Object.entries(basis.parameters).filter(([, value]) => value !== null).map(([key, value]) =>
       <div key={key}><dt>{parameterLabels[key] || key}</dt><dd>{String(value)}</dd></div>)}</dl>
     {basis.capability && <p>已接入输入：{basis.capability.input_ports.join('、') || '无'}</p>}
-    <pre aria-label="实际提交文本">{basis.input.text || '尚未填写生成文本'}</pre>
+    <section aria-label="实际提交文本"><CanvasTextPreview text={basis.input.text || '尚未填写生成文本'} label="实际提交文本" /></section>
     <p>已采用来源：{basis.input.used?.map(item => item.source.card_id).join('、') || '无'}</p>
     {!!basis.input.mapping?.length && <ul aria-label="实际参考素材及用途">{basis.input.mapping.map((item, index) =>
       <li key={index}>{'source' in item ? `${item.source.card_id} · ${item.media_position === null ? '文本' : `素材 ${item.media_position}`}`
@@ -61,8 +61,6 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
     </ul>}
     {report.results.map(result => {
       const item = report.items.find(row => row.id === result.item_id)
-      const canRecheck = item && (recheckTextCategories.has(item.category) ||
-        (item.category === 'P03' || !!report.product) && report.executions?.some(entry => entry.item_id === result.item_id))
       return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
         {report.product ? <p>此结论仅适用于固定历史产物</p> : applicability && <p role="status">{applicability(item)}</p>}
         {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
@@ -90,7 +88,7 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
           </li>)}
         </ul>}
         <small>{result.boundary}</small>
-        {recheck && canRecheck
+        {recheck && report.recheck_item_ids?.includes(result.item_id)
           && <CheckRecheckForm key={report.id} {...recheck} cardId={report.check_card_id} reportId={report.id} itemId={result.item_id} />}
       </article>
     })}

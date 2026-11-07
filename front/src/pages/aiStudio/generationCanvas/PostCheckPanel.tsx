@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Alert, Select } from 'antd'
+import { Alert, Checkbox, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckProduct, CanvasCheckReportRead, CanvasPostCheckPreview, CheckCard } from '../../../services/generated'
+import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 
 const postCategories = [
@@ -25,7 +26,7 @@ export function HistoricalCheckProduct({ product }: { product: CanvasCheckProduc
     <summary>固定{productLabels[product.modality ?? 'text']}产物 · 原生成修订 {product.revision} · {statuses[product.generation_status]}</summary>
     <p>运行 {product.run_id} · 节点 {product.node_id} · 位置 {product.position + 1}</p>
     {product.result_set_id && <p>结果集 {product.result_set_id}</p>}
-    {product.file_id ? <p>固定文件 {product.file_id}</p> : <pre aria-label="固定文字产物正文">{product.text}</pre>}
+    {product.file_id ? <p>固定文件 {product.file_id}</p> : <section aria-label="固定文字产物正文"><CanvasTextPreview text={product.text || ''} label="固定文字产物" /></section>}
   </details>
 }
 
@@ -102,17 +103,16 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
 
   const selectedCategories = card.post_check_categories ?? postCategories.map(item => item.id)
   return <section className="generation-check-category" aria-label="生成后检查">
-    <label><input type="checkbox" checked={!!card.auto_post_check} disabled={configDisabled || running}
-      onChange={event => updateCard({ ...card, auto_post_check: event.currentTarget.checked })} />
+    <Checkbox checked={!!card.auto_post_check} disabled={configDisabled || running}
+      onChange={event => updateCard({ ...card, auto_post_check: event.target.checked })}>
       完整交付后自动检查
-    </label>
-    <p>自动检查仅适用于启用后提交且完整交付的生成。项目范围同时用于手动检查。</p>
-    <fieldset aria-label="生成后检查项目范围">{postCategories.map(category => <label key={category.id}>
-      <input type="checkbox" checked={selectedCategories.includes(category.id)} disabled={configDisabled || running}
-        onChange={event => updateCard({ ...card, post_check_categories: event.currentTarget.checked
-          ? [...new Set([...selectedCategories, category.id])] : selectedCategories.filter(id => id !== category.id) })} />
+    </Checkbox>
+    <p>自动检查仅适用于启用后提交且完整交付的生成。项目范围用于整份产物检查和自动检查。</p>
+    <fieldset aria-label="生成后检查项目范围">{postCategories.map(category => <Checkbox key={category.id} checked={selectedCategories.includes(category.id)} disabled={configDisabled || running}
+        onChange={event => updateCard({ ...card, post_check_categories: event.target.checked
+          ? [...new Set([...selectedCategories, category.id])] : selectedCategories.filter(id => id !== category.id) })}>
       {category.label}
-    </label>)}</fieldset>
+    </Checkbox>)}</fieldset>
     <p>手动选择一个历史产物，按其原生成依据检查。</p>
     {error && <Alert type="warning" showIcon message={error} />}
     <label>历史产物
@@ -133,14 +133,14 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
         && <p>视频序列按采样画面核对可见过程，证据时间为模型估计。音轨和声画同步未核验。</p>}
       {fixed.reason && <p>{fixed.reason}</p>}
       {fixed.items.map(item => <div className="generation-check-item" key={item.id}>
-        <label><input type="checkbox" aria-label={`纳入生成后检查：${item.source.card_id}/${item.field_id}`}
+        <Checkbox aria-label={`纳入生成后检查：${item.source.card_id}/${item.field_id}`}
           checked={!card.disabled_items?.includes(item.id)} disabled={configDisabled || running}
-          onChange={event => updateCard({ ...card, disabled_items: event.currentTarget.checked
-            ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })} />
-          {item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</label>
-        {!item.enabled && <p>此项已关闭</p>}
-        {item.availability !== 'ready' && <p>无法判断 · {item.reason}</p>}
-        <Button size="small" disabled={disabled || running || !item.enabled || item.availability !== 'ready'}
+          onChange={event => updateCard({ ...card, disabled_items: event.target.checked
+            ? (card.disabled_items || []).filter(id => id !== item.id) : [...(card.disabled_items || []), item.id] })}>
+          {item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</Checkbox>
+        {!item.enabled && <p>未纳入整份产物检查，可单项执行</p>}
+        {item.availability === 'ready' ? <small>单项预计调用 1 次</small> : <p>无法判断 · {item.reason}</p>}
+        <Button size="small" disabled={disabled || running || item.availability !== 'ready'}
           onClick={() => void submit(item.id)}>{alreadyChecked ? '重新检查此项' : '检查此项'}</Button>
       </div>)}
       <Button variant="primary" disabled={disabled || running} loading={running} onClick={() => void submit()}>

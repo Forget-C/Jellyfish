@@ -271,3 +271,56 @@ async def test_p03_recheck_uses_original_image_and_model_after_replacement_and_c
             assert retained == old and len(calls) == 2
         finally:
             worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_p03_prompt_only_attributes_unambiguous_text_and_can_run_long_segment_ids(runtime, image_storage):
+    await prepare(runtime, image_storage)
+    client, url = runtime.client, runtime.url
+    doc = (await client.get(url)).json()['data']['document']
+    model = next(card for card in doc['cards'] if card['id'] == 'model')
+    model['input_bindings'].append({'id': 'other', 'input_port': 'image', 'source': {
+        'canvas_id': runtime.canvas_id, 'card_id': 'red', 'port_id': 'image', 'position': 0,
+    }})
+    doc['edges'].append({'id': 'adopt-red', 'source_card': 'red', 'source_port': 'image', 'target_card': 'model', 'target_port': 'image'})
+    doc['input_order']['model']['image'].append('adopt-red')
+    long_id = 'reference-' + 'a' * 280
+    model['prompt'] = {'segments': [
+        {'id': long_id, 'kind': 'reference', 'binding_id': 'unrelated'},
+        {'id': 'between', 'kind': 'text', 'text': '画面应为红色'},
+        {'id': 'other', 'kind': 'reference', 'binding_id': 'other'},
+    ]}
+    await save_canvas(client, url, doc, 2)
+    assert not [item for item in (await preview(runtime))['items'] if item['category'] == 'P03' and item['source']['card_id'] == 'model']
+
+    model['prompt']['segments'].pop()
+    await save_canvas(client, url, doc, 3)
+    current = await preview(runtime)
+    item, = [item for item in current['items'] if item['category'] == 'P03' and item['source']['card_id'] == 'model']
+    assert item['field_id'] == f'prompt:{long_id}' and len(item['id']) <= 256
+    response = await client.post(f'{url}/checks/check/runs', json={'item_id': item['id'],
+        'expected_revision': current['basis']['revision'], 'basis_hash': current['basis']['basis_hash']})
+    assert response.status_code == 200, response.text
+    assert [entry['item_id'] for entry in response.json()['data']['executions']] == [item['id']]
+
+
+@pytest.mark.asyncio
+async def test_p03_cannot_turn_a_proposal_into_a_hard_visual_finding(runtime, image_storage):
+    await prepare(runtime, image_storage)
+    await run(runtime, await preview(runtime))
+
+    def provider(_request):
+        return httpx.Response(200, json={'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+            'role': 'assistant', 'content': '{"outcome":"nonconforming","message":"可能不符","visible_evidence":"可见红色区域"}',
+        }}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=False)
+    report, = (await runtime.client.get(f'{runtime.url}/checks/check/reports')).json()['data']
+    assert report['results'][0]['outcome'] == 'risk'
+    assert report['results'][0]['observed_media'][0]['file_id'] == 'red'

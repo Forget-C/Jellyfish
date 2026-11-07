@@ -17,6 +17,7 @@ class CanvasCheckBasis(BaseModel):
     parameters: dict[str, str | int | float | bool | None]
     capability: CanvasModelCapability | None = None
     input: CanvasCompiledInput
+    observed_model_inputs: list[str] = Field(default_factory=list)
 
 
 class CanvasCheckItem(BaseModel):
@@ -169,6 +170,14 @@ class CanvasPostCheckPreview(BaseModel):
     reason: str | None = None
 
 
+class CanvasCheckConfiguration(BaseModel):
+    """Public selection saved with the report, excluding provider credentials."""
+    categories: list[str]
+    disabled_items: list[str]
+    scope_notes: dict[str, str]
+    auto_post_check: bool | None = None
+
+
 class CanvasCheckReportRead(BaseModel):
     """固定本轮目标、依据、所选项目与结果；重查形成新身份。"""
     id: str
@@ -180,6 +189,8 @@ class CanvasCheckReportRead(BaseModel):
     results: list[CanvasCheckResult]
     omitted: list[CanvasCheckOmission] = Field(default_factory=list)
     check_model_id: str | None = None
+    configuration: CanvasCheckConfiguration | None = None
+    recheck_item_ids: list[str] = Field(default_factory=list)
     executions: list[CanvasCheckExecution] = Field(default_factory=list)
     enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')
     product: CanvasCheckProduct | None = None

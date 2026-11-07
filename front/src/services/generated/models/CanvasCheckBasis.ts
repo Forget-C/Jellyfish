@@ -15,4 +15,5 @@ export type CanvasCheckBasis = {
     parameters: Record<string, (string | number | boolean | null)>;
     capability?: (CanvasModelCapability | null);
     input: CanvasCompiledInput;
+    observed_model_inputs?: Array<string>;
 };

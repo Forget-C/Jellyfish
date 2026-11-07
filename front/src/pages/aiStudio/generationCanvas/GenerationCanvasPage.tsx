@@ -22,7 +22,7 @@ import '../directing/canvasWorkbench.css'
 import { TaskCenter } from '../components/TaskCenter'
 import './generationCanvas.css'
 
-type InspectTarget = { cardId: string; serial: number; segmentId?: string }
+type InspectTarget = { cardId: string; serial: number; segmentId?: string; reportId?: string }
 
 /** 浏览仅限同一画布的真实位置，不使用业务内容撤销记录。 */
 function CanvasHistoryControls({ storageKey, requestLeave }: { storageKey: string; requestLeave: () => Promise<boolean> }) {
@@ -47,6 +47,14 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const editor = useGenerationCanvasEditor(projectId, canvasId)
   const { current, document, edit, save, saving, dirty, ownership } = editor
+  const checkCardId = search.get('check')
+  const checkReportId = search.get('report')
+  const liveCheck = !!checkCardId && !!current?.document.cards?.some(card => card.id === checkCardId && card.type === 'review.check')
+  useEffect(() => {
+    if (current?.id === canvasId && checkCardId && checkReportId && liveCheck) {
+      setInspectTarget({ cardId: checkCardId, reportId: checkReportId, serial: Date.now() })
+    }
+  }, [canvasId, current?.id, checkCardId, checkReportId, liveCheck])
   const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit, current?.revision)
   useEffect(() => { if (runtime.preview) setPreviewOpen(true) }, [runtime.preview])
   const change: typeof edit = next => { runtime.invalidate(); edit(next) }
@@ -63,7 +71,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const refreshList = () => Canvases.canvasList({ projectId }).then(response => setCanvases(response.data || []))
   const select = (id?: string) => setSearch(previous => {
     const next = new URLSearchParams(previous)
-    next.delete('run'); next.delete('node')
+    next.delete('run'); next.delete('node'); next.delete('check'); next.delete('report')
     if (id) next.set('canvas', id)
     else next.delete('canvas')
     return next
@@ -156,7 +164,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         <div ref={setPrimaryHost} className="generation-primary-host" />
         {document && <RunHistory onClose={closeRunHistory} key={document.id} runs={runtime.snapshot.runs} targetRun={search.get('run')} targetNode={search.get('node')}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
-        {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} />}
+        {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
           <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>

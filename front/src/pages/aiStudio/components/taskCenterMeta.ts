@@ -42,6 +42,8 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
     const query = new URLSearchParams({ canvas: source.canvas_id })
     if (source.run_id) query.set('run', source.run_id)
     if (source.node_id) query.set('node', source.node_id)
+    if (source.check_card_id) query.set('check', source.check_card_id)
+    if (source.check_report_id) query.set('report', source.check_report_id)
     navigateTo = generationCanvasLocation(projectId, query)
   }
   else if (kind === 'experiment_session') navigateTo = `/lab?session=${encodeURIComponent(id)}`
