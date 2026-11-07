@@ -1,5 +1,6 @@
 """Isolated real HTTP + TaskWorker fixture, fake only external text provider."""
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -27,7 +28,7 @@ project_id = os.environ.get('CANVAS_BROWSER_PROJECT_ID', 'canvas-project')
 provider_id = project_id + '-provider' if database_url else 'canvas-runtime-provider'
 model_id = project_id + '-text' if database_url else 'canvas-runtime-text'
 sessions = async_sessionmaker(engine, expire_on_commit=False)
-control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False}
+control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False, 'check_release': False, 'check_calls': []}
 
 
 class ControlledModel:
@@ -54,6 +55,22 @@ class ControlledModel:
         yield SimpleNamespace(content='第三段')
 
 
+    async def ainvoke(self, messages):
+        data = json.loads(messages[1].content)
+        field = data['requirement']['field_id']
+        calls = control['check_calls']
+        first_duration = field == 'estimated_duration' and field not in calls
+        calls.append(field)
+        while not control['check_release']:
+            await asyncio.sleep(.03)
+        if first_duration:
+            return SimpleNamespace(content='malformed')
+        return SimpleNamespace(content=json.dumps({
+            'outcome': 'conforming', 'message': '已传入本项设计',
+            'submitted_excerpt': data['requirement']['text'],
+        }))
+
+
 async def database():
     async with sessions() as db:
         try:
@@ -78,7 +95,7 @@ async def set_control(body: dict = Body(...)):
         from app.models.generation_canvas import CanvasEvent
         async with sessions.begin() as db:
             await db.execute(delete(CanvasEvent))
-    for key in ('release', 'release_for', 'fail_next', 'duplicate_next'):
+    for key in ('release', 'release_for', 'fail_next', 'duplicate_next', 'check_release'):
         if key in body:
             control[key] = body[key]
     return control

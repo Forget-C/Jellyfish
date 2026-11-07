@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasCheckBasis } from './CanvasCheckBasis';
+import type { CanvasCheckExecution } from './CanvasCheckExecution';
 import type { CanvasCheckItem } from './CanvasCheckItem';
 import type { CanvasCheckOmission } from './CanvasCheckOmission';
 import type { CanvasCheckResult } from './CanvasCheckResult';
@@ -18,4 +19,6 @@ export type CanvasCheckReportRead = {
     items: Array<CanvasCheckItem>;
     results: Array<CanvasCheckResult>;
     omitted?: Array<CanvasCheckOmission>;
+    check_model_id?: (string | null);
+    executions?: Array<CanvasCheckExecution>;
 };

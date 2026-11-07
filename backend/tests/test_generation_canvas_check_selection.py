@@ -20,7 +20,7 @@ async def test_check_selection_survives_source_replacement_and_keeps_history(can
     connect_check(document)
     await save_canvas(client, url, document, 0)
     first = (await client.get(checks)).json()['data']
-    item, = first['items']
+    item, = (item for item in first['items'] if item['category'] == 'P06')
     assert first['categories'][0]['id'] == 'P06' and first['categories'][0]['enabled']
     original = (await client.post(f'{checks}/runs', json=run_request(first))).json()['data']
 
@@ -32,7 +32,7 @@ async def test_check_selection_survives_source_replacement_and_keeps_history(can
     document['input_order']['model']['text'] = [edge['id']]
     await save_canvas(client, url, document, 1)
     replacement = (await client.get(checks)).json()['data']
-    derived, = replacement['items']
+    derived, = (item for item in replacement['items'] if item['category'] == 'P06')
     assert derived['source']['card_id'] == 'unused' and derived['id'] != item['id']
     assert not derived['enabled'] and not replacement['categories'][0]['enabled']
     assert (await client.post(f'{checks}/runs', json=run_request(replacement))).status_code == 422
@@ -48,7 +48,7 @@ async def test_check_selection_survives_source_replacement_and_keeps_history(can
     edge['source_card'] = 'shot'
     await save_canvas(client, url, document, 2)
     restored = (await client.get(checks)).json()['data']
-    derived, = restored['items']
+    derived, = (item for item in restored['items'] if item['category'] == 'P06')
     assert restored['categories'][0]['enabled'] and not derived['enabled']
     assert derived['id'] == item['id'] and derived['scope_note'] == '核对本镜头'
     assert (await client.get(f'{checks}/reports')).json()['data'][-1] == original
@@ -67,7 +67,7 @@ async def test_missing_seconds_keeps_applicable_item_but_empty_duration_is_not_a
 
     preview = (await client.get(checks)).json()['data']
     assert preview['categories'][0]['availability'] == 'unavailable'
-    item, = preview['items']
+    item, = (item for item in preview['items'] if item['category'] == 'P06')
     assert item['availability'] == 'unavailable' and item['reason'] == '请先填写本次生成时长'
     assert (await client.post(f'{checks}/runs', json=run_request(preview, item_id=item['id']))).status_code == 422
     assert (await client.get(f'{checks}/reports')).json()['data'] == []
@@ -96,5 +96,5 @@ async def test_unrelated_shots_remain_unavailable_instead_of_compared_to_whole_d
     preview = (await client.get(f'{url}/checks/check')).json()['data']
     assert {item['source']['card_id'] for item in preview['items']} == {'shot', 'unused'}
     assert {item['availability'] for item in preview['items']} == {'unavailable'}
-    assert all('同一范围' in item['reason'] for item in preview['items'])
+    assert all('同一范围' in item['reason'] for item in preview['items'] if item['category'] == 'P06')
     assert (await client.post(f'{url}/checks/check/runs', json=run_request(preview))).status_code == 422

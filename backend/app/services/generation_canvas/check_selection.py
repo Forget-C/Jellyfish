@@ -1,9 +1,10 @@
 """从已采用依据派生当前检查范围，用户选择独立持久化。"""
 from app.schemas.canvas_checks import CanvasCheckCategory, CanvasCheckItem, CanvasCheckOmission
 from app.schemas.generation_canvas import CheckCard
+from app.services.generation_canvas.check_adoption import ADOPTION_CATEGORY, ADOPTION_LABEL, adoption_checks
 from app.services.generation_canvas.check_duration import DURATION_CATEGORY, DURATION_LABEL, duration_checks
 
-CHECK_CATEGORY_LABELS = {DURATION_CATEGORY: DURATION_LABEL}
+CHECK_CATEGORY_LABELS = {DURATION_CATEGORY: DURATION_LABEL, ADOPTION_CATEGORY: ADOPTION_LABEL}
 
 
 def initial_check_categories() -> list[str]:
@@ -21,11 +22,13 @@ def describe_category(card: CheckCard, category: str, items: list[CanvasCheckIte
                                availability=availability, reason=None if ready else members[0].reason if members else not_applicable)
 
 
-def check_items(basis, card: CheckCard):
+def check_items(basis, card: CheckCard, model_unavailable: str | None):
     """共用来源派生结果，使预览、整卡和单项执行使用同一范围。"""
     items, comparisons = duration_checks(basis, card)
     categories = [describe_category(card, DURATION_CATEGORY, items, '未采用可核对时长的镜头设计')]
-    return categories, items, comparisons
+    adopted, observations = adoption_checks(basis, card, model_unavailable)
+    categories.append(describe_category(card, ADOPTION_CATEGORY, adopted, '未采用可核对的设计或验收要求'))
+    return categories, items + adopted, comparisons, observations
 
 
 def select_check_items(items: list[CanvasCheckItem], item_id: str | None) -> tuple[list[CanvasCheckItem], list[CanvasCheckOmission]]:

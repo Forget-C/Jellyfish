@@ -2,11 +2,19 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.generation import FrozenGenerationConfig
+from app.core.contracts.task import TaskStatus
 from app.models.generation_canvas import CanvasCheckReport, GenerationCanvas
-from app.schemas.canvas_checks import CanvasCheckBasis, CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest
+from app.models.llm import Model, ModelCategoryKey, Provider
+from app.models.task import Task
+from app.schemas.canvas_checks import (
+    CanvasCheckBasis, CanvasCheckExecution, CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest, CanvasCheckResult,
+)
 from app.schemas.generation_canvas import CheckCard, CanvasDocument, TextModelCard
 from app.services.generation_canvas.check_selection import check_items, select_check_items
 from app.services.generation_canvas.current_state import CanvasCurrentState
@@ -14,6 +22,10 @@ from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.execution_basis import CanvasBasis, digest
 from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.generation_canvas.store import CanvasStore
+from app.services.llm.provider_resolver import resolve_provider_config_from_provider
+from app.services.task_service import TaskService
+
+CHECK_REPORT_TARGET = 'canvas_check_report'
 
 
 _TEXT_PARAMETERS = ('temperature', 'max_tokens', 'max_completion_tokens', 'top_p',
@@ -40,7 +52,7 @@ class CanvasChecks:
     """与画布保存使用相同项目边界，规则执行与报告写入处于同一事务。"""
 
     def __init__(self, db: AsyncSession, project_id: str):
-        self.db = db
+        self.db, self.project_id = db, project_id
         self.store = CanvasStore(db, project_id)
         self.current = CanvasCurrentState(db, project_id)
 
@@ -56,13 +68,34 @@ class CanvasChecks:
         return card, await self.current.current_basis(canvas, relation.source_card, outputs,
                                                       lock_config=lock_config, context=context)
 
+    async def _check_model(self, card: CheckCard) -> tuple[FrozenGenerationConfig | None, str | None]:
+        """Resolve the explicitly selected text route, keeping credentials server-side."""
+        if not card.check_model_id:
+            return None, '请选择独立的文字检查模型'
+        # One consistent read avoids locking two different models in opposite order across canvases.
+        selected = (await self.db.execute(select(Model, Provider).outerjoin(Provider, Model.provider_id == Provider.id)
+            .where(Model.id == card.check_model_id).execution_options(populate_existing=True))).one_or_none()
+        if selected is None or selected.Model.category != ModelCategoryKey.text:
+            return None, '所选检查模型不存在或不支持文字检查'
+        model, provider = selected
+        if provider is not None:
+            try:
+                config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
+                return FrozenGenerationConfig(model_name=model.name, model_params=model.params or {},
+                    provider_id=provider.id, provider_key=config.provider_key, api_key=config.api_key,
+                    base_url=config.base_url), None
+            except (HTTPException, ValidationError):
+                pass
+        return None, '所选检查模型的供应商配置不可用'
+
     async def preview(self, canvas_id: str, card_id: str) -> CanvasCheckPreview:
         """读取保存后的当前目标和适用项，不启动模型或写报告。"""
         canvas = await self.store.get(canvas_id)
         card, basis = await self._basis(canvas, card_id)
         if basis is None:
             return CanvasCheckPreview(reason='请连接模型生成卡的生成检查依据')
-        categories, items, _ = check_items(basis, card)
+        _, reason = await self._check_model(card)
+        categories, items, _, _ = check_items(basis, card, reason)
         return CanvasCheckPreview(basis=public_check_basis(basis), categories=categories, items=items)
 
     async def run(self, canvas_id: str, card_id: str, request: CanvasCheckRequest) -> CanvasCheckReportRead:
@@ -77,7 +110,8 @@ class CanvasChecks:
         public = public_check_basis(basis)
         if public.basis_hash != request.basis_hash:
             raise diagnostic('CHECK_BASIS_CHANGED', '检查依据已变，请刷新后再检查', target, status=409, blocks=['check'])
-        _, items, comparisons = check_items(basis, card)
+        check_model, reason = await self._check_model(card)
+        _, items, comparisons, observations = check_items(basis, card, reason)
         selected, omitted = select_check_items(items, request.item_id)
         if not selected:
             unavailable = next((item.reason for item in items if item.id == request.item_id), None)
@@ -86,9 +120,27 @@ class CanvasChecks:
         report = CanvasCheckReportRead(id=uuid4().hex, check_card_id=card_id, created_at=datetime.now(UTC),
                                        scope='item' if request.item_id is not None else 'all',
                                        basis=public, items=selected, omitted=omitted,
-                                       results=[comparisons[item.id].evaluate() for item in selected])
+                                       results=[comparisons[item.id].evaluate() for item in selected if item.id in comparisons],
+                                       check_model_id=card.check_model_id)
+        tasks = {}
+        if check_model is not None:
+            for item in selected:
+                if item.id not in observations:
+                    continue
+                task = await TaskService(self.db).submit(
+                    kind='canvas_check', project_id=self.project_id, target_type=CHECK_REPORT_TARGET, target_id=report.id,
+                    title=f'{item.label} · {item.source.card_id}/{item.field_id}', provider_id=check_model.provider_id,
+                    expected_target_version=canvas.revision, snapshot={
+                        'item_id': item.id, 'execution_config': check_model.model_dump(mode='json'),
+                        'observation': {'requirement': observations[item.id], 'submitted_text': basis.compiled.text},
+                    })
+                tasks[item.id] = task.id
+                report.executions.append(CanvasCheckExecution(item_id=item.id, status='queued'))
+        stored = report.model_dump(mode='json')
+        if tasks:
+            stored['_tasks'] = tasks
         self.db.add(CanvasCheckReport(id=report.id, canvas_id=canvas_id, check_card_id=card_id,
-                                      created_at=report.created_at.replace(tzinfo=None), report=report.model_dump(mode='json')))
+                                      created_at=report.created_at.replace(tzinfo=None), report=stored))
         await self.db.flush()
         return report
 
@@ -100,4 +152,27 @@ class CanvasChecks:
         rows = await self.db.scalars(select(CanvasCheckReport).where(
             CanvasCheckReport.canvas_id == canvas_id, CanvasCheckReport.check_card_id == card_id
         ).order_by(CanvasCheckReport.created_at.desc(), CanvasCheckReport.id.desc()))
-        return [CanvasCheckReportRead.model_validate(row.report) for row in rows]
+        return await self._read_reports(list(rows))
+
+    async def _read_reports(self, rows: list[CanvasCheckReport]) -> list[CanvasCheckReportRead]:
+        """Project task facts without a canvas lock or copying task-private snapshots."""
+        task_ids = {task_id for row in rows for task_id in row.report.get('_tasks', {}).values()}
+        tasks = {}
+        if task_ids:
+            facts = await self.db.execute(select(Task.id, Task.target_id, Task.status, Task.result, Task.error_message)
+                .where(Task.id.in_(task_ids), Task.project_id == self.project_id, Task.target_type == CHECK_REPORT_TARGET))
+            tasks = {(fact.target_id, fact.id): fact for fact in facts}
+        reports = []
+        for row in rows:
+            report = CanvasCheckReportRead.model_validate(row.report)
+            for execution in report.executions:
+                task_id = row.report.get('_tasks', {}).get(execution.item_id)
+                fact = tasks.get((report.id, task_id))
+                if fact is None:
+                    execution.status, execution.reason = 'failed', '检查任务记录不可用'
+                else:
+                    execution.status, execution.reason = TaskStatus(fact.status).value, fact.error_message
+                    if fact.status == TaskStatus.succeeded:
+                        report.results.append(CanvasCheckResult.model_validate(fact.result))
+            reports.append(report)
+        return reports

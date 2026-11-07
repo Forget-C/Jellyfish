@@ -55,7 +55,7 @@ async def test_check_reuses_actual_input_and_preserves_independent_reports(canva
     assert any(issue['code'] == 'MODEL_REQUIRED' for issue in basis['basis']['input']['diagnostics'])
     assert (await client.get(f'{checks}/reports')).json()['data'] == []
 
-    item, = basis['items']
+    item, = (item for item in basis['items'] if item['category'] == 'P06')
     request = {'expected_revision': basis['basis']['revision'], 'basis_hash': basis['basis']['basis_hash']}
     response = await client.post(f'{checks}/runs', json=request)
     assert response.status_code == 200, response.text

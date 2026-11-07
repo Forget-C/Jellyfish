@@ -310,6 +310,9 @@ class TaskWorker:
 
     async def _text(self, task: Task) -> None:
         """先解析模型后释放事务；同步 Agent 在有界线程池执行，结果统一交付。"""
+        if task.kind == "canvas_check":
+            await self._canvas_check(task)
+            return
         if task.target_type == "canvas_node":
             await self._canvas_text(task)
             return
@@ -364,15 +367,36 @@ class TaskWorker:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
             await db.commit()
 
-    async def _canvas_text(self, task: Task) -> None:
-        """Use the admitted private config and persist chunks in short transactions."""
+    def _frozen_text_model(self, task: Task) -> ChatOpenAI:
+        """Use only the provider and model configuration captured at admission."""
         from app.core.contracts.generation import FrozenGenerationConfig
         frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
         params = dict(frozen.model_params)
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
         params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
-        llm = ChatOpenAI(**params)
+        return ChatOpenAI(**params)
+
+    async def _canvas_check(self, task: Task) -> None:
+        """Execute one semantic item and publish only its validated observation."""
+        import json
+        from app.services.generation_canvas.check_adoption import ADOPTION_INSTRUCTIONS, parse_observation
+        snapshot = task.input_snapshot
+        observation = snapshot['observation']
+        messages = [SystemMessage(content=ADOPTION_INSTRUCTIONS),
+                    HumanMessage(content=json.dumps(observation, ensure_ascii=False))]
+        reply = await self._frozen_text_model(task).ainvoke(messages)
+        result = parse_observation(snapshot['item_id'], observation, reply.content)
+        if result is None:
+            await self._fail(task.id, 'canvas_check_response_invalid', '检查模型返回无法解析')
+            return
+        async with self.sessions() as db:
+            await TaskService(db).finish(task.id, result=result.model_dump(mode='json'))
+            await db.commit()
+
+    async def _canvas_text(self, task: Task) -> None:
+        """Use the admitted private config and persist chunks in short transactions."""
+        llm = self._frozen_text_model(task)
         roles = {'system': SystemMessage, 'user': HumanMessage, 'assistant': AIMessage}
         messages = [roles[item['role']](content=item['content']) for item in sorted(
             task.input_snapshot['operation_input']['messages'], key=lambda item: item['sequence'])]

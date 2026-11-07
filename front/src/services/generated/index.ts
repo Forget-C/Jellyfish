@@ -183,6 +183,7 @@ export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition
 export type { CanvasCatalog } from './models/CanvasCatalog';
 export type { CanvasCheckBasis } from './models/CanvasCheckBasis';
 export type { CanvasCheckCategory } from './models/CanvasCheckCategory';
+export type { CanvasCheckExecution } from './models/CanvasCheckExecution';
 export type { CanvasCheckItem } from './models/CanvasCheckItem';
 export type { CanvasCheckOmission } from './models/CanvasCheckOmission';
 export type { CanvasCheckPreview } from './models/CanvasCheckPreview';

@@ -10,6 +10,7 @@ export type CheckCard = {
     type_version?: number;
     type?: string;
     enabled_categories?: Array<string>;
+    check_model_id?: (string | null);
     disabled_items?: Array<string>;
     scope_notes?: Record<string, string>;
 };
