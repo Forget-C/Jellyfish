@@ -14,4 +14,8 @@ export type CanvasCheckItem = {
     field_id: string;
     requirement: string;
     enabled: boolean;
+    /**
+     * 本项实际核对的依据标记，用于与当前项目比较。
+     */
+    input_stamp?: (string | null);
 };

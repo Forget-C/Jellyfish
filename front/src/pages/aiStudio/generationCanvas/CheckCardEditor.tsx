@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCheckBasis, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
+import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import type { CardRendererProps } from './rendererRegistry'
 import './checkCard.css'
@@ -26,6 +26,13 @@ function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label: string
     {!!basis.input.diagnostics?.length && <ul aria-label="默认技术诊断">{basis.input.diagnostics.map((issue, index) =>
       <li key={index}>{issue.message}</li>)}</ul>}
   </details>
+}
+
+function applicability(previous: CanvasCheckItem | undefined, current: CanvasCheckItem | undefined, sameTarget: boolean) {
+  if (!sameTarget) return '原生成目标已变更或断开'
+  if (!current) return '此项已不在当前检查范围'
+  if (!previous?.input_stamp || !current.input_stamp) return '缺少逐项比较依据，可重新检查'
+  return previous.input_stamp === current.input_stamp ? '仍适用于当前输入' : '依据已变化，请重新检查'
 }
 
 /** 保存后的依据用于检查；卡片选择与执行报告分别管理。 */
@@ -64,7 +71,13 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
   const report = reports.find(item => item.id === selectedReportId) || reports[0]
   const items = preview?.items || []
   const enabled = (itemId: string) => !card.disabled_items?.includes(itemId)
-  const blocked = disabled || running || loading || documentPending || !basis || basis.revision !== savedRevision
+  const comparable = !loading && !documentPending && !!preview && (!basis || basis.revision === savedRevision)
+  const sameTarget = !!basis && basis.target_card_id === report?.basis.target_card_id
+  const currentEnabled = items.filter(item => item.enabled).map(item => item.id)
+  const originalEnabled = report?.enabled_item_ids
+  const selectionChanged = comparable && sameTarget && originalEnabled != null
+    && (originalEnabled.length !== currentEnabled.length || originalEnabled.some(id => !currentEnabled.includes(id)))
+  const blocked = disabled || running || !comparable || !basis
   const run = async (itemId?: string) => {
     if (blocked || !basis) return
     setRunning(true)
@@ -93,6 +106,8 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     {documentPending && <p role="status">保存修改后可检查</p>}
     {!loading && preview?.reason && <p>{preview.reason}</p>}
     {basis && <BasisDetails basis={basis} label="生成检查依据" />}
+    {report && <Button size="small" variant="quiet" disabled={loading || running || documentPending}
+      onClick={() => { setError(''); setRefresh(value => value + 1) }}>刷新检查依据</Button>}
     {items.map(item => {
       const action = reports.some(entry => entry.results.some(result => result.item_id === item.id)) ? '重新检查此项' : '检查此项'
       return <div className="generation-check-item" key={item.id}>
@@ -111,10 +126,14 @@ export function CheckCardEditor({ card: raw, document, savedRevision, documentPe
     {report && <section className="generation-check-report" aria-label="检查报告">
       <label>检查报告 <Select aria-label="选择检查报告" disabled={false} value={report.id} onChange={setSelectedReportId}
         options={reports.map((entry, index) => ({ value: entry.id, label: `报告 ${reports.length - index} · 修订 ${entry.basis.revision}` }))} /></label>
-      <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮执行 {report.results.length} 项</p>
+      <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮执行 {report.results.length} 项
+        {originalEnabled != null && ` · 执行时启用 ${originalEnabled.length} 项`}</p>
+      {selectionChanged && <p role="status">当前启用项目与报告生成时不同。此报告只覆盖当时执行的项目。</p>}
       {report.results.map(result => {
         const item = report.items.find(row => row.id === result.item_id)
+        const current = items.find(row => row.id === result.item_id)
         return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
+          <p role="status">{comparable ? applicability(item, current, sameTarget) : '待核对当前检查依据'}</p>
           {item && <p>{item.label} · 来源 {item.source.card_id} · {item.requirement}</p>}
           <p>{result.message}</p><small>{result.boundary}</small>
         </article>

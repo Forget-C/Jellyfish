@@ -87,7 +87,8 @@ class CanvasChecks:
 
         report = CanvasCheckReportRead(id=uuid4().hex, check_card_id=card_id, created_at=datetime.now(UTC),
                                        scope='item' if request.item_id is not None else 'all',
-                                       basis=public, items=[item], results=[duration.evaluate()])
+                                       basis=public, items=[item], results=[duration.evaluate()],
+                                       enabled_item_ids=[item.id] if item.enabled else [])
         self.db.add(CanvasCheckReport(id=report.id, canvas_id=canvas_id, check_card_id=card_id,
                                       created_at=report.created_at.replace(tzinfo=None), report=report.model_dump(mode='json')))
         await self.db.flush()

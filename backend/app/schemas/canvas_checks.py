@@ -28,6 +28,7 @@ class CanvasCheckItem(BaseModel):
     field_id: str
     requirement: str
     enabled: bool
+    input_stamp: str | None = Field(default=None, description='本项实际核对的依据标记，用于与当前项目比较。')
 
 
 class CanvasCheckPreview(BaseModel):
@@ -62,3 +63,4 @@ class CanvasCheckReportRead(BaseModel):
     basis: CanvasCheckBasis
     items: list[CanvasCheckItem]
     results: list[CanvasCheckResult]
+    enabled_item_ids: list[str] | None = Field(default=None, description='执行时启用的项目；可与本轮实际执行范围不同。')

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from app.core.contracts.generation_canvas import DesignTextPayload, ShotDesignFields
 from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckResult
 from app.schemas.generation_canvas import CheckCard, VideoModelCard
-from app.services.generation_canvas.execution_basis import CanvasBasis
+from app.services.generation_canvas.execution_basis import CanvasBasis, digest
 
 _DURATION = re.compile(r'(预计|固定|至少|最低)?\s*(\d{1,4}(?:\.\d{1,3})?)\s*秒')
 _BOUNDARY = '仅核对同一直接采用镜头的明确时长数值，不预测动作可行性或生成结果。'
@@ -61,6 +61,17 @@ def duration_check(basis: CanvasBasis, card: CheckCard) -> DurationCheck | None:
         return None
 
     item_id = f'P06:{source.source.card_id}:estimated_duration'
+    # 仅标记此规则读取的时长和证据；不将修订、选项和其他提交内容视为时长变化。
+    input_stamp = digest({
+        'source': source.source.model_dump(mode='json'),
+        'source_locator': source.payload.source_locator,
+        'field_source_locator': field.source_locator,
+        'requirement': field.text,
+        'state': field.state,
+        'purpose': field.purpose,
+        'seconds': basis.card.config.seconds,
+    })
     item = CanvasCheckItem(id=item_id, category='P06', label='明确时长要求匹配', source=source.source,
-                          field_id='estimated_duration', requirement=field.text, enabled=item_id not in card.disabled_items)
+                          field_id='estimated_duration', requirement=field.text,
+                          enabled=item_id not in card.disabled_items, input_stamp=input_stamp)
     return DurationCheck(item=item, kind=kind, expected=desired, actual=basis.card.config.seconds)
