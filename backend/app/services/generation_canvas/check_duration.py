@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from app.core.contracts.generation_canvas import DesignTextPayload, ShotDesignFields
-from app.schemas.canvas_checks import CanvasCheckItem, CanvasCheckResult
+from app.schemas.canvas_checks import CanvasCheckBasis, CanvasCheckItem, CanvasCheckResult
 from app.schemas.generation_canvas import CheckCard, VideoModelCard
 from app.services.generation_canvas.execution_basis import CanvasBasis, digest
 
@@ -82,3 +82,20 @@ def duration_checks(basis: CanvasBasis, card: CheckCard) -> tuple[list[CanvasChe
         if comparison:
             comparisons[item_id] = DurationCheck(item, *comparison)
     return items, comparisons
+
+
+def recheck_duration(basis: CanvasCheckBasis, item: CanvasCheckItem) -> CanvasCheckResult | None:
+    """Reapply the same numeric comparison to the archived accepted shot and seconds."""
+    seconds = basis.parameters.get('seconds')
+    if type(seconds) is not int:
+        return None
+    design = next((row.payload for row in basis.input.used if row.available and row.source == item.source
+                   and isinstance(row.payload, DesignTextPayload) and isinstance(row.payload.fields, ShotDesignFields)), None)
+    if design is None or item.field_id != 'estimated_duration':
+        return None
+    field = design.fields.estimated_duration
+    if field.text != item.requirement or field.state not in ('proposal', 'fact') or field.purpose == 'background':
+        return None
+    # The completed original rule identifies the single directly adopted shot.
+    comparison, _ = _comparison(field, design.scope, seconds, same_scope=True)
+    return DurationCheck(item, *comparison).evaluate() if comparison else None

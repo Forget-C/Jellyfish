@@ -217,3 +217,16 @@ async def get_archived_canvas_check_reports(project_id: str, canvas_id: str,
                                             db: AsyncSession = Depends(get_db, scope='function')):
     """读取当前画布中已删检查卡留下的原报告。"""
     return success_response(await CanvasChecks(db, project_id).archived_reports(canvas_id))
+
+
+from app.schemas.canvas_checks import CanvasCheckRecheckRequest
+from app.services.generation_canvas.check_rechecks import CanvasCheckRechecks
+
+
+@router.post('/{project_id}/{canvas_id}/checks/{card_id}/reports/{report_id}/recheck',
+             response_model=ApiResponse[CanvasCheckReportRead], operation_id='canvas_check_recheck',
+             responses={422: {'model': CanvasError}})
+async def recheck_canvas_report(project_id: str, canvas_id: str, card_id: str, report_id: str,
+                                body: CanvasCheckRecheckRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """Run one completed finding against the evidence of its original report."""
+    return success_response(await CanvasCheckRechecks(db, project_id).run(canvas_id, card_id, report_id, body))

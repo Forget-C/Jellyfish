@@ -110,6 +110,8 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
             if field == 'estimated_duration' and self.params['model'] == 'frozen-model':
                 return SimpleNamespace(content='invalid response')
             snippet = '保留室内光线' if self.params['model'] == 'frozen-model' else '未找到的片段'
+            if data := body.get('recheck'):
+                snippet = data['clarification']
             return SimpleNamespace(content=json.dumps({
                 'outcome': 'risk', 'message': '灯光要求仅部分体现', 'submitted_excerpt': snippet,
             }))
@@ -152,5 +154,28 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
         assert timed_out['results'] == []
         assert timed_out['executions'][0]['reason'] == '任务执行超时'
         assert len(calls) == 5
+
+        original_result = next(row for row in finished['results'] if row['item_id'] == visible_result['id'])
+        path = f"{checks}/reports/{finished['id']}/recheck"
+        response = await client.post(path, json={'item_id': visible_result['id'], 'clarification': '实际房间已经全黑'})
+        assert response.status_code == 200, response.text
+        rechecked = response.json()['data']
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        latest = (await history())[0]
+        assert latest['id'] == rechecked['id'] and latest['basis'] == finished['basis']
+        assert latest['results'][0]['outcome'] == 'indeterminate'
+        assert latest['recheck']['original_result'] == original_result
+        params, body = calls[-1]
+        assert params['model'] == 'frozen-model' and params['api_key'] == 'private-secret'
+        assert body['recheck']['original_result'] == original_result
+        assert body['requirement']['text'] == '关门但不关灯' and '已修改的内容' not in body['submitted_text']
+
+        await run((await preview())['basis'], failed['item_id'])
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        assert len(calls) == 7
+        assert 'recheck' not in calls[-1][1] and calls[-1][0]['model'] == 'changed-model'
+        assert next(row for row in await history() if row['id'] == finished['id']) == finished
     finally:
         worker.text_pool.shutdown(wait=False)
