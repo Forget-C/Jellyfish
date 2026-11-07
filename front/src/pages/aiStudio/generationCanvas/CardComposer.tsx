@@ -4,13 +4,17 @@ import { createPortal } from 'react-dom'
 import { CanvasEditorFooter } from './CanvasCardEditor'
 import './materialComposer.css'
 
-/** 模型、参考与描述共用编辑骨架；顶部参数模式底部只保留状态，提交由模型提供。 */
-export function CardComposer({ associations, children, parameters, status, submit, parametersPosition = 'bottom' }: {
-  associations?: ReactNode; children: ReactNode; parameters: ReactNode; status: ReactNode; submit?: ReactNode; parametersPosition?: 'top' | 'bottom'
+/** 共用编辑骨架；底部参数操作位于滚动区外，顶部参数模式底部只保留状态。 */
+export function CardComposer({ associations, children, parameters, parameterAction, status, submit, parametersPosition = 'bottom' }: {
+  associations?: ReactNode; children: ReactNode; parameters: ReactNode; parameterAction?: ReactNode; status: ReactNode; submit?: ReactNode; parametersPosition?: 'top' | 'bottom'
 }) {
   const footerHost = useContext(CanvasEditorFooter)
   const footer = <footer className="generation-material-footer" data-parameters-position={parametersPosition} aria-label={parametersPosition === 'top' ? '状态区' : '参数状态区'}>
-    {parametersPosition === 'bottom' && <><div className="generation-material-parameters" aria-label="模型参数">{parameters}</div><span className="generation-material-divider" aria-hidden="true">|</span></>}
+    {parametersPosition === 'bottom' && <>
+      <div className="generation-material-parameters" aria-label="模型参数">{parameters}</div>
+      {parameterAction}
+      <span className="generation-material-divider" aria-hidden="true">|</span>
+    </>}
     <div className="generation-material-tools" aria-label={parametersPosition === 'top' ? '状态信息' : '模型状态'}>{status}</div>{submit}
   </footer>
   return <div className="generation-material-composer">

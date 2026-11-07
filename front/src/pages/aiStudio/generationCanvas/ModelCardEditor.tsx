@@ -99,9 +99,9 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const submit = () => { if (!submitDisabled) onPrecheck?.() }
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
-      onChange={id => onChange({ ...card, model_id: id })} />{parameters}
-    <label className="generation-result-display"><Switch size="small" aria-label="显示结果卡" checked={!!card.show_result_cards} disabled={disabled}
-      onChange={checked => onChange({ ...card, show_result_cards: checked })} />显示结果卡</label></>
+      onChange={id => onChange({ ...card, model_id: id })} />{parameters}</>
+  const resultDisplay = <label className="generation-result-display"><Switch size="small" aria-label="显示结果卡" checked={!!card.show_result_cards} disabled={disabled}
+    onChange={checked => onChange({ ...card, show_result_cards: checked })} />显示结果卡</label>
   const compiledCriteria = resolved.compiled?.used?.filter(item => item.payload && 'design_type' in item.payload && item.payload.design_type === 'direction.criterion') || []
   const carriedInputs = (sourceId: string, close: AssociationDetailContext['close']) => {
     const media = resolved.compiled?.media?.filter(item => item.design_sources?.some(origin => origin.source.card_id === sourceId)) || []
@@ -196,7 +196,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     </>
   }
   const associations = <CanvasAssociations entries={entries} sourceActions={sourceActions} sessionKey={`${card.id}:${editorOpen}`} loading={resolved.loading} error={resolved.error} renderDetails={renderDetails} onLocateSource={onLocateDesign} onInspect={() => { if (management.current) management.current.open = false }} />
-  return <CardComposer associations={associations} parameters={modelParameters} status={status}
+  return <CardComposer associations={associations} parameters={modelParameters} parameterAction={resultDisplay} status={status}
     submit={<WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={submitDisabled} onClick={submit} />}>
     {!!card.missing_designs?.length && <Alert type="warning" message="旧摄影设计已移除，需要补充设计依据" description={<><p>缺失设计：{card.missing_designs.join('、')}</p><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, missing_designs: [] })}>已处理缺失设计</WorkbenchButton></>} />}
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}

@@ -63,6 +63,17 @@ try {
   const originalModelBox = await box(model)
   const showResults = card.getByRole('switch', { name: '显示结果卡', exact: true })
   const resultCards = page.getByRole('article', { name: /生成结果/ })
+  const assertResultDisplayVisible = async () => {
+    const bounds = await showResults.evaluate(toggle => {
+      const label = toggle.closest('label')
+      const { left, right } = label.getBoundingClientRect()
+      const scrollArea = label.closest('[aria-label="模型参数"]')
+      return { left, right, visibleRight: Math.min(innerWidth, scrollArea?.getBoundingClientRect().right ?? innerWidth) }
+    })
+    assert.ok(bounds.left >= 0 && bounds.right <= bounds.visibleRight + 1,
+      `result switch and its full label are visible without scrolling: ${JSON.stringify(bounds)}`)
+  }
+  await assertResultDisplayVisible()
   assert.equal(await showResults.getAttribute('aria-checked'), 'false')
   await showResults.press('Space')
   assert.equal(await showResults.getAttribute('aria-checked'), 'true')
@@ -220,10 +231,8 @@ try {
   await closeCanvasDetails(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await open('m')
-  await showResults.scrollIntoViewIfNeeded()
-  const toggleBox = await showResults.boundingBox()
+  await assertResultDisplayVisible()
   const runBox = await card.getByRole('button', { name: '预检运行', exact: true }).boundingBox()
-  assert.ok(toggleBox.x >= 0 && toggleBox.x + toggleBox.width <= 391)
   assert.ok(runBox.x >= 0 && runBox.x + runBox.width <= 391)
   assert.equal((await control()).calls.length, 5)
   await page.screenshot({ path: join(output, 'result-display-mobile.png'), fullPage: true })
