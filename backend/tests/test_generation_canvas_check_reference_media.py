@@ -205,3 +205,69 @@ async def test_p03_uses_explicit_object_mapping_and_text_reference_and_keeps_uns
     report = await run(runtime, current)
     assert [item['id'] for item in report['items']] == [next(item['id'] for item in current['items'] if item['source']['card_id'] == 'person')]
     assert any(item['item_id'] == missing['id'] and item['status'] == 'unavailable' for item in report['omitted'])
+
+
+@pytest.mark.asyncio
+async def test_p03_recheck_uses_original_image_and_model_after_replacement_and_card_deletion(runtime, image_storage):
+    red = await prepare(runtime, image_storage)
+    client, url = runtime.client, runtime.url
+    checks = f'{url}/checks/check'
+    original = await run(runtime, await preview(runtime))
+    calls = []
+
+    def provider(request):
+        body = json.loads(request.content)
+        text, image = body['messages'][1]['content']
+        context = json.loads(text['text'])
+        calls.append(context)
+        assert request.url.host == 'vision.test' and body['model'] == 'qwen3-vl-plus'
+        assert base64.b64decode(image['image_url']['url'].split(',')[1]) == red
+        if 'recheck' in context:
+            assert '不能视作证据' in body['messages'][0]['content']
+        return httpx.Response(200, json={'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+            'role': 'assistant', 'content': json.dumps({
+                'outcome': 'conforming', 'message': '重读后看到红色区域', 'visible_evidence': '红色区域',
+            }),
+        }}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as transport:
+        worker = TaskWorker(runtime.sessions, client=transport)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            old, = (await client.get(f'{checks}/reports')).json()['data']
+            item, = old['items']
+            assert old['id'] == original['id'] and old['results'][0]['outcome'] == 'conforming'
+            document = (await client.get(url)).json()['data']['document']
+            document['cards'][0]['file_id'] = 'green'
+            document['cards'] = [card for card in document['cards'] if card['id'] != 'check']
+            document['edges'] = [edge for edge in document['edges'] if edge['target_card'] != 'check']
+            document['input_order'].pop('check')
+            await save_canvas(client, url, document, 2)
+
+            body = {'item_id': item['id'], 'clarification': '请复看角落。不要改用当前图片。'}
+            path = f"{checks}/reports/{old['id']}/recheck"
+            other_project = path.replace(runtime.project_id, 'wrong-project', 1)
+            assert (await client.post(other_project, json=body)).status_code == 404
+            response = await client.post(path, json=body)
+            assert response.status_code == 200, response.text
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            reviewed, retained = (await client.get(f'{url}/check-reports/archived')).json()['data']
+            assert reviewed['basis'] == old['basis'] and retained == old
+            assert reviewed['id'] != old['id'] and reviewed['recheck']['report_id'] == old['id']
+            assert reviewed['results'][0]['observed_media'][0]['file_id'] == 'red'
+            assert len(calls) == 2 and calls[-1]['recheck']['clarification'] == body['clarification']
+
+            del image_storage['key-red']
+            response = await client.post(path, json=body)
+            assert response.status_code == 200, response.text
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            unavailable, _, retained = (await client.get(f'{url}/check-reports/archived')).json()['data']
+            result, = unavailable['results']
+            assert result['outcome'] == 'indeterminate' and not result['observed_media']
+            assert '无法读取' in result['message']
+            assert retained == old and len(calls) == 2
+        finally:
+            worker.text_pool.shutdown(wait=False)

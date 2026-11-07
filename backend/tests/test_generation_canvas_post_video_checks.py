@@ -139,6 +139,18 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
             assert uncertain['results'][0]['outcome'] == 'indeterminate'
             assert uncertain['results'][0]['observed_media'][0].get('evidence_range') is None
 
+            recheck_path = f"{url}/checks/check/reports/{report['id']}/recheck"
+            clarification = {'item_id': activity['id'], 'clarification': '请复看红色转蓝色的原区间'}
+            response = await client.post(recheck_path, json=clarification)
+            assert response.status_code == 200, response.text
+            await advance()
+            reviewed, _, retained = (await client.get(url + '/checks/check/reports')).json()['data']
+            assert retained == report and reviewed['product'] == report['product']
+            assert reviewed['results'] == [result]
+            assert reviewed['recheck']['original_result'] == result
+            assert len(calls) == 3 and calls[-1][1] == calls[0][1]
+            assert calls[-1][0]['recheck']['clarification'] == clarification['clarification']
+
             image_storage.clear()
             response = await client.post(inspection + '/runs', json={'expected_revision': preview['revision'],
                 'basis_hash': preview['basis']['basis_hash'], 'expected_calls': 1, 'item_id': activity['id']})
@@ -146,7 +158,16 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
             await advance()
             unreadable, *_ = (await client.get(url + '/checks/check/reports')).json()['data']
             result, = unreadable['results']
-            assert result['outcome'] == 'indeterminate' and not result['observed_media'] and len(calls) == 2
+            assert result['outcome'] == 'indeterminate' and not result['observed_media'] and len(calls) == 3
+
+            response = await client.post(recheck_path, json=clarification)
+            assert response.status_code == 200, response.text
+            await advance()
+            unavailable, *_ = (await client.get(url + '/checks/check/reports')).json()['data']
+            unavailable_result, = unavailable['results']
+            assert unavailable_result['outcome'] == 'indeterminate'
+            assert not unavailable_result['observed_media'] and '视频序列' in unavailable_result['message']
+            assert len(calls) == 3
 
             document['cards'][3]['check_model_id'] = 'image-check'
             await save_canvas(client, url, document, 3)
