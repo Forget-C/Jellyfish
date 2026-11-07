@@ -5,14 +5,13 @@ import type { CardRendererProps } from './rendererRegistry'
 import { DesignReferenceContext, ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { DesignScopePopover } from './DesignScopePopover'
-import { VisualDesignRelations } from './VisualDesignRelations'
 import { MovementPhaseTabs } from './MovementPhaseTabs'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions } from './photographyDesign'
 import { designSummary } from './designSummary'
 
 /** 阶段身份不随名称和顺序改变；删除只移除本卡画面，外部定位保留失效状态。 */
-export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document, savedRevision, modelOutputs, onLocateDesign }: CardRendererProps) {
+export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document }: CardRendererProps) {
   const card = raw as MovementCard, fields = card.fields || {}, phases = card.phases || []
   const latest = useRef(card); latest.current = card
   const change = (next: MovementCard) => { latest.current = next; onChange(next) }
@@ -63,7 +62,6 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
     <section className="movement-motion design-preset-fields design-preset-fields-compact design-stable-region" aria-label="运镜功能参数">
       {(['movement_type', 'movement_path', 'movement_speed', 'movement_trigger'] as const).map(key => <DesignFieldEditor compact key={key} label={labels[key]} value={fields[key]} onChange={value => change({ ...latest.current, fields: { ...latest.current.fields, [key]: value } })} />)}
     </section>
-    <VisualDesignRelations onLocateDesign={onLocateDesign} card={card} document={document} savedRevision={savedRevision} modelOutputs={modelOutputs} disabled={disabled} onChange={onChange} />
   </DesignPresetEditor>
 }
 

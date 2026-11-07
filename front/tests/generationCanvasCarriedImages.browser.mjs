@@ -1,4 +1,3 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -40,31 +39,47 @@ try {
   assert.ok(uploaded.ok,await uploaded.clone().text());const file=(await uploaded.json()).data.id
   const identity=id=>({canvas_id:canvas.id,card_id:id,port_id:id==='reference'?'image':'text',position:0})
   const document={...canvas.document,cards:[{id:'reference',type:'content.image',file_id:file},
-    {id:'style',type:'direction.style',fields:{direction:{state:'proposal',document:{segments:[{id:'before',kind:'text',text:'参考人物：'},{id:'image',kind:'reference',source:identity('reference')}]}}}},
-    {id:'image',type:'model.image',model_id:'canvas-image-model'}],
-    edges:[{id:'ref',source_card:'reference',source_port:'image',target_card:'style',target_port:'image'}, {id:'design',source_card:'style',source_port:'text',target_card:'image',target_port:'text'}],
-    input_order:{style:{image:['ref']},image:{text:['design']}}}
+    {id:'style',type:'direction.camera',fields:{viewpoint:{state:'proposal',document:{segments:[{id:'before',kind:'text',text:'参考人物：'},{id:'image',kind:'reference',source:identity('reference')}]}}}},
+    {id:'criterion',type:'direction.criterion',criterion_id:'clear',name:'主体清晰',standard:{text:'表情可辨认'}},
+    {id:'image',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'direct-image',input_port:'image',prompt_owned:false,source:identity('reference')}]}],
+    edges:[{id:'ref',source_card:'reference',source_port:'image',target_card:'style',target_port:'image'}, {id:'design',source_card:'style',source_port:'text',target_card:'image',target_port:'text'},
+      {id:'acceptance',source_card:'criterion',source_port:'criterion',target_card:'style',target_port:'acceptance_basis'},
+      {id:'direct-criterion',source_card:'criterion',source_port:'text',target_card:'image',target_port:'text'},
+      {id:'direct-image-edge',source_card:'reference',source_port:'image',target_card:'image',target_port:'image'}],
+    input_order:{style:{image:['ref'],acceptance_basis:['acceptance']},image:{text:['design','direct-criterion'],image:['direct-image-edge']}}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seed.ok,await seed.text())
   const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('carried save did not arrive')}
   const compiled=async()=> (await (await fetch(`${base}/${canvas.id}/cards/image/compile`)).json()).data
   await page.goto(`http://127.0.0.1:4667/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.locator('[data-card-id="image"]').press('Enter')
-  await openModelInspection(page)
+  await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/机位与视角卡/}).click()
   // A sole independent design connection is adopted immediately.
-  await poll(state=>state.document.cards.find(c=>c.id==='image').input_bindings?.length===1)
+  await poll(state=>state.document.cards.find(c=>c.id==='image').input_bindings?.length===3)
   await page.getByRole('region',{name:'随设计携带的素材',exact:true}).waitFor()
   assert.equal((await compiled()).media.length,1)
-  assert.equal((await read()).document.edges.length,2,'adoption does not add a direct media edge')
+  assert.equal((await read()).document.edges.length,5,'adoption does not add a direct media edge')
+  await page.getByText('此素材也由本卡直接采用', { exact: true }).waitFor()
+  await page.getByText('此验收要求也由本卡直接采用', { exact: true }).waitFor()
+  const strip = page.getByRole('region', { name: '关联来源', exact: true })
+  assert.equal(await strip.locator('.generation-material-reference').count(), 3, 'carried paths do not create duplicate source entries')
+  await page.keyboard.press('Escape')
+  await strip.getByRole('button', { name: /图片内容卡/ }).click()
+  await page.locator('.canvas-association-inspect:visible').getByRole('button', { name: /^取消采用/ }).click()
+  await poll(state => !state.document.cards.find(card => card.id === 'image').input_bindings.some(binding => binding.id === 'direct-image'))
+  await page.keyboard.press('Escape')
+  await strip.getByRole('button', { name: /机位与视角卡/ }).click()
+  await page.getByRole('region', { name: '随设计携带的素材', exact: true }).waitFor()
+  assert.equal((await compiled()).media.length, 1, 'clearing direct adoption preserves the carried path')
   await page.screenshot({path:join(output,'carried-images.png'),animations:'disabled'})
-  await page.getByRole('button',{name:'查看 画面风格卡 · 风格方向',exact:true}).click()
-  const field=page.getByRole('textbox',{name:'风格方向内容',exact:true})
-  await field.waitFor();await delay(350);await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='风格方向内容')
+  await page.getByRole('button',{name:'查看 机位与视角卡 · 观察视点',exact:true}).click()
+  const field=page.getByRole('textbox',{name:'观察视点内容',exact:true})
+  await field.waitFor();await delay(350);await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='观察视点内容')
   await page.screenshot({path:join(output,'carried-image-origin.png'),animations:'disabled'})
   await field.fill('改为纯文字风格')
-  await poll(state=>state.document.cards.find(c=>c.id==='style').fields.direction.document.segments.every(s=>s.kind==='text'))
+  await poll(state=>state.document.cards.find(c=>c.id==='style').fields.viewpoint.document.segments.every(s=>s.kind==='text'))
   await page.getByRole('button',{name:'关闭详情',exact:true}).click()
-  await page.locator('[data-card-id="image"]').press('Enter');await openModelInspection(page)
+  await page.locator('[data-card-id="image"]').press('Enter');await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/机位与视角卡/}).click()
   for(let i=0;i<80&&(await compiled()).media.length;i++)await delay(100)
   assert.equal((await compiled()).media.length,0)
   assert.equal(await page.getByRole('region',{name:'随设计携带的素材',exact:true}).count(),0)

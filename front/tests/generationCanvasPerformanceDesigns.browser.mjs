@@ -90,7 +90,8 @@ try {
     await field.fill(''); await field.press('@')
     await page.getByRole('option',{name:'@文本1',exact:true}).click()
     await field.press('End'); await field.press(' ')
-    await detail.locator('.design-field-candidates').getByRole('button',{name:/候选.*图片.*候选/}).click()
+    await detail.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/候选.*图片.*候选/}).click()
+    await page.getByRole('button',{name:'引用当前字段「'+label+'」',exact:true}).click()
     await poll(s=>s.document.cards.find(c=>c.id===id)[key]?.document?.segments.filter(x=>x.kind==='reference').length===2)
     if(id==='blocking') {
       await field.press('End'); await field.press(' '); await field.press('@')

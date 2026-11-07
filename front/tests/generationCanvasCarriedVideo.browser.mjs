@@ -1,4 +1,3 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -50,7 +49,7 @@ try {
   const compiled=async()=> (await (await fetch(`${base}/${canvas.id}/cards/image/compile`)).json()).data
   await page.goto(`http://127.0.0.1:4668/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.locator('[data-card-id="image"]').press('Enter')
-  await openModelInspection(page)
+  await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/画面风格卡/}).click()
   const detail=page.locator('.wb-details:not([hidden])')
   assert.equal((await compiled()).media.length,1)
   await poll(state=>state.document.cards.find(c=>c.id==='image').input_bindings?.length===1)
@@ -62,16 +61,18 @@ try {
   await poll(state=>state.document.cards.find(c=>c.id==='image').design_media_uses?.length===1)
   assert.equal((await compiled()).video_media.frames.first.file_id,file)
   await page.reload()
-  await page.locator('[data-card-id="image"]').press('Enter');await openModelInspection(page)
+  await page.locator('[data-card-id="image"]').press('Enter');await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/画面风格卡/}).click()
   await uses.getByText('首帧',{exact:true}).waitFor()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
   await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
-  await observer.locator('[data-card-id="image"]').press('Enter');await openModelInspection(observer)
+  await observer.locator('[data-card-id="image"]').press('Enter');await observer.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/画面风格卡/}).click()
   assert.equal(await observer.getByRole('button',{name:/^移除携带用途 首帧 /}).isDisabled(),true)
   await observer.close()
+  await page.keyboard.press('Escape')
   await page.locator('.generation-material-model').click()
   await page.locator('.ant-select-dropdown:visible').getByText('viduq2-pro',{exact:true}).click()
   await poll(state=>state.document.cards.find(c=>c.id==='image').model_id==='canvas-subject-model')
+  await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/画面风格卡/}).click()
   await uses.getByRole('button',{name:/^移除携带用途 首帧 /}).click()
   await poll(state=>state.document.cards.find(c=>c.id==='image').design_media_uses?.length===0)
   await uses.getByRole('textbox',{name:/^携带素材新主体分组 /}).fill('张三')
@@ -93,7 +94,7 @@ try {
   await field.fill('改为纯文字风格')
   await poll(state=>state.document.cards.find(c=>c.id==='style').fields.direction.document.segments.every(s=>s.kind==='text'))
   await page.getByRole('button',{name:'关闭详情',exact:true}).click()
-  await page.locator('[data-card-id="image"]').press('Enter');await openModelInspection(page)
+  await page.locator('[data-card-id="image"]').press('Enter');await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/画面风格卡/}).click()
   for(let i=0;i<80&&(await compiled()).media.length;i++)await delay(100)
   assert.equal((await compiled()).media.length,0)
   assert.equal(await page.getByRole('region',{name:'随设计携带的素材',exact:true}).count(),0)

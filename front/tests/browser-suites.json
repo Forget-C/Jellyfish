@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-associations": { "file": "generationCanvasAssociations.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-sound-reference": { "file": "generationCanvasSoundReference.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },
     "generation-canvas-anchor-reference": {"file":"generationCanvasAnchorReference.browser.mjs","ports":[4287,8287],"timeoutMs":180000},
     "generation-canvas-parameter-groups": {"file":"generationCanvasParameterGroups.browser.mjs","ports":[4285,8285],"timeoutMs":180000},
@@ -132,7 +133,7 @@
   "suites": {
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],
     "performance-design": ["generation-canvas-narrative-spatial-objects", "generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
-    "canvas-design": ["generation-canvas-design-focus","generation-canvas-multipath-protection","generation-canvas-candidate-states","generation-canvas-design-names","generation-canvas-design-metadata","generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
+    "canvas-design": ["generation-canvas-associations","generation-canvas-design-focus","generation-canvas-multipath-protection","generation-canvas-candidate-states","generation-canvas-design-names","generation-canvas-design-metadata","generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
     "canvas-interaction": [
       "generation-canvas-editor-reveal",
       "generation-canvas-interaction-combinations","generation-canvas-interaction", "generation-canvas-interaction-rules", "generation-canvas-image-fit", "generation-canvas-model-card-shell", "generation-canvas-anchored-editor", "generation-canvas-stacks", "generation-canvas-organization", "generation-canvas-tools"],

@@ -1,6 +1,7 @@
+import { CanvasAssociations, type AssociationEntry, type AssociationDetailContext } from './CanvasAssociations'
+import { associationSources, includeConnectedSources, associationIssues } from './associationSources'
 import { InputBindingReferences } from './InputBindingReferences'
 import { DesignVideoMediaUses } from './DesignVideoMediaUses'
-import { MaterialReferenceButton } from './MaterialReferenceButton'
 import { Alert, Select, Space } from 'antd'
 import { ArrowUpOutlined } from '@ant-design/icons'
 import type { CanvasResolvedOutput, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
@@ -26,7 +27,7 @@ import { CardComposer } from './CardComposer'
 import './materialComposer.css'
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
-export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId, onLocateDesign }: CardRendererProps) {
+export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId, onLocateDesign, editorOpen }: CardRendererProps) {
   const promptEditor = useRef<PromptEditorHandle>(null)
   const management = useRef<HTMLDetailsElement>(null)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
@@ -87,72 +88,73 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     return undefined
   }
   // 保存刷新期间仍展示已采用但暂未解析的来源，不将缺失来源误报为新候选。
-  const sources: CanvasResolvedOutput[] = [...resolved.candidates]
+  let sources: CanvasResolvedOutput[] = [...resolved.candidates]
   for (const binding of adopted) if (!sources.some(output => sourceKey(output.source) === sourceKey(binding.source))) sources.push({ source: binding.source, modality: 'text', available: false })
+  sources = includeConnectedSources(document, card.id, sources)
   const labels = referenceLabels(document, sources, card.id)
-  const displayLabel = (output: CanvasResolvedOutput) => labels.get(sourceKey(output.source)) || output.token || '来源'
-  const inspectSource = (output: CanvasResolvedOutput) => {
-    if (!management.current) return
-    management.current.open = true
-    requestAnimationFrame(() => management.current?.querySelector<HTMLElement>(`[data-reference-source="${CSS.escape(sourceKey(output.source))}"]`)?.scrollIntoView({ block: 'nearest' }))
-  }
+  const displayLabel = (output: CanvasResolvedOutput) => output.token ? labels.get(sourceKey(output.source)) || output.token : labelFor(output)
   const hasInput = adopted.length > 0 || (editorPrompt(card).segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())
   const submitDisabled = !!(disabled || busy || checking || runDisabled || !hasInput)
   const submit = () => { if (!submitDisabled) onPrecheck?.() }
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id })} />{parameters}</>
-  const automaticCriteria = resolved.compiled?.used?.filter(item => item.payload && 'design_type' in item.payload && item.payload.design_type === 'direction.criterion' && !adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source))) || []
-  const carriedInputs = !!resolved.compiled?.media?.some(item => item.design_sources?.length) && <section className="generation-design-carried" aria-label="随设计携带的素材"><strong>随设计携带的素材</strong><small>来源由设计中的有效引用决定，无需补连素材</small>
-      {resolved.compiled.media.filter(item => item.design_sources?.length).map(item => <div key={sourceKey(item.source)}><strong>{labelFor(item)}</strong>{item.modality === 'image' && item.file_id && <details><summary>查看携带图片</summary><MediaPreview fileId={item.file_id} type="image" /></details>}
-        {item.design_sources?.map(origin => {
+  const compiledCriteria = resolved.compiled?.used?.filter(item => item.payload && 'design_type' in item.payload && item.payload.design_type === 'direction.criterion') || []
+  const carriedInputs = (sourceId: string, close: AssociationDetailContext['close']) => {
+    const media = resolved.compiled?.media?.filter(item => item.design_sources?.some(origin => origin.source.card_id === sourceId)) || []
+    return !!media.length && <section className="generation-design-carried" aria-label="随设计携带的素材"><strong>随设计携带的素材</strong><small>来源由设计中的有效引用决定，无需补连素材</small>
+      {media.map(item => <div key={sourceKey(item.source)}><strong>{labelFor(item)}</strong>{item.modality === 'image' && item.file_id && <details><summary>查看携带图片</summary><MediaPreview fileId={item.file_id} type="image" /></details>}
+        {item.design_sources?.filter(origin => origin.source.card_id === sourceId).map(origin => {
           const design = document.cards?.find(value => value.id === origin.source.card_id)
           const phase = design && 'phases' in design ? design.phases?.find(value => 'phase:' + value.id === origin.field_id) : undefined
           const field = cardDefinitions[design?.type || '']?.fields?.find(value => value.id === origin.field_id)?.label || phase?.name || '设计参数'
-          return <WorkbenchButton variant="quiet" key={origin.source.card_id + ':' + origin.field_id} onClick={() => onLocateDesign?.(origin.source.card_id, origin.field_id)}>查看 {cardTitles[design?.type || ''] || '设计卡'} · {field}</WorkbenchButton>
+          return <WorkbenchButton variant="quiet" key={origin.source.card_id + ':' + origin.field_id} onClick={() => { close(false); onLocateDesign?.(origin.source.card_id, origin.field_id) }}>查看 {cardTitles[design?.type || ''] || '设计卡'} · {field}</WorkbenchButton>
         })}
         {card.type === 'model.video' && <DesignVideoMediaUses card={card as VideoModelCard} output={item} label={labelFor(item)} capability={capability} disabled={disabled} onChange={onChange} />}
+        {sources.some(output => sourceKey(output.source) === sourceKey(item.source) && bindings.some(binding => sourceKey(binding.source) === sourceKey(item.source))) && <small>此素材也由本卡直接采用</small>}
         {item.available === false && <small>来源已失效，请返回设计卡处理引用</small>}{item.basis_current === false && <small>来源依据已变，需重新生成</small>}
       </div>)}
     </section>
-  const status = <><details ref={management} className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用">关联 {sources.length} · 已采用 {adopted.length}{resolved.compiled?.media?.some(item => item.design_sources?.length) && ` · 携带 ${resolved.compiled.media.filter(item => item.design_sources?.length).length}`}</summary>
+  }
+  const directInput = (output: CanvasResolvedOutput, context?: AssociationDetailContext) => {
+
+    const binding = bindings.find(value => sourceKey(value.source) === sourceKey(output.source))
+    const independent = document.edges?.some(edge => edge.source_card === output.source.card_id && edge.source_port === output.source.port_id && edge.target_card === card.id && isIndependentDesignEdge(document, edge))
+    const protectedReference = binding && referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
+    const index = binding ? bindings.indexOf(binding) : -1
+    return <div key={sourceKey(output.source)} data-reference-source={sourceKey(output.source)}>
+      <strong>{displayLabel(output)} · {binding ? '已采用' : '候选'}</strong>
+      {output.available === false ? <small>来源输出缺失</small> : output.modality === 'text'
+        ? <CanvasTextPreview text={output.text || ''} label="已保存来源" /> : <small>{output.modality} · {output.file_id}</small>}
+      <NamedImageSummary output={output} displayLabel={displayLabel(output)} />
+      <PhotographyInputScope card={card} output={output} binding={binding} onChange={onChange} disabled={disabled} />
+      {output.basis_current === false && <small>依据已变，需重新生成来源</small>}
+      {context && output.modality !== 'text' && output.available !== false && output.file_id ? <MediaPreview fileId={output.file_id} type={output.modality} /> : card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {displayLabel(output)}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
+      {card.type !== 'model.video' && ['text', 'image'].includes(output.modality) && <Space wrap>
+        <WorkbenchButton title={protectedReference ? '请先清理正文引用再解除关联' : undefined} disabled={disabled || !!protectedReference || !binding && (resolved.loading || output.available === false || !capability?.input_ports?.includes(output.modality))}
+          onClick={() => onChange(binding ? withoutInputBinding(card, binding.id) : { ...card, input_bindings: [...bindings, { id: crypto.randomUUID(), prompt_owned: false, input_port: output.modality, source: output.source }] })}>
+          {`${binding ? independent ? '解除关联' : '取消采用' : '采用'} ${displayLabel(output)}`}
+        </WorkbenchButton>
+        {binding && <InputBindingReferences card={card} bindingId={binding.id} onLocate={() => context?.close(false)} />}
+        {binding && <><span>采用顺序 {index + 1}</span>
+          <WorkbenchButton aria-label={`前移 ${displayLabel(output)}`} disabled={disabled || index === 0} onClick={() => move(binding.id, -1)}>前移</WorkbenchButton>
+          <WorkbenchButton aria-label={`后移 ${displayLabel(output)}`} disabled={disabled || index === bindings.length - 1} onClick={() => move(binding.id, 1)}>后移</WorkbenchButton></>}
+      </Space>}
+    </div>
+  }
+  const entries: AssociationEntry[] = associationSources(document, card.id, sources).map(entry => {
+    const selected = entry.outputs.some(output => bindings.some(binding => sourceKey(binding.source) === sourceKey(output.source)))
+    const name = labelFor(entry.outputs[0])
+    const issue = [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
+    return { ...entry, label: entry.kind === 'design' ? name : displayLabel(entry.outputs[0]), description: `${name} ${displayLabel(entry.outputs[0])} · ${selected ? '使用中' : '候选'}`, used: selected, issue }
+  })
+  const status = <><details ref={management} className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用">关联 {entries.length} · 已采用 {adopted.length}{resolved.compiled?.media?.some(item => item.design_sources?.length) && ` · 携带 ${resolved.compiled.media.filter(item => item.design_sources?.length).length}`}</summary>
     <div ref={setReferenceTools} />
     <section aria-label="候选参考区">{references}</section>
     <section role="region" aria-label="已保存直接输入">
       <small>已保存 revision {resolved.revision ?? savedRevision} · 本地修改保存后更新</small>
       {card.type === 'model.image' && capability && <small>参考图片上限：{capability.max_reference_images ?? '未声明'} · {capability.supports_duplicate_reference_images ? '允许重复图片文件' : '不允许重复图片文件'}</small>}
-      {sources.map(output => {
-        const binding = bindings.find(value => sourceKey(value.source) === sourceKey(output.source))
-        const independent = document.edges?.some(edge => edge.source_card === output.source.card_id && edge.source_port === output.source.port_id && edge.target_card === card.id && isIndependentDesignEdge(document, edge))
-        const protectedReference = binding && referencesIn(editorPrompt(card)).some(reference => reference.binding_id === binding.id)
-        const index = binding ? bindings.indexOf(binding) : -1
-        return <div key={sourceKey(output.source)} data-reference-source={sourceKey(output.source)}>
-          <strong>{displayLabel(output)} · {binding ? '已采用' : '候选'}</strong>
-          {output.available === false ? <small>来源输出缺失</small> : output.modality === 'text'
-            ? <CanvasTextPreview text={output.text || ''} label="已保存来源" /> : <small>{output.modality} · {output.file_id}</small>}
-          <NamedImageSummary output={output} displayLabel={displayLabel(output)} />
-          <PhotographyInputScope card={card} output={output} binding={binding} onChange={onChange} disabled={disabled} />
-          {output.basis_current === false && <small>依据已变，需重新生成来源</small>}
-          {card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {displayLabel(output)}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
-          {card.type !== 'model.video' && ['text', 'image'].includes(output.modality) && <Space wrap>
-            <WorkbenchButton title={protectedReference ? '请先清理正文引用再解除关联' : undefined} disabled={disabled || !!protectedReference || !binding && (resolved.loading || output.available === false || !capability?.input_ports?.includes(output.modality))}
-              onClick={() => onChange(binding ? withoutInputBinding(card, binding.id) : { ...card, input_bindings: [...bindings, { id: crypto.randomUUID(), prompt_owned: false, input_port: output.modality, source: output.source }] })}>
-              {`${binding ? independent ? '解除关联' : '取消采用' : '采用'} ${displayLabel(output)}`}
-            </WorkbenchButton>
-            {binding && <InputBindingReferences card={card} bindingId={binding.id} />}
-            {binding && <><span>采用顺序 {index + 1}</span>
-              <WorkbenchButton aria-label={`前移 ${displayLabel(output)}`} disabled={disabled || index === 0} onClick={() => move(binding.id, -1)}>前移</WorkbenchButton>
-              <WorkbenchButton aria-label={`后移 ${displayLabel(output)}`} disabled={disabled || index === bindings.length - 1} onClick={() => move(binding.id, 1)}>后移</WorkbenchButton></>}
-          </Space>}
-        </div>
-      })}
-      {!!automaticCriteria.length && <section aria-label="随设计采用的验收要求"><strong>随设计采用的验收要求</strong>
-        {automaticCriteria.map(item => <div key={sourceKey(item.source)}>
-          <CanvasTextPreview text={item.text || ''} label="验收要求" />
-          <WorkbenchButton variant="quiet" onClick={() => onLocateDesign?.(item.source.card_id, 'standard')}>查看验收要求</WorkbenchButton>
-        </div>)}
-      </section>}
-      {carriedInputs}
+      {sources.map(output => directInput(output))}
       {(resolved.compiled?.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
@@ -172,17 +174,24 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
       : <MediaResultsPreview outputs={formalOutputs} />}</section>}
     </details>
     </details>{node && <span className="generation-material-runtime" role="status">{canvasNodeStatusLabels[node.status] || node.status}{typeof node.progress === 'number' ? ` ${node.progress}%` : ''}</span>}</>
-  const associations = <div className="generation-material-references">
-    {sources.map(output => {
-      const selected = adopted.some(binding => sourceKey(binding.source) === sourceKey(output.source))
-      const name = labelFor(output)
-      return <MaterialReferenceButton output={output} label={displayLabel(output)} selected={selected} key={sourceKey(output.source)} aria-label={`${name} ${displayLabel(output)} · ${selected ? '已采用' : '候选'}`} title={displayLabel(output) !== output.token ? displayLabel(output) : name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
-        onMouseDown={event => { if (card.type === 'model.image' && output.modality === 'image') event.preventDefault() }}
-        onClick={() => { if (card.type === 'model.image' && output.modality === 'image') promptEditor.current?.insertReference(output.source); else inspectSource(output) }}>
-      </MaterialReferenceButton>
-    })}
-    <div className="generation-material-add">{sourceActions}</div>
-  </div>
+  const renderDetails = (entry: AssociationEntry, context: AssociationDetailContext) => {
+    const sourceId = entry.outputs[0].source.card_id
+    const design = document.cards?.find(source => source.id === sourceId)
+    const used = entry.outputs.some(output => bindings.some(binding => sourceKey(binding.source) === sourceKey(output.source)))
+    const criteria = used && design && 'input_bindings' in design ? compiledCriteria.filter(criterion => design.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && binding.source.card_id === criterion.source.card_id)) : []
+    const keys = new Set(entry.outputs.map(output => sourceKey(output.source)))
+    return <>
+      {entry.outputs.map(output => directInput(output, context))}
+      {card.type === 'model.video' && <VideoInputBindings labels={labels} card={card as VideoModelCard} candidates={entry.outputs} sourceOnly={keys} onLocate={() => context.close(false)} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
+      {card.type !== 'model.video' && entry.outputs.map(output => <WorkbenchButton key={sourceKey(output.source)} disabled={disabled || resolved.loading || !!candidateIssue(output)} onClick={() => {
+        context.close(false)
+        promptEditor.current?.insertReference(output.source)
+      }}>引用到正文 {displayLabel(output)}</WorkbenchButton>)}
+      {used && carriedInputs(sourceId, context.close)}
+      {!!criteria.length && <section aria-label="随设计采用的验收要求"><strong>随设计采用的验收要求</strong>{criteria.map(item => <div key={sourceKey(item.source)}><CanvasTextPreview text={item.text || ''} label="验收要求" />{adopted.some(binding => binding.source.card_id === item.source.card_id) && <small>此验收要求也由本卡直接采用</small>}<WorkbenchButton variant="quiet" onClick={() => { context.close(false); onLocateDesign?.(item.source.card_id, 'standard') }}>查看验收要求</WorkbenchButton></div>)}</section>}
+    </>
+  }
+  const associations = <CanvasAssociations entries={entries} sourceActions={sourceActions} sessionKey={`${card.id}:${editorOpen}`} loading={resolved.loading} error={resolved.error} renderDetails={renderDetails} onLocateSource={onLocateDesign} onInspect={() => { if (management.current) management.current.open = false }} />
   return <CardComposer associations={associations} parameters={modelParameters} status={status}
     submit={<WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={submitDisabled} onClick={submit} />}>
     {!!card.missing_designs?.length && <Alert type="warning" message="旧摄影设计已移除，需要补充设计依据" description={<><p>缺失设计：{card.missing_designs.join('、')}</p><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, missing_designs: [] })}>已处理缺失设计</WorkbenchButton></>} />}

@@ -5,13 +5,13 @@ import type { CanvasResolvedOutput } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 
 /** Model and design candidates share presentation; callers own insertion and adoption. */
-export const MaterialReferenceButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { output: CanvasResolvedOutput; label: string; selected: boolean; selectedLabel?: string; children?: ReactNode }>(function MaterialReferenceButton({ output, label, selected, selectedLabel = '已采用', children, ...props }, ref) {
+export const MaterialReferenceButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { output: CanvasResolvedOutput; label: string; selected: boolean; selectedLabel?: string; children?: ReactNode; icon?: ReactNode; issue?: string }>(function MaterialReferenceButton({ output, label, selected, selectedLabel = '已采用', children, icon, issue, ...props }, ref) {
   const { token } = theme.useToken()
   return <button ref={ref} {...props} type="button" className="generation-material-reference">
-    {output.file_id && output.modality === 'image' ? <img alt="图片预览" src={buildFileDownloadUrl(output.file_id)} /> : output.file_id && output.modality === 'video' ? <video src={buildFileDownloadUrl(output.file_id)} muted playsInline preload="metadata" /> : <span aria-hidden="true">{output.modality === 'image' ? <PictureOutlined /> : output.modality === 'video' ? <VideoCameraOutlined /> : output.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />}</span>}
+    {!icon && output.file_id && output.modality === 'image' ? <img alt="图片预览" src={buildFileDownloadUrl(output.file_id)} /> : !icon && output.file_id && output.modality === 'video' ? <video src={buildFileDownloadUrl(output.file_id)} muted playsInline preload="metadata" /> : <span aria-hidden="true">{icon || (output.modality === 'image' ? <PictureOutlined /> : output.modality === 'video' ? <VideoCameraOutlined /> : output.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />)}</span>}
     <small>{label}</small>
     {selected && <CheckCircleFilled style={{ color: token.colorSuccess }} className="generation-material-adopted" aria-label={selectedLabel} />}
-    {(output.available === false || output.basis_current === false) && <ExclamationCircleOutlined style={{ color: token.colorWarning }} className="generation-material-reference-issue" aria-label={output.available === false ? '来源输出缺失' : '依据已变'} />}
+    {(issue || output.available === false || output.basis_current === false) && <ExclamationCircleOutlined style={{ color: token.colorWarning }} className="generation-material-reference-issue" aria-label={issue || (output.available === false ? '来源输出缺失' : '依据已变')} />}
     {children}
   </button>
 })

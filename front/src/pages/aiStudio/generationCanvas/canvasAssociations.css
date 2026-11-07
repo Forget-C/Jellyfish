@@ -1,0 +1,24 @@
+.canvas-associations { min-width: 0; position: relative; flex: none; }
+.canvas-associations-row { display: flex; align-items: center; gap: 8px; height: 68px; min-width: 0; }
+.canvas-association-group { display: flex; align-items: center; gap: 8px; flex: none; }
+.canvas-association-group + .canvas-association-group { position: relative; padding-left: 13px; }
+.canvas-association-group + .canvas-association-group::before { content: ''; position: absolute; left: 2px; top: 50%; height: 28px; transform: translateY(-50%); border-left: 1px solid var(--wb-border); }
+.canvas-associations[data-tight='true'] .canvas-association-group { gap: 4px; }
+.canvas-associations .generation-material-reference { width: 64px; height: 64px; flex-basis: 64px; }
+.canvas-associations .generation-material-adopted { top: 4px; bottom: auto; }
+.canvas-association-more.wb-action { flex: none; padding-inline: 2px; font-size: 11px; gap: 2px; }
+.canvas-association-more[data-summary='false'].wb-action { width: 32px; min-width: 32px; }
+.canvas-association-status { position: absolute; bottom: 0; left: 76px; color: var(--wb-muted); font-size: 11px; max-width: calc(100% - 76px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-association-inspect .ant-popover-inner { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.canvas-association-inspect .ant-popover-inner-content > div { width: 310px; max-width: calc(100vw - 64px); overflow-wrap: anywhere; }
+.canvas-association-inspect .ant-popover-inner-content > div:has(.anchor-marker-image) { width: 310px; }
+.canvas-association-list { display: grid; gap: 4px; max-height: min(400px, 60dvh); overflow: auto; }
+.canvas-association-list-item.wb-action { display: flex; justify-content: flex-start; text-align: left; min-height: 36px; height: auto; white-space: normal; }
+.canvas-association-list-item > span:not(.anticon) { overflow-wrap: anywhere; min-width: 0; }
+.canvas-association-list-item small { margin-left: 8px; color: var(--wb-muted); }
+.canvas-association-output + .canvas-association-output { border-top: 1px solid var(--wb-border); padding-top: 8px; margin-top: 8px; }
+.canvas-association-inspect .ant-space { max-width: 100%; }
+.canvas-association-inspect .ant-space-item { min-width: 0; max-width: 100%; }
+.canvas-association-inspect .wb-action { max-width: 100%; height: auto; min-height: 32px; white-space: normal; overflow-wrap: anywhere; }
+
+.canvas-association-inspect.design-source-expanded .ant-popover-inner-content > div:has(.anchor-marker-image) { width: min(680px, calc(100vw - 64px)); }
