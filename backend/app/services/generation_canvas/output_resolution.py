@@ -54,7 +54,8 @@ class CanvasOutputContext:
         if isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
             for binding in card.input_bindings:
                 if any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id
-                       and edge.target_card == card_id and edge.target_port == binding.input_port for edge in self.incoming.get(card_id, ())):
+                       and edge.target_port == binding.input_port and edge.includes_position(binding.source.position)
+                       for edge in self.incoming.get(card_id, ())):
                     adopted.extend(item for item in self.published_outputs(binding.source.card_id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
                         if identity_key(item.source) == identity_key(binding.source))
         from app.services.generation_canvas.design_references import REFERENCE_DESIGN_TYPES, resolve_design_card
@@ -80,7 +81,8 @@ class CanvasOutputContext:
 
 
     def resolve_outputs(self, card_id: str, *,
-                        model_outputs: dict[str, list[CanvasResolvedOutput]] | None, allow_reference_drafts=False) -> list[CanvasResolvedOutput]:
+                        model_outputs: dict[str, list[CanvasResolvedOutput]] | None, allow_reference_drafts=False,
+                        known_positions: dict[tuple[str, str], set[int]] | None = None) -> list[CanvasResolvedOutput]:
         """按端口顺序解析候选；保存校验可核对草稿的稳定对象身份；公开候选和运行仍要求名称就绪。"""
         document = self.document
         cards = self.cards
@@ -97,11 +99,24 @@ class CanvasOutputContext:
                 positions = {item.source.position for item in outputs}
                 outputs = list(outputs) + [CanvasResolvedOutput(source=ref, modality=edge.source_port if edge.source_port in ('image', 'video', 'audio') else 'text', available=False)
                     for ref in retained if ref.canvas_id == document.id and ref.card_id == source.id and ref.port_id == edge.source_port and ref.position not in positions]
+                # Historical slots are display placeholders; retained references already keep their own identity.
+                display_only = set()
+                if known_positions and isinstance(source, ModelCard):
+                    existing = {item.source.position for item in outputs}
+                    display_only = known_positions.get((source.id, edge.source_port), set()) - existing
+                    for position in display_only:
+                        outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=document.id, card_id=source.id,
+                            port_id=edge.source_port, position=position), modality=edge.source_port, available=False))
                 for item in sorted(outputs, key=lambda value: value.source.position):
+                    if not edge.includes_position(item.source.position):
+                        continue
                     key = identity_key(item.source)
                     if key in seen:
                         continue
                     seen.add(key)
+                    if item.source.position in display_only:
+                        result.append(item)
+                        continue
                     counts[item.modality] = counts.get(item.modality, 0) + 1
                     result.append(item.model_copy(update={'token': '@' + LABELS[item.modality] + str(counts[item.modality])}))
         return result

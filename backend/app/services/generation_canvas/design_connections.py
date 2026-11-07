@@ -10,6 +10,7 @@ def expand_source_connections(document, previous):
     from app.services.generation_canvas.connection_policy import source_connection_policies
     cards = {card.id: card for card in document.cards}
     endpoints = {(edge.source_card, edge.source_port, edge.target_card, edge.target_port) for edge in document.edges}
+    scopes = {(edge.source_card, edge.source_port, edge.target_card): edge.result_scope for edge in document.edges}
     old = {(edge.source_card, edge.source_port, edge.target_card, edge.target_port): edge for edge in previous.edges}
     pairs = list(dict.fromkeys((edge.source_card, edge.target_card) for edge in document.edges))
     for source_id, target_id in pairs:
@@ -23,7 +24,7 @@ def expand_source_connections(document, previous):
                 continue
             edge = old.get(endpoint) or GenerationCanvasEdge(id=uuid4().hex, source_card=source_id,
                 source_port=output, target_card=target_id, target_port=input_port)
-            document.edges.append(edge)
+            document.edges.append(edge.model_copy(update={'result_scope': scopes.get((source_id, output, target_id))}))
             document.input_order.setdefault(target_id, {}).setdefault(input_port, []).append(edge.id)
             endpoints.add(endpoint)
     return document

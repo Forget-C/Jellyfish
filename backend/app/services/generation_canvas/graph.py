@@ -1,5 +1,5 @@
 """候选图结构校验与目标端口语义；不将候选误当实际运行依赖。"""
-from app.schemas.generation_canvas import CanvasDocument, ObjectDescriptionCard, NamedImageReferenceCard
+from app.schemas.generation_canvas import CanvasDocument, ModelCard, ObjectDescriptionCard, NamedImageReferenceCard
 from app.services.generation_canvas.errors import diagnostic
 
 from app.services.generation_canvas.catalog import ports_compatible
@@ -11,7 +11,7 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
     previous_edges = {edge.id: edge for edge in previous.edges} if previous else {}
     edge_ids, endpoints = set(), set()
     successors = {card_id: set() for card_id in cards}
-    expected = {}
+    expected, result_scopes = {}, {}
     for edge in document.edges:
         target = {'edge_id': edge.id, 'card_id': edge.target_card, 'port_id': edge.target_port}
         source, receiver = cards.get(edge.source_card), cards.get(edge.target_card)
@@ -22,6 +22,11 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
         endpoints.add(endpoint)
         if not source or not receiver or edge.source_port not in source.output_ports or edge.target_port not in receiver.input_ports:
             raise diagnostic('INVALID_ENDPOINT', '连接端点不存在', target)
+        if edge.result_scope is not None and not isinstance(source, ModelCard):
+            raise diagnostic('INVALID_RESULT_SCOPE', '只有模型输出连接可限定结果位置', target)
+        scope_key = (edge.source_card, edge.source_port, edge.target_card)
+        if result_scopes.setdefault(scope_key, edge.result_scope) != edge.result_scope:
+            raise diagnostic('INVALID_RESULT_SCOPE', '同一来源与接收卡的各用途必须共享结果范围', target)
         if edge.source_card == edge.target_card:
             raise diagnostic('SELF_CONNECTION', '卡片不能连接自身', target)
         if not ports_compatible(edge.source_port, receiver.type, edge.target_port, source.type):

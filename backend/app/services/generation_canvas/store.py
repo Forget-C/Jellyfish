@@ -91,9 +91,12 @@ class CanvasStore:
             raise HTTPException(404, 'Card not found')
         context = CanvasOutputContext(document)
         published = await CanvasCurrentState(self.db, self.project_id).current_outputs(canvas, context=context)
+        from app.services.generation_canvas.result_positions import known_result_positions
+        sources = {edge.source_card for edge in context.incoming.get(card_id, ()) if isinstance(context.cards[edge.source_card], ModelCard)}
+        known = await known_result_positions(self.db, canvas_id, sources)
         return CanvasCardOutputs(revision=canvas.revision, card_id=card_id,
             outputs=context.published_outputs(card.id, model_outputs=published),
-            candidates=context.resolve_outputs(card_id, model_outputs=published))
+            candidates=context.resolve_outputs(card_id, model_outputs=published, known_positions=known))
 
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
         """编译已保存内容；不受理任务，不发布尚未存在的模型输出。"""

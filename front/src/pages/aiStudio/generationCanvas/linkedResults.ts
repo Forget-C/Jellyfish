@@ -1,23 +1,48 @@
-import type { CanvasResolvedOutput } from '../../../services/generated'
+import type { CanvasResolvedOutput, CanvasRunRead } from '../../../services/generated'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { GraphSize } from '../directing/graphLayout'
 import { GENERATION_CARD_SIZE } from './GenerationCardFrame'
-import type { GenerationCard } from './graphRules'
+import type { GenerationCard, GenerationEdge } from './graphRules'
+import { resultScopeIncludes } from './resultConnections'
 
 export type LinkedResult = { id: string; output: CanvasResolvedOutput }
 
 const resultPrefix = (id: string) => `linked-result:${encodeURIComponent(id)}:`
+const slot = ({ source }: CanvasResolvedOutput) => JSON.stringify([source.port_id, source.position])
+
+/** 历史只用于确认已有输出位置，不用旧内容填补当前缺失。 */
+export function knownResultPositions(runs: CanvasRunRead[]) {
+  const known = new Map<string, Map<string, CanvasResolvedOutput>>()
+  for (const run of runs) for (const node of run.nodes) {
+    if (node.status !== 'succeeded' || !node.result_set_id) continue
+    const positions = known.get(node.card_id) || new Map<string, CanvasResolvedOutput>()
+    known.set(node.card_id, positions)
+    for (const output of node.outputs) positions.set(slot(output), { source: output.source, modality: output.modality, available: false })
+  }
+  return known
+}
 
 /** 结果卡是正式输出的画布投影，身份跟随来源位置，不随文件或运行变化。 */
-export function linkedResultCards(cards: GenerationCard[], outputs: Record<string, CanvasResolvedOutput[]> | undefined, hidden: Set<string>): LinkedResult[] {
+export function linkedResultCards(cards: GenerationCard[], outputs: Record<string, CanvasResolvedOutput[]> | undefined,
+  hidden: Set<string>, edges: GenerationEdge[], known: ReturnType<typeof knownResultPositions>): LinkedResult[] {
   const occupied = new Set(cards.map(card => card.id))
-  return cards.flatMap(card => !('show_result_cards' in card) || !card.show_result_cards || hidden.has(card.id) ? [] :
-    (outputs?.[card.id] || []).map(output => {
+  return cards.filter(card => 'show_result_cards' in card && card.show_result_cards && !hidden.has(card.id)).flatMap(card => {
+    const connections = edges.filter(edge => edge.source_card === card.id)
+    const values = new Map<string, CanvasResolvedOutput>()
+    for (const output of known.get(card.id)?.values() || []) {
+      const { source } = output
+      if (connections.some(edge => edge.source_port === source.port_id && resultScopeIncludes(edge.result_scope, source.position))) {
+        values.set(slot(output), output)
+      }
+    }
+    for (const output of outputs?.[card.id] || []) values.set(slot(output), output)
+    return [...values.values()].sort((a, b) => a.source.position - b.source.position).map(output => {
       let id = `${resultPrefix(card.id)}${encodeURIComponent(output.source.port_id)}:${output.source.position}`
       while (occupied.has(id)) id += ':'
       occupied.add(id)
       return { id, output }
-    }))
+    })
+  })
 }
 
 /** 收起或等待运行快照时保留已有结果坐标；删除模型时交给既有布局缓存清理。 */

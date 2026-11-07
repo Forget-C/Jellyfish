@@ -1,6 +1,7 @@
 import { cleanConnectionDocument } from './connectionCleanup'
 import type { CanvasDocument, CanvasModelCapability, NamedImageReferenceCard } from '../../../services/generated'
 import { findConnection, sourceConnectionEdges } from './graphRules'
+import { resultScopeIncludes, resultScopeWithPosition, sameResultConnection } from './resultConnections'
 import type { GenerationCard, GenerationEdge, createGraphRules } from './graphRules'
 import { referenceProtection, sourceKey } from './promptRules'
 import { cleanObjectSources } from './objectSourceCleanup'
@@ -21,18 +22,39 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
     let changed = connect(document, edge)
     // 静态用途随来源开放；模型能力只限制新连接能否建立及实际采用。
     for (const option of sourceOptions(document, edge.source_card, edge.target_card)) {
-      if (!findConnection(changed, option)) changed = connect(changed, { ...option, id: crypto.randomUUID() }, false)
+      if (!findConnection(changed, option)) changed = connect(changed, { ...option, id: crypto.randomUUID(), result_scope: sameResultConnection(edge, option) ? edge.result_scope : undefined }, false)
     }
     return { document: changed }
+  }
+  const updateResultScope = (document: CanvasDocument, edge: GenerationEdge, position: number, include: boolean) => {
+    const scope = resultScopeWithPosition(edge.result_scope, position, include)
+    if (scope !== null) return { ...document, edges: document.edges?.map(member => sameResultConnection(member, edge) ? { ...member, result_scope: scope } : member) }
+    return (document.edges || []).filter(member => sameResultConnection(member, edge)).reduce((next, member) => disconnect(next, member.id), document)
   }
   return {
     clean: (document: CanvasDocument) => cleanConnectionDocument(cleanReferenceImageSources(cleanObjectSources(document)), { connectionPolicy, cardDefinitions, cleanDirectDesignCandidates, sourceOptions }),
     connect: addConnection,
-    check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability) {
-      if (findConnection(document, edge)) return undefined
+    connectResult(document: CanvasDocument, edge: GenerationEdge, position: number, capability?: CanvasModelCapability): CanvasOperationResult {
+      const existing = findConnection(document, edge)
+      if (!existing) return addConnection(document, { ...edge, result_scope: { mode: 'only', positions: [position] } }, capability)
+      if (resultScopeIncludes(existing.result_scope, position)) return { document }
+      const reason = connectionReason(document, edge, capability, true)
+      return reason ? { reason } : { document: updateResultScope(document, existing, position, true) }
+    },
+    disconnectResult(document: CanvasDocument, edge: GenerationEdge, position: number): CanvasOperationResult {
+      if (stackFor(document, edge.target_card)) return { reason: '请先解除堆叠后删除输入连线' }
+      const protection = referenceProtection(document, connectionPolicy, edge.source_card, edge.target_card, [], { port_id: edge.source_port, position })
+      if (protection) return { reason: '此连线仍有输入被引用，请先解除全部引用：' + protection.message, protection }
+      const existing = findConnection(document, edge)
+      return { document: existing && resultScopeIncludes(existing.result_scope, position)
+        ? updateResultScope(document, existing, position, false) : document }
+    },
+    check(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability, position?: number) {
+      const existing = findConnection(document, edge)
+      if (existing && (position === undefined || resultScopeIncludes(existing.result_scope, position))) return undefined
       const target = document.cards?.find(card => card.id === edge.target_card)
       if (target && 'model_id' in target && !capability) return '模型能力尚未核实，暂不能新建连接'
-      return connectionReason(document, edge, capability)
+      return connectionReason(document, edge, capability, position !== undefined)
     },
     update(document: CanvasDocument, next: GenerationCard, capability?: CanvasModelCapability): CanvasOperationResult {
       if (stackFor(document, next.id)) return { reason: '请先解除堆叠后编辑' }
@@ -53,7 +75,11 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
       // 已明确选择内容与用途时，一次更新同时补足直接来源边。
       if ('input_bindings' in next) for (const binding of next.input_bindings || []) {
         const edge = { id: crypto.randomUUID(), source_card: binding.source.card_id, source_port: binding.source.port_id, target_card: next.id, target_port: binding.input_port }
-        if (findConnection(changed, edge)) continue
+        const existing = findConnection(changed, edge)
+        if (existing) {
+          if (!resultScopeIncludes(existing.result_scope, binding.source.position)) return { reason: '此结果尚未连接' }
+          continue
+        }
         const result = addConnection(changed, edge)
         if (!result.document) return result
         changed = result.document

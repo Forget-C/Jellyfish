@@ -109,7 +109,7 @@ async def validate_design_examples(db, document, published, project_id, previous
             port = {'image': 'image_example', 'video': 'video_example', 'audio': 'audio_example'}.get(example.source.port_id)
             from app.services.generation_canvas.design_references import FLAT_DESIGN_TYPES
             accepted_ports = (port, example.source.port_id) if card.type in FLAT_DESIGN_TYPES else (port,)
-            connected = any(edge.target_card == card.id and edge.target_port in accepted_ports and edge.source_card == example.source.card_id and edge.source_port == example.source.port_id for edge in document.edges)
+            connected = any(edge.target_card == card.id and edge.target_port in accepted_ports and edge.source_card == example.source.card_id and edge.source_port == example.source.port_id and edge.includes_position(example.source.position) for edge in document.edges)
             item = next((item for item in candidates if identity_key(item.source) == identity_key(example.source)), None)
             fixed = any(old['id'] == example.id and old['file_id'] == example.file_id and old['source'] == example.source.model_dump() for old in old_examples)
             if example.id in ids or not connected or example.source.canvas_id != document.id or not port or (not fixed and (not item or not item.available or item.file_id != example.file_id)):

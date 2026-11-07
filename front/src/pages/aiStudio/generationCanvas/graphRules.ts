@@ -1,3 +1,4 @@
+import { resultScopeIncludes } from './resultConnections'
 import type { CanvasCatalog, CanvasDocument, CanvasModelCapability, OutputIdentity } from '../../../services/generated'
 
 export type GenerationCard = NonNullable<CanvasDocument['cards']>[number]
@@ -14,7 +15,7 @@ export function createGraphRules(catalog: CanvasCatalog) {
   const outputPorts = (card: GenerationCard) => cardDefinitions[card.type || '']?.outputs.map(port => port.id) || []
   const inputPorts = (card: GenerationCard) => cardDefinitions[card.type || '']?.inputs.map(port => port.id) || []
 /** 保存后的既有候选不随模型切换删除；这个判断只用于创建新连接。 */
-function connectionReason(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability): string | undefined {
+function connectionReason(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability, expanding = false): string | undefined {
   const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
   if (!source || !target || !outputPorts(source).includes(edge.source_port) || !inputPorts(target).includes(edge.target_port)) return '连接端点不存在'
   if (source.id === target.id) return '卡片不能连接自身'
@@ -27,7 +28,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return '请先填写验收要求名称'
   if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return '所选模型未接入该输入用途'
   const edges = document.edges || []
-  if (findConnection(document, edge)) return '同一端口连接已存在'
+  if (!expanding && findConnection(document, edge)) return '同一端口连接已存在'
   const pending = [edge.target_card], seen = new Set<string>()
   while (pending.length) {
     const id = pending.pop()!
@@ -49,7 +50,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   const candidatePorts = (document: CanvasDocument, source: OutputIdentity, targetId: string, capability: CanvasModelCapability | undefined) =>
     source.canvas_id === document.id && capability ? (document.edges || []).filter(edge =>
       edge.source_card === source.card_id && edge.source_port === source.port_id && edge.target_card === targetId
-      && capability.input_ports.includes(edge.target_port) && connectionPolicy(document, edge)?.adoption_allowed).map(edge => edge.target_port) : []
+      && resultScopeIncludes(edge.result_scope, source.position) && capability.input_ports.includes(edge.target_port) && connectionPolicy(document, edge)?.adoption_allowed).map(edge => edge.target_port) : []
   const isIndependentDesignEdge = (document: CanvasDocument, edge: GenerationEdge) => connectionPolicy(document, edge)?.connect === 'adopt_design'
 
 /** 每个接收端口独立排序；位置、分组和模型身份均不参与排序。 */

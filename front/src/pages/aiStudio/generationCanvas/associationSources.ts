@@ -25,7 +25,7 @@ export function associationIssues(output: CanvasResolvedOutput): { message: stri
 export function includeConnectedSources(document: CanvasDocument, receiverId: string, outputs: CanvasResolvedOutput[]): CanvasResolvedOutput[] {
   const sources = [...outputs]
   for (const edge of document.edges || []) {
-    if (edge.target_card !== receiverId || sources.some(output => output.source.canvas_id === document.id && output.source.card_id === edge.source_card && output.source.port_id === edge.source_port)) continue
+    if (edge.target_card !== receiverId || edge.result_scope || sources.some(output => output.source.canvas_id === document.id && output.source.card_id === edge.source_card && output.source.port_id === edge.source_port)) continue
     const modality = edge.source_port === 'image' || edge.source_port === 'video' || edge.source_port === 'audio' ? edge.source_port : 'text'
     sources.push({ source: { canvas_id: document.id, card_id: edge.source_card, port_id: edge.source_port, position: 0 }, modality, available: false })
   }

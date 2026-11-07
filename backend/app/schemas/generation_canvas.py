@@ -242,6 +242,21 @@ class VideoModelCard(ModelCard):
         return self
 
 
+class CanvasResultScope(BaseModel):
+    """模型候选范围。only 指定位置，except 保留新增位置的候选资格。"""
+    model_config = ConfigDict(extra='forbid')
+    mode: Literal['only', 'except']
+    positions: Annotated[list[Annotated[int, Field(ge=0, strict=True)]], Field(min_length=1)]
+
+    @model_validator(mode='after')
+    def normalize_positions(self):
+        """位置范围是集合，顺序由接收端连接顺序决定。"""
+        if len(self.positions) != len(set(self.positions)):
+            raise ValueError('输出位置不能重复')
+        self.positions.sort()
+        return self
+
+
 class GenerationCanvasEdge(BaseModel):
     """候选连接只描述来源和用途，不代表实际使用。"""
     model_config = ConfigDict(extra='forbid')
@@ -250,6 +265,12 @@ class GenerationCanvasEdge(BaseModel):
     source_port: str
     target_card: str
     target_port: str
+    result_scope: Annotated[CanvasResultScope | None, Field(exclude_if=lambda value: value is None)] = None
+
+    def includes_position(self, position: int) -> bool:
+        """无范围的既有连线接收该端口全部当前及未来结果。"""
+        scope = self.result_scope
+        return scope is None or (position in scope.positions) == (scope.mode == 'only')
 
 
 class GenerationCanvasGroup(BaseModel):

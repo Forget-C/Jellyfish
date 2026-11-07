@@ -12,7 +12,7 @@ type ConnectionHost = {
   options: (source: string, target: string) => GenerationEdge[]
   issue: (source: string, target: string) => void
   // 提交端按当前文档复核只读、重复连接与兼容性，再写入文档历史。
-  commit: (option: GenerationEdge, target: ConnectionSide, source: ConnectionSide) => void
+  commit: (option: GenerationEdge, target: ConnectionSide, source: ConnectionSide, sourceCard?: string) => void
   end: () => void
 }
 
@@ -25,7 +25,7 @@ export function createConnectionSession(host: ConnectionHost) {
   const commit = (option: GenerationEdge, side: ConnectionSide) => {
     const source = state.drag || state.accessibleConnection
     if (!source) return
-    host.commit(option, side, source.side)
+    host.commit(option, side, source.side, source.card)
     cancel()
   }
   return {

@@ -200,6 +200,7 @@ export type { CanvasPrecheckRequest } from './models/CanvasPrecheckRequest';
 export type { CanvasRead } from './models/CanvasRead';
 export type { CanvasReferencePreview } from './models/CanvasReferencePreview';
 export type { CanvasResolvedOutput } from './models/CanvasResolvedOutput';
+export type { CanvasResultScope } from './models/CanvasResultScope';
 export type { CanvasRunAccepted } from './models/CanvasRunAccepted';
 export type { CanvasRunRead } from './models/CanvasRunRead';
 export type { CanvasRunSubmit } from './models/CanvasRunSubmit';

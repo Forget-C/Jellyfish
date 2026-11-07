@@ -39,7 +39,8 @@ try {
   const document = { ...canvas.document, cards: [
     { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'p', kind: 'text', text: '三张完整图片' }] }, config: { count: 3, target_ratio: '1:1', resolution_profile: 'standard' } },
     { id: 'text', type: 'content.text', text: 'Literal 图片3 [media:1]' },
-    { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: { count: 3 } }],
+    { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: { count: 3 } },
+    { id: 'single', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: { count: 3 } }],
     edges: [{ id: 'downstream', source_card: 'm', source_port: 'image', target_card: 'consumer', target_port: 'image' }, { id: 'text-edge', source_card: 'text', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { consumer: { image: ['downstream'], text: ['text-edge'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
@@ -72,8 +73,8 @@ try {
   await resultCards.nth(2).waitFor()
   assert.equal(await resultCards.count(), 3)
   assert.equal(await page.getByRole('img', { name: '随生成更新', exact: true }).count(), 3)
-  assert.equal(await page.getByRole('img', { name: '结果候选连接', exact: true }).count(), 3)
-  assert.equal(await page.locator('[data-generation-edge-id="downstream"]').count(), 0)
+  assert.equal(await page.getByRole('button', { name: /^结果候选连接/ }).count(), 3)
+  assert.equal(await page.locator('[data-generation-edge-id="downstream"]:not([data-generation-result-position])').count(), 0)
   assert.deepEqual(await box(model), originalModelBox)
 
   const result = page.getByRole('article', { name: '图片生成结果 1', exact: true })
@@ -100,7 +101,7 @@ try {
   await open('m')
   await showResults.click()
   await result.waitFor({ state: 'detached' })
-  await page.locator('[data-generation-edge-id="downstream"]').waitFor()
+  await page.locator('[data-generation-edge-id="downstream"]:not([data-generation-result-position])').waitFor()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   assert.deepEqual(await readInputs(), visibleInputs, 'display does not affect candidates or compiled inputs')
   await showResults.click()
@@ -137,6 +138,79 @@ try {
   await observer.close()
 
   await closeCanvasDetails(page)
+  const resultTwo = page.getByRole('article', { name: '图片生成结果 2', exact: true })
+  await resultTwo.getByRole('button', { name: '右侧连接点' }).press('Enter')
+  await page.locator('[data-card-id="single"]').getByRole('button', { name: '左侧连接点' }).press('Enter')
+  const saved = page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' })
+  await saved.waitFor()
+  const positions = async id => {
+    const { data } = await (await fetch(`${base}/${canvas.id}/cards/${id}/outputs`)).json()
+    return data.candidates.filter(item => item.source.card_id === 'm').map(item => [item.source.position, item.available])
+  }
+  assert.deepEqual(await positions('single'), [[1, true]])
+
+  const chooseResultPath = async position => {
+    const path = page.locator(`[data-generation-edge-id="downstream"][data-generation-result-position="${position}"]`)
+    await path.getByRole('button').press('Enter')
+    await page.getByRole('button', { name: '断开此连接', exact: true }).click()
+  }
+  await chooseResultPath(0)
+  await page.getByText(/此连线仍有输入被引用/).waitFor()
+  assert.deepEqual(await positions('consumer'), [[0, true], [1, true], [2, true]])
+  await chooseResultPath(1)
+  await saved.waitFor()
+  assert.deepEqual(await positions('consumer'), [[0, true], [2, true]])
+  assert.deepEqual(await positions('single'), [[1, true]])
+
+  await open('m')
+  await showResults.click()
+  await saved.waitFor()
+  assert.deepEqual(await positions('consumer'), [[0, true], [2, true]])
+  await showResults.click()
+  await saved.waitFor()
+  const changeCount = async count => {
+    const { data } = await (await fetch(`${base}/${canvas.id}`)).json()
+    data.document.cards[0].config.count = count
+    const updated = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: 'count-' + count, expected_revision: data.revision, document: data.document }) })
+    assert.ok(updated.ok, await updated.text())
+    // The settings are changed through public save, then loaded by the normal editor route.
+    await page.reload()
+    await open('m')
+    await start()
+    await page.waitForFunction(async ({ base, id, count }) => {
+      const { data } = await (await fetch(`${base}/${id}/runtime`)).json()
+      return data.current_outputs.m?.length === count
+    }, { base: new URL(base).pathname, id: canvas.id, count })
+  }
+  await changeCount(2)
+  await page.getByRole('article', { name: '图片生成结果 3' }).getByText('当前输出缺失').waitFor()
+  assert.deepEqual(await positions('consumer'), [[0, true], [2, false]])
+  await changeCount(4)
+  await page.getByRole('article', { name: '图片生成结果 4' }).waitFor()
+  assert.deepEqual(await positions('consumer'), [[0, true], [2, true], [3, true]])
+  assert.deepEqual(await positions('single'), [[1, true]])
+  assert.equal((await readInputs()).used[0].source.position, 0)
+
+  await open('consumer')
+  await inputs.getByRole('button', { name: '取消采用 @图片1', exact: true }).click()
+  await saved.waitFor()
+  await closeCanvasDetails(page)
+  for (const position of [0, 2, 3]) {
+    await chooseResultPath(position)
+    await saved.waitFor()
+  }
+  assert.deepEqual(await positions('consumer'), [])
+  await open('m')
+  await showResults.click()
+  await saved.waitFor()
+  assert.equal(await page.locator('[data-generation-edge-id="downstream"]').count(), 0,
+    'collapsing cannot restore the last explicitly disconnected result')
+  assert.deepEqual(await positions('single'), [[1, true]])
+  await showResults.click()
+  await saved.waitFor()
+
+  await closeCanvasDetails(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await open('m')
   await showResults.scrollIntoViewIfNeeded()
@@ -144,7 +218,7 @@ try {
   const runBox = await card.getByRole('button', { name: '预检运行', exact: true }).boundingBox()
   assert.ok(toggleBox.x >= 0 && toggleBox.x + toggleBox.width <= 391)
   assert.ok(runBox.x >= 0 && runBox.x + runBox.width <= 391)
-  assert.equal((await control()).calls.length, 3)
+  assert.equal((await control()).calls.length, 5)
   await page.screenshot({ path: join(output, 'result-display-mobile.png'), fullPage: true })
   console.log('PASS formal result display, layout, candidate parity, regeneration and readonly', output)
 } finally { await cleanup() }

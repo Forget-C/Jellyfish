@@ -69,11 +69,17 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
         if target and target.card_id in previous_cards and (not any(source.id == target.card_id for source in document.cards) or any(edge['source_card'] == target.card_id and edge['target_card'] == card.id for edge in canvas.document.get('edges', [])) and not any(edge.source_card == target.card_id and edge.target_card == card.id for edge in document.edges)):
             raise diagnostic('REFERENCE_IN_USE', '请先解除构图的运镜关联再删除来源', {'card_id': card.id, 'path': ['frame_target']})
     validate_graph(document, previous_document)
+    from app.services.generation_canvas.result_positions import known_result_positions
+    scoped_edges = [edge for edge in document.edges if edge.result_scope]
+    if scoped_edges:
+        known = await known_result_positions(db, canvas_id, {edge.source_card for edge in scoped_edges})
+        for edge in scoped_edges:
+            if not set(edge.result_scope.positions) <= known.get((edge.source_card, edge.source_port), set()):
+                raise diagnostic('INVALID_RESULT_SCOPE', '结果范围包含未发布的输出位置',
+                                 {'edge_id': edge.id, 'card_id': edge.target_card, 'port_id': edge.target_port})
     # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
     from app.services.generation_canvas.compiler import prompt_references
     for receiver in document.cards:
-        if not isinstance(receiver, (ModelCard, NamedImageReferenceCard, PerformanceDirectionCard, SoundDirectionCard)):
-            continue
         references = [(reference.source, reference.id, path) for reference, path in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [
             (binding.source, binding.id, ['input_bindings', binding.id]) for binding in getattr(receiver, 'input_bindings', [])]
         from app.services.generation_canvas.design_references import design_field_references
@@ -85,11 +91,14 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
         if isinstance(receiver, (PerformanceDirectionCard, SoundDirectionCard)):
             references.extend((example.source, example.id, ['examples', example.id]) for example in receiver.examples)
         for source, reference_id, path in references:
-            was_connected = any(edge['source_card'] == source.card_id and edge['source_port'] == source.port_id
-                                and edge['target_card'] == receiver.id for edge in canvas.document.get('edges', []))
-            connected = any(edge.source_card == source.card_id and edge.source_port == source.port_id
-                            and edge.target_card == receiver.id for edge in document.edges)
-            if source.canvas_id == canvas_id and was_connected and not connected:
+            def same_source(edge, identity=source, target_id=receiver.id):
+                return edge.source_card == identity.card_id and edge.source_port == identity.port_id and edge.target_card == target_id
+
+            was_connected = any(same_source(edge) and edge.includes_position(source.position)
+                                for edge in previous_document.edges)
+            matching = [edge for edge in document.edges if same_source(edge)]
+            connected = any(edge.includes_position(source.position) for edge in matching)
+            if source.canvas_id == canvas_id and (was_connected or matching) and not connected:
                 raise diagnostic('REFERENCE_IN_USE', '请先清理实际引用再断开或删除来源',
                                  {'card_id': receiver.id, 'segment_id': reference_id, 'path': path})
     previous_pairs = {(edge['source_card'], edge['target_card']) for edge in canvas.document.get('edges', [])}

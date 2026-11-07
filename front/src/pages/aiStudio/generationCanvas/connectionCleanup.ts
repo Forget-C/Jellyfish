@@ -1,6 +1,7 @@
 import type { CanvasDocument, OutputIdentity, InputBinding, PromptReference } from '../../../services/generated'
 import { sourceKey } from './promptRules'
 import { visibleSourceEdges } from './graphRules'
+import { resultScopeIncludes, sameResultConnection } from './resultConnections'
 import type { createGraphRules, GenerationCard, GenerationEdge } from './graphRules'
 
 /** 恢复与撤销使用当前策略；只补足明确采用，不把候选升级为采用。 */
@@ -10,6 +11,8 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
   const valid = (source: OutputIdentity, card: GenerationCard, port: string) => {
     const origin = document.cards?.find(item => item.id === source.card_id)
     if (!origin || origin.id === card.id || source.canvas_id !== document.id || !rules.connectionPolicy(document, endpoint(source, card, port))?.adoption_allowed) return false
+    const existing = document.edges?.find(edge => sameResultConnection(edge, endpoint(source, card, port)))
+    if (!resultScopeIncludes(existing?.result_scope, source.position)) return false
     if (card.type?.startsWith('reference.') && (port === 'image_source' && origin.type !== 'content.image' || port === 'name' && origin.type !== card.type.replace('reference.', 'content.'))) return false
     const record = origin as unknown as Record<string, unknown>
     const identity = ['object_id', 'anchor_id', 'blocking_id', 'beat_id', 'event_id', 'shot_id', 'dialogue_id', 'criterion_id'].map(key => record[key]).find(Boolean)
@@ -23,7 +26,10 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
     return true
   }) || []
   const add = (source: OutputIdentity, card: GenerationCard, port: string) => {
-    if (!document.edges!.some(edge => edge.source_card === source.card_id && edge.source_port === source.port_id && edge.target_card === card.id && edge.target_port === port)) document.edges!.push({ ...endpoint(source, card, port), id: `connection:${card.id}:${port}:${source.card_id}:${source.port_id}` })
+    const edge = endpoint(source, card, port)
+    if (document.edges!.some(member => sameResultConnection(member, edge) && member.target_port === port)) return
+    const scope = document.edges!.find(member => sameResultConnection(member, edge))?.result_scope
+    document.edges!.push({ ...edge, id: `connection:${card.id}:${port}:${source.card_id}:${source.port_id}`, ...(scope ? { result_scope: scope } : {}) })
   }
   for (const card of document.cards || []) {
     if ('input_bindings' in card) {
