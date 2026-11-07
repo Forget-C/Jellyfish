@@ -57,6 +57,12 @@ class ControlledModel:
 
     async def ainvoke(self, messages):
         data = json.loads(messages[1].content)
+        if 'requirements' in data:
+            control['check_calls'].append('R01')
+            return SimpleNamespace(content=json.dumps({'results': [
+                {'item_id': item['item_id'], 'outcome': 'conforming', 'message': '已核对历史正文',
+                 'submitted_excerpt': data['output_text']} for item in data['requirements']
+            ]}))
         field = data['requirement']['field_id']
         calls = control['check_calls']
         first_duration = field == 'estimated_duration' and field not in calls
