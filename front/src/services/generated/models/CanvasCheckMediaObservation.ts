@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasCheckMediaInterval } from './CanvasCheckMediaInterval';
+import type { CanvasCheckVideoMoment } from './CanvasCheckVideoMoment';
 import type { CanvasCheckVideoRange } from './CanvasCheckVideoRange';
 /**
  * Public identity and visible evidence for media supplied to a check model.
@@ -14,4 +15,5 @@ export type CanvasCheckMediaObservation = {
     frame_at_ms?: (number | null);
     video_range?: (CanvasCheckVideoRange | null);
     evidence_range?: (CanvasCheckMediaInterval | null);
+    moments?: Array<CanvasCheckVideoMoment>;
 };
