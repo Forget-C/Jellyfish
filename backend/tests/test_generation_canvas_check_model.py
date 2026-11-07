@@ -29,6 +29,7 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
                               'target_card': 'shot', 'target_port': 'acceptance_basis'})
     document['input_order']['shot'] = {'acceptance_basis': ['criterion-link']}
     document['cards'][2]['prompt'] = {'segments': [{'id': 'prompt', 'kind': 'text', 'text': '保留室内光线'}]}
+    document['cards'][3]['enabled_categories'] = ['P01', 'P06']
     connect_check(document)
     await save_canvas(client, url, document, 1)
     calls = []

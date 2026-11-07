@@ -69,6 +69,13 @@ class CanvasCheckRequest(BaseModel):
     item_id: str | None = Field(default=None, min_length=1, max_length=256)
 
 
+class CanvasCheckTextEvidence(BaseModel):
+    """Exact excerpt and location in a frozen check input."""
+    source: OutputIdentity
+    field_id: str
+    excerpt: str
+
+
 class CanvasCheckMediaObservation(BaseModel):
     """Public identity and visible evidence for media supplied to a check model."""
     modality: Literal['image', 'video']
@@ -89,6 +96,7 @@ class CanvasCheckResult(BaseModel):
     message: str
     boundary: str
     submitted_excerpt: str | None = None
+    text_evidence: list[CanvasCheckTextEvidence] = Field(default_factory=list)
     observed_media: list[CanvasCheckMediaObservation] = Field(default_factory=list)
 
 

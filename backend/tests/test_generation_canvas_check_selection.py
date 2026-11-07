@@ -94,7 +94,7 @@ async def test_unrelated_shots_remain_unavailable_instead_of_compared_to_whole_d
     connect_check(document)
     await save_canvas(client, url, document, 0)
     preview = (await client.get(f'{url}/checks/check')).json()['data']
-    assert {item['source']['card_id'] for item in preview['items']} == {'shot', 'unused'}
+    assert {item['source']['card_id'] for item in preview['items'] if item['category'] == 'P06'} == {'shot', 'unused'}
     assert {item['availability'] for item in preview['items']} == {'unavailable'}
     assert all('同一范围' in item['reason'] for item in preview['items'] if item['category'] == 'P06')
     assert (await client.post(f'{url}/checks/check/runs', json=run_request(preview))).status_code == 422

@@ -55,6 +55,12 @@ export function CheckReportDetails({ report, applicability, retry }: {
         {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
         {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
         <p>{result.message}</p>
+        {!!result.text_evidence?.length && <ul aria-label="要求证据">
+          {result.text_evidence.map(evidence => <li key={`${evidence.source.card_id}:${evidence.field_id}`}>
+            <p>来源 {evidence.source.card_id}/{evidence.field_id}</p>
+            <blockquote>{evidence.excerpt}</blockquote>
+          </li>)}
+        </ul>}
         {result.submitted_excerpt && <blockquote aria-label={report.product ? '产物片段' : '提交片段'}>{result.submitted_excerpt}</blockquote>}
         {!!result.observed_media?.length && <ul aria-label="本轮观察素材">
           {result.observed_media.map((media, index) => <li key={index}>
