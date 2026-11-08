@@ -6,9 +6,9 @@
 | --- | --- |
 | 每次审查 | [项目指令](../../../AGENTS.md)、[术语表](../../../GLOSSARY.md)、[开发规范](development.md)、[贡献指南](../guides/contributing.md) |
 | 提交说明变化或审查提交规范 | [提交规范](commit-convention.md) |
-| 后端实现 | `site/content/docs/guide/backend.md` |
-| 前端实现与布局 | `site/content/docs/guide/frontend.md`、[前端基础布局](../architecture/frontend-layout.md) |
-| 对外接口、响应 schema 或客户端 | `site/content/docs/guide/openapi.md`、[接口同步规范](development.md#接口与文档同步) |
+| 后端实现 | [后端说明](../guides/backend.md) |
+| 前端实现与布局 | [前端说明](../guides/frontend.md)、[前端基础布局](../architecture/frontend-layout.md) |
+| 对外接口、响应 schema 或客户端 | [OpenAPI 同步指南](../guides/openapi.md)、[接口同步规范](development.md#接口与文档同步) |
 | 章节划分与场次版本 | [章节划分架构](../architecture/chapter-division.md)、[场次版本架构](../architecture/scene-versions.md) |
 | 场次领域、六岗或生产单元 | [场次工作台架构](../architecture/directing-foundation.md)、[六部门专业输出契约](../reference/six-department-contracts.md) |
 | 工作台控件、主题、卡片或详情 | [工作台前端设计标准](workbench-design.md) |

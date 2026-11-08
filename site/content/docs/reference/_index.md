@@ -1,10 +1,7 @@
 ---
 title: "参考资料"
 weight: 3
-description: "环境变量、接口与数据模型等参考性资料。"
+description: "开发参考资料入口。"
 ---
 
-这里集中放环境变量、API、数据模型等参考型内容。
-
-- [接口与 OpenAPI](/docs/reference/api/)
-- [环境变量](/docs/reference/env/)
+数据模型、六部门专业输出契约、接口与环境变量均见[仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)。

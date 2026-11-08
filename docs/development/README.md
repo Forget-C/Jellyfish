@@ -1,5 +1,14 @@
 # Jellyfish 开发文档
 
+## 开发入口
+
+- [本地开发](guides/local-development.md)、[开发与站点维护 FAQ](guides/developer-faq.md)
+- [项目结构](architecture/project-structure.md)、[AI 工作流](architecture/ai-workflow.md)
+- [前端说明](guides/frontend.md)、[后端说明](guides/backend.md)
+- [OpenAPI 同步](guides/openapi.md)、[供应商注册与扩展](guides/llm-provider-registration.md)
+- [接口参考](reference/api.md)、[环境变量](reference/env.md)
+- [站点维护](../../site/README.md)
+
 ## 开发规范
 
 - [开发规范](standards/development.md)

@@ -1,8 +1,4 @@
----
-title: "OpenAPI"
-weight: 4
-description: "理解前后端接口生成与同步流程。"
----
+# OpenAPI
 
 前端请求函数和类型由后端 OpenAPI 文档生成。
 
@@ -14,8 +10,7 @@ description: "理解前后端接口生成与同步流程。"
 ## 更新命令
 
 ```bash
-cd front
-pnpm run openapi:update
+pnpm --dir front run openapi:update
 ```
 
 ## 生成流程

@@ -14,19 +14,12 @@ cascade:
 ## 快速开始
 
 - [安装说明](/docs/getting-started/installation/)
-- [本地开发](/docs/getting-started/local-dev/)
+- [开发快速开始](/docs/getting-started/local-dev/)
 - [Docker 部署](/docs/getting-started/docker/)
 
 ## 开发指南
 
-- [前端说明](/docs/guide/frontend/)
-- [后端说明](/docs/guide/backend/)
-- [OpenAPI](/docs/guide/openapi/)
-- [AI 工作流](/docs/guide/ai-workflow/)
-
-## 当前架构
-
-- [项目结构](/docs/architecture/project-structure/)
+- [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
 
 ## 任务计划
 
@@ -35,4 +28,3 @@ cascade:
 ## 社区与协作
 
 - [参与贡献](/docs/community/contributing/)
-- [FAQ](/docs/community/faq/)

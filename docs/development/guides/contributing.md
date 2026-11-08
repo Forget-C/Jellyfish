@@ -4,7 +4,7 @@
 
 ## 开发前
 
-1. 阅读[项目结构](../../../site/content/docs/architecture/project-structure.md)及[本地开发](../../../site/content/docs/getting-started/local-dev.md)。
+1. 阅读[项目结构](../architecture/project-structure.md)及[本地开发](local-development.md)。
 2. 按改动范围查阅[开发规范](../standards/development.md)和[审查来源索引](../standards/review-sources.md)，沿用现有职责分层与命名。
 3. 只同步本次受影响的文档。面向用户的说明在官网维护，技术规则和实现资料归入对应开发文档。
 
