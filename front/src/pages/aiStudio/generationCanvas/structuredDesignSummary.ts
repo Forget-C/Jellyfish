@@ -10,4 +10,8 @@ export const structuredDesignFields: Partial<Record<string, readonly string[]>> 
   'direction.blocking': ['position', 'path', 'transition_reason'],
   'direction.activity': ['task', 'path', 'entry_exit'],
   'direction.environment': ['activity', 'empty_space', 'reason'],
+  'direction.anchor': ['position', 'orientation', 'spatial_relation'],
+  'direction.sound': ['source_description', 'sound_elements', 'hierarchy'],
+  'direction.space_rule': ['shootable_area', 'axis', 'scale'],
+  'direction.continuity': ['category', 'continuity_sequence', 'following_constraints'],
 }

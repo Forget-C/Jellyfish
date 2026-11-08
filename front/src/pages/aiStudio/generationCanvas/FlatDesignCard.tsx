@@ -5,6 +5,7 @@ import type { FlatDesignCard } from './designFieldReferences'
 import { designFieldEntries } from './designFieldReferences'
 import { useGraphRules } from './CanvasCatalogContext'
 import { DesignCardBody } from './VisualDesignCard'
+import type { DesignSummaryRow } from './VisualDesignCard'
 import { isCompactDesignCard } from './cardGeometry'
 import { structuredDesignFields } from './structuredDesignSummary'
 
@@ -19,7 +20,7 @@ export function FlatDesignCardBody({ card, document }: { card: FlatDesignCard; d
     return source ? 'name' in source && source.name || cardDefinitions[source.type!]?.title || '已关联来源' : '失效来源'
   }
   const values = new Map(designFieldEntries(card))
-  const rows = definition.fields.flatMap(({ id, label, default_value }) => {
+  const rows: (DesignSummaryRow & { id: string })[] = definition.fields.flatMap(({ id, label, default_value }) => {
     const field = values.get(id)
     if (!field) return []
     const text = field.document ? field.document.segments?.map(part => part.kind === 'text' ? part.text : `@${sourceName(part.source.card_id)}`).join('')?.trim() : field.text?.trim()
@@ -55,7 +56,20 @@ export function FlatDesignCardBody({ card, document }: { card: FlatDesignCard; d
     return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} />
   }
 
-  if ('category' in card && card.category !== 'space') rows.push({ id: 'category', label: '连续性分类', text: { space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', photography: '摄影', dialogue_sound: '对白与声音' }[card.category || 'space'] })
+  const addGroup = (id: string, label: string, fields: string[], separator: string) => {
+    const parts = fields.flatMap(field => {
+      const row = rows.find(item => item.id === field && item.text)
+      return row ? [`${row.label}：${row.text}`] : []
+    })
+    if (parts.length) rows.push({ id, label, parts, text: parts.join(separator) })
+  }
+  if (card.type === 'direction.sound') addGroup('sound_elements', '声音要素', ['environment', 'action_sound'], ' · ')
+  if (card.type === 'direction.continuity') {
+    addGroup('continuity_sequence', '前后变化', ['before', 'change', 'after'], ' → ')
+    if ((card.category && card.category !== 'space') || rows.some(row => row.text && ['continuity_sequence', 'following_constraints'].includes(row.id))) {
+      rows.push({ id: 'category', label: '连续性分类', text: { space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', photography: '摄影', dialogue_sound: '对白与声音' }[card.category || 'space'], lines: 1 })
+    }
+  }
   rows.push(...relations)
   if ('delay_ms' in card && card.delay_ms !== undefined && card.delay_ms !== null) rows.push({ id: 'delay_ms', label: '反应延迟', text: `${card.delay_ms} 毫秒` })
   rows.push(...scope)
@@ -65,12 +79,12 @@ export function FlatDesignCardBody({ card, document }: { card: FlatDesignCard; d
   if (priorities) {
     const summary = priorities.flatMap(id => {
       const row = rows.find(candidate => candidate.id === id && candidate.text)
-      return row ? [{ ...row, lines: 2 }] : []
+      return row ? [{ ...row, lines: row.lines || 2 }] : []
     }).slice(0, 3)
     const auxiliary = rows.find(row => row.text)
-    if (!summary.length && auxiliary) {
-      summary.push({ id: 'empty-core', label: '核心内容', text: `尚未填写${title}`, lines: 1 }, { ...auxiliary, lines: 2 })
-    }
+    const emptyCore = { id: 'empty-core', label: '核心内容', text: `尚未填写${title}`, lines: 1 }
+    if (!summary.length && auxiliary) summary.push(emptyCore, { ...auxiliary, lines: 2 })
+    else if (kind === 'continuity' && summary.length && !summary.some(row => row.id === 'continuity_sequence')) summary.splice(1, 0, emptyCore)
     return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} />
   }
   return <DesignCardBody kind={kind} title={title} rows={rows} emptyHint={emptyHint} />
