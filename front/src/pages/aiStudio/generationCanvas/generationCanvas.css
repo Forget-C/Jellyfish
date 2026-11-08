@@ -277,9 +277,6 @@
 /* 基础正文保留四行摘要；独立媒体在有限卡面保留播放控件。 */
 .generation-workbench .generation-card:is([data-card-type="content.video"], [data-card-type="content.audio"]) .generation-card-body { padding: 12px 14px; }
 .generation-card[data-card-type="content.video"] .generation-card-body > video { flex: 1; min-height: 0; }
-.generation-workbench .generation-card[data-card-type="content.text"] .generation-card-body { padding: 12px 14px; font-size: 13px; line-height: 1.8; }
-.generation-card[data-card-type="content.text"] .canvas-card-summary { -webkit-line-clamp: 4; margin: 0; }
-.generation-card[data-card-type="content.text"] .generation-card-footer { margin-top: auto; padding-top: 4px; }
 
 /* 标题和状态补偿画布缩放；正文与媒体仍按原几何缩放。 */
 .generation-workbench .generation-card header strong { font-size: max(12px, calc(12px / var(--generation-canvas-scale, 1))); }

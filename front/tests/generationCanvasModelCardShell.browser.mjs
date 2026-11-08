@@ -26,7 +26,8 @@ try {
   }
   assert.ok(ready, 'isolated backend ready')
   writeFileSync(join(output, 'openapi.json'), JSON.stringify(await (await fetch(`${api}/openapi.json`)).json()))
-  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4610, strictPort: true, open: false, proxy: { '/api': api } } })
+  const port = Number(process.env.JELLYFISH_MODEL_SHELL_TEST_PORT || 4610)
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
@@ -66,16 +67,27 @@ try {
   execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=gray:s=240x120:d=1','-f','lavfi','-i','sine=frequency=440:duration=1','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',videoPath])
   const videoId = await upload('clip.mp4',readFileSync(videoPath),'video/mp4')
   const out = (id,position,modality,extra) => ({source:{canvas_id:canvas.id,card_id:id,port_id:modality,position},modality,available:true,basis_current:true,...extra})
-  let scenario = 'succeeded'
+  let scenario = 'succeeded', streamedOutputs, streamFixtures = false
+  await page.route(/\/events(?:\?|$)/, async route => {
+    if (!streamFixtures) return route.continue()
+    const cursor = Number(new URL(route.request().url()).searchParams.get('cursor') || 0)
+    const event = streamedOutputs && streamedOutputs.cursor > cursor
+      ? { version: 1, canvas_id: canvas.id, type: 'run.finished', cursor: streamedOutputs.cursor,
+          payload: { run_id: 'run', current_outputs: streamedOutputs.outputs } }
+      : undefined
+    await route.fulfill({ contentType: 'text/event-stream', body: event ? `data: ${JSON.stringify(event)}\n\n` : ': waiting\n\n' })
+  })
+  let scenarioOutputs
   await page.route('**/runtime', async route => {
     const outputs = scenario === 'empty' ? {} : {short:[out('short',0,'text',{text:'一行短文本'})], long:[out('long',0,'text',{text:'很长的生成内容。'.repeat(1000)})], image:[out('image',0,'image',{file_id:imageId}),out('image',1,'image',{file_id:imageId})],video:[out('video',0,'video',{file_id:videoId})]}
+    scenarioOutputs = outputs
     const nodes = scenario === 'empty' ? [] : ids.filter(id=>id!=='empty').map(id=>({id:'node-'+id,run_id:'run',card_id:id,task_id:null,status:scenario,stage:scenario==='running'?'generating':'finished',progress:scenario==='running'?30:100,text:scenario==='running'?'正在生成'.repeat(500):'',basis:{},outputs:outputs[id]||[],result_set_id:null,current_output_updated:scenario==='succeeded',error_code:scenario==='failed'?'fixture_failure':null,error_message:scenario==='failed'?'生成失败，保留上次结果':null}))
     await route.fulfill({json:{code:200,message:'success',data:{cursor:0,runs:nodes.length?[{id:'run',canvas_id:canvas.id,lifecycle:scenario==='running'?'active':'finished',nodes}]:[],current_outputs:outputs},meta:null}})
   })
   await page.addInitScript(({layoutKey,positions,sizes,transform})=>{
     if(!sessionStorage.getItem('model-shell-seeded')){localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions,sizes,transform,manuallyPlaced:['short','video']}));sessionStorage.setItem('model-shell-seeded','1')}
   },{layoutKey,positions,sizes,transform})
-  const url=`http://127.0.0.1:4610/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  const url=`http://127.0.0.1:${port}/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
   const checkGeometry = async (scale=1) => {
     for (const id of ids) {
       const card = page.locator(`[data-card-id="${id}"]`), body = card.locator(':scope > .generation-card-body'), footer=card.locator('.generation-card-footer')
@@ -94,7 +106,7 @@ try {
     assert.ok(Math.abs(endpoint.y-endpoint.middle)<1,'edge follows the resized image card center')
     const layout=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
     for (const [id, point] of Object.entries(positions)) assert.deepEqual(layout.positions[id],point)
-    for (const [id, expected] of [['content',{width:300,height:251}],['description',{width:400,height:172}],['basis',{width:400,height:172}]]) {
+    for (const [id, expected] of [['content',{width:400,height:172}],['description',{width:400,height:172}],['basis',{width:400,height:172}]]) {
       assert.deepEqual(layout.sizes[id],expected)
       assert.deepEqual(await page.locator(`[data-card-id="${id}"]`).evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),expected)
     }
@@ -108,8 +120,6 @@ try {
     if(scenario!=='empty') assert.equal(await page.locator('[data-card-id="image"] .generation-image-result > img').evaluate(e=>getComputedStyle(e).objectFit),'contain','generated image remains fully visible')
     await checkGeometry()
     if(scenario==='succeeded') {
-      const linkedText = page.getByRole('article',{name:'文本生成结果 1',exact:true}).locator('.generation-linked-text')
-      assert.ok(await linkedText.evaluate(preview=>preview.scrollHeight>preview.clientHeight),'long generated text remains scrollable')
       const imageCard=page.locator('[data-card-id="image"]');await imageCard.getByRole('button',{name:'预览下一张图片',exact:true}).click();await imageCard.getByText('2 / 2',{exact:true}).waitFor()
       await imageCard.getByRole('button',{name:'打开完整图片',exact:true}).click();await page.getByRole('dialog',{name:'图片预览',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('dialog',{name:'图片预览',exact:true}).waitFor({state:'hidden'})
       const video=page.locator('[data-card-id="video"] video');await video.evaluate(e=>{e.muted=true;return e.play()});assert.equal(await video.evaluate(e=>e.paused),false);await video.evaluate(e=>e.pause())
@@ -142,5 +152,26 @@ try {
     await page.waitForFunction(value=>parseInt(document.querySelector('[aria-label="画布缩放比例"]').textContent)===Math.round(value*100),scale)
     await checkGeometry(scale)
   }
+  // Keep the result reader's normal viewport reveal separate from the layout assertions above.
+  scenario = 'succeeded'
+  streamFixtures = true
+  await page.goto(url)
+  const linkedText = page.getByRole('article',{name:'文本生成结果 1',exact:true})
+  const summary = linkedText.getByRole('region', { name:'生成结果预览' }).locator('p')
+  assert.equal(await summary.evaluate(node => getComputedStyle(node).webkitLineClamp), '4')
+  assert.equal(await summary.evaluate(node => getComputedStyle(node).overflowY), 'hidden')
+  await linkedText.press('Enter')
+  const resultDetail = page.getByRole('complementary', {name:'文本生成结果 1', exact:true})
+  const resultText = resultDetail.getByRole('textbox', {name:'文本内容', exact:true})
+  assert.equal(await resultText.inputValue(), '很长的生成内容。'.repeat(1000))
+  streamedOutputs = { cursor: 1, outputs: { ...scenarioOutputs, long: [out('long', 0, 'text', { text: '同一输出位置的新正文' })] } }
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="文本内容"]')?.value === '同一输出位置的新正文')
+  await linkedText.getByText('同一输出位置的新正文', { exact: true }).waitFor()
+  streamedOutputs = { cursor: 2, outputs: { ...scenarioOutputs, long: [] } }
+  await resultDetail.getByText('当前输出缺失', { exact: true }).waitFor()
+  assert.equal(await resultText.count(), 0, 'missing output does not retain prior text in the detail')
+  await resultDetail.getByRole('button', {name:'关闭详情', exact:true}).click()
+  streamedOutputs = { cursor: 3, outputs: scenarioOutputs }
+  await linkedText.waitFor()
   console.log('PASS unified model dimensions, full image preview, readable zoom, fixed footer and cached positions',output)
 } catch(error) { if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error } finally { await cleanup() }
