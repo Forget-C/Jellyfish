@@ -12,4 +12,4 @@ title: "工作流"
 
 当前场次版本可持续编辑；生成、检查、素材及交付记录保留固定依据。生成成功不会自动采用，预演也不代表媒体已经齐备。声音设计和后期完成状态分别显示。
 
-操作步骤见[场次创作与导出](/docs/guide/sequence-workflow/)。
+操作步骤见[章节划分与场次版本](/docs/guide/chapter-and-scene-versions/)和[场次创作与导出](/docs/guide/sequence-workflow/)。

@@ -4,13 +4,14 @@
 
 | 何时读取 | 权威来源 |
 | --- | --- |
-| 每次审查 | `AGENTS.md`、`GLOSSARY.md`、`site/content/docs/community/contributing.md` |
-| 提交说明变化或审查提交规范 | `site/content/docs/community/commit-convention.md` |
-| 后端实现 | `docs/development/guides/backend.md` |
-| 前端实现与布局 | `docs/development/guides/frontend.md`、`site/content/docs/architecture/frontend-layout.md` |
-| 对外接口、响应 schema 或客户端 | `docs/development/guides/openapi.md`、AGENTS.md 的接口同步要求 |
-| 场次领域、六岗、生产单元或版本 | `site/content/docs/architecture/directing-foundation.md` |
-| 工作台控件、主题、卡片或详情 | `site/content/docs/guide/workbench-design.md` |
+| 每次审查 | [项目指令](../../../AGENTS.md)、[术语表](../../../GLOSSARY.md)、[开发规范](development.md)、[贡献指南](../guides/contributing.md) |
+| 提交说明变化或审查提交规范 | [提交规范](commit-convention.md) |
+| 后端实现 | [后端说明](../guides/backend.md) |
+| 前端实现与布局 | [前端说明](../guides/frontend.md)、[前端基础布局](../architecture/frontend-layout.md) |
+| 对外接口、响应 schema 或客户端 | [OpenAPI 同步指南](../guides/openapi.md)、[接口同步规范](development.md#接口与文档同步) |
+| 章节划分与场次版本 | [章节划分架构](../architecture/chapter-division.md)、[场次版本架构](../architecture/scene-versions.md) |
+| 场次领域、六岗或生产单元 | `site/content/docs/architecture/directing-foundation.md` |
+| 工作台控件、主题、卡片或详情 | [工作台前端设计标准](workbench-design.md) |
 | graph、投影、导航、布局缓存或证据 | `site/content/docs/guide/canvas-graph.md` |
 | 测试、lint、CI 或运行入口 | `front/tests/README.md`、`front/package.json`、`.github/workflows/frontend-checks.yml`、`front/tests/browser-suites.json` |
 | 规格与票据 | `docs/agents/issue-tracker.md`，再定位本任务 `.scratch/<feature>/spec.md` 与票据 |

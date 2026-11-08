@@ -8,7 +8,6 @@ title: "计划与近期实施依据"
 
 - [实验室后续事项](/docs/plans/experiment-follow-up/)：区分已实现能力、未排期增强和依赖用户体系的事项。
 - [系统种子与部署核验待办](/docs/plans/alembic-unified-migration-plan/)：种子数据整理和目标环境核验。
-- [工作台设计标准迁移](/docs/plans/workbench-design-standard-migration/)：按实际组件列出剩余接入。
 
 ## 已确认范围
 
@@ -21,4 +20,3 @@ title: "计划与近期实施依据"
 - [场次画布工作台](/docs/plans/canvas-sequence-workbench-plan/)
 - [导演画布镜头分组](/docs/plans/director-shot-centered-layout/)
 - [共享 graph 与单元画布](/docs/plans/shared-canvas-graph-and-unit-workbench-plan/)
-- [章节划分统一编辑与历史版本](/docs/plans/chapter-division-version-editor-plan/)

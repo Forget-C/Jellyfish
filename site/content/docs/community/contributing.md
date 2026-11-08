@@ -1,32 +1,9 @@
 ---
-title: "贡献指南"
+title: "参与贡献"
 weight: 1
-description: "参与 Jellyfish 代码和文档协作的起点。"
+description: "反馈问题、提出建议或参与 Jellyfish 的代码与文档协作。"
 ---
 
-## 贡献方式
+欢迎通过 [Issue](https://github.com/Forget-C/Jellyfish/issues) 反馈问题或提出建议，也可以提交 Pull Request 改进代码和文档。
 
-- 提交 Issue 反馈问题或提出建议
-- 提交 Pull Request 改进代码或文档
-
-## 开发前建议
-
-- 先阅读项目结构与本地开发文档
-- 优先沿用现有前后端分层与命名方式
-- 同步更新相关文档
-
-## 提交前建议检查
-
-- 后端是否能正常启动
-- 前端是否能正常访问
-- 如果修改了接口，是否更新 OpenAPI 生成代码
-- 如果改了站点内容，是否至少本地预览过一次 `site/`
-
-## 文档协作建议
-
-当你修改以下内容时，建议同步更新 `site/` 文档：
-
-- 启动方式
-- 目录结构
-- 接口生成流程
-- 提交与协作规范
+开始前，请查看仓库的[贡献指南](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/guides/contributing.md)，其中包含开发入口、检查要求和提交规范。

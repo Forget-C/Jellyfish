@@ -55,7 +55,7 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 共同契约测试覆盖四类投影及非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `sceneBrowseControls.browser.mjs`（四画布导航、选择联动、收起偏好、失效与更新失败恢复）、`test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs`、`directorLayout.browser.mjs`、`sceneGraphSummary.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
 
-对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](/docs/guide/workbench-design/)。
+对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/standards/workbench-design.md)。
 
 剪辑投影批量查询全部有权限查看的同场 Take 轻量身份、固定来源及文件登记信息，不展开完整生成输入。默认整场图仍仅关联已采用源，独立“浏览同场素材图”通过服务端 `library_view_id` 进入全部候选视图；显示地址保持不透明。采用用独立 clip ID 定位，多个片段可关联同一源 Take，各自保留源区间、位置和片段适配。待拍占位只带预期内容与预计时长，时间线空白不生成节点。选择图节点只定位原素材或时间线片段；当前编辑已删除的旧图目标明确不可用，未保存新片段继续在原时间线编辑。刷新图证据复用已保存基线保护，不重建播放器或覆盖尚未应用的片段表单。对应浏览器回归为 `sceneEditGraph.browser.mjs` 与 `sceneTimeline.browser.mjs`。
 

@@ -9,6 +9,20 @@
 - [接口参考](reference/api.md)、[环境变量](reference/env.md)
 - [站点维护](../../site/README.md)
 
+## 开发规范
+
+- [开发规范](standards/development.md)
+- [工作台前端设计标准](standards/workbench-design.md)
+- [提交规范](standards/commit-convention.md)
+
+## 架构
+
+- [前端基础布局](architecture/frontend-layout.md)
+
+## 开发指南
+
+- [贡献指南](guides/contributing.md)
+
 ## 审查依据
 
 - [代码审查来源索引](standards/review-sources.md)按改动范围指向项目规则、需求依据和验证证据。
@@ -25,3 +39,9 @@
 - [任务系统](../agents/issue-tracker.md)
 - [分诊标签](../agents/triage-labels.md)
 - [领域文档位置](../agents/domain.md)
+
+## 章节划分与场次版本
+
+- [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
+- [章节划分架构](architecture/chapter-division.md)与[场次版本架构](architecture/scene-versions.md)
+- [接入章节划分历史](guides/chapter-division-history-import.md)与[身份参考存量整理](guides/identity-reference-cleanup.md)

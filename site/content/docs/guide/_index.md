@@ -9,7 +9,7 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [接入共享画布 graph](/docs/guide/canvas-graph/)
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
 - [从本场资产到单元试拍](/docs/guide/sequence-asset-to-shoot/)
-- [接入章节划分历史](/docs/guide/chapter-division-history-import/)
+- [章节划分与场次版本](/docs/guide/chapter-and-scene-versions/)
 
 相关文档已拆分到独立栏目：
 

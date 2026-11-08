@@ -32,5 +32,4 @@ cascade:
 
 ## 社区与协作
 
-- [贡献指南](/docs/community/contributing/)
-- [提交规范](/docs/community/commit-convention/)
+- [参与贡献](/docs/community/contributing/)

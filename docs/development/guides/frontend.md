@@ -26,7 +26,7 @@
 前端主要通过 `front/src/services/generated/` 中的 OpenAPI 生成代码与后端通信。  
 接口契约变化时按 [OpenAPI 同步指南](openapi.md)更新客户端。
 
-场次工作台的按钮、图标、文本、弹窗与滚动规范见[工作台前端设计标准](../../../site/content/docs/guide/workbench-design.md)，包含共享组件、开发示例和验证入口。
+场次工作台的按钮、图标、文本、弹窗与滚动规范见[工作台前端设计标准](../standards/workbench-design.md)，包含共享组件、开发示例和验证入口。
 
 ## 检查入口
 
