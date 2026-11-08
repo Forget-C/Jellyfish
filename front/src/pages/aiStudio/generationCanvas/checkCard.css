@@ -1,18 +1,9 @@
-.generation-check-editor { display: grid; gap: 12px; }
-.generation-check-editor > p, .generation-check-item p, .generation-check-report p { margin: 0; }
-.generation-check-editor > .wb-action { justify-self: end; }
-.generation-check-item, .generation-check-report article { border: 1px solid var(--wb-border); border-radius: var(--wb-radius); padding: 12px; display: grid; gap: 8px; }
-.generation-check-item label, .generation-check-report label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.generation-check-item .wb-action { justify-self: start; }
+.generation-check-item p, .generation-check-page p, .generation-check-report p { margin: 0; }
 .generation-check-basis { min-width: 0; overflow-wrap: anywhere; }
 .generation-check-basis dl { display: flex; gap: 12px; flex-wrap: wrap; }
 .generation-check-basis dl > div { display: flex; gap: 4px; }
 .generation-check-basis dd { margin: 0; }
 .generation-check-basis pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-.generation-check-report { display: grid; gap: 8px; }
-.generation-check-category { display: grid; gap: 8px; }
-.generation-check-category > label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.generation-check-category > p { margin: 0; }
 
 /* 卡面使用有限尺寸；每行的文字和执行按钮分别拥有激活入口。 */
 .generation-card[data-card-type="review.check"] > .generation-card-body { padding: 12px; overflow: hidden; }
@@ -30,50 +21,46 @@
 .generation-check-face-reason { font-size: 11px; color: var(--wb-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .generation-check-post-link.wb-action { width: 100%; justify-content: flex-start; font-size: 11px; overflow: hidden; }
 .generation-check-post-link.wb-action > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 只调整检查卡容器；保留其他卡片的编辑、定位和视口规则。 */
-.generation-card-editor[data-card-type="review.check"] .wb-details-body { display: flex; flex-direction: column; min-height: 0; padding: 0 16px; overflow: hidden; }
-.generation-card-editor[data-card-type="review.check"] fieldset.generation-card-body { padding: 0; min-height: 0; flex: 1; display: flex; }
-.generation-card-editor[data-card-type="review.check"][data-expanded="true"] { height: min(800px, calc(100dvh - 64px)); }
 .generation-check-editor { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 12px; }
-.generation-check-settings { flex: none; display: grid; gap: 8px; }
-.generation-check-settings p { margin: 0; font-size: 12px; color: var(--wb-muted); }
-.generation-check-settings label { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+.generation-check-settings { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: 8px 24px; }
+.generation-check-settings p, .generation-check-settings label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.generation-check-settings p { margin: 0; white-space: nowrap; }
+.generation-check-settings p span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--wb-muted); }
 .generation-check-settings .ant-select { flex: 1; min-width: 0; }
-.generation-check-tabs { min-height: 0; }
-.generation-check-page { box-sizing: border-box; height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; padding: 4px 4px 16px; scrollbar-width: thin; }
+.generation-check-page { overflow-x: hidden; display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
+.generation-check-report:not(.generation-check-page) { display: grid; gap: 8px; }
 .generation-check-page > * { flex-shrink: 0; }
 .generation-check-intro { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; font-size: 11px; color: var(--wb-muted); }
-.generation-check-group { border-bottom: 1px solid var(--wb-border); padding-bottom: 8px; }
-.generation-check-group > summary { cursor: pointer; padding: 8px 0; font-size: 13px; }
-.generation-check-group > summary small { margin-left: 12px; font-size: 11px; color: var(--wb-muted); }
+.generation-check-category { border-bottom: 1px solid var(--wb-border); padding-bottom: 8px; }
+.generation-check-category-heading { display: flex; align-items: center; gap: 8px; }
+.generation-check-category-heading small { color: var(--wb-muted); }
+.generation-check-category-content:not([hidden]) { display: grid; gap: 8px; }
 .generation-check-category-toggle { display: flex; align-items: center; gap: 12px; font-size: 12px; padding: 8px 0; }
-.generation-check-item { border: 0; border-top: 1px solid var(--wb-border); border-radius: 0; padding: 8px 0; gap: 8px; }
+.generation-check-item { border-top: 1px solid var(--wb-border); padding: 8px 0; display: grid; gap: 8px; }
 .generation-check-item-heading { display: flex; align-items: center; gap: 8px; }
 .generation-check-item-heading > span { flex-shrink: 0; font-size: 11px; }
-.generation-check-item-title.wb-action { flex: 1; min-width: 0; justify-content: flex-start; padding-inline: 0; }
+.generation-check-item-title.wb-action.ant-btn { display: inline-flex; flex: 1; min-width: 0; align-items: center; justify-content: flex-start; padding-inline: 0; text-align: start; }
 .generation-check-item-title.wb-action > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .generation-check-item-title .anticon { font-size: 12px; }
 .generation-check-item-body:not([hidden]) { display: grid; gap: 8px; }
 .generation-check-item summary { cursor: pointer; font-size: 13px; overflow-wrap: anywhere; }
 .generation-check-item details p, .generation-check-item-result { margin-top: 8px; }
 .generation-check-requirement { font-size: 14px; line-height: 1.8; }
+.generation-check-item-body label, .generation-check-report > label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.generation-check-item-body > .wb-action, .generation-check-item-result > .wb-action { justify-self: start; }
 .generation-check-item-body label { margin: 8px 0; }
 .generation-check-item-result article, .generation-check-report article { border: 0; border-top: 1px solid var(--wb-border); border-radius: 0; padding: 12px 0; }
 .generation-check-item-result { display: grid; gap: 8px; }
 .generation-check-report .ant-select { flex: 1; min-width: 0; }
 .generation-check-report label { min-width: 0; }
-.generation-check-actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
-.generation-check-actions > div { min-width: 0; font-size: 12px; color: var(--wb-muted); overflow-wrap: anywhere; }
+.generation-check-actions > :first-child { min-width: 0; font-size: 12px; color: var(--wb-muted); overflow-wrap: anywhere; }
 .generation-check-actions small { display: block; }
-.generation-check-actions > .wb-action { flex-shrink: 0; }
+.generation-check-actions > :last-child { flex: none; margin-inline-start: auto; }
 .generation-check-post-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border: 0; padding: 0; }
 .generation-check-post-scope label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
 @media (max-width: 700px) {
   .generation-check-item-heading { flex-wrap: wrap; }
   .generation-check-item-heading > .wb-action:last-child { margin-left: auto; }
-  .generation-check-settings label { align-items: stretch; flex-direction: column; gap: 4px; }
-  .generation-check-settings .ant-select { flex: none; width: 100%; }
-  .generation-check-actions { flex-wrap: wrap; }
-  .generation-check-actions > .wb-action { margin-left: auto; min-height: 36px; }
+  .generation-check-settings { grid-template-columns: minmax(0, 1fr); }
   .generation-check-post-scope { grid-template-columns: minmax(0, 1fr); }
 }

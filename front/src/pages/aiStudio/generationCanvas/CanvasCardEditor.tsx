@@ -7,6 +7,7 @@ import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { useWorkbenchDetailsSlot } from '../directing/ui/WorkbenchDetails'
 import { WorkbenchReadingContext } from '../directing/ui/WorkbenchReadingContext'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
+import './canvasCardEditor.css'
 
 /** 编辑器本体和独立菜单取消后使用同一可见焦点顺序。 */
 export function canvasEditorFocusTargets(root: HTMLElement) {
@@ -21,13 +22,14 @@ export const CanvasEditorTitle = createContext<{ host: HTMLElement | null; open:
 export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
-export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, material = false, focusLayout = false, modality, cardType, onReveal, suppressed = false, children }: {
+export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, longForm = false, material = false, focusLayout = false, modality, cardType, onReveal, suppressed = false, children }: {
   title: string; editableTitle?: boolean; typeLabel?: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
   anchor?: HTMLElement | null; layoutKey: string; suppressed?: boolean; onReveal: (offset: { x: number; y: number }) => (() => void);
-  expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
+  expandRequest?: number; forceModal?: boolean; longForm?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
   const visualDesign = [...visualDesignTypes, ...performanceDesignTypes, ...narrativeDesignTypes, ...soundConstraintTypes].includes(cardType || '')
+  const formLayout = visualDesign || longForm
   const slot = useWorkbenchDetailsSlot(), slotId = useId(), selectSlot = slot?.select
   const slotSelected = !slot || slot.active === slotId
   const activated = useRef(false)
@@ -55,7 +57,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
     }))
   }
   const modal = forceModal || expanded || !desktop
-  const anchoredHeightLimit = cardType === 'review.check' ? 560 : material ? 320 : 360
+  const anchoredHeightLimit = material ? 320 : 360
   const previousOpen = useRef(false)
   const lastModal = useRef(modal)
   const lastViewport = useRef({ width: window.innerWidth, height: window.innerHeight })
@@ -90,7 +92,6 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       if (!modal) {
         node.style.width = `${width}px`
         node.style.maxHeight = `${Math.min(anchoredHeightLimit, maxHeight)}px`
-        if (cardType === 'review.check') node.style.height = `${Math.min(anchoredHeightLimit, maxHeight)}px`
       }
       const height = Math.min(node.getBoundingClientRect().height || anchoredHeightLimit, anchoredHeightLimit, maxHeight)
       const left = box.left, top = box.bottom + 16
@@ -192,11 +193,12 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       else dismiss.current()
     }} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-preset-design={visualDesign} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, height:cardType === 'review.check' ? Math.min(anchoredHeightLimit, placement.maxHeight) : undefined, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: `min(${['direction.performance', 'direction.activity'].includes(cardType || '') ? 840 : 730}px, calc(100dvh - 2 * var(--design-editor-top)))`, maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-form-layout={formLayout} data-long-form={longForm} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType}
+      style={!modal ? { left: placement.left, top: placement.top, width: placement.width, maxHeight: Math.min(anchoredHeightLimit, placement.maxHeight) } : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading" data-name-editor={editableTitle}>{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}{editableTitle ? <div ref={setTitleHost} className="design-title-host" /> : <h2 title={title}>{title}</h2>}{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
-        {(!desktop || !material) && <WorkbenchIconButton style={!desktop && visualDesign ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
+        {(!desktop || !material) && <WorkbenchIconButton style={!desktop && formLayout ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
       <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorTitle.Provider value={{ host: titleHost, open: visible, typeLabel }}><CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></CanvasEditorTitle.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />

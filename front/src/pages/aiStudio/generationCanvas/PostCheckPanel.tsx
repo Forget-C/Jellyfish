@@ -1,3 +1,4 @@
+import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
 import { createPortal } from 'react-dom'
 import { CanvasEditorFooter } from './CanvasCardEditor'
 import { CheckReportDetails } from './CheckReportDetails'
@@ -121,7 +122,7 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
   const report = reports.find(row => row.product && productKey(row.product) === selected)
   const pending = reports.find(row => row.product && productKey(row.product) === selected && reportPending(row))
   const selectedCategories = card.post_check_categories ?? postCategories.map(item => item.id)
-  return <section className="generation-check-page generation-check-report" aria-label="生成后检查">
+  return <section className="canvas-editor-tab-page generation-check-page generation-check-report" aria-label="生成后检查">
     <label className="generation-check-category-toggle">完整交付后自动检查<Switch aria-label="完整交付后自动检查" checked={!!card.auto_post_check} disabled={configDisabled || running}
       onChange={checked => updateCard({ ...card, auto_post_check: checked })} /></label>
     {automaticWaitExpired && <p role="status">自动检查报告尚未到达，请刷新历史产物和报告。此状态不代表检查已完成。</p>}
@@ -166,10 +167,9 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
       <p>最近一次{report.scope === 'item' ? '单项' : '整份产物'}检查 · {report.results.length} 项结论，仅适用于所选固定产物</p>
       <Button variant="quiet" onClick={() => onOpenReport(report.id)}>查看对应报告</Button>
     </section>}
-    {active && footer && createPortal(<div className="generation-check-actions">
-      <div role="status">{pending ? '正在检查所选产物' : fixed ? `产物 1 份 · ${observationLabels[fixed.observation_method ?? 'text']} · 预计调用 ${fixed.estimated_calls} 次` : '请选择具体产物'}{fixed?.reason && <small>{fixed.reason}</small>}</div>
+    {active && footer && createPortal(<WorkbenchDialogActions className="generation-check-actions" secondary={<div role="status">{pending ? '正在检查所选产物' : fixed ? `产物 1 份 · ${observationLabels[fixed.observation_method ?? 'text']} · 预计调用 ${fixed.estimated_calls} 次` : '请选择具体产物'}{fixed?.reason && <small>{fixed.reason}</small>}</div>}>
       {pending ? <Button loading={cancelling} disabled={configDisabled || cancelling || pending.executions?.every(row => !['queued', 'running'].includes(row.status) || row.cancel_requested)} onClick={() => void onCancel(pending.id)}>取消本轮检查</Button>
         : <Button variant="primary" disabled={disabled || running || !fixed} loading={running} onClick={() => void submit()}>{fixed && !fixed.estimated_calls ? '记录未执行原因' : alreadyChecked ? '重新检查所选产物' : '检查所选产物'}</Button>}
-    </div>, footer)}
+    </WorkbenchDialogActions>, footer)}
   </section>
 }

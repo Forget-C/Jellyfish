@@ -19,8 +19,10 @@ export function checkApplicability(previous: CanvasCheckItem | undefined, curren
 }
 
 /** 一张卡只有一个保留会话；详情关闭、编组隐藏不影响已受理检查的观察。 */
-function useCheckSession(props: CardRendererProps) {
-  const { card: raw, document, savedRevision, documentPending, disabled, modelOutputs, automaticCheckRunId, targetReportId, editorOpen } = props
+type CheckSessionProps = CardRendererProps & { reportTarget?: { reportId?: string; serial: number } }
+
+function useCheckSession(props: CheckSessionProps) {
+  const { card: raw, document, savedRevision, documentPending, disabled, modelOutputs, automaticCheckRunId, reportTarget, editorOpen } = props
   const card = raw as CheckCard
   const { cardTitles, cardDefinitions } = useGraphRules()
   const [preview, setPreview] = useState<CanvasCheckPreview>()
@@ -50,7 +52,7 @@ function useCheckSession(props: CardRendererProps) {
     observed.current = { key: observedKey, stamp: observedStamp }
     if (outputChanged) { setPreview(undefined); setRefresh(value => value + 1) }
   }, [observedKey, observedStamp, outputChanged])
-  useEffect(() => { if (targetReportId) { setSelectedReportId(targetReportId); setReportFilter('all'); setTab('history') } }, [targetReportId])
+  useEffect(() => { if (reportTarget?.reportId) { setSelectedReportId(reportTarget.reportId); setReportFilter('all'); setTab('history') } }, [reportTarget])
   const mergeReports = (history: CanvasCheckReportRead[]) => setReports(previous => orderedReports([
     ...history, ...previous.filter(entry => !history.some(row => row.id === entry.id)),
   ]))
@@ -63,7 +65,6 @@ function useCheckSession(props: CardRendererProps) {
         if (active) {
           setError(''); setPreview(basis.data || undefined)
           mergeReports(history.data || [])
-          setSelectedReportId(previous => previous || history.data?.[0]?.id)
         }
       })
       .catch(() => { if (active) { setPreview(undefined); setError('读取检查依据或报告失败，请重试') } })
@@ -112,7 +113,6 @@ function useCheckSession(props: CardRendererProps) {
     : error || preview?.reason || (!basis ? '请连接模型生成卡的生成检查依据' : !ready ? '没有可执行的已启用检查项，请检查配置' : '')
   const showReport = (accepted: CanvasCheckReportRead) => {
     mergeReports([accepted])
-    setSelectedReportId(previous => previous || accepted.id)
   }
   const run = async (itemId?: string) => {
     if (blocked || submitting.current || !basis) return
@@ -181,7 +181,7 @@ function useCheckSession(props: CardRendererProps) {
 }
 
 const CheckContext = createContext<ReturnType<typeof useCheckSession> | undefined>(undefined)
-export function CheckCardSession({ children, ...props }: CardRendererProps & { children: ReactNode }) {
+export function CheckCardSession({ children, ...props }: CheckSessionProps & { children: ReactNode }) {
   const session = useCheckSession(props)
   return <CheckContext.Provider value={session}>{children}</CheckContext.Provider>
 }

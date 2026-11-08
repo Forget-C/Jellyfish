@@ -21,7 +21,7 @@ import type { MediaCard } from './MediaContentEditor'
 import type { GenerationCard } from './graphRules'
 
 export type CardRendererProps = { requirementNameValidationRequested?: boolean; onLocateDesign?: (cardId: string, fieldId: string) => void; editorOpen?: boolean; onUndoDesign?: () => void; onDuplicateDesign?: () => void; initialEntry?: string; savedRevision?: number; documentPending?: boolean; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void | boolean;
-  targetReportId?: string; automaticCheckRunId?: string; defaultModelId?: string | null; models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; sourceActions?: ReactNode }
+  automaticCheckRunId?: string; defaultModelId?: string | null; models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; sourceActions?: ReactNode }
 
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {

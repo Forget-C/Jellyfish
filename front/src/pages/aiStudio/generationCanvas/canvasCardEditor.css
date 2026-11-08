@@ -1,0 +1,37 @@
+.generation-card-editor[data-form-layout="true"] { border-radius: 20px; }
+.generation-card-editor[data-form-layout="true"] .wb-details-header { border-bottom: 0; padding: 16px 24px 12px; }
+.generation-card-editor[data-form-layout="true"] .wb-details-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0 24px; }
+.generation-card-editor[data-form-layout="true"] .generation-card-body { padding: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.generation-card-editor[data-form-layout="true"] .generation-editor-actions { border: 0; padding: 12px 24px 16px; }
+.generation-card-editor[data-form-layout="true"] .wb-dialog-actions { border: 0; padding: 0; }
+.generation-card-editor[data-form-layout="true"] .wb-dialog-actions > div { align-items: center; }
+.generation-editor-actions { flex: none; padding: 12px 16px; border-top: 1px solid var(--wb-border); background: var(--wb-surface); }
+.generation-editor-actions:empty { display: none; }
+.generation-card-editor[data-form-layout="true"] { --canvas-editor-top: min(64px, 8dvh); }
+@media (max-width: 700px) { .generation-card-editor[data-form-layout="true"] { --canvas-editor-top: 8px; } }
+.generation-card-editor.wb-details[data-expanded="true"][data-form-layout="true"] {
+  top: var(--canvas-editor-top);
+  height: min(var(--canvas-editor-height, 730px), calc(100dvh - 2 * var(--canvas-editor-top)));
+  max-height: calc(100dvh - 2 * var(--canvas-editor-top));
+  transform: translateX(-50%);
+}
+.generation-card-editor[data-long-form="true"] { --canvas-editor-height: 840px; }
+@media (max-width: 700px) {
+  .generation-card-editor[data-form-layout="true"] .wb-details-header { padding: 8px 12px; }
+  .generation-card-editor[data-form-layout="true"] .wb-details-body { padding: 0 14px; }
+  .generation-card-editor[data-form-layout="true"] .generation-editor-actions { padding: 10px 14px; }
+}
+
+/* Fixed navigation and one scrollable body per tab. */
+.canvas-editor-tabs { flex: 1; min-height: 0; }
+.canvas-editor-tabs .ant-tabs-nav { flex: none; margin-bottom: 8px; }
+.canvas-editor-tabs .ant-tabs-tab { box-sizing: border-box; height: 32px; padding: 0; font-size: 12px; font-weight: 400; }
+.canvas-editor-tabs .ant-tabs-content-holder,
+.canvas-editor-tabs .ant-tabs-content,
+.canvas-editor-tabs .ant-tabs-tabpane { min-height: 0; height: 100%; }
+.canvas-editor-tab-page { height: 100%; overflow-y: auto; scrollbar-gutter: stable; padding: 4px; box-sizing: border-box; }
+.canvas-editor-tabs .ant-tabs-nav::before { border: 0; }
+.canvas-editor-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--wb-text); text-shadow: none; }
+.canvas-editor-tabs .ant-tabs-ink-bar { height: 2px; background: var(--wb-text); }
+.canvas-editor-tabs .ant-tabs-tab-btn:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -2px; border-radius: 2px; }
+@media (max-width: 700px), (pointer: coarse) { .canvas-editor-tabs .ant-tabs-tab { height: 36px; } }

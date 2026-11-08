@@ -184,12 +184,12 @@
 .generation-edges { z-index: 2; }
 /* Generation editors are anchored to content; shared workbench details retain their own positioning. */
 .generation-card-editor.wb-details { position: fixed; right: auto; bottom: auto; width: min(680px, calc(100vw - 32px)); max-height: min(360px, calc(100vh - 160px)); z-index: 900; }
-/* 编辑卡隐藏容器滚动条，保留长表单的滚轮与键盘访问；输入控件使用同一暗色细滚动条。 */
+/* 编辑卡隐藏外壳滚动条；输入控件和公共页签正文使用同一暗色细滚动条。 */
 .generation-card-editor, .generation-card-editor * { color-scheme: dark; scrollbar-color: var(--wb-primary) transparent; }
-.generation-card-editor, .generation-card-editor :not(textarea, [contenteditable]) { scrollbar-width: none; }
+.generation-card-editor, .generation-card-editor :not(textarea, [contenteditable], .canvas-editor-tab-page) { scrollbar-width: none; }
 .generation-card-editor ::-webkit-scrollbar { display: none; }
-.generation-card-editor :is(textarea, [contenteditable]) { scrollbar-width: thin; }
-.generation-card-editor :is(textarea, [contenteditable])::-webkit-scrollbar { display: block; width: 6px; height: 6px; }
+.generation-card-editor :is(textarea, [contenteditable], .canvas-editor-tab-page) { scrollbar-width: thin; }
+.generation-card-editor :is(textarea, [contenteditable], .canvas-editor-tab-page)::-webkit-scrollbar { display: block; width: 6px; height: 6px; }
 .generation-card-editor ::-webkit-scrollbar-track, .generation-card-editor ::-webkit-scrollbar-corner { background: transparent; }
 .generation-card-editor ::-webkit-scrollbar-thumb { background: var(--wb-primary); border-radius: 6px; }
 .generation-card-editor ::-webkit-scrollbar-thumb:hover { background: var(--wb-strongBorder); }
