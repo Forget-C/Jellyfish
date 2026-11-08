@@ -36,6 +36,7 @@ export function CardStatusSummary({ card, node, outputs, readonly, missingImage,
     {missingImage && <span data-problem>缺少主图</span>}
     {'uploading' in card && card.uploading && <span>上传尚未完成</span>}
     {'text' in card && <span>{card.text?.length || 0} 字</span>}
+    {'source_locator' in card && card.type === 'content.basis' && card.source_locator && <span className="generation-card-specification" title={card.source_locator}>{card.source_locator}</span>}
     {specification && <span className="generation-card-specification" title={specification}>{specification}</span>}
     {reasons.length > 0 && <Popover trigger="click" open={explaining} onOpenChange={setExplaining} title="状态说明" content={<div className="generation-card-status-reasons">{reasons.map((reason, index) => <p key={index}>{reason}</p>)}</div>}>
       <WorkbenchIconButton label="查看状态说明" icon={<InfoCircleOutlined />} variant="quiet" />

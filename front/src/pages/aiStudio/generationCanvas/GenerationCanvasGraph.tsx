@@ -9,6 +9,8 @@ import { DesignReferenceEditor } from './DesignReferenceEditor'
 import { designReferences, isVisualDesign, isReferenceDesign, isFlatDesign } from './designFieldReferences'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { TextContentEditor } from './TextContentEditor'
+import { TextCardPreview } from './TextCardPreview'
+import { canReadLinkedResult, LinkedResultReader } from './LinkedResultReader'
 import { CardStatusSummary } from './CardStatusSummary'
 import { ImageContentCardSummary } from './ImageContentCardSummary'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
@@ -107,6 +109,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [selected, setSelected] = useState<string[]>([])
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
   const [detailId, setDetailId] = useState<string | undefined>()
+  // 保留打开位置的身份；位置消失时不保留旧输出内容。
+  const [openedResult, setOpenedResult] = useState<LinkedResult>()
   // Retain visited editors by card identity; unvisited cards stay unmounted.
   const [detailSessions, setDetailSessions] = useState<string[]>([])
   useEffect(() => {
@@ -1017,6 +1021,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }
     if (connectDocument(next, edge, capability(card))) setUploadSource(source.id)
   } }}><WorkbenchIconButton label={isReferenceDesign(card) ? '添加设计来源' : '添加模型来源'} icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
+  const resultSource = openedResult && cards.find(card => card.id === openedResult.output.source.card_id)
+  const resultDetail = openedResult && openedResult.id === detailId && resultSource && 'show_result_cards' in resultSource
+    && resultSource.show_result_cards && !hidden.has(resultSource.id)
+    ? resultsById.get(openedResult.id) || openedResult : undefined
   const sourceTargetCard = cards.find(card => card.id === sourceTarget)
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
@@ -1357,7 +1365,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onContextActions={trigger => openCardContext(id, trigger)} readonly={readonly}
             point={point(id)} scale={transform.scale} viewportOffset={transform}
             width={cardSizes[id].width} height={cardSizes[id].height} selected={selected.includes(id)}
-            onOpen={() => { setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined); setDetailId(undefined) }}
+            onOpen={trigger => {
+              setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined)
+              if (canReadLinkedResult(output)) {
+                setOpenedResult({ id, output: { source: output.source, modality: output.modality, available: false } })
+                setDetailTrigger(trigger); setDetailId(id)
+              } else setDetailId(undefined)
+            }}
             onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, id])] : previous.filter(value => value !== id)) }}
             multiSelectMode={multiSelectMode} onDragStart={() => beginMove(id, true)} onDragEnd={finishMove}
             onMove={position => { if (!accessibleConnection) moveCards(id, position) }} connections={geometricPorts(cards.find(card => card.id === output.source.card_id)!, result)}>
@@ -1369,6 +1383,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const size = cardSizes[card.id]
           const isReference = card.type?.startsWith('reference.')
           const isDescription = isDescriptionCard(card)
+          const isTextContent = card.type === 'content.text' || card.type === 'content.basis'
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
@@ -1380,10 +1395,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onOpen={(trigger, fromKeyboard) => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(!fromKeyboard && card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}
             onConnect={card.type === 'review.check' ? undefined : trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
-            footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
+            footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' || isTextContent ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
             {card.type === 'review.check' && <CheckCardFace onOpen={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} />}
-            {!isModel && !isReference && !isDescription && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {isTextContent && <TextCardPreview label="正文预览" text={'text' in card && card.text || '未填写正文'}
+              status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />} />}
+            {!isModel && !isReference && !isDescription && !isTextContent && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} readonly={readonly} onEdit={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
@@ -1425,6 +1442,18 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     {cards.filter(card => card.type !== 'review.check' && (detailSessions.includes(card.id) || card.id === detailId)).map(renderEditor)}
+    {resultDetail && <CanvasCardEditor key={resultDetail.id} open title={linkedResultTitle(resultDetail.output)}
+      status={resultDetail.output.basis_current === false ? '只读 · 依据已变' : '只读'}
+      anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(resultsById.has(resultDetail.id) ? resultDetail.id : resultDetail.output.source.card_id)}"]`)}
+      layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(resultDetail.id))}`}
+      onReveal={revealEditor} suppressed={detailsSuppressed} trigger={detailTrigger}
+      cardType={`content.${resultDetail.output.modality}`} modality={resultDetail.output.modality}
+      focusLayout={focusCardTypes.includes(`content.${resultDetail.output.modality}`)}
+      onClose={() => { setOpenedResult(undefined); setDetailId(undefined) }}>
+      <div className="generation-card-body" data-canvas-details={document.id} data-card-details={resultDetail.id}>
+        <LinkedResultReader id={resultDetail.id} output={resultDetail.output} />
+      </div>
+    </CanvasCardEditor>}
   </div>
 }
 
