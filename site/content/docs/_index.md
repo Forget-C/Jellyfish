@@ -22,15 +22,12 @@ cascade:
 - [使用生成画布](/docs/guide/generation-canvas/)
 - [查看与处理任务](/docs/guide/task-center/)
 - [配置生成模型](/docs/guide/model-setup/)
+- [生成和管理资产图片](/docs/guide/asset-images/)
+- [使用生成实验室](/docs/guide/generation-labs/)
 
 ## 开发指南
 
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
-
-## 当前架构
-
-- [场次核心数据与版本](/docs/architecture/directing-foundation/)
-- [素材、剪辑与交付](/docs/architecture/directing-edit-delivery/)
 
 ## 任务计划
 

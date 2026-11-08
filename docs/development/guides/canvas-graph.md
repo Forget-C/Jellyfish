@@ -1,8 +1,3 @@
----
-title: "接入共享画布 graph"
-description: "后端投影、共同校验、前端渲染与编辑保存的复用步骤和边界。"
----
-
 # 接入共享画布 graph
 
 四个画布使用版本接口返回的 `director_graph`、`unit_graph`、`instruction_graph`、`edit_graph`。单元画布另通过只读 `unit-canvas/preview` 接口投影当前编辑，在保存前展示新增及修改的单元卡片。业务内容保存在原 `SceneVersionContent`；graph 是同一次读取的展示投影，不是另一份可保存的业务数据。指令图按明确单元展示已保存正文、实际消费依据与明确参考；完整正文在稳定挂载的独立工作区编辑，建议与检查继续沿用原业务入口。剪辑图默认按真实时间顺序展示已保存采用、待拍占位与源 Take 取材关系；播放器、时间线和原素材库从明确入口进入，浏览切换保持工作区挂载。素材库、审片、接缝与返工仍使用原业务入口。
@@ -55,7 +50,7 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 共同契约测试覆盖四类投影及非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `sceneBrowseControls.browser.mjs`（四画布导航、选择联动、收起偏好、失效与更新失败恢复）、`test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs`、`directorLayout.browser.mjs`、`sceneGraphSummary.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
 
-对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/standards/workbench-design.md)。
+对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](../standards/workbench-design.md)。
 
 剪辑投影批量查询全部有权限查看的同场 Take 轻量身份、固定来源及文件登记信息，不展开完整生成输入。默认整场图仍仅关联已采用源，独立“浏览同场素材图”通过服务端 `library_view_id` 进入全部候选视图；显示地址保持不透明。采用用独立 clip ID 定位，多个片段可关联同一源 Take，各自保留源区间、位置和片段适配。待拍占位只带预期内容与预计时长，时间线空白不生成节点。选择图节点只定位原素材或时间线片段；当前编辑已删除的旧图目标明确不可用，未保存新片段继续在原时间线编辑。刷新图证据复用已保存基线保护，不重建播放器或覆盖尚未应用的片段表单。对应浏览器回归为 `sceneEditGraph.browser.mjs` 与 `sceneTimeline.browser.mjs`。
 
@@ -77,7 +72,7 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 `SceneEditCanvas` 默认的 `EditGraphCanvas` 是真实业务图。保留的 `DirectorCanvasSurface` 仅安排原素材、播放器、时间线与审片操作面板的几何位置，不是服务端剪辑图的回退，不负责推导采用、覆盖或接缝事实。原四容器布局没有可靠业务节点映射，因此不迁移到新业务图；两个视图各自保留布局，业务编辑与媒体工作区保持稳定。
 
-迁移组合验证可从 `pnpm --dir front run test:canvas-graph`、`pnpm --dir front run test:workbench-ui` 执行。新增导航回归为 `sceneGraphNavigation.browser.mjs`，覆盖不透明地址、同一 Take 多次采用的精确回跳、跨画布未保存输入与键盘路径。完整 A01–A24 对照与各类恢复证据记录在本地任务目录的 `acceptance.md`。
+迁移组合验证可从 `pnpm --dir front run test:canvas-graph`、`pnpm --dir front run test:workbench-ui` 执行。导航回归为 `sceneGraphNavigation.browser.mjs`，覆盖不透明地址、同一 Take 多次采用的精确回跳、跨画布未保存输入与键盘路径。完整 A01–A24 对照与各类恢复证据记录在本地任务目录的 `acceptance.md`。
 
 剪辑工作区保持挂载以保留表单与播放，但隐藏工作区不会加载完整素材审片、接缝、整场验收或落幅历史。用户明确选择“查看完整…历史”、原记录或审查接缝后才读取；刷新 graph 或保存 revision 不重复获取完整历史，仍保留已经打开的记录与未提交输入。原历史入口提供明确重读动作。
 

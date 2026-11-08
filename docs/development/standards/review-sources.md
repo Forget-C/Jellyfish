@@ -10,9 +10,10 @@
 | 前端实现与布局 | [前端说明](../guides/frontend.md)、[前端基础布局](../architecture/frontend-layout.md) |
 | 对外接口、响应 schema 或客户端 | [OpenAPI 同步指南](../guides/openapi.md)、[接口同步规范](development.md#接口与文档同步) |
 | 章节划分与场次版本 | [章节划分架构](../architecture/chapter-division.md)、[场次版本架构](../architecture/scene-versions.md) |
-| 场次领域、六岗或生产单元 | `site/content/docs/architecture/directing-foundation.md` |
+| 场次领域、六岗或生产单元 | [场次工作台架构](../architecture/directing-foundation.md)、[六部门专业输出契约](../reference/six-department-contracts.md) |
+| 资产图片、生成准备或实验室 | [资产图片管理](../architecture/asset-image-management.md)、[生成准备](../architecture/generation-workspace.md)、[生成实验室](../architecture/generation-labs.md) |
 | 工作台控件、主题、卡片或详情 | [工作台前端设计标准](workbench-design.md) |
-| graph、投影、导航、布局缓存或证据 | `site/content/docs/guide/canvas-graph.md` |
+| graph、投影、导航、布局缓存或证据 | [接入共享画布 graph](../guides/canvas-graph.md) |
 | 任务执行、模型解析或数据库维护 | [任务执行架构](../architecture/task-execution.md)、[默认模型解析](../architecture/llm-default-model-resolution.md)、[数据库迁移](../architecture/database-migrations.md) |
 | 生成画布、运行与检查 | [生成画布架构](../architecture/generation-canvas.md)、[首版检查项目录](../design/generation-canvas-check-catalog.md) |
 | 测试、lint、CI 或运行入口 | `front/tests/README.md`、`front/package.json`、`.github/workflows/frontend-checks.yml`、`front/tests/browser-suites.json` |
