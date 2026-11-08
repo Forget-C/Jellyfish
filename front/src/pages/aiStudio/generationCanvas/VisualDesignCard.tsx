@@ -59,10 +59,10 @@ export function VisualDesignCard({ card, document }: { card: DesignCard; documen
 export type DesignSummaryRow = { label: string; text: string; lines?: number }
 
 /** Layout is bounded by the selected card size; the full design belongs in its detail. */
-export function DesignCardBody({ kind, title, rows, compact = false, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: DesignSummaryRow[]; compact?: boolean; emptyHint?: string }) {
-  const visibleRows = compact ? rows : rows.slice(0, 2)
-  return <section className="visual-design-card" data-compact={compact} aria-label={`${title}摘要`}>
-    {!compact && <DesignPurposeIllustration kind={kind} />}
+export function DesignCardBody({ kind, title, rows, summaryOnly = false, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: DesignSummaryRow[]; summaryOnly?: boolean; emptyHint?: string }) {
+  const visibleRows = summaryOnly ? rows : rows.slice(0, 2)
+  return <section className="visual-design-card" data-summary-only={summaryOnly} aria-label={`${title}摘要`}>
+    {!summaryOnly && <DesignPurposeIllustration kind={kind} />}
     {visibleRows.length ? <dl>{visibleRows.map((row, index) => <div key={index}>
       <dt title={row.label}>{row.label}</dt>
       <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>

@@ -6,6 +6,7 @@ import { designFieldEntries } from './designFieldReferences'
 import { useGraphRules } from './CanvasCatalogContext'
 import { DesignCardBody } from './VisualDesignCard'
 import { isCompactDesignCard } from './cardGeometry'
+import { structuredDesignFields } from './structuredDesignSummary'
 
 const states: Record<string, string> = { not_applicable: '不适用', absent: '明确没有', undecided: '待确定', fact: '事实', proposal: '提议' }
 
@@ -51,7 +52,7 @@ export function FlatDesignCardBody({ card, document }: { card: FlatDesignCard; d
       core ? { ...core, lines: speaker ? 3 : 4 } : { label: '核心内容', text: `尚未填写${title}`, lines: 1 },
       ...(auxiliary ? [{ ...auxiliary, lines: 1 }] : []),
     ] : []
-    return <DesignCardBody kind={kind} title={title} rows={summary} compact emptyHint={emptyHint} />
+    return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} />
   }
 
   if ('category' in card && card.category !== 'space') rows.push({ id: 'category', label: '连续性分类', text: { space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', photography: '摄影', dialogue_sound: '对白与声音' }[card.category || 'space'] })
@@ -60,5 +61,17 @@ export function FlatDesignCardBody({ card, document }: { card: FlatDesignCard; d
   rows.push(...scope)
   if (card.examples?.length) rows.push({ id: 'examples', label: '参考示例', text: `${card.examples.length} 项` })
   if ('markers' in card && card.markers?.length) rows.push({ id: 'markers', label: '位置标记', text: `${card.markers.length} 项` })
+  const priorities = structuredDesignFields[card.type!]
+  if (priorities) {
+    const summary = priorities.flatMap(id => {
+      const row = rows.find(candidate => candidate.id === id && candidate.text)
+      return row ? [{ ...row, lines: 2 }] : []
+    }).slice(0, 3)
+    const auxiliary = rows.find(row => row.text)
+    if (!summary.length && auxiliary) {
+      summary.push({ id: 'empty-core', label: '核心内容', text: `尚未填写${title}`, lines: 1 }, { ...auxiliary, lines: 2 })
+    }
+    return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} />
+  }
   return <DesignCardBody kind={kind} title={title} rows={rows} emptyHint={emptyHint} />
 }
