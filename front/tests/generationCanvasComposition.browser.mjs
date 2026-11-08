@@ -37,7 +37,7 @@ try {
   const read = async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate=> { for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('composition save timeout') }
   await page.goto(`http://127.0.0.1:4404/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const card=page.locator('[data-card-id="composition"]');await card.getByRole('button',{name:'开始设计',exact:true}).click()
+  const card=page.locator('[data-card-id="composition"]');await card.locator('.generation-card-body').click()
   const detail=page.locator('.wb-details:not([hidden])');await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
   assert.equal(await detail.getByRole('tab').count(),0)
   await detail.getByRole('button',{name:/预览 /}).first().click();await detail.getByRole('button',{name:/应用/}).click()
@@ -57,7 +57,7 @@ try {
   await poll(s=>s.document.cards[0].fields.shot_size.size==='close_up')
   assert.equal((await read()).document.cards[1].fields.negative_space.text,'保留独立留白')
   await page.screenshot({path:join(output,'composition-desktop.png')})
-  await page.reload();await card.getByRole('button',{name:'编辑设计',exact:true}).click();await detail.getByRole('button',{name:'高级设置',exact:true}).click();assert.equal(await composition.innerText(),'主体位于画面右侧')
+  await page.reload();await card.locator('.generation-card-body').click();assert.equal(await composition.innerText(),'主体位于画面右侧')
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(output,'composition-mobile.png')});assert.ok(await detail.getByRole('button',{name:'返回预设',exact:true}).isVisible())
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   console.log('PASS independent composition preset, structured framing, save/reopen, isolation and narrow layout')

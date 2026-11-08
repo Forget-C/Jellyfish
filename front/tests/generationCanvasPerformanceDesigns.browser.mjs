@@ -56,7 +56,6 @@ try {
   const close=()=>detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   const open=async id=>{await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
   await open('legacy')
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   const original = (await read()).document.cards.find(card=>card.id==='legacy')
   await detail.getByRole('textbox',{name:'表演适用说明内容',exact:true}).focus()
   await close()
@@ -64,18 +63,15 @@ try {
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   assert.deepEqual((await read()).document.cards.find(card=>card.id==='legacy'),original,'viewing legacy @ text must not create references')
   await open('legacy')
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   const legacy = detail.getByRole('textbox',{name:'表演适用说明内容',exact:true})
   await legacy.press('End'); await legacy.press(' '); await legacy.pressSequentially('补充')
   await poll(s=>s.document.cards.find(card=>card.id==='legacy').applicability.document?.segments.some(part=>part.kind==='text'&&part.literal))
   await close(); await page.reload(); await open('legacy')
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await legacy.press('End'); await legacy.press(' '); await legacy.press('@')
   await page.getByRole('option',{name:'@图片1',exact:true}).click()
   await poll(s=>s.document.cards.find(card=>card.id==='legacy').applicability.document.segments.filter(part=>part.kind==='reference').length===1)
   await close()
   for(const [id,key,label,preset] of cases){
-    await page.locator(`[data-card-id="${id}"] .visual-design-card .design-purpose svg`).waitFor({state:'attached'})
     await open(id)
     assert.equal(await detail.getByRole('tab').count(),0)
     if(preset){
@@ -117,7 +113,6 @@ try {
   assert.match(compiled.text,/image 1/)
   assert.deepEqual((await read()).document.edges.filter(edge=>edge.target_card==='model').map(edge=>edge.source_card),['environment'],'carried media requires no extra model connections')
   await page.reload();await open('performance')
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('textbox',{name:'身体动作内容',exact:true}).locator('.generation-prompt-token').filter({hasText:'@图片1'}).waitFor()
   await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
@@ -130,10 +125,8 @@ try {
   const revision=(await read()).revision
   for(const[id,,label,preset]of cases){
     await observer.locator(`[data-card-id="${id}"]`).waitFor({state:'attached'})
-    assert.match(await observer.locator(`[data-card-id="${id}"]`).textContent(), /查看设计/)
     await observer.locator(`[data-card-id="${id}"]`).press('Enter')
     const readonly=observer.locator('.wb-details:not([hidden])')
-    if(preset)await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await readonly.getByRole('textbox',{name:label+'内容',exact:true}).isDisabled(),true)
     await readonly.getByRole('button',{name:'关闭详情',exact:true}).click()
   }

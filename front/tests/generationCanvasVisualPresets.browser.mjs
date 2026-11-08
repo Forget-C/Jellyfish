@@ -42,7 +42,7 @@ try {
     { id: 'continuity', type: 'direction.continuity', category: 'appearance', before: authored('袖口干净'),
       following_constraints: authored('保持已明确的服装、妆发与外观变化结果；避免无依据的造型变化') },
     { id: 'fact', type: 'direction.fact' },
-    { id: 'dialogue', type: 'direction.dialogue' },
+    { id: 'dialogue', type: 'direction.dialogue', dialogue_id: 'dialogue' },
     { id: 'anchor', type: 'direction.anchor' },
   ], edges: [{id:'e', source_card:'style',source_port:'text',target_card:'consumer',target_port:'text'}], input_order:{consumer:{text:['e']}} }
   const seed = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
@@ -141,7 +141,7 @@ try {
   await close()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
   await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
-  await observer.locator('[data-card-id="style"]').press('Enter')
+  await observer.locator('[data-card-id="style"]').locator('.generation-card-body').click()
   const rd=observer.locator('.wb-details:visible')
   assert.equal(await rd.getByRole('textbox',{name:'风格方向内容',exact:true}).isVisible(),true,'read-only opens the same mode')
   await rd.getByRole('button',{name:'返回预设',exact:true}).click()
@@ -161,7 +161,7 @@ try {
   for (const label of [...watercolor.map(([label])=>label), '自定义说明']) {
     await detail.getByRole('textbox',{name:label+'内容',exact:true}).fill('')
   }
-  await poll(s=>Object.values(s.document.cards.find(c=>c.id==='style').fields).every(field=>!field.text))
+  await poll(s=>Object.values(s.document.cards.find(c=>c.id==='style').fields).every(field=>!field.text?.trim()))
   assert.equal(await detail.getByRole('button',{name:'返回预设',exact:true}).isVisible(),true,'clearing design retains the open parameter session')
   await close();await open('style')
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()

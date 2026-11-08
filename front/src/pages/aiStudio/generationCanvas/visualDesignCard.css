@@ -8,8 +8,11 @@
 .visual-design-card dt { color: var(--wb-muted); flex-shrink: 0; max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 .visual-design-card dd { margin: 0; min-width: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .visual-design-card dd:focus-visible { outline: 1px solid var(--wb-focus); }
-.visual-design-card small, .visual-design-empty p { color: var(--wb-muted); font-size: 12px; }
+.visual-design-empty p { color: var(--wb-muted); font-size: 12px; }
 .visual-design-empty strong { font-size: 13px; }
 .visual-design-empty p { margin: 8px 0 0; }
-.visual-design-card .design-card-entry { width: 100%; margin-top: 4px; }
-@media (pointer: coarse) { .visual-design-card .design-card-entry.wb-action.ant-btn { min-height: 44px; } }
+.visual-design-card[data-compact="true"] dl { display: grid; gap: 8px; line-height: 1.5; }
+.visual-design-card[data-compact="true"] dd {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--design-summary-lines, 1);
+  white-space: normal; overflow-wrap: anywhere;
+}

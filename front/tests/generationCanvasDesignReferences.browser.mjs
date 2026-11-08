@@ -52,7 +52,6 @@ try {
     await page.locator('.design-source-inspect:visible').waitFor()
     await page.keyboard.press('Escape');assert.equal(await detail.isVisible(),true)
     await page.locator('.design-source-inspect:visible').waitFor({state:'hidden'})
-    await detail.getByRole('button',{name:'高级设置',exact:true}).click()
     const field=detail.getByRole('textbox',{name:label+'内容',exact:true})
     await field.fill('站在 ');await candidate.click()
     assert.equal(await field.locator('.generation-prompt-token').count(),0,'opening a source only previews it')
@@ -76,11 +75,11 @@ try {
     assert.equal(saved.fields[other].document.segments.find(segment=>segment.kind==='reference').source.card_id,'brief')
   }
   await page.reload()
-  await page.locator('[data-card-id="style"]').getByRole('button',{name:'编辑设计',exact:true}).click()
+  await page.locator('[data-card-id="style"]').locator('.generation-card-body').click()
   await detail.getByRole('button',{name:'添加设计来源',exact:true}).click()
   await page.getByRole('menuitem',{name:'从当前画布选择',exact:true}).click()
   const picker=page.getByRole('dialog',{name:'选择画布来源',exact:true})
-  await picker.getByRole('button',{name:/· loose → 文本/}).click()
+  await picker.getByRole('button',{name:/· loose ·/}).click()
   await poll(s=>s.document.edges.some(edge=>edge.source_card==='loose'&&edge.target_card==='style'))
   await detail.getByRole('button',{name:'添加设计来源',exact:true}).click()
   await page.getByRole('menuitem',{name:/上传参考素材/}).hover()
@@ -106,7 +105,6 @@ try {
   await page.getByRole('dialog',{name:'项目文件库',exact:true}).getByRole('button',{name:'选用 reference',exact:true}).click()
   await poll(s=>s.document.cards.filter(card=>card.type==='content.image'&&card.file_id).length===2)
   await uploadDialog.locator('.ant-modal-close').click()
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   const second=detail.getByRole('textbox',{name:'自定义说明内容',exact:true})
   assert.match(await second.innerText(),/@文本1/,'saved retained source survives reload')
   const color=detail.getByRole('textbox',{name:'色彩倾向内容',exact:true})
@@ -132,7 +130,6 @@ try {
   for(const [kind,,label] of kinds){
     await observer.locator(`[data-card-id="${kind}"]`).press('Enter')
     const readonly=observer.locator('.wb-details:visible')
-    await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await readonly.getByRole('textbox',{name:label+'内容',exact:true}).isDisabled(),true)
     await readonly.getByRole('button',{name:'关闭详情',exact:true}).click()
   }

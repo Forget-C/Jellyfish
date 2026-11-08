@@ -74,7 +74,7 @@ try {
   for (const definition of definitions) {
     const id = definition.type.slice('direction.'.length)
     const node = page.locator(`[data-card-id="${id}"]`)
-    await node.getByRole('button', { name: '编辑设计', exact: true }).waitFor({ state: 'attached' })
+    await node.waitFor({ state: 'attached' })
     for (const text of await node.locator('dd').allTextContents()) assert.doesNotMatch(text, /^(事实|设计|背景|约束)[：·]/, `${definition.title}: user card summary omits default metadata`)
     const original = await savedCard(id)
     const detail = await reopen(id)

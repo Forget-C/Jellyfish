@@ -22,10 +22,10 @@ export const CanvasEditorTitle = createContext<{ host: HTMLElement | null; open:
 export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
-export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, longForm = false, material = false, focusLayout = false, modality, cardType, onReveal, suppressed = false, children }: {
+export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, longForm = false, material = false, focusLayout = false, modality, cardType, diagnosticFocus, onReveal, suppressed = false, children }: {
   title: string; editableTitle?: boolean; typeLabel?: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
   anchor?: HTMLElement | null; layoutKey: string; suppressed?: boolean; onReveal: (offset: { x: number; y: number }) => (() => void);
-  expandRequest?: number; forceModal?: boolean; longForm?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
+  expandRequest?: number; forceModal?: boolean; longForm?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; diagnosticFocus?: { selector: string; serial: number }; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
   const visualDesign = [...visualDesignTypes, ...performanceDesignTypes, ...narrativeDesignTypes, ...soundConstraintTypes].includes(cardType || '')
@@ -128,6 +128,33 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
     else if (activated.current) { activated.current = false; close.current() }
   }, [open, slot?.active, slotId])
   const visible = open && !suppressed && (!slot || slot.active === slotId)
+  const [unavailableDiagnostic, setUnavailableDiagnostic] = useState<number>()
+  const diagnosticSelector = diagnosticFocus?.selector, diagnosticSerial = diagnosticFocus?.serial
+  useEffect(() => {
+    if (!visible || !diagnosticSelector || diagnosticSerial === undefined) return
+    setUnavailableDiagnostic(undefined)
+    let frame = 0, attempts = 0
+    const focus = () => {
+      const node = panel.current
+      const target = node?.querySelector<HTMLElement>(diagnosticSelector!)
+      if (node && target && !node.inert) {
+        const disclosure = target.closest('details')
+        if (disclosure) disclosure.open = true
+        if (target.getClientRects().length) {
+          const control = target.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled)') || target
+          const destination = control.matches(':disabled') ? control.parentElement || node : control
+          destination.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+          if (destination.tabIndex < 0) destination.tabIndex = -1
+          destination.focus({ preventScroll: true })
+          return
+        }
+      }
+      if (++attempts < 60) frame = requestAnimationFrame(focus)
+      else setUnavailableDiagnostic(diagnosticSerial)
+    }
+    frame = requestAnimationFrame(focus)
+    return () => cancelAnimationFrame(frame)
+  }, [visible, diagnosticSelector, diagnosticSerial])
   useLayoutEffect(() => {
     const node = panel.current
     const body = node?.querySelector<HTMLElement>('.wb-details-body')
@@ -200,7 +227,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
         {(!desktop || !material) && <WorkbenchIconButton style={!desktop && formLayout ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
-      <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorTitle.Provider value={{ host: titleHost, open: visible, typeLabel }}><CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></CanvasEditorTitle.Provider></div>
+      <div className="wb-details-body">{diagnosticSerial !== undefined && unavailableDiagnostic === diagnosticSerial && <p role="status">原问题位置当前不可用，已打开相关卡片。</p>}{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorTitle.Provider value={{ host: titleHost, open: visible, typeLabel }}><CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></CanvasEditorTitle.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />
     </section>
   </>, document.body)

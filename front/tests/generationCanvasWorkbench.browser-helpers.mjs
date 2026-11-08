@@ -8,8 +8,6 @@ export async function openCanvasCard(page, id) {
   if (await details.count() && await details.getAttribute('aria-modal') === 'true') await closeCanvasDetails(page)
   const card = page.locator(`[data-card-id="${id}"]`)
   await card.press('Enter')
-  const edit = card.locator('button[aria-label="编辑卡片"]')
-  if (await edit.count()) { await edit.waitFor({state:'visible'}); await edit.press('Enter') }
   await page.locator('.wb-details:visible').waitFor()
   await openModelInspection(page)
   return page.locator('.wb-details:visible')

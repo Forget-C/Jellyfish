@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Input, Typography, type InputRef } from 'antd'
 import { CanvasEditorTitle } from './CanvasCardEditor'
 import { DesignReferenceContext } from './DesignReferenceEditor'
+import { duplicateDesignName } from './canvasDiagnosticNavigation'
 
 /** 名称原位编辑沿用画布自动保存；退出只结束编辑，回退使用画布撤销。 */
 export function DesignNameField({ label, placeholder, value, disabled, error, onChange }: { label: string; placeholder: string; value?: string; disabled?: boolean; error?: string; onChange: (value: string) => void }) {
@@ -11,8 +12,7 @@ export function DesignNameField({ label, placeholder, value, disabled, error, on
   const [editing, setEditing] = useState(false)
   const name = value?.trim() || ''
   const card = references?.card
-  const unique = card?.type === 'direction.criterion' || ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card?.type || '')
-  const duplicate = unique && name && references?.document.cards?.some(other => other.id !== card?.id && other.type === card?.type && 'name' in other && other.name?.trim() === name)
+  const duplicate = card && duplicateDesignName(card, references?.document.cards || [])
   const issue = error || (duplicate ? '该名称已被同类型卡片使用，请使用其他名称' : undefined)
   useEffect(() => {
     if (!title?.open || disabled) setEditing(false)
@@ -34,7 +34,7 @@ export function DesignNameField({ label, placeholder, value, disabled, error, on
     requestAnimationFrame(() => action.current?.focus({ preventScroll: true }))
   }
   if (!title?.host) return null
-  return createPortal(<div className="design-title-name">
+  return createPortal(<div className="design-title-name" data-diagnostic-name tabIndex={-1}>
     <div className="design-title-row">
       {editing && !disabled ? <Input ref={input} id={id} aria-label={label} aria-invalid={!!issue} aria-describedby={issue ? `${id}-error` : undefined} value={value} placeholder={placeholder} status={issue ? 'error' : undefined} onChange={event => onChange(event.target.value)} onBlur={() => setEditing(false)} onKeyDown={event => {
         if (!event.nativeEvent.isComposing && (event.key === 'Enter' || event.key === 'Escape')) { event.preventDefault(); event.stopPropagation(); finish() }

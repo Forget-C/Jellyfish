@@ -45,7 +45,7 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(150)}throw Error('save timeout')}
-  assert.match(await page.locator('[data-card-id="creative_control"]').textContent(), /开始设计/)
+  await page.locator('[data-card-id="creative_control"]').getByText('尚未填写创作控制', { exact: true }).waitFor({ state: 'attached' })
   for(const[id,key,label,preset]of cases){
     await openCanvasCard(page,id)
     if(['creative_control','guidance','fact','performance_rule'].includes(id)){
@@ -116,7 +116,6 @@ try {
   await openCanvasCard(page,'sound')
   assert.equal(await detail.getByRole('region',{name:'声源对象',exact:true}).count(),0)
   assert.equal(await detail.getByRole('button',{name:/选择声源对象/}).count(),0)
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('textbox',{name:'动作声内容',exact:true}).fill('编辑后的碰撞声')
   await poll(state=>state.document.cards.find(item=>item.id==='sound').action_sound.text==='编辑后的碰撞声')
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
@@ -131,8 +130,7 @@ try {
   await page.reload();await openCanvasCard(page,'continuity');await page.setViewportSize({width:390,height:844})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
   await page.screenshot({path:join(output,'sound-constraints-mobile.png'),fullPage:true})
-  assert.equal(await detail.getByRole('combobox',{name:'连续性分类',exact:true}).count(),0)
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  assert.equal(await detail.getByRole('combobox',{name:'连续性分类',exact:true}).isVisible(),true)
   const constraint=detail.getByRole('textbox',{name:'后续约束内容',exact:true})
   await constraint.fill('');await constraint.press('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()
   await poll(state=>state.document.cards.find(card=>card.id==='continuity').following_constraints.document?.segments.some(segment=>segment.kind==='reference'))
@@ -159,9 +157,9 @@ try {
   await detail.getByRole('button',{name:'撤销',exact:true}).click()
   await poll(state=>state.document.cards.find(card=>card.id==='continuity').category==='appearance')
   await detail.getByRole('button',{name:'返回预设',exact:true}).click()
-  await detail.getByText('已应用 · 造型延续',{exact:true}).waitFor()
+  await detail.getByText('自定义配置',{exact:true}).waitFor()
   await detail.getByRole('button',{name:'预览 空间延续',exact:true}).click()
-  await detail.getByText('已应用 · 造型延续',{exact:true}).waitFor()
+  await detail.getByText('自定义配置',{exact:true}).waitFor()
   await detail.getByRole('button',{name:'撤销',exact:true}).click()
   await poll(state=>{const card=state.document.cards.find(card=>card.id==='continuity');return card.category==='space'&&JSON.stringify(card.following_constraints)===JSON.stringify(beforeContinuity.following_constraints)})
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
@@ -172,7 +170,6 @@ try {
   for(const[id,,label,preset]of cases){
     await openCanvasCard(observer,id)
     const readonly=observer.locator('.wb-details:not([hidden])')
-    if(preset)await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await readonly.getByRole('textbox',{name:label+'内容',exact:true}).isDisabled(),true)
     await readonly.getByRole('button',{name:'关闭详情',exact:true}).click()
   }
