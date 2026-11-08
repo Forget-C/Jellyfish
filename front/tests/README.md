@@ -43,9 +43,9 @@ pnpm --dir front run test:browser -- --list
 
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 
-章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），覆盖 105 章分页/搜索、表格滚动恢复、无跨章节汇总、未知数量、名称/精简/原文/对比/AI 优化后保存、影响确认、错误恢复、创建序号、归属校验和四尺寸截图。`node front/tests/chapterSequenceNavigation.browser.mjs`（默认 4201 端口）覆盖单层场次抽屉、默认详情、基本信息保存与手动选区、草稿保护、深链接、阶段往返、迟到响应及窄屏返回列表。两者拦截全部业务接口，不执行真实模型请求。当前章节契约见[场次架构](../../site/content/docs/architecture/directing-foundation.md)。
+章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），覆盖 105 章分页/搜索、表格滚动恢复、无跨章节汇总、未知数量、名称/精简/原文/对比/AI 优化后保存、影响确认、错误恢复、创建序号、归属校验和四尺寸截图。`node front/tests/chapterSequenceNavigation.browser.mjs`（默认 4201 端口）覆盖单层场次抽屉、默认详情、基本信息保存与手动选区、草稿保护、深链接、阶段往返、迟到响应及窄屏返回列表。两者拦截全部业务接口，不执行真实模型请求。当前章节契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
-`node front/tests/chapterSourceSelection.browser.mjs`（默认 4207，可用 `SOURCE_SELECTION_PORT` 修改）覆盖五列表格与直接划场、默认场次、改名保留旧来源、真实鼠标框选、跨 DOM 节点及 Unicode/CRLF 范围、重复匹配、重叠/版本冲突、AI 候选逐场确认、未保存保护、返回焦点、长原文位置恢复和四尺寸布局。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。章节划分与并发保存边界见[场次架构](../../site/content/docs/architecture/directing-foundation.md)。
+`node front/tests/chapterSourceSelection.browser.mjs`（默认 4207，可用 `SOURCE_SELECTION_PORT` 修改）覆盖五列表格与直接划场、默认场次、改名保留旧来源、真实鼠标框选、跨 DOM 节点及 Unicode/CRLF 范围、重复匹配、重叠/版本冲突、AI 候选逐场确认、未保存保护、返回焦点、长原文位置恢复和四尺寸布局。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。章节划分与并发保存边界见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
 ```bash
 node front/tests/workspaceUsage.browser.mjs

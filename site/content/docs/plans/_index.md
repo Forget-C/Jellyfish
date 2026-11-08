@@ -21,4 +21,3 @@ title: "计划与近期实施依据"
 - [场次画布工作台](/docs/plans/canvas-sequence-workbench-plan/)
 - [导演画布镜头分组](/docs/plans/director-shot-centered-layout/)
 - [共享 graph 与单元画布](/docs/plans/shared-canvas-graph-and-unit-workbench-plan/)
-- [章节划分统一编辑与历史版本](/docs/plans/chapter-division-version-editor-plan/)
