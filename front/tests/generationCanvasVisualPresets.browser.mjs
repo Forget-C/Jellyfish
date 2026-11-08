@@ -34,7 +34,17 @@ try {
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
-  const document = { ...canvas.document, cards: [{ id: 'style', type: 'direction.style' }, { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config:{count:3} }], edges: [{id:'e', source_card:'style',source_port:'text',target_card:'consumer',target_port:'text'}], input_order:{consumer:{text:['e']}} }
+  const authored = text => ({ text, state: 'fact', purpose: 'design', authorship: 'user' })
+  const document = { ...canvas.document, cards: [
+    { id: 'style', type: 'direction.style' },
+    { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config:{count:3} },
+    { id: 'auxiliary', type: 'direction.creative_control', name: '备用约束', source_locator: '第1节', scope: { description: '仅用于室内镜头' } },
+    { id: 'continuity', type: 'direction.continuity', category: 'appearance', before: authored('袖口干净'),
+      following_constraints: authored('保持已明确的服装、妆发与外观变化结果；避免无依据的造型变化') },
+    { id: 'fact', type: 'direction.fact' },
+    { id: 'dialogue', type: 'direction.dialogue' },
+    { id: 'anchor', type: 'direction.anchor' },
+  ], edges: [{id:'e', source_card:'style',source_port:'text',target_card:'consumer',target_port:'text'}], input_order:{consumer:{text:['e']}} }
   const seed = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok, await seed.text())
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
@@ -79,6 +89,8 @@ try {
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text==='手绘水彩')
   assert.deepEqual((await read()).document,before,'one undo restores the entire pre-application document')
   await close();await open('style')
+  assert.equal(await detail.getByRole('textbox',{name:'自定义说明内容',exact:true}).isVisible(),true,'extra design opens in parameters')
+  await detail.getByRole('button',{name:'返回预设',exact:true}).click()
   assert.equal(await detail.getByRole('button',{name:'应用',exact:true}).isDisabled(),true,'closing discards the unapplied choice without changing applied fields')
   assert.equal(await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).getAttribute('aria-pressed'),'true','custom notes outside the preset retain its applied preview')
   assert.equal(await detail.locator('.design-preset-preview figcaption strong').innerText(),'手绘水彩')
@@ -96,10 +108,12 @@ try {
   assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).innerText(),long+'保留失败输入')
   await close();await page.getByRole('button',{name:'保存画布',exact:true}).click()
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text===long+'保留失败输入')
-  await open('style');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  await open('style')
   await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).fill(long)
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text===long)
   await close();await open('style')
+  assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).isVisible(),true)
+  await detail.getByRole('button',{name:'返回预设',exact:true}).click()
   for(const [width,height] of [[1440,960],[1280,640],[390,844]]){
     await page.setViewportSize({width,height})
     await detail.getByRole('button',{name:'预览 立体动画',exact:true}).click()
@@ -123,13 +137,14 @@ try {
     await detail.getByRole('button',{name:'返回预设',exact:true}).click()
   }
   await close();await page.reload();await open('style')
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).innerText(),long)
   await close()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
   await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
-  await observer.locator('[data-card-id="style"]').getByRole('button',{name:'查看设计',exact:true}).click()
+  await observer.locator('[data-card-id="style"]').press('Enter')
   const rd=observer.locator('.wb-details:visible')
+  assert.equal(await rd.getByRole('textbox',{name:'风格方向内容',exact:true}).isVisible(),true,'read-only opens the same mode')
+  await rd.getByRole('button',{name:'返回预设',exact:true}).click()
   await rd.getByRole('button',{name:'预览 手绘水彩',exact:true}).click()
   await rd.getByRole('button',{name:'对比 立体动画',exact:true}).click()
   assert.equal(await rd.getByRole('button',{name:'应用'}).isDisabled(),true)
@@ -138,5 +153,40 @@ try {
   const revision=(await read()).revision;await observer.keyboard.press('Escape');await rd.waitFor({state:'hidden'})
   assert.equal((await read()).revision,revision)
   await observer.close()
+  await open('style')
+  const watercolor = [
+    ['风格方向', '手绘水彩'], ['视觉特征', '柔和边缘、半透明叠色、自然晕染'],
+    ['材质倾向', '水彩颜料与纸张颗粒'], ['色彩倾向', '低饱和青绿与暖色点缀'],
+  ]
+  for (const label of [...watercolor.map(([label])=>label), '自定义说明']) {
+    await detail.getByRole('textbox',{name:label+'内容',exact:true}).fill('')
+  }
+  await poll(s=>Object.values(s.document.cards.find(c=>c.id==='style').fields).every(field=>!field.text))
+  assert.equal(await detail.getByRole('button',{name:'返回预设',exact:true}).isVisible(),true,'clearing design retains the open parameter session')
+  await close();await open('style')
+  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  for (const [label,value] of watercolor) await detail.getByRole('textbox',{name:label+'内容',exact:true}).fill(value)
+  await poll(s=>s.document.cards.find(c=>c.id==='style').fields.colors.text==='低饱和青绿与暖色点缀')
+  assert.equal(await detail.getByRole('button',{name:'返回预设',exact:true}).isVisible(),true,'matching a preset retains the open parameter session')
+  await close();await open('style')
+  assert.equal(await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).getAttribute('aria-pressed'),'true','handwritten design matches the preset')
+  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).fill('另一种方向')
+  await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text==='另一种方向')
+  await detail.getByRole('button',{name:'撤销',exact:true}).click()
+  await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text==='手绘水彩')
+  await close();await open('style')
+  assert.equal(await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).getAttribute('aria-pressed'),'true','undo restores the matched entry')
+  await open('auxiliary')
+  await detail.getByRole('button',{name:'预览 有限发挥',exact:true}).waitFor()
+  await open('continuity')
+  assert.equal(await detail.getByRole('combobox',{name:'连续性分类',exact:true}).isVisible(),true,'matched category and constraint with extra design open parameters')
+  await detail.getByRole('button',{name:'返回预设',exact:true}).click()
+  await detail.getByText('自定义配置',{exact:true}).waitFor()
+  for (const [id,label] of [['fact','不可改事实'],['dialogue','对白正文'],['anchor','位置']]) {
+    await open(id)
+    await detail.getByRole('textbox',{name:label+'内容',exact:true}).waitFor()
+    assert.equal(await detail.getByRole('button',{name:/高级设置|返回预设/}).count(),0)
+  }
   console.log('A parameters, previews, conflict disclosure, atomic undo, session boundaries, read-only and responsive layouts passed:',output)
 } finally { await cleanup() }

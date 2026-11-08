@@ -9,6 +9,7 @@ import { MovementPhaseTabs } from './MovementPhaseTabs'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions } from './photographyDesign'
 import { designSummary } from './designSummary'
+import { isDesignFieldConfigured } from './designFieldConfiguration'
 
 /** 阶段身份不随名称和顺序改变；删除只移除本卡画面，外部定位保留失效状态。 */
 export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document }: CardRendererProps) {
@@ -43,7 +44,8 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
     return () => { observer.disconnect(); region.style.removeProperty('--movement-frame-height') }
   }, [])
   const labels = photographyRegions.movement.fields
-  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
+  const additionalDesign = phases.some(phase => phase.name?.trim() || isDesignFieldConfigured({ ...phase.frame, source_locator: '' }))
+  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} additionalDesign={additionalDesign} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <section ref={keyframes} className="movement-keyframes design-stable-region" aria-label="运镜关键画面">
       <MovementPhaseTabs phases={phases} activeId={activeId} onSelect={setSelectedId} editorOpen={editorOpen} disabled={disabled} uses={uses} issues={(references?.issues || []).filter(issue => issue.field_id.startsWith('phase:')).map(issue => issue.field_id.slice(6))}
         onRename={(id, name) => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === id ? { ...phase, name } : phase) })}
