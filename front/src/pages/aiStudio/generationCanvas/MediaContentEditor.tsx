@@ -5,7 +5,7 @@ import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchB
 import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
-import './imageContentEditor.css'
+import { ImageContentReader } from './ImageContentReader'
 
 export type MediaCard = ImageContentCard | VideoContentCard | AudioContentCard
 export type MediaContentEditorProps = {
@@ -36,28 +36,12 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
   const [refresh, setRefresh] = useState(0)
   const [releasing, setReleasing] = useState<string>()
   const [uploading, setUploading] = useState(false)
-  const [fileInfo, setFileInfo] = useState<FileRead>()
-  const [readingFile, setReadingFile] = useState(false)
-  const [imageSize, setImageSize] = useState<{ id: string; width: number; height: number }>()
-  const [imageState, setImageState] = useState<{ id: string; state: 'loaded' | 'failed' }>()
   const latest = useRef({ card, onChange })
   latest.current = { card, onChange }
   const operation = useRef(0)
   const libraryRequest = useRef(0)
   const type = card.type?.split('.')[1] || 'image'
   useEffect(() => () => { operation.current++; libraryRequest.current++ }, [projectId, card.id])
-
-  // Read current file identity through the existing API; dimensions come from the loaded image.
-  useEffect(() => {
-    if (type !== 'image' || !card.file_id) return
-    let active = true
-    setReadingFile(true)
-    StudioFilesService.getFileDetailApiV1StudioFilesFileIdGet({ fileId: card.file_id })
-      .then(response => { if (active) setFileInfo(response.data || undefined) })
-      .catch(() => { if (active) setFileInfo(undefined) })
-      .finally(() => { if (active) setReadingFile(false) })
-    return () => { active = false }
-  }, [type, card.file_id])
 
   const upload = async (file: File) => {
     if (disabled || uploading) return
@@ -104,34 +88,16 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
     <WorkbenchButton icon={<UploadOutlined />} disabled={disabled || uploading} loading={uploading} onClick={() => input.current?.click()}>{empty ? '上传图片' : '替换图片'}</WorkbenchButton>
     <WorkbenchButton variant="quiet" icon={<PlusOutlined />} disabled={disabled || uploading} onClick={openLibrary}>{empty ? '从素材中选择' : '选择素材'}</WorkbenchButton>
   </div>
-  const currentInfo = fileInfo?.id === card.file_id ? fileInfo : undefined
-  const currentSize = imageSize?.id === card.file_id ? imageSize : undefined
-  const currentImage = imageState?.id === card.file_id ? imageState?.state : undefined
+  const imageReadonly = disabled && <small>只读，无法上传或替换图片</small>
   return <Space direction="vertical" style={{ width: '100%' }}>
-    {type === 'image' ? <section className="generation-image-content" data-empty={!card.file_id} data-portrait={!!currentSize && currentSize.height > currentSize.width} aria-label="图片内容编辑">
+    {type === 'image' ? (card.file_id ? <ImageContentReader key={card.file_id} fileId={card.file_id} origin={card.origin}>
+      {imageActions()}
+      {imageReadonly}
+    </ImageContentReader> : <section className="generation-image-content" data-empty={true} data-portrait={false} aria-label="图片内容编辑">
       <div className="generation-image-preview">
-        {card.file_id ? <>
-          <img alt="图片预览" src={buildFileDownloadUrl(card.file_id)} onLoad={event => {
-            const image = event.currentTarget
-            setImageSize({ id: card.file_id!, width: image.naturalWidth, height: image.naturalHeight })
-            setImageState({ id: card.file_id!, state: 'loaded' })
-          }} onError={() => setImageState({ id: card.file_id!, state: 'failed' })} />
-          {!currentImage && <small role="status">图片加载中</small>}
-          {currentImage === 'failed' && <small role="status">图片暂不可预览，文件仍保留</small>}
-        </> : <div className="generation-image-empty"><PictureOutlined aria-hidden /><strong>添加一张图片</strong>{imageActions(true)}{disabled && <small>只读，无法上传或替换图片</small>}</div>}
+        <div className="generation-image-empty"><PictureOutlined aria-hidden /><strong>添加一张图片</strong>{imageActions(true)}{imageReadonly}</div>
       </div>
-      {card.file_id && <div className="generation-image-file-info">
-        <strong title={currentInfo?.name}>{currentInfo?.name || (card.file_id ? readingFile ? '读取文件信息…' : '文件信息不可用' : '尚未选择图片')}</strong>
-        {card.file_id && <dl>
-          <dt>尺寸</dt><dd>{currentSize?.width && currentSize.height ? `${currentSize.width} × ${currentSize.height}` : '未知'}</dd>
-          <dt>类型</dt><dd>图片</dd>
-          <dt>来源</dt><dd>{card.origin ? '运行成果副本' : '项目文件'}</dd>
-        </dl>}
-        {card.origin && <small>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</small>}
-        {imageActions()}
-        {disabled && <small>只读，无法上传或替换图片</small>}
-      </div>}
-    </section> : <>
+    </section>) : <>
       {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
       {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
       {actions}

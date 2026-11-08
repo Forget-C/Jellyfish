@@ -51,6 +51,7 @@ try {
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const control = async body => (await fetch(`${api}/test/image-controls`, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
   const runtime = async () => (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data
+  const readDocument = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const start = async () => {
     await card.getByRole('button', { name: '预检运行', exact: true }).click()
     const received = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
@@ -92,7 +93,22 @@ try {
   const resultImage = result.getByRole('img', { name: '图片预览', exact: true })
   const previousFile = await resultImage.getAttribute('src')
   const originalResultBox = await box(result)
+  assert.deepEqual([originalResultBox.width, originalResultBox.height], [300, 251])
   await closeCanvasDetails(page)
+  const beforeReading = await readDocument()
+  await result.getByRole('button', { name: '打开完整图片', exact: true }).click()
+  const fullPreview = page.getByRole('dialog', { name: '图片预览', exact: true })
+  await fullPreview.getByRole('img', { name: '完整图片', exact: true }).waitFor()
+  assert.equal(await card.getByRole('region', { name: '图片内容阅读', exact: true }).count(), 0)
+  await fullPreview.getByRole('button', { name: 'Close', exact: true }).click()
+  await fullPreview.waitFor({ state: 'hidden' })
+  await resultImage.click()
+  await card.getByRole('region', { name: '图片内容阅读', exact: true }).waitFor()
+  await card.getByText('生成结果', { exact: true }).waitFor()
+  assert.equal(await card.getByRole('img', { name: '图片预览', exact: true }).getAttribute('src'), previousFile)
+  assert.equal(await card.getByRole('button', { name: /替换图片|选择素材|上传图片/ }).count(), 0)
+  await closeCanvasDetails(page)
+  assert.deepEqual(await readDocument(), beforeReading, 'reading and previewing a result leave the canvas document intact')
   await result.getByRole('button', { name: '移动布局：图片生成结果 1' }).press('ArrowDown')
   const moved = await box(result)
   assert.equal(parseFloat(moved.top), parseFloat(originalResultBox.top) + 10)
@@ -127,11 +143,17 @@ try {
   await card.getByRole('alert').filter({ hasText: 'submission_failed' }).waitFor()
   assert.equal(await resultImage.getAttribute('src'), previousFile, 'a failed generation keeps the last formal result')
   assert.deepEqual(await box(result), moved)
+  await control({ response_delay: 1.6 })
   await start()
+  await result.press('Enter')
+  const readingImage = card.getByRole('img', { name: '图片预览', exact: true })
+  await readingImage.waitFor()
   await page.waitForFunction(previous => {
     const node = document.querySelector('[aria-label="图片生成结果 1"] img')
     return node?.getAttribute('src') !== previous
   }, previousFile)
+  assert.equal(await readingImage.getAttribute('src'), await resultImage.getAttribute('src'), 'open reader follows the same output position')
+  await control({})
   assert.equal(await resultCards.count(), 3)
   assert.deepEqual(await box(result), moved)
 
@@ -146,6 +168,13 @@ try {
   await observer.getByText('此画布当前只读', { exact: true }).waitFor()
   await observer.locator('[data-card-id="m"]').press('Enter')
   assert.equal(await observer.getByRole('switch', { name: '显示结果卡', exact: true }).isDisabled(), true)
+  await closeCanvasDetails(observer)
+  await observer.setViewportSize({ width: 390, height: 844 })
+  await observer.route(/\/api\/v1\/studio\/files\/[^/]+\/download$/, route => route.abort())
+  await observer.getByRole('article', { name: '图片生成结果 1', exact: true }).press('Enter')
+  const mobileReading = observer.getByRole('dialog', { name: '图片生成结果 1', exact: true })
+  await mobileReading.getByText('图片暂不可预览，文件仍保留', { exact: true }).waitFor()
+  await mobileReading.getByText('生成结果', { exact: true }).waitFor()
   await observer.close()
 
   await closeCanvasDetails(page)
@@ -202,7 +231,12 @@ try {
     assert.equal((await runtime()).current_outputs.m?.length, count)
   }
   await changeCount(2)
-  await page.getByRole('article', { name: '图片生成结果 3' }).getByText('当前输出缺失').waitFor()
+  const missingResult = page.getByRole('article', { name: '图片生成结果 3', exact: true })
+  await missingResult.getByText('当前输出缺失').waitFor()
+  await missingResult.press('Enter')
+  await card.getByText('当前输出缺失', { exact: true }).waitFor()
+  assert.equal(await card.getByRole('img', { name: '图片预览', exact: true }).count(), 0)
+  await closeCanvasDetails(page)
   assert.deepEqual(await positions('consumer'), [[0, true], [2, false]])
   await changeCount(4)
   await page.getByRole('article', { name: '图片生成结果 4' }).waitFor()
@@ -238,7 +272,6 @@ try {
   await page.screenshot({ path: join(output, 'result-display-mobile.png'), fullPage: true })
   await closeCanvasDetails(page)
   await page.setViewportSize({ width: 1440, height: 1000 })
-  const readDocument = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const setup = await readDocument()
   const identity = { canvas_id: canvas.id, card_id: 'm', port_id: 'image', position: 0 }
   for (const [id, scope] of [['consumer', { mode: 'except', positions: [1] }], ['single', { mode: 'only', positions: [0, 1] }]]) {
