@@ -38,11 +38,18 @@ VIDEO_PRODUCT_INSTRUCTIONS = (
     '没有足够的有序画面证据、触发条件不可见或样本之间发生什么无法确认时，返回 indeterminate。'
     'evidence_kind 为 camera_path 时，核对可见的运镜方向、触发、速度或中间阶段。区分镜头移动和对象自身移动。仅有起幅与落幅不足以核对路径，阶段名称不是时间码。'
     'evidence_kind 为 continuity 时，仅核对本片段中的可见前态、过程和后态。遮挡不代表消失，也不能确认遮挡期间状态保持。'
-    '上述两类还须返回 moments，包含 before、during、after 三个 phase 的 at_ms 和具体画面描述 description。'
+    '上述两类的每项结果须单列 moments 数组，元素形如 {"phase":"before","at_ms":500,"description":"具体画面"}。'
+    '依次提供 before、during、after 三个元素。evidence_start_ms 和 evidence_end_ms 分别给整个证据区间的起止毫秒数。'
     '对于 continuity，visibility 必须说明关键过程为 visible、occluded 或 unknown。'
     '未观察到的部分不能据此判缺失。自然度、情绪效果、提议或艺术偏好只作风险建议。不要判断声音、对白或声画同步。'
     '只返回一个 JSON 对象，results 对每项给 item_id、outcome（conforming、nonconforming、risk 或 indeterminate）、'
-    'message、visible_evidence、evidence_start_ms、evidence_end_ms；证据不足时后三项可填 null。'
+    'message、visible_evidence、evidence_start_ms、evidence_end_ms。即使判为不符合，也需要填写可见证据与起止时间。'
+    '仅在无法定位证据时填 null 并返回 indeterminate。visible_evidence 是摘要字符串，不能用 moments 或对象代替。'
+    '过程项的字段示例（内容与时间须以实际视频为准）：'
+    '{"item_id":"原项目编号","outcome":"conforming","message":"核对理由","visible_evidence":"可见特征摘要",'
+    '"evidence_start_ms":500,"evidence_end_ms":2500,"visibility":"visible","moments":['
+    '{"phase":"before","at_ms":500,"description":"前态"},{"phase":"during","at_ms":1500,"description":"过程"},'
+    '{"phase":"after","at_ms":2500,"description":"后态"}]}。'
 )
 
 

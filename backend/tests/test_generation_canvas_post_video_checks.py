@@ -18,7 +18,8 @@ from tests.test_generation_canvas_runs import runtime  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime, image_storage, tmp_path, monkeypatch):
+@pytest.mark.parametrize('check_model', ['qwen3-vl-plus', 'qwen3.8-omni-flash'])
+async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime, image_storage, tmp_path, monkeypatch, check_model):
     if not (shutil.which('ffmpeg') and shutil.which('ffprobe')):
         pytest.skip('ffmpeg and ffprobe required')
     original = tmp_path / 'original.mp4'
@@ -33,7 +34,7 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
         db.add(Provider(id='vision-provider', name='aliyun_bailian', api_key='vision-secret',
                         base_url='https://vision.test/compatible-mode/v1'))
         await db.flush()
-        db.add(Model(id='video-check', name='qwen3-vl-plus', provider_id='vision-provider', category='text'))
+        db.add(Model(id='video-check', name=check_model, provider_id='vision-provider', category='text'))
         db.add(Model(id='image-check', name='qwen3-vl-flash', provider_id='vision-provider', category='text'))
 
     client, url = runtime.client, runtime.url
@@ -72,12 +73,21 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
                 rgb = subprocess.check_output(['ffmpeg', '-v', 'error', '-ss', at, '-i', str(submitted),
                                                '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'])
                 assert rgb[channel] > 200 and rgb[2 - channel] < 20
+            reply = json.dumps({'results': [{
+                'item_id': row['item_id'], 'outcome': 'conforming', 'message': '看见可定位的动作变化',
+                'visible_evidence': '开头红色区域，随后切换为蓝色',
+                'evidence_start_ms': 500, 'evidence_end_ms': 2000 if row['field_id'] == 'activity' else 4000,
+            } for row in context['requirements']]})
+            if check_model == 'qwen3.8-omni-flash':
+                assert body['model'] == check_model and body['stream'] is True and body['modalities'] == ['text']
+                assert body['response_format'] == {'type': 'json_object'} and body['reasoning_effort'] == 'none'
+                chunks = [{'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': part},
+                                        'finish_reason': None}]}
+                          for part in (reply[:len(reply) // 2], reply[len(reply) // 2:])]
+                events = ''.join(f'data: {json.dumps(chunk)}\n\n' for chunk in chunks)
+                return httpx.Response(200, text=events + 'data: [DONE]\n\n', headers={'Content-Type': 'text/event-stream'})
             return httpx.Response(200, json={'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
-                'role': 'assistant', 'content': json.dumps({'results': [{
-                    'item_id': row['item_id'], 'outcome': 'conforming', 'message': '看见可定位的动作变化',
-                    'visible_evidence': '开头红色区域，随后切换为蓝色',
-                    'evidence_start_ms': 500, 'evidence_end_ms': 2000 if row['field_id'] == 'activity' else 4000,
-                } for row in context['requirements']]}),
+                'role': 'assistant', 'content': reply,
             }}]})
         if request.method == 'POST':
             return httpx.Response(200, json={'id': 'remote-video'})

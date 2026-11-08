@@ -17,7 +17,9 @@ from app.models.studio import FileItem, FileUsage
 from app.services.directing.media import extract_boundary_frame, probe_duration
 
 
-_IMAGE_MODELS = frozenset({'qwen3-vl-plus', 'qwen3-vl-flash'})
+OMNI_CHECK_MODEL = 'qwen3.8-omni-flash'
+_VIDEO_MODELS = frozenset({'qwen3-vl-plus', OMNI_CHECK_MODEL})
+_IMAGE_MODELS = _VIDEO_MODELS | {'qwen3-vl-flash'}
 _IMAGE_PREFIX = {'image/png': b'\x89PNG\r\n\x1a\n', 'image/jpeg': b'\xff\xd8\xff', 'image/webp': b'RIFF'}
 _MAX_IMAGE_BYTES = 7 * 1024 * 1024
 _MAX_VIDEO_BYTES = 32 * 1024 * 1024
@@ -31,8 +33,8 @@ def supports_check_image(model: FrozenGenerationConfig | None) -> bool:
 
 
 def supports_check_video(model: FrozenGenerationConfig | None) -> bool:
-    """Connect only the documented Bailian model used for video-file input."""
-    return bool(model and model.provider_key == 'aliyun_bailian' and model.model_name == 'qwen3-vl-plus')
+    """Only the connected Bailian video-file routes may inspect continuous video."""
+    return bool(model and model.provider_key == 'aliyun_bailian' and model.model_name in _VIDEO_MODELS)
 
 
 async def owned_check_files(db, project_id, file_ids, *, lock=False) -> dict[str, FileItem]:
