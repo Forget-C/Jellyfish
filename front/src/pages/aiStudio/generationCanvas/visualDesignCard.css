@@ -11,7 +11,7 @@
 .visual-design-empty p { color: var(--wb-muted); font-size: 12px; }
 .visual-design-empty strong { font-size: 13px; }
 .visual-design-empty p { margin: 8px 0 0; }
-.visual-design-card[data-summary-only="true"] dl { display: grid; gap: 8px; line-height: 1.5; }
+.visual-design-card[data-summary-only="true"] dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; line-height: 1.5; }
 .visual-design-card[data-summary-only="true"] dd {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--design-summary-lines, 1);
   white-space: normal; overflow-wrap: anywhere;
