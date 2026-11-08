@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckReportRead } from '../../../services/generated'
+import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckReportRead, ModelRead } from '../../../services/generated'
 import { CheckRecheckForm } from './CheckRecheckForm'
 import type { RecheckContext } from './CheckRecheckForm'
 import { HistoricalCheckProduct } from './PostCheckPanel'
@@ -30,28 +30,30 @@ export function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label:
   </details>
 }
 
-export function CheckReportDetails({ report, applicability, retry, recheck }: {
+export function CheckReportDetails({ report, applicability, retry, recheck, itemId, models }: {
+  itemId?: string
+  models?: ModelRead[]
   report: CanvasCheckReportRead
   applicability?: (item: CanvasCheckItem | undefined) => string
   retry?: (itemId: string) => ReactNode
   recheck?: RecheckContext
 }) {
   return <>
-    <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
-      {report.enabled_item_ids != null && ` · 执行时启用 ${report.enabled_item_ids.length} 项`}
-      {report.check_model_id && ` · 检查模型 ${report.check_model_id}`}</p>
+    {!itemId && <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
+      {report.enabled_item_ids !== null && report.enabled_item_ids !== undefined && ` · 执行时启用 ${report.enabled_item_ids.length} 项`}
+      {report.check_model_id && ` · 检查模型 ${models?.find(model => model.id === report.check_model_id)?.name || report.check_model_id}`}</p>}
     {report.recheck && <details>
       <summary>原报告复核 · {report.recheck.report_id}</summary>
       <p>原结论 {outcomes[report.recheck.original_result.outcome]} · {report.recheck.original_result.message}</p>
       <p>本次复核说明 {report.recheck.clarification}</p>
     </details>}
-    {report.automatic && <p>完整交付后自动检查</p>}
-    {report.product && <HistoricalCheckProduct product={report.product} />}
+    {!itemId && report.automatic && <p>完整交付后自动检查</p>}
+    {!itemId && report.product && <HistoricalCheckProduct product={report.product} />}
     {!!report.executions?.length && <ul aria-label="模型检查执行状态">
-      {report.executions.map(execution => {
+      {report.executions.filter(execution => !itemId || execution.item_id === itemId).map(execution => {
         const item = report.items.find(row => row.id === execution.item_id)
         return <li key={execution.item_id}>
-          {item && <span>{item.source.card_id}/{item.field_id} · </span>}
+          {item && <span>{item.label} · </span>}
           <span role="status">{execution.status === 'running' && execution.cancel_requested
             ? '已请求取消，等待执行结束' : executionStates[execution.status]}</span>
           {execution.reason && ` · ${execution.reason}`}
@@ -59,16 +61,16 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
         </li>
       })}
     </ul>}
-    {report.results.map(result => {
+    {report.results.filter(result => !itemId || result.item_id === itemId).map(result => {
       const item = report.items.find(row => row.id === result.item_id)
       return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
         {report.product ? <p>此结论仅适用于固定历史产物</p> : applicability && <p role="status">{applicability(item)}</p>}
-        {item && <p>{item.label} · 来源 {item.source.card_id}/{item.field_id} · {item.requirement}</p>}
+        {item && <><p>本报告要求 · {item.label} · {item.requirement}</p><details><summary>历史来源身份</summary><p>{item.source.card_id} / {item.field_id}</p></details></>}
         {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
         <p>{result.message}</p>
         {!!result.text_evidence?.length && <ul aria-label="要求证据">
           {result.text_evidence.map(evidence => <li key={`${evidence.source.card_id}:${evidence.field_id}`}>
-            <p>来源 {evidence.source.card_id}/{evidence.field_id}</p>
+            <details><summary>证据来源</summary><p>{evidence.source.card_id} / {evidence.field_id}</p></details>
             <blockquote>{evidence.excerpt}</blockquote>
           </li>)}
         </ul>}
@@ -76,7 +78,7 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
         {!!result.observed_media?.length && <ul aria-label="本轮观察素材">
           {result.observed_media.map((media, index) => <li key={index}>
             {media.video_range ? `提交视频区间 ${media.video_range.start_ms}–${media.video_range.end_ms} 毫秒 · 请求 ${media.video_range.sampling_fps} 帧/秒`
-              : media.frame_at_ms != null ? `视频静帧 ${media.frame_at_ms} 毫秒`
+              : media.frame_at_ms !== null && media.frame_at_ms !== undefined ? `视频静帧 ${media.frame_at_ms} 毫秒`
                 : media.modality === 'image' ? '已读取图片' : '已读取视频'} · {media.file_id}
             {media.evidence_range && <p>模型估计证据区间 {media.evidence_range.start_ms}–{media.evidence_range.end_ms} 毫秒</p>}
             {media.description && <span> · {media.description}</span>}
@@ -93,8 +95,8 @@ export function CheckReportDetails({ report, applicability, retry, recheck }: {
       </article>
     })}
     {!!report.omitted?.length && <ul aria-label="本轮未执行">
-      {report.omitted.map(item => <li key={item.item_id}>{item.label} · {item.source_card_id} · {item.reason}</li>)}
+      {report.omitted.filter(item => !itemId || item.item_id === itemId).map(item => <li key={item.item_id}>{item.label} · {item.source_card_id} · {item.reason}</li>)}
     </ul>}
-    <BasisDetails basis={report.basis} label="本报告固定依据" />
+    {!itemId && <BasisDetails basis={report.basis} label="本报告固定依据" />}
   </>
 }

@@ -93,7 +93,7 @@
 .generation-card-categories .wb-action { flex-shrink: 0; }
 .generation-card-categories .generation-director-category { margin-top: 12px; }
 .generation-card-categories [aria-pressed="true"] { background: var(--wb-selected); }
-.generation-card-list { position: absolute; left: 68px; top: 0; bottom: 0; margin-block: auto; height: fit-content; width: max-content; max-width: calc(100vw - 96px); max-height: min(620px, calc(100dvh - 180px)); display: grid; grid-template-columns: minmax(0, 1fr); overflow: auto; padding: 12px; box-sizing: border-box; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; scrollbar-gutter: stable; }
+.generation-card-list { position: absolute; left: 68px; top: 0; bottom: 0; margin-block: auto; height: fit-content; width: max-content; min-width: min(240px, calc(100vw - 100px)); max-width: calc(100vw - 100px); max-height: min(620px, calc(100dvh - 180px)); display: grid; grid-template-columns: minmax(0, 1fr); overflow: auto; padding: 12px; box-sizing: border-box; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; scrollbar-gutter: stable; }
 /* 搜索框跟随菜单宽度，不用原生输入框的默认字符宽度撑大菜单。 */
 .generation-card-list > .ant-input-affix-wrapper { min-width: 0; contain: inline-size; }
 .generation-card-list header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

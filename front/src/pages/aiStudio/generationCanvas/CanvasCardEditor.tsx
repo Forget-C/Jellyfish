@@ -55,7 +55,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
     }))
   }
   const modal = forceModal || expanded || !desktop
-  const anchoredHeightLimit = material ? 320 : 360
+  const anchoredHeightLimit = cardType === 'review.check' ? 560 : material ? 320 : 360
   const previousOpen = useRef(false)
   const lastModal = useRef(modal)
   const lastViewport = useRef({ width: window.innerWidth, height: window.innerHeight })
@@ -90,6 +90,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       if (!modal) {
         node.style.width = `${width}px`
         node.style.maxHeight = `${Math.min(anchoredHeightLimit, maxHeight)}px`
+        if (cardType === 'review.check') node.style.height = `${Math.min(anchoredHeightLimit, maxHeight)}px`
       }
       const height = Math.min(node.getBoundingClientRect().height || anchoredHeightLimit, anchoredHeightLimit, maxHeight)
       const left = box.left, top = box.bottom + 16
@@ -191,7 +192,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       else dismiss.current()
     }} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-preset-design={visualDesign} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: `min(${['direction.performance', 'direction.activity'].includes(cardType || '') ? 840 : 730}px, calc(100dvh - 2 * var(--design-editor-top)))`, maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-design-editor={visualDesign} data-preset-design={visualDesign} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, width:placement.width, height:cardType === 'review.check' ? Math.min(anchoredHeightLimit, placement.maxHeight) : undefined, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : visualDesign ? { top: 'var(--design-editor-top)', height: `min(${['direction.performance', 'direction.activity'].includes(cardType || '') ? 840 : 730}px, calc(100dvh - 2 * var(--design-editor-top)))`, maxHeight: 'calc(100dvh - 2 * var(--design-editor-top))', transform: 'translateX(-50%)' } : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading" data-name-editor={editableTitle}>{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}{editableTitle ? <div ref={setTitleHost} className="design-title-host" /> : <h2 title={title}>{title}</h2>}{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}

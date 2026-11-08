@@ -13,3 +13,67 @@
 .generation-check-category { display: grid; gap: 8px; }
 .generation-check-category > label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .generation-check-category > p { margin: 0; }
+
+/* 卡面使用有限尺寸；每行的文字和执行按钮分别拥有激活入口。 */
+.generation-card[data-card-type="review.check"] > .generation-card-body { padding: 12px; overflow: hidden; }
+.generation-check-face { display: flex; flex-direction: column; height: 100%; min-width: 0; gap: 8px; }
+.generation-check-face p { margin: 0; }
+.generation-check-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.generation-check-counts { font-size: 11px; line-height: 1.6; color: var(--wb-muted); min-height: 36px; }
+.generation-check-face-items { flex: 1; min-height: 0; }
+.generation-check-face-row { display: flex; gap: 8px; align-items: center; min-height: 44px; }
+.generation-check-face-row > .generation-check-item-link { flex: 1; min-width: 0; height: 44px; justify-content: flex-start; }
+.generation-check-item-link > span { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; width: 100%; }
+.generation-check-item-link span span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.generation-check-item-link .generation-check-status { font-size: 11px; }
+.generation-check-face-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.generation-check-face-reason { font-size: 11px; color: var(--wb-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.generation-check-post-link.wb-action { width: 100%; justify-content: flex-start; font-size: 11px; overflow: hidden; }
+.generation-check-post-link.wb-action > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 只调整检查卡容器；保留其他卡片的编辑、定位和视口规则。 */
+.generation-card-editor[data-card-type="review.check"] .wb-details-body { display: flex; flex-direction: column; min-height: 0; padding: 0 16px; overflow: hidden; }
+.generation-card-editor[data-card-type="review.check"] fieldset.generation-card-body { padding: 0; min-height: 0; flex: 1; display: flex; }
+.generation-card-editor[data-card-type="review.check"][data-expanded="true"] { height: min(800px, calc(100dvh - 64px)); }
+.generation-check-editor { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 12px; }
+.generation-check-settings { flex: none; display: grid; gap: 8px; }
+.generation-check-settings p { margin: 0; font-size: 12px; color: var(--wb-muted); }
+.generation-check-settings label { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+.generation-check-settings .ant-select { flex: 1; min-width: 0; }
+.generation-check-tabs { min-height: 0; }
+.generation-check-page { box-sizing: border-box; height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; padding: 4px 4px 16px; scrollbar-width: thin; }
+.generation-check-page > * { flex-shrink: 0; }
+.generation-check-intro { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; font-size: 11px; color: var(--wb-muted); }
+.generation-check-group { border-bottom: 1px solid var(--wb-border); padding-bottom: 8px; }
+.generation-check-group > summary { cursor: pointer; padding: 8px 0; font-size: 13px; }
+.generation-check-group > summary small { margin-left: 12px; font-size: 11px; color: var(--wb-muted); }
+.generation-check-category-toggle { display: flex; align-items: center; gap: 12px; font-size: 12px; padding: 8px 0; }
+.generation-check-item { border: 0; border-top: 1px solid var(--wb-border); border-radius: 0; padding: 8px 0; gap: 8px; }
+.generation-check-item-heading { display: flex; align-items: center; gap: 8px; }
+.generation-check-item-heading > span { flex-shrink: 0; font-size: 11px; }
+.generation-check-item-title.wb-action { flex: 1; min-width: 0; justify-content: flex-start; padding-inline: 0; }
+.generation-check-item-title.wb-action > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.generation-check-item-title .anticon { font-size: 12px; }
+.generation-check-item-body:not([hidden]) { display: grid; gap: 8px; }
+.generation-check-item summary { cursor: pointer; font-size: 13px; overflow-wrap: anywhere; }
+.generation-check-item details p, .generation-check-item-result { margin-top: 8px; }
+.generation-check-requirement { font-size: 14px; line-height: 1.8; }
+.generation-check-item-body label { margin: 8px 0; }
+.generation-check-item-result article, .generation-check-report article { border: 0; border-top: 1px solid var(--wb-border); border-radius: 0; padding: 12px 0; }
+.generation-check-item-result { display: grid; gap: 8px; }
+.generation-check-report .ant-select { flex: 1; min-width: 0; }
+.generation-check-report label { min-width: 0; }
+.generation-check-actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.generation-check-actions > div { min-width: 0; font-size: 12px; color: var(--wb-muted); overflow-wrap: anywhere; }
+.generation-check-actions small { display: block; }
+.generation-check-actions > .wb-action { flex-shrink: 0; }
+.generation-check-post-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border: 0; padding: 0; }
+.generation-check-post-scope label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+@media (max-width: 700px) {
+  .generation-check-item-heading { flex-wrap: wrap; }
+  .generation-check-item-heading > .wb-action:last-child { margin-left: auto; }
+  .generation-check-settings label { align-items: stretch; flex-direction: column; gap: 4px; }
+  .generation-check-settings .ant-select { flex: none; width: 100%; }
+  .generation-check-actions { flex-wrap: wrap; }
+  .generation-check-actions > .wb-action { margin-left: auto; min-height: 36px; }
+  .generation-check-post-scope { grid-template-columns: minmax(0, 1fr); }
+}
