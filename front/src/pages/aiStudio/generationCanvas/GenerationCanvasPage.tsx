@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Empty, Input, Popconfirm, Select, Space } from 'antd'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasRead, TextContentCard, ImageContentCard, VideoContentCard } from '../../../services/generated'
+import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -45,7 +45,12 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const canvasId = search.get('canvas')
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const editor = useGenerationCanvasEditor(projectId, canvasId)
-  const { current, document, edit, save, saving, dirty, ownership } = editor
+  const { current, document, edit, save, saving, dirty, ownership, configureCatalog: configureEditorCatalog } = editor
+  const catalog = useRef<CanvasCatalog>()
+  const configureCatalog = useCallback((value: CanvasCatalog) => {
+    catalog.current = value
+    configureEditorCatalog(value)
+  }, [configureEditorCatalog])
   const checkCardId = search.get('check')
   const checkReportId = search.get('report')
   const liveCheck = !!checkCardId && !!current?.document.cards?.some(card => card.id === checkCardId && card.type === 'review.check')
@@ -186,10 +191,10 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         // 预检操作容器解除底层 inert 后，再由详情定位真实编辑片段。
         if (pendingInspect.current) { setInspectTarget(pendingInspect.current); pendingInspect.current = undefined }
       }} open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
-        {runtime.preview && <RunPreview canvas={document || undefined} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), segmentId: target.segment_id || target.reference_id ? String(target.segment_id || target.reference_id) : undefined, diagnostic: target, serial: Date.now() }; setPreviewOpen(false) }} />}
+        {runtime.preview && <RunPreview canvas={document || undefined} catalog={catalog.current} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), diagnostic: target, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <GenerationCanvasGraph onCatalogReady={editor.configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
+      <GenerationCanvasGraph onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery}

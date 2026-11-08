@@ -12,11 +12,11 @@ export function ImageModelParameters({ card, capability, disabled, onChange }: P
   const resolutions = Object.keys(profiles[config.target_ratio || ''] || {})
   const supportsResolution = Object.values(profiles).some(values => Object.keys(values).length > 0)
   return <>
-    {ratios.length > 0 && <Select size="small" bordered={false} disabled={disabled} aria-label="图片画幅" value={config.target_ratio || 'default'}
+    {ratios.length > 0 && <Select size="small" bordered={false} disabled={disabled} aria-label="图片画幅" data-diagnostic-control="target_ratio" value={config.target_ratio || 'default'}
       options={[{ value: 'default', label: '默认画幅' }, ...options(ratios)]} onChange={value => onChange({ ...card, config: { ...config, target_ratio: value === 'default' ? null : value } })} />}
-    {supportsResolution && <Select size="small" bordered={false} disabled={disabled || !resolutions.length} aria-label="图片分辨率" placeholder="分辨率" title={!resolutions.length ? '先选择支持的画幅' : undefined} value={config.resolution_profile || 'default'}
+    {supportsResolution && <Select size="small" bordered={false} disabled={disabled || !resolutions.length} aria-label="图片分辨率" data-diagnostic-control="resolution_profile" placeholder="分辨率" title={!resolutions.length ? '先选择支持的画幅' : undefined} value={config.resolution_profile || 'default'}
       options={[{ value: 'default', label: '默认分辨率' }, ...options(resolutions)]} onChange={value => onChange({ ...card, config: { ...config, resolution_profile: value === 'default' ? null : value } })} />}
-    {typeof capability?.min_count === 'number' && typeof capability?.max_count === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label="图片数量" value={config.count ?? 1} min={capability.min_count} max={capability.max_count}
+    {typeof capability?.min_count === 'number' && typeof capability?.max_count === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label="图片数量" data-diagnostic-control="count" value={config.count ?? 1} min={capability.min_count} max={capability.max_count}
       formatter={value => `${value ?? ''} 张`} parser={value => Number(value?.replace(/[^\d]/g, ''))}
       onChange={value => onChange({ ...card, config: { ...config, count: value ?? 1 } })} />}
   </>
@@ -25,13 +25,13 @@ export function ImageModelParameters({ card, capability, disabled, onChange }: P
 export function VideoModelParameters({ card, capability, disabled, onChange }: Props<VideoModelCard>) {
   const config = card.config || {}
   return <>
-    <Select size="small" bordered={false} disabled={disabled} aria-label="视频画幅" placeholder="读取默认画幅" value={config.ratio || undefined} style={{ width: 100 }} options={options(capability?.ratios)}
+    <Select size="small" bordered={false} disabled={disabled} aria-label="视频画幅" data-diagnostic-control="ratio" placeholder="读取默认画幅" value={config.ratio || undefined} style={{ width: 100 }} options={options(capability?.ratios)}
       onChange={value => onChange({ ...card, config: { ...config, ratio: value ?? null } })} />
     <Select size="small" bordered={false} disabled={disabled} aria-label="视频时长模式" value={typeof config.seconds === 'number' ? 'custom' : 'default'} options={[{ value: 'default', label: '默认时长' }, { value: 'custom', label: '自定义时长' }]}
       onChange={value => onChange({ ...card, config: { ...config, seconds: value === 'default' ? null : Math.min(capability?.max_seconds ?? Infinity, Math.max(capability?.min_seconds ?? 1, 5)) } })} />
-    {typeof config.seconds === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label="视频时长（秒）" value={config.seconds} min={capability?.min_seconds ?? 1} max={capability?.max_seconds ?? undefined}
+    {typeof config.seconds === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label="视频时长（秒）" data-diagnostic-control="seconds" value={config.seconds} min={capability?.min_seconds ?? 1} max={capability?.max_seconds ?? undefined}
       onChange={value => onChange({ ...card, config: { ...config, seconds: value } })} />}
-    <details><summary>高级设置</summary><label>随机种子 <InputNumber aria-label="随机种子" value={config.seed} disabled={disabled || !capability?.supports_seed}
+    <details><summary>高级设置</summary><label>随机种子 <InputNumber aria-label="随机种子" data-diagnostic-control="seed" value={config.seed} disabled={disabled || !capability?.supports_seed}
       onChange={value => onChange({ ...card, config: { ...config, seed: value } })} /></label>
       {card.config?.seed !== undefined && card.config?.seed !== null && !capability?.supports_seed && <span role="alert">当前模型不支持已有随机种子，配置已保留</span>}
     </details>

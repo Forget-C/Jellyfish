@@ -105,7 +105,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const hasInput = adopted.length > 0 || (editorPrompt(card).segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())
   const submitDisabled = !!(disabled || busy || checking || runDisabled || !hasInput)
   const submit = () => { if (!submitDisabled) onPrecheck?.() }
-  const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
+  const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" data-diagnostic-control="model_id" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id })} />{parameters}</>
   const resultDisplay = <label className="generation-result-display"><Switch size="small" aria-label="显示结果卡" checked={!!card.show_result_cards} disabled={disabled}

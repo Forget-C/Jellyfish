@@ -99,7 +99,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
   const draw = (next: PromptDocument) => {
     if (!root.current) return
     root.current.replaceChildren(...(next.segments || []).map(segment => {
-      if (segment.kind === 'text') { const node = window.document.createElement('span'); node.dataset.textId = segment.id; if (segment.literal) node.dataset.literalText = 'true'; node.textContent = segment.text || ''; return node }
+      if (segment.kind === 'text') { const node = window.document.createElement('span'); node.dataset.textId = segment.id; node.dataset.segmentId = segment.id; if (segment.literal) node.dataset.literalText = 'true'; node.textContent = segment.text || ''; return node }
       const node = window.document.createElement('span'); node.contentEditable = 'false'; node.dataset.segment = JSON.stringify(segment); node.dataset.segmentId = segment.id
       node.className = 'generation-prompt-token'
       node.textContent = segment.kind === 'reference' ? label(segment) : `/${segment.command}`
@@ -296,7 +296,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} overlayClassName="canvas-workbench-dialog generation-prompt-popup" content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
       <span aria-hidden="true" style={{ position: 'fixed', pointerEvents: 'none', left: popupAnchor.left, top: popupAnchor.top, height: popupAnchor.height, width: 1 }} />
     </Popover>, window.document.body)}
-    <div ref={root} role="textbox" aria-label={fieldLabel} aria-describedby={fieldDescriptionId} aria-multiline="true" aria-readonly={disabled} aria-disabled={disabled} aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
+    <div ref={root} data-diagnostic-control="prompt" role="textbox" aria-label={fieldLabel} aria-describedby={fieldDescriptionId} aria-multiline="true" aria-readonly={disabled} aria-disabled={disabled} aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
       onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); refreshLabels(previous => previous + 1); updateQuery(); if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm(false, incomingCandidates) }}
       onInput={() => {
         root.current?.querySelectorAll('[data-prompt-caret]').forEach(node => node.remove())

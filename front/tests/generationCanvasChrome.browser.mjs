@@ -67,6 +67,10 @@ try {
   await page.locator('.generation-card-editor:visible').waitFor()
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '选择模型')
   await closeCanvasDetails(page)
+  const cardMenu = page.getByRole('button', { name: '卡片操作', exact: true })
+  await cardMenu.click()
+  await page.getByRole('button', { name: /^(取消)?选择卡片$/ }).press('Escape')
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '卡片操作')
   const issues = page.getByRole('button', { name: '查看卡片问题', exact: true })
   await issues.press('Enter')
   const issueList = page.getByRole('region', { name: '卡片问题', exact: true })
@@ -76,7 +80,11 @@ try {
   await closeCanvasDetails(page)
   await page.screenshot({ path: join(output, 'chrome-desktop.png'), animations: 'disabled' })
   const saved = (await (await fetch(`${base}/${id}`)).json()).data
-  const modelId = saved.document.cards.find(item => item.type === 'model.text').id
+  const model = saved.document.cards.find(item => item.type === 'model.text')
+  const modelId = model.id
+  const promptSegmentId = model.prompt.segments[0].id
+  const groupedCard = { id: 'grouped', type: 'direction.criterion', name: '编组内验收' }
+  const collapsed = { id: 'collapsed', name: '折叠编组', card_ids: [groupedCard.id], collapsed: true }
   const criterion = { id: 'criterion', type: 'direction.criterion', name: '手部可见' }
   const performance = { id: 'performance', type: 'direction.performance' }
   const source = { id: 'phase-source', type: 'content.text', text: '长廊中的手部动作' }
@@ -89,7 +97,7 @@ try {
   const edge = { id: 'phase-source-edge', source_card: source.id, source_port: 'text', target_card: movement.id, target_port: 'text' }
   const seeded = await fetch(`${base}/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request_id: 'diagnostic-targets', expected_revision: saved.revision, document: { ...saved.document, cards: [...saved.document.cards, criterion, performance, source, movement], edges: [...saved.document.edges, edge], input_order: { ...saved.document.input_order, [movement.id]: { text: [edge.id] } } } }),
+    body: JSON.stringify({ request_id: 'diagnostic-targets', expected_revision: saved.revision, document: { ...saved.document, cards: [...saved.document.cards, criterion, performance, source, movement, groupedCard], groups: [...(saved.document.groups || []), collapsed], edges: [...saved.document.edges, edge], input_order: { ...saved.document.input_order, [movement.id]: { text: [edge.id] } } } }),
   })
   assert.ok(seeded.ok, await seeded.text())
   await page.reload()
@@ -102,6 +110,10 @@ try {
       { code: 'PHASE_REVIEW', message: '需要核对阶段引用', severity: 'error', blocks: ['run'], target: { card_id: movement.id, path: ['phases', 'first', 'frame', 'document'], segment_id: 'phase-ref' } },
       { code: 'PHASE_GONE', message: '原阶段已删除', severity: 'warning', blocks: [], target: { card_id: movement.id, path: ['phases', 'deleted', 'frame', 'document'] } },
       { code: 'CARD_GONE', message: '原设计卡已删除', severity: 'warning', blocks: [], target: { card_id: 'deleted-design', path: ['fields', 'direction', 'document'] } },
+      { code: 'TEXT_REQUIRED', message: '请填写模型正文', severity: 'error', blocks: ['run'], target: { card_id: modelId, path: ['prompt'] } },
+      { code: 'PROMPT_SEGMENT', message: '请核对正文片段', severity: 'error', blocks: ['run'], target: { card_id: modelId, path: ['prompt', 'segments', promptSegmentId], segment_id: promptSegmentId } },
+      { code: 'UNKNOWN_PATH', message: '仅保留问题说明', severity: 'warning', blocks: [], target: { card_id: modelId, path: ['design_media_uses'], segment_id: promptSegmentId } },
+      { code: 'GROUPED_CARD', message: '请核对编组内名称', severity: 'warning', blocks: [], target: { card_id: groupedCard.id, path: ['name'] } },
       { code: 'GLOBAL_NOTE', message: '当前请求需要核实', severity: 'warning', blocks: [], target: {} },
     ]
     await route.fulfill({ response, json: payload })
@@ -112,7 +124,26 @@ try {
   const globalIssue = precheck.getByRole('alert').filter({ hasText: '当前请求需要核实' })
   await globalIssue.waitFor()
   assert.equal(await globalIssue.getByRole('button').count(), 0)
-  await closePrecheck(page)
+  const unsupported = precheck.getByRole('alert').filter({ hasText: '仅保留问题说明' })
+  assert.equal(await unsupported.getByRole('button').count(), 0, 'unknown path has no precheck action')
+  await precheck.getByRole('alert').filter({ hasText: '请填写模型正文' }).getByRole('button', { name: '定位问题', exact: true }).click()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '模型正文')
+  await closeCanvasDetails(page)
+  await page.locator(`[data-card-id="${modelId}"]`).getByRole('button', { name: '查看卡片问题', exact: true }).press('Enter')
+  await issueList.getByRole('button', { name: '定位模型正文', exact: true }).click()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '模型正文')
+  await closeCanvasDetails(page)
+  await page.locator(`[data-card-id="${modelId}"]`).getByRole('button', { name: '查看卡片问题', exact: true }).press('Enter')
+  assert.equal(await issueList.getByText('仅保留问题说明').locator('..').getByRole('button').count(), 0)
+  await issueList.getByRole('button', { name: '定位正文片段', exact: true }).click()
+  await page.waitForFunction(id => document.activeElement?.getAttribute('data-segment-id') === id, promptSegmentId)
+  await closeCanvasDetails(page)
+  await page.locator(`[data-card-id="${modelId}"]`).press('Enter')
+  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  await precheck.getByRole('alert').filter({ hasText: '请核对编组内名称' }).getByRole('button', { name: '定位问题', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '问题所指的卡片位于已折叠的编组内' }).waitFor()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-group-id') === 'collapsed')
+  assert.equal(await page.locator('[data-card-id="grouped"]').count(), 0)
   await closeCanvasDetails(page)
   await page.locator('[data-card-id="criterion"]').getByRole('button', { name: '查看卡片问题', exact: true }).press('Enter')
   await issueList.getByText('错误', { exact: true }).waitFor()
@@ -142,8 +173,10 @@ try {
   await closeCanvasDetails(page)
   await page.locator(`[data-card-id="${modelId}"]`).press('Enter')
   await page.getByRole('button', { name: '预检运行', exact: true }).click()
-  await precheck.getByRole('alert').filter({ hasText: '原设计卡已删除' }).getByRole('button', { name: '定位问题', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '问题所指的卡片已不可用' }).waitFor()
+  const deletedIssue = precheck.getByRole('alert').filter({ hasText: '原设计卡已删除' })
+  assert.equal(await deletedIssue.getByRole('button').count(), 0, 'a deleted card has no action')
+  await deletedIssue.getByText('问题所指的卡片已不可用', { exact: true }).waitFor()
+  await closePrecheck(page)
   assert.equal(await page.locator('[data-card-details="deleted-design"]').count(), 0)
   await closeCanvasDetails(page)
   const observer = await context.newPage()

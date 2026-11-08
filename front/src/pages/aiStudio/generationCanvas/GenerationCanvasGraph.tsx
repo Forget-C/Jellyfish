@@ -3,7 +3,7 @@ import { CardIssueIndicator } from './CardIssueIndicator'
 import { diagnosticAssociation, diagnosticEdgeId, diagnosticRelatedCards, isWholeCardDiagnostic } from './canvasRelationNavigation'
 import { AssociationInspectionContext } from './CanvasAssociations'
 import { CheckCardIssues } from './CheckCardIssues'
-import { diagnosticControl, diagnosticDesignField, duplicateDesignName, type CanvasInspectTarget } from './canvasDiagnosticNavigation'
+import { diagnosticCardAction, diagnosticControl, diagnosticDesignField, duplicateDesignName, type CanvasInspectTarget } from './canvasDiagnosticNavigation'
 import type { CanvasDiagnostic } from '../../../services/generated'
 import { CheckCardFace } from './CheckCardFace'
 import { designMediaSourcePorts } from './designSources'
@@ -216,7 +216,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   }, [accessibleConnection])
   const [diagnosticTarget, setDiagnosticTarget] = useState<CanvasInspectTarget>()
-  const inspectCardId = diagnosticTarget?.cardId, inspectSerial = diagnosticTarget?.serial, inspectSegmentId = diagnosticTarget?.segmentId
   useEffect(() => { setDiagnosticTarget(current => current?.cardId === detailId ? current : undefined) }, [detailId])
   const [designFieldTarget, setDesignFieldTarget] = useState<{ cardId: string; fieldId: string; serial: number }>()
   const navigateInspection = useRef<(cardId: string, target?: CanvasInspectTarget) => void>(() => undefined)
@@ -224,21 +223,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     if (inspectTarget) navigateInspection.current(inspectTarget.cardId, inspectTarget)
   }, [inspectTarget])
-  useEffect(() => {
-    if (!inspectCardId || !inspectSegmentId || inspectCardId !== detailId) return
-    const frame = requestAnimationFrame(() => {
-      const editor = window.document.querySelector<HTMLElement>(`[data-canvas-details="${CSS.escape(document.id)}"][data-card-details="${CSS.escape(inspectCardId)}"]`)
-      // Design fields own segment focus after their group or phase has been opened.
-      if (editor?.querySelector('.design-reference-owner')) return
-      const segment = editor?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(inspectSegmentId)}"]`)
-      if (segment && !segment.closest('[inert]')) {
-        segment.tabIndex = -1
-        segment.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-        segment.focus({ preventScroll: true })
-      }
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [inspectSerial, inspectCardId, inspectSegmentId, detailId, document.id])
   const latest = useRef(document); latest.current = document
   useEffect(() => {
     if (readonly) return
@@ -363,6 +347,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       clearSelection()
       setReason('请先解除堆叠后编辑')
       centerInspectionElement(`[data-stack-id="${CSS.escape(stack.id)}"]`)
+      return
+    }
+    const collapsedGroup = groups.find(group => group.collapsed && group.card_ids?.includes(cardId))
+    if (target && collapsedGroup) {
+      clearSelection()
+      setSelectedGroupId(collapsedGroup.id)
+      setReason('问题所指的卡片位于已折叠的编组内')
+      centerInspectionElement(`[data-group-id="${CSS.escape(collapsedGroup.id)}"]`)
       return
     }
     if (target?.diagnostic && isWholeCardDiagnostic(target.diagnostic)) {
@@ -1111,9 +1103,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return <AssociationInspectionContext.Provider key={detailCard.id} value={{
         request: associationRequest,
         onLocateFrameRelation: cardId => navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic: { card_id: cardId, path: ['frame_target'] } }),
-      }}><EditorContainer diagnosticFocus={control && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={isCheck || detailCard.type?.startsWith('direction.')} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
+      }}><EditorContainer diagnosticFocus={control?.selector && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={isCheck || detailCard.type?.startsWith('direction.')} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
         {!desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && detailCard.type !== 'review.check' && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
+        {control?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的正文片段已不可用。</div>}
         {designDestination?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的设计字段、运镜阶段或引用已不可用。</div>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
         {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={targetField} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
@@ -1380,7 +1373,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 48 : 0 }
           const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (cardSizes[id]?.width || 400) - origin.x + 16))
           const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (cardSizes[id]?.height || 350) - origin.y + 16))
-          return <section key={group.id} data-group-id={group.id} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
+          return <section key={group.id} data-group-id={group.id} tabIndex={-1} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
             if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
             const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
@@ -1474,7 +1467,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           }
           const openCheck = (trigger: HTMLElement) => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }
           const cardNode = hidden.has(card.id) ? null : <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger => openCardContext(card.id, trigger)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            issueIndicator={card.type === 'review.check' ? <CheckCardIssues diagnostics={issues} onOpen={openCheck} /> : issues.length > 0 && <CardIssueIndicator issues={issues} actionFor={issue => diagnosticEdgeId(issue.target) ? '定位连线' : diagnosticAssociation(card, issue.target) ? '定位关系' : isWholeCardDiagnostic(issue.target) ? '定位卡片' : diagnosticControl(card, issue.target)?.action || diagnosticDesignField(card, issue.target, cardDefinitions[card.type || '']?.fields || [])?.action}
+            issueIndicator={card.type === 'review.check' ? <CheckCardIssues diagnostics={issues} onOpen={openCheck} /> : issues.length > 0 && <CardIssueIndicator issues={issues} actionFor={issue => diagnosticCardAction(card, issue.target, cardDefinitions[card.type || '']?.fields || [])}
               relatedActionsFor={issue => diagnosticRelatedCards(issue.target).map((id, index) => {
                 const related = cards.find(item => item.id === id)
                 return related ? { id, label: `定位 ${('name' in related && related.name?.trim()) || cardTitles[related.type || ''] || '相关卡片'}`, target: { card_id: id, path: [] } }

@@ -1,7 +1,7 @@
 import { forwardRef } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Tooltip } from 'antd'
-import type { ButtonProps } from 'antd'
+import type { ButtonProps, TooltipProps } from 'antd'
 
 export type WorkbenchButtonProps = Omit<ButtonProps, 'type' | 'danger'> & {
   variant?: 'primary' | 'secondary' | 'quiet' | 'danger'
@@ -13,6 +13,6 @@ export const WorkbenchButton = forwardRef<HTMLElement, WorkbenchButtonProps>(fun
 })
 
 /** 纯图标操作必须有可读名称；tooltipOpen 允许确认浮层展开时收起重复提示，默认自动显示。 */
-export const WorkbenchIconButton = forwardRef<HTMLElement, Omit<WorkbenchButtonProps, 'children' | 'icon'> & { label: string; icon: ReactNode; tooltipOpen?: boolean }>(function WorkbenchIconButton({ label, tooltipOpen, className = '', ...props }, ref) {
-  return <Tooltip title={label} open={tooltipOpen}><span className="wb-icon-trigger"><WorkbenchButton {...props} ref={ref} aria-label={label} className={`wb-icon-action ${className}`} /></span></Tooltip>
+export const WorkbenchIconButton = forwardRef<HTMLElement, Omit<WorkbenchButtonProps, 'children' | 'icon'> & { label: string; icon: ReactNode; tooltipOpen?: boolean; tooltip?: ReactNode; tooltipTrigger?: TooltipProps['trigger'] }>(function WorkbenchIconButton({ label, tooltipOpen, tooltip = label, tooltipTrigger, className = '', ...props }, ref) {
+  return <Tooltip title={tooltip} trigger={tooltipTrigger} open={tooltipOpen}><span className="wb-icon-trigger"><WorkbenchButton {...props} ref={ref} aria-label={label} className={`wb-icon-action ${className}`} /></span></Tooltip>
 })
