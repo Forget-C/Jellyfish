@@ -10,6 +10,8 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
 - [从本场资产到单元试拍](/docs/guide/sequence-asset-to-shoot/)
 - [章节划分与场次版本](/docs/guide/chapter-and-scene-versions/)
+- [生成和管理资产图片](/docs/guide/asset-images/)
+- [使用生成实验室](/docs/guide/generation-labs/)
 
 相关文档已拆分到独立栏目：
 

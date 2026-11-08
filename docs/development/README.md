@@ -18,10 +18,12 @@
 ## 架构
 
 - [前端基础布局](architecture/frontend-layout.md)
+- [生成准备](architecture/generation-workspace.md)、[资产图片管理](architecture/asset-image-management.md)、[生成实验室](architecture/generation-labs.md)
 
 ## 开发指南
 
 - [贡献指南](guides/contributing.md)
+- [资产结构化切换](guides/structured-asset-switch.md)
 
 ## 审查依据
 

@@ -17,6 +17,11 @@ cascade:
 - [开发快速开始](/docs/getting-started/local-dev/)
 - [Docker 部署](/docs/getting-started/docker/)
 
+## 产品操作
+
+- [生成和管理资产图片](/docs/guide/asset-images/)
+- [使用生成实验室](/docs/guide/generation-labs/)
+
 ## 开发指南
 
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
