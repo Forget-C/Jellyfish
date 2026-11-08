@@ -3,7 +3,7 @@ import { CaretRightOutlined } from '@ant-design/icons'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, ConfigProvider, Input, Select, Switch, Tooltip, theme } from 'antd'
-import type { CanvasCheckReportRead, CheckCard } from '../../../services/generated'
+import type { CanvasCheckItem, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
 import { CanvasEditorFooter, CanvasEditorTitle } from './CanvasCardEditor'
@@ -59,7 +59,11 @@ export function CheckCardEditor() {
   if (card.check_model_id && !models.some(model => model.id === card.check_model_id)) modelOptions.push({ value: card.check_model_id, label: '已保存的模型暂不可用' })
   const visibleReports = reports.filter(report => filter === 'all' || (filter === 'post') === !!report.product)
   const selectedId = state.selectedReportId
+  const { reportSelection } = state
+  const selectedItemId = reportSelection?.itemId
   const report = selectedId ? visibleReports.find(row => row.id === selectedId) : visibleReports[0]
+  const hasReportItem = !selectedItemId || !!report?.items.some(item => item.id === selectedItemId)
+    || !!report?.omitted?.some(item => item.item_id === selectedItemId)
   const pending = state.currentPending
   const firstVisibleId = visibleReports[0]?.id
   const selectReport = state.setSelectedReportId
@@ -73,6 +77,13 @@ export function CheckCardEditor() {
     const page = owner.current?.querySelector<HTMLElement>('.ant-tabs-tabpane-active .canvas-editor-tab-page')
     if (page) page.scrollTop = scrollPositions.current[tab] ?? 0
   }, [tab, visible])
+  useLayoutEffect(() => {
+    if (reportSelection?.itemId) {
+      scrollPositions.current.history = 0
+      const page = owner.current?.querySelector<HTMLElement>('.ant-tabs-tabpane-active .canvas-editor-tab-page')
+      if (page) page.scrollTop = 0
+    }
+  }, [reportSelection])
 
   const targetItem = items.find(item => item.id === state.itemTarget?.id)
   useLayoutEffect(() => {
@@ -92,6 +103,9 @@ export function CheckCardEditor() {
   const applicability = (selected: CanvasCheckReportRead) => (item: typeof items[number] | undefined) => comparable
     ? checkApplicability(item, items.find(row => row.id === item?.id), selected.basis.target_card_id === basis?.target_card_id)
     : '待核对当前检查依据'
+  const sourceAction = (item: CanvasCheckItem, historical = false) => state.canLocateSource(item)
+    ? <Button size="small" variant="quiet" onClick={() => state.onLocateDesign?.(item.source.card_id, item.field_id)}>{historical ? '定位当前来源' : '定位来源'}</Button>
+    : <small>当前来源不可定位</small>
   const updateScope = (id: string, value: string) => {
     const notes = { ...card.scope_notes }
     if (value.trim()) notes[id] = value
@@ -105,6 +119,7 @@ export function CheckCardEditor() {
   const pre = <section className="canvas-editor-tab-page generation-check-page" aria-label="生成前检查">
     <div className="generation-check-intro"><span>仅核对本次采用的要求，结论供生成决策参考。</span><Button variant="quiet" size="small" disabled={loading || running || documentPending} onClick={state.refresh}>刷新检查依据</Button></div>
     {basis && <BasisDetails basis={basis} label="生成检查依据" />}
+    {state.itemTarget && !targetItem && !loading && <p role="status">指定检查项暂不可用</p>}
     {!items.length && <p>{state.reason || '当前没有适用检查项'}</p>}
     {categories.map(category => {
       const children = items.filter(item => item.category === category.id)
@@ -135,12 +150,12 @@ export function CheckCardEditor() {
               </div>
               <div className="generation-check-item-body" hidden={!expanded.includes(item.id)}>
                 <p className="generation-check-requirement">{item.requirement}</p>
-                <Button size="small" variant="quiet" onClick={() => state.onLocateDesign?.(item.source.card_id, item.field_id)}>定位来源</Button>
+                {sourceAction(item)}
                 {!enabled || !included(item.id) ? <p>未纳入整卡检查，仍可明确执行单项检查。</p> : null}
                 {item.availability === 'unavailable' && <p>{item.reason}</p>}
                 {item.scope_editable && <label>检查范围说明<Input.TextArea rows={2} maxLength={500} disabled={disabled || running} value={card.scope_notes?.[item.id] || ''} onChange={event => updateScope(item.id, event.currentTarget.value)} /></label>}
                 {previous && <div className="generation-check-item-result"><strong>最近检查结果</strong><CheckReportDetails report={previous} itemId={item.id} applicability={applicability(previous)} recheck={recheck} />
-                  <Button size="small" variant="quiet" onClick={() => state.openReport(previous.id)}>查看对应报告</Button></div>}
+                  <Button size="small" variant="quiet" onClick={() => state.openReport(previous.id, item.id)}>查看对应报告</Button></div>}
               </div>
             </div>
           })}
@@ -154,8 +169,11 @@ export function CheckCardEditor() {
     {report ? <>
       <ReportChanges report={report} />
       {reportPending(report) && <Button size="small" loading={cancelling} disabled={disabled || cancelling} onClick={() => void cancel(report.id)}>取消本轮检查</Button>}
-      <CheckReportDetails report={report} models={state.models} applicability={report.product ? undefined : applicability(report)} recheck={recheck}
+      {hasReportItem ? <CheckReportDetails report={report} itemId={selectedItemId} showContext active={visible && tab === 'history'} models={state.models} applicability={report.product ? undefined : applicability(report)} recheck={recheck}
+        sourceAction={item => sourceAction(item, true)}
         retry={id => !report.product && items.some(item => item.id === id && item.availability === 'ready') && <Button size="small" disabled={blocked} onClick={() => void run(id)}>重新检查此项</Button>} />
+        : <p role="status">指定报告条目暂不可用</p>}
+      {selectedItemId && <Button variant="quiet" onClick={() => selectReport(report.id)}>查看整份报告</Button>}
       {reports[0] && report.id !== reports[0].id && <Button variant="quiet" onClick={() => { setFilter('all'); state.openReport(reports[0].id) }}>查看最新报告</Button>}
     </> : <p role="status">{selectedId ? loading ? '正在读取指定报告' : '指定报告暂不可用' : '暂无此范围的检查记录'}</p>}
   </section>

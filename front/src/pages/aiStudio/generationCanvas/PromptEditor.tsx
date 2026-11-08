@@ -306,7 +306,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm()
       }} onMouseUp={updateQuery} onKeyUp={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) updateQuery() }}
       onKeyDown={event => {
-        if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
+        if (disabled || composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
         if (query && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(''); return }
         if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); const index = active ? selectable.indexOf(active) : event.key === 'ArrowDown' ? -1 : 0; const next = selectable[(index + (event.key === 'ArrowDown' ? 1 : -1) + Math.max(1, selectable.length)) % Math.max(1, selectable.length)]; setActiveKey(next ? sourceKey(next.source) : null); return }
         if (event.key === 'Enter' && (isMac ? event.metaKey : event.ctrlKey)) {
@@ -341,7 +341,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           if (query && active) { event.preventDefault(); insert({ id: crypto.randomUUID(), kind: 'reference', source: active.source }); return }
           if (confirm(true)) { event.preventDefault(); setQuery('') }
         }
-      }} onBlur={() => { confirm(true); requestAnimationFrame(() => { if (!root.current?.contains(window.document.activeElement)) setQuery('') }) }}
+      }} onBlur={() => { if (!disabled) confirm(true); requestAnimationFrame(() => { if (!root.current?.contains(window.document.activeElement)) setQuery('') }) }}
       onCopy={event => {
         const selection = window.getSelection(); if (!selection?.rangeCount) return
         const fragment = selection.getRangeAt(0).cloneContents(), box = window.document.createElement('div'); box.append(fragment)

@@ -18,6 +18,10 @@ export function DesignParameterTabs({ items, editorOpen }: { items: { key: strin
   const positions = useRef<Record<string, number>>({})
   const defaultKey = items[0].key
   useEffect(() => { if (editorOpen === false) { setActive(defaultKey); positions.current = {} } }, [editorOpen, defaultKey])
+  const targetGroup = items.find(item => references?.targetField && item.fields.includes(references.targetField.fieldId))?.key
+  useEffect(() => {
+    if (editorOpen !== false && targetGroup) setActive(targetGroup)
+  }, [editorOpen, targetGroup, references?.targetField?.serial])
   const [hint, setHint] = useState<string>()
   return <div ref={owner} className="design-parameter-tabs" onFocusCapture={event => {
     const tab = (event.target as HTMLElement).closest<HTMLElement>('.ant-tabs-tab')
