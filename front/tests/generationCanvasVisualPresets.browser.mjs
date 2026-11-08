@@ -128,7 +128,7 @@ try {
   await close()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
   await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
-  await observer.locator('[data-card-id="style"]').getByRole('button',{name:'查看设计',exact:true}).click()
+  await observer.locator('[data-card-id="style"]').locator('.generation-card-body').click()
   const rd=observer.locator('.wb-details:visible')
   await rd.getByRole('button',{name:'预览 手绘水彩',exact:true}).click()
   await rd.getByRole('button',{name:'对比 立体动画',exact:true}).click()

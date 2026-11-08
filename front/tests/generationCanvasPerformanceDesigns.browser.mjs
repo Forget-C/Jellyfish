@@ -130,7 +130,6 @@ try {
   const revision=(await read()).revision
   for(const[id,,label,preset]of cases){
     await observer.locator(`[data-card-id="${id}"]`).waitFor({state:'attached'})
-    assert.match(await observer.locator(`[data-card-id="${id}"]`).textContent(), /查看设计/)
     await observer.locator(`[data-card-id="${id}"]`).press('Enter')
     const readonly=observer.locator('.wb-details:not([hidden])')
     if(preset)await readonly.getByRole('button',{name:'高级设置',exact:true}).click()

@@ -76,11 +76,11 @@ try {
     assert.equal(saved.fields[other].document.segments.find(segment=>segment.kind==='reference').source.card_id,'brief')
   }
   await page.reload()
-  await page.locator('[data-card-id="style"]').getByRole('button',{name:'编辑设计',exact:true}).click()
+  await page.locator('[data-card-id="style"]').locator('.generation-card-body').click()
   await detail.getByRole('button',{name:'添加设计来源',exact:true}).click()
   await page.getByRole('menuitem',{name:'从当前画布选择',exact:true}).click()
   const picker=page.getByRole('dialog',{name:'选择画布来源',exact:true})
-  await picker.getByRole('button',{name:/· loose → 文本/}).click()
+  await picker.getByRole('button',{name:/· loose ·/}).click()
   await poll(s=>s.document.edges.some(edge=>edge.source_card==='loose'&&edge.target_card==='style'))
   await detail.getByRole('button',{name:'添加设计来源',exact:true}).click()
   await page.getByRole('menuitem',{name:/上传参考素材/}).hover()
