@@ -30,3 +30,9 @@
 - [任务系统](../agents/issue-tracker.md)
 - [分诊标签](../agents/triage-labels.md)
 - [领域文档位置](../agents/domain.md)
+
+## 章节划分与场次版本
+
+- [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
+- [章节划分架构](architecture/chapter-division.md)与[场次版本架构](architecture/scene-versions.md)
+- [接入章节划分历史](guides/chapter-division-history-import.md)与[身份参考存量整理](guides/identity-reference-cleanup.md)

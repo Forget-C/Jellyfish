@@ -13,7 +13,7 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
 - [AI 工作流](/docs/guide/ai-workflow/)
 - [从本场资产到单元试拍](/docs/guide/sequence-asset-to-shoot/)
-- [接入章节划分历史](/docs/guide/chapter-division-history-import/)
+- [章节划分与场次版本](/docs/guide/chapter-and-scene-versions/)
 - [LLM 供应商注册与扩展](/docs/guide/llm-provider-registration/)
 
 相关文档已拆分到独立栏目：

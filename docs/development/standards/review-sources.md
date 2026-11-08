@@ -9,7 +9,8 @@
 | 后端实现 | `site/content/docs/guide/backend.md` |
 | 前端实现与布局 | `site/content/docs/guide/frontend.md`、[前端基础布局](../architecture/frontend-layout.md) |
 | 对外接口、响应 schema 或客户端 | `site/content/docs/guide/openapi.md`、[接口同步规范](development.md#接口与文档同步) |
-| 场次领域、六岗、生产单元或版本 | `site/content/docs/architecture/directing-foundation.md` |
+| 章节划分与场次版本 | [章节划分架构](../architecture/chapter-division.md)、[场次版本架构](../architecture/scene-versions.md) |
+| 场次领域、六岗或生产单元 | `site/content/docs/architecture/directing-foundation.md` |
 | 工作台控件、主题、卡片或详情 | [工作台前端设计标准](workbench-design.md) |
 | graph、投影、导航、布局缓存或证据 | `site/content/docs/guide/canvas-graph.md` |
 | 测试、lint、CI 或运行入口 | `front/tests/README.md`、`front/package.json`、`.github/workflows/frontend-checks.yml`、`front/tests/browser-suites.json` |

@@ -38,7 +38,7 @@
 
 ## 场次工作台数据基础
 
-1. 仅涉及场次工作台时，按需读取 `site/content/docs/architecture/directing-foundation.md` 的相关章节；阶段进展与验收记录以对应计划文档为准。
+1. 仅涉及章节划分或场次版本时，按需读取[章节划分架构](docs/development/architecture/chapter-division.md)或[场次版本架构](docs/development/architecture/scene-versions.md)。场次生产与工作台其余边界见[场次核心架构](site/content/docs/architecture/directing-foundation.md)。
 2. 新场次数据统一通过 `app.services.directing.store.DirectingStore` 读写；不得绕过类型、项目归属、版本与文件引用校验直接更新 JSON。
 3. `Sequence` 表示故事场次，`Scene` 仍是场所资产。GenerationUnit 身份为生产计划版本与 unit_id，Take 不绑定唯一镜头。
 4. 已确认版本不可原地改写；预演预计时长和真实媒体区间、素材审查与剪辑采用必须分开。
