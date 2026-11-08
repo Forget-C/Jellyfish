@@ -40,7 +40,7 @@ export function RunPreview({ preview, canvas, submitting, disabled, onSubmit, on
     {!!preview.input.mapping?.length && <details><summary>实际使用来源及媒体对应关系</summary><pre>{JSON.stringify(preview.input.mapping, null, 2)}</pre></details>}
     {(preview.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
       message={`${diagnostic.code}: ${diagnostic.message}`} description={`阻止：${diagnostic.blocks.map(action => ({ run: '运行', save: '保存' }[action] || action)).join('、') || '无'}`}
-      action={<Button size="small" onClick={() => locate(diagnostic.target)}>定位问题</Button>} />)}
+      action={typeof diagnostic.target.card_id === 'string' || diagnostic.target.segment_id || diagnostic.target.reference_id ? <Button size="small" onClick={() => locate(diagnostic.target)}>定位问题</Button> : undefined} />)}
     {!!preview.automatic_checks?.length && <section aria-label="本次自动生成后检查">
       <h4>完整交付后自动检查</h4>
       {preview.automatic_checks.map(plan => <p key={plan.check_card_id}>

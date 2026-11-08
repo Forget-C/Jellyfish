@@ -1,4 +1,7 @@
 import { CheckCardSession } from './CheckCardSession'
+import { CardIssueIndicator } from './CardIssueIndicator'
+import { diagnosticControl, duplicateDesignName, type CanvasInspectTarget } from './canvasDiagnosticNavigation'
+import type { CanvasDiagnostic } from '../../../services/generated'
 import { CheckCardFace } from './CheckCardFace'
 import { designMediaSourcePorts } from './designSources'
 import { designSummary } from './designSummary'
@@ -74,7 +77,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string; reportId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument }: { history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
@@ -208,11 +211,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (!accessibleConnection) return
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   }, [accessibleConnection])
-  const inspectCardId = inspectTarget?.cardId, inspectSerial = inspectTarget?.serial, inspectSegmentId = inspectTarget?.segmentId
+  const [diagnosticTarget, setDiagnosticTarget] = useState<CanvasInspectTarget>()
+  const inspectCardId = diagnosticTarget?.cardId, inspectSerial = diagnosticTarget?.serial, inspectSegmentId = diagnosticTarget?.segmentId
+  useEffect(() => { setDiagnosticTarget(current => current?.cardId === detailId ? current : undefined) }, [detailId])
   const [designFieldTarget, setDesignFieldTarget] = useState<{ cardId: string; fieldId: string; serial: number }>()
-  const navigateInspection = useRef<(cardId: string) => void>(() => undefined)
+  const navigateInspection = useRef<(cardId: string, target?: CanvasInspectTarget) => void>(() => undefined)
   // Diagnostics navigate once per explicit request, using current stack/layout data without re-centering on every render.
-  useEffect(() => { if (inspectCardId) navigateInspection.current(inspectCardId) }, [inspectCardId, inspectSerial])
+  useEffect(() => {
+    if (inspectTarget) navigateInspection.current(inspectTarget.cardId, inspectTarget.diagnostic ? inspectTarget : undefined)
+  }, [inspectTarget])
   useEffect(() => {
     if (!inspectCardId || !inspectSegmentId || inspectCardId !== detailId) return
     const frame = requestAnimationFrame(() => {
@@ -305,7 +312,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     update: change => movementHost.current.layout.setView(change),
     record: (undo, redo) => movementHost.current.history?.record(undo, redo),
   }))
-  navigateInspection.current = (cardId: string) => {
+  navigateInspection.current = (cardId: string, target?: CanvasInspectTarget) => {
+    setDiagnosticTarget(target)
+    if (target && !cards.some(card => card.id === cardId)) { setReason('问题所指的卡片已不可用'); return }
     if (stackFor(cardId)) {
       setReason('请先解除堆叠后编辑'); setDetailId(undefined); setSelected([])
       requestAnimationFrame(() => {
@@ -1029,6 +1038,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
   const renderEditor = (detailCard: GenerationCard) => {
+      const diagnostic = diagnosticTarget?.cardId === detailCard.id ? diagnosticTarget.diagnostic : undefined
+      const control = diagnostic && diagnosticControl(detailCard, diagnostic)
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
       const observedTarget = detailCard.type === 'review.check'
@@ -1041,11 +1052,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const isCheck = detailCard.type === 'review.check'
       const longForm = isCheck || detailCard.type === 'direction.performance' || detailCard.type === 'direction.activity'
       const showEditorStatus = !(isCheck || isReferenceDesign(detailCard)) || !['修改尚未保存', '正在保存修改'].includes(editingStatus || '')
-      return <EditorContainer editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={isCheck || detailCard.type?.startsWith('direction.')} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
+      return <EditorContainer diagnosticFocus={control && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={isCheck || detailCard.type?.startsWith('direction.')} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
         {!desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && detailCard.type !== 'review.check' && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={designFieldTarget?.cardId === detailCard.id ? designFieldTarget : undefined} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={modelSources(detailCard)} disabled={readonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !readonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           automaticCheckRunId={automaticCheckRunId} capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer>
   }
@@ -1388,8 +1399,16 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
           const visualDesign = isReferenceDesign(card)
+          const issues = (diagnostics || []).filter(issue => issue.target.card_id === card.id)
+          const hasNameIssue = issues.some(issue => Array.isArray(issue.target.path) && issue.target.path.length === 1 && issue.target.path[0] === 'name')
+          const requiresName = invalidRequirementNames.has(card.id) && card.type === 'direction.criterion' && (!('name' in card) || !card.name?.trim())
+          if (!hasNameIssue && (requiresName || duplicateDesignName(card, cards))) {
+            issues.push({ code: 'DESIGN_NAME', message: requiresName ? '请先填写验收要求名称' : '该名称已被同类型卡片使用，请使用其他名称', target: { card_id: card.id, path: ['name'] }, blocks: [] })
+          }
           const cardNode = hidden.has(card.id) ? null : <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger => openCardContext(card.id, trigger)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            issueIndicator={issues.length > 0 && <CardIssueIndicator issues={issues} actionFor={issue => diagnosticControl(card, issue.target)?.action} onLocate={(issue, trigger) => {
+              setDetailTrigger(trigger); navigateInspection.current(card.id, { cardId: card.id, serial: Date.now(), diagnostic: issue.target })
+            }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}

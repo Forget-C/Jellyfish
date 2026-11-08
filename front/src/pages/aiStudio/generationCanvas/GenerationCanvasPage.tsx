@@ -21,8 +21,7 @@ import { ArrowLeftOutlined, ArrowRightOutlined, DownOutlined, SaveOutlined, More
 import '../directing/canvasWorkbench.css'
 import { TaskCenter } from '../components/TaskCenter'
 import './generationCanvas.css'
-
-type InspectTarget = { cardId: string; serial: number; segmentId?: string; reportId?: string }
+import type { CanvasInspectTarget } from './canvasDiagnosticNavigation'
 
 /** 浏览仅限同一画布的真实位置，不使用业务内容撤销记录。 */
 function CanvasHistoryControls({ storageKey, requestLeave }: { storageKey: string; requestLeave: () => Promise<boolean> }) {
@@ -41,8 +40,8 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const navigate = useNavigate()
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [inspectTarget, setInspectTarget] = useState<InspectTarget>()
-  const pendingInspect = useRef<InspectTarget>()
+  const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
+  const pendingInspect = useRef<CanvasInspectTarget>()
   const canvasId = search.get('canvas')
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const editor = useGenerationCanvasEditor(projectId, canvasId)
@@ -187,13 +186,13 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         // 预检操作容器解除底层 inert 后，再由详情定位真实编辑片段。
         if (pendingInspect.current) { setInspectTarget(pendingInspect.current); pendingInspect.current = undefined }
       }} open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
-        {runtime.preview && <RunPreview canvas={document || undefined} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), segmentId: target.segment_id || target.reference_id ? String(target.segment_id || target.reference_id) : undefined, serial: Date.now() }; setPreviewOpen(false) }} />}
+        {runtime.preview && <RunPreview canvas={document || undefined} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), segmentId: target.segment_id || target.reference_id ? String(target.segment_id || target.reference_id) : undefined, diagnostic: target, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
       <GenerationCanvasGraph onCatalogReady={editor.configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
-      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery}
+      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </div>}
