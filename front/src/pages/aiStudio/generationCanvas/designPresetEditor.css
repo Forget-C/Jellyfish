@@ -111,6 +111,8 @@
 
 /* Scroll focused controls clear of the outer ring, including fractional viewport heights. */
 .design-preset-advanced :is(input, textarea, [role="textbox"], .ant-select, .ant-input-number) { scroll-margin-block: 8px; }
+.design-preset-advanced :is([data-design-field], [aria-readonly="true"][role="textbox"], .generation-prompt-token):focus { outline: 2px solid var(--wb-focus); outline-offset: 2px; }
+.design-preset-advanced .generation-prompt-token { scroll-margin: 8px; }
 
 .design-preset-actions > div:last-child { margin-left: auto; justify-content: flex-end; }
 .design-preset-revision { color: var(--wb-muted); font-size: 12px; white-space: nowrap; flex-shrink: 0; }

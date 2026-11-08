@@ -1,5 +1,6 @@
 import type { CanvasDiagnostic } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
+import { designFieldEntries, isFlatDesign, isVisualDesign } from './designFieldReferences'
 
 export type CanvasInspectTarget = {
   cardId: string
@@ -25,6 +26,33 @@ export function diagnosticControl(card: GenerationCard | undefined, target: Canv
     if (fields && typeof field === 'string' && Object.prototype.hasOwnProperty.call(fields, field)) label = fields[field]
   }
   if (label) return { action: '定位模型配置', selector: `[aria-label="${CSS.escape(label)}"]` }
+}
+
+type DesignDiagnosticDestination = { action: '定位设计字段' | '定位运镜阶段'; fieldId: string; segmentId?: string } | { action: '查看卡片'; fieldId?: never }
+
+/** Interpret only design parameter paths. A removed field, phase or reference can still open its card. */
+export function diagnosticDesignField(card: GenerationCard, target: CanvasDiagnostic['target'], fields: readonly { id: string }[]): DesignDiagnosticDestination | undefined {
+  const path = target.path
+  if (!Array.isArray(path) || !path.every(part => typeof part === 'string')) return undefined
+  const [section, key, frame, ...rest] = path
+  const declared = (id: string) => fields.some(field => field.id === id)
+  let fieldId: string
+  let phaseId: string | undefined
+  if (isFlatDesign(card) && section && (path.length === 1 && declared(section) || path.length === 2 && key === 'document')) fieldId = section
+  else if (isVisualDesign(card) && section === 'fields' && key && (path.length === 2 || path.length === 3 && frame === 'document')) fieldId = key
+  else if (card.type === 'direction.movement' && section === 'phases' && key && (path.length === 2 || frame === 'frame' && (rest.length === 0 || rest.length === 1 && rest[0] === 'document'))) {
+    phaseId = key
+    fieldId = `phase:${key}`
+  } else return undefined
+
+  const fieldAvailable = phaseId ? 'phases' in card && card.phases?.some(phase => phase.id === phaseId) : declared(fieldId)
+  if (!fieldAvailable) return { action: '查看卡片' }
+  const segmentId = target.segment_id ?? target.reference_id
+  if (segmentId !== undefined) {
+    const field = designFieldEntries(card).find(([id]) => id === fieldId)?.[1]
+    if (typeof segmentId !== 'string' || !field?.document?.segments?.some(segment => segment.kind === 'reference' && segment.id === segmentId)) return { action: '查看卡片' }
+  }
+  return { action: phaseId ? '定位运镜阶段' : '定位设计字段', fieldId, segmentId }
 }
 
 /** 预检、保存诊断和已有卡片检查共用同一份名称约束。 */

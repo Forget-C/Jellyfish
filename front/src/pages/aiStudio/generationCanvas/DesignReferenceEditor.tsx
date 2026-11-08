@@ -24,7 +24,7 @@ import { MediaPreview } from './MediaContentEditor'
 import { AcceptanceBasisDetails } from './AcceptanceBasisDetails'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
-type TargetField = { fieldId: string; serial: number }
+type TargetField = { fieldId: string; segmentId?: string; serial: number }
 interface ReferenceContext {
   savedRevision?: number; targetField?: TargetField; issues: DesignReferenceIssue[];
   document: CanvasDocument; card: GenerationCard; candidates: Candidate[]; disabled?: boolean;
@@ -150,7 +150,8 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])
     const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || '@缺失来源').join('')
-    const content = (parts: NonNullable<DesignFieldDocument['segments']>) => parts.map(part => part.kind === 'reference' ? ['reference', part.source] : ['text', part.text])
+    // The editor drops empty text nodes on blur. Locating an empty field must not become an edit.
+    const content = (parts: NonNullable<DesignFieldDocument['segments']>) => parts.filter(part => part.kind === 'reference' || part.text).map(part => part.kind === 'reference' ? ['reference', part.source] : ['text', part.text])
     if (JSON.stringify(content(segments)) === JSON.stringify(content(prompt.segments as NonNullable<DesignFieldDocument['segments']> || []))) return
     props.onChange(userDesignField({ ...value, document: { segments }, text }))
   }

@@ -58,25 +58,30 @@ export function DesignPresetEditor({ fields, labels, presets, children, advanced
     if (editorOpen) setSessionMode(mode => mode ?? initialAdvanced)
     else { setSessionMode(undefined); setSelected(undefined); setCompare(undefined); setNotice('') }
   }, [editorOpen, initialAdvanced])
+  const targetFieldId = references?.targetField?.fieldId
+  const targetSegmentId = references?.targetField?.segmentId
+  const targetSerial = references?.targetField?.serial
   useEffect(() => {
-    if (!references?.targetField || !editorOpen) return
+    if (!targetFieldId || !editorOpen) return
     setSessionMode(true)
     let frame = 0, attempts = 0, settled = 0, scrolled = false
     const focusField = () => {
-      const field = owner.current?.querySelector<HTMLElement>(`[data-design-field="${CSS.escape(references.targetField!.fieldId)}"]`)
+      const field = owner.current?.querySelector<HTMLElement>(`[data-design-field="${CSS.escape(targetFieldId)}"]`)
       if (field && !field.closest('[inert]') && field.getClientRects().length) {
-        if (!scrolled) { field.scrollIntoView({ block: 'nearest' }); scrolled = true }
-        field.tabIndex = -1
-        const input = field.querySelector<HTMLElement>('[role="textbox"]:not([aria-readonly="true"])') || field
-        if (document.activeElement === input) settled += 1
-        else { input.focus({ preventScroll: true }); settled = 0 }
-        if (settled >= 3) return
+        const input = targetSegmentId ? field.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(targetSegmentId)}"]`) : field.querySelector<HTMLElement>('[role="textbox"]') || field
+        if (input) {
+          if (!scrolled) { input.scrollIntoView({ block: 'nearest', inline: 'nearest' }); scrolled = true }
+          if (!input.isContentEditable && input.tabIndex < 0) input.tabIndex = -1
+          if (document.activeElement === input) settled += 1
+          else { input.focus({ preventScroll: true }); settled = 0 }
+          if (settled >= 3) return
+        }
       }
       if (++attempts < 90) frame = requestAnimationFrame(focusField)
     }
     frame = requestAnimationFrame(focusField)
     return () => cancelAnimationFrame(frame)
-  }, [references?.targetField, editorOpen])
+  }, [targetFieldId, targetSegmentId, targetSerial, editorOpen])
   const savedFields = JSON.stringify([fields, category?.value])
   useEffect(() => { setNotice('') }, [savedFields])
   const availableSelected = presets.find(preset => preset.id === selected?.id)

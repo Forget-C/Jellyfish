@@ -22,13 +22,14 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const selected = phases.find(phase => phase.id === activeId)
   const frameField = activeId === 'field:end_frame' ? 'end_frame' : 'movement_start'
   const frameLabel = frameField === 'end_frame' ? '结束画面' : '起始画面'
+  const targetField = references?.targetField?.fieldId
+  const targetSerial = references?.targetField?.serial
   useEffect(() => { if (!editorOpen) setSelectedId('field:movement_start') }, [editorOpen])
   useEffect(() => {
     if (!editorOpen) return
-    const field = references?.targetField?.fieldId
-    if (field?.startsWith('phase:')) setSelectedId(field.slice(6))
-    else if (field === 'movement_start' || field === 'end_frame') setSelectedId('field:' + field)
-  }, [references?.targetField, editorOpen])
+    if (targetField?.startsWith('phase:')) setSelectedId(targetField.slice(6))
+    else if (targetField === 'movement_start' || targetField === 'end_frame') setSelectedId('field:' + targetField)
+  }, [targetField, targetSerial, editorOpen])
   const uses = (id: string) => (document.cards || []).reduce((count, target) => {
     if ('frame_target' in target && target.frame_target?.card_id === card.id && target.frame_target.state_id === 'phase:' + id) count += 1
     if ('frame_targets' in target) count += (target.frame_targets || []).filter(frame => frame.state_id === 'phase:' + id && target.input_bindings?.some(binding => binding.id === frame.binding_id && binding.source.card_id === card.id)).length
