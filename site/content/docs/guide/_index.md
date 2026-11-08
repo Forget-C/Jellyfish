@@ -20,4 +20,5 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 
 
 - [场次创作与导出](/docs/guide/sequence-workflow/)
-- [运行与排查异步任务](/docs/guide/async-tasks/)
+- [查看与处理任务](/docs/guide/task-center/)
+- [配置生成模型](/docs/guide/model-setup/)

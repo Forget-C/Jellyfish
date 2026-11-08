@@ -19,7 +19,7 @@
 - 图片选择器提供首帧、尾帧、关键帧、角色、演员、道具、场景正面与其他视角、服装等图片模板。参考项按选入顺序传递资料库 `file_id`、`media_kind` 和 `ordinal`。
 - 视频使用 `video_prompt` 类提示词模板和画幅。界面从 `GET /api/v1/llm/video-generation-options` 获取所选模型的画幅和媒体能力。具名帧槽为 `frames.first`、`frames.last`、`frames.keys`，当前界面各槽选择一张图。命名 `subjects` 独立表达主体的有序图片或视频，主体名在同次提交唯一。实验室界面限制主体与帧互斥，服务端按模型能力验证输入及组合。供应商映射及能力配置见[供应商注册与扩展](../guides/llm-provider-registration.md)。
 - 固定模态入口为 `POST /api/v1/studio/generation-tasks/labs/{image|video}/sessions/{session_id}/tasks`。路径约束会话模态、生成 operation 和媒体结构。服务端校验资料库引用、文件类型和模型能力；实际供应商媒体表示由 Worker 执行时解析。
-- 用户消息、带任务标识的任务消息及任务记录在同一数据库事务内写入，由持久任务表驱动 Worker。消息正文是展示投影。执行以 `Task.input_snapshot` 和持久输入关系为准，媒体任务在受理时固定执行配置。任务接口及实验室历史不公开私有执行配置。任务状态与恢复见[任务执行架构](../../../site/content/docs/architecture/task-execution.md)。
+- 用户消息、带任务标识的任务消息及任务记录在同一数据库事务内写入，由持久任务表驱动 Worker。消息正文是展示投影。执行以 `Task.input_snapshot` 和持久输入关系为准，媒体任务在受理时固定执行配置。任务接口及实验室历史不公开私有执行配置。任务状态与恢复见[任务执行架构](task-execution.md)。
 - 提交返回任务标识和两条已持久化消息。前端按消息 ID 去重、按 `sequence` 排序，并叠加任务轮询状态。历史状态、错误和文件结果由任务事实派生，终态继续显示在原任务消息位置。成功媒体按统一文件流程归档，供历史预览。
 
 ## 历史查看与回填

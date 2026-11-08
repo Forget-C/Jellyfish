@@ -25,6 +25,12 @@
 - [贡献指南](guides/contributing.md)
 - [资产结构化切换](guides/structured-asset-switch.md)
 
+## 任务、模型与数据库
+
+- [任务执行架构](architecture/task-execution.md)、[运行与排查异步任务](guides/task-operations.md)
+- [LLM 默认模型解析](architecture/llm-default-model-resolution.md)
+- [数据库迁移与系统种子](architecture/database-migrations.md)、[数据库升级与回退](guides/database-upgrade.md)
+
 ## 审查依据
 
 - [代码审查来源索引](standards/review-sources.md)按改动范围指向项目规则、需求依据和验证证据。

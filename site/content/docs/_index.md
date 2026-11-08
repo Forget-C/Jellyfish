@@ -17,8 +17,10 @@ cascade:
 - [开发快速开始](/docs/getting-started/local-dev/)
 - [Docker 部署](/docs/getting-started/docker/)
 
-## 产品操作
+## 产品使用
 
+- [查看与处理任务](/docs/guide/task-center/)
+- [配置生成模型](/docs/guide/model-setup/)
 - [生成和管理资产图片](/docs/guide/asset-images/)
 - [使用生成实验室](/docs/guide/generation-labs/)
 

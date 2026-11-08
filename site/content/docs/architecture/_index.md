@@ -14,9 +14,6 @@ description: "记录当前真实生效的系统结构、状态流转、页面边
 - [场次工作台核心数据与版本](/docs/architecture/directing-foundation/)
 
 - [仓库中的前端基础布局](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/frontend-layout.md)
-- [任务执行架构](/docs/architecture/task-execution/)
-- [LLM 默认模型解析](/docs/architecture/llm-default-model-resolution/)
-- [数据库迁移与系统种子](/docs/architecture/database-migrations/)
 
 - [素材、剪辑与交付](/docs/architecture/directing-edit-delivery/)
 - [固定版本与历史素材契约](/docs/architecture/directing-fixed-records/)

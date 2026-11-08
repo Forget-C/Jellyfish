@@ -27,3 +27,5 @@ Compose 启动前端、后端、任务 Worker、MySQL 和 RustFS。数据库迁�
 - 访问[后端健康检查](http://localhost:8000/health)，确认 API 返回成功。
 - 需要检查对象存储时，打开 [RustFS 控制台](http://localhost:9001)。
 - 若迁移或初始化任务失败，用同一 Compose 配置执行 `logs backend-migrate backend-seed-system-data` 查看原因，修正配置后再启动。数据库与媒体保存在持久卷中，请保留这些卷。
+
+升级已有部署前先备份数据库，核对现有版本及回退方式。维护步骤见[数据库升级与回退](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/guides/database-upgrade.md)。

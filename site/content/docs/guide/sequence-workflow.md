@@ -33,4 +33,4 @@ title: "从章节到场次创作与导出"
 
 整场导出使用独立后台任务，固定已保存时间线和导出配置，支持默认 1080 与可选 720 档。导出不自动改变审片、采用或章节交付。章节顺序播放、整场视频导出、多轨后期和声音制作是不同能力。
 
-详细契约见[场次核心架构](/docs/architecture/directing-foundation/)，任务运行与取消见[异步任务操作](/docs/guide/async-tasks/)。
+详细契约见[场次核心架构](/docs/architecture/directing-foundation/)，任务运行与取消见[查看与处理任务](/docs/guide/task-center/)。
