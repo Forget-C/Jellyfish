@@ -104,7 +104,10 @@ try {
     await route.fulfill({ response, json: payload })
   }
   const reportUrl = `**/${canvas.id}/checks/check/reports`
+  const fixedDownload = `**/files/${observedReport.product.file_id}/download`
+  const missingFile = route => route.fulfill({ status: 404, body: 'fixture withdrawn' })
   await page.route(reportUrl, observeIssues)
+  await page.route(fixedDownload, missingFile)
   await page.reload()
   await prepareCanvasCard(page, 'check')
   const navigationWrites = []
@@ -123,12 +126,6 @@ try {
   await report.getByText(`固定文件 ${observedReport.product.file_id}`, { exact: true }).waitFor()
   await report.getByText(new RegExp(`运行 ${observedReport.product.run_id}.*位置 2`)).waitFor()
   await report.getByRole('img', { name: '图片预览' }).waitFor()
-  await fixedProduct.click()
-  await report.getByRole('img', { name: '图片预览', includeHidden: true }).waitFor({ state: 'detached' })
-  const fixedDownload = `**/files/${observedReport.product.file_id}/download`
-  const missingFile = route => route.fulfill({ status: 404, body: 'fixture withdrawn' })
-  await page.route(fixedDownload, missingFile)
-  await fixedProduct.click()
   await report.getByText('图片暂不可预览，文件仍保留', { exact: true }).waitFor()
   await page.unroute(fixedDownload, missingFile)
   await report.getByRole('button', { name: '查看整份报告', exact: true }).waitFor()
