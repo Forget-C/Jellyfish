@@ -30,7 +30,7 @@ description: "理解前端页面组织、请求层和状态管理。"
 前端主要通过 `front/src/services/generated/` 中的 OpenAPI 生成代码与后端通信。  
 这意味着后端接口变更后，前端应同步执行一次 `pnpm run openapi:update`。
 
-场次工作台的按钮、图标、文本、弹窗与滚动规范见[工作台前端设计标准](../workbench-design/)，包含共享组件、开发示例和验证入口。
+场次工作台的按钮、图标、文本、弹窗与滚动规范见[工作台前端设计标准](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/standards/workbench-design.md)，包含共享组件、开发示例和验证入口。
 
 ## 检查入口
 

@@ -8,7 +8,6 @@ title: "计划与近期实施依据"
 
 - [实验室后续事项](/docs/plans/experiment-follow-up/)：区分已实现能力、未排期增强和依赖用户体系的事项。
 - [系统种子与部署核验待办](/docs/plans/alembic-unified-migration-plan/)：种子数据整理和目标环境核验。
-- [工作台设计标准迁移](/docs/plans/workbench-design-standard-migration/)：按实际组件列出剩余接入。
 
 ## 已确认范围
 

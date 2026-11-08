@@ -10,7 +10,7 @@ status: completed
 
 > 状态：已完成（2026-10-21）。G1–G6 已落地，A01–A20 验收完成；后端共享契约／工具、两类投影、共同前端图能力及四画布保存恢复已生效。当前边界见架构文档，接入步骤见[共享 graph 指南](/docs/guide/canvas-graph/)。
 >
-> 前序画布与生产准备实施记录已清理。当前接入规则见[共享 graph 指南](/docs/guide/canvas-graph/)，领域边界见[场次架构](/docs/architecture/directing-foundation/)，交互遵循[工作台设计规范](/docs/guide/workbench-design/)。
+> 前序画布与生产准备实施记录已清理。当前接入规则见[共享 graph 指南](/docs/guide/canvas-graph/)，领域边界见[场次架构](/docs/architecture/directing-foundation/)，交互遵循[工作台设计规范](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/standards/workbench-design.md)。
 
 ## 1. 目标、范围与成功标准
 

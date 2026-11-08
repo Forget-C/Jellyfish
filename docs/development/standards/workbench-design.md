@@ -1,11 +1,6 @@
----
-title: "工作台前端设计标准"
-description: "场次四画布的动作层级、文本与图标规则、共享组件和可重复验收。"
----
-
 # 工作台前端设计标准
 
-适用于场次四画布及其工具栏、弹窗和任务抽屉。全站浅色页面保持自身主题。新增或修改这些区域时，先使用现有共享组件；确需例外时，在变更说明中写明原因、影响范围及验证方式。
+适用于场次四画布及其工具栏、弹窗和任务抽屉，也适用于下文明确列出的生成画布界面。全站浅色页面与全站任务中心沿用各自的主题。新增或修改这些区域时，优先复用现有共享组件。现有工作区的部分动作仍使用 Ant Design 按钮，整场导出已共用弹窗和底部操作区，按钮覆盖与容器覆盖分别判断。确需例外时，在变更说明中写明原因、影响范围及验证方式。
 
 ## 开发顺序
 
@@ -30,7 +25,7 @@ description: "场次四画布的动作层级、文本与图标规则、共享组
 | `CanvasToolbarMenu` | 菜单持续挂载、Escape 收起与焦点恢复；菜单关闭不终止任务 |
 | `WorkbenchChrome` | 顶部身份／版本／保存／画布切换／主操作、当前位置与导航；各画布保留适用的中央工作区 |
 | `CanvasBrowse` | 顶部前进／后退、独立面包屑、可收起筛选及对应操作／提示宿主；不承载业务选择状态 |
-| `GraphCanvas` / `GraphSubgraphPreview` | 服务端 graph 的通用容器和聚合预览，布局状态使用 `useGraphLayout`，浏览历史使用 `useGraphBrowse`；接入方式见[共享 graph 指南](/docs/guide/canvas-graph/) |
+| `GraphCanvas` / `GraphSubgraphPreview` | 服务端 graph 的通用容器和聚合预览，布局状态使用 `useGraphLayout`，浏览历史使用 `useGraphBrowse`；接入方式见[共享 graph 指南](../../../site/content/docs/guide/canvas-graph.md) |
 | `components/canvas/Canvas` | 通用视口、几何、标题拖动、卡片鼠标／键盘激活及事件隔离；导演布局、分组和关系留在业务适配 |
 
 使用 AntD 已有表单、选择、提示与语义标签，不重复实现基础控件。任务中心仅在工作台实例采用共享按钮，全站实例保持原主题。AI 设计的生成／检查／应用阶段属于业务组件，不放入通用弹窗。
@@ -64,7 +59,7 @@ description: "场次四画布的动作层级、文本与图标规则、共享组
 | 加载 | 保持尺寸，阻止重复提交 | 图标不改变按钮可访问名称；后台轮询不插入额外加载行 |
 | 焦点 | 清晰细蓝描边 | 键盘操作必须可辨，不能因“更简洁”而移除 |
 
-蓝色用于链接、键盘焦点；成功、警告、错误保留业务语义色。旧区域尚存的蓝色主按钮是迁移项，不是新增代码的选项。
+蓝色用于链接、键盘焦点；成功、警告、错误保留业务语义色。已有区域可能仍显示蓝色主按钮。新增或修改的工作台主动作遵循上表的中性灰层级。
 
 常规控件高 32px；显著入口可使用 38px；窄屏固定操作区至少 36px。常规图标 16px，入口强调图标可为 20px。间距使用 4／8／12／16／24px 的有限等级，避免每个按钮单独微调。共享动作的颜色和高度由 tokens 与公共 CSS 决定，业务 CSS 负责位置与布局。
 
@@ -115,7 +110,7 @@ pnpm --dir front run typecheck
 PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui
 ```
 
-若使用 Playwright 已安装的自带浏览器，可省略 `PLAYWRIGHT_CHANNEL`。命令先预检依赖、本机监听及浏览器启动能力，再依次执行组件示例、四画布样式和设计完整性回归，输出临时截图目录。设计完整性可用 `pnpm --dir front run test:design-scope` 单独运行。相关 PR 与 merge queue 由 Frontend checks 工作流执行相同检查。
+若使用 Playwright 已安装的自带浏览器，可省略 `PLAYWRIGHT_CHANNEL`。命令先预检依赖、本机监听及浏览器启动能力，再执行工作台浏览器套件，覆盖组件示例、四画布样式、设计完整性、单元设计和指令相关流程，输出临时截图目录。设计完整性可用 `pnpm --dir front run test:design-scope` 单独运行。相关 PR 与 merge queue 由 Frontend checks 工作流执行相同检查。
 
 验收清单：
 

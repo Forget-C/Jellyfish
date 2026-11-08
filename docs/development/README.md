@@ -1,5 +1,19 @@
 # Jellyfish 开发文档
 
+## 开发规范
+
+- [开发规范](standards/development.md)
+- [工作台前端设计标准](standards/workbench-design.md)
+- [提交规范](standards/commit-convention.md)
+
+## 架构
+
+- [前端基础布局](architecture/frontend-layout.md)
+
+## 开发指南
+
+- [贡献指南](guides/contributing.md)
+
 ## 审查依据
 
 - [代码审查来源索引](standards/review-sources.md)按改动范围指向项目规则、需求依据和验证证据。
