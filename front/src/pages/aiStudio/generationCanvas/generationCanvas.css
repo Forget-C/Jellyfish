@@ -205,8 +205,6 @@
 @keyframes generation-edge-flow { to { stroke-dashoffset: -36; } }
 @media (prefers-reduced-motion: reduce) { .generation-edges [data-edge-active="true"] .canvas-edge-line { animation: none; } }
 
-.generation-card-edit { position: absolute; right: 12px; top: 52px; z-index: 2; visibility: hidden; }
-.generation-card[data-selected="true"] .generation-card-edit, .generation-card:focus-within .generation-card-edit { visibility: visible; }
 
 .generation-stack { position:absolute; width:400px; height:300px; cursor:grab; z-index:2; }
 .generation-stack:focus-visible { outline:2px solid var(--wb-focus); }

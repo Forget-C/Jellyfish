@@ -7,7 +7,7 @@ import type { VisualDesignCard as DesignCard } from './designFieldReferences'
 import { photographyRegions, shotSizeLabels } from './photographyDesign'
 import { styleLabels } from './visualPresets'
 import { DesignPurposeIllustration } from './DesignPurposeIllustration'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import type { CSSProperties } from 'react'
 import './visualDesignCard.css'
 
 const states: Record<string, string> = { empty: '未填写', not_applicable: '不适用', absent: '明确没有', fact: '事实', undecided: '待确定', proposal: '提议' }
@@ -49,18 +49,25 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
 }
 
 /** Six designs share one card body and entry; their field ownership and modal editors stay independent. */
-export function VisualDesignCard({ card, document, readonly, onEdit }: { card: DesignCard; document: CanvasDocument; readonly?: boolean; onEdit: (trigger: HTMLElement) => void }) {
+export function VisualDesignCard({ card, document }: { card: DesignCard; document: CanvasDocument }) {
   const { cardDefinitions } = useGraphRules()
   const defaults = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.default_value]))
   const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document, defaults)
-  return <DesignCardBody kind={kind} title={title} rows={rows} readonly={readonly} onEdit={onEdit} />
+  return <DesignCardBody kind={kind} title={title} rows={rows} />
 }
 
-/** Shared finite card geometry for visual design and performance/staging. */
-export function DesignCardBody({ kind, title, rows, readonly, onEdit, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: { label: string; text: string }[]; readonly?: boolean; onEdit: (trigger: HTMLElement) => void; emptyHint?: string }) {
-  return <section className="visual-design-card" aria-label={`${title}摘要`}>
-    <DesignPurposeIllustration kind={kind} />
-    {rows.length ? <><dl>{rows.slice(0, 2).map((row, index) => <div key={index}><dt title={row.label}>{row.label}</dt><Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}><dd tabIndex={0} aria-label={`${row.label}：${row.text}`}>{row.text}</dd></Tooltip></div>)}</dl>{rows.length > 2 && <small>另有 {rows.length - 2} 项配置</small>}</> : <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
-    <WorkbenchButton className="design-card-entry" onClick={event => onEdit(event.currentTarget)}>{readonly ? '查看设计' : rows.length ? '编辑设计' : '开始设计'}</WorkbenchButton>
+export type DesignSummaryRow = { label: string; text: string; lines?: number }
+
+/** Layout is bounded by the selected card size; the full design belongs in its detail. */
+export function DesignCardBody({ kind, title, rows, compact = false, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: DesignSummaryRow[]; compact?: boolean; emptyHint?: string }) {
+  const visibleRows = compact ? rows : rows.slice(0, 2)
+  return <section className="visual-design-card" data-compact={compact} aria-label={`${title}摘要`}>
+    {!compact && <DesignPurposeIllustration kind={kind} />}
+    {visibleRows.length ? <dl>{visibleRows.map((row, index) => <div key={index}>
+      <dt title={row.label}>{row.label}</dt>
+      <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>
+        <dd tabIndex={0} aria-label={`${row.label}：${row.text}`} style={row.lines ? { '--design-summary-lines': row.lines } as CSSProperties : undefined}>{row.text}</dd>
+      </Tooltip>
+    </div>)}</dl> : <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
   </section>
 }

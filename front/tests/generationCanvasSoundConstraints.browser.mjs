@@ -45,7 +45,7 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(150)}throw Error('save timeout')}
-  assert.match(await page.locator('[data-card-id="creative_control"]').textContent(), /开始设计/)
+  await page.locator('[data-card-id="creative_control"]').getByText('尚未填写创作控制', { exact: true }).waitFor({ state: 'attached' })
   for(const[id,key,label,preset]of cases){
     await openCanvasCard(page,id)
     if(['creative_control','guidance','fact','performance_rule'].includes(id)){
