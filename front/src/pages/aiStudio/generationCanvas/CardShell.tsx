@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CanvasCard } from '../../../components/canvas/Canvas'
-import { MoreOutlined, FileTextOutlined, PictureOutlined, VideoCameraOutlined, AudioOutlined, CameraOutlined, CheckSquareOutlined, CommentOutlined, LockOutlined, ProfileOutlined, ThunderboltOutlined, ControlOutlined, CompassOutlined, ReadOutlined, FlagOutlined } from '@ant-design/icons'
+import { MoreOutlined, FileTextOutlined, PictureOutlined, VideoCameraOutlined, AudioOutlined, CameraOutlined, CheckSquareOutlined, CommentOutlined, LockOutlined, ProfileOutlined, ThunderboltOutlined, ControlOutlined, CompassOutlined, ReadOutlined, FlagOutlined, EnvironmentOutlined, SoundOutlined, BorderOuterOutlined, BranchesOutlined } from '@ant-design/icons'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
@@ -16,6 +16,10 @@ const designIcons = {
   'direction.narrative': ReadOutlined,
   'direction.beat': FlagOutlined,
   'direction.shot': VideoCameraOutlined,
+  'direction.anchor': EnvironmentOutlined,
+  'direction.sound': SoundOutlined,
+  'direction.space_rule': BorderOuterOutlined,
+  'direction.continuity': BranchesOutlined,
 }
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */

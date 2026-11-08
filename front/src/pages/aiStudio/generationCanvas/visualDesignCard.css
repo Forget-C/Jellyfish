@@ -16,3 +16,5 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--design-summary-lines, 1);
   white-space: normal; overflow-wrap: anywhere;
 }
+.visual-design-card[data-summary-only="true"] dd[data-summary-parts] { display: block; }
+.visual-design-card dd[data-summary-parts] > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

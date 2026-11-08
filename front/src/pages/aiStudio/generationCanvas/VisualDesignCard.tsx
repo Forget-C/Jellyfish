@@ -56,7 +56,7 @@ export function VisualDesignCard({ card, document }: { card: DesignCard; documen
   return <DesignCardBody kind={kind} title={title} rows={rows} />
 }
 
-export type DesignSummaryRow = { label: string; text: string; lines?: number }
+export type DesignSummaryRow = { label: string; text: string; lines?: number; parts?: string[] }
 
 /** Layout is bounded by the selected card size; the full design belongs in its detail. */
 export function DesignCardBody({ kind, title, rows, summaryOnly = false, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: DesignSummaryRow[]; summaryOnly?: boolean; emptyHint?: string }) {
@@ -66,7 +66,9 @@ export function DesignCardBody({ kind, title, rows, summaryOnly = false, emptyHi
     {visibleRows.length ? <dl>{visibleRows.map((row, index) => <div key={index}>
       <dt title={row.label}>{row.label}</dt>
       <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>
-        <dd tabIndex={0} aria-label={`${row.label}：${row.text}`} style={row.lines ? { '--design-summary-lines': row.lines } as CSSProperties : undefined}>{row.text}</dd>
+        <dd tabIndex={0} aria-label={`${row.label}：${row.text}`} data-summary-parts={row.parts ? true : undefined} style={row.lines ? { '--design-summary-lines': row.lines } as CSSProperties : undefined}>
+          {row.parts ? row.parts.map(part => <span key={part}>{part}</span>) : row.text}
+        </dd>
       </Tooltip>
     </div>)}</dl> : <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
   </section>

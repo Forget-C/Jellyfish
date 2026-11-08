@@ -38,6 +38,14 @@ export async function verifyIndependentDesigns(scenario, port) {
       narrative: { information_change: '发现出口', relationship_change: '信任开始动摇', turning_point: '脚步声突然停止' },
       beat: { objective: '拿到钥匙', obstacle: '被守卫拦住', expected_change: '取得主动权' },
       shot: { visible_result: longResult, narrative_role: '揭示人物看见门口时的反应，保留等待守卫转身的停顿。'.repeat(4), estimated_duration: '约五秒，等待人物抬手并完成视线转移后切换。'.repeat(4) },
+      anchor: { position: '门口右侧，距离石柱两步。'.repeat(15), orientation: '朝向大厅', spatial_relation: '与柜台相邻' },
+      space_rule: { shootable_area: '仅拍摄大厅内侧。'.repeat(15), axis: '沿门口至柜台的轴线', scale: '保留两人并排的宽度' },
+      sound: { source_description: '门外传来脚步声。'.repeat(15), environment: '窗外雨声', action_sound: '钥匙碰到桌面', hierarchy: '对白优先' },
+      continuity: { before: '钥匙留在桌面。'.repeat(15), change: '左手拾起钥匙', after: '左手握住钥匙', following_constraints: '下一镜维持同一只手' },
+    }
+    const groupedSummary = {
+      sound: [structuredExamples.sound.source_description, '环境声：窗外雨声\n动作声：钥匙碰到桌面', '对白优先'],
+      continuity: ['手部与道具', `前态：${structuredExamples.continuity.before}\n变化：待确定\n后态：左手握住钥匙`, '下一镜维持同一只手'],
     }
     const fieldKeys=['direction','composition','viewpoint','movement_path','light_sources','depth_focus']
     const fieldLabels=['风格方向','构图重心','观察视点','运动路径','光源','景深与焦点']
@@ -71,18 +79,24 @@ export async function verifyIndependentDesigns(scenario, port) {
       cards.find(card => card.id === 'narrative').viewpoint = { authorship: 'user', text: '从门外观察' }
       cards.find(card => card.id === 'beat').audience_must_see = { authorship: 'user', text: '必须看到手里的钥匙' }
       cards.find(card => card.id === 'shot').name = '门口反应镜头'
+      cards.find(card => card.id === 'anchor').name = '厅门旁'
+      cards.find(card => card.id === 'space_rule').spatial_basis = { authorship: 'user', text: '以大厅参考图为准' }
+      cards.find(card => card.id === 'sound').music = { authorship: 'user', text: '不铺设额外音乐' }
+      Object.assign(cards.find(card => card.id === 'continuity'), { category: 'hands_props', change: { state: 'undecided' } })
       cards.push(
         { id: 'empty-criterion', type: 'direction.criterion' },
         { id: 'scope-only-criterion', type: 'direction.criterion', scope: { condition: '当钥匙入画时' } },
         { id: 'scope-only-guidance', type: 'direction.guidance', scope: { description: '仅用于门厅' } },
         { id: 'empty-creative-control', type: 'direction.creative_control' },
         { id: 'state-only-beat', type: 'direction.beat', obstacle: { state: 'absent' } },
+        { id: 'empty-continuity', type: 'direction.continuity' },
+        { id: 'music-only-sound', type: 'direction.sound', music: { authorship: 'user', text: '仅保留尾声音乐' } },
       )
     }
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
-    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, style: { x: 1060, y: 220 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 } }
+    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, style: { x: 1060, y: 220 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, sound: { x: 1010, y: 540 } }
     if (scenario === 'summaries') {
       document.edges.push(
         { id: 'person-focus', source_card: 'person', source_port: 'object', target_card: 'relation-only', target_port: 'focus_object' },
@@ -137,9 +151,27 @@ export async function verifyIndependentDesigns(scenario, port) {
       await assertDesignGeometry(page)
       for (const [id, fields] of Object.entries(structuredExamples)) {
         const card = page.locator(`[data-card-id="${id}"]`)
-        assert.deepEqual(await card.getByRole('definition').allTextContents(), Object.values(fields), id + ': author content follows summary priorities')
+        assert.deepEqual(await card.getByRole('definition').allInnerTexts(), groupedSummary[id] || Object.values(fields), id + ': author content follows summary priorities')
         assert.equal(await card.getByRole('img', { name: /用途示意/ }).count(), 0, id + ': structured card omits the generic illustration')
       }
+      await page.locator('[data-card-id="empty-continuity"]').getByText('尚未填写连续性设计', { exact: true }).waitFor({ state: 'attached' })
+      const continuity = page.locator('[data-card-id="continuity"]')
+      const firstState = await continuity.getByText(/^前态：钥匙留在桌面/).evaluate(node => ({ width: node.clientWidth, content: node.scrollWidth }))
+      assert.ok(firstState.content > firstState.width, 'long before text is truncated on its own line')
+      const stateOffsets = await Promise.all(['变化：待确定', '后态：左手握住钥匙'].map(text =>
+        continuity.getByText(text, { exact: true }).evaluate(node => node.getBoundingClientRect().top)))
+      assert.ok(stateOffsets[1] > stateOffsets[0], 'later continuity states retain their own visible lines')
+      const musicOnly = page.locator('[data-card-id="music-only-sound"]')
+      await musicOnly.getByText('尚未填写声音安排', { exact: true }).waitFor({ state: 'attached' })
+      await musicOnly.getByText('仅保留尾声音乐', { exact: true }).waitFor({ state: 'attached' })
+      const soundCard = page.locator('[data-card-id="sound"]')
+      assert.equal(await soundCard.getByText('不铺设额外音乐', { exact: true }).count(), 0)
+      await soundCard.screenshot({ path: join(output, 'structured-sound-desktop.png'), animations: 'disabled' })
+      await soundCard.press('Enter')
+      const soundAdvanced = detail.getByRole('button', { name: '高级设置', exact: true })
+      if (await soundAdvanced.count()) await soundAdvanced.click()
+      assert.equal(await detail.getByRole('textbox', { name: '音乐约束内容', exact: true }).innerText(), '不铺设额外音乐')
+      await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       const shot = page.locator('[data-card-id="shot"]')
       assert.equal(await shot.getByText('门口反应镜头', { exact: true }).count(), 1)
       assert.deepEqual(await shot.evaluate(card => [card.style.left, card.style.top]), ['200px', '540px'])
@@ -220,7 +252,7 @@ export async function verifyIndependentDesigns(scenario, port) {
         await card.getByRole('definition').filter({hasText:text}).waitFor({state:'attached'})
       }
       const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().height)))
-      assert.equal(figures.length,cards.length-1-Object.keys(compactExamples).length-2-Object.keys(structuredExamples).length-3,'only designs using the illustration layout have purpose illustrations')
+      assert.equal(figures.length,cards.length-1-Object.keys(compactExamples).length-2-Object.keys(structuredExamples).length-5,'only designs using the illustration layout have purpose illustrations')
       assert.equal(new Set(figures).size,1,'type-specific illustrations keep the same visible height')
       assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=3)),true,'cards keep at most three labelled summary rows')
       assert.equal(await page.locator('.visual-design-card dl > div').evaluateAll(nodes=>nodes.every(node=>{const row=node.getBoundingClientRect();return [...node.children].every(child=>{const r=child.getBoundingClientRect();return r.left>=row.left-1&&r.right<=row.right+1})})),true,'long stage labels and values remain inside the summary')
