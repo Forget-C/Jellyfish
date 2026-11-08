@@ -17,6 +17,11 @@ cascade:
 - [开发快速开始](/docs/getting-started/local-dev/)
 - [Docker 部署](/docs/getting-started/docker/)
 
+## 产品使用
+
+- [查看与处理任务](/docs/guide/task-center/)
+- [配置生成模型](/docs/guide/model-setup/)
+
 ## 开发指南
 
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)

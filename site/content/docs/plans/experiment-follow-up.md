@@ -4,7 +4,7 @@ title: "实验室后续事项"
 
 ## 当前实现
 
-文本、图片和视频实验室已有会话增删改查与分页历史。图片和视频提交在同一数据库事务内创建消息与任务，由持久任务表驱动 Worker。任务输入以 `Task.input_snapshot` 为准；已受理媒体任务使用固定供应商配置。当前事实见[任务执行架构](/docs/architecture/task-execution/)。
+文本、图片和视频实验室已有会话增删改查与分页历史。图片和视频提交在同一数据库事务内创建消息与任务，由持久任务表驱动 Worker。任务输入以 `Task.input_snapshot` 为准；已受理媒体任务使用固定供应商配置。当前事实见[任务执行架构](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/task-execution.md)。
 
 ## 尚未实施的增强提案
 
