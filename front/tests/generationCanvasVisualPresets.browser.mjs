@@ -170,6 +170,7 @@ try {
   assert.equal(await detail.getByRole('button',{name:'返回预设',exact:true}).isVisible(),true,'matching a preset retains the open parameter session')
   await close();await open('style')
   assert.equal(await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).getAttribute('aria-pressed'),'true','handwritten design matches the preset')
+  await detail.getByText('匹配预设 · 手绘水彩',{exact:true}).waitFor()
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
   await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).fill('另一种方向')
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text==='另一种方向')

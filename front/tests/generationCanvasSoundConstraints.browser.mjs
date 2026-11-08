@@ -63,7 +63,7 @@ try {
     if(preset){await detail.getByRole('button',{name:'预览 '+preset,exact:true}).click();await detail.getByRole('button',{name:'应用',exact:true}).click();
       await poll(state=>Object.values(state.document.cards.find(card=>card.id===id)).some(value=>value&&typeof value==='object'&&value.state==='fact'&&value.authorship==='user'))
       await detail.getByRole('button',{name:'关闭详情',exact:true}).click();await openCanvasCard(page,id)
-      if(['space_rule','creative_control'].includes(id))await detail.getByText('已应用 · '+preset,{exact:true}).waitFor()
+      if(['space_rule','creative_control'].includes(id))await detail.getByText('匹配预设 · '+preset,{exact:true}).waitFor()
       await detail.getByRole('button',{name:'高级设置',exact:true}).click()}
     const field=detail.getByRole('textbox',{name:label+'内容',exact:true})
     await field.fill('');await field.press('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()

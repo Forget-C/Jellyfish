@@ -19,9 +19,17 @@ function PhaseDeleteBadge({ children, content, selected, confirmed, editing }: {
   useEffect(() => {
     const node = anchor.current, root = node?.closest('.movement-keyframe-list')
     if (!node || !root) return
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { root })
+    // The retained editor can start hidden or reopen straight into parameters.
+    const measure = () => {
+      const tab = node.getBoundingClientRect(), strip = root.getBoundingClientRect()
+      setVisible(tab.width > 0 && strip.width > 0 && tab.left < strip.right && tab.right > strip.left)
+    }
+    const observer = new ResizeObserver(measure)
     observer.observe(node)
-    return () => observer.disconnect()
+    observer.observe(root)
+    root.addEventListener('scroll', measure, { passive: true })
+    measure()
+    return () => { observer.disconnect(); root.removeEventListener('scroll', measure) }
   }, [])
   const focusTitle = () => anchor.current?.querySelector<HTMLButtonElement>('[role="tab"]')?.focus()
   return <Popover placement="topRight" align={{ offset: [0, 6] }} arrow={false} autoAdjustOverflow={false} trigger={['hover', 'focus']} mouseLeaveDelay={0.15} open={!editing && visible && (open || confirmed || (touch && selected))} onOpenChange={setOpen} getPopupContainer={node => node.closest<HTMLElement>('.design-preset-editor') || node.parentElement!} overlayClassName="movement-delete-popover" content={<div ref={popup} onFocus={() => setOpen(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false) }} onKeyDown={event => {
