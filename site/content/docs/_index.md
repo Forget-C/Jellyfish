@@ -28,11 +28,6 @@ cascade:
 
 - [仓库开发文档](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/README.md)
 
-## 当前架构
-
-- [场次核心数据与版本](/docs/architecture/directing-foundation/)
-- [素材、剪辑与交付](/docs/architecture/directing-edit-delivery/)
-
 ## 任务计划
 
 - [计划与近期实施依据](/docs/plans/)

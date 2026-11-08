@@ -48,6 +48,13 @@
 - [分诊标签](../agents/triage-labels.md)
 - [领域文档位置](../agents/domain.md)
 
+## 场次设计、生产与交付
+
+- [场次生产设计](design/scene-production.md)与[场次工作台架构](architecture/directing-foundation.md)
+- [场次素材、剪辑与交付](architecture/directing-edit-delivery.md)与[固定版本及历史素材](architecture/directing-fixed-records.md)
+- [接入共享画布 graph](guides/canvas-graph.md)
+- [数据模型](reference/data-model.md)与[六部门专业输出契约](reference/six-department-contracts.md)
+
 ## 章节划分与场次版本
 
 - [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
