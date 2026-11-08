@@ -84,76 +84,15 @@ backend/
 
 ## 快速开始
 
-### 1. 安装 uv（若未安装）
+本地 API、Worker 和前端的启动步骤见[本地开发指南](../docs/development/guides/local-development.md)。使用自行提供的 MySQL 和 S3 兼容存储时，在 `backend/` 复制 `.env.example` 为 `.env`（首次设置时），填写实际连接信息。启动前同步依赖并初始化数据库：
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### 2. 进入 backend 并安装依赖
-
-```bash
-cd backend
 uv sync
+uv run python -m app.scripts.migrate_database
+uv run python -m app.scripts.seed_system_data
 ```
 
-### 3. 配置环境
-
-```bash
-cp .env.example .env
-# 按需编辑 .env
-```
-
-### 4. 初始化数据库（Alembic）
-
-如果你使用的是 **SQLite 默认配置**（`DATABASE_URL=sqlite+aiosqlite:///./jellyfish.db`），可以跳过本节，首次访问时会自动创建文件。
-
-使用 MySQL 等外部数据库时，必须先运行 Alembic 迁移和系统种子：
-
-1. 在 `.env` 中配置数据库连接（示例）：
-
-   ```env
-   # SQLite（默认）
-   # DATABASE_URL=sqlite+aiosqlite:///./jellyfish.db
-
-   # MySQL（使用 aiomysql 驱动）
-   # DATABASE_URL=mysql+aiomysql://user:pass@localhost:3306/jellyfish
-
-   # PostgreSQL
-   # DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/jellyfish
-   ```
-
-2. 运行迁移和系统种子（使用 uv）：
-
-   ```bash
-   cd backend
-   uv sync
-   uv run python -m app.scripts.migrate_database
-   uv run python -m app.scripts.seed_system_data
-   ```
-
-空数据库会执行 `alembic upgrade head`；由旧初始化流程创建且结构完整的数据库会先安全登记在初始 Alembic revision，再执行后续 revision。部分表缺失时命令会拒绝登记，避免隐藏不完整 schema。
-
-### 5. 启动服务
-
-```bash
-uv run python -m app.dev api
-```
-
-- API 文档：http://localhost:8000/docs  
-- 健康检查：http://localhost:8000/health  
-- API v1 示例：http://localhost:8000/api/v1/example/prompt  
-- 影视技能（确认路由）：http://localhost:8000/api/v1/film （GET）；实体/分镜抽取见下方，需 **POST** 且路径带 **/api/v1** 前缀。
-
-### 影视技能 API（需配置 OPENAI_API_KEY）
-
-| 方法 | 完整路径 | 说明 |
-|------|----------|------|
-| GET  | `/api/v1/film` | 返回端点说明，用于确认路由已注册 |
-| POST | `/api/v1/film/extract/entities` | 人物/地点/道具抽取 |
-| POST | `/api/v1/film/extract/shotlist` | 分镜/镜头表抽取 |
-
-未配置 `OPENAI_API_KEY` 时上述 POST 返回 503。
+迁移命令拒绝没有 Alembic 版本记录的非空数据库。遇到这种库时先核对实际结构和迁移记录，不能用自动登记代替核对。开发启动与健康检查见上面的指南，当前 API 入口见[接口参考](../docs/development/reference/api.md)。
 
 ## 常用命令
 

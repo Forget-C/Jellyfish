@@ -1,6 +1,4 @@
----
-title: "环境变量"
----
+# 环境变量
 
 配置样例随代码维护，不在文档复制凭据。首次本地启动分别复制 `backend/.env.example`、`front/.env.example`；Compose 使用 `deploy/compose/.env.example`。
 
@@ -15,4 +13,4 @@ title: "环境变量"
 
 供应商模型通过模型管理配置，已受理媒体任务使用冻结配置；修改密钥不回写旧任务。其他运行参数以配置定义和对应 `.env.example` 为准，不把样例默认凭据用于公开部署。
 
-启动步骤见[本地开发](/docs/getting-started/local-dev/)和[Docker 部署](/docs/getting-started/docker/)。
+启动步骤见[本地开发](../guides/local-development.md)和 [Docker 部署](../../../site/content/docs/getting-started/docker.md)。
