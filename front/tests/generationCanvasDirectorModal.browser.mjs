@@ -51,7 +51,6 @@ try {
   await page.locator('.generation-editor-mask').click({position:{x:10,y:10}})
   await details.waitFor({state:'hidden'})
   await photo.locator('.generation-card-body').click()
-  await details.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).evaluate(element => 'value' in element ? element.value : element.innerText),'保存后的夜间轮廓光')
   await page.screenshot({path:join(output,'director-modal-desktop.png')})
   await closeCanvasDetails(page)
@@ -73,7 +72,6 @@ try {
   const saved=(await (await fetch(`${base}/${id}`)).json()).data
   assert.equal(saved.document.cards.find(c=>c.id==='lighting').fields.light_sources.text,'保存后的夜间轮廓光')
   await page.reload();await photo.press('Enter')
-  await details.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).evaluate(element => 'value' in element ? element.value : element.innerText),'保存后的夜间轮廓光')
   await closeCanvasDetails(page)
   await page.setViewportSize({width:1440,height:960})

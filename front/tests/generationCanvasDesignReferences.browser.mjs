@@ -52,7 +52,6 @@ try {
     await page.locator('.design-source-inspect:visible').waitFor()
     await page.keyboard.press('Escape');assert.equal(await detail.isVisible(),true)
     await page.locator('.design-source-inspect:visible').waitFor({state:'hidden'})
-    await detail.getByRole('button',{name:'高级设置',exact:true}).click()
     const field=detail.getByRole('textbox',{name:label+'内容',exact:true})
     await field.fill('站在 ');await candidate.click()
     assert.equal(await field.locator('.generation-prompt-token').count(),0,'opening a source only previews it')
@@ -106,11 +105,11 @@ try {
   await page.getByRole('dialog',{name:'项目文件库',exact:true}).getByRole('button',{name:'选用 reference',exact:true}).click()
   await poll(s=>s.document.cards.filter(card=>card.type==='content.image'&&card.file_id).length===2)
   await uploadDialog.locator('.ant-modal-close').click()
-  await detail.getByRole('button',{name:'高级设置',exact:true}).click()
+  await uploadDialog.waitFor({state:'hidden'})
   const second=detail.getByRole('textbox',{name:'自定义说明内容',exact:true})
   assert.match(await second.innerText(),/@文本1/,'saved retained source survives reload')
   const color=detail.getByRole('textbox',{name:'色彩倾向内容',exact:true})
-  await color.fill('');await color.press('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()
+  await color.click();await color.fill('');await color.press('@');await page.getByRole('option',{name:'@文本1',exact:true}).click()
   await poll(s=>s.document.cards.find(card=>card.id==='style').fields.colors.document?.segments.some(segment=>segment.kind==='reference'))
   const beforePreset=(await read()).document.cards.find(card=>card.id==='style').fields
   await detail.getByRole('button',{name:'返回预设',exact:true}).click()
@@ -132,7 +131,6 @@ try {
   for(const [kind,,label] of kinds){
     await observer.locator(`[data-card-id="${kind}"]`).press('Enter')
     const readonly=observer.locator('.wb-details:visible')
-    await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await readonly.getByRole('textbox',{name:label+'内容',exact:true}).isDisabled(),true)
     await readonly.getByRole('button',{name:'关闭详情',exact:true}).click()
   }

@@ -201,7 +201,6 @@ export async function verifyIndependentDesigns(scenario, port) {
       await criterion.screenshot({ path: join(output, 'compact-criterion-desktop.png'), animations: 'disabled' })
       await criterion.locator('.generation-card-body').click()
       await detail.waitFor()
-      await detail.getByRole('button', { name: '高级设置', exact: true }).click()
       assert.equal(await detail.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).innerText(), compactExamples.criterion[1])
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       assert.deepEqual(await criterion.evaluate(card => [card.style.left, card.style.top]), before)
@@ -231,7 +230,8 @@ export async function verifyIndependentDesigns(scenario, port) {
     for(let i=0;i<types.length;i++){
       const kind=types[i], card=page.locator(`[data-card-id="${kind}"]`)
       await card.press('Enter')
-      await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
+      await detail.getByRole('button',{name:'返回预设',exact:true}).waitFor()
+      await detail.getByRole('button',{name:'返回预设',exact:true}).click()
       assert.equal(await detail.getByRole('tab').count(),0)
       await detail.getByRole('button',{name:'高级设置',exact:true}).click()
       const field=detail.getByRole('textbox',{name:fieldLabels[i]+'内容',exact:true});assert.equal(await field.evaluate(element => 'value' in element ? element.value : element.innerText),`独立设计${i}`)
@@ -243,7 +243,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       }
       await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
     }
-    await page.setViewportSize({width:390,height:844});await page.locator('[data-card-id="composition"]').press('Enter');await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
+    await page.setViewportSize({width:390,height:844});await page.locator('[data-card-id="composition"]').press('Enter');await detail.getByRole('button',{name:'返回预设',exact:true}).waitFor()
     await page.screenshot({path:join(output,`${scenario}-mobile.png`)});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
     if(scenario==='summaries') {
       const observer=await context.newPage()

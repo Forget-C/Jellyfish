@@ -57,7 +57,7 @@ try {
   await poll(s=>s.document.cards[0].fields.shot_size.size==='close_up')
   assert.equal((await read()).document.cards[1].fields.negative_space.text,'保留独立留白')
   await page.screenshot({path:join(output,'composition-desktop.png')})
-  await page.reload();await card.locator('.generation-card-body').click();await detail.getByRole('button',{name:'高级设置',exact:true}).click();assert.equal(await composition.innerText(),'主体位于画面右侧')
+  await page.reload();await card.locator('.generation-card-body').click();assert.equal(await composition.innerText(),'主体位于画面右侧')
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(output,'composition-mobile.png')});assert.ok(await detail.getByRole('button',{name:'返回预设',exact:true}).isVisible())
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   console.log('PASS independent composition preset, structured framing, save/reopen, isolation and narrow layout')

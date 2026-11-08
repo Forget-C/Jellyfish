@@ -76,7 +76,6 @@ try {
     await page.setViewportSize({width:1440,height:960})
     await page.reload()
     await page.locator(`[data-card-id="${card.id}"]`).locator('.generation-card-body').click()
-    await detail.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await detail.getByRole('textbox',{name:extra+'内容',exact:true}).innerText(),'独立的'+kind+'说明')
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   }
@@ -89,7 +88,6 @@ try {
   for(let index=0;index<cases.length;index++){
     await observer.locator(`[data-card-id="${created[index]}"]`).locator('.generation-card-body').click()
     const readonly=observer.locator('.wb-details:visible')
-    await readonly.getByRole('button',{name:'高级设置',exact:true}).click()
     assert.equal(await readonly.getByRole('textbox',{name:cases[index][3]+'内容',exact:true}).isDisabled(),true)
     await readonly.getByRole('button',{name:'关闭详情',exact:true}).click()
   }
