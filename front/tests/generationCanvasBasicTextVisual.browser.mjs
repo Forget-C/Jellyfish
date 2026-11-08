@@ -65,8 +65,7 @@ try {
     await closeCanvasDetails(page)
     await card.screenshot({ path: join(output, `F01-${width}-default-card.png`) })
     await card.screenshot({ path: join(output, `F02-${width}-expanded-card.png`) })
-    const cardWidth = (await card.boundingBox()).width
-    assert.ok(cardWidth <= 305, 'basic text follows compact card density')
+    assert.deepEqual(await card.evaluate(node => [node.offsetWidth, node.offsetHeight]), [400, 172], 'basic text uses the compact text size')
     await card.press('Enter')
     await body.fill('')
     await editor.getByText('0 字', { exact: true }).waitFor()
