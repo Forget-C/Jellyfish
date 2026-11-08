@@ -6,10 +6,10 @@ import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchB
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */
-export function CardShell({ id, title, name, label, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
+export function CardShell({ id, title, name, label, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, issueIndicator, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
   { id: string; type?: string; title: string; name?: string; label?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
     onContextActions?: (trigger: HTMLElement) => void; menu: boolean; onMenuChange?: (open: boolean) => void; viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect?: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect?: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove?: () => void;
-    connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, fromKeyboard?: boolean) => void }) {
+    connections: ReactNode; children: ReactNode; footer?: ReactNode; issueIndicator?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, fromKeyboard?: boolean) => void }) {
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; viewport?: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
   const menuChange = useRef(setMenu); menuChange.current = setMenu
@@ -62,6 +62,7 @@ export function CardShell({ id, title, name, label, type, contextKey, point, sca
   }} aria-label={label} data-card-id={id} data-card-type={type} data-canvas-node={id} data-selected={selected} data-filter-match={filterMatch} aria-description={filterMatch ? '符合筛选' : undefined} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, height }}>
     <header><button type="button" data-keyboard-move aria-label={`移动布局：${name || title}`} title="拖动卡片，或用方向键移动">{type?.startsWith('direction.') ? <CameraOutlined /> : type?.endsWith('image') || type?.startsWith('reference.') ? <PictureOutlined /> : type?.endsWith('video') ? <VideoCameraOutlined /> : type?.endsWith('audio') ? <AudioOutlined /> : <FileTextOutlined />}</button>
       <strong title={name || title}>{name || title}</strong>{name && <small>{title}</small>}
+      {issueIndicator}
       {setMenu && <WorkbenchIconButton label="卡片操作" icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)} />}
       {menu && <div className="generation-card-menu" onPointerDown={event => event.stopPropagation()}>
         {onContextActions && <WorkbenchButton onClick={event=>onContextActions(event.currentTarget)}>复制、封面与下载…</WorkbenchButton>}

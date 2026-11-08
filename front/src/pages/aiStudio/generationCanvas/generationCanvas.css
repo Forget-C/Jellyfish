@@ -129,6 +129,9 @@
 .generation-workbench .generation-card header { position: relative; background: transparent; padding: 0 8px; height: 32px; color: var(--wb-muted); }
 .generation-card header strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .generation-card header small { font-size: 11px; flex-shrink: 0; }
+.generation-card-issues { max-width: min(340px, calc(100vw - 32px)); max-height: min(360px, 60vh); overflow: auto; }
+.generation-card-issues ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.generation-card-issues li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
 .generation-card header > button:first-child { background: transparent; border: 0; color: var(--wb-muted); cursor: grab; }
 .generation-workbench .generation-card > .generation-card-body { display: flex; flex-direction: column; box-sizing: border-box; padding: 20px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; height: calc(100% - 32px); min-height: 0; overflow: hidden; }
 .generation-card[data-selected="true"] .generation-card-body { outline: 1px solid var(--wb-focus); }

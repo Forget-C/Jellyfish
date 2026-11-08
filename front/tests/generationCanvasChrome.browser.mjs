@@ -1,4 +1,4 @@
-import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -64,8 +64,51 @@ try {
   await page.getByRole('button', { name: '定位问题', exact: true }).first().click()
   await page.getByRole('dialog', { name: '运行预检', exact: true }).waitFor({ state: 'hidden' })
   await page.locator('.generation-card-editor:visible').waitFor()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '选择模型')
+  await closeCanvasDetails(page)
+  const issues = page.getByRole('button', { name: '查看卡片问题', exact: true })
+  await issues.press('Enter')
+  const issueList = page.getByRole('region', { name: '卡片问题', exact: true })
+  await issueList.getByText('请选择模型', { exact: true }).waitFor()
+  await issueList.getByRole('button', { name: '定位模型配置', exact: true }).click()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '选择模型')
   await closeCanvasDetails(page)
   await page.screenshot({ path: join(output, 'chrome-desktop.png'), animations: 'disabled' })
+  const saved = (await (await fetch(`${base}/${id}`)).json()).data
+  const modelId = saved.document.cards.find(item => item.type === 'model.text').id
+  const criterion = { id: 'criterion', type: 'direction.criterion', name: '手部可见', standard: { text: '钥匙和手部清晰可见' } }
+  const seeded = await fetch(`${base}/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: 'diagnostic-targets', expected_revision: saved.revision, document: { ...saved.document, cards: [...saved.document.cards, criterion] } }),
+  })
+  assert.ok(seeded.ok, await seeded.text())
+  await page.reload()
+  await page.route('**/precheck', async route => {
+    const response = await route.fetch(), payload = await response.json()
+    payload.data.diagnostics = [
+      { code: 'TITLE_REVIEW', message: '需要核对验收要求名称', severity: 'error', blocks: ['run'], target: { card_id: criterion.id, path: ['name'] } },
+      { code: 'TITLE_NOTE', message: '同时核对验收要求来源', severity: 'warning', blocks: [], target: { card_id: criterion.id } },
+      { code: 'GLOBAL_NOTE', message: '当前请求需要核实', severity: 'warning', blocks: [], target: {} },
+    ]
+    await route.fulfill({ response, json: payload })
+  })
+  await page.locator(`[data-card-id="${modelId}"]`).press('Enter')
+  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  const precheck = page.getByRole('dialog', { name: '运行预检', exact: true })
+  const globalIssue = precheck.getByRole('alert').filter({ hasText: '当前请求需要核实' })
+  await globalIssue.waitFor()
+  assert.equal(await globalIssue.getByRole('button').count(), 0)
+  await closePrecheck(page)
+  await closeCanvasDetails(page)
+  await page.locator('[data-card-id="criterion"]').getByRole('button', { name: '查看卡片问题', exact: true }).press('Enter')
+  await issueList.getByText('错误', { exact: true }).waitFor()
+  await issueList.getByText('警告', { exact: true }).waitFor()
+  assert.equal(await issueList.getByRole('button').count(), 1, 'unstructured warning has no field action')
+  await issueList.getByRole('button', { name: '定位名称', exact: true }).click()
+  await page.waitForFunction(() => document.activeElement?.closest('[data-diagnostic-name]') !== null && document.activeElement?.tagName === 'BUTTON')
+  assert.equal(await page.getByRole('button', { name: '高级设置', exact: true }).isVisible(), true, 'name location leaves the preset page open')
+  assert.equal((await (await fetch(`${base}/${id}`)).json()).data.revision, saved.revision + 1, 'reading diagnostics does not write the canvas')
+  await closeCanvasDetails(page)
   await page.reload()
   await page.getByRole('button', { name: '画布管理', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '画布名称' }).inputValue(), '菜单中的画布')

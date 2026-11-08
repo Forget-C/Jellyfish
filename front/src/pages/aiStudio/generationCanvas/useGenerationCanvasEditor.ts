@@ -3,7 +3,7 @@ import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
@@ -23,6 +23,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [document, setDocument] = useState<CanvasDocument>()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [failedDiagnostic, setFailedDiagnostic] = useState<{ scope: string; document: unknown; issue: CanvasDiagnostic }>()
   const [storageError, setStorageError] = useState('')
   const [recovery, setRecovery] = useState<Recovery>()
   const [conflict, setConflict] = useState(false)
@@ -96,7 +97,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     const s = state.current
     if (!ownership.canEdit() || !s.current || !s.document || s.recovery || s.conflict) return Promise.resolve(false)
     const run = async () => {
-      setSaving(true); setError('')
+      setSaving(true); setError(''); setFailedDiagnostic(undefined)
       try {
         while (s === state.current && (s.pending || !same(s.document, s.current!.document))) {
           const command = s.pending || { request_id: crypto.randomUUID(), expected_revision: s.current!.revision, document: structuredClone(s.document!) }
@@ -117,6 +118,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         }
         // 暂停相同失败正文；未知结果保留原请求，手动保存可随时核实。
         s.blocked = structuredClone(s.pending ? s.document : failedDocument as CanvasDocument)
+        const issue = reason instanceof ApiError && reason.status === 422 ? reason.body?.data : undefined
+        if (failedDocument && issue && typeof issue.target?.card_id === 'string' && typeof issue.code === 'string' && typeof issue.message === 'string' && Array.isArray(issue.blocks)) {
+          setFailedDiagnostic({ scope: key, document: failedDocument, issue })
+        }
         setError(describe(reason)); persist(); return false
       } finally { if (s === state.current) { setSaving(false); inFlight.current = undefined } }
     }
@@ -197,6 +202,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }, [key])
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
   useEffect(() => { if (blocker.state === 'blocked') void latest.current.requestLeave().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
-  return { configureCatalog, current, document, edit, recordAction, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
+  const saveDiagnostic = failedDiagnostic?.scope === key && same(document, failedDiagnostic.document) ? failedDiagnostic.issue : undefined
+  return { saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }
