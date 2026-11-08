@@ -75,7 +75,11 @@ try {
   await poll(s=>s.document.cards.find(card=>card.id==='legacy').applicability.document.segments.filter(part=>part.kind==='reference').length===1)
   await close()
   for(const [id,key,label,preset] of cases){
-    await page.locator(`[data-card-id="${id}"] .visual-design-card .design-purpose svg`).waitFor({state:'attached'})
+    const card = page.locator(`[data-card-id="${id}"]`)
+    if (id !== 'anchor') {
+      assert.deepEqual(await card.evaluate(node => [node.offsetWidth, node.offsetHeight]), [360, id === 'performance_rule' ? 240 : 304])
+      assert.equal(await card.getByRole('img', { name: /用途示意/ }).count(), 0)
+    }
     await open(id)
     assert.equal(await detail.getByRole('tab').count(),0)
     if(preset){
