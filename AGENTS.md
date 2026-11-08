@@ -36,23 +36,8 @@
 - 修改场次工作台的控件、布局、主题或交互时，读取[工作台前端设计标准](docs/development/standards/workbench-design.md)，使用共享组件并按适用范围验收。
 - 准备或审查提交说明时，读取[提交规范](docs/development/standards/commit-convention.md)。
 
-## 场次工作台数据基础
+## 场次工作台
 
-1. 仅涉及章节划分或场次版本时，按需读取[章节划分架构](docs/development/architecture/chapter-division.md)或[场次版本架构](docs/development/architecture/scene-versions.md)。场次生产与工作台其余边界见[场次核心架构](site/content/docs/architecture/directing-foundation.md)。
-2. 新场次数据统一通过 `app.services.directing.store.DirectingStore` 读写；不得绕过类型、项目归属、版本与文件引用校验直接更新 JSON。
-3. `Sequence` 表示故事场次，`Scene` 仍是场所资产。GenerationUnit 身份为生产计划版本与 unit_id，Take 不绑定唯一镜头。
-4. 已确认版本不可原地改写；预演预计时长和真实媒体区间、素材审查与剪辑采用必须分开。
-5. 旧 Shot、ShotDetail 及镜头槽位生成入口已移除，不恢复旧状态、双写或兼容别名。
-6. 候选不自动采用，预演不代表实际覆盖，样片动作偏差不等于计划已覆盖。
-7. 前段依赖绑定历史计划版本、实际落幅及参考；采用替换仅使有关依赖和接缝待复核。
-
-## 前端页面职责与主流程
-
-1. 项目工作台负责章节原文、项目资产和项目风格；章节原文按故事段落确认场次。
-2. 场次设计视图负责六岗设计、来源、预计镜头和版本确认；镜头是设计中的计划条目，不是旧 Shot 表。
-3. 场次试拍视图负责生产单元、参考素材、提示词编译与审稿、模型能力预检、单次或批量拍摄。
-4. 场次剪辑与验收视图负责 Take 实际覆盖、可用区间、人工采用、接缝与整场审片、局部返工。
-5. 章节组合只消费各场已确认的粗剪；预演缺口、真实媒体、声音待后期分别显示。
-6. 任务中心只展示通用状态、进度、取消与业务回跳。提示词、来源映射、诊断等专属上下文留在场次业务页。
-7. 标准顺序为：新建项目 → 添加章节原文 → 确认场次 → 六岗设计与确认 → 准备资产/参考及生产单元 → 编译审稿 → 拍摄 → 审片采用与粗剪 → 局部返工。
-8. 设计/计划确认、运行时任务状态、生成准备度、素材审查和剪辑采用分别表达。生成成功只登记 Take，不自动采用；不使用旧 shot.status 判定新流程。
+- 修改章节划分与历史时，读取[章节划分架构](docs/development/architecture/chapter-division.md)；修改方案保存、恢复或复制时，读取[场次版本架构](docs/development/architecture/scene-versions.md)。
+- 修改场次页面职责、设计、生产单元、指令或任务来源时，读取[场次工作台架构](docs/development/architecture/directing-foundation.md)和适用的[六部门专业输出契约](docs/development/reference/six-department-contracts.md)。
+- 修改 Take、素材审查、剪辑采用、前段依赖或章节交付时，读取[场次素材、剪辑与交付](docs/development/architecture/directing-edit-delivery.md)。涉及旧生产计划及不可变修订时，读取[固定版本与历史素材契约](docs/development/architecture/directing-fixed-records.md)。

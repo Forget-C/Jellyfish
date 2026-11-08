@@ -7,9 +7,9 @@ description: 场次单元、资产图片与实验室的当前生成边界
 
 当前场次版本保存可编辑六岗设计、生产单元及指令正文。单元明确动作范围、模型、时长、画幅、真实参考和连续性依赖；AI 建议必须明确应用，不能替代保存或执行授权。指令依据核对、检查及视频提交分别记录，提交时固定实际使用的内容与输入，后续编辑不会改写已受理任务。
 
-旧已确认设计、生产计划及不可变 PromptRevision 属于[固定版本契约](/docs/architecture/directing-fixed-records/)，不是当前四画布需要重复执行的逐层确认流程。
+旧已确认设计、生产计划及不可变 PromptRevision 属于[固定版本契约](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/directing-fixed-records.md)，不是当前四画布需要重复执行的逐层确认流程。
 
-提交与 Worker 执行都校验输入身份、模型能力和实际连续性证据。生成成功登记 Take，审片覆盖和剪辑采用另行保存。没有旧镜头槽位提交、自动采用或在 Worker 再追加镜头指导的旁路。完整契约见[场次工作台核心数据与版本](/docs/architecture/directing-foundation/)。
+提交与 Worker 执行都校验输入身份、模型能力和实际连续性证据。生成成功登记 Take，审片覆盖和剪辑采用另行保存。没有旧镜头槽位提交、自动采用或在 Worker 再追加镜头指导的旁路。完整契约见[场次工作台核心数据与版本](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/directing-foundation.md)。
 
 ## 资产图片
 

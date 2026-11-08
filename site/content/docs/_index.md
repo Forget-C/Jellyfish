@@ -27,8 +27,6 @@ cascade:
 ## 当前架构
 
 - [项目结构](/docs/architecture/project-structure/)
-- [场次核心数据与版本](/docs/architecture/directing-foundation/)
-- [素材、剪辑与交付](/docs/architecture/directing-edit-delivery/)
 
 ## 任务计划
 

@@ -85,6 +85,8 @@ node front/tests/shellFocus.browser.mjs
 
 ## 新场次工作台回归（B 阶段）
 
+当前四画布投影、导航和保存的回归范围见[共享画布接入指南](../../docs/development/guides/canvas-graph.md#验证与接口同步)。
+
 ```bash
 node --test front/tests/designWorkspace.test.mjs front/tests/workspaceTaskContext.test.mjs
 node front/tests/sequenceWorkbench.browser.mjs
