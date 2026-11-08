@@ -21,6 +21,6 @@ description: 场次单元、资产图片与实验室的当前生成边界
 
 ## 实验室与通用执行
 
-实验室保持独立的模型试验入口，不自动写入场次设计或粗剪。资产和场次复用通用任务、供应商适配和文件归档；模型参数及媒体契约位于 `app/core/contracts`，执行编排不定义跨层 DTO。任务状态和结果交付边界见[任务执行架构](/docs/architecture/task-execution/)。
+实验室保持独立的模型试验入口，不自动写入场次设计或粗剪。资产和场次复用通用任务、供应商适配和文件归档；模型参数及媒体契约位于 `app/core/contracts`，执行编排不定义跨层 DTO。任务状态和结果交付边界见[任务执行架构](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/task-execution.md)。
 
 旧 `services/studio/generation/frame`、`video` 和 ShotDetail 摄影字段已移除；画幅及时长由当前生产单元表达，不再从旧镜头字段派生。

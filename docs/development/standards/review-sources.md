@@ -13,6 +13,7 @@
 | 场次领域、六岗或生产单元 | [场次工作台架构](../architecture/directing-foundation.md)、[六部门专业输出契约](../reference/six-department-contracts.md) |
 | 工作台控件、主题、卡片或详情 | [工作台前端设计标准](workbench-design.md) |
 | graph、投影、导航、布局缓存或证据 | [接入共享画布 graph](../guides/canvas-graph.md) |
+| 任务执行、模型解析或数据库维护 | [任务执行架构](../architecture/task-execution.md)、[默认模型解析](../architecture/llm-default-model-resolution.md)、[数据库迁移](../architecture/database-migrations.md) |
 | 测试、lint、CI 或运行入口 | `front/tests/README.md`、`front/package.json`、`.github/workflows/frontend-checks.yml`、`front/tests/browser-suites.json` |
 | 规格与票据 | `docs/agents/issue-tracker.md`，再定位本任务 `.scratch/<feature>/spec.md` 与票据 |
 

@@ -13,8 +13,5 @@ description: "记录当前真实生效的系统结构、状态流转、页面边
 
 
 - [仓库中的前端基础布局](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/frontend-layout.md)
-- [任务执行架构](/docs/architecture/task-execution/)
-- [LLM 默认模型解析](/docs/architecture/llm-default-model-resolution/)
-- [数据库迁移与系统种子](/docs/architecture/database-migrations/)
 
 - [生成画布架构与执行边界](/docs/architecture/generation-canvas/)

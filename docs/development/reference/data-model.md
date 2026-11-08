@@ -20,4 +20,4 @@
 
 旧 `directing_revisions` 及旧生产计划 Take 仍按原固定身份读取；旧 Shot、ShotDetail 和镜头槽位生成路径已经退役，不是当前主业务模型。
 
-字段与关系以 `backend/app/models`、`backend/app/core/contracts` 为准。参见[场次架构](../architecture/directing-foundation.md)、[任务执行](../../../site/content/docs/architecture/task-execution.md)和[生成画布](../../../site/content/docs/architecture/generation-canvas.md)。
+字段与关系以 `backend/app/models`、`backend/app/core/contracts` 为准。参见[场次架构](../architecture/directing-foundation.md)、[任务执行](../architecture/task-execution.md)和[生成画布](../../../site/content/docs/architecture/generation-canvas.md)。
