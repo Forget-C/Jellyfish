@@ -287,6 +287,32 @@ try {
   await other.getByRole('tab', { name: '生成前检查', exact: true }).click()
   assert.equal(await other.locator('.generation-card-editor:visible').getByRole('button', { name: '检查', exact: true }).isDisabled(), true)
   await other.close()
+  const single = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '未纳入整卡的单项检查' }) })).json()).data
+  const singleSeed = await fetch(`${base}/${single.id}`, { method: 'PUT', headers: json, body: JSON.stringify({
+    request_id: 'seed-single', expected_revision: 0,
+    document: { ...single.document, cards: [shots[0], ...manyDocument.cards.slice(-2)],
+      edges: manyDocument.edges.filter(edge => ['adopt-shot-0', 'observe'].includes(edge.id)),
+      input_order: { target: { text: ['adopt-shot-0'] }, check: { check_basis: ['observe'] } } },
+  }) })
+  assert.ok(singleSeed.ok, await singleSeed.text())
+  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${single.id}`)
+  await face.getByText(/已启用 1 项/).waitFor()
+  await openCanvasCard(page, 'check')
+  await itemSwitch.uncheck()
+  await closeCanvasDetails(page)
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await face.getByText(/已启用 0 项/).waitFor()
+  await openCanvasCard(page, 'check')
+  const excluded = category.getByRole('button', { name: /^检查此项：镜头1/ })
+  await excluded.click()
+  await category.getByRole('button', { name: /^重新检查此项：镜头1/ }).waitFor()
+  await closeCanvasDetails(page)
+  await face.getByText(/已启用 0 项/).waitFor()
+  await face.getByRole('button', { name: '查看卡片问题', exact: true }).click()
+  const excludedIssue = page.getByRole('region', { name: '卡片问题', exact: true }).getByRole('listitem').filter({ hasText: /镜头1.*风险建议/ })
+  await excludedIssue.getByRole('button', { name: '查看检查报告', exact: true }).click()
+  await editor.getByRole('tab', { name: '检查记录', exact: true, selected: true }).waitFor()
+  await editor.getByRole('region', { name: '检查报告', exact: true }).getByText(/单项检查/).waitFor()
   console.log('check model, partial failure, single-item retry, and sound capability rule passed')
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})

@@ -2,12 +2,13 @@ import { designPhaseLabel } from './designScope'
 import { isDesignFieldConfigured } from './designFieldConfiguration'
 import { useGraphRules } from './CanvasCatalogContext'
 import { Tooltip } from 'antd'
-import type { CanvasDocument, MovementCard, ReferenceDesignField } from '../../../services/generated'
+import type { CanvasDocument, CanvasResolvedOutput, MovementCard, OutputIdentity, ReferenceDesignField } from '../../../services/generated'
 import type { VisualDesignCard as DesignCard } from './designFieldReferences'
 import { photographyRegions, shotSizeLabels } from './photographyDesign'
 import { styleLabels } from './visualPresets'
 import { DesignPurposeIllustration } from './DesignPurposeIllustration'
 import { movementFrameOptions } from './CompositionFrameCandidate'
+import { designSummarySourceLabel } from './designSummarySource'
 import type { CSSProperties } from 'react'
 import './visualDesignCard.css'
 
@@ -17,15 +18,11 @@ const kindOf = (card: DesignCard) => (card.type || 'direction.style').slice('dir
 const titleOf = (kind: string) => kind === 'style' ? '画面风格' : photographyRegions[kind as keyof typeof photographyRegions].label
 
 /** Configuration describes authored intent, independently from output eligibility or model readiness. */
-function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<string, ReferenceDesignField | undefined>): DesignSummaryRow[] {
+function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<string, ReferenceDesignField | undefined>, sourceName: (identity: OutputIdentity) => string): DesignSummaryRow[] {
   const kind = kindOf(card), labels: Record<string, string> = kind === 'style' ? styleLabels : photographyRegions[kind as keyof typeof photographyRegions].fields
-  const sourceName = (id: string) => {
-    const source = document.cards?.find(item => item.id === id)
-    return source ? 'name' in source && source.name ? source.name : '已关联来源' : '失效来源'
-  }
   const describe = (field?: ReferenceDesignField & { size?: string | null }, key?: string) => {
     if (!field) return ''
-    const text = field.document ? (field.document.segments || []).map(segment => segment.kind === 'text' ? segment.text : `@${sourceName(segment.source.card_id)}`).join('').trim() : field.text?.trim() || ''
+    const text = field.document ? (field.document.segments || []).map(segment => segment.kind === 'text' ? segment.text : `@${sourceName(segment.source)}`).join('').trim() : field.text?.trim() || ''
     const size = field.size ? shotSizeLabels[field.size as keyof typeof shotSizeLabels] : ''
     const configured = isDesignFieldConfigured(field, key ? defaults[key] : undefined)
     if (!configured) return ''
@@ -57,7 +54,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
   if (card.scope?.phase) summary.push({ label: '制作阶段', text: designPhaseLabel(card.scope.phase) })
   if (card.scope?.condition?.trim()) summary.push({ label: '适用条件', text: card.scope.condition.trim() })
   if (card.source_locator?.trim()) summary.push({ label: '卡片原始来源', text: card.source_locator.trim() })
-  for (const binding of card.input_bindings || []) summary.push({ label: relationLabels[binding.input_port] || '关联关系', text: sourceName(binding.source.card_id) })
+  for (const binding of card.input_bindings || []) summary.push({ label: relationLabels[binding.input_port] || '关联关系', text: sourceName(binding.source) })
   if (!rows.length && summary.length) summary.unshift({ label: '核心内容', text: `尚未填写${titleOf(kind)}` })
   const visible = summary.slice(0, 3)
   // Give longer values two lines where possible, within four lines for the whole card.
@@ -65,10 +62,10 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
 }
 
 /** Six designs share one card body and entry; their field ownership and modal editors stay independent. */
-export function VisualDesignCard({ card, document }: { card: DesignCard; document: CanvasDocument }) {
+export function VisualDesignCard({ card, document, outputs }: { card: DesignCard; document: CanvasDocument; outputs?: Record<string, CanvasResolvedOutput[]> }) {
   const { cardDefinitions } = useGraphRules()
   const defaults = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.default_value]))
-  const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document, defaults)
+  const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document, defaults, designSummarySourceLabel(document, card.id, cardDefinitions, outputs))
   return <DesignCardBody kind={kind} title={title} rows={rows} />
 }
 

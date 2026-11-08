@@ -7,15 +7,19 @@ const attention = new Set(['明确问题', '无法判断', '执行失败', '待�
 /** 检查问题只使用已有结论与逐项有效性，跳转不参与技术预检。 */
 export function CheckCardIssues({ diagnostics, onOpen }: { diagnostics: CanvasDiagnostic[]; onOpen: (trigger: HTMLElement) => void }) {
   const state = useCheckCard()
-  const { cardId, enabledItems, reports, latest, itemName, itemState, openItem, openReport } = state
+  const { cardId, items, enabledItems, reports, latest, itemName, itemState, openItem, openReport } = state
   const issues = [...diagnostics]
   const add = (name: string, status: string, itemId: string, reportId?: string) => {
     issues.push({ code: 'CHECK_ATTENTION', severity: status === '明确问题' || status === '执行失败' ? 'error' : 'warning',
       message: `${name} · ${status}`, target: { card_id: cardId, report_id: reportId, item_id: itemId }, blocks: [] })
   }
-  for (const item of enabledItems) {
+  // 整卡开关控制执行范围，单独执行的结果仍属于当前检查卡。
+  const enabledIds = new Set(enabledItems.map(item => item.id))
+  for (const item of items) {
+    const report = latest(item.id)
+    if (!enabledIds.has(item.id) && !report?.items.some(row => row.id === item.id)) continue
     const status = itemState(item)
-    if (attention.has(status)) add(itemName(item), status, item.id, latest(item.id)?.id)
+    if (attention.has(status)) add(itemName(item), status, item.id, report?.id)
   }
   // 每条问题保留原报告，单项复核只替代同一产物的同一项。
   const recentProduct = reports.find(report => report.product)?.product

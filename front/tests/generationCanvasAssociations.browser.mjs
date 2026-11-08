@@ -72,6 +72,7 @@ try {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:4291/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.locator('[data-card-id="broken-style"]').getByText(/失效来源/).waitFor({ state: 'attached' })
   const detail = page.locator('.wb-details:visible')
   const strip = detail.getByRole('region', { name: '关联来源', exact: true })
   await page.locator('[data-card-id="empty"]').press('Enter')

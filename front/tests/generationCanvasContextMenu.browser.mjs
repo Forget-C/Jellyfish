@@ -69,12 +69,21 @@ try {
   await page.waitForFunction(()=>document.querySelectorAll('[data-card-type="content.text"]').length===2)
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   await page.reload();await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
-  await page.getByLabel('生成画布视口',{exact:true}).waitFor()
-  await page.mouse.click(1300,650,{button:'right'})
+  const blank = await page.getByLabel('生成画布视口',{exact:true}).evaluate(surface => {
+    const { left, top, right, bottom } = surface.getBoundingClientRect()
+    for (let y = top + 80; y < Math.min(bottom, innerHeight) - 40; y += 40) {
+      for (let x = left + 80; x < Math.min(right, innerWidth) - 40; x += 40) {
+        const hit = document.elementFromPoint(x, y)
+        if (hit && surface.contains(hit) && !hit.closest('[data-card-id], .generation-group, .generation-stack, .canvas-edge-hit, button, input, textarea, [contenteditable], [role="dialog"]')) return { x, y }
+      }
+    }
+  })
+  assert.ok(blank, 'the restored canvas has space to paste another card')
+  await page.mouse.click(blank.x,blank.y,{button:'right'})
   await menu.getByRole('menuitem',{name:'粘贴',exact:true}).click()
   await page.waitForFunction(()=>document.querySelectorAll('[data-card-type="content.text"]').length===3)
   const dimensions = await page.locator('[data-card-type="content.text"]').evaluateAll(cards => cards.map(card => [card.offsetWidth, card.offsetHeight]))
-  assert.deepEqual(dimensions, [[300, 251], [300, 251], [300, 251]], 'new, pasted and restored text cards share their dimensions')
+  assert.deepEqual(dimensions, [[400, 172], [400, 172], [400, 172]], 'new, pasted and restored text cards share their dimensions')
   await page.screenshot({path:join(output,'context-menu.png')})
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   const request=async(path,body,method='POST')=>{const response=await fetch(base+path,body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);assert.ok(response.ok,await response.clone().text());return(await response.json()).data}

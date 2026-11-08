@@ -146,8 +146,9 @@ function useCheckSession(props: CheckSessionProps) {
     } catch { setError('取消请求结果待核实，请查看刷新后的检查状态'); setRefresh(value => value + 1) }
     finally { setCancelling(false) }
   }
+  // 批量报告里的关闭记录不覆盖该项已执行的报告。
   const latest = (id: string) => reports.find(report => !report.product && (report.results.some(result => result.item_id === id)
-    || report.executions?.some(item => item.item_id === id) || report.omitted?.some(item => item.item_id === id)))
+    || report.executions?.some(item => item.item_id === id) || report.omitted?.some(item => item.item_id === id && item.status !== 'disabled')))
   const itemState = (item: CanvasCheckItem) => {
     const report = latest(item.id)
     const execution = report?.executions?.find(row => row.item_id === item.id)

@@ -1,3 +1,12 @@
+/** 紧凑档的类型、核心字段和辅助字段优先级共用同一份定义。 */
+export const compactDesignFields: Partial<Record<string, { core: string; auxiliary: readonly string[] }>> = {
+  'direction.criterion': { core: 'standard', auxiliary: ['scope', 'condition'] },
+  'direction.fact': { core: 'fact', auxiliary: ['source_basis', 'source'] },
+  'direction.dialogue': { core: 'content', auxiliary: ['language_pronunciation', 'audiovisual_relation'] },
+  'direction.event': { core: 'action_change', auxiliary: ['source'] },
+  'direction.performance_rule': { core: 'applicability', auxiliary: ['scope', 'condition'] },
+}
+
 /** 结构化档按卡片职责选择关键字段，与目录中的表单字段顺序无关。 */
 export const structuredDesignFields: Partial<Record<string, readonly string[]>> = {
   'direction.creative_control': ['keep', 'allowed_range', 'freedom'],
