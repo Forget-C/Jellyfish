@@ -17,11 +17,26 @@ export type MediaContentEditorProps = {
 }
 
 /** 固定文件的原生预览保留视频音轨，音频不走图片兜底。 */
-export function MediaPreview({ fileId, type, onDuration }: { fileId: string; type: string; onDuration?: (seconds: number) => void }) {
+export function MediaPreview({ fileId, type, onDuration, onError }: { fileId: string; type: string; onDuration?: (seconds: number) => void; onError?: () => void }) {
   const src = buildFileDownloadUrl(fileId)
-  if (type === 'audio') return <audio aria-label="音频预览" src={src} controls onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%' }} />
-  if (type === 'video') return <video aria-label="视频预览" src={src} controls playsInline onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%', maxHeight: 260 }} />
+  if (type === 'audio') return <audio aria-label="音频预览" src={src} controls onError={onError} onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%' }} />
+  if (type === 'video') return <video aria-label="视频预览" src={src} controls playsInline onError={onError} onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%', maxHeight: 260 }} />
   return <img alt="图片预览" src={src} style={{ maxWidth: '100%', maxHeight: 260 }} />
+}
+
+/** 同一文件的播放器随状态刷新保留，调用方按文件身份重建以清除旧播放位置。 */
+export function PlaybackContent({ fileId, type, onDuration }: { fileId: string; type: 'audio' | 'video'; onDuration?: (seconds: number | undefined) => void }) {
+  const preview = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    const player = preview.current?.querySelector<HTMLMediaElement>('audio, video')
+    return () => player?.pause()
+  }, [])
+  return <div className="generation-playback-content" ref={preview}>
+    {failed && <small role="status">媒体暂不可播放</small>}
+    <MediaPreview fileId={fileId} type={type} onDuration={seconds => { setFailed(false); onDuration?.(seconds) }}
+      onError={() => { setFailed(true); onDuration?.(undefined) }} />
+  </div>
 }
 
 /** 上传与画布保存分别提交；回调只更新原卡，调用方须按现有 ID 合并编辑。 */
@@ -99,7 +114,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
       </div>
     </section>) : <>
       {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
-      {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
+      {card.file_id ? <PlaybackContent key={card.file_id} fileId={card.file_id} type={type === 'audio' ? 'audio' : 'video'} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
       {actions}
     </>}
     {error && <Alert type="error" message={error} />}

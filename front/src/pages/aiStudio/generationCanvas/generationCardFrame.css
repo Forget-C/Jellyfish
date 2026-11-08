@@ -1,9 +1,15 @@
-.generation-workbench .generation-card:is([data-card-type^="model."], [data-card-type^="result."], [data-card-type^="reference."], [data-card-type="content.image"], [data-card-type="content.text"], [data-card-type="content.basis"], [data-card-type="content.character"], [data-card-type="content.prop"], [data-card-type="content.costume"], [data-card-type="content.place"]) .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
+.generation-workbench .generation-card:is([data-card-type^="model."], [data-card-type^="result."], [data-card-type^="reference."], [data-card-type="content.image"], [data-card-type="content.text"], [data-card-type="content.audio"], [data-card-type="content.video"], [data-card-type="content.basis"], [data-card-type="content.character"], [data-card-type="content.prop"], [data-card-type="content.costume"], [data-card-type="content.place"]) .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
 .generation-output-card { height: 100%; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .generation-output-preview { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .generation-workbench .generation-card .generation-output-card > footer.generation-card-footer { height: 32px; flex: none; box-sizing: border-box; margin-top: auto; padding: 0 10px; font-size: 11px; color: var(--wb-muted); overflow: hidden; display: flex; align-items: center; gap: 8px; }
 .generation-output-card .generation-card-status { height: 100%; min-height: 0; }
 .generation-output-card .generation-card-status > .wb-icon-trigger { flex: none; overflow: visible; }
+
+.generation-playback-card-preview { display: flex; flex-direction: column; justify-content: center; gap: 4px; height: 100%; box-sizing: border-box; padding: 8px 10px; }
+.generation-playback-card-preview > small { color: var(--wb-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.generation-playback-card-preview > p { margin: 0; color: var(--wb-muted); }
+.generation-playback-content > :is(audio, video) { display: block; }
+.generation-playback-content > small { color: var(--wb-muted); }
 
 .generation-output-text { --generation-card-summary-lines: 4; padding: 12px 15px; }
 .generation-output-text .canvas-card-summary { font-size: 13px; line-height: 1.8; margin: 0; }

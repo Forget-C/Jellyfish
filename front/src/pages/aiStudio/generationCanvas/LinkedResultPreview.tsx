@@ -1,6 +1,7 @@
 import type { CanvasResolvedOutput } from '../../../services/generated'
 import { GenerationCardFrame } from './GenerationCardFrame'
 import { MediaResultsPreview } from './MediaResultsPreview'
+import { PlaybackCardPreview } from './PlaybackCardPreview'
 import { TextCardPreview } from './TextCardPreview'
 
 const modalityLabels = { text: '文本', image: '图片', video: '视频', audio: '音频' }
@@ -15,6 +16,11 @@ export function LinkedResultPreview({ output }: { output: CanvasResolvedOutput }
   if (output.modality === 'text') return <TextCardPreview label="生成结果预览"
     text={missing ? '当前输出缺失' : output.text || ''}
     status={<>{!missing && <span>{output.text?.length || 0} 字</span>}{status}</>} />
+  if (output.modality === 'audio' || output.modality === 'video') {
+    const fileId = missing ? undefined : output.file_id ?? undefined
+    return <PlaybackCardPreview key={fileId} type={output.modality} fileId={fileId} label="生成结果预览"
+      status={status} empty="当前输出缺失" />
+  }
   return <GenerationCardFrame label="生成结果预览" status={status}>
     {missing ? <p className="generation-output-text">当前输出缺失</p> : <MediaResultsPreview outputs={[output]} cardPreview />}
   </GenerationCardFrame>

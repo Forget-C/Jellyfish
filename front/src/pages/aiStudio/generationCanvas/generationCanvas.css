@@ -272,10 +272,6 @@
   .generation-card-editor.wb-details[data-focus-layout="true"][data-expanded="true"] { width: calc(100vw - 16px); }
 }
 
-/* 基础正文保留四行摘要；独立媒体在有限卡面保留播放控件。 */
-.generation-workbench .generation-card:is([data-card-type="content.video"], [data-card-type="content.audio"]) .generation-card-body { padding: 12px 14px; }
-.generation-card[data-card-type="content.video"] .generation-card-body > video { flex: 1; min-height: 0; }
-
 /* 标题和状态补偿画布缩放；正文与媒体仍按原几何缩放。 */
 .generation-workbench .generation-card header strong { font-size: max(12px, calc(12px / var(--generation-canvas-scale, 1))); }
 .generation-workbench .generation-card header small { font-size: max(11px, calc(11px / var(--generation-canvas-scale, 1))); }

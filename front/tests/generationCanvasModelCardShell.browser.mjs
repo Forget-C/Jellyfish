@@ -54,18 +54,26 @@ try {
   const sizes = { description:{width:440,height:204}, basis:{width:480,height:250}, short: {width:560,height:400}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
   const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   const transform = {x:0,y:0,scale:1}
-  const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[
-    ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`,...(id==='long'?{show_result_cards:true}:{})})), ...contentCards
-  ],edges:[{id:'caption',source_card:'short',source_port:'text',target_card:'image',target_port:'text'}],input_order:{image:{text:['caption']}}}})})
-  assert.ok(seeded.ok,await seeded.text())
   const upload = async (name, data, type) => {
     const form = new FormData(); form.append('file',new Blob([data],{type}),name); form.append('project_id','canvas-project'); form.append('usage_kind','generation_upload')
     const response = await fetch(api+'/api/v1/studio/files/upload',{method:'POST',body:form}); assert.ok(response.ok,await response.clone().text()); return (await response.json()).data.id
   }
   const imageId = await upload('reference.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64'),'image/png')
   const videoPath = join(output,'clip.mp4')
-  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=gray:s=240x120:d=1','-f','lavfi','-i','sine=frequency=440:duration=1','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',videoPath])
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=gray:s=240x120:d=4','-f','lavfi','-i','sine=frequency=440:duration=4','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',videoPath])
   const videoId = await upload('clip.mp4',readFileSync(videoPath),'video/mp4')
+  const voicePath = join(output, 'voice.wav')
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4', voicePath])
+  const voiceId = await upload('voice.wav', readFileSync(voicePath), 'audio/wav')
+  const nextVoiceId = await upload('next-voice.wav', readFileSync(voicePath), 'audio/wav')
+  const nextVideoId = await upload('next-clip.mp4', readFileSync(videoPath), 'video/mp4')
+  contentCards.push({ id: 'voice', type: 'content.audio', file_id: voiceId }, { id: 'clip', type: 'content.video', file_id: videoId })
+  Object.assign(positions, { voice: { x: 1550, y: 700 }, clip: { x: 1550, y: 960 } })
+  Object.assign(sizes, { voice: { width: 300, height: 251 }, clip: { width: 300, height: 251 } })
+  const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[
+    ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`,...(['long','video'].includes(id)?{show_result_cards:true}:{})})), ...contentCards
+  ],edges:[{id:'caption',source_card:'short',source_port:'text',target_card:'image',target_port:'text'}],input_order:{image:{text:['caption']}}}})})
+  assert.ok(seeded.ok,await seeded.text())
   const out = (id,position,modality,extra) => ({source:{canvas_id:canvas.id,card_id:id,port_id:modality,position},modality,available:true,basis_current:true,...extra})
   let scenario = 'succeeded', streamedOutputs, streamFixtures = false
   await page.route(/\/events(?:\?|$)/, async route => {
@@ -79,7 +87,7 @@ try {
   })
   let scenarioOutputs
   await page.route('**/runtime', async route => {
-    const outputs = scenario === 'empty' ? {} : {short:[out('short',0,'text',{text:'一行短文本'})], long:[out('long',0,'text',{text:'很长的生成内容。'.repeat(1000)})], image:[out('image',0,'image',{file_id:imageId}),out('image',1,'image',{file_id:imageId})],video:[out('video',0,'video',{file_id:videoId})]}
+    const outputs = scenario === 'empty' ? {} : {short:[out('short',0,'text',{text:'一行短文本'})], long:[out('long',0,'text',{text:'很长的生成内容。'.repeat(1000)})], image:[out('image',0,'image',{file_id:imageId}),out('image',1,'image',{file_id:imageId})],video:[out('video',0,'video',{file_id:videoId}),out('video',1,'audio',{file_id:voiceId})]}
     scenarioOutputs = outputs
     const nodes = scenario === 'empty' ? [] : ids.filter(id=>id!=='empty').map(id=>({id:'node-'+id,run_id:'run',card_id:id,task_id:null,status:scenario,stage:scenario==='running'?'generating':'finished',progress:scenario==='running'?30:100,text:scenario==='running'?'正在生成'.repeat(500):'',basis:{},outputs:outputs[id]||[],result_set_id:null,current_output_updated:scenario==='succeeded',error_code:scenario==='failed'?'fixture_failure':null,error_message:scenario==='failed'?'生成失败，保留上次结果':null}))
     await route.fulfill({json:{code:200,message:'success',data:{cursor:0,runs:nodes.length?[{id:'run',canvas_id:canvas.id,lifecycle:scenario==='running'?'active':'finished',nodes}]:[],current_outputs:outputs},meta:null}})
@@ -106,7 +114,7 @@ try {
     assert.ok(Math.abs(endpoint.y-endpoint.middle)<1,'edge follows the resized image card center')
     const layout=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
     for (const [id, point] of Object.entries(positions)) assert.deepEqual(layout.positions[id],point)
-    for (const [id, expected] of [['content',{width:400,height:172}],['description',{width:400,height:172}],['basis',{width:400,height:172}]]) {
+    for (const [id, expected] of [['content',{width:400,height:172}],['description',{width:400,height:172}],['basis',{width:400,height:172}],['voice',{width:300,height:172}],['clip',{width:300,height:251}]]) {
       assert.deepEqual(layout.sizes[id],expected)
       assert.deepEqual(await page.locator(`[data-card-id="${id}"]`).evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),expected)
     }
@@ -173,5 +181,70 @@ try {
   await resultDetail.getByRole('button', {name:'关闭详情', exact:true}).click()
   streamedOutputs = { cursor: 3, outputs: scenarioOutputs }
   await linkedText.waitFor()
+  const linkedAudio = page.getByRole('article', { name: '音频生成结果 2', exact: true })
+  assert.deepEqual(await linkedAudio.evaluate(node => [node.offsetWidth, node.offsetHeight]), [300, 172])
+  for (const card of [page.locator('[data-card-id="voice"]'), linkedAudio]) {
+    await card.getByLabel('音频预览', { exact: true }).waitFor()
+    await card.getByText('voice', { exact: true }).waitFor()
+    await card.getByText('4 秒', { exact: true }).waitFor()
+  }
+  const readCanvas = () => request('/api/v1/studio/generation-canvases/canvas-project/' + canvas.id)
+  const beforePlayback = await readCanvas()
+  let cursor = 3
+  let currentMedia = scenarioOutputs.video
+  const publishMedia = (position, change) => {
+    currentMedia = currentMedia.map(output => output.source.position === position ? { ...output, ...change } : output)
+    streamedOutputs = { cursor: ++cursor, outputs: { ...scenarioOutputs, video: currentMedia } }
+  }
+  for (const { position, tag, name, previewName, replacement } of [
+    { position: 0, tag: 'video', name: '视频生成结果 1', previewName: '视频预览', replacement: nextVideoId },
+    { position: 1, tag: 'audio', name: '音频生成结果 2', previewName: '音频预览', replacement: nextVoiceId },
+  ]) {
+    const linked = page.getByRole('article', { name, exact: true })
+    const detail = page.getByRole('complementary', { name, exact: true })
+    if (tag === 'video') {
+      assert.deepEqual(await linked.evaluate(node => [node.offsetWidth, node.offsetHeight]), [300, 251])
+      await linked.getByLabel(previewName, { exact: true }).click({ position: { x: 14, y: 14 } })
+      assert.equal(await detail.isVisible(), false, 'using an embedded player does not open details')
+    }
+    await linked.press('Enter')
+    await detail.getByText('生成结果', { exact: true }).waitFor()
+    assert.equal(await detail.getByRole('button', { name: '添加媒体', exact: true }).count(), 0)
+    const player = detail.getByLabel(previewName, { exact: true })
+    await player.evaluate(async media => {
+      media.muted = true
+      await media.play()
+      media.currentTime = 1.1
+    })
+    publishMedia(position, { basis_current: false })
+    await detail.getByText('只读 · 依据已变', { exact: true }).waitFor()
+    assert.ok(await player.evaluate(media => !media.paused && media.currentTime >= 1), 'same file refresh preserves playback')
+    publishMedia(position, { file_id: replacement, basis_current: true })
+    const replaced = detail.locator(`${tag}[src*="${replacement}"]`)
+    await replaced.waitFor()
+    assert.ok(await replaced.evaluate(media => media.paused && media.currentTime === 0), 'new file starts at rest')
+    await linked.locator(`${tag}[src*="${replacement}"]`).waitFor()
+    await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await linked.press('Enter')
+    const narrow = page.getByRole('dialog', { name, exact: true })
+    await narrow.getByLabel(previewName, { exact: true }).waitFor()
+    if (tag === 'audio') {
+      const playback = narrow.getByLabel(previewName, { exact: true })
+      const oldPlayer = await playback.elementHandle()
+      await playback.evaluate(async media => { media.muted = true; await media.play() })
+      publishMedia(position, { available: false })
+      await narrow.getByText('当前输出缺失', { exact: true }).waitFor()
+      assert.equal(await playback.count(), 0)
+      assert.equal(await oldPlayer.evaluate(media => media.paused), true, 'removed output pauses previous playback')
+      publishMedia(position, { available: true, file_id: 'missing-audio-fixture' })
+      await narrow.getByText('媒体暂不可播放', { exact: true }).waitFor()
+    }
+    await narrow.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await page.setViewportSize({ width: 1440, height: 1200 })
+  }
+  const afterPlayback = await readCanvas()
+  assert.equal(afterPlayback.revision, beforePlayback.revision)
+  assert.deepEqual(afterPlayback.document, beforePlayback.document, 'reading and runtime updates do not edit canvas')
   console.log('PASS unified model dimensions, full image preview, readable zoom, fixed footer and cached positions',output)
 } catch(error) { if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error } finally { await cleanup() }

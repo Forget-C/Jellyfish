@@ -13,7 +13,7 @@ import { designReferences, isVisualDesign, isReferenceDesign, isFlatDesign } fro
 import { buildFileDownloadUrl } from '../assets/utils'
 import { TextContentEditor } from './TextContentEditor'
 import { TextCardPreview } from './TextCardPreview'
-import { canReadLinkedResult, LinkedResultReader } from './LinkedResultReader'
+import { LinkedResultReader } from './LinkedResultReader'
 import { CardStatusSummary } from './CardStatusSummary'
 import { ImageContentCardSummary } from './ImageContentCardSummary'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
@@ -56,6 +56,7 @@ import { knownResultPositions, linkedResultCards, placeLinkedResults, retainedRe
 import { resultScopeIncludes } from './resultConnections'
 import { capturedResult } from './detachedResults'
 import { LinkedResultPreview, linkedResultTitle } from './LinkedResultPreview'
+import { PlaybackCardPreview } from './PlaybackCardPreview'
 import { rendererRegistry } from './rendererRegistry'
 import { visibleSourceEdges, sourceConnectionEdges } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
@@ -1378,10 +1379,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             width={cardSizes[id].width} height={cardSizes[id].height} selected={selected.includes(id)}
             onOpen={trigger => {
               setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined)
-              if (canReadLinkedResult(output)) {
-                setOpenedResult({ id, output: { source: output.source, modality: output.modality, available: false } })
-                setDetailTrigger(trigger); setDetailId(id)
-              } else setDetailId(undefined)
+              setOpenedResult({ id, output: { source: output.source, modality: output.modality, available: false } })
+              setDetailTrigger(trigger); setDetailId(id)
             }}
             onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, id])] : previous.filter(value => value !== id)) }}
             multiSelectMode={multiSelectMode} onDragStart={() => beginMove(id, true)} onDragEnd={finishMove}
@@ -1395,6 +1394,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const isReference = card.type?.startsWith('reference.')
           const isDescription = isDescriptionCard(card)
           const isTextContent = card.type === 'content.text' || card.type === 'content.basis'
+          const playbackType = card.type === 'content.audio' ? 'audio' : card.type === 'content.video' ? 'video' : undefined
+          const playbackFile = playbackType && 'file_id' in card ? card.file_id ?? undefined : undefined
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
@@ -1413,12 +1414,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}
             onConnect={card.type === 'review.check' ? undefined : trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
-            footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' || isTextContent ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
+            footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
             {card.type === 'review.check' && <CheckCardFace onOpen={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} />}
             {isTextContent && <TextCardPreview label="正文预览" text={'text' in card && card.text || '未填写正文'}
               status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />} />}
-            {!isModel && !isReference && !isDescription && !isTextContent && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {playbackType && <PlaybackCardPreview key={playbackFile} type={playbackType} fileId={playbackFile} label="媒体预览"
+              status={<>{playbackFile && <span>固定媒体</span>}<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} /></>} />}
+            {!isModel && !isReference && !isDescription && !isTextContent && !playbackType && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
