@@ -31,6 +31,14 @@ export async function verifyIndependentDesigns(scenario, port) {
       event: ['action_change', '门铃响起'],
       performance_rule: ['applicability', '等待门铃停止后再起身'],
     }
+    const longResult = '人物看向门口并抬起右手。'.repeat(30)
+    const structuredExamples = {
+      creative_control: { keep: '保留左手钥匙', allowed_range: '允许调整门的位置', freedom: '颜色自由发挥' },
+      guidance: { priority: '优先交代方向', prohibitions: '不要跨轴', reference_requirements: '使用门口全景参考' },
+      narrative: { information_change: '发现出口', relationship_change: '信任开始动摇', turning_point: '脚步声突然停止' },
+      beat: { objective: '拿到钥匙', obstacle: '被守卫拦住', expected_change: '取得主动权' },
+      shot: { visible_result: longResult, narrative_role: '揭示人物看见门口时的反应，保留等待守卫转身的停顿。'.repeat(4), estimated_duration: '约五秒，等待人物抬手并完成视线转移后切换。'.repeat(4) },
+    }
     const fieldKeys=['direction','composition','viewpoint','movement_path','light_sources','depth_focus']
     const fieldLabels=['风格方向','构图重心','观察视点','运动路径','光源','景深与焦点']
     const cards=types.map((kind,i)=>({id:kind,type:'direction.'+kind,fields:{[fieldKeys[i]]:{text:`独立设计${i}`,state:'fact'}}}))
@@ -54,30 +62,42 @@ export async function verifyIndependentDesigns(scenario, port) {
         const kind = card.type.slice('direction.'.length)
         const sample = compactExamples[kind]
         return { id: kind, type: card.type, ...(kind === 'dialogue' ? { dialogue_id: 'geometry-dialogue' } : {}),
-          ...(sample ? { [sample[0]]: { state: 'fact', text: sample[1] } } : {}) }
+          ...(sample ? { [sample[0]]: { state: 'fact', text: sample[1] } } : {}),
+          ...Object.fromEntries(Object.entries(structuredExamples[kind] || {}).reverse().map(([key, value]) => [key, { authorship: 'user', text: value }])) }
       }))
       cards.find(card => card.id === 'criterion').name = '道具连续性验收'
       cards.find(card => card.id === 'criterion').scope = { description: '只核对镜头末尾' }
+      cards.find(card => card.id === 'guidance').sound_strategy = { authorship: 'user', text: '仅保留脚步声' }
+      cards.find(card => card.id === 'narrative').viewpoint = { authorship: 'user', text: '从门外观察' }
+      cards.find(card => card.id === 'beat').audience_must_see = { authorship: 'user', text: '必须看到手里的钥匙' }
+      cards.find(card => card.id === 'shot').name = '门口反应镜头'
       cards.push(
         { id: 'empty-criterion', type: 'direction.criterion' },
         { id: 'scope-only-criterion', type: 'direction.criterion', scope: { condition: '当钥匙入画时' } },
+        { id: 'scope-only-guidance', type: 'direction.guidance', scope: { description: '仅用于门厅' } },
+        { id: 'empty-creative-control', type: 'direction.creative_control' },
+        { id: 'state-only-beat', type: 'direction.beat', obstacle: { state: 'absent' } },
       )
     }
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
-    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, style: { x: 1060, y: 220 } }
+    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, style: { x: 1060, y: 220 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 } }
     if (scenario === 'summaries') {
       document.edges.push(
         { id: 'person-focus', source_card: 'person', source_port: 'object', target_card: 'relation-only', target_port: 'focus_object' },
         { id: 'style-criterion', source_card: 'style', source_port: 'text', target_card: 'criterion', target_port: 'text' },
+        { id: 'shot-criterion', source_card: 'shot', source_port: 'text', target_card: 'criterion', target_port: 'text' },
       )
       document.input_order['relation-only'] = { focus_object: ['person-focus'] }
-      document.input_order.criterion = { text: ['style-criterion'] }
-      document.groups = [{ id: 'existing-group', name: '验收依据', card_ids: ['criterion', 'fact'] }]
+      document.input_order.criterion = { text: ['style-criterion', 'shot-criterion'] }
+      document.groups = [
+        { id: 'existing-group', name: '验收依据', card_ids: ['criterion', 'fact'] },
+        { id: 'existing-shot-group', name: '镜头依据', card_ids: ['shot', 'guidance'] },
+      ]
       await page.addInitScript(({ key, positions }) => {
         if (sessionStorage.getItem('compact-layout-seeded')) return
-        localStorage.setItem(key, JSON.stringify({ schema: 1, positions, sizes: { criterion: { width: 360, height: 368 } },
+        localStorage.setItem(key, JSON.stringify({ schema: 1, positions, sizes: { criterion: { width: 360, height: 368 }, shot: { width: 360, height: 368 } },
           transform: { x: 24, y: 32, scale: 1 }, manuallyPlaced: Object.keys(positions) }))
         sessionStorage.setItem('compact-layout-seeded', 'true')
       }, { key: compactLayoutKey, positions: compactPositions })
@@ -106,13 +126,49 @@ export async function verifyIndependentDesigns(scenario, port) {
       }))
       assert.equal(boxes.length, cards.length - 1)
       for (const { id, type, width, height, overflow } of boxes) {
-        assert.deepEqual({ width, height }, { width: 360, height: Object.hasOwn(compactExamples, type.slice('direction.'.length)) ? 240 : 368 }, id)
+        const kind = type.slice('direction.'.length)
+        const heightByType = Object.hasOwn(compactExamples, kind) ? 240 : Object.hasOwn(structuredExamples, kind) ? 304 : 368
+        assert.deepEqual({ width, height }, { width: 360, height: heightByType }, id)
         assert.ok(overflow <= 1, id + ': card body contains its full summary')
       }
     }
     if(scenario==='summaries') {
       const names=['画面风格','景别与构图','机位与视角','运镜','光影与色彩','焦点与成像']
       await assertDesignGeometry(page)
+      for (const [id, fields] of Object.entries(structuredExamples)) {
+        const card = page.locator(`[data-card-id="${id}"]`)
+        assert.deepEqual(await card.getByRole('definition').allTextContents(), Object.values(fields), id + ': author content follows summary priorities')
+        assert.equal(await card.getByRole('img', { name: /用途示意/ }).count(), 0, id + ': structured card omits the generic illustration')
+      }
+      const shot = page.locator('[data-card-id="shot"]')
+      assert.equal(await shot.getByText('门口反应镜头', { exact: true }).count(), 1)
+      assert.deepEqual(await shot.evaluate(card => [card.style.left, card.style.top]), ['200px', '540px'])
+      const lineBoxes = await shot.getByRole('definition').evaluateAll(nodes => nodes.map(node => ({ visible: node.clientHeight, content: node.scrollHeight, lineHeight: parseFloat(getComputedStyle(node).lineHeight) })))
+      for (const box of lineBoxes) {
+        assert.ok(box.content > box.visible && Math.abs(box.visible - box.lineHeight * 2) <= 1, 'each long structured value uses at most two lines')
+      }
+      assert.equal(await page.locator('[data-group-id="existing-shot-group"]').evaluate(node => node.offsetHeight), 368, 'group fits the new structured height')
+      const shotEndpoint = await page.locator('[data-generation-edge-id="shot-criterion"] .canvas-edge-line').evaluate(path => {
+        const point = path.getPointAtLength(0).matrixTransform(path.getScreenCTM())
+        const box = document.querySelector('[data-card-id="shot"]').getBoundingClientRect()
+        return { x: point.x, y: point.y, left: box.left, right: box.right, center: box.top + box.height / 2 }
+      })
+      assert.ok(Math.min(Math.abs(shotEndpoint.x - shotEndpoint.left), Math.abs(shotEndpoint.x - shotEndpoint.right)) < 1 && Math.abs(shotEndpoint.y - shotEndpoint.center) < 1, 'connected edge follows the structured card')
+      await page.getByRole('button', { name: '布局', exact: true }).click()
+      await page.getByRole('button', { name: '展开小地图', exact: true }).click()
+      assert.equal(await page.getByRole('img', { name: '小地图导航' }).locator('[data-minimap-node="shot"]').getAttribute('height'), '304')
+      await page.getByRole('button', { name: '关闭小地图', exact: true }).click()
+      const scopeOnlyGuidance = page.locator('[data-card-id="scope-only-guidance"]')
+      await scopeOnlyGuidance.getByText('尚未填写生成指导', { exact: true }).waitFor({ state: 'attached' })
+      await scopeOnlyGuidance.getByText('仅用于门厅', { exact: true }).waitFor({ state: 'attached' })
+      await page.locator('[data-card-id="empty-creative-control"]').getByText('尚未填写创作控制', { exact: true }).waitFor({ state: 'attached' })
+      await page.locator('[data-card-id="state-only-beat"]').getByRole('definition').filter({ hasText: '明确没有' }).waitFor({ state: 'attached' })
+      await shot.screenshot({ path: join(output, 'structured-shot-desktop.png'), animations: 'disabled' })
+      await shot.press('Enter')
+      const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
+      if (await advanced.count()) await advanced.click()
+      assert.equal(await detail.getByRole('textbox', { name: '可见结果内容', exact: true }).innerText(), longResult)
+      await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       for (const [id, [, text]] of Object.entries(compactExamples)) {
         const card = page.locator(`[data-card-id="${id}"]`)
         await card.getByRole('definition').filter({ hasText: text }).waitFor({ state: 'attached' })
@@ -141,6 +197,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       const cache = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), compactLayoutKey)
       assert.deepEqual(cache.transform, { x: 24, y: 32, scale: 1 })
       assert.deepEqual(cache.sizes.criterion, { width: 360, height: 240 })
+      assert.deepEqual(cache.sizes.shot, { width: 360, height: 304 })
       await criterion.screenshot({ path: join(output, 'compact-criterion-desktop.png'), animations: 'disabled' })
       await criterion.locator('.generation-card-body').click()
       await detail.waitFor()
@@ -163,9 +220,9 @@ export async function verifyIndependentDesigns(scenario, port) {
         await card.getByRole('definition').filter({hasText:text}).waitFor({state:'attached'})
       }
       const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().height)))
-      assert.equal(figures.length,cards.length-1-Object.keys(compactExamples).length-2,'only non-compact designs have purpose illustrations')
+      assert.equal(figures.length,cards.length-1-Object.keys(compactExamples).length-2-Object.keys(structuredExamples).length-3,'only designs using the illustration layout have purpose illustrations')
       assert.equal(new Set(figures).size,1,'type-specific illustrations keep the same visible height')
-      assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=2)),true,'cards keep at most two labelled summary rows')
+      assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=3)),true,'cards keep at most three labelled summary rows')
       assert.equal(await page.locator('.visual-design-card dl > div').evaluateAll(nodes=>nodes.every(node=>{const row=node.getBoundingClientRect();return [...node.children].every(child=>{const r=child.getBoundingClientRect();return r.left>=row.left-1&&r.right<=row.right+1})})),true,'long stage labels and values remain inside the summary')
       await assertDesignGeometry(page)
       await page.screenshot({path:join(output,'unified-design-cards-desktop.png'),animations:'disabled'})
