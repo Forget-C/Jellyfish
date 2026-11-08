@@ -11,10 +11,10 @@
 .visual-design-empty p { color: var(--wb-muted); font-size: 12px; }
 .visual-design-empty strong { font-size: 13px; }
 .visual-design-empty p { margin: 8px 0 0; }
-.visual-design-card[data-summary-only="true"] dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; line-height: 1.5; }
-.visual-design-card[data-summary-only="true"] dd {
+.visual-design-card[data-multiline="true"] dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; line-height: 1.5; }
+.visual-design-card[data-multiline="true"] dd {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--design-summary-lines, 1);
   white-space: normal; overflow-wrap: anywhere;
 }
-.visual-design-card[data-summary-only="true"] dd[data-summary-parts] { display: block; }
+.visual-design-card[data-multiline="true"] dd[data-summary-parts] { display: block; }
 .visual-design-card dd[data-summary-parts] > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

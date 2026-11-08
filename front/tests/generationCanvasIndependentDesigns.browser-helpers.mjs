@@ -56,7 +56,21 @@ export async function verifyIndependentDesigns(scenario, port) {
     const fieldKeys=['direction','composition','viewpoint','movement_path','light_sources','depth_focus']
     const fieldLabels=['风格方向','构图重心','观察视点','运动路径','光源','景深与焦点']
     const cards=types.map((kind,i)=>({id:kind,type:'direction.'+kind,fields:{[fieldKeys[i]]:{text:`独立设计${i}`,state:'fact'}}}))
-    if(scenario==='summaries') Object.assign(cards[0], { scope:{description:'整场适用'}, source_locator:'第3章' })
+    const movementStart = '先从门外远处沿着走廊看向被门框遮挡的人物。'.repeat(10)
+    if(scenario==='summaries') {
+      cards[0].fields.visual_features = { text: '用柔和窗光与深色墙面分开人物轮廓。'.repeat(12), authorship: 'user' }
+      cards[1].fields.shot_size = { size: 'medium', state: 'fact' }
+      cards[1].frame_target = { card_id: 'movement', state_id: 'phase:pause' }
+      cards[2].fields.height_angle = { text: '视线高度保持水平', authorship: 'user' }
+      Object.assign(cards[3].fields, {
+        movement_start: { text: movementStart, authorship: 'user' },
+        end_frame: { text: '停在窗边人物的反应', authorship: 'user' },
+        movement_trigger: { text: '人物抬手后开始移动', authorship: 'user' },
+      })
+      cards[3].phases = [{ id: 'pause', name: '门框停顿', frame: { text: '门框左侧保持一半留白', authorship: 'user' } }]
+      cards[4].fields.light_direction = { text: '窗外从左后方补光', authorship: 'user' }
+      cards[5].fields.focus_change = { text: '由近处钥匙转向人物', authorship: 'user' }
+    }
     if(scenario==='summaries')cards.push(
       ...types.map(kind=>({id:'empty-'+kind,type:'direction.'+kind})),
       {id:'stage-only',type:'direction.movement',phases:[{id:'draft',name:'待定落幅'.repeat(30),frame:{state:'empty'}}]},
@@ -103,15 +117,17 @@ export async function verifyIndependentDesigns(scenario, port) {
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
-    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, style: { x: 1060, y: 220 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 } }
+    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 } }
     if (scenario === 'summaries') {
       document.edges.push(
+        { id: 'movement-composition', source_card: 'movement', source_port: 'text', target_card: 'composition', target_port: 'text' },
         { id: 'person-focus', source_card: 'person', source_port: 'object', target_card: 'relation-only', target_port: 'focus_object' },
         { id: 'style-criterion', source_card: 'style', source_port: 'text', target_card: 'criterion', target_port: 'text' },
         { id: 'shot-criterion', source_card: 'shot', source_port: 'text', target_card: 'criterion', target_port: 'text' },
         { id: 'performance-criterion', source_card: 'performance', source_port: 'text', target_card: 'criterion', target_port: 'text' },
       )
       document.input_order['relation-only'] = { focus_object: ['person-focus'] }
+      document.input_order.composition = { text: ['movement-composition'] }
       document.input_order.criterion = { text: ['style-criterion', 'shot-criterion', 'performance-criterion'] }
       document.groups = [
         { id: 'existing-group', name: '验收依据', card_ids: ['criterion', 'fact'] },
@@ -274,6 +290,31 @@ export async function verifyIndependentDesigns(scenario, port) {
         const empty=page.locator(`[data-card-id="empty-${types[i]}"]`)
         await empty.getByText('尚未填写'+names[i],{exact:true}).waitFor({state:'attached'})
       }
+      const visualLabels = {
+        style: ['风格方向', '视觉特征'],
+        composition: ['景别', '构图重心', '画面目标'],
+        camera: ['观察视点', '高度与角度'],
+        movement: ['起始画面', '结束画面', '运动路径'],
+        lighting: ['光源', '光线方向'],
+        focus: ['景深与焦点', '焦点变化'],
+      }
+      for (const [id, labels] of Object.entries(visualLabels)) {
+        const card = page.locator(`[data-card-id="${id}"]`)
+        assert.deepEqual(await card.locator('dt').allTextContents(), labels, id + ': actual design priorities')
+        const lines = await card.getByRole('definition').evaluateAll(rows => rows.map(row => ({
+          visible: row.clientHeight, full: row.scrollHeight, lineHeight: parseFloat(getComputedStyle(row).lineHeight),
+        })))
+        const visibleLines = lines.reduce((sum, row) => sum + Math.round(row.visible / row.lineHeight), 0)
+        assert.ok(visibleLines <= 4, id + ': at most four visible summary lines')
+        if (id === 'movement') assert.equal(visibleLines, 4, 'long start and two short movement fields use the available four lines')
+        if (id === 'style' || id === 'movement') assert.ok(lines.some(row => row.full > row.visible), id + ': long parameter is truncated')
+      }
+      await page.locator('[data-card-id="composition"]').getByRole('definition').filter({hasText:'运镜阶段 · 门框停顿'}).waitFor({state:'attached'})
+      await page.locator('[data-card-id="scope-only"]').getByText('尚未填写画面风格',{exact:true}).waitFor({state:'attached'})
+      const visualMovement = page.locator('[data-card-id="movement"]')
+      const movementBox = await visualMovement.boundingBox()
+      assert.equal(await page.evaluate(({x,y,width,height}) => document.elementFromPoint(x+width/2,y+height/2)?.closest('[data-card-id]')?.dataset.cardId,movementBox),'movement')
+      await visualMovement.screenshot({path:join(output,'visual-movement-desktop.png'),animations:'disabled'})
       for(const [id,text] of [['stage-only','阶段待填写'],['size-only','特写'],['scope-only','整场黄昏'],['state-only','不适用'],['fact-only','事实'],['doc-only','提议：窗外斜射光'],['relation-only','张三']]) {
         const card=page.locator(`[data-card-id="${id}"]`)
         await card.getByRole('definition').filter({hasText:text}).waitFor({state:'attached'})
