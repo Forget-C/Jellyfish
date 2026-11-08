@@ -3,12 +3,12 @@
   <div class="jf-heading">
     <div class="jf-kicker">Screens</div>
     <h2>{{ $shots.title }}</h2>
-    <p class="jf-lead">当前先复用仓库已有截图，后续可以继续补充章节工作台、分镜编辑和模型管理界面。</p>
+    <p class="jf-lead">查看项目概览和资产管理界面。</p>
   </div>
   <div class="jf-screenshot-grid">
     {{ range $shots.items }}
       <figure class="jf-shot">
-        <img src="{{ .image }}" alt="{{ .alt }}">
+        <img src="{{ .image | relURL }}" alt="{{ .alt }}">
         <figcaption>{{ .title }}</figcaption>
       </figure>
     {{ end }}
