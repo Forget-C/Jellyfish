@@ -480,5 +480,45 @@ try {
   await page.getByRole('button', { name: '断开此连接', exact: true }).click()
   await saved.waitFor()
   assert.deepEqual((await positions('all-fixed-target')).map(([position]) => position), [1, 2, 3])
+
+  const currentOutput = (await runtime()).current_outputs.m[0]
+  const { revision, document: summaryDocument } = await readDocument()
+  summaryDocument.cards.push(
+    { id: 'draft-picture', type: 'content.image', file_id: currentOutput.file_id },
+    { id: 'draft-reference', type: 'reference.character', name: '', image_binding: { file_id: currentOutput.file_id,
+      source: { canvas_id: canvas.id, card_id: 'draft-picture', port_id: 'image', position: 0 } } },
+  )
+  summaryDocument.edges.push({ id: 'draft-picture-binding', source_card: 'draft-picture', source_port: 'image', target_card: 'draft-reference', target_port: 'image_source' })
+  summaryDocument.input_order['draft-reference'] = { image_source: ['draft-picture-binding'] }
+  for (const [id, source] of [
+    ['published-summary', currentOutput.source],
+    ['draft-summary', { canvas_id: canvas.id, card_id: 'draft-reference', port_id: 'image', position: 0 }],
+  ]) {
+    summaryDocument.cards.push({ id, type: 'direction.style', fields: { direction: { state: 'proposal',
+      document: { segments: [{ id: 'reference', kind: 'reference', source }] } } } })
+    summaryDocument.edges.push({ id, source_card: source.card_id, source_port: 'image', target_card: id, target_port: 'image' })
+    summaryDocument.input_order[id] = { image: [id] }
+  }
+  const summarySaved = await saveDeletion('reference-summary-status', revision, summaryDocument)
+  assert.ok(summarySaved.ok, await summarySaved.text())
+  let releaseRuntime
+  const pendingRuntime = new Promise(resolve => { releaseRuntime = resolve })
+  await page.route('**/runtime', async route => {
+    await pendingRuntime
+    const response = await route.fetch()
+    const body = await response.json()
+    body.data.current_outputs.m = body.data.current_outputs.m.filter(output => output.source.position !== currentOutput.source.position)
+    await route.fulfill({ response, json: body })
+  })
+  const publishedSummary = page.locator('[data-card-id="published-summary"]')
+  try {
+    await page.reload()
+    await publishedSummary.getByText(/@图片模型卡/).waitFor({ state: 'attached' })
+    assert.equal(await publishedSummary.getByText(/失效来源/).count(), 0, 'pending runtime does not imply missing output')
+    await page.locator('[data-card-id="draft-summary"]').getByText(/失效来源/).waitFor({ state: 'attached' })
+  } finally {
+    releaseRuntime()
+  }
+  await publishedSummary.getByText(/失效来源/).waitFor({ state: 'attached' })
   console.log('PASS formal result display, linked result lifecycle, deletion and readonly', output)
 } finally { await cleanup() }

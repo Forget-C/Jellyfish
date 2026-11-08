@@ -8,7 +8,8 @@ import type { StreamConnection } from '../../../services/eventStream'
 export const canvasNodeStatusLabels: Record<string, string> = { waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' }
 
 export const activeNode = (node?: CanvasNodeRead) => !!node && ['waiting', 'queued', 'running'].includes(node.status)
-const empty = (): CanvasSnapshot => ({ cursor: 0, runs: [], current_outputs: {} })
+type RuntimeSnapshot = CanvasSnapshot & { outputScope?: string }
+const empty = (): RuntimeSnapshot => ({ cursor: 0, runs: [], current_outputs: {} })
 const describe = (reason: unknown) => reason instanceof ApiError && reason.body?.data?.code
   ? `${reason.body.data.code}: ${reason.body.data.message}` : '请求结果未知，请核实原请求；不会自动重复生成'
 type Pending = { cardId: string; command: CanvasRunSubmit }
@@ -17,7 +18,7 @@ type Pending = { cardId: string; command: CanvasRunSubmit }
  * submission outcomes keep the exact durable command until its receipt is known. */
 export function useGenerationCanvasRuntime(projectId: string, canvasId: string | null, save: () => Promise<boolean>, canEdit: () => boolean, savedRevision?: number) {
   const scope = `${projectId}:${canvasId}`, key = `jellyfish:generation-run:${scope}`
-  const [snapshot, setSnapshot] = useState<CanvasSnapshot>(empty)
+  const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(empty)
   const [connection, setConnection] = useState<StreamConnection>('connecting')
   const [preview, setPreview] = useState<CanvasPrecheck>()
   const [checking, setChecking] = useState<string>()
@@ -37,7 +38,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
     void Canvases.canvasRuntime({ projectId, canvasId }).then(response => {
       if (state.current !== current || request !== current.snapshotRequest || generation !== current.generation || !response.data) return
       const next = response.data
-      setSnapshot(previous => next.cursor >= previous.cursor ? next : previous)
+      setSnapshot(previous => next.cursor >= previous.cursor ? { ...next, outputScope: scope } : previous)
     }).catch(() => {
       if (state.current === current && request === current.snapshotRequest && generation === current.generation) setError('输出状态读取失败，请重开后重试')
     })
@@ -85,7 +86,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
             runs[index] = { ...runs[index], nodes }
             if (node.current_output_updated && !event.payload.current_outputs) outputs[node.card_id] = node.outputs
           }
-          return { cursor: event.cursor, runs, current_outputs: outputs }
+          return { cursor: event.cursor, runs, current_outputs: outputs, outputScope: event.payload.current_outputs ? scope : previous.outputScope }
         })
       },
     })
@@ -147,5 +148,5 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
   const nodes = snapshot.runs.flatMap(run => run.nodes)
   const latestNodes = Object.fromEntries(nodes.map(node => [node.card_id, node])) as Record<string, CanvasNodeRead>
   const busyCards = new Set(nodes.filter(activeNode).map(node => node.card_id))
-  return { snapshot, latestNodes, busyCards, connection, preview, checking, submitting, pending, error, storageBlocked, invalidate, precheck, submit, cancelling, cancel }
+  return { snapshot, outputsVerified: snapshot.outputScope === scope, latestNodes, busyCards, connection, preview, checking, submitting, pending, error, storageBlocked, invalidate, precheck, submit, cancelling, cancel }
 }
