@@ -111,4 +111,4 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 
 ## 测试提示
 
-完整 `app.main` 会加载含 Celery 依赖的路由链。仅验证 LLM 路由行为时，可使用测试辅助模块 `backend/tests/support/llm_api_app.py` 构建只挂载 `/api/v1/llm` 的应用，避免轻量环境缺少可选依赖导致导入失败。
+完整应用会加载全部业务路由。仅验证 LLM 路由时，可使用 `backend/tests/support/llm_api_app.py` 构建只挂载 `/api/v1/llm` 的测试应用；当前任务执行使用独立 Worker。

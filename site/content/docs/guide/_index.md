@@ -21,6 +21,6 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - 当前事实与边界请看 [当前架构](/docs/architecture/)
 - 后续执行方案请看 [任务计划](/docs/plans/)
 
-相关发布与阶段记录：
 
-- [后端重构阶段总结：路由瘦身、Service 分层与测试补强](/blog/backend-refactor-phase-1/)
+- [场次创作与导出](/docs/guide/sequence-workflow/)
+- [运行与排查异步任务](/docs/guide/async-tasks/)

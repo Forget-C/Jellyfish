@@ -1,4 +1,0 @@
-
-> jellyfish-frontend@0.1.0 typecheck /Users/extreme/Projects/github.com/jellyfish/front
-> tsc --noEmit
-

@@ -10,7 +10,7 @@ status: completed
 
 > 状态：已完成（2026-10-21）。G1–G6 已落地，A01–A20 验收完成；后端共享契约／工具、两类投影、共同前端图能力及四画布保存恢复已生效。当前边界见架构文档，接入步骤见[共享 graph 指南](/docs/guide/canvas-graph/)。
 >
-> 承接[可复用画布框架与交互规范计划](/docs/plans/reusable-canvas-framework-plan/)及[生产计划与单元拍摄准备关系图改造计划](/docs/plans/production-preparation-graph-plan/)。当前领域边界以[场次工作台数据基础](/docs/architecture/directing-foundation/)为准，交互遵循[工作台设计规范](/docs/guide/workbench-design/)。
+> 前序画布与生产准备实施记录已清理。当前接入规则见[共享 graph 指南](/docs/guide/canvas-graph/)，领域边界见[场次架构](/docs/architecture/directing-foundation/)，交互遵循[工作台设计规范](/docs/guide/workbench-design/)。
 
 ## 1. 目标、范围与成功标准
 

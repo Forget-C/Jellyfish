@@ -10,7 +10,7 @@ status: completed
 
 > 状态：代码实现与验收已完成（2026-09-30）。P1–P6 与 V01–V18 的证据见末尾。业务数据库尚未升级；本次交付包含独立迁移和显式接入命令，不包含生产部署或收费模型调用。
 >
-> 承接[章节入口与整章划分工作流优化计划](/docs/plans/chapter-division-workflow-plan/)。前序完成状态及验证记录保留；本计划实施后替换其 AI／手动双视图和分散历史入口，继续复用整章草稿、原文选区、影响预览、原子保存及身份保护。
+> 前序实施记录已清理。本计划保留统一编辑与历史版本的实施依据；当前整章草稿、原文选区、影响预览、原子保存及身份保护规则见[场次架构](/docs/architecture/directing-foundation/)。
 >
 > 用户要求：顶部右侧只保留“AI智能划分”和“历史版本”；AI 与手动使用同一编辑组件；历史以 Modal 内可展开表格呈现；AI 完成后回填编辑区，保存形成新版本并切换至该版本。
 
@@ -277,4 +277,4 @@ P1–P6 已完成代码实现与验证：统一编辑器、两个右侧操作、
 
 浏览器使用隔离 API 数据与真实 Chromium；完整主流程使用测试媒体，不代表真实供应商生成或生产部署验收。迁移及并发另由隔离 MySQL 实测覆盖。
 
-参考：[当前场次工作台架构](/docs/architecture/directing-foundation/)、[前序整章工作流计划](/docs/plans/chapter-division-workflow-plan/)。
+参考：[当前场次工作台架构](/docs/architecture/directing-foundation/)。

@@ -111,3 +111,9 @@ Worker 启动时：
 数据库升级要求见 [数据库迁移与系统种子](../database-migrations/)。收缩迁移不转换旧任务历史。2026-09-14 本地开发库已升级至 13b6a9d2e401，并通过 Vidu 图片提交、换 Worker 轮询、文件保存和历史查询完整实测；这不代表生产环境已部署。
 
 事务读取语义参考 [MySQL 隔离级别说明](https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html)。
+
+## 执行模型的取舍
+
+任务表同时承担待执行队列、远端任务关联和历史记录，TaskService 是生命周期唯一写入入口。远端生成是主要工作负载，因此保留供应商任务 ID 后继续查询与收取成果；不保留本地调用栈、Attempt、步骤检查点或自动重新生成框架。没有远端 ID 的中断请求失败，由用户明确创建新任务。
+
+这项取舍减少重复状态源，但不承诺跨机调度、高吞吐公平性或任意 DAG 恢复。TaskInput、TaskOutput 和 File 保留输入、输出与媒体身份；任务表精简不等于删除必要的业务会话、文件使用关系或审查记录。旧表收缩及回退要求见[数据库迁移](/docs/architecture/database-migrations/)。

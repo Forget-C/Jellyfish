@@ -27,13 +27,12 @@ cascade:
 ## 当前架构
 
 - [项目结构](/docs/architecture/project-structure/)
-- [分镜状态流转说明](/docs/architecture/shot-status-flow/)
-- [分镜页面职责边界](/docs/architecture/shot-page-boundary/)
+- [场次核心数据与版本](/docs/architecture/directing-foundation/)
+- [素材、剪辑与交付](/docs/architecture/directing-edit-delivery/)
 
 ## 任务计划
 
-- [开发规划](/docs/plans/development-plan/)
-- [任务异步化与取消方案](/docs/plans/task-async-cancellation-plan/)
+- [计划与近期实施依据](/docs/plans/)
 
 ## 社区与协作
 
