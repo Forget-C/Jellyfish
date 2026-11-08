@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckReportRead, ModelRead } from '../../../services/generated'
 import { CheckRecheckForm } from './CheckRecheckForm'
 import type { RecheckContext } from './CheckRecheckForm'
-import { HistoricalCheckProduct } from './PostCheckPanel'
+import { HistoricalCheckProduct } from './HistoricalCheckProduct'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import './checkCard.css'
 
@@ -30,16 +30,20 @@ export function BasisDetails({ basis, label }: { basis: CanvasCheckBasis; label:
   </details>
 }
 
-export function CheckReportDetails({ report, applicability, retry, recheck, itemId, models }: {
+export function CheckReportDetails({ report, applicability, retry, recheck, itemId, models, showContext = !itemId, sourceAction, active }: {
   itemId?: string
   models?: ModelRead[]
   report: CanvasCheckReportRead
   applicability?: (item: CanvasCheckItem | undefined) => string
   retry?: (itemId: string) => ReactNode
   recheck?: RecheckContext
+  showContext?: boolean
+  sourceAction?: (item: CanvasCheckItem) => ReactNode
+  active?: boolean
 }) {
+  const selected = itemId && report.items.find(item => item.id === itemId)
   return <>
-    {!itemId && <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
+    {showContext && <p>{report.scope === 'item' ? '单项检查' : '整卡检查'} · 本轮已有 {report.results.length} 项结论
       {report.enabled_item_ids !== null && report.enabled_item_ids !== undefined && ` · 执行时启用 ${report.enabled_item_ids.length} 项`}
       {report.check_model_id && ` · 检查模型 ${models?.find(model => model.id === report.check_model_id)?.name || report.check_model_id}`}</p>}
     {report.recheck && <details>
@@ -47,8 +51,11 @@ export function CheckReportDetails({ report, applicability, retry, recheck, item
       <p>原结论 {outcomes[report.recheck.original_result.outcome]} · {report.recheck.original_result.message}</p>
       <p>本次复核说明 {report.recheck.clarification}</p>
     </details>}
-    {!itemId && report.automatic && <p>完整交付后自动检查</p>}
-    {!itemId && report.product && <HistoricalCheckProduct product={report.product} />}
+    {showContext && report.automatic && <p>完整交付后自动检查</p>}
+    {showContext && report.product && <HistoricalCheckProduct product={report.product} active={active} />}
+    {showContext && selected && !report.results.some(result => result.item_id === selected.id) && <>
+      <p>本报告要求 · {selected.label} · {selected.requirement}</p>{sourceAction?.(selected)}
+    </>}
     {!!report.executions?.length && <ul aria-label="模型检查执行状态">
       {report.executions.filter(execution => !itemId || execution.item_id === itemId).map(execution => {
         const item = report.items.find(row => row.id === execution.item_id)
@@ -65,7 +72,7 @@ export function CheckReportDetails({ report, applicability, retry, recheck, item
       const item = report.items.find(row => row.id === result.item_id)
       return <article key={result.item_id}><strong>{outcomes[result.outcome]}</strong>
         {report.product ? <p>此结论仅适用于固定历史产物</p> : applicability && <p role="status">{applicability(item)}</p>}
-        {item && <><p>本报告要求 · {item.label} · {item.requirement}</p><details><summary>历史来源身份</summary><p>{item.source.card_id} / {item.field_id}</p></details></>}
+        {item && <><p>本报告要求 · {item.label} · {item.requirement}</p><details><summary>历史来源身份</summary><p>{item.source.card_id} / {item.field_id}</p></details>{sourceAction?.(item)}</>}
         {item?.scope_editable && item.scope_note && <p>本轮检查范围：{item.scope_note}</p>}
         <p>{result.message}</p>
         {!!result.text_evidence?.length && <ul aria-label="要求证据">
@@ -97,6 +104,6 @@ export function CheckReportDetails({ report, applicability, retry, recheck, item
     {!!report.omitted?.length && <ul aria-label="本轮未执行">
       {report.omitted.filter(item => !itemId || item.item_id === itemId).map(item => <li key={item.item_id}>{item.label} · {item.source_card_id} · {item.reason}</li>)}
     </ul>}
-    {!itemId && <BasisDetails basis={report.basis} label="本报告固定依据" />}
+    {showContext && <BasisDetails basis={report.basis} label="本报告固定依据" />}
   </>
 }

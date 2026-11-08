@@ -7,8 +7,8 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { Alert, Switch, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckProduct, CanvasCheckReportRead, CanvasPostCheckPreview, CheckCard } from '../../../services/generated'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { HistoricalCheckProduct, historicalProductOptionLabel } from './HistoricalCheckProduct'
 
 const postCategories = [
   { id: 'R01', label: '明确内容与结果落实' },
@@ -18,22 +18,11 @@ const postCategories = [
   { id: 'R05', label: '运镜过程与落幅落实' },
   { id: 'R06', label: '片段内连续性落实' },
 ]
-const productLabels = { text: '文字', image: '图片', video: '视频' }
 const observationLabels = {
   text: '文字模型检查', image: '图片模型检查', video_frame: '视频静帧检查',
   video_sequence: '视频序列检查', video_mixed: '视频序列与静帧检查',
 }
-const statuses = { succeeded: '完整交付', failed: '生成失败 · 保留片段', cancelled: '生成取消 · 保留片段' }
 const productKey = (product: CanvasCheckProduct) => `${product.node_id}:${product.position}`
-
-export function HistoricalCheckProduct({ product }: { product: CanvasCheckProduct }) {
-  return <details>
-    <summary>固定{productLabels[product.modality ?? 'text']}产物 · 原生成修订 {product.revision} · {statuses[product.generation_status]}</summary>
-    <p>运行 {product.run_id} · 节点 {product.node_id} · 位置 {product.position + 1}</p>
-    {product.result_set_id && <p>结果集 {product.result_set_id}</p>}
-    {product.file_id ? <p>固定文件 {product.file_id}</p> : <section aria-label="固定文字产物正文"><CanvasTextPreview text={product.text || ''} label="固定文字产物" /></section>}
-  </details>
-}
 
 type Props = {
   projectId: string
@@ -135,14 +124,14 @@ export function PostCheckPanel({ projectId, canvasId, cardId, savedRevision, act
       <Select aria-label="历史产物" placeholder="请选择要检查的具体产物" value={selected} allowClear
         disabled={running} onChange={value => { setSelected(value); setPreview(undefined); setError('') }}
         options={products?.map(row => ({ value: productKey(row),
-          label: `${productLabels[row.modality ?? 'text']} · 修订 ${row.revision} · ${statuses[row.generation_status]} · 运行 ${row.run_id.slice(0, 8)} · 位置 ${row.position + 1}` }))} />
+          label: historicalProductOptionLabel(row) }))} />
     </label>
     <Button size="small" variant="quiet" disabled={running}
       onClick={() => { setPreview(undefined); setError(''); setRefresh(value => value + 1); onRefreshReports() }}>刷新历史产物和报告</Button>
     {products?.length === 0 && <p>暂无此生成目标的历史产物</p>}
     {selected && !fixed && !error && <p role="status">正在读取所选产物</p>}
     {fixed && <>
-      <HistoricalCheckProduct product={fixed.product} />
+      <HistoricalCheckProduct product={fixed.product} active={active} />
       <p>产物 1 份 · {observationLabels[fixed.observation_method ?? 'text']} · 预计调用 {fixed.estimated_calls} 次</p>
       {fixed.observation_method === 'video_frame' && <p>只观察实际解码的静帧。其他时刻、动作过程和音轨未核验。</p>}
       {(fixed.observation_method === 'video_sequence' || fixed.observation_method === 'video_mixed')

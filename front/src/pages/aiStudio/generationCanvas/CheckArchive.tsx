@@ -72,14 +72,15 @@ export function CheckArchive({ projectId, canvasId, revision, targetReportId }: 
       <section aria-label="已删检查卡报告" className="generation-check-report">
         <Button size="small" variant="quiet" loading={loading} onClick={() => setRefresh(value => value + 1)}>刷新检查归档</Button>
         {error && <Alert type="warning" message="读取检查归档失败，请刷新" />}
-        {!loading && !error && !reports.length && <Empty description="暂无已删检查卡的报告" />}
+        {!loading && !error && (newReportId && !reports.some(report => report.id === newReportId)
+          ? <p role="status">指定报告暂不可用</p> : !reports.length && <Empty description="暂无已删检查卡的报告" />)}
         {reports.map(report => <details key={report.id} open={report.id === newReportId || undefined} className="generation-check-basis">
           <summary>检查卡 {report.check_card_id} · 原目标 {report.basis.target_card_id} · 修订 {report.basis.revision}</summary>
           <div className="generation-check-report">
             {report.executions?.some(execution => (execution.status === 'queued' || execution.status === 'running') && !execution.cancel_requested)
               && <Button size="small" variant="quiet" loading={cancelling === report.id} disabled={!!cancelling}
                 onClick={() => void cancel(report)}>取消本轮检查</Button>}
-            <CheckReportDetails report={report} recheck={{ projectId, canvasId, disabled: !!cancelling, onReport: showReport }} />
+            <CheckReportDetails report={report} active={open} recheck={{ projectId, canvasId, disabled: !!cancelling, onReport: showReport }} />
           </div>
         </details>)}
       </section>

@@ -1,8 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
+import { designFieldEntries, isReferenceDesign } from './designFieldReferences'
+import type { CanvasInspectTarget } from './canvasDiagnosticNavigation'
 
 export const checkOutcomes = { conforming: '符合', nonconforming: '明确问题', risk: '风险建议', indeterminate: '无法判断' }
 export const checkExecutions = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }
@@ -19,7 +21,7 @@ export function checkApplicability(previous: CanvasCheckItem | undefined, curren
 }
 
 /** 一张卡只有一个保留会话；详情关闭、编组隐藏不影响已受理检查的观察。 */
-type CheckSessionProps = CardRendererProps & { reportTarget?: { reportId?: string; serial: number } }
+type CheckSessionProps = CardRendererProps & { reportTarget?: CanvasInspectTarget }
 
 function useCheckSession(props: CheckSessionProps) {
   const { card: raw, document, savedRevision, documentPending, disabled, modelOutputs, automaticCheckRunId, reportTarget, editorOpen } = props
@@ -27,7 +29,9 @@ function useCheckSession(props: CheckSessionProps) {
   const { cardTitles, cardDefinitions } = useGraphRules()
   const [preview, setPreview] = useState<CanvasCheckPreview>()
   const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
-  const [selectedReportId, setSelectedReportId] = useState<string>()
+  const [reportSelection, setReportSelection] = useState<{ id: string; itemId?: string }>()
+  const selectedReportId = reportSelection?.id
+  const setSelectedReportId = useCallback((id?: string) => setReportSelection(id ? { id } : undefined), [])
   const [tab, setTab] = useState('pre')
   const [reportFilter, setReportFilter] = useState('all')
   const [itemTarget, setItemTarget] = useState<{ id: string; serial: number }>()
@@ -52,7 +56,13 @@ function useCheckSession(props: CheckSessionProps) {
     observed.current = { key: observedKey, stamp: observedStamp }
     if (outputChanged) { setPreview(undefined); setRefresh(value => value + 1) }
   }, [observedKey, observedStamp, outputChanged])
-  useEffect(() => { if (reportTarget?.reportId) { setSelectedReportId(reportTarget.reportId); setReportFilter('all'); setTab('history') } }, [reportTarget])
+  useEffect(() => {
+    const target = reportTarget?.diagnostic
+    const reportId = reportTarget?.reportId || (typeof target?.report_id === 'string' ? target.report_id : undefined)
+    const itemId = typeof target?.item_id === 'string' && target.item_id ? target.item_id : undefined
+    if (reportId) { setReportSelection({ id: reportId, itemId }); setReportFilter('all'); setTab('history') }
+    else if (itemId && reportTarget) { setTab('pre'); setItemTarget({ id: itemId, serial: reportTarget.serial }) }
+  }, [reportTarget])
   const mergeReports = (history: CanvasCheckReportRead[]) => setReports(previous => orderedReports([
     ...history, ...previous.filter(entry => !history.some(row => row.id === entry.id)),
   ]))
@@ -171,13 +181,19 @@ function useCheckSession(props: CheckSessionProps) {
     const field = source && cardDefinitions[source.type || '']?.fields.find(row => row.id === item.field_id)
     return `${cardName(item.source.card_id)} · ${field?.label || item.label}`
   }
+  const canLocateSource = (item: CanvasCheckItem) => {
+    const source = item.source.canvas_id === canvasId && document.cards?.find(row => row.id === item.source.card_id)
+    return !!props.onLocateDesign && !!source && isReferenceDesign(source)
+      && (cardDefinitions[source.type || '']?.fields.some(field => field.id === item.field_id)
+        || designFieldEntries(source).some(([field]) => field === item.field_id))
+  }
   const openItem = (id: string) => { setTab('pre'); setItemTarget({ id, serial: Date.now() }) }
-  const openReport = (id: string) => { setReportFilter('all'); setSelectedReportId(id); setTab('history') }
+  const openReport = (id: string, itemId?: string) => { setReportFilter('all'); setReportSelection({ id, itemId }); setTab('history') }
   const report = reports.find(row => row.id === selectedReportId) || reports[0]
   return { ...props, card, projectId, canvasId, cardId, preview, basis, reports, report, items, categories, selectedCategories,
     enabledItems, included, comparable, blocked, ready, reason, running, cancelling, checking, loading, error, run, cancel, showReport,
     refresh: () => setRefresh(value => value + 1), tab, setTab, itemTarget, openItem, postTarget, setPostTarget,
-    selectedReportId, setSelectedReportId, automaticWaitExpired, currentPending, itemChecking, reportFilter, setReportFilter, latest, itemState, faceItems, cardName, itemName, targetId, openReport }
+    selectedReportId, reportSelection, setSelectedReportId, automaticWaitExpired, currentPending, itemChecking, reportFilter, setReportFilter, latest, itemState, faceItems, cardName, itemName, targetId, openReport, canLocateSource }
 }
 
 const CheckContext = createContext<ReturnType<typeof useCheckSession> | undefined>(undefined)
