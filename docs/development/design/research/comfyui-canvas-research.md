@@ -1,11 +1,6 @@
----
-title: "ComfyUI 多结果与局部执行调研"
-description: "对照 ComfyUI 官方文档及固定源码，区分批次、预览选择、结果历史和局部执行，为独立生成画布的设计提供依据。"
----
-
 # ComfyUI 多结果与局部执行调研
 
-查阅日期：2026-10-23。本文记录外部项目事实与待讨论建议，不表示 Jellyfish 已采用这些行为。未运行 ComfyUI 实例；结论来自官方文档与源码核查，不将社区插件行为归入核心能力。
+查阅日期：2026-10-23。本文记录来自官方文档和固定源码的外部项目事实。Jellyfish 的选择见[独立生成画布的边界与连接契约](../../adr/0001-independent-generation-canvas.md)。核查范围是核心能力的文档与源码，不含实例运行或社区插件。
 
 源码固定为后端 [d07dff4565ea9804277fff8cdfa0c817e08c3d44](https://github.com/Comfy-Org/ComfyUI/commit/d07dff4565ea9804277fff8cdfa0c817e08c3d44) 与前端 [e5e13b8fe2ac68c5f8e4d5ec7bf153a135282dd2](https://github.com/Comfy-Org/ComfyUI_frontend/commit/e5e13b8fe2ac68c5f8e4d5ec7bf153a135282dd2)。这两个提交用于固定调查证据，不宣称是某个统一发行版；官方在线文档后续可能变化。
 
@@ -38,11 +33,3 @@ ComfyUI 根据输入与控件变化判断缓存是否仍可使用；重新提交
 官方 Partial Execution 面向选中的输出节点，例如预览或保存节点，执行通向该输出的必要分支。前端先筛选输出节点再提交目标列表，后端也仅将匹配列表的输出节点作为执行目标；仍使用依赖与缓存机制。它不能直接证明“任意框选节点都必须重新运行”的行为。[官方局部执行说明](https://docs.comfy.org/interface/features/partial-execution)、[前端命令](https://github.com/Comfy-Org/ComfyUI_frontend/blob/e5e13b8fe2ac68c5f8e4d5ec7bf153a135282dd2/src/composables/useCoreCommands.ts#L562-L598)、[后端目标筛选](https://github.com/Comfy-Org/ComfyUI/blob/d07dff4565ea9804277fff8cdfa0c817e08c3d44/execution.py#L1182-L1184)
 
 所核查后端在执行错误后跳出当前调度循环。因此 Jellyfish 已确认的“无依赖分支继续执行”属于自身产品选择，不应标为沿用 ComfyUI 核心失败策略。[执行循环](https://github.com/Comfy-Org/ComfyUI/blob/d07dff4565ea9804277fff8cdfa0c817e08c3d44/execution.py#L786-L800)
-
-## 对 Jellyfish 的设计启示（尚待确认）
-
-- 基础内容卡“一卡一份内容”可以保持；模型的一次执行可以产生多个结果，结果集合不必强制变成多个基础卡。
-- 将预览切换与数据选择分开。保留完整模型输出，通过明确的选取操作决定某条下游分支使用哪些结果；这可以呈现为选择节点或清晰可见的连接配置，具体交互尚待决定。
-- 输入契约还须区分“多份内容共同参与一次调用”与“逐份执行多次”。批量传播不意味着应静默增加模型调用次数。
-- 人工暂停审核应显式启用；不宜仅根据候选数量推断用户想审核，或默认选第一张伪装成明确选择。
-- Jellyfish 的框选运行需要单独确定所选节点强制重跑、选择范围外输入的复用条件，以及依赖缺失时是否扩大范围。不能把这些行为归于 ComfyUI 的 Partial Execution。

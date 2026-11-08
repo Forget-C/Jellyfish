@@ -22,4 +22,4 @@ title: "数据模型"
 
 旧 `directing_revisions` 及旧生产计划 Take 仍按原固定身份读取；旧 Shot、ShotDetail 和镜头槽位生成路径已经退役，不是当前主业务模型。
 
-字段与关系以 `backend/app/models`、`backend/app/core/contracts` 为准。参见[场次架构](/docs/architecture/directing-foundation/)、[任务执行](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/task-execution.md)和[生成画布](/docs/architecture/generation-canvas/)。
+字段与关系以 `backend/app/models`、`backend/app/core/contracts` 为准。参见[场次架构](/docs/architecture/directing-foundation/)、[任务执行](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/task-execution.md)和[生成画布](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/generation-canvas.md)。

@@ -8,10 +8,6 @@ title: "计划与近期实施依据"
 
 - [实验室后续事项](/docs/plans/experiment-follow-up/)：区分已实现能力、未排期增强和依赖用户体系的事项。
 
-## 已确认范围
-
-- [生成画布首版检查项目录](/docs/plans/generation-canvas-check-catalog/)：已确认目录，具体实现范围以文内对照为准。
-
 ## 当前一代实施依据
 
 以下记录已实施方案及验证边界，不表示仍待执行。当前行为以[架构文档](/docs/architecture/)为准。

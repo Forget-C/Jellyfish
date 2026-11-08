@@ -1,12 +1,6 @@
----
-title: "生成画布首版检查项目录"
-description: "列明默认技术诊断与可选业务检查的触发依据、内容、方式和结论边界。"
-status: accepted
----
-
 # 生成画布首版检查项目录
 
-2026-11-07 确认首版检查目录。本文细化已确认的[检查卡方案](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/adr/0003-generation-canvas-check-cards.md)与[声音设计职责](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/adr/0004-sound-design-and-generation-responsibilities.md)，不扩大为生成门槛、预期设计范围或完整制作验收。
+状态：已确认的首版设计。本文细化[检查卡方案](../adr/0003-generation-canvas-check-cards.md)与[声音设计职责](../adr/0004-sound-design-and-generation-responsibilities.md)，不扩大为生成门槛、预期设计范围或完整制作验收。
 
 ## 共同判定规则
 
@@ -80,4 +74,4 @@ P01 处理“含义是否传递”，P02 处理“要求是否冲突”，P09 �
 
 ## 当前实现对照
 
-当前检查卡、报告、复核和媒体读取边界见[生成画布架构](/docs/architecture/generation-canvas/)。默认技术诊断沿用编译、能力、构图与设计引用校验。`estimated_duration` 属于设计文字，生成请求使用独立的时长参数。真实模型的语义及媒体观察效果需通过小规模样例单独验收。
+当前检查卡、报告、复核和媒体读取边界见[生成画布架构](../architecture/generation-canvas.md#检查依据报告及媒体观察)。默认技术诊断沿用编译、能力、构图与设计引用校验。`estimated_duration` 属于设计文字，生成请求使用独立的时长参数。真实模型的语义及媒体观察效果需通过小规模样例单独验收。

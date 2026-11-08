@@ -51,3 +51,8 @@
 - [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
 - [章节划分架构](architecture/chapter-division.md)与[场次版本架构](architecture/scene-versions.md)
 - [接入章节划分历史](guides/chapter-division-history-import.md)与[身份参考存量整理](guides/identity-reference-cleanup.md)
+
+## 生成画布
+
+- [生成画布架构与执行边界](architecture/generation-canvas.md)
+- [首版检查项目录](design/generation-canvas-check-catalog.md)、[ComfyUI 多结果与局部执行调研](design/research/comfyui-canvas-research.md)

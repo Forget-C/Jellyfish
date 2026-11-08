@@ -137,4 +137,4 @@ status: accepted
 
 需要独立编辑、整理或永久保留某个具体结果时，通过“保存为内容卡”取得固定内容并保留来源追溯；该来源关系不持续更新内容卡。选择这一方式以避免每次运行都向画布自动追加结果卡，同时保持基础内容卡无输入。
 
-多结果与局部执行的外部依据见 [ComfyUI 调研记录](../../../site/content/docs/reference/comfyui-canvas-research.md)。该记录保留调研时的事实与建议，已确认的本项目决策以本记录为准。
+多结果与局部执行的外部依据见 [ComfyUI 调研记录](../design/research/comfyui-canvas-research.md)。该记录保留调研时的事实与固定源码依据，已确认的本项目决策以本记录为准。

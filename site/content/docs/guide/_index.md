@@ -20,3 +20,4 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [场次创作与导出](/docs/guide/sequence-workflow/)
 - [查看与处理任务](/docs/guide/task-center/)
 - [配置生成模型](/docs/guide/model-setup/)
+- [使用生成画布](/docs/guide/generation-canvas/)

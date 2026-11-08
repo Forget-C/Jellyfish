@@ -16,7 +16,7 @@ status: accepted
 
 首版生成前按已采用设计落实、设计一致性、时长与动作可行性组织检查项；生成后检查实际结果是否落实已采用设计和要求。六部门作为检查视角，不作为必须逐岗执行的卡片或模型调用数量。
 
-具体项目及其触发条件、检查方式和结论边界见[首版检查项目录](../../../site/content/docs/plans/generation-canvas-check-catalog.md)。目录记录已确认的首版基线。当前实现与验证边界见[生成画布架构](../../../site/content/docs/architecture/generation-canvas.md)。
+具体项目及其触发条件、检查方式和结论边界见[首版检查项目录](../design/generation-canvas-check-catalog.md)。目录记录已确认的首版基线。当前实现与验证边界见[生成画布架构](../architecture/generation-canvas.md)。
 
 ## 要求、执行与结论
 

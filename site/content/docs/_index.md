@@ -19,6 +19,7 @@ cascade:
 
 ## 产品使用
 
+- [使用生成画布](/docs/guide/generation-canvas/)
 - [查看与处理任务](/docs/guide/task-center/)
 - [配置生成模型](/docs/guide/model-setup/)
 
