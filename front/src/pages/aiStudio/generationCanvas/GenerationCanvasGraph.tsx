@@ -1,5 +1,6 @@
 import { CheckCardSession } from './CheckCardSession'
 import { CardIssueIndicator } from './CardIssueIndicator'
+import { CheckCardIssues } from './CheckCardIssues'
 import { diagnosticControl, diagnosticDesignField, duplicateDesignName, type CanvasInspectTarget } from './canvasDiagnosticNavigation'
 import type { CanvasDiagnostic } from '../../../services/generated'
 import { CheckCardFace } from './CheckCardFace'
@@ -219,7 +220,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const navigateInspection = useRef<(cardId: string, target?: CanvasInspectTarget) => void>(() => undefined)
   // Diagnostics navigate once per explicit request, using current stack/layout data without re-centering on every render.
   useEffect(() => {
-    if (inspectTarget) navigateInspection.current(inspectTarget.cardId, inspectTarget.diagnostic ? inspectTarget : undefined)
+    if (inspectTarget) navigateInspection.current(inspectTarget.cardId, inspectTarget)
   }, [inspectTarget])
   useEffect(() => {
     if (!inspectCardId || !inspectSegmentId || inspectCardId !== detailId) return
@@ -1379,16 +1380,23 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {linkedResults.map(result => {
           const { id, output } = result
           const title = linkedResultTitle(output)
+          const openResult = (trigger: HTMLElement) => {
+            setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined)
+            setOpenedResult({ id, output: { source: output.source, modality: output.modality, available: false } })
+            setDetailTrigger(trigger); setDetailId(id)
+          }
+          const issue: CanvasDiagnostic | undefined = output.available === false
+            ? { code: 'RESULT_UNAVAILABLE', message: '当前输出缺失', severity: 'error', target: output.source, blocks: [] }
+            : output.basis_current === false
+              ? { code: 'RESULT_BASIS_CHANGED', message: '此产物的生成依据已变', severity: 'warning', target: output.source, blocks: [] }
+              : undefined
           return <CardShell key={id} id={id} type={`result.${output.modality}`} title={title} label={title} contextKey={document.id}
             menu={cardMenuId === id} onMenuChange={open => setCardMenuId(open ? id : undefined)}
             onContextActions={trigger => openCardContext(id, trigger)} readonly={readonly}
             point={point(id)} scale={transform.scale} viewportOffset={transform}
             width={cardSizes[id].width} height={cardSizes[id].height} selected={selected.includes(id)}
-            onOpen={trigger => {
-              setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined)
-              setOpenedResult({ id, output: { source: output.source, modality: output.modality, available: false } })
-              setDetailTrigger(trigger); setDetailId(id)
-            }}
+            issueIndicator={issue && <CardIssueIndicator issues={[issue]} actionFor={() => '查看产物'} onLocate={(_, trigger) => openResult(trigger)} />}
+            onOpen={openResult}
             onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, id])] : previous.filter(value => value !== id)) }}
             multiSelectMode={multiSelectMode} onDragStart={() => beginMove(id, true)} onDragEnd={finishMove}
             onMove={position => { if (!accessibleConnection) moveCards(id, position) }} connections={geometricPorts(cards.find(card => card.id === output.source.card_id)!, result)}>
@@ -1413,8 +1421,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (!hasNameIssue && (requiresName || duplicateDesignName(card, cards))) {
             issues.push({ code: 'DESIGN_NAME', message: requiresName ? '请先填写验收要求名称' : '该名称已被同类型卡片使用，请使用其他名称', target: { card_id: card.id, path: ['name'] }, blocks: [] })
           }
+          const openCheck = (trigger: HTMLElement) => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }
           const cardNode = hidden.has(card.id) ? null : <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger => openCardContext(card.id, trigger)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            issueIndicator={issues.length > 0 && <CardIssueIndicator issues={issues} actionFor={issue => diagnosticControl(card, issue.target)?.action || diagnosticDesignField(card, issue.target, cardDefinitions[card.type || '']?.fields || [])?.action} onLocate={(issue, trigger) => {
+            issueIndicator={card.type === 'review.check' ? <CheckCardIssues diagnostics={issues} onOpen={openCheck} /> : issues.length > 0 && <CardIssueIndicator issues={issues} actionFor={issue => diagnosticControl(card, issue.target)?.action || diagnosticDesignField(card, issue.target, cardDefinitions[card.type || '']?.fields || [])?.action} onLocate={(issue, trigger) => {
               setDetailTrigger(trigger); navigateInspection.current(card.id, { cardId: card.id, serial: Date.now(), diagnostic: issue.target })
             }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
@@ -1423,7 +1432,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onConnect={card.type === 'review.check' ? undefined : trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
-            {card.type === 'review.check' && <CheckCardFace onOpen={trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }} />}
+            {card.type === 'review.check' && <CheckCardFace onOpen={openCheck} />}
             {isTextContent && <TextCardPreview label="正文预览" text={'text' in card && card.text || '未填写正文'}
               status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />} />}
             {playbackType && <PlaybackCardPreview key={playbackFile} type={playbackType} fileId={playbackFile} label="媒体预览"
@@ -1441,7 +1450,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           return <CheckCardSession key={`${document.id}:${card.id}`} card={card} document={document} projectId={document.project_id}
             onChange={updateCard} savedCard={savedDocument?.cards?.find(row => row.id === card.id)} savedRevision={savedRevision}
             documentPending={!!editingStatus} disabled={readonly} editorOpen={detailId === card.id} models={models} modelOutputs={runtime?.outputs}
-            reportTarget={inspectTarget?.cardId === card.id ? inspectTarget : undefined}
+            reportTarget={diagnosticTarget?.cardId === card.id ? diagnosticTarget : undefined}
             onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }}
             automaticCheckRunId={observedNode?.status === 'succeeded' && observedNode.automatic_check_card_ids?.includes(card.id) ? observedNode.run_id : undefined}>
             {cardNode}{renderEditor(card)}

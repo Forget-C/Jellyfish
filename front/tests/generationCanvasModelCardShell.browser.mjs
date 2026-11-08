@@ -71,7 +71,7 @@ try {
   Object.assign(positions, { voice: { x: 1550, y: 700 }, clip: { x: 1550, y: 960 } })
   Object.assign(sizes, { voice: { width: 300, height: 251 }, clip: { width: 300, height: 251 } })
   const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[
-    ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`,...(['long','video'].includes(id)?{show_result_cards:true}:{})})), ...contentCards
+    ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`,...(['long','image','video'].includes(id)?{show_result_cards:true}:{})})), ...contentCards
   ],edges:[{id:'caption',source_card:'short',source_port:'text',target_card:'image',target_port:'text'}],input_order:{image:{text:['caption']}}}})})
   assert.ok(seeded.ok,await seeded.text())
   const out = (id,position,modality,extra) => ({source:{canvas_id:canvas.id,card_id:id,port_id:modality,position},modality,available:true,basis_current:true,...extra})
@@ -168,19 +168,31 @@ try {
   const summary = linkedText.getByRole('region', { name:'生成结果预览' }).locator('p')
   assert.equal(await summary.evaluate(node => getComputedStyle(node).webkitLineClamp), '4')
   assert.equal(await summary.evaluate(node => getComputedStyle(node).overflowY), 'hidden')
-  await linkedText.press('Enter')
+  streamedOutputs = { cursor: 1, outputs: { ...scenarioOutputs, long: [out('long', 0, 'text', { text: '很长的生成内容。'.repeat(1000), basis_current: false })] } }
+  await linkedText.getByRole('button', { name: '查看卡片问题' }).press('Enter')
+  const resultIssues = page.getByRole('region', { name: '卡片问题', exact: true })
+  await resultIssues.getByText('此产物的生成依据已变', { exact: true }).waitFor()
+  await resultIssues.getByRole('button', { name: '查看产物', exact: true }).click()
   const resultDetail = page.getByRole('complementary', {name:'文本生成结果 1', exact:true})
   const resultText = resultDetail.getByRole('textbox', {name:'文本内容', exact:true})
   assert.equal(await resultText.inputValue(), '很长的生成内容。'.repeat(1000))
-  streamedOutputs = { cursor: 1, outputs: { ...scenarioOutputs, long: [out('long', 0, 'text', { text: '同一输出位置的新正文' })] } }
+  streamedOutputs = { cursor: 2, outputs: { ...scenarioOutputs, long: [out('long', 0, 'text', { text: '同一输出位置的新正文' })] } }
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="文本内容"]')?.value === '同一输出位置的新正文')
   await linkedText.getByText('同一输出位置的新正文', { exact: true }).waitFor()
-  streamedOutputs = { cursor: 2, outputs: { ...scenarioOutputs, long: [] } }
+  streamedOutputs = { cursor: 3, outputs: { ...scenarioOutputs, long: [] } }
   await resultDetail.getByText('当前输出缺失', { exact: true }).waitFor()
   assert.equal(await resultText.count(), 0, 'missing output does not retain prior text in the detail')
   await resultDetail.getByRole('button', {name:'关闭详情', exact:true}).click()
-  streamedOutputs = { cursor: 3, outputs: scenarioOutputs }
+  streamedOutputs = { cursor: 4, outputs: { ...scenarioOutputs, image: scenarioOutputs.image.map(output =>
+    output.source.position === 1 ? { ...output, basis_current: false } : output) } }
   await linkedText.waitFor()
+  const imageName = '图片生成结果 2'
+  const linkedImage = page.getByRole('article', { name: imageName, exact: true })
+  await linkedImage.getByRole('button', { name: '查看卡片问题' }).press('Enter')
+  await resultIssues.getByRole('button', { name: '查看产物', exact: true }).press('Enter')
+  const imageDetail = page.getByRole('complementary', { name: imageName, exact: true })
+  await imageDetail.getByRole('img', { name: '图片预览' }).waitFor()
+  await imageDetail.getByRole('button', { name: '关闭详情', exact: true }).click()
   const linkedAudio = page.getByRole('article', { name: '音频生成结果 2', exact: true })
   assert.deepEqual(await linkedAudio.evaluate(node => [node.offsetWidth, node.offsetHeight]), [300, 172])
   for (const card of [page.locator('[data-card-id="voice"]'), linkedAudio]) {
@@ -190,7 +202,7 @@ try {
   }
   const readCanvas = () => request('/api/v1/studio/generation-canvases/canvas-project/' + canvas.id)
   const beforePlayback = await readCanvas()
-  let cursor = 3
+  let cursor = 4
   let currentMedia = scenarioOutputs.video
   const publishMedia = (position, change) => {
     currentMedia = currentMedia.map(output => output.source.position === position ? { ...output, ...change } : output)
@@ -219,6 +231,10 @@ try {
     publishMedia(position, { basis_current: false })
     await detail.getByText('只读 · 依据已变', { exact: true }).waitFor()
     assert.ok(await player.evaluate(media => !media.paused && media.currentTime >= 1), 'same file refresh preserves playback')
+    await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await linked.getByRole('button', { name: '查看卡片问题' }).press('Enter')
+    await resultIssues.getByRole('button', { name: '查看产物', exact: true }).press('Enter')
+    await player.waitFor()
     publishMedia(position, { file_id: replacement, basis_current: true })
     const replaced = detail.locator(`${tag}[src*="${replacement}"]`)
     await replaced.waitFor()

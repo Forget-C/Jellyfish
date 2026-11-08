@@ -1,4 +1,4 @@
-import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCanvasCard, closeCanvasDetails, prepareCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -94,6 +94,45 @@ try {
   await page.getByRole('tab', { name: '检查记录', exact: true }).click()
   await report.getByRole('button', { name: '查看最新报告', exact: true }).waitFor()
   assert.equal(await report.getByRole('combobox', { name: '选择检查报告' }).evaluate(node => node.closest('.ant-select').querySelector('.ant-select-selection-item')?.textContent), selectedReportText, 'first automatic report stays selected after another report arrives')
+
+  const observedReport = reports.find(row => row.product.position === 1)
+  const observeIssues = async route => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data = payload.data.map(row => row.product?.position === 0 || row.id === observedReport.id
+      ? { ...row, results: row.results.map(result => ({ ...result, outcome: 'indeterminate' })) } : row)
+    await route.fulfill({ response, json: payload })
+  }
+  const reportUrl = `**/${canvas.id}/checks/check/reports`
+  const fixedDownload = `**/files/${observedReport.product.file_id}/download`
+  const missingFile = route => route.fulfill({ status: 404, body: 'fixture withdrawn' })
+  await page.route(reportUrl, observeIssues)
+  await page.route(fixedDownload, missingFile)
+  await page.reload()
+  await prepareCanvasCard(page, 'check')
+  const navigationWrites = []
+  const recordNavigationWrite = request => {
+    if (request.url().includes(`/generation-canvases/canvas-project/${canvas.id}`) && !['GET', 'HEAD'].includes(request.method())) navigationWrites.push(request.url())
+  }
+  page.on('request', recordNavigationWrite)
+  await page.locator('[data-card-id="check"]').getByRole('button', { name: '查看卡片问题' }).click()
+  const issues = page.getByRole('region', { name: '卡片问题', exact: true })
+  await issues.getByRole('listitem').filter({ hasText: /历史产物 1.*无法判断/ }).waitFor()
+  await issues.getByRole('listitem').filter({ hasText: /历史产物 2.*无法判断/ })
+    .getByRole('button', { name: '查看检查报告', exact: true }).click()
+  await report.getByText('此结论仅适用于固定历史产物', { exact: true }).waitFor()
+  const fixedProduct = report.getByText(/^固定图片产物 · 原生成修订/)
+  await fixedProduct.click()
+  await report.getByText(`固定文件 ${observedReport.product.file_id}`, { exact: true }).waitFor()
+  await report.getByText(new RegExp(`运行 ${observedReport.product.run_id}.*位置 2`)).waitFor()
+  await report.getByRole('img', { name: '图片预览' }).waitFor()
+  await report.getByText('图片暂不可预览，文件仍保留', { exact: true }).waitFor()
+  await page.unroute(fixedDownload, missingFile)
+  await report.getByRole('button', { name: '查看整份报告', exact: true }).waitFor()
+  await closeCanvasDetails(page)
+  assert.deepEqual(navigationWrites, [], 'reading a specific product report does not execute or save')
+  page.off('request', recordNavigationWrite)
+  await page.unroute(reportUrl, observeIssues)
 
   const skipped = await request(base, 'POST', { name: '已失效自动检查计划' })
   const skippedUrl = `${base}/${skipped.id}`
