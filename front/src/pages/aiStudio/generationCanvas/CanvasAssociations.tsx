@@ -2,12 +2,13 @@ import type { TooltipRef } from 'antd/es/tooltip'
 import { cardCategories } from './CardList'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ConfigProvider, Popover, theme } from 'antd'
 import { ArrowLeftOutlined, AuditOutlined, IdcardOutlined, ExclamationCircleOutlined, FileTextOutlined, PictureOutlined, SoundOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { MaterialReferenceButton } from './MaterialReferenceButton'
 import { associationIssues, type AssociationSource } from './associationSources'
+import type { AssociationInspection } from './canvasRelationNavigation'
 import './canvasAssociations.css'
 
 export type AssociationEntry = AssociationSource & {
@@ -17,6 +18,11 @@ export type AssociationEntry = AssociationSource & {
   issue?: string
 }
 export type AssociationDetailContext = { close: (restoreFocus?: boolean) => void }
+
+export const AssociationInspectionContext = createContext<{
+  request?: AssociationInspection
+  onLocateFrameRelation?: (cardId: string) => void
+} | undefined>(undefined)
 
 /** 共用来源导航和浮层会话，采用与解除仍由接收卡提供的操作处理。 */
 export function CanvasAssociations({ entries, sourceActions, loading, error, sessionKey, renderDetails, onInspect, expanded, onLocateSource }: {
@@ -30,6 +36,9 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
   onLocateSource?: (cardId: string, fieldId: string) => void
   onInspect?: () => void
 }) {
+  const inspection = useContext(AssociationInspectionContext)
+  const request = inspection?.request
+  const handled = useRef<number>()
   const [width, setWidth] = useState(0)
   const [surface, setSurface] = useState<string>()
   const [detail, setDetail] = useState<string>()
@@ -57,6 +66,10 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
   const entriesRef = useRef(entries); entriesRef.current = entries
   const visibleRef = useRef(visible); visibleRef.current = visible
   const current = entries.find(entry => entry.id === detail)
+  const requestedSource = request?.source
+  const requestedEntry = requestedSource && entries.find(entry => entry.outputs.some(output =>
+    typeof requestedSource === 'string' ? output.source.card_id === requestedSource : sourceKey(output.source) === sourceKey(requestedSource)))
+  const requestedEntryId = requestedEntry ? requestedEntry.id : undefined
   const close = useCallback((restoreFocus = true) => {
     setSurface(undefined)
     setDetail(undefined)
@@ -72,6 +85,23 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
     return () => observer.disconnect()
   }, [])
   useEffect(() => { setSurface(undefined); setDetail(undefined) }, [sessionKey])
+  useEffect(() => {
+    if (!request || handled.current === request.serial || !width) return
+    const entry = requestedEntryId && entriesRef.current.find(item => item.id === requestedEntryId)
+    if (requestedSource && !entry && loading) return
+    handled.current = request.serial
+    if (!entry) {
+      requestAnimationFrame(() => owner.current?.focus({ preventScroll: true }))
+      return
+    }
+    const shown = visibleRef.current.some(item => item.id === entry.id)
+    const selector = shown ? `[data-association-id="${CSS.escape(entry.id)}"]` : `[data-association-more="${entry.kind}"]`
+    trigger.current = owner.current?.querySelector<HTMLElement>(selector) || undefined
+    setDetail(entry.id)
+    setSurface(shown ? entry.id : 'more:' + entry.kind)
+    onInspect?.()
+    requestAnimationFrame(() => trigger.current?.focus({ preventScroll: true }))
+  }, [request, requestedSource, requestedEntryId, width, loading, onInspect])
   useEffect(() => {
     if (!surface || !detail) return
     const selected = entriesRef.current.find(entry => entry.id === detail)
@@ -118,12 +148,14 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
   const details = current && <>
     {current.outputs.flatMap(output => associationIssues(output).filter(issue => issue.fieldId).map((issue, index) => <div role="alert" key={`${output.source.card_id}:${issue.fieldId}:${index}`}>
       <p>{issue.message}</p>
-      <WorkbenchButton variant="quiet" disabled={!onLocateSource} onClick={() => { close(false); onLocateSource?.(output.source.card_id, issue.fieldId!) }}>查看问题字段</WorkbenchButton>
+      {issue.fieldId === 'frame_target'
+        ? <WorkbenchButton variant="quiet" disabled={!inspection?.onLocateFrameRelation} onClick={() => { close(false); inspection?.onLocateFrameRelation?.(output.source.card_id) }}>查看画面关系</WorkbenchButton>
+        : <WorkbenchButton variant="quiet" disabled={!onLocateSource} onClick={() => { close(false); onLocateSource?.(output.source.card_id, issue.fieldId!) }}>查看问题字段</WorkbenchButton>}
     </div>))}
     {renderDetails(current, { close })}
   </>
 
-  return <div className="canvas-associations" aria-label="关联来源" role="region" ref={owner} onClickCapture={event => {
+  return <div className="canvas-associations" aria-label="关联来源" role="region" tabIndex={-1} ref={owner} onClickCapture={event => {
       const button = (event.target as HTMLElement).closest<HTMLElement>('button')
       if (button && owner.current?.contains(button)) trigger.current = button
     }} data-tight={gap === 4}>
@@ -146,6 +178,7 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
       })}
       {sourceActions && <div className="generation-material-add">{sourceActions}</div>}
     </div>
+    {requestedSource && !loading && !requestedEntry && <small role="status">问题所指的关系当前不可用</small>}
     {(loading || error) && <small className="canvas-association-status" role={error ? 'alert' : 'status'}>{error || '正在读取候选来源…'}</small>}
   </div>
 }

@@ -1,4 +1,4 @@
-import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -39,13 +39,18 @@ try {
   const poll = async predicate => { for (let i = 0; i < 100; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('association edit did not save') }
   const document = { ...canvas.document, cards: [
     { id: 'empty', type: 'direction.movement' }, { id: 'movement', type: 'direction.movement' },
+    { id: 'stack-source', type: 'content.text', text: '堆叠中的来源' },
+    { id: 'stack-mate', type: 'content.text', text: '堆叠中的另一张卡' },
+    { id: 'tracked-movement', type: 'direction.movement', fields: { movement_start: { text: '跟随人物入画', state: 'fact' } } },
+    { id: 'diagnostic-composition', type: 'direction.composition', frame_target: { card_id: 'tracked-movement', state_id: 'field:movement_start' } },
+    { id: 'diagnostic-model', type: 'model.text', prompt: { segments: [{ id: 'prompt', kind: 'text', text: '诊断导航验证' }] } },
     ...Array.from({ length: 12 }, (_, index) => ({ id: `text-${index}`, type: 'content.text', text: `参考文本 ${index}` })),
     { id: 'person', type: 'content.character', object_id: 'actor', name: '林夏', text: '街角停步' },
     ...Array.from({ length: 5 }, (_, index) => ({ id: `design-${index}`, type: 'direction.style', fields: { direction: { text: `风格 ${index}`, state: 'proposal' } } })),
     { id: 'criterion', type: 'direction.criterion', criterion_id: 'clear', name: '主体清晰', standard: { text: '人物表情可辨认' } },
     { id: 'missing', type: 'content.image', file_id: null },
     { id: 'broken-style', type: 'direction.style', fields: { direction: { state: 'proposal', document: { segments: [{ id: 'bad-ref', kind: 'reference', source: { canvas_id: canvas.id, card_id: 'missing', port_id: 'image', position: 0 } }] } } } },
-  ], edges: [], input_order: {} }
+  ], edges: [], input_order: {}, groups: [{ id: 'diagnostic-stack', name: '阅读堆叠', kind: 'stack', card_ids: ['stack-source', 'stack-mate'] }] }
   const link = (source_card, source_port, target_card, target_port) => ({ id: `${source_card}-${target_card}-${source_port}`, source_card, source_port, target_card, target_port })
   document.edges = [
     ...Array.from({ length: 12 }, (_, index) => link(`text-${index}`, 'text', 'movement', 'text')),
@@ -55,6 +60,8 @@ try {
     ...Array.from({ length: 5 }, (_, index) => link(`design-${index}`, 'text', 'movement', 'text')),
     link('criterion', 'criterion', 'movement', 'acceptance_basis'),
     link('broken-style', 'text', 'movement', 'text'),
+    link('text-0', 'text', 'diagnostic-model', 'text'),
+    link('tracked-movement', 'text', 'diagnostic-composition', 'text'),
   ]
   for (const edge of document.edges) {
     const ports = document.input_order[edge.target_card] ||= {}
@@ -123,5 +130,77 @@ try {
   await page.setViewportSize({ width: 1440, height: 960 })
   await delay(350)
   await page.screenshot({ path: join(output, 'associations-desktop.png'), animations: 'disabled' })
+  await closeCanvasDetails(page)
+  const revision = (await read()).revision
+  await page.route('**/precheck', async route => {
+    const response = await route.fetch(), payload = await response.json()
+    payload.data.diagnostics = [{
+      code: 'EDGE_DIAGNOSTIC', severity: 'warning', message: '请核对明确的候选连接', blocks: [],
+      target: { card_id: 'diagnostic-model', path: ['edges', 'text-0-diagnostic-model-text'] },
+    }, {
+      code: 'RELATION_DIAGNOSTIC', severity: 'warning', message: '请核对构图的画面定位', blocks: [],
+      target: { card_id: 'diagnostic-composition', path: ['frame_target'] },
+    }, {
+      code: 'RELATED_DIAGNOSTIC', severity: 'warning', message: '有多个明确的相关对象', blocks: [],
+      target: { card_id: 'diagnostic-model', related_card_ids: ['person', 'stack-source', 'deleted-card'] },
+    }, {
+      code: 'STALE_EDGE_DIAGNOSTIC', severity: 'warning', message: '历史问题关联的线已删除', blocks: [],
+      target: { card_id: 'diagnostic-model', path: ['edges', 'deleted-edge'] },
+    }, {
+      code: 'TEXT_ONLY_DIAGNOSTIC', severity: 'warning', message: '来源林夏的依据已变', blocks: [],
+      target: { card_id: 'diagnostic-model' },
+    }]
+    await route.fulfill({ response, json: payload })
+  })
+  await page.locator('[data-card-id="diagnostic-model"]').press('Enter')
+  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
+  await preview.getByText('EDGE_DIAGNOSTIC: 请核对明确的候选连接', { exact: true }).waitFor()
+  const previewRelated = preview.getByRole('alert').filter({ hasText: '有多个明确的相关对象' })
+  assert.equal(await previewRelated.getByRole('button').count(), 2)
+  await previewRelated.getByText('相关卡片 3 已不可用', { exact: true }).waitFor()
+  assert.equal(await preview.getByRole('alert').filter({ hasText: '来源林夏的依据已变' }).getByRole('button').count(), 0)
+  await closePrecheck(page)
+  await closeCanvasDetails(page)
+  await page.locator('[data-card-id="diagnostic-model"]').getByRole('button', { name: '查看卡片问题' }).press('Enter')
+  const diagnostics = page.getByRole('region', { name: '卡片问题' })
+  await diagnostics.getByRole('listitem').filter({ hasText: '请核对明确的候选连接' }).getByRole('button', { name: '定位连线', exact: true }).press('Enter')
+  await page.locator('[data-generation-edge-id="text-0-diagnostic-model-text"][data-edge-active="true"]').waitFor()
+  assert.equal(await detail.count(), 0)
+  await page.locator('[data-card-id="diagnostic-composition"]').getByRole('button', { name: '查看卡片问题' }).press('Enter')
+  await page.getByRole('region', { name: '卡片问题' }).getByRole('button', { name: '定位关系', exact: true }).press('Enter')
+  await page.getByRole('combobox', { name: '定位到画面', exact: true }).waitFor()
+  assert.equal(await detail.getByRole('button', { name: '高级设置', exact: true }).isVisible(), true, '关系定位保留普通预设入口')
+  await page.keyboard.press('Escape')
+  await closeCanvasDetails(page)
+  const modelIssues = page.locator('[data-card-id="diagnostic-model"]').getByRole('button', { name: '查看卡片问题' })
+  await modelIssues.press('Enter')
+  const related = diagnostics.getByRole('listitem').filter({ hasText: '有多个明确的相关对象' })
+  await related.getByText('相关卡片 3 已不可用', { exact: true }).waitFor()
+  assert.equal(await diagnostics.getByRole('listitem').filter({ hasText: '来源林夏的依据已变' }).getByRole('button').count(), 0, '文字说明不从名称猜测目标')
+  await related.getByRole('button', { name: '定位 林夏', exact: true }).press('Enter')
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-card-id') === 'person')
+  assert.equal(await detail.count(), 0, '跨卡导航仅定位画布卡片')
+  await modelIssues.press('Enter')
+  await related.getByRole('button', { name: /^定位 文本内容卡/ }).press('Enter')
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-stack-id') === 'diagnostic-stack')
+  await page.getByText('请先解除堆叠后编辑', { exact: true }).waitFor()
+  assert.equal(await detail.count(), 0, '堆叠成员不被强制打开')
+  await modelIssues.press('Enter')
+  await diagnostics.getByRole('listitem').filter({ hasText: '历史问题关联的线已删除' }).getByRole('button', { name: '定位连线', exact: true }).press('Enter')
+  await page.getByText('问题所指的连线已不可用', { exact: true }).waitFor()
+  assert.equal(await detail.count(), 0, '失效连线不选择替代位置')
+  const other = await context.newPage()
+  await other.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await other.goto(page.url())
+  await other.getByRole('button', { name: '取得编辑权', exact: true }).click()
+  await page.getByText('此画布当前只读', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator('[data-card-id="diagnostic-composition"]').getByRole('button', { name: '查看卡片问题' }).press('Enter')
+  await diagnostics.getByRole('button', { name: '定位关系', exact: true }).press('Enter')
+  const readonlyFrame = page.getByRole('combobox', { name: '定位到画面', exact: true })
+  await readonlyFrame.waitFor()
+  assert.equal(await readonlyFrame.isDisabled(), true, '只读窄屏可定位，但不能改绑')
+  assert.equal((await read()).revision, revision, '关系、连线和跨卡导航不修改画布')
   assert.deepEqual(errors, [])
 } catch (error) { await debugPage?.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }); throw error } finally { await cleanup() }

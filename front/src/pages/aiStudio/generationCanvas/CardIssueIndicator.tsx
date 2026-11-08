@@ -5,10 +5,11 @@ import type { CanvasDiagnostic } from '../../../services/generated'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 
 /** 标题图标只负责展开说明，跳转由用户选择具体问题的入口触发。 */
-export function CardIssueIndicator({ issues, onLocate, actionFor }: {
+export function CardIssueIndicator({ issues, onLocate, actionFor, relatedActionsFor }: {
   issues: CanvasDiagnostic[]
-  onLocate: (issue: CanvasDiagnostic, trigger: HTMLElement) => void
+  onLocate: (issue: CanvasDiagnostic, trigger: HTMLElement, target?: CanvasDiagnostic['target']) => void
   actionFor: (issue: CanvasDiagnostic) => string | undefined
+  relatedActionsFor?: (issue: CanvasDiagnostic) => { id: string; label: string; target?: CanvasDiagnostic['target'] }[]
 }) {
   const [open, setOpen] = useState(false)
   const { token } = theme.useToken()
@@ -24,6 +25,11 @@ export function CardIssueIndicator({ issues, onLocate, actionFor }: {
   }, [open])
   const error = issues.some(issue => issue.severity !== 'warning')
   const severity = (issue: CanvasDiagnostic) => issue.severity === 'warning' ? '警告' : '错误'
+  const locate = (issue: CanvasDiagnostic, target?: CanvasDiagnostic['target']) => {
+    setOpen(false)
+    const trigger = document.getElementById(`${id}-trigger`)
+    if (trigger) onLocate(issue, trigger, target)
+  }
   const messages = issues.map(issue => `${severity(issue)}：${issue.message}`)
   return <Popover open={open} onOpenChange={setOpen} trigger="click" placement="bottomRight"
     content={<section id={id} ref={panel} tabIndex={-1} aria-label="卡片问题" className="generation-card-issues" onKeyDown={event => {
@@ -34,11 +40,10 @@ export function CardIssueIndicator({ issues, onLocate, actionFor }: {
       <ul>{issues.map((issue, index) => {
         const action = actionFor(issue)
         return <li key={`${issue.code}:${index}`}><small>{severity(issue)}</small><span>{issue.message}</span>
-          {action && <WorkbenchButton size="small" onClick={() => {
-            setOpen(false)
-            const trigger = document.getElementById(`${id}-trigger`)
-            if (trigger) onLocate(issue, trigger)
-          }}>{action}</WorkbenchButton>}
+          {action && <WorkbenchButton size="small" onClick={() => locate(issue)}>{action}</WorkbenchButton>}
+          {relatedActionsFor?.(issue).map(({ id, label, target }) => target
+            ? <WorkbenchButton key={id} size="small" onClick={() => locate(issue, target)}>{label}</WorkbenchButton>
+            : <small key={id}>{label}</small>)}
         </li>
       })}</ul>
     </section>}>
