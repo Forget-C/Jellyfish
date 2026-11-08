@@ -1,8 +1,3 @@
----
-title: "Agent 任务跟踪"
-description: "使用本地 Markdown 保存规格、任务票据与决策记录。"
----
-
 # Issue tracker: Local Markdown
 
 本项目的 Agent 规格与任务保存在 `.scratch/`，使用本地文件操作读写。

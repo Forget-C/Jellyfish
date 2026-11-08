@@ -33,7 +33,7 @@ Look for the originating spec, in this order:
 
 ### 3. Identify the standards sources
 
-Start with `site/content/docs/guide/agents/review-sources.md` and load the sources triggered by the diff. Then discover additional standards using a case-insensitive file-name search, excluding dependencies, generated directories and Git metadata. When `CODING_STANDARDS.md` or `CONTRIBUTING.md` exists (including lowercase names), it must be on the list. The index is navigation; the linked documents remain authoritative.
+Start with `docs/development/standards/review-sources.md` and load the sources triggered by the diff. Then discover additional standards using a case-insensitive file-name search, excluding dependencies, generated directories and Git metadata. When `CODING_STANDARDS.md` or `CONTRIBUTING.md` exists (including lowercase names), it must be on the list. The index is navigation; the linked documents remain authoritative.
 
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 

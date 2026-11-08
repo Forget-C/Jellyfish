@@ -1,8 +1,3 @@
----
-title: "代码审查来源索引"
-description: "按改动范围定位仓库规则、需求依据和验证证据。"
----
-
 # 代码审查来源索引
 
 所有路径从仓库根目录解析。本页只负责导航，规则由对应文档维护。
@@ -18,7 +13,7 @@ description: "按改动范围定位仓库规则、需求依据和验证证据。
 | 工作台控件、主题、卡片或详情 | `site/content/docs/guide/workbench-design.md` |
 | graph、投影、导航、布局缓存或证据 | `site/content/docs/guide/canvas-graph.md` |
 | 测试、lint、CI 或运行入口 | `front/tests/README.md`、`front/package.json`、`.github/workflows/frontend-checks.yml`、`front/tests/browser-suites.json` |
-| 规格与票据 | `site/content/docs/guide/agents/issue-tracker.md`，再定位本任务 `.scratch/<feature>/spec.md` 与票据 |
+| 规格与票据 | `docs/agents/issue-tracker.md`，再定位本任务 `.scratch/<feature>/spec.md` 与票据 |
 
 索引不能代替发现新增规则。搜索文件名时忽略大小写，排除依赖、生成目录和 Git 元数据；将新发现的 CONTRIBUTING、CODING_STANDARDS 和实际适用的规则加入审查输入。
 

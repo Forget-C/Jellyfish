@@ -6,7 +6,7 @@ status: accepted
 
 # 生成画布首版检查项目录
 
-2026-11-07 确认首版检查目录。本文细化已确认的[检查卡方案](/docs/architecture/adr/0003-generation-canvas-check-cards/)与[声音设计职责](/docs/architecture/adr/0004-sound-design-and-generation-responsibilities/)，不扩大为生成门槛、预期设计范围或完整制作验收。
+2026-11-07 确认首版检查目录。本文细化已确认的[检查卡方案](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/adr/0003-generation-canvas-check-cards.md)与[声音设计职责](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/adr/0004-sound-design-and-generation-responsibilities.md)，不扩大为生成门槛、预期设计范围或完整制作验收。
 
 ## 共同判定规则
 

@@ -223,6 +223,8 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 ## 🧑‍💻 Local Development
 
+See the [developer documentation](docs/development/README.md) for project guidance and architectural decisions.
+
 To run the frontend and backend locally while using Compose-managed middleware,
 first copy the matching environment templates and start MySQL, RustFS,
 and the Compose migration and system-seed jobs:

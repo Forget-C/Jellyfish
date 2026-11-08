@@ -20,15 +20,15 @@
 
 ### Issue tracker
 
-使用任务跟踪、发布规格（`to-spec`）、拆分票据（`to-tickets`）或读取票据时，按 `site/content/docs/guide/agents/issue-tracker.md` 操作本地 `.scratch/<feature>/` 文件。规格与票据属于任务系统，不自动另建站点计划。
+使用任务跟踪、发布规格或拆分票据时，读取[本地任务系统配置](docs/agents/issue-tracker.md)。
 
 ### Triage labels
 
-分诊票据时，使用 `site/content/docs/guide/agents/triage-labels.md` 中的五个默认状态。
+分诊票据时，读取[标签映射](docs/agents/triage-labels.md)。
 
 ### Domain docs
 
-讨论领域术语或架构决策时，按 `site/content/docs/guide/agents/domain.md` 使用单上下文术语表与 ADR；文档按需创建。
+讨论领域术语或架构决策时，读取[领域文档布局](docs/agents/domain.md)。
 
 ## 代码规范
 
