@@ -10,12 +10,12 @@
    - `service` 层负责业务逻辑、状态流转、数据编排。
 5. 新增或修改公共接口、非显然业务规则、复杂函数或类时，注释说明职责、约束与必要的参数/返回值；简单代码优先使用清晰命名，避免复述实现。改动涉及的注释应与实现同步。
 6. 生成能力相关的通用契约（输入/输出 DTO、供应商配置等）统一放在 `app/core/contracts`：
-   - `tasks` 仅保留任务封装、分派与执行编排，不定义跨层 DTO。
-   - `integrations` 仅依赖 `contracts`，不依赖 `tasks` 类型模块。
+   - 任务服务负责生命周期编排，Worker 负责领取、执行和报告结果。两者使用共享契约，跨层 DTO 统一由 `contracts` 定义。具体分工见[任务执行架构](../architecture/task-execution.md)。
+   - 供应商集成使用共享契约，禁止依赖任务编排层的类型。
 
 ## 前端布局
 
-项目工作台等带固定工具栏的页面必须使用这组原语；tab 不得依赖父级的 `overflow: hidden` 来裁切自然高度内容。工作台的默认滚动面板不得使用 `overflow: auto`；需要横向浏览的表格、卡片带或代码块必须在自己的局部容器上显式使用 `overflow-x: auto`。
+项目工作台等带固定工具栏的页面必须使用 `PageToolbar`、`WorkspaceLayout` 和 `WorkspaceScrollPanel`，组件职责见[前端基础布局](../architecture/frontend-layout.md#路由内容与滚动)。tab 不得依赖父级的 `overflow: hidden` 来裁切自然高度内容。工作台的默认滚动面板不得使用 `overflow: auto`；需要横向浏览的表格、卡片带或代码块必须在自己的局部容器上显式使用 `overflow-x: auto`。
 
 ## 接口与文档同步
 
