@@ -28,10 +28,10 @@ const designIcons = {
 }
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */
-export function CardShell({ id, title, name, label, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, issueIndicator, onOpen, onExpand, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
+export function CardShell({ id, title, name, label, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, sourceControl, issueIndicator, onOpen, onExpand, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
   { id: string; type?: string; title: string; name?: string; label?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
     onContextActions?: (trigger: HTMLElement) => void; menu: boolean; onMenuChange?: (open: boolean) => void; viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect?: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect?: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove?: () => void;
-    connections: ReactNode; children: ReactNode; footer?: ReactNode; issueIndicator?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement) => void }) {
+    connections: ReactNode; children: ReactNode; footer?: ReactNode; sourceControl?: ReactNode; issueIndicator?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement) => void }) {
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; viewport?: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
   const pendingTouchOpen = useRef(false)
@@ -109,6 +109,6 @@ export function CardShell({ id, title, name, label, type, contextKey, point, sca
       </div>}
     </header>
     {connections}
-    <CanvasCard className="generation-card-body" aria-label={`${name || title}详情`} >{children}{footer && <footer className="generation-card-footer">{footer}</footer>}</CanvasCard>
+    <CanvasCard className="generation-card-body" aria-label={`${name || title}详情`} >{children}{footer && <footer className="generation-card-footer">{footer}</footer>}{sourceControl}</CanvasCard>
   </article>
 }
