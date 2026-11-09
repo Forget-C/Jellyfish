@@ -76,6 +76,7 @@ const emptyGroups: NonNullable<CanvasDocument['groups']> = []
 const emptyEdges: NonNullable<CanvasDocument['edges']> = []
 
 const focusCardTypes = ['content.text', 'content.image', 'model.text', 'model.image']
+const connectionPointAt = (x: number, y: number) => window.document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-connection-side]')
 
 const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) => Object.fromEntries(nodes.map((node, index) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
@@ -115,6 +116,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const historicalPositions = useRef<Record<string, { x: number; y: number }>>({})
   const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
+  const [movingIds, setMovingIds] = useState<readonly string[]>([])
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
   const [detailId, setDetailId] = useState<string | undefined>()
   // 保留打开位置的身份；位置消失时不保留旧输出内容。
@@ -139,7 +141,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     commit: (option, target, source, sourceCard) => connectionActions.current!.commit(option, target, source, sourceCard),
     end: () => connectionActions.current!.end(),
   }))
-  const { drag, accessibleConnection } = connectionState
+  const { drag, accessibleConnection, target: connectionTarget } = connectionState
+  const connectionSource = drag?.card || accessibleConnection?.card
+  const arrangementBlocked = movingIds.length > 0 || !!connectionSource
   const connectionTrigger = useRef<HTMLElement>()
   const connectionMenu = useRef<HTMLDivElement>(null)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
@@ -214,8 +218,16 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [detailsSuppressed, document.id])
   useEffect(() => {
     if (!accessibleConnection) return
+    const focusTarget = (event: FocusEvent) => {
+      const target = event.target
+      const item = target instanceof HTMLElement && container.current?.contains(target)
+        ? target.closest<HTMLElement>('[data-connection-target], [data-card-id]') : undefined
+      connection.focusTarget(item?.dataset.connectionTarget || item?.dataset.cardId)
+    }
+    window.addEventListener('focusin', focusTarget)
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
-  }, [accessibleConnection])
+    return () => window.removeEventListener('focusin', focusTarget)
+  }, [accessibleConnection, connection])
   const [diagnosticTarget, setDiagnosticTarget] = useState<CanvasInspectTarget>()
   useEffect(() => { setDiagnosticTarget(current => current?.cardId === detailId ? current : undefined) }, [detailId])
   const [designFieldTarget, setDesignFieldTarget] = useState<{ cardId: string; fieldId: string; serial: number }>()
@@ -287,7 +299,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     for (const id of cachedResultIds) if (!positions[id] && retained?.[id]) positions[id] = retained[id]
     return positions
   }
-  const lockedDesignCardIds = detailId ? [detailId] : []
+  const lockedDesignCardIds = [
+    ...movingIds.filter(id => !hidden.has(id)),
+    ...[detailId, connectionSource, connectionTarget].filter((id): id is string => !!id),
+  ]
   const designSizes = useDesignCardSizes(cards, lockedDesignCardIds)
   const sizesReady = cards.every(card => !designHeightBands(card.type) || hidden.has(card.id) || designSizes.measured(card.id))
   const nodes = [
@@ -305,6 +320,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     view: () => movementHost.current.layout.view,
     update: change => movementHost.current.layout.setView(change),
     record: (undo, redo) => movementHost.current.history?.record(undo, redo),
+    onMembersChange: setMovingIds,
   }))
   const centerInspectionElement = (selector: string) => requestAnimationFrame(() => {
     const element = container.current?.querySelector<HTMLElement>(selector)
@@ -822,7 +838,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const finishDrag = (event: PointerEvent) => {
     if (!drag) return
-    const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-connection-side]')
+    const target = connectionPointAt(event.clientX, event.clientY)
     if (!target) { setReason('连接已取消，请拖到目标连接点'); cancelConnection(); return }
     connection.choose(target.dataset.card!, target.dataset.connectionSide as ConnectionSide)
   }
@@ -857,7 +873,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const sourceConnection = drag || accessibleConnection
     const options = !result && sourceConnection && id !== sourceConnection.card ? compatibleOptions(sourceConnection.card, id) : []
     const outputName = ({ text: '文本', image: '图片', video: '视频', audio: '音频' })[definition?.modality || 'text']
-    const hoveredPoint = drag ? window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]') : undefined
+    const hoveredPoint = drag ? connectionPointAt(drag.x, drag.y) : undefined
     const summary = result ? (result.output.available === false ? '当前输出缺失' : linkedResultTitle(result.output))
       : sourceConnection && id !== sourceConnection.card
         ? existingSource(sourceConnection.card, id) ? '已连接，选择可定位连线'
@@ -881,7 +897,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
           setActiveCategory(undefined); connectionTrigger.current = event.currentTarget
           connection.start({ card: id, side }, { x: event.clientX, y: event.clientY }); setReason('拖到接收卡建立来源连接')
-        }} onPointerMove={event => { if (drag) connection.move({ x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connection.pointerActive) cancelConnection() }}><i aria-hidden>+</i></button>
+        }} onPointerMove={event => {
+          if (drag) connection.move({ x: event.clientX, y: event.clientY }, connectionPointAt(event.clientX, event.clientY)?.dataset.card)
+        }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connection.pointerActive) cancelConnection() }}><i aria-hidden>+</i></button>
       </Tooltip>
     })
   }
@@ -1203,7 +1221,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     {accessibleConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
       <p>选择接收卡建立连接。候选用途在接收卡的关联区选择。</p>
-      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
+      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} data-connection-target={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
       <Button onClick={cancelConnection}>取消连接</Button>
     </div>}
 
@@ -1216,7 +1234,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => zoomAt(transform.scale + .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
       <Button variant="quiet" onClick={fitVisibleCards}>适应全部</Button>
       <CanvasToolbarMenu label="布局" caption="布局">
-        <Button onClick={() => layout.rearrange()}>整理布局</Button>
+        <Button disabled={arrangementBlocked} onClick={() => layout.rearrange()}>整理布局</Button>
         <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
         <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
         <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
@@ -1515,7 +1533,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {drag && <svg className="generation-temporary-connection" aria-label="正在连接候选" width="100%" height="100%"><path d={(() => {
         const origin = anchor(drag.card, drag.side), rect = viewport.surface.current?.getBoundingClientRect()
         const from = { x: origin.x * transform.scale + transform.x, y: origin.y * transform.scale + transform.y }
-        const target = window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]')
+        const target = connectionPointAt(drag.x, drag.y)
         const targetCard = target?.dataset.card, side = target?.dataset.connectionSide as ConnectionSide | undefined
         const snapped = targetCard && side && compatibleOptions(drag.card, targetCard).length ? anchor(targetCard, side) : undefined
         const to = snapped ? { x: snapped.x * transform.scale + transform.x, y: snapped.y * transform.scale + transform.y } : { x: drag.x - (rect?.left || 0), y: drag.y - (rect?.top || 0) }
