@@ -106,12 +106,12 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const travel = (direction: HistorySide) => {
     const s = state.current, h = history.current
     if (!ownership.canEdit() || !s.document || s.recovery || s.initialBefore || s.scope !== key || h.scope !== key || !cleaner.current) return
-    const next = h[direction].at(-1)
+    const next = h[direction][h[direction].length - 1]
     if (!next) return
     if ('document' in next && next.scene) {
       const scene = next.scene
       const restoreScene = async () => {
-        if (!await save() || s !== state.current || h[direction].at(-1) !== next || !s.current || !s.document ||
+        if (!await save() || s !== state.current || h[direction][h[direction].length - 1] !== next || !s.current || !s.document ||
             !same(s.document, s.current.document) || s.pending || !ownership.canEdit()) return
         s.initialBefore = s.document
         s.historySide = direction

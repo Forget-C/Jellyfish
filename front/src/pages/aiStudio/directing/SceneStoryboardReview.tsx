@@ -25,9 +25,9 @@ function Changes({ title, cards, selected, choose }: {
 }
 
 /** Compare the saved revision and exact overwrite selection before applying. */
-export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying }: {
+export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError }: {
   scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<number | undefined>;
-  reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean;
+  reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
 }) {
   const [baseline, setBaseline] = useState<number>()
   const [opening, setOpening] = useState(false)
@@ -76,18 +76,19 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
         <Button variant="primary" loading={applying} disabled={!review || !ready || !editable}
           onClick={() => void applyReview()}>应用分镜</Button>
       </WorkbenchDialogActions>}>
-      {error && <Alert type="warning" showIcon message={error} action={<Button disabled={applying} loading={opening}
+      {error && <Alert type="warning" showIcon message={saveError || error} action={<Button disabled={applying} loading={opening}
         onClick={() => void open(true)}>核对最新画布</Button>} />}
       {!diff && !error && <Spin aria-label="正在核对差异" />}
       {diff && <>
         {diff.source_changed && <p>应用时将采用本次已确认的原文。仍被引用的旧原文依据会保留。</p>}
         <p>人工新增的卡片会保留。勾选后才会覆盖相应的人工修改或移除这些卡片。</p>
+        {!!diff.orphaned.length && <section><h3>失去引用的保留卡片</h3>
+          <ul>{diff.orphaned.map(card => <li key={card.id}>{card.name} 将失去 {card.lost_targets?.join('、')}</li>)}</ul>
+        </section>}
         <Changes title="新增" cards={diff.added} selected={selected} choose={choose} />
         <Changes title="修改" cards={diff.modified} selected={selected} choose={choose} />
         <Changes title="移除" cards={diff.removed} selected={selected} choose={choose} />
-        {!!diff.orphaned.length && <section><h3>失去引用的保留卡片</h3>
-          <ul>{diff.orphaned.map(card => <li key={card.id}>{card.name} 将失去 {card.lost_targets.join('、')}</li>)}</ul>
-        </section>}
+
       </>}
     </WorkbenchModal>
   </>

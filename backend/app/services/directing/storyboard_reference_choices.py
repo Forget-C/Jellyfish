@@ -24,7 +24,7 @@ def expired_reference_uses(current, candidate, retained, cards):
     return expired
 
 
-def carry_reference_choices(current, candidate, cards, kept, edges, order, production_ports):
+def carry_reference_choices(current, candidate, cards, kept, edges, order, production_ports, invalidated):
     """Keep shot overrides by identity and retain manual cancellations on kept models."""
     previous_shots = {shot.shot_id: shot for shot in current.storyboard.shots} if current.storyboard else {}
     defaults = {obj.object_id: obj.reference_card_id for obj in candidate.storyboard.objects}
@@ -42,13 +42,17 @@ def carry_reference_choices(current, candidate, cards, kept, edges, order, produ
             default = defaults.get(use.object_id)
             card_id = overrides.get(use.object_id, default)
             reference = cards.get(card_id)
-            if not _reference(reference, use.object_id):
-                continue
+            valid = _reference(reference, use.object_id)
             if use.model_card_id in kept:
-                actual.append(use)
+                if valid:
+                    actual.append(use.model_copy(update={'active': False}) if (card_id, 'image') in invalidated else use)
                 continue
             model = cards.get(use.model_card_id)
             port = {'model.image': 'image', 'model.video': 'subject_image'}.get(model.type) if isinstance(model, ModelCard) else None
+            if not valid:
+                if use.active:
+                    _set_extracted_reference(current.id, model, use.binding_id, None, port, False, '', edges, order)
+                continue
             active = bool(port and port in production_ports and reference.image_binding)
             if active != use.active or card_id != default:
                 label = getattr(cards.get(default), 'name', '') or reference.name

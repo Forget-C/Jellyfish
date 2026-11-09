@@ -145,6 +145,10 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             assert all(text not in compiled['text'] for text in ('排除后镜锚点', '排除候选锚点', '排除另一镜头画面', '仅声音阶段风声'))
             assert any(item['payload'].get('frame_target_state', {}).get('label') == '开启画面'
                        for item in compiled['used'] if item.get('payload'))
+            composition = next(item for item in image['document']['cards'] if item['type'] == 'direction.composition')
+            assert any(edge['source_card'] == composition['frame_target']['card_id']
+                       and edge['target_card'] == composition['id'] and edge['source_port'] == edge['target_port'] == 'text'
+                       for edge in image['document']['edges'])
             image_model = next(item for item in image['document']['cards'] if item['id'] == first_model)
             assert anchor_id not in {item['source']['card_id'] for item in image_model['input_bindings']}
             assert image_model['frame_targets'][0]['binding_id'] in {item['id'] for item in image_model['input_bindings']}

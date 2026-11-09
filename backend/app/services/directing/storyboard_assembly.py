@@ -271,9 +271,8 @@ class StoryboardAssembly:
             self._adopt(subject, 'object', card, SUBJECT_PORTS[design.card_type], object_id=subject['object_id'])
         return card
 
-    def _frame_target(self, plan, owner, target, cards) -> dict:
-        piece = plan.frame(owner, target)
-        return {'card_id': cards[piece.key]['id'], 'state_id': 'phase:' + self._id(f'{piece.key}:phase:{target.phase_id}')}
+    def _frame_target(self, piece, phase_id, cards) -> dict:
+        return {'card_id': cards[piece.key]['id'], 'state_id': 'phase:' + self._id(f'{piece.key}:phase:{phase_id}')}
 
     def _connect_designs(self, plan, cards) -> None:
         for piece in plan.pieces:
@@ -288,7 +287,9 @@ class StoryboardAssembly:
                 else:
                     self._adopt(source, output, card, port, object_id=source.get(output + '_id'))
             if target := piece.design.frame_target:
-                card['frame_target'] = self._frame_target(plan, piece.owner, target, cards)
+                movement = plan.frame(piece.owner, target)
+                card['frame_target'] = self._frame_target(movement, target.phase_id, cards)
+                self._edge(cards[movement.key], 'text', card, 'text')
 
     def _field_dependency(self, piece, field, card, source, port, edge):
         if field.startswith('phase:'):
@@ -396,7 +397,8 @@ class StoryboardAssembly:
                 sources = [basis]
             else:
                 sources = list(story)
-            targets = [self._frame_target(plan, shot.id, target, designs) for target in shot.frame_targets] if phase == 'image' else []
+            targets = [self._frame_target(plan.frame(shot.id, target), target.phase_id, designs)
+                       for target in shot.frame_targets] if phase == 'image' else []
             target_cards = {item['card_id'] for item in targets}
             sources += [designs[piece.key] for piece in plan.pieces
                         if piece.key in executable and (piece.design.adoption == 'model' or designs[piece.key]['id'] in target_cards)

@@ -12,12 +12,13 @@ def card_name(card):
     return getattr(card, 'name', '').strip() or CARD_TITLES[card.type]
 
 
-def clean_lost_references(card, before, after, canvas_id: str, expired=None) -> set[str]:
+def clean_lost_references(card, before, after, canvas_id: str, expired=None, invalidated=None) -> set[str]:
     """Remove actual adoption and translate only body references to the old name."""
     lost = set()
 
     def removed(source):
-        if source and source.canvas_id == canvas_id and source.card_id in before and source.card_id not in after:
+        if source and source.canvas_id == canvas_id and source.card_id in before and (
+                source.card_id not in after or invalidated and (source.card_id, source.port_id) in invalidated):
             lost.add(source.card_id)
             return True
         return False
@@ -59,10 +60,9 @@ def clean_lost_references(card, before, after, canvas_id: str, expired=None) -> 
         card.examples = [item for item in card.examples if not removed(item.source)]
     if isinstance(card, NamedImageReferenceCard):
         if removed(card.name_binding):
-            card.object_id = card.name_binding.object_id
             card.name_binding = None
         if card.image_binding and removed(card.image_binding.source):
-            card.image_binding.source = None
+            card.image_binding = None
     for _, field, _ in design_fields(card):
         if not field.document:
             continue

@@ -58,8 +58,8 @@ async def client_for(sessions):
     from app.api.v1.routes.studio.chapters import router as chapter_router
     app.include_router(chapter_router, prefix="/api/v1/studio/chapters")
     from app.main import http_exception_handler
-    from fastapi import HTTPException
-    app.add_exception_handler(HTTPException, http_exception_handler)
+    from app.services.generation_canvas.errors import CanvasDomainError
+    app.add_exception_handler(CanvasDomainError, http_exception_handler)
 
     async def scoped_db():
         """模拟真实请求提交和异常回滚，不共享未提交的测试会话。"""

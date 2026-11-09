@@ -102,8 +102,12 @@ try {
   const moved = await top()
   assert.ok(moved > before)
   const details = await openCanvasCard(page, first.card_id)
+  const save = page.waitForResponse(response => response.request().method() === 'PUT' &&
+    new URL(response.url()).pathname === new URL(path).pathname)
   await details.getByRole('textbox', { name: '可见结果内容', exact: true }).fill('林舟在码头掀开铜匣。')
   await closeCanvasDetails(page)
+  const saved = await save
+  assert.ok(saved.ok(), await saved.text())
   await poll(state => state.document.cards.find(card => card.id === first.card_id)?.visible_result.text === '林舟在码头掀开铜匣。')
   await page.reload()
   await firstCard.waitFor()

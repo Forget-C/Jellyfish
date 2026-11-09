@@ -3,7 +3,7 @@
 from collections import defaultdict
 
 from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardDiffCard
-from app.schemas.generation_canvas import CanvasDocument, ObjectDescriptionCard
+from app.schemas.generation_canvas import CanvasDocument, NamedImageReferenceCard, ObjectDescriptionCard
 from app.services.directing.storyboard_reference_choices import carry_reference_choices, expired_reference_uses
 from app.services.directing.storyboard_reference_cleanup import card_name, clean_lost_references
 from app.services.generation_canvas.catalog import CARD_TITLES
@@ -28,16 +28,29 @@ def _connections(document: CanvasDocument | None) -> dict:
 
 def _unique_description_names(cards, keep):
     """The newly extracted identity must not overwrite a same-named manual description."""
-    occupied = {(card.type, card.name) for key, card in cards.items() if key in keep and isinstance(card, ObjectDescriptionCard)}
+    occupied = {(card.type, card.name.strip()) for key, card in cards.items() if key in keep and isinstance(card, ObjectDescriptionCard)}
     for key, card in cards.items():
         if key in keep or not isinstance(card, ObjectDescriptionCard):
             continue
         name = card.name
         number = 2
-        while (card.type, card.name) in occupied:
+        while (card.type, card.name.strip()) in occupied:
             card.name = f'{name[:240]}（{number}）'
             number += 1
-        occupied.add((card.type, card.name))
+        occupied.add((card.type, card.name.strip()))
+
+
+def _invalidated_reference_outputs(cards):
+    """A reference losing its name or image source no longer supplies those adopted outputs."""
+    invalidated = set()
+    for key, card in cards.items():
+        if not isinstance(card, NamedImageReferenceCard):
+            continue
+        if card.name_binding and card.name_binding.card_id not in cards:
+            invalidated.update((key, port) for port in card.output_ports)
+        elif card.image_binding and card.image_binding.source and card.image_binding.source.card_id not in cards:
+            invalidated.add((key, 'image'))
+    return invalidated
 
 
 def plan_application(current: CanvasDocument, candidate: CanvasDocument,
@@ -80,17 +93,19 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
     final = {key: card.model_copy(deep=True) for key, card in final.items()}
     _unique_description_names(final, keep)
     expired = expired_reference_uses(current, candidate, keep, final)
+    invalidated = _invalidated_reference_outputs(final)
     dropped_edges = {(binding.source.card_id, binding.source.port_id, model, binding.input_port)
                      for model, bindings in expired.items() for binding in bindings.values()}
     for key, card in final.items():
         if key in keep and key in origins:
             lost[key].update(source.card_id for source in origins[key].sources if source.card_id in previous and source.card_id not in final)
-        lost[key].update(clean_lost_references(card, previous, final, current.id, expired.get(key)))
+        lost[key].update(clean_lost_references(card, previous, final, current.id, expired.get(key), invalidated))
     for model in expired:
         dropped_edges.difference_update((binding.source.card_id, binding.source.port_id, model, binding.input_port)
                                         for binding in final[model].input_bindings)
     edges = [edge for edge in edges if edge.source_card in final and edge.target_card in final
-             and (edge.source_card, edge.source_port, edge.target_card, edge.target_port) not in dropped_edges]
+             and (edge.source_card, edge.source_port, edge.target_card, edge.target_port) not in dropped_edges
+             and (edge.source_card, edge.source_port) not in invalidated]
     live_edges = {edge.id for edge in edges}
     edges = [edge.model_copy(update={'order_anchor': None}) if edge.order_anchor and edge.order_anchor.edge_id not in live_edges
              else edge for edge in edges]
@@ -107,7 +122,7 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
         groups[group.id] = (old or group).model_copy(update={'card_ids': list(dict.fromkeys([*group.card_ids, *extra]))})
     groups = [group.model_copy(update={'card_ids': [key for key in group.card_ids if key in final]})
               for group in groups.values()]
-    shots = carry_reference_choices(current, candidate, final, keep, edges, order, production_ports or [])
+    shots = carry_reference_choices(current, candidate, final, keep, edges, order, production_ports or [], invalidated)
     document = current.model_copy(update={'cards': list(final.values()), 'edges': edges,
         'input_order': order, 'groups': [group for group in groups if group.card_ids],
         'storyboard': candidate.storyboard.model_copy(update={'origins': origins, 'shots': shots}),
