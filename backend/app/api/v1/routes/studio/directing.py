@@ -12,7 +12,7 @@ from app.core.contracts.directing.division import DivisionDraft, DivisionPreview
 from app.services.directing.division import DivisionService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
-from app.core.contracts.directing.scene_storyboard import StoryboardRequest, StoryboardTaskRead
+from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardTaskRead
 from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.scene_objects import ObjectExtractionRequest, SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead
@@ -141,12 +141,48 @@ async def submit_storyboard(project_id: str, chapter_id: str, sequence_id: str, 
     return created_response(await _call(SceneStoryboardService(db, project_id).submit_storyboard(chapter_id, sequence_id, body)))
 
 
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards",
+             response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_reextract")
+async def reextract_storyboard(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,
+                               body: StoryboardReextractRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """针对既有场次画布创建可核对的重新提取任务。"""
+    return created_response(await _call(SceneStoryboardService(db, project_id).reextract_storyboard(
+        chapter_id, sequence_id, canvas_id, body)))
+
+
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}",
             response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_get")
 async def read_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                           db: AsyncSession = Depends(get_db, scope="function")):
     """读取当前任务状态、候选和应用基线。"""
     return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard(chapter_id, sequence_id, task_id)))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/diff",
+             response_model=ApiResponse[StoryboardDiff], operation_id="directing_storyboard_diff")
+async def preview_storyboard_application(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                                         body: StoryboardApplication, db: AsyncSession = Depends(get_db, scope="function")):
+    """核对当前修订的卡片差异及保留影响。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).apply_storyboard(
+        chapter_id, sequence_id, task_id, body, preview=True)))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/apply",
+             response_model=ApiResponse[CanvasRead], operation_id="directing_storyboard_apply")
+async def apply_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                           body: StoryboardApplication, db: AsyncSession = Depends(get_db, scope="function")):
+    """明确应用本场候选，原子保存已核对的共同文档。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).apply_storyboard(
+        chapter_id, sequence_id, task_id, body)))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/restore",
+             response_model=ApiResponse[CanvasRead], operation_id="directing_storyboard_restore")
+async def restore_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                              body: StoryboardRestore, db: AsyncSession = Depends(get_db, scope="function")):
+    """在真实应用回执约束下撤销或重做同一批次。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).restore_storyboard(
+        chapter_id, sequence_id, task_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/overview", response_model=ApiResponse[ChapterOverview], operation_id="directing_chapter_overview")

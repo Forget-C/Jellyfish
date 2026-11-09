@@ -85,19 +85,42 @@ class CanvasStore:
     async def save(self, canvas_id: str, command: CanvasSave) -> dict:
         """原回执优先于当前 revision；CAS 与回执在同一外层事务内落库。"""
         canvas = await self.get(canvas_id, lock=True)
-        digest = hashlib.sha256(json.dumps(command.model_dump(exclude={'request_id'}), sort_keys=True,
-                                           separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
-        receipt = await self.db.get(CanvasSaveReceipt, (canvas_id, command.request_id))
+        digest = self.command_digest(command.model_dump(exclude={'request_id'}))
+        receipt = await self.save_receipt(canvas_id, command.request_id, digest)
         if receipt:
-            if receipt.request_hash != digest:
-                raise diagnostic('IDEMPOTENCY_CONFLICT', '请求身份已用于其他正文', {'canvas_id': canvas_id}, status=409)
-            return receipt.response
+            return receipt
+        return await self._write(canvas, command, digest)
+
+    @staticmethod
+    def command_digest(body: dict) -> str:
+        """Hash a normalized command, independent of its receipt identity."""
+        return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'),
+                                        ensure_ascii=False).encode()).hexdigest()
+
+    async def save_receipt(self, canvas_id: str, request_id: str, digest: str) -> dict | None:
+        """Under the canvas lock, replay only the same command."""
+        receipt = await self.db.get(CanvasSaveReceipt, (canvas_id, request_id))
+        if receipt and receipt.request_hash != digest:
+            raise diagnostic('IDEMPOTENCY_CONFLICT', '请求身份已用于其他正文', {'canvas_id': canvas_id}, status=409)
+        return receipt.response if receipt else None
+
+    async def save_scene_application(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
+                                     *, chapter_version: str, scene_sources: dict, source_history: dict | None = None) -> CanvasRead:
+        """Write the checked workbench plan using the ordinary save transaction."""
+        result = await self._write(canvas, command, digest, chapter_version=chapter_version,
+                                   scene_sources=scene_sources, source_history=source_history)
+        return CanvasRead.model_validate(result['scene_canvas'])
+
+    async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
+                     *, chapter_version: str | None = None, scene_sources: dict | None = None,
+                     source_history: dict | None = None) -> dict:
+        canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         from app.services.generation_canvas.checks import CanvasChecks, changed_check_connections
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
-        prepared = await prepare_document(self.db, self.project_id, canvas, command.document)
+        prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources)
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
         changed = changed_check_connections(prepared.previous_document, prepared.document)
         check_edge_revisions = canvas.check_edge_revisions
@@ -111,6 +134,12 @@ class CanvasStore:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         await CanvasChecks(self.db, self.project_id).cancel_changed_targets(canvas_id, changed)
         response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'revision': command.expected_revision + 1}
+        if chapter_version is not None:
+            response['scene_canvas'] = CanvasRead(id=canvas_id, project_id=self.project_id,
+                revision=response['revision'], document=prepared.document,
+                source_changed=prepared.document.fixed_source.chapter_version != chapter_version).model_dump(mode='json')
+        if source_history is not None:
+            response['source_history'] = source_history
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()
         return response

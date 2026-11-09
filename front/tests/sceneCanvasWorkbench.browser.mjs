@@ -95,7 +95,7 @@ try {
 
   await request(`${studio}/chapters/${chapter}`, 'PATCH', { raw_text: '灯没有亮。' })
   await page.reload()
-  await page.getByText('章节原文已变化，画布仍保留创建时的原文依据。', { exact: true }).waitFor()
+  await page.getByText('章节原文已变化，画布仍保留当前固定原文。', { exact: true }).waitFor()
   const canonical = await read()
   await page.evaluate(({ project, id, canonical }) => {
     const draft = structuredClone(canonical.document)

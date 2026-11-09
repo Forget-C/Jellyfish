@@ -1,23 +1,27 @@
 """提交文本分镜任务并校验初次共同画布候选，不绕过画布保存。"""
 
+from hashlib import sha256
 from types import SimpleNamespace
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate
-from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardCandidate, StoryboardRequest, StoryboardTaskRead
+from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardTaskRead
 from app.core.contracts.task import TaskStatus
 from app.models.generation_canvas import CanvasSaveReceipt
 from app.models.llm import Model, ModelCategoryKey, Provider
-from app.models.studio import FileUsage
+from app.models.studio import FileItem, FileUsage
 from app.models.task import Task
-from app.schemas.generation_canvas import CanvasDocument
+from app.schemas.generation_canvas import CanvasDocument, CanvasFixedSource, CanvasRead, CanvasSave, CreativeBasisCard
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
+from app.services.directing.storyboard_application import plan_application
+from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
 from app.services.generation_canvas.capabilities import model_capability
-from app.services.generation_canvas.document_save import prepare_document
+from app.services.generation_canvas.document_save import fixed_source_state, prepare_document
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -34,16 +38,26 @@ class SceneStoryboardService(SceneObjectService):
 
     async def submit_storyboard(self, chapter_id: str, sequence_id: str, body: StoryboardRequest) -> StoryboardTaskRead:
         """在同一事务建立空白目标及冻结任务，重放不重复创建。"""
+        return await self._submit(chapter_id, sequence_id, body)
+
+    async def reextract_storyboard(self, chapter_id: str, sequence_id: str, canvas_id: str,
+                                   body: StoryboardReextractRequest) -> StoryboardTaskRead:
+        """Keep the canvas identity and freeze the selected, verified text evidence."""
+        return await self._submit(chapter_id, sequence_id, body, canvas_id=canvas_id)
+
+    async def _submit(self, chapter_id: str, sequence_id: str, body: StoryboardRequest,
+                      *, canvas_id: str | None = None) -> StoryboardTaskRead:
         sequence, chapter = await self._scene(chapter_id, sequence_id, lock=True)
         request = body.model_dump(mode='json')
         existing = await self.db.scalar(self._storyboards(sequence_id).where(
             Task.input_snapshot['storyboard_request']['request_id'].as_string() == body.request_id))
         if existing:
-            if existing.input_snapshot['storyboard_request'] != request:
+            snapshot = existing.input_snapshot
+            if snapshot['storyboard_request'] != request or snapshot.get('reextract_canvas_id') != canvas_id:
                 raise RevisionConflict('分镜请求身份已用于另一份内容')
             return await self._storyboard_read(existing)
         objects = await self.read_objects(chapter_id, sequence_id)
-        if objects.source_changed:
+        if objects.source_changed and not canvas_id:
             raise ValueError('场次原文范围已变化，请先刷新对象准备')
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.text_model_id)
         provider = await self.db.get(Provider, model.provider_id)
@@ -54,13 +68,24 @@ class SceneStoryboardService(SceneObjectService):
             if not production or production.category not in (ModelCategoryKey.image, ModelCategoryKey.video):
                 raise ValueError('请选择可用的图片或视频生产模型')
             capability = await model_capability(self.db, production.id)
-        canvas = await self.create_canvas(chapter_id, sequence_id, SceneCanvasCreate(name=body.name))
-        available = {(asset.kind, asset.id) for asset in objects.assets}
-        frozen_objects = [{
-            'id': item.id, 'kind': item.kind, 'name': item.name, 'excerpt': item.excerpt,
-            'asset_id': item.asset_id if (item.kind, item.asset_id) in available else None,
-            'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
-        } for item in objects.objects]
+        prior_task_id = None
+        if canvas_id:
+            canvas, prior_task_id = await self._reextract_baseline(sequence, chapter, canvas_id, body)
+        else:
+            canvas = await self.create_canvas(chapter_id, sequence_id, SceneCanvasCreate(name=body.name))
+        fixed = canvas.document.fixed_source
+        basis = next(card for card in canvas.document.cards if card.id == fixed.card_id)
+        if not objects.source_changed and (fixed.chapter_version, basis.selection_start, basis.text) == (
+                sequence.source['version'], sequence.source_start, sequence.source_text):
+            available = {(asset.kind, asset.id) for asset in objects.assets}
+            frozen_objects = [{
+                'id': item.id, 'kind': item.kind, 'name': item.name, 'excerpt': item.excerpt,
+                'asset_id': item.asset_id if (item.kind, item.asset_id) in available else None,
+                'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
+            } for item in objects.objects]
+        else:
+            frozen_objects = await self._previous_object_inputs(canvas, prior_task_id, basis)
+
         files = sorted({item['image_file_id'] for item in frozen_objects if item['image_file_id']})
         if files:
             # A verified asset slot can own an image without a separate project FileUsage.
@@ -71,7 +96,7 @@ class SceneStoryboardService(SceneObjectService):
                 if file_id not in linked:
                     await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id,
                         chapter_id=chapter.id, usage_kind='canvas_storyboard_source', source_ref=f'{canvas.id}:{file_id}')
-        args = {'mode': body.mode, 'script_text': sequence.source_text, 'source_version': canvas.document.fixed_source.chapter_version,
+        args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
                 'objects': frozen_objects, 'production_model_id': body.production_model_id,
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
@@ -79,17 +104,142 @@ class SceneStoryboardService(SceneObjectService):
             target_id=sequence_id, project_id=self.project_id, provider_id=provider.id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
-                      'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
+                      'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
                       'provider_key': config.provider_key, 'run_args': args})
         return await self._storyboard_read(task)
+
+    async def _reextract_baseline(self, sequence, chapter, canvas_id: str,
+                                  body: StoryboardReextractRequest) -> tuple[CanvasRead, str | None]:
+        store = CanvasStore(self.db, self.project_id)
+        row = await store.get(canvas_id, lock=True)
+        current = CanvasDocument.model_validate(row.document)
+        fixed = current.fixed_source
+        if row.sequence_id != sequence.id or not fixed or fixed.chapter_id != chapter.id:
+            raise HTTPException(404, 'Canvas not found in scene')
+        basis = next(card for card in current.cards if card.id == fixed.card_id)
+        if body.adopt_current_source:
+            version = self._confirmed_source_version(sequence, chapter)
+            if (fixed.chapter_version, basis.text, basis.selection_start, basis.selection_end) != (
+                    version, sequence.source_text, sequence.source_start, sequence.source_end):
+                evidence = f'{canvas_id}:{version}:{sequence.source_start}:{sequence.source_end}'
+                basis = CreativeBasisCard(id=uuid5(NAMESPACE_URL, evidence).hex, text=sequence.source_text,
+                    source_locator=f'章节 {chapter.title} · 场次 {sequence.title}',
+                    selection_start=sequence.source_start, selection_end=sequence.source_end)
+                fixed = CanvasFixedSource(card_id=basis.id, chapter_id=chapter.id, chapter_version=version)
+        seed = CanvasDocument(id=canvas_id, project_id=self.project_id, name=current.name,
+                              cards=[basis], fixed_source=fixed)
+        task_id = current.storyboard.task_id if current.storyboard else None
+        return CanvasRead(id=canvas_id, project_id=self.project_id, revision=row.revision, document=seed), task_id
+
+    async def _previous_object_inputs(self, canvas: CanvasRead, task_id: str | None, basis: CreativeBasisCard) -> list[dict]:
+        if not task_id:
+            return []
+        task = await self.db.get(Task, task_id)
+        if not task or task.kind != STORYBOARD_KIND or task.project_id != self.project_id or task.input_snapshot.get('canvas_id') != canvas.id:
+            return []
+        args = task.input_snapshot['run_args']
+        if (args['source_version'], args['script_text']) != (canvas.document.fixed_source.chapter_version, basis.text):
+            return []
+        items = args['objects']
+        file_ids = {item['image_file_id'] for item in items if item.get('image_file_id')}
+        available = set(await self.db.scalars(select(FileItem.id).join(FileUsage, FileUsage.file_id == FileItem.id)
+            .where(FileItem.id.in_(file_ids), FileItem.deleted_at.is_(None), FileItem.delete_requested_at.is_(None),
+                   FileUsage.project_id == self.project_id))) if file_ids else set()
+        return [{**item, 'image_file_id': item['image_file_id'] if item['image_file_id'] in available else None} for item in items]
+
+    @staticmethod
+    def _confirmed_source_version(sequence, chapter) -> str:
+        """Use only the scene range already confirmed against the current chapter."""
+        version = sha256(chapter.raw_text.encode()).hexdigest()
+        if not sequence.is_current or not sequence.source_text.strip() or sequence.source.get('kind') != 'chapter' or (
+                sequence.source.get('reference'), sequence.source.get('version')) != (chapter.id, version):
+            raise RevisionConflict('章节原文已变动，请返回章节确认本场次的新原文范围')
+        return version
 
     async def read_storyboard(self, chapter_id: str, sequence_id: str, task_id: str) -> StoryboardTaskRead:
         """只返回本场任务与候选，不泄露模型配置和冻结私有输入。"""
         await self._scene(chapter_id, sequence_id)
+        return await self._storyboard_read(await self._get_storyboard(chapter_id, sequence_id, task_id))
+
+    async def _get_storyboard(self, chapter_id: str, sequence_id: str, task_id: str) -> Task:
         task = await self.db.scalar(self._storyboards(sequence_id).where(Task.id == task_id))
         if task is None or task.input_snapshot.get('chapter_id') != chapter_id:
             raise HTTPException(404, 'Storyboard task not found in scene')
-        return await self._storyboard_read(task)
+        return task
+
+    async def apply_storyboard(self, chapter_id: str, sequence_id: str, task_id: str,
+                               body: StoryboardApplication, *, preview: bool = False):
+        """Compute the exact reviewed plan from the locked revision or replay its receipt."""
+        sequence, chapter = await self._scene(chapter_id, sequence_id, lock=not preview)
+        task = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        store = CanvasStore(self.db, self.project_id)
+        canvas = await store.get(task.input_snapshot['canvas_id'], lock=not preview)
+        request_id = 'storyboard:' + task.id
+        digest = store.command_digest({'expected_revision': body.expected_revision,
+                                       'overwrite_card_ids': sorted(body.overwrite_card_ids)})
+        if not preview:
+            receipt = await store.save_receipt(canvas.id, request_id, digest)
+            if receipt:
+                return CanvasRead.model_validate(receipt['scene_canvas'])
+        if canvas.revision != body.expected_revision:
+            raise diagnostic('REVISION_CONFLICT', '画布已更新，请重新核对提取差异', {'canvas_id': canvas.id}, status=409)
+        if task.status != TaskStatus.succeeded or canvas.sequence_id != sequence_id:
+            raise ValueError('本场分镜候选尚未可用')
+        if await self.db.get(CanvasSaveReceipt, (canvas.id, request_id)):
+            raise ValueError('这份分镜结果已经应用')
+        candidate = StoryboardCandidate.model_validate(task.result)
+        current = CanvasDocument.model_validate(canvas.document)
+        if task.input_snapshot['storyboard_request'].get('adopt_current_source'):
+            version = self._confirmed_source_version(sequence, chapter)
+            basis = next(card for card in candidate.document.cards if card.id == candidate.document.fixed_source.card_id)
+            if (candidate.document.fixed_source.chapter_version, basis.text, basis.selection_start, basis.selection_end) != (
+                    version, sequence.source_text, sequence.source_start, sequence.source_end):
+                raise RevisionConflict('提取后原文范围再次变动，请重新提取')
+        elif current.fixed_source != candidate.document.fixed_source:
+            raise RevisionConflict('固定原文已更新，请重新提取')
+        previous = await self.db.get(Task, current.storyboard.task_id) if current.storyboard else None
+        prior = None
+        if previous and previous.kind == STORYBOARD_KIND and previous.target_id == sequence_id and previous.project_id == self.project_id and previous.status == TaskStatus.succeeded:
+            prior = StoryboardCandidate.model_validate(previous.result).document
+        capability = task.input_snapshot['run_args'].get('production_capability') or {}
+        document, diff = plan_application(current, candidate.document, body, prior=prior,
+                                          production_ports=capability.get('input_ports'))
+        if preview:
+            return diff
+        return await store.save_scene_application(canvas,
+            CanvasSave(request_id=request_id, expected_revision=body.expected_revision, document=document.model_dump()),
+            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(),
+            scene_sources=fixed_source_state(document),
+            source_history={'before': self._history_state(current), 'after': self._history_state(document)})
+
+    @staticmethod
+    def _history_state(document: CanvasDocument) -> dict:
+        return {'sources': fixed_source_state(document), 'task_id': document.storyboard.task_id if document.storyboard else None}
+
+    async def restore_storyboard(self, chapter_id: str, sequence_id: str, task_id: str,
+                                 body: StoryboardRestore) -> CanvasRead:
+        """Restore a fixed source only across a real application and its exact evidence."""
+        _, chapter = await self._scene(chapter_id, sequence_id, lock=True)
+        task = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        store = CanvasStore(self.db, self.project_id)
+        canvas = await store.get(task.input_snapshot['canvas_id'], lock=True)
+        digest = store.command_digest({'task_id': task_id, **body.model_dump(mode='json', exclude={'request_id'})})
+        replay = await store.save_receipt(canvas.id, body.request_id, digest)
+        if replay:
+            return CanvasRead.model_validate(replay['scene_canvas'])
+        if canvas.revision != body.expected_revision:
+            raise diagnostic('REVISION_CONFLICT', '画布已更新，请重新读取后核对', {'canvas_id': canvas.id}, status=409)
+        receipt = await self.db.get(CanvasSaveReceipt, (canvas.id, 'storyboard:' + task.id))
+        history = receipt.response.get('source_history') if receipt else None
+        from_side, to_side = ('after', 'before') if body.direction == 'undo' else ('before', 'after')
+        current = CanvasDocument.model_validate(canvas.document)
+        document = CanvasDocument.model_validate(body.document)
+        if canvas.sequence_id != sequence_id or not history or self._history_state(current) != history[from_side] or (
+                self._history_state(document) != history[to_side]):
+            raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对整批操作的原文与提取依据', {'canvas_id': canvas.id})
+        return await store.save_scene_application(canvas,
+            CanvasSave(request_id=body.request_id, expected_revision=body.expected_revision, document=document.model_dump()),
+            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'])
 
     async def _storyboard_read(self, task: Task) -> StoryboardTaskRead:
         canvas_id = task.input_snapshot['canvas_id']
@@ -101,7 +251,7 @@ class SceneStoryboardService(SceneObjectService):
             if receipt:
                 candidate = None
             else:
-                pending = canvas.revision != candidate.base_revision
+                pending = bool(task.input_snapshot.get('reextract_canvas_id')) or canvas.revision != candidate.base_revision
         return StoryboardTaskRead(**self.task_read(task).model_dump(), canvas_id=canvas_id,
                                   candidate=candidate, pending_application=pending)
 

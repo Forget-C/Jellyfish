@@ -1,3 +1,4 @@
+import { fixedCanvasSource } from './fixedCanvasSource'
 import { cleanConnectionDocument } from './connectionCleanup'
 import type { CanvasDocument, CanvasModelCapability, CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
 import { findConnection, sourceConnectionEdges } from './graphRules'
@@ -100,7 +101,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
       return connectionReason(document, edge, capability, position !== undefined)
     },
     update(document: CanvasDocument, next: GenerationCard, capability?: CanvasModelCapability): CanvasOperationResult {
-      if (document.fixed_source?.card_id === next.id) return { reason: '固定原文不可修改' }
+      if (fixedCanvasSource(document, next.id)) return { reason: '固定原文不可修改' }
       if (stackFor(document, next.id)) return { reason: '请先解除堆叠后编辑' }
       const previous = document.cards?.find(card => card.id === next.id)
       if ('prompt' in next && previous && 'prompt' in previous && previous.model_id === next.model_id) {
@@ -162,7 +163,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
         input_order: { ...changed.input_order, [copy.id]: { ...changed.input_order?.[copy.id], ...order } } } }
     },
     remove(document: CanvasDocument, ids: string[], busyCards: Set<string>, cardLabel: (id: string) => string): CanvasOperationResult {
-      if (document.fixed_source && ids.includes(document.fixed_source.card_id)) return { reason: '固定原文不可删除' }
+      if (ids.some(id => fixedCanvasSource(document, id))) return { reason: '固定原文不可删除' }
       const blocked = ids.find(id => stackFor(document, id) || document.edges?.some(edge => edge.source_card === id && stackFor(document, edge.target_card)) || busyCards.has(id))
       if (blocked) return { reason: `${cardLabel(blocked)}：${busyCards.has(blocked) ? '卡片正在运行，结束前不可删除' : '请先解除相关堆叠后删除'}` }
       // Only retained consumers can protect a source from a batch deletion.

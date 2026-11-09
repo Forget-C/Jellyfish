@@ -156,7 +156,7 @@ class StoryboardAssembly:
                 'start': start, 'end': end, 'excerpt': excerpt, 'source_version': self.args['source_version']}
 
     def _card(self, key: str, card_type: str, *, sources: list[dict] | None = None, **fields) -> dict:
-        card = {'id': self._id(key), 'type': card_type, **fields}
+        card = {'id': self._id(f'{key}:{card_type}'), 'type': card_type, **fields}
         self.document['cards'].append(card)
         self.index['origins'][card['id']] = {'semantic_key': key, 'sources': sources or []}
         return card

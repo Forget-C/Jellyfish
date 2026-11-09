@@ -10,6 +10,7 @@ import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
 import { CheckArchive } from './CheckArchive'
+import { SceneStoryboardReview } from '../directing/SceneStoryboardReview'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDetailsProvider } from '../directing/ui/WorkbenchDetails'
@@ -50,7 +51,9 @@ interface GenerationCanvasWorkspaceProps {
   canvasId: string | null
   back: { label: string; onClick: () => void }
   renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
+  renderSceneActions?: (context: CanvasManagementContext) => ReactNode
   initialCandidate?: StoryboardCandidate
+  storyboardScope?: { chapterId: string; sequenceId: string; requiresReview?: boolean }
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
   hostErrorAction?: ReactNode
@@ -63,7 +66,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, initialCandidate, onCanvasRead, hostError, hostErrorAction,
+  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, initialCandidate, storyboardScope, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
@@ -83,8 +86,9 @@ export function GenerationCanvasWorkspace({
     }
     if (!ownership.editable && ownership.state === 'checking') return
     handledCandidate.current = candidateTask
-    void applyInitialCandidate(initialCandidate).then(result => setCandidatePending(result === 'pending'))
-  }, [candidateTask, current, initialCandidate, applyInitialCandidate, ownership.editable, ownership.state])
+    if (storyboardScope?.requiresReview) setCandidatePending(true)
+    else void applyInitialCandidate(initialCandidate).then(result => setCandidatePending(result === 'pending'))
+  }, [candidateTask, current, initialCandidate, applyInitialCandidate, ownership.editable, ownership.state, storyboardScope?.requiresReview])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -122,17 +126,19 @@ export function GenerationCanvasWorkspace({
     return saved
   }
 
+  const management: CanvasManagementContext = {
+    current, saving, editable: ownership.editable,
+    running: !!runtime.busyCards.size, canEdit: ownership.canEdit, requestLeave: editor.requestLeave,
+    nameEditor: document && <Input aria-label="画布名称" value={document.name} maxLength={255}
+      disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
+      onChange={event => change({ ...document, name: event.target.value })} />,
+  }
   return <WorkbenchTheme><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
     <header className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await editor.requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
-        {renderCanvasManagement?.({
-          current, saving, editable: ownership.editable, running: !!runtime.busyCards.size,
-          canEdit: ownership.canEdit, requestLeave: editor.requestLeave,
-          nameEditor: document && <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
-              onChange={event => change({ ...document, name: event.target.value })} />,
-        })}
+        {renderCanvasManagement?.(management)}
         <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : current ? '已保存' : '尚无画布'}</span>
         {current && <WorkbenchIconButton label="保存画布" variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
         <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={editor.requestLeave} />}</div>
@@ -140,6 +146,7 @@ export function GenerationCanvasWorkspace({
       <div className="generation-toolbar-center" />
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="generation-primary-host" />
+        {renderSceneActions?.({ ...management, editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
         {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}
@@ -151,8 +158,17 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
-    {candidatePending && current?.document.storyboard?.task_id !== candidateTask && <Alert type="warning" showIcon message="分镜结果待应用，现有画布内容已保留。" />}
-    {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留创建时的原文依据。" />}
+    {candidatePending && candidateTask && storyboardScope && current?.document.storyboard?.task_id !== candidateTask &&
+      <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId: storyboardScope.chapterId,
+        sequenceId: storyboardScope.sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
+        prepare={editor.prepareReview} reload={editor.reload} applying={saving}
+        apply={async choice => {
+          const applied = await editor.applyReviewedCandidate({ chapterId: storyboardScope.chapterId,
+            sequenceId: storyboardScope.sequenceId, taskId: candidateTask }, choice)
+          if (applied) { runtime.invalidate(); setCandidatePending(false) }
+          return applied
+        }} />}
+    {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
 

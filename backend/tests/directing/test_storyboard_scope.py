@@ -186,5 +186,26 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             await read_data(client, 'PUT', video_path, {'request_id': 'manual', 'expected_revision': video['revision'], 'document': data})
             edited = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
             assert '分段动作举高' not in edited['text']
+            before_reextract = await read_data(client, 'GET', video_path)
+            rerun = await read_data(client, 'POST', endpoint + '/canvases/' + video_path.rsplit('/', 1)[-1] + '/storyboards',
+                {'request_id': 'repeat-segmented', 'text_model_id': 'scope-text', 'production_model_id': 'scope-video'})
+            await work()
+            application = endpoint + '/storyboards/' + rerun['task_id']
+            candidate = await read_data(client, 'GET', application)
+            assert candidate['pending_application'] and candidate['status'] == 'succeeded', candidate
+            choice = {'expected_revision': before_reextract['revision']}
+            diff = await read_data(client, 'POST', application + '/diff', choice)
+            assert any(item['id'] == card['id'] and item['manually_edited'] for item in diff['modified'])
+            merged = await read_data(client, 'POST', application + '/apply', choice)
+            assert merged['document']['storyboard']['shots'][1]['segments'] == second['segments']
+            assert merged['document']['storyboard']['origins'][specific]['applicability'] == data['storyboard']['origins'][specific]['applicability']
+            after = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
+            assert '分段动作举高' not in after['text']
+            assert [item['file_id'] for item in after['media']] == ['image1']
+            undo = await read_data(client, 'POST', application + '/restore',
+                {'request_id': 'undo-segmented', 'expected_revision': merged['revision'], 'direction': 'undo',
+                 'document': before_reextract['document']})
+            assert undo['document'] == before_reextract['document']
+
         finally:
             worker.text_pool.shutdown(wait=False)

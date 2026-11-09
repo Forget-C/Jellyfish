@@ -857,6 +857,7 @@ class CanvasDocument(BaseModel):
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
     fixed_source: CanvasFixedSource | None = Field(default=None, exclude_if=lambda value: value is None)
     storyboard: CanvasStoryboard | None = Field(default=None, exclude_if=lambda value: value is None)
+    archived_sources: list[CanvasFixedSource] = Field(default_factory=list, exclude_if=lambda value: not value)
 
 
 

@@ -1,3 +1,4 @@
+import { fixedCanvasSource } from './fixedCanvasSource'
 import type { CanvasDocument, CanvasSourceIndex } from '../../../services/generated'
 import { designFieldEntries } from './designFieldReferences'
 
@@ -25,10 +26,10 @@ export function sourceDestination(document: CanvasDocument, source: CanvasSource
     : field ? field.text : 'text' in card ? card.text : undefined
   const points = Array.from(text || '')
   const { start, end, excerpt, source_version: version } = source
-  const fixed = document.fixed_source
+  const fixed = fixedCanvasSource(document, card.id)
   if (!selector || !excerpt || typeof start !== 'number' || typeof end !== 'number' || !Number.isInteger(start) || !Number.isInteger(end)
       || start < 0 || end <= start || end > points.length || points.slice(start, end).join('') !== excerpt
-      || fixed?.card_id === card.id && version && fixed.chapter_version !== version) {
+      || fixed && version && fixed.chapter_version !== version) {
     return { focus, issue: '来源文本已变化，仅定位卡片或字段' }
   }
   const prefix = points.slice(0, start).join('')

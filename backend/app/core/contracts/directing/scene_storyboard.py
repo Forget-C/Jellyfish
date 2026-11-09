@@ -165,3 +165,47 @@ class StoryboardTaskRead(SceneObjectTaskRead):
     canvas_id: Identity
     pending_application: bool = False
     candidate: StoryboardCandidate | None = None
+
+
+class StoryboardApplication(Contract):
+    """Apply only the revision and manual choices the user reviewed."""
+
+    expected_revision: int = Field(ge=0)
+    overwrite_card_ids: list[Identity] = Field(default_factory=list, max_length=2000)
+
+
+class StoryboardDiffCard(Contract):
+    """A card-level change or a preserved card with affected references."""
+
+    id: Identity
+    type: str
+    type_name: str
+    name: str
+    manually_edited: bool = False
+    lost_targets: list[str] = Field(default_factory=list)
+
+
+class StoryboardDiff(Contract):
+    """The effect of applying the task to one saved canvas revision."""
+
+    added: list[StoryboardDiffCard]
+    modified: list[StoryboardDiffCard]
+    removed: list[StoryboardDiffCard]
+    orphaned: list[StoryboardDiffCard]
+    source_changed: bool
+
+
+
+class StoryboardReextractRequest(StoryboardRequest):
+    """Extract on a known target, optionally adopting a newly confirmed scene range."""
+
+    adopt_current_source: bool = False
+
+
+class StoryboardRestore(Contract):
+    """Undo or redo one reviewed application through the existing document history."""
+
+    request_id: Identity
+    expected_revision: int = Field(ge=0)
+    direction: Literal['undo', 'redo']
+    document: dict

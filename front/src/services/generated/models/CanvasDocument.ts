@@ -60,4 +60,5 @@ export type CanvasDocument = {
     groups?: Array<GenerationCanvasGroup>;
     fixed_source?: (CanvasFixedSource | null);
     storyboard?: (CanvasStoryboard | null);
+    archived_sources?: Array<CanvasFixedSource>;
 };

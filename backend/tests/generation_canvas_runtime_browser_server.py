@@ -59,12 +59,19 @@ class ControlledModel:
                                        'excerpt': '林舟在码头', 'asset_id': 'object-browser-character'}]}
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
         assert '前门的阿同' in args['script_text']
+        if os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1' and '放下信封' in args['script_text']:
+            revised = '前门的阿同放下信封。'
+            return SimpleNamespace(content=json.dumps({'shots': [{'id': 'front', 'excerpt': revised}]}, ensure_ascii=False))
         if args.get('mode') in ('complete', 'faithful'):
             objects = {item['excerpt']: item['id'] for item in args['objects']}
             front = objects['前门的阿同']
             extra = [{'id': 'return', 'excerpt': '他绕过门廊。', 'object_ids': [front]}] if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1' else []
             designs = [{'id': 'action', 'card_type': 'direction.performance', 'object_id': front,
                         'fields': {'physical_action': {'state': 'fact', 'text': '拿着信封', 'excerpt': '拿着信封'}}}]
+            if os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1':
+                designs.append({'id': 'movement', 'card_type': 'direction.movement', 'fields': {'movement_start': {
+                    'state': 'fact', 'text': '前门的阿同拿着信封。', 'excerpt': '前门的阿同拿着信封。',
+                }}})
             if args['mode'] == 'complete':
                 designs.append({'id': 'camera', 'card_type': 'direction.camera', 'fields': {'viewpoint': {
                     'state': 'proposal', 'text': '低机位跟拍', 'excerpt': '前门的阿同拿着信封。', 'reason': '突出手部动作',
@@ -230,7 +237,7 @@ async def prepare():
         db.add(Provider(id=provider_id, name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name=model_id if database_url else 'controlled-text', provider_id=provider_id, category='text', params={'temperature': 0.2}))
-        if storyboard_video_fixture:
+        if storyboard_video_fixture or os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1':
             db.add(Provider(id='story-video-provider', name='vidu', api_key='test', base_url='https://video.test'))
             await db.flush()
             db.add(Model(id='story-video-model', name='viduq2', category='video', provider_id='story-video-provider'))

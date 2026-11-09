@@ -67,6 +67,7 @@ import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneV
 import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
+import type { ApiResponse_StoryboardDiff_ } from '../models/ApiResponse_StoryboardDiff_';
 import type { ApiResponse_StoryboardTaskRead_ } from '../models/ApiResponse_StoryboardTaskRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
@@ -121,7 +122,10 @@ import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
 import type { SourceResolveRequest } from '../models/SourceResolveRequest';
+import type { StoryboardApplication } from '../models/StoryboardApplication';
+import type { StoryboardReextractRequest } from '../models/StoryboardReextractRequest';
 import type { StoryboardRequest } from '../models/StoryboardRequest';
+import type { StoryboardRestore } from '../models/StoryboardRestore';
 import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
 import type { TransitionWrite_Input } from '../models/TransitionWrite_Input';
@@ -369,6 +373,41 @@ export class StudioDirectingService {
         });
     }
     /**
+     * Reextract Storyboard
+     * 针对既有场次画布创建可核对的重新提取任务。
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardReextract({
+        projectId,
+        chapterId,
+        sequenceId,
+        canvasId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        canvasId: string,
+        requestBody: StoryboardReextractRequest,
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Read Storyboard
      * 读取当前任务状态、候选和应用基线。
      * @returns ApiResponse_StoryboardTaskRead_ Successful Response
@@ -394,6 +433,111 @@ export class StudioDirectingService {
                 'sequence_id': sequenceId,
                 'task_id': taskId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Storyboard Application
+     * 核对当前修订的卡片差异及保留影响。
+     * @returns ApiResponse_StoryboardDiff_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardDiff({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+        requestBody: StoryboardApplication,
+    }): CancelablePromise<ApiResponse_StoryboardDiff_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/diff',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Storyboard
+     * 明确应用本场候选，原子保存已核对的共同文档。
+     * @returns ApiResponse_CanvasRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardApply({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+        requestBody: StoryboardApplication,
+    }): CancelablePromise<ApiResponse_CanvasRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/apply',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Restore Storyboard
+     * 在真实应用回执约束下撤销或重做同一批次。
+     * @returns ApiResponse_CanvasRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardRestore({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+        requestBody: StoryboardRestore,
+    }): CancelablePromise<ApiResponse_CanvasRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/restore',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

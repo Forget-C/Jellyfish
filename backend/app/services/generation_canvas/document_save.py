@@ -20,7 +20,7 @@ class PreparedDocument:
     detached_proofs: dict[str, dict[str, Any]]
 
 
-async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> PreparedDocument:
+async def prepare_document(db, project_id: str, canvas, raw_document: dict, *, scene_sources: dict | None = None) -> PreparedDocument:
     """调用方已锁画布并核对回执及 revision；保持首个诊断顺序，不写文档或替换保护。"""
     canvas_id = canvas.id
     try:
@@ -35,7 +35,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
             from app.services.generation_canvas.check_selection import initial_check_categories
             card.enabled_categories = initial_check_categories()
     previous_document = CanvasDocument.model_validate(canvas.document)
-    _validate_fixed_source(previous_document, document)
+    _validate_fixed_source(previous_document, document, scene_sources)
     document, previous_document = _normalize_document(document, previous_document)
     await _mark_storyboard_edits(db, document)
     identities = dict(canvas.card_types)
@@ -249,17 +249,23 @@ async def _mark_storyboard_edits(db, document: CanvasDocument) -> None:
             origin.manually_edited = original[card.id] != card.model_dump(mode='json')
 
 
-def _validate_fixed_source(previous: CanvasDocument, current: CanvasDocument) -> None:
-    """普通保存不能建立、替换或移除固定依据；位置及分组不属于依据。"""
-    source = previous.fixed_source
-    if source != current.fixed_source:
-        card_id = (source or current.fixed_source).card_id
-    elif source and next((card for card in previous.cards if card.id == source.card_id), None) != next(
-            (card for card in current.cards if card.id == source.card_id), None):
-        card_id = source.card_id
-    else:
+def fixed_source_state(document: CanvasDocument) -> dict:
+    """Exact fixed evidence that can be authorized by a scoped application receipt."""
+    sources = [source for source in [document.fixed_source, *document.archived_sources] if source]
+    ids = {source.card_id for source in sources}
+    return {'fixed_source': document.fixed_source.model_dump(mode='json') if document.fixed_source else None,
+            'archived_sources': [source.model_dump(mode='json') for source in document.archived_sources],
+            'cards': {card.id: card.model_dump(mode='json') for card in document.cards if card.id in ids}}
+
+
+def _validate_fixed_source(previous: CanvasDocument, current: CanvasDocument, scene_sources: dict | None) -> None:
+    """Ordinary saves must retain the exact fixed evidence and its identity."""
+    expected = scene_sources if scene_sources is not None else fixed_source_state(previous)
+    if fixed_source_state(current) == expected:
         return
-    raise diagnostic('FIXED_SOURCE_IMMUTABLE', '固定原文不可修改或删除', {'card_id': card_id})
+    source = previous.fixed_source or current.fixed_source
+    raise diagnostic('FIXED_SOURCE_IMMUTABLE', '固定原文不可修改或删除',
+                     {'card_id': source.card_id} if source else {'canvas_id': current.id})
 
 
 def _normalize_document(document, previous_document):

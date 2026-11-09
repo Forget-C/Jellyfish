@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Input, Radio, Select, Space } from 'antd'
+import { Alert, Checkbox, Input, Radio, Select, Space } from 'antd'
 import { LlmService, StudioDirectingService } from '../../../services/generated'
-import type { ModelRead, StoryboardRequest, StoryboardTaskRead } from '../../../services/generated'
+import type { ModelRead, StoryboardReextractRequest, StoryboardRequest, StoryboardTaskRead } from '../../../services/generated'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
@@ -10,10 +10,12 @@ type Scope = { projectId: string; chapterId: string; sequenceId: string }
 const terminal = new Set(['succeeded', 'failed', 'cancelled'])
 
 /** 当前准备流只提交文本任务。真正的画布应用由编辑工作区核对本地和保存基线。 */
-export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, onCompleted }: {
-  scope: Scope; editable: boolean; nameForNewCanvas: () => string; onCompleted: (result: StoryboardTaskRead) => void;
+export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, target, onCompleted }: {
+  scope: Scope; editable: boolean; nameForNewCanvas?: () => string; onCompleted: (result: StoryboardTaskRead) => void;
+  target?: { id: string; sourceChanged: boolean; sourceReady: boolean; productionModelId?: string; confirmSource: () => void };
 }) {
-  const [request, setRequest] = useState<StoryboardRequest>()
+  const action = target ? '重新提取' : '生成分镜'
+  const [request, setRequest] = useState<StoryboardReextractRequest>()
   const [sent, setSent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -64,14 +66,16 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
     return () => { active = false; clearTimeout(timer) }
   }, [projectId, chapterId, sequenceId, taskId, taskStatus])
   const start = () => {
-    setRequest({ request_id: crypto.randomUUID(), name: nameForNewCanvas(), mode: 'complete' })
+    setRequest({ request_id: crypto.randomUUID(), name: nameForNewCanvas?.(), mode: 'complete',
+      production_model_id: target?.productionModelId })
     setSent(false); setError('')
   }
   const submit = async () => {
     if (!request || submitting) return
     setSubmitting(true); setSent(true); setError('')
     try {
-      const response = await StudioDirectingService.directingStoryboardSubmit({ ...scope, requestBody: request })
+      const response = target ? await StudioDirectingService.directingStoryboardReextract({ ...scope, canvasId: target.id, requestBody: request })
+        : await StudioDirectingService.directingStoryboardSubmit({ ...scope, requestBody: request })
       if (!alive.current) return
       if (!response.data) throw new Error('分镜提交结果待核实')
       setTask(response.data); setRequest(undefined); setSent(false)
@@ -83,12 +87,12 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
   const inProgress = !!task && !terminal.has(task.status)
   return <>
     <Space wrap>
-      <Button variant="primary" onClick={start} disabled={!editable || inProgress}>生成分镜</Button>
+      <Button variant="primary" onClick={start} disabled={!editable || inProgress}>{action}</Button>
       {inProgress && <span role="status">{task.status === 'queued' ? '分镜任务排队中' : '正在提取分镜'} · {task.stage}</span>}
     </Space>
     {!open && error && <Alert type="warning" showIcon message={error} />}
     {task?.status === 'failed' && <Alert type="error" showIcon message={task.error || '分镜提取失败，可重新生成分镜。'} />}
-    <WorkbenchModal title="生成分镜" open={open} width={480}
+    <WorkbenchModal title={action} open={open} width={480}
       closable={!submitting} keyboard={!submitting} maskClosable={!submitting}
       onCancel={() => { if (!submitting) setRequest(undefined) }}
       footer={<WorkbenchDialogActions secondary={<Button variant="quiet" disabled={submitting} onClick={() => setRequest(undefined)}>取消</Button>}>
@@ -107,9 +111,14 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
         <p>{request?.mode === 'faithful'
           ? '保留原文明示内容，未写明的设计保持待确定。'
           : '保留原文事实，为适用镜头补充设计建议，仍不确定的内容保留待确定。'}</p>
-        <label htmlFor="scene-storyboard-name">画布名称</label>
-        <Input id="scene-storyboard-name" maxLength={255} value={request?.name || ''} disabled={sent}
-          onChange={event => setRequest(value => value && { ...value, name: event.target.value })} />
+        {target ? target.sourceChanged && (target.sourceReady
+          ? <Checkbox checked={request?.adopt_current_source || false} disabled={sent}
+            onChange={event => setRequest(value => value && { ...value, adopt_current_source: event.target.checked })}>采用章节最新已确认原文</Checkbox>
+          : <Alert type="warning" showIcon message="仍可使用画布的固定原文。采用章节新版前，请先确认场次范围。"
+            action={<Button variant="quiet" onClick={target.confirmSource}>在章节确认新范围</Button>} />)
+          : <><label htmlFor="scene-storyboard-name">画布名称</label>
+            <Input id="scene-storyboard-name" maxLength={255} value={request?.name || ''} disabled={sent}
+              onChange={event => setRequest(value => value && { ...value, name: event.target.value })} /></>}
         <Select aria-label="生产模型" placeholder="稍后配置生产模型" allowClear value={request?.production_model_id || undefined}
           style={{ width: '100%' }} disabled={sent}
           options={models.filter(model => ['image', 'video'].includes(model.category)).map(model => ({ value: model.id, label: model.name }))}
