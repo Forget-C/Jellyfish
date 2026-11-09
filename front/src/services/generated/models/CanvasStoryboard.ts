@@ -10,7 +10,7 @@ import type { CanvasStoryboardShot } from './CanvasStoryboardShot';
  */
 export type CanvasStoryboard = {
     task_id: string;
-    mode: string;
+    mode: 'complete' | 'faithful';
     source_version: string;
     origins: Record<string, CanvasStoryboardOrigin>;
     objects: Array<CanvasStoryboardObject>;

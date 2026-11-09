@@ -1,5 +1,5 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
-from app.core.contracts.generation_canvas import ReferenceDesignField, StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
+from app.core.contracts.generation_canvas import CanvasStoryboardMode, ReferenceDesignField, StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
 from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
@@ -785,6 +785,7 @@ class CanvasStoryboardObject(BaseModel):
     object_id: str
     description_card_id: str
     reference_card_id: str
+    origin: Literal['prepared', 'missed'] = 'prepared'
 
 
 class CanvasStoryboardShot(BaseModel):
@@ -801,7 +802,7 @@ class CanvasStoryboard(BaseModel):
     """由工作台建立的分镜采用范围和溯源索引。"""
     model_config = ConfigDict(extra='forbid')
     task_id: str
-    mode: Literal['faithful']
+    mode: CanvasStoryboardMode
     source_version: str
     origins: dict[str, CanvasStoryboardOrigin]
     objects: list[CanvasStoryboardObject]

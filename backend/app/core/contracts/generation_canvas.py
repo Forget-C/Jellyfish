@@ -140,6 +140,9 @@ class NamedImageMapping(NamedImageObject):
         return value
 
 
+CanvasStoryboardMode = Literal['complete', 'faithful']
+
+
 class DesignField(BaseModel):
     """字段来源显式区分用户设定与提取；unknown 保持历史语义及快照格式。"""
     model_config = ConfigDict(extra='forbid')

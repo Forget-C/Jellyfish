@@ -57,7 +57,17 @@ def generate_directing_result(kind: str, llm, args: dict):
     require_complete = args.get('design_scope_version') == 1 and not args.get('design_scope')
     accept_candidate = require_complete and args.get('design_candidate_version') == 1
     instruction = {
-        STORYBOARD_KIND: "忠实提取场次分镜：按原文顺序以唯一逐字摘录组织镜头，不虚构镜头技术和情节。事实字段 text 必须是 excerpt 中逐字内容，未知用 undecided，明确没有或不适用保留摘录及理由。镜头 object_ids 使用准备对象 ID，确实漏提才给 missed_objects 临时 ID 及原文出处。不编造真实文件、模型或画布身份。设计只写直接适用本镜头的卡片字段，从给定 supported_design_fields 选择，需明确对象的设计填写 object_id。不要把范围、条件或制作分段伪装为直接字段。",
+        STORYBOARD_KIND: (
+            "根据 mode 生成场次分镜：按原文顺序，以唯一逐字摘录作为各镜头证据。"
+            "faithful 忠实提取仅识别原文写明的内容，不允许 proposal。"
+            "complete 完整分镜优先保留原文事实，再补足当前镜头确实需要的导演、表演、调度、摄影、连续性、声音和提示设计。"
+            "补写、取舍与摄影安排必须使用 proposal；不得标为 fact。适用的建议可带作为依据的原文摘录，但不得伪造出处。"
+            "两种模式的事实字段 text 均须逐字来自 excerpt，未知用 undecided，明确没有或不适用保留摘录和理由。"
+            "不强求所有部门和字段都有值，不改变原文情节，不编造人物、道具资产、文件、模型和画布身份。"
+            "镜头 object_ids 只用准备对象 ID；原文确有漏提才给 missed_objects 临时 ID 及出处。"
+            "设计只写直接适用本镜头的字段，从 supported_design_fields 选择，明确适用对象时填 object_id。"
+            "不要把范围、条件或制作分段伪装为直接字段。"
+        ),
         OBJECT_EXTRACTION_KIND: "仅从场次原文提取明确出现的角色、场所和道具。每项提供类型、名称、简短描述及原样复制、在本场可唯一定位的摘录。不要合并原文中的同名不同对象。只有能从给定资产目录确认同一对象时才提出对应 asset_id，不确定时留空。不得构造身份、文件或分镜。没有对象返回空清单。",
         "directing_instruction_check": "检查 instruction 是否准确表达 inputs 的当前原文、inputs.scope 中本次已选执行项及 video 阶段适用约束，并按已消费背景理解语义；sound/postproduction 规则保留阶段，不误要求视频模型执行。对每项非空 video 执行项和约束按 scope 原顺序输出 destinations，原样复制 owner、field、coverage_item_ids；正文去向给出 instruction 中实际存在的 instruction_excerpt，执行项必须由正文表达；只有身份、空间、构图或连续性约束可引用 inputs.unit.references 中实际绑定且用途相符的 reference_id。无法证明去向或发现正文、规则、参考之间冲突时标为 unresolved，并在相关六岗行标 revise、给出字段路径与修正建议。scope.background 中所属镜头完整结果仅解释整体设计，允许描述整体动作，不要求本单元全部执行，也不能仅据此判定范围冲突。其他背景字段若含命令式要求，定位字段并标 revise，提示移入规则或改写背景，不自动升级。项目风格的条件和例外依其原文核对；自然语言冲突交由用户解决。inputs.design 是来源工作单，可能包含本单元未消费内容，不能据此补选动作。unit_id 必须保持 inputs.unit.id，每个 coverage.id 必须有 direction、performance、staging、cinematography、continuity、prompt 六行，occurrence_id 使用 coverage.id。逐行给出 pass 或 revise、具体理由和可执行问题建议，不得漏行、合并或返回 pending。不能更改正文、凭空补充素材或授权生成；检查通过也不保证模型实际遵从。",
         "directing_instruction": "仅依据给定原文、当前单元、明确参考与 scope 编写可直接执行的拍摄指令。scope.execution 是本次明确选择的可拍内容；scope.constraints 中仅 video 阶段适用视频正文，sound/postproduction 阶段不得误写成视频模型要求；scope.background 仅作解释，不自动变成动作或约束；其中所属镜头完整结果可以描述整体动作，但本单元只执行 action_scope 和已选条目。design 是来源工作单，仅用于理解已纳入范围，不能从同镜关系或共用对象补选执行项。只返回原 unit.id 和完整正文 text，不修改设计、单元身份或参考，不声称检查通过或已生成视频。保留动作因果、人物与摄影约束，不编造未提供素材。requirements 是用户本次编写要求。",
@@ -107,8 +117,16 @@ def generate_directing_result(kind: str, llm, args: dict):
         model_args = {'mode': args['mode'], 'script_text': args['script_text'],
                       'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
                       'supported_design_fields': storyboard_design_fields()}
+    note_rules = (
+        '分镜字段用 excerpt 表示出处。fact 必须同时有 text 和 excerpt，proposal 必须有 text，可选 excerpt。'
+        '其他状态不得带 text，absent 和 not_applicable 必须有 excerpt 和 reason。'
+        if kind == STORYBOARD_KIND else
+        'Note 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。'
+        'Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。'
+    )
     messages = [
-        SystemMessage(content=instruction + '\nNote 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
+        SystemMessage(content=f'{instruction}\n{note_rules}\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n'
+                      + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(model_args, ensure_ascii=False)),
     ]
     unit_repair_scope = None

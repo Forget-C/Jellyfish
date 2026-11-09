@@ -110,7 +110,8 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
       onSelect={value => { const image = connected.find(item => referenceImageKey(item) === value.value); if (image) chooseCandidate(image) }} />
     </EditorAttribute>
   </>
-  const status = [disabled && '只读', selected ? '1 张参考图' : '未选择图片', ''].filter(Boolean).join(' · ')
+  const missed = document.storyboard?.objects.some(item => item.reference_card_id === card.id && item.origin === 'missed')
+  const status = [disabled && '只读', missed && '补漏对象', selected ? '1 张参考图' : '未选择图片'].filter(Boolean).join(' · ')
   return <ReferenceCardEditor parameters={parameters} status={<span>{status}</span>}>
     <div className="generation-reference-image" data-empty={!selected}>
       {selected ? <><img alt="当前参考图" src={buildFileDownloadUrl(selected.file_id)} /><div className="generation-reference-image-actions">

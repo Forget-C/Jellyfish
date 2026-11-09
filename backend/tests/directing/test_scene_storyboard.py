@@ -52,7 +52,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
             'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
         assert scene.status_code == 200, scene.text
         path = base + '/sequences/' + scene.json()['data']['id'] + '/storyboards'
-        request = {'request_id': 'first', 'name': '忠实稿', 'text_model_id': 'story-text'}
+        request = {'request_id': 'first', 'name': '忠实稿', 'text_model_id': 'story-text', 'mode': 'faithful'}
         submitted = await client.post(path, json=request)
         assert submitted.status_code == 200, submitted.text
         task = submitted.json()['data']
@@ -77,6 +77,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         document = candidate['document']
         cards = document['cards']
         assert len([card for card in cards if card['type'] == 'content.character']) == 1
+        assert document['storyboard']['objects'][0]['origin'] == 'missed'
         refs = [card for card in cards if card['type'] == 'reference.character']
         assert len(refs) == 1 and refs[0]['image_binding'] is None
         shots = [card for card in cards if card['type'] == 'direction.shot']
@@ -133,3 +134,94 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         assert after_failure['revision'] == 0 and len(after_failure['document']['cards']) == 1
         tasks = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1'})).json()['data']['items']
         assert {item['task_kind'] for item in tasks} == {'directing_storyboard'}
+
+
+@pytest.mark.asyncio
+async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_facts(tmp_path, monkeypatch):
+    """Both modes run the same task and save path; only complete permits proposals."""
+    original = '阿青扶起椅子。'
+    fact = {'state': 'fact', 'text': '扶起椅子', 'excerpt': original}
+    proposal = {'state': 'proposal', 'text': '以低机位表现起身动作', 'excerpt': original, 'reason': '突出动作变化'}
+    shot = {'id': 'action', 'excerpt': original, 'narrative_role': fact}
+    complete = {'shots': [{**shot, 'visible_result': proposal, 'designs': [
+        {'id': 'camera', 'card_type': 'direction.camera', 'fields': {'viewpoint': proposal}},
+        {'id': 'light', 'card_type': 'direction.lighting', 'fields': {'light_direction': {
+            'state': 'undecided', 'reason': '待确认场地光线'}}},
+    ]}]}
+    calls = []
+
+    class ControlledModel:
+        """Control only external output and transport failure."""
+
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, messages):
+            import httpx
+            args = json.loads(messages[1].content)
+            calls.append(args['mode'])
+            if len(calls) == 5:
+                raise httpx.ConnectError('fixture provider unavailable')
+            if len(calls) == 1:
+                result = {'shots': [{**shot, 'visible_result': {**proposal, 'state': 'fact'}}]}
+            else:
+                result = {'shots': [shot]} if len(calls) == 4 else complete
+            return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = original
+            db.add(Provider(id='story-modes-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            await db.flush()
+            db.add(Model(id='story-modes-text', name='text', category='text', provider_id='story-modes-provider'))
+        base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        chapter = (await client.get(base)).json()['data']
+        scene = await client.post(base + '/sequences', json={'title': '场次', 'position': 0,
+            'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
+        assert scene.status_code == 200, scene.text
+        path = base + '/sequences/' + scene.json()['data']['id'] + '/storyboards'
+        worker = TaskWorker(sessions)
+        try:
+            async def extract(request_id, **config):
+                response = await client.post(path, json={'request_id': request_id,
+                    'text_model_id': 'story-modes-text', **config})
+                assert response.status_code == 200, response.text
+                task_id = response.json()['data']['task_id']
+                await worker.tick()
+                await asyncio.gather(*worker.jobs.values())
+                return (await client.get(path + '/' + task_id)).json()['data']
+
+            expanded = await extract('default-mode')
+            assert expanded['status'] == 'succeeded', expanded
+            candidate = expanded['candidate']
+            assert candidate['document']['storyboard']['mode'] == 'complete'
+            canvas_path = '/api/v1/studio/generation-canvases/p1/' + expanded['canvas_id']
+            applied = await client.put(canvas_path, json={'request_id': 'storyboard:' + expanded['task_id'],
+                'expected_revision': candidate['base_revision'], 'document': candidate['document']})
+            assert applied.status_code == 200, applied.text
+            saved = (await client.get(canvas_path)).json()['data']
+            cards = saved['document']['cards']
+            frame = next(card for card in cards if card['type'] == 'direction.shot')
+            assert frame['narrative_role']['state'] == 'fact'
+            assert frame['visible_result']['state'] == 'proposal'
+            assert frame['visible_result']['text'] == proposal['text']
+            camera = next(card for card in cards if card['type'] == 'direction.camera')
+            assert camera['fields']['viewpoint']['extraction_reason'] == proposal['reason']
+            light = next(card for card in cards if card['type'] == 'direction.lighting')
+            assert light['fields']['light_direction']['state'] == 'undecided'
+            assert light['fields']['light_direction']['text'] == ''
+            assert not next(card for card in cards if card['type'] == 'model.image')['model_id']
+
+            faithful = await extract('explicit-faithful', mode='faithful')
+            assert faithful['status'] == 'succeeded', faithful
+            assert faithful['candidate']['document']['storyboard']['mode'] == 'faithful'
+            assert not any(card['type'] == 'direction.camera' for card in faithful['candidate']['document']['cards'])
+            assert calls == ['complete', 'complete', 'faithful', 'faithful']
+
+            failed = await extract('provider-failed')
+            assert failed['status'] == 'failed' and failed['candidate'] is None and failed['error']
+            assert calls == ['complete', 'complete', 'faithful', 'faithful', 'complete']
+            assert (await client.get(canvas_path)).json()['data'] == saved
+        finally:
+            worker.text_pool.shutdown(wait=False)

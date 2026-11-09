@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.core.contracts.directing.common import Contract, Identity, Text
 from app.core.contracts.directing.scene_objects import SceneObjectTaskRead
+from app.core.contracts.generation_canvas import CanvasStoryboardMode
 from app.schemas.generation_canvas import CanvasDocument
 
 
@@ -16,13 +17,13 @@ class StoryboardRequest(Contract):
     name: str = Field(default='', max_length=255)
     text_model_id: Identity | None = None
     production_model_id: Identity | None = None
-    mode: Literal['faithful'] = 'faithful'
+    mode: CanvasStoryboardMode = 'complete'
 
 
 class StoryboardField(Contract):
-    """设计内容、理由及原样摘录；服务端核对忠实提取的出处。"""
+    """设计内容、理由及原样摘录，服务端核对原文出处。"""
 
-    state: Literal['fact', 'undecided', 'absent', 'not_applicable']
+    state: Literal['fact', 'proposal', 'undecided', 'absent', 'not_applicable']
     purpose: Literal['background', 'design', 'constraint'] = 'design'
     text: str = Field(default='', max_length=4000)
     excerpt: str = Field(default='', max_length=4000)
@@ -54,6 +55,7 @@ class StoryboardShot(Contract):
     excerpt: Text = Field(max_length=4000)
     object_ids: list[Identity] = Field(default_factory=list, max_length=50)
     narrative_role: StoryboardField | None = None
+    visible_result: StoryboardField | None = None
     estimated_duration: StoryboardField | None = None
     beat: StoryboardField | None = None
     designs: list[StoryboardDesign] = Field(default_factory=list, max_length=30)
