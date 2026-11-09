@@ -217,6 +217,19 @@ try {
   assert.equal((await rejected(`${objectsUrl}/extractions`, 'POST', { request_id: 'archive-extract' })).status, 422)
   assert.equal((await rejected(`${objectsUrl}/${backObject.id}`, 'PUT', { expected_revision: adopted.revision, asset_id: null })).status, 422)
   assert.equal((await read()).revision, adopted.revision)
+  // Opening a failed task from history must show its own error without candidate actions.
+  const liveScene = (await request(chapterPath)).sequences.find(row => row.id === emptyScene.id)
+  const emptyPath = `${scenes}/${emptyScene.id}`
+  await request(emptyPath, 'PUT', { title: liveScene.title, position: liveScene.position,
+    expected_version: liveScene.version, source_version: sourceVersion,
+    span: { start: excerpt.length, end: excerpt.length + 1 } })
+  const failedTask = await request(`${emptyPath}/objects/extractions`, 'POST', { request_id: 'failed-object-link' })
+  await page.goto(management.replace(`sequence=${sequence.id}`, `sequence=${emptyScene.id}`) + `&objectTask=${failedTask.task_id}`)
+  const taskDialog = page.getByRole('dialog', { name: '对象提取任务', exact: true })
+  await taskDialog.getByText('对象提取失败', { exact: true }).waitFor()
+  assert.equal(await taskDialog.getByRole('button', { name: '应用整批对象', exact: true }).count(), 0)
+  await taskDialog.getByRole('button', { name: /^关\s*闭$/ }).click()
+  await page.waitForURL(url => !url.searchParams.has('objectTask'))
   console.log(JSON.stringify({ output, passed: true }))
 } catch (reason) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true })

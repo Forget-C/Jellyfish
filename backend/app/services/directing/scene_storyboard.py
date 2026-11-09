@@ -18,6 +18,7 @@ from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.studio import FileItem, FileUsage
 from app.models.task import Task
 from app.schemas.generation_canvas import CanvasDocument, CanvasFixedSource, CanvasModelCapability, CanvasRead, CanvasSave, CreativeBasisCard
+from app.services.directing.scene_canvas import SCENE_TASK_ORDER
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.storyboard_application import plan_application
@@ -58,6 +59,7 @@ class SceneStoryboardService(SceneObjectService):
             'id': item.id, 'kind': item.kind, 'name': item.name, 'excerpt': item.excerpt,
             'asset_id': item.asset_id if (item.kind, item.asset_id) in available else None,
             'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
+            'reference_unavailable': bool(item.image_file_id and item.reference_state != 'ready'),
         } for item in objects.objects]
 
     async def _storyboard_basis(self, sequence, chapter, objects: SceneObjectsRead, inputs: list[dict],
@@ -88,6 +90,7 @@ class SceneStoryboardService(SceneObjectService):
             object_task_active=active_task_id is not None, objects=[StoryboardBasisObject(
                 id=item['id'], name=item['name'], excerpt=item['excerpt'], kind=item['kind'], asset_id=item['asset_id'],
                 asset_name=names.get((item['kind'], item['asset_id'])), image_file_id=item['image_file_id'],
+                reference_unavailable=item['reference_unavailable'],
             ) for item in inputs])
 
     async def reextract_storyboard(self, chapter_id: str, sequence_id: str, canvas_id: str,
@@ -224,14 +227,16 @@ class SceneStoryboardService(SceneObjectService):
                 if file_id not in linked:
                     await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id,
                         chapter_id=chapter.id, usage_kind='canvas_storyboard_source', source_ref=f'{canvas.id}:{file_id}')
+        # Availability labels belong to confirmation, not frozen model inputs.
+        model_objects = [{key: value for key, value in item.items() if key != 'reference_unavailable'} for item in frozen_objects]
         args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
-                'objects': frozen_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
+                'objects': model_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
             title='生成完整分镜' if body.mode == 'complete' else '忠实提取分镜', target_type='directing_sequence',
             target_id=sequence_id, project_id=self.project_id, provider_id=provider.id, retry_of_task_id=retry_of_task_id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
-            snapshot={'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
+            snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
                       'provider_key': config.provider_key, 'run_args': args})
         return await self._storyboard_read(task)
@@ -286,7 +291,8 @@ class SceneStoryboardService(SceneObjectService):
         available = set(await self.db.scalars(select(FileItem.id).join(FileUsage, FileUsage.file_id == FileItem.id)
             .where(FileItem.id.in_(file_ids), FileItem.deleted_at.is_(None), FileItem.delete_requested_at.is_(None),
                    FileUsage.project_id == self.project_id))) if file_ids else set()
-        return [{**item, 'image_file_id': item['image_file_id'] if item['image_file_id'] in available else None} for item in items]
+        return [{**item, 'image_file_id': item['image_file_id'] if item['image_file_id'] in available else None,
+                 'reference_unavailable': bool(item['image_file_id'] and item['image_file_id'] not in available)} for item in items]
 
     @staticmethod
     def _confirmed_source_version(sequence, chapter) -> str:
@@ -311,7 +317,7 @@ class SceneStoryboardService(SceneObjectService):
             query = query.where(target == canvas_id)
         tasks = (await self.db.execute(query.with_only_columns(
             Task.id, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id, target.label('canvas_id'))
-            .order_by(Task.created_at.desc(), Task.id.desc()).limit(20))).all()
+            .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(20))).all()
         saved = set(await self.db.scalars(select(CanvasSaveReceipt.request_id).where(
             CanvasSaveReceipt.request_id.in_(['storyboard:' + task.id for task in tasks if task.status == TaskStatus.succeeded]))))
         return [self._storyboard_summary(task, task.canvas_id, task.status == TaskStatus.succeeded and 'storyboard:' + task.id not in saved)
@@ -337,7 +343,7 @@ class SceneStoryboardService(SceneObjectService):
                 Task.input_snapshot['chapter_id'].as_string() == chapter_id,
                 Task.input_snapshot['canvas_id'].as_string() == canvas_id,
                 Task.status == TaskStatus.succeeded,
-            ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
+            ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))
         if task is None or task.status != TaskStatus.succeeded:
             return None
         result = await self._storyboard_read(task)

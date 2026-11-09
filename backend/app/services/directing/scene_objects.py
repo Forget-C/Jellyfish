@@ -16,7 +16,7 @@ from app.models.directing import Sequence
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.studio import FileItem, FileUsage
 from app.models.task import Task
-from app.services.directing.scene_canvas import SceneCanvasService
+from app.services.directing.scene_canvas import SCENE_TASK_ORDER, SceneCanvasService
 from app.services.directing.store import RevisionConflict
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -80,7 +80,7 @@ class SceneObjectService(SceneCanvasService):
         sequence, _ = await self._scene(chapter_id, sequence_id)
         task = (await self.db.execute(self._tasks(sequence_id)
             .with_only_columns(Task.id, Task.status, Task.stage, Task.error_message)
-            .order_by(Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
+            .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
         if task and task.status == TaskStatus.succeeded:
             # 任务可能在两次查询之间提交，成功状态要随最新准备结果返回。
             await self.db.refresh(sequence, ['object_preparation'])
@@ -103,7 +103,7 @@ class SceneObjectService(SceneCanvasService):
         candidate_task_id = await self.db.scalar(self._tasks(sequence_id).with_only_columns(Task.id).where(
             Task.input_snapshot['chapter_id'].as_string() == chapter_id,
             Task.status == TaskStatus.succeeded, Task.result['pending_application'].as_boolean().is_(True),
-        ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
+        ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))
         return SceneObjectsRead(revision=prepared.get('revision', 0), source_version=prepared.get('source_version'),
             source_changed=bool(prepared and prepared['source_digest'] != digest), objects=objects, assets=assets,
             task=self.task_read(task) if task else None, candidate_task_id=candidate_task_id)
@@ -133,7 +133,7 @@ class SceneObjectService(SceneCanvasService):
                 'existing_assets': [{'id': asset.id, 'kind': asset.kind, 'name': asset.name, 'description': asset.description[:800]}
                                     for asset in assets[:120]]}
         task = await TaskService(self.db).submit(kind=OBJECT_EXTRACTION_KIND, title='提取场次对象',
-            snapshot={'object_extraction': request, 'chapter_id': chapter.id, 'model_id': model.id, 'model_name': model.name,
+            snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'object_extraction': request, 'chapter_id': chapter.id, 'model_id': model.id, 'model_name': model.name,
                       'provider_key': config.provider_key, 'run_args': args}, project_id=self.project_id, provider_id=provider.id,
             target_type='directing_sequence', target_id=sequence_id)
         return self.task_read(task)
@@ -164,13 +164,19 @@ class SceneObjectService(SceneCanvasService):
         await self.db.flush()
         return await self.read_objects(chapter_id, sequence_id)
 
-    async def _candidate_task(self, chapter_id: str, sequence_id: str, task_id: str) -> tuple[Task, SceneObjectExtractionResult]:
+    async def _extraction_task(self, chapter_id: str, sequence_id: str, task_id: str) -> Task:
         """候选读取及应用均先核实任务的真实章节和场次归属。"""
         task = await self.db.scalar(self._tasks(sequence_id).where(Task.id == task_id,
             Task.input_snapshot['chapter_id'].as_string() == chapter_id))
-        if not task or task.status != TaskStatus.succeeded or 'pending_application' not in (task.result or {}):
-            raise HTTPException(404, '未找到此场次可核对的对象提取结果')
-        return task, SceneObjectExtractionResult.model_validate(task.result)
+        if not task:
+            raise HTTPException(404, '未找到此场次的对象提取任务')
+        return task
+
+    @staticmethod
+    def _extraction_result(task: Task) -> SceneObjectExtractionResult | None:
+        if task.status != TaskStatus.succeeded or 'pending_application' not in (task.result or {}):
+            return None
+        return SceneObjectExtractionResult.model_validate(task.result)
 
     def _candidate_plan(self, sequence: Sequence, task: Task, result: SceneObjectExtractionResult
                         ) -> tuple[SceneObjectCandidateReview, list[SceneObjectCandidate]]:
@@ -197,15 +203,20 @@ class SceneObjectService(SceneCanvasService):
         token = None
         if sequence.is_current and not source_changed and result.pending_application:
             token = sha256(f'{task.id}:{revision}:{digest}'.encode()).hexdigest()
-        review = SceneObjectCandidateReview(task=self.task_read(task), revision=revision, source_changed=source_changed,
+        review = SceneObjectCandidateReview(task=self.task_read(task), candidate_available=True, revision=revision, source_changed=source_changed,
             is_current=sequence.is_current, applied_revision=result.applied_revision, preview_token=token,
             added=added, removed=removed, modified=modified, retained_choices=retained_choices)
         return review, merged
 
     async def read_candidate(self, chapter_id: str, sequence_id: str, task_id: str) -> SceneObjectCandidateReview:
-        """按任务身份重开差异，不产生任何准备写入或重新调用模型。"""
+        """按身份读取任务状态，可用时提供整批差异。"""
         sequence, _ = await self._scene(chapter_id, sequence_id)
-        task, result = await self._candidate_task(chapter_id, sequence_id, task_id)
+        task = await self._extraction_task(chapter_id, sequence_id, task_id)
+        result = self._extraction_result(task)
+        if result is None:
+            return SceneObjectCandidateReview(task=self.task_read(task), candidate_available=False,
+                revision=(sequence.object_preparation or {}).get('revision', 0), source_changed=False,
+                is_current=sequence.is_current, added=[], removed=[], modified=[], retained_choices=[])
         review, _ = self._candidate_plan(sequence, task, result)
         return review
 
@@ -213,7 +224,10 @@ class SceneObjectService(SceneCanvasService):
                               body: SceneObjectCandidateApplication) -> SceneObjectCandidateReceipt:
         """在场次写锁内核对预览，并同时保存整批准备和该任务的原回执。"""
         sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
-        task, result = await self._candidate_task(chapter_id, sequence_id, task_id)
+        task = await self._extraction_task(chapter_id, sequence_id, task_id)
+        result = self._extraction_result(task)
+        if result is None:
+            raise HTTPException(404, '未找到此场次可核对的对象提取结果')
         if not result.pending_application:
             if result.application == body and result.applied_revision is not None:
                 return SceneObjectCandidateReceipt(task_id=task.id, revision=result.applied_revision)
@@ -243,6 +257,7 @@ class SceneObjectService(SceneCanvasService):
     async def complete_extraction(self, task: Task, result: SceneObjectExtraction) -> SceneObjectExtractionResult:
         """首次适用结果直接交付，其他成功结果保留为待核对候选。"""
         args = task.input_snapshot['run_args']
+        await self._lock_sqlite_scene(task.input_snapshot['chapter_id'], task.target_id)
         sequence = await self.db.scalar(select(Sequence).where(Sequence.id == task.target_id,
             Sequence.chapter_id == task.input_snapshot['chapter_id']).with_for_update().execution_options(populate_existing=True))
         if sequence is None:

@@ -1,5 +1,6 @@
 import { Alert, Button, Checkbox } from 'antd'
 import type { StoryboardBasis } from '../../../services/generated'
+import { buildFileDownloadUrl } from '../assets/utils'
 
 /** 显示本次会固定的摘录及可用参考，和当前对象任务状态分别表达。 */
 export function StoryboardBasisPreview({ basis, useSaved, onUseSaved, onRefresh, onOpenSource, onOpenObjects,
@@ -25,7 +26,10 @@ export function StoryboardBasisPreview({ basis, useSaved, onUseSaved, onRefresh,
           <summary>本次采用的对象与参考（{basis.objects.length}）</summary>
           <ul>{basis.objects.map(object => <li key={object.id}>
             {object.name}{basis.objects.some(other => other.id !== object.id && other.name === object.name) && `（${object.excerpt}）`}
-            {' · '}{object.asset_name || '未关联资产'} · {object.image_file_id ? '已选参考图' : '无参考图'}
+            {' · '}{object.asset_name || '未关联资产'} · {object.image_file_id
+              ? <img className="management-basis-reference" alt={`${object.name}采用的参考图`}
+                src={buildFileDownloadUrl(object.image_file_id)} />
+              : object.reference_unavailable ? '参考图不可用，本次不采用' : '无参考图'}
           </li>)}</ul>
         </details> : <p>{emptyText ?? (basis.preparation_revision ? '已保存准备没有对象，可以继续生成。' : '尚未准备对象，可以直接生成分镜。')}</p>}
       </>}

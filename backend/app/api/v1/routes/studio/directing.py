@@ -136,7 +136,7 @@ async def extract_scene_objects(project_id: str, chapter_id: str, sequence_id: s
             response_model=ApiResponse[SceneObjectCandidateReview], operation_id="directing_scene_object_candidate")
 async def read_scene_object_candidate(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                                       db: AsyncSession = Depends(get_db, scope="function")):
-    """读取冻结对象和当前准备的整批差异。"""
+    """读取指定对象提取任务，可用时返回冻结对象和当前准备的整批差异。"""
     return success_response(await SceneObjectService(db, project_id).read_candidate(chapter_id, sequence_id, task_id))
 
 

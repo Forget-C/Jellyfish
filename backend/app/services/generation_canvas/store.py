@@ -2,9 +2,10 @@
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 from fastapi import HTTPException
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
 from app.models.directing import Sequence
@@ -96,6 +97,12 @@ class CanvasStore:
                                   sequence_id=scene.sequence_id if scene else None,
                                   document=document.model_dump(), revision=0,
                                   card_types={scene.basis.id: scene.basis.type} if scene else {})
+        if scene:
+            # Scene admission is serialized by the caller. Keep even equal clock readings ordered.
+            previous = await self.db.scalar(select(func.max(GenerationCanvas.created_at)).where(
+                GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == scene.sequence_id))
+            now = datetime.now(UTC).replace(tzinfo=None)
+            canvas.created_at = max(now, previous.replace(tzinfo=None) + timedelta(microseconds=1)) if previous else now
         self.db.add(canvas)
         await self.db.flush()
         from app.models.generation_canvas import CanvasEventHead

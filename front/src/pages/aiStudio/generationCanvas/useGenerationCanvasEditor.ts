@@ -6,6 +6,9 @@ import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, Canva
 import { cleanObjectSources } from './objectSourceCleanup'
 import { generationCanvasEditScope, useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
+export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
+  `jellyfish:generation:${projectId}:${canvasId}:recovery`
+
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
 type PendingSave = CanvasSave & { scene?: SceneChange }
@@ -39,7 +42,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
 
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
 export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true) {
-  const key = `jellyfish:generation:${projectId}:${canvasId}:recovery`
+  const key = canvasRecoveryKey(projectId, canvasId)
   const ownership = useSceneEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [current, setCurrent] = useState<CanvasRead>()
   const [document, setDocument] = useState<CanvasDocument>()

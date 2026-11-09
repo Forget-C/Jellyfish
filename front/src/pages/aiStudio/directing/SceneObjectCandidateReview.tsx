@@ -21,6 +21,9 @@ function choiceLabel(object: SceneObjectCandidate) {
   return [object.asset_id && '资产关联', object.image_file_id && '参考图'].filter(Boolean).join('和')
 }
 
+const taskStatus = { queued: '对象提取排队中', running: '正在提取对象', failed: '对象提取失败',
+  cancelled: '对象提取已取消', succeeded: '对象提取已完成，暂无可核对差异' }
+
 /** 只确认当前预览，未知结果保留原命令，过期预览要求重新核对。 */
 export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, taskId, editable, onClose }: {
   projectId: string; chapterId: string; sequenceId: string; taskId: string;
@@ -40,18 +43,25 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
   }, [])
   useEffect(() => {
     let active = true
+    let timer: number | undefined
     const request = StudioDirectingService.directingSceneObjectCandidate({ projectId, chapterId, sequenceId, taskId })
     void request.then(({ data }) => {
       if (!data || data.task.task_id !== taskId) throw new Error('无法读取此对象提取结果')
-      if (active) setPreview(data)
+      if (active) {
+        setPreview(data); setReadError('')
+        if (data.task.status === 'queued' || data.task.status === 'running') {
+          timer = window.setTimeout(() => setRefresh(value => value + 1), 1200)
+        }
+      }
     }).catch(cause => { if (active) setReadError(directingError(cause)) })
       .finally(() => { if (active) setLoading(false) })
-    return () => { active = false; request.cancel() }
+    return () => { active = false; window.clearTimeout(timer); request.cancel() }
   }, [projectId, chapterId, sequenceId, taskId, refresh])
   const reread = () => {
     setPreview(undefined); setLoading(true); setReadError(''); setUnknown(false)
     setRefresh(value => value + 1)
   }
+  const status = preview?.task.status
   const apply = async () => {
     if (!editable || applying || !preview?.preview_token) return
     setApplying(true); setApplyError('')
@@ -70,17 +80,20 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
     } finally { if (mounted.current) setApplying(false) }
   }
   const adopted = typeof preview?.applied_revision === 'number'
-  return <WorkbenchModal title="核对对象差异" open width={660} closable={!applying} keyboard={!applying}
+  const hasCandidate = preview?.candidate_available
+  return <WorkbenchModal title={hasCandidate ? '核对对象差异' : '对象提取任务'} open width={660} closable={!applying} keyboard={!applying}
     maskClosable={false} onCancel={onClose}
-    footer={<WorkbenchDialogActions secondary={<Button disabled={applying} onClick={onClose}>{adopted ? '关闭' : '暂不应用'}</Button>}>
-      {!adopted && <Button type="primary" disabled={!editable || !preview?.preview_token} loading={applying}
+    footer={<WorkbenchDialogActions secondary={<Button disabled={applying} onClick={onClose}>{adopted || !hasCandidate ? '关闭' : '暂不应用'}</Button>}>
+      {hasCandidate && !adopted && <Button type="primary" disabled={!editable || !preview?.preview_token} loading={applying}
         onClick={() => void apply()}>{unknown ? '核实应用结果' : '应用整批对象'}</Button>}
     </WorkbenchDialogActions>}>
     {loading && <Spin aria-label="正在核对对象差异" />}
     {readError && <Alert type="error" message={readError} action={<Button onClick={reread}>重新读取差异</Button>} />}
     {applyError && <Alert type="warning" showIcon message={applyError} />}
     {adopted && <Alert type="success" showIcon message="该结果已应用到本场对象准备" />}
-    {preview && !adopted && <>
+    {preview && !hasCandidate && <Alert type={status === 'failed' ? 'warning' : 'info'} showIcon
+      message={taskStatus[preview.task.status]} description={preview.task.error} />}
+    {preview && hasCandidate && !adopted && <>
       {!preview.is_current && <Alert type="warning" showIcon message="历史场次可查看对象候选，恢复为当前场次后可重新核对。" />}
       {preview.source_changed && <Alert type="warning" showIcon message="已确认场次原文已变化，请重新提取对象。" />}
       <Changes label="新增" objects={preview.added} note={() => '待关联'} />

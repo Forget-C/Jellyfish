@@ -9,6 +9,7 @@ import type { SceneObjectTaskRead } from './SceneObjectTaskRead';
  */
 export type SceneObjectCandidateReview = {
     task: SceneObjectTaskRead;
+    candidate_available: boolean;
     revision: number;
     source_changed: boolean;
     is_current: boolean;

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openCanvasManagement } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCanvasManagement, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -130,6 +130,27 @@ try {
   await page.getByText('画布已保存新修订，请重新核对并确认删除').waitFor()
   assert.equal((await request(canvasUrl(ordinary.id))).document.name, '自由入口并发保存')
 
+  // A failed save leaves recoverable local work even after releasing editor ownership.
+  const recoverable = await request(sceneApi + '/canvases', 'POST', { name: '本地草稿目标' })
+  const failedSave = url => url.pathname === '/api/v1/studio/generation-canvases/' + project + '/' + recoverable.id
+  await page.goto(free(recoverable.id))
+  await page.locator('[data-card-type="content.basis"]').waitFor()
+  await page.route(failedSave, route => route.request().method() === 'PUT' ? route.abort('failed') : route.fallback())
+  await openCardList(page)
+  await page.getByRole('button', { name: '文本卡', exact: true }).click()
+  await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('仍可恢复的本地备注')
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('region', { name: '生成画布工作台' }).getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
+  await page.unroute(failedSave)
+  await page.goto(management)
+  await managedDelete('本地草稿目标更多操作')
+  await dialog.getByText(/整张画布及其运行历史/).waitFor()
+  await confirm()
+  await dialog.getByText('画布有未保存的本地内容，请先打开画布处理。').waitFor()
+  assert.equal((await request(canvasUrl(recoverable.id))).revision, 0)
+  await dialog.getByRole('button', { name: '打开画布处理' }).click()
+  await page.getByRole('button', { name: '恢复本地内容' }).waitFor()
+
   await page.goto(management)
   await managedDelete('管理删除目标更多操作')
   await dialog.getByText(/整张画布及其运行历史/).waitFor()
@@ -156,7 +177,7 @@ try {
   await page.getByRole('heading', { name: '管理入口并发保存', exact: true }).waitFor({ state: 'hidden' })
   assert.equal((await fetch(canvasUrl(managed.id))).status, 404)
   assert.ok((await request(base)).every(canvas => canvas.id !== managed.id))
-  assert.equal((await request(sceneApi + '/canvases')).canvases.length, 2)
+  assert.equal((await request(sceneApi + '/canvases')).canvases.length, 3)
   assert.equal((await request(sceneApi + '/storyboards/' + active.task_id)).status, 'running')
   await request(api + '/test/runtime-controls', 'POST', { storyboard_release: 1, release: 3 })
   await page.goto(free(managed.id))

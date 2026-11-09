@@ -4,7 +4,7 @@ import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Space
 import type { InputRef } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService, type SceneCanvasSummary, type StoryboardTaskSummary } from '../../../services/generated'
-import { readChapterBrowse, saveChapterBrowse, sceneCanvasLocation } from './chapterNavigation'
+import { readChapterBrowse, sceneCanvasLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { SceneCanvasDeletion } from './SceneCanvasDeletion'
 import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
@@ -133,7 +133,6 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   }, [])
 
   const openCanvas = (canvasId: string, taskId?: string) => {
-    saveChapterBrowse(projectId, chapterId, { managementCanvas: canvasId })
     navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, canvasId, taskId), { state })
   }
   const closeDetail = () => {
@@ -247,7 +246,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       ]} />}
     </Modal>
     {deleteTarget && <SceneCanvasDeletion key={deleteTarget} {...{ projectId }} canvasId={deleteTarget}
-      onClose={() => setDeleteTarget(undefined)} onFailure={setDeleteError}
+      onClose={() => setDeleteTarget(undefined)} onOpen={() => openCanvas(deleteTarget)} onFailure={setDeleteError}
       onDeleted={() => {
         setCanvases(previous => previous?.filter(canvas => canvas.id !== deleteTarget))
         setRevision(value => value + 1)

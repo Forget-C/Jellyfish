@@ -59,6 +59,11 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
         request = {'request_id': 'extract-once', 'model_id': 'object-model'}
         admitted = await client.post(endpoint + '/extractions', json=request)
         assert admitted.status_code == 200, admitted.text
+        queued_path = endpoint + '/extractions/' + admitted.json()['data']['task_id'] + '/candidate'
+        queued_details = await client.get(queued_path)
+        assert queued_details.status_code == 200, queued_details.text
+        assert queued_details.json()['data']['task']['status'] == 'queued'
+        assert not queued_details.json()['data']['candidate_available']
         assert (await client.post(endpoint + '/extractions', json=request)).json() == admitted.json()
         assert (await client.post(endpoint + '/extractions', json={**request, 'request_id': 'other'})).status_code == 409
         worker = TaskWorker(sessions)
@@ -116,6 +121,10 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             assert retry.status_code == 200, retry.text
             failed = await run()
             assert failed['task']['status'] == 'failed'
+            failed_details = await client.get(endpoint + '/extractions/' + failed['task']['task_id'] + '/candidate')
+            assert failed_details.status_code == 200, failed_details.text
+            assert failed_details.json()['data']['task']['status'] == 'failed'
+            assert not failed_details.json()['data']['candidate_available']
             assert failed['objects'] == selected['objects']
             assert len(calls) == 4
 
@@ -168,7 +177,15 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             command = apply_command(confirmed)
             wrong_task = await client.post(candidate_path.replace('/p1/', '/p2/') + '/apply', json=command)
             assert wrong_task.status_code == 404
-            applied = await client.post(candidate_path + '/apply', json=command)
+            applied, chosen = await asyncio.gather(
+                client.post(candidate_path + '/apply', json=command),
+                client.put(object_url, json={**choice, 'expected_revision': confirmed['revision']}),
+            )
+            assert sorted((applied.status_code, chosen.status_code)) == [200, 409]
+            if chosen.status_code == 200:
+                confirmed = await review()
+                command = apply_command(confirmed)
+                applied = await client.post(candidate_path + '/apply', json=command)
             assert applied.status_code == 200, applied.text
             assert (await client.post(candidate_path + '/apply', json=command)).json() == applied.json()
             adopted = await read_objects()

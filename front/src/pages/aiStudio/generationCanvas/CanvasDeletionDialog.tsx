@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Modal, Spin } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases, type CanvasRead } from '../../../services/generated'
@@ -5,9 +6,9 @@ import { directingError } from '../directing/common'
 import { WorkbenchModal } from '../directing/ui/WorkbenchModal'
 
 /** 两个入口共同核对保存修订，提交未知时只核实原画布。 */
-export function CanvasDeletionDialog({ projectId, canvasId, workbench, checking, blockedReason, canDelete, onClose, onDeleted, onFailure }: {
+export function CanvasDeletionDialog({ projectId, canvasId, workbench, checking, blockedReason, errorAction, canDelete, onClose, onDeleted, onFailure }: {
   projectId: string; canvasId: string; workbench?: boolean; checking?: boolean; blockedReason?: string
-  canDelete: () => boolean | Promise<boolean>; onClose: () => void; onDeleted: () => void; onFailure: (reason: string) => void
+  errorAction?: ReactNode; canDelete: () => boolean | Promise<boolean>; onClose: () => void; onDeleted: () => void; onFailure: (reason: string) => void
 }) {
   const [basis, setBasis] = useState<CanvasRead>()
   const [busy, setBusy] = useState(false)
@@ -98,6 +99,6 @@ export function CanvasDeletionDialog({ projectId, canvasId, workbench, checking,
     {checking || (available && !basis) ? <Spin aria-label="正在核对画布状态" /> : null}
     {blockedReason && <Alert type="warning" showIcon message={blockedReason} />}
     {basis && <p>将删除「{basis.document.name}」整张画布及其运行历史。删除后无法恢复，文件及其他使用关系会保留。</p>}
-    {error && <Alert type="error" showIcon message={error} />}
+    {error && <Alert type="error" showIcon message={error} action={errorAction} />}
   </Dialog>
 }

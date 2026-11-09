@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Alert, Space, Spin } from 'antd'
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
-import { ApiError, StudioDirectingService, type SceneCanvasesRead } from '../../../services/generated'
+import { ApiError, StudioDirectingService, type CanvasRead, type SceneCanvasesRead } from '../../../services/generated'
 import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
-import { sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
+import { saveChapterBrowse, sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
@@ -43,6 +43,11 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
     window.addEventListener('focus', reload)
     return () => window.removeEventListener('focus', reload)
   }, [])
+  const rememberOpened = useCallback((canvas: CanvasRead) => {
+    if (canvas.scene?.chapter_id === chapterId && canvas.scene.sequence_id === sequenceId) {
+      saveChapterBrowse(projectId, chapterId, { managementCanvas: canvas.id })
+    }
+  }, [projectId, chapterId, sequenceId])
   const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试读取场次</Button>
   const management = (step: 'division' | 'storyboard' = 'storyboard') => navigate(workbenchManagementLocation(
     projectId, chapterId, sequenceId, step, step === 'storyboard' ? { canvas: canvasId, storyboardTask: selectedTaskId } : undefined),
@@ -50,7 +55,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
   if (scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
-      storyboardTaskId={selectedTaskId}
+      storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
       renderSceneActions={({ current, editable, requestLeave }) => {
         if (!current?.document.fixed_source) return null
@@ -60,7 +65,10 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         return <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
           navigationKey={location.key} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current}
           target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
-            sourceChanged: !!current.source_changed || !!basis && 'text' in basis && basis.text !== scene.sequence.source_text,
+            sourceChanged: !!current.source_changed ||
+              !!basis && 'text' in basis && basis.text !== scene.sequence.source_text ||
+              !!basis && 'selection_start' in basis && (basis.selection_start !== scene.sequence.span?.start ||
+                basis.selection_end !== scene.sequence.span?.end),
             sourceReady: !!scene.sequence.is_current && !scene.sequence.source_changed,
             productionModelId: model && 'model_id' in model ? model.model_id ?? undefined : undefined,
             pendingModality: model?.type === 'model.video' ? 'video' : 'image',

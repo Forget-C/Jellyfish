@@ -11,6 +11,7 @@ from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.directing import Sequence
 from app.models.generation_canvas import GenerationCanvas
 from app.models.task import Task
+from app.services.directing.scene_canvas import SCENE_TASK_ORDER
 from app.services.directing.scene_objects import OBJECT_EXTRACTION_KIND, _source_digest
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND
 from app.services.directing.workspace import WorkspaceService
@@ -62,7 +63,8 @@ class WorkbenchManagementService(WorkspaceService):
         """每种任务优先选择仍在运行的项，再按创建时间选择最近记录。"""
         ranked = (select(Task.id, Task.target_id, Task.kind, Task.status, func.row_number().over(
             partition_by=(Task.target_id, Task.kind),
-            order_by=(case((Task.status.in_(TERMINAL_TASK_STATUSES), 1), else_=0), Task.created_at.desc(), Task.id.desc()),
+            order_by=(case((Task.status.in_(TERMINAL_TASK_STATUSES), 1), else_=0),
+                      SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()),
         ).label('rank')).join(Sequence, Sequence.id == Task.target_id)
             .where(Sequence.chapter_id == chapter_id, Task.project_id == self.project_id,
                    Task.target_type == 'directing_sequence', Task.kind.in_((OBJECT_EXTRACTION_KIND, STORYBOARD_KIND)))

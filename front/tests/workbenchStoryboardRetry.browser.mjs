@@ -55,7 +55,11 @@ try {
   })
   const sceneApi = chapterApi + '/sequences/' + scene.id
   await data(sceneApi + '/objects/extractions', 'POST', { request_id: 'retry-objects' })
-  await poll(() => data(sceneApi + '/objects'), value => value.task?.status === 'succeeded')
+  const prepared = await poll(() => data(sceneApi + '/objects'), value => value.task?.status === 'succeeded')
+  const firstObject = prepared.objects.find(item => item.excerpt === '前门的阿同')
+  await data(sceneApi + '/objects/' + firstObject.id, 'PUT', {
+    expected_revision: prepared.revision, asset_id: 'object-browser-character', image_file_id: 'object-browser-image',
+  })
   await control({ storyboard_release: 1, storyboard_fail_on: 1 })
   const original = await data(sceneApi + '/storyboards', 'POST', {
     name: '原有画布', request_id: 'retry-original', mode: 'faithful', pending_modality: 'video',
@@ -82,7 +86,10 @@ try {
   await dialog.getByText('稍后配置视频模型卡', { exact: true }).waitFor()
   await dialog.getByText(raw, { exact: true }).waitFor()
   await dialog.getByText('本次采用的对象与参考（3）', { exact: true }).click()
-  await dialog.getByText(/阿同（前门的阿同）.*无参考图/).waitFor()
+  const firstReference = dialog.getByRole('img', { name: '阿同采用的参考图' })
+  await firstReference.waitFor()
+  assert.ok((await firstReference.getAttribute('src')).includes('object-browser-image'))
+  await dialog.getByText(/阿同（前门的阿同）.*已有角色/).waitFor()
   await dialog.getByText(/阿同（后门的阿同）.*无参考图/).waitFor()
   await page.screenshot({ path: join(output, 'retry-confirmation.png') })
 

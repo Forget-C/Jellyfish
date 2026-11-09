@@ -108,6 +108,7 @@ class SceneObjectCandidateReview(Contract):
     """冻结结果相对当前对象准备的差异，只提供整批预览依据。"""
 
     task: SceneObjectTaskRead
+    candidate_available: bool
     revision: int = Field(ge=0)
     source_changed: bool
     is_current: bool

@@ -315,7 +315,7 @@ export class StudioDirectingService {
     }
     /**
      * Read Scene Object Candidate
-     * 读取冻结对象和当前准备的整批差异。
+     * 读取指定对象提取任务，可用时返回冻结对象和当前准备的整批差异。
      * @returns ApiResponse_SceneObjectCandidateReview_ Successful Response
      * @throws ApiError
      */
