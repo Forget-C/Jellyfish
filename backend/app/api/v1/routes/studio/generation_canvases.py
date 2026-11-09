@@ -1,5 +1,7 @@
 """独立生成画布 HTTP 适配，仅负责收参与响应。"""
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
@@ -35,10 +37,12 @@ async def save_canvas(project_id: str, canvas_id: str, body: CanvasSave, db: Asy
     return success_response(await CanvasStore(db, project_id).save(canvas_id, body))
 
 
-@router.delete('/{project_id}/{canvas_id}', response_model=ApiResponse[None], operation_id='canvas_delete')
-async def delete_canvas(project_id: str, canvas_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """删除无运行的画布。"""
-    await CanvasStore(db, project_id).delete(canvas_id)
+@router.delete('/{project_id}/{canvas_id}', response_model=ApiResponse[None], operation_id='canvas_delete',
+               responses={409: {'model': CanvasError}})
+async def delete_canvas(project_id: str, canvas_id: str, expected_revision: Annotated[int, Query(ge=0)],
+                        db: AsyncSession = Depends(get_db, scope='function')):
+    """仅删除已核对修订且没有活动任务的画布。"""
+    await CanvasStore(db, project_id).delete(canvas_id, expected_revision=expected_revision)
     return empty_response()
 
 

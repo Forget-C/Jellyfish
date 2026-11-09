@@ -138,16 +138,18 @@ export class StudioGenerationCanvasesService {
     }
     /**
      * Delete Canvas
-     * 删除无运行的画布。
+     * 仅删除已核对修订且没有活动任务的画布。
      * @returns ApiResponse_NoneType_ Successful Response
      * @throws ApiError
      */
     public static canvasDelete({
         projectId,
         canvasId,
+        expectedRevision,
     }: {
         projectId: string,
         canvasId: string,
+        expectedRevision: number,
     }): CancelablePromise<ApiResponse_NoneType_> {
         return __request(OpenAPI, {
             method: 'DELETE',
@@ -156,7 +158,11 @@ export class StudioGenerationCanvasesService {
                 'project_id': projectId,
                 'canvas_id': canvasId,
             },
+            query: {
+                'expected_revision': expectedRevision,
+            },
             errors: {
+                409: `Conflict`,
                 422: `Validation Error`,
             },
         });

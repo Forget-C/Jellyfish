@@ -14,7 +14,9 @@ from app.core.contracts.directing.workbench_management import ChapterWorkbenchMa
 from app.services.directing.workbench_management import WorkbenchManagementService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
-from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardBasis, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
+from app.core.contracts.directing.scene_storyboard import (StoryboardApplication, StoryboardBasis, StoryboardDiff,
+    StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardRetryBasis,
+    StoryboardTaskRead, StoryboardTaskSummary)
 from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.scene_objects import (
@@ -202,6 +204,15 @@ async def retry_storyboard(project_id: str, chapter_id: str, sequence_id: str, t
                            db: AsyncSession = Depends(get_db, scope="function")):
     """在同一画布恢复失败任务，原任务及已保存内容保持可查。"""
     return created_response(await _call(SceneStoryboardService(db, project_id).retry_storyboard(chapter_id, sequence_id, task_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry/basis",
+            response_model=ApiResponse[StoryboardRetryBasis], operation_id="directing_storyboard_retry_basis")
+async def storyboard_retry_basis(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                                 db: AsyncSession = Depends(get_db, scope="function")):
+    """读取重试原画布时实际采用的原文、对象参考和模型。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard_retry_basis(
+        chapter_id, sequence_id, task_id)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}",

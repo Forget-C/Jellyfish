@@ -6,9 +6,11 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.contracts.task import TERMINAL_TASK_STATUSES
 from app.models.directing import Sequence
 from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Chapter, FileUsage, Project
+from app.models.task import Task
 from app.schemas.generation_canvas import (
     CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasRead,
     CanvasSave, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
@@ -44,9 +46,15 @@ class CanvasStore:
 
     async def get(self, canvas_id: str, *, lock: bool = False) -> GenerationCanvas:
         """锁住文档行后再读回执，使同画布的竞争请求按数据库顺序核实。"""
-        stmt = select(GenerationCanvas).where(GenerationCanvas.id == canvas_id,
-                                             GenerationCanvas.project_id == self.project_id)
+        identity = (GenerationCanvas.id == canvas_id, GenerationCanvas.project_id == self.project_id)
+        stmt = select(GenerationCanvas).where(*identity)
         if lock:
+            if self.db.get_bind().dialect.name == 'sqlite':
+                # SQLite ignores FOR UPDATE; acquire its writer lock before
+                # reading the mutation basis, without changing the document.
+                await self.db.execute(update(GenerationCanvas).where(*identity)
+                                      .values(revision=GenerationCanvas.revision, updated_at=GenerationCanvas.updated_at)
+                                      .execution_options(synchronize_session=False))
             stmt = stmt.with_for_update().execution_options(populate_existing=True)
         canvas = await self.db.scalar(stmt)
         if canvas is None:
@@ -200,12 +208,28 @@ class CanvasStore:
             result.can_run = False
         return result
 
-    async def delete(self, canvas_id: str) -> None:
+    async def delete(self, canvas_id: str, *, expected_revision: int) -> None:
         """删除前核实真实占用；历史、引用与文档在调用方事务内一起释放。"""
         canvas = await self.get(canvas_id, lock=True)
+        if canvas.revision != expected_revision:
+            raise diagnostic('DELETE_REVISION_CHANGED', '画布已保存新修订，请重新核对并确认删除',
+                             {'canvas_id': canvas_id}, status=409, blocks=['delete'])
         from app.models.generation_canvas import CanvasScopeOccupancy
         if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):
-            raise diagnostic("RUN_SCOPE_BUSY", "画布仍有活动运行", {"canvas_id": canvas_id}, status=409, blocks=["delete"])
+            raise diagnostic('RUN_SCOPE_BUSY', '画布仍有活动运行，任务结束后可删除',
+                             {'canvas_id': canvas_id}, status=409, blocks=['delete'])
+        if canvas.sequence_id:
+            from app.services.directing.storyboard_assembly import STORYBOARD_KIND
+            # New admissions hold this canvas lock. Never lock an existing Task
+            # here: worker completion can acquire Task before the canvas.
+            active_task = await self.db.scalar(select(Task.id).where(
+                Task.project_id == self.project_id, Task.kind == STORYBOARD_KIND,
+                Task.target_type == 'directing_sequence', Task.target_id == canvas.sequence_id,
+                Task.input_snapshot['canvas_id'].as_string() == canvas_id,
+                Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1))
+            if active_task:
+                raise diagnostic('STORYBOARD_BUSY', '画布仍有活动分镜任务，任务结束后可删除',
+                                 {'canvas_id': canvas_id, 'task_id': active_task}, status=409, blocks=['delete'])
         # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
         from app.services.generation_canvas.runtime import delete_runtime
         await delete_runtime(self.db, canvas_id)

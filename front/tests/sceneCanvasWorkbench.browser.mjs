@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { closeCanvasDetails, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -96,14 +96,17 @@ try {
   assert.equal((await read()).document.name, '改名后方案')
   await page.goto(prep)
 
+  const beforeNote = await read()
+  await request(`${base}/${id}`, 'PUT', { request_id: 'prepare-note', expected_revision: beforeNote.revision,
+    document: { ...beforeNote.document, cards: [...beforeNote.document.cards, { id: 'ordinary-note', type: 'content.text', text: '备注' }] } })
+
   const sceneRead = url => url.pathname.endsWith('/sequences/' + sequence.id + '/canvases')
   let disconnect
   const interrupt = new Promise(resolve => { disconnect = resolve })
   await page.route(sceneRead, async route => { await interrupt; await route.abort('connectionreset') }, { times: 1 })
   await page.getByRole('button', { name: '改名后方案', exact: true }).click()
   const workspace = page.getByRole('region', { name: '生成画布工作台' })
-  await openCardList(page)
-  await page.getByRole('button', { name: '文本卡', exact: true }).click()
+  await openCanvasCard(page, 'ordinary-note')
   const text = page.getByRole('textbox', { name: '文本内容', exact: true })
   await text.fill('刷新失败保留草稿')
   disconnect()
@@ -115,13 +118,10 @@ try {
   await refreshed
   await retry.waitFor({ state: 'hidden' })
   await workspace.getByRole('button', { name: '撤销操作', exact: true }).click()
-  assert.equal(await text.inputValue(), '')
+  assert.equal(await text.inputValue(), '备注')
   await workspace.getByRole('button', { name: '返回场次准备', exact: true }).click()
   await page.getByRole('button', { name: '改名后方案', exact: true }).waitFor()
 
-  const beforeBatch = await read()
-  await request(`${base}/${id}`, 'PUT', { request_id: 'prepare-batch', expected_revision: beforeBatch.revision,
-    document: { ...beforeBatch.document, cards: [...beforeBatch.document.cards, { id: 'ordinary-note', type: 'content.text', text: '备注' }] } })
   await page.goto(`http://127.0.0.1:4259/projects/${project}/generation-canvas?canvas=${id}`)
   await card.press('Enter')
   assert.equal(await body.inputValue(), excerpt)

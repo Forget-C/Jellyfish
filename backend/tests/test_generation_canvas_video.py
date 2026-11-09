@@ -141,6 +141,8 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
 @pytest.mark.parametrize('named', [False, True])
 async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route(runtime, image_storage, monkeypatch, named):
     accepted, preview = await setup_video(runtime, named=named)
+    rejected = await runtime.client.delete(runtime.url, params={'expected_revision': 2})
+    assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
     assert preview['input']['video_media']['frames']['keys'][0]['file_id'] != preview['input']['video_media']['frames']['first']['file_id']
     if named:
         changed = (await runtime.client.get(runtime.url)).json()['data']['document']

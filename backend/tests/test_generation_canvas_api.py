@@ -119,9 +119,9 @@ async def test_project_canvas_can_save_empty_text_and_reopen_independently(canva
     assert reopened['revision'] == 1
     assert (await client.get(f"/canvases/p/{second['id']}")).json()['data']['document']['cards'] == []
     assert (await client.get(f"/canvases/other/{first['id']}")).status_code == 404
-    assert (await client.delete(f"/canvases/other/{first['id']}")).status_code == 404
+    assert (await client.delete(f"/canvases/other/{first['id']}", params={'expected_revision': 1})).status_code == 404
     assert len((await client.get('/canvases/p')).json()['data']) == 2
-    assert (await client.delete(f"/canvases/p/{second['id']}")).status_code == 200
+    assert (await client.delete(f"/canvases/p/{second['id']}", params={'expected_revision': 0})).status_code == 200
 
 @pytest.mark.asyncio
 async def test_original_receipt_replays_after_new_revision_and_conflicts_do_not_overwrite(canvas_client):
@@ -324,7 +324,7 @@ async def test_media_uploads_are_project_files_and_canvas_content_protects_them(
     assert (await client.get(url)).json()['data']['document']['cards'][0]['file_id'] == file['id']
     assert (await client.delete(f"/files/{file['id']}")).status_code == 409
     assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'p'})).status_code == 409
-    assert (await client.delete(url)).status_code == 200
+    assert (await client.delete(url, params={'expected_revision': 1})).status_code == 200
     assert (await client.get('/files', params={'project_id': 'p'})).json()['data']['pagination']['total'] == 1
     assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'other'})).status_code == 404
     assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'p'})).status_code == 200

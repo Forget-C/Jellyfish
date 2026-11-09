@@ -146,6 +146,7 @@ export type { ApiResponse_ScriptConsistencyCheckResult_ } from './models/ApiResp
 export type { ApiResponse_SequenceRead_ } from './models/ApiResponse_SequenceRead_';
 export type { ApiResponse_StoryboardBasis_ } from './models/ApiResponse_StoryboardBasis_';
 export type { ApiResponse_StoryboardDiff_ } from './models/ApiResponse_StoryboardDiff_';
+export type { ApiResponse_StoryboardRetryBasis_ } from './models/ApiResponse_StoryboardRetryBasis_';
 export type { ApiResponse_StoryboardTaskRead_ } from './models/ApiResponse_StoryboardTaskRead_';
 export type { ApiResponse_TaskAccepted_ } from './models/ApiResponse_TaskAccepted_';
 export type { ApiResponse_TaskCancelRead_ } from './models/ApiResponse_TaskCancelRead_';
@@ -752,6 +753,7 @@ export type { StoryboardReextractRequest } from './models/StoryboardReextractReq
 export type { StoryboardRequest } from './models/StoryboardRequest';
 export type { StoryboardRestore } from './models/StoryboardRestore';
 export type { StoryboardRetry } from './models/StoryboardRetry';
+export type { StoryboardRetryBasis } from './models/StoryboardRetryBasis';
 export type { StoryboardTaskRead } from './models/StoryboardTaskRead';
 export type { StoryboardTaskSummary } from './models/StoryboardTaskSummary';
 export type { StyleDesignFields } from './models/StyleDesignFields';

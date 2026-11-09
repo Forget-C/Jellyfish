@@ -249,7 +249,7 @@ try {
   await page.getByRole('button', { name: '文本卡', exact: true }).click()
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('未收到保存回执的人工备注')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
+  await page.getByRole('region', { name: '生成画布工作台' }).getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
   await control({ storyboard_release: 6 })
   await poll(() => data(`${tasks}/${draftTask.task_id}`), row => row.status === 'succeeded')
   await page.unroute(saveRoute)
