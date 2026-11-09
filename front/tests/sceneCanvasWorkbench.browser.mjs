@@ -44,9 +44,23 @@ try {
   await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const page = await context.newPage()
   page.setDefaultTimeout(9000)
-  const prep = `http://127.0.0.1:4259/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
-  await page.goto(prep)
+  const origin = 'http://127.0.0.1:4259'
+  const scene = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}`
+  const prep = scene + '/canvas-workbench'
+  const chapterPage = `${origin}/projects/${project}?tab=chapters&chapter=${chapter}`
+  await page.goto(chapterPage)
+  await page.getByRole('button', { name: '打开场次工作台', exact: true }).click()
+  await page.waitForURL(prep)
   await page.getByRole('heading', { name: '推开门' }).waitFor()
+  await page.getByRole('button', { name: '返回章节', exact: true }).click()
+  await page.waitForURL(url => url.searchParams.get('chapter') === chapter && url.searchParams.get('sequence') === sequence.id)
+  await page.getByRole('textbox', { name: '场次标题' }).fill('推开门与照明')
+  await page.getByRole('button', { name: '保存并打开工作台', exact: true }).click()
+  await page.waitForURL(prep)
+  await page.getByRole('heading', { name: '推开门与照明' }).waitFor()
+  await page.goto(`${origin}/projects/${project}?tab=dashboard`)
+  await page.getByRole('button', { name: '推开门与照明 · 打开场次工作台', exact: true }).click()
+  await page.waitForURL(prep)
   const create = page.getByRole('button', { name: '新建空白画布', exact: true })
   await create.focus()
   await page.keyboard.press('Enter')

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type NavigateFunction } from 'react-router-dom'
 import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
+import { scenePreparationLocation } from '../directing/chapterNavigation'
 import { generationCanvasLocation } from '../generationCanvas/navigation'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { TaskUiItem } from './taskUiStore'
@@ -18,7 +19,7 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
   else if (kind === 'sequence' && projectId && chapterId &&
       (task.taskKind === 'directing_object_extract' || task.taskKind === 'directing_storyboard')) {
-    const path = `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/sequences/${encodeURIComponent(id)}/canvas-workbench`
+    const path = scenePreparationLocation(projectId, chapterId, id)
     navigateTo = task.taskKind === 'directing_storyboard' ? path + '?' + new URLSearchParams({ storyboardTask: task.taskId }) : path
   }
   else if (kind === 'sequence' && projectId && chapterId) {

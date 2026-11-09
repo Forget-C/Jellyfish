@@ -39,8 +39,20 @@ export function chapterLocation(projectId: string, chapterId?: string, sequenceI
   return `/projects/${encodeURIComponent(projectId)}?${query}`
 }
 
+function sequencePath(projectId: string, chapterId: string, sequenceId: string) {
+  return `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/sequences/${encodeURIComponent(sequenceId)}`
+}
+
+export function scenePreparationLocation(projectId: string, chapterId: string, sequenceId: string): string {
+  return `${sequencePath(projectId, chapterId, sequenceId)}/canvas-workbench`
+}
+
 export function sequenceLocation(projectId: string, chapterId: string, sequenceId: string, view: Stage): string {
-  return `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/sequences/${encodeURIComponent(sequenceId)}?view=${view}`
+  return `${sequencePath(projectId, chapterId, sequenceId)}?view=${view}`
+}
+
+export function legacySceneCanvasLocation(projectId: string, chapterId: string, sequenceId: string, canvas: 'director' | 'units' | 'edit'): string {
+  return `${sequencePath(projectId, chapterId, sequenceId)}?canvas=${canvas}`
 }
 
 /** 未知字段不能当作空章；数量入口仍允许查看缺少原文的历史场次。 */

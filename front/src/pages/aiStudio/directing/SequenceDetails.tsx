@@ -4,7 +4,7 @@ import { Alert, Button, Input, InputNumber, Space, Spin } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { StudioDirectingService, type ChapterSequences, type SequenceRead } from '../../../services/generated'
 import { directingError } from './common'
-import { sequenceLocation } from './chapterNavigation'
+import { legacySceneCanvasLocation, scenePreparationLocation, sequenceLocation } from './chapterNavigation'
 import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 
 /** 场次管理容器内的编辑区；保存保留当前场次，离开沿用统一草稿保护。 */
@@ -69,10 +69,12 @@ export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onS
         <Button onClick={onRange}>在原文中调整范围</Button></section>
       <Space wrap>
         <Button type="primary" loading={busy} disabled={!dirty} onClick={() => { void save() }}>保存</Button>
-        <Button onClick={async () => { if (await save()) navigate(sequenceLocation(projectId, chapterId, sequence.id, 'design')) }}>保存并打开工作台</Button>
+        <Button onClick={async () => { if (await save()) navigate(scenePreparationLocation(projectId, chapterId, sequence.id)) }}>保存并打开工作台</Button>
       </Space>
-      <Space wrap>{(['design', 'shoot', 'cut'] as const).map((view, index) => <Button key={view}
-        onClick={() => navigate(sequenceLocation(projectId, chapterId, sequence.id, view))}>{['导演设计', '单元试拍', '剪辑与验收'][index]}</Button>)}</Space>
+      <Space wrap>{([
+        ['director', '旧版导演设计'], ['units', '旧版单元试拍'], ['edit', '旧版审片与剪辑'],
+      ] as const).map(([canvas, label]) => <Button key={canvas}
+        onClick={() => navigate(legacySceneCanvasLocation(projectId, chapterId, sequence.id, canvas))}>{label}</Button>)}</Space>
     </Space></WorkspaceWriteBoundary>}
   </section>
 }

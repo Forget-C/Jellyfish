@@ -3,8 +3,7 @@ import { Alert, Button, Empty, Input, List, Space, Tag } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { StudioDirectingService, type ChapterOverview, type SequenceRead } from '../../../services/generated'
 import { directingError } from './common'
-import { readChapterBrowse, saveChapterBrowse, sequenceAction, sequenceLocation } from './chapterNavigation'
-import { readWorkspaceContext } from './workspaceContext'
+import { readChapterBrowse, saveChapterBrowse, scenePreparationLocation } from './chapterNavigation'
 
 /** 仅加载当前章节的轻量摘要；场次详情与业务编辑由各自入口承接。 */
 export function ChapterSceneList({ projectId, chapterId, onDetails, onSource, selectedId, refreshKey = 0, onRestore }: {
@@ -65,26 +64,23 @@ export function ChapterSceneList({ projectId, chapterId, onDetails, onSource, se
     setQuery(event.target.value); saveChapterBrowse(projectId, chapterId, { query: event.target.value, top: 0 })
   }} style={{ marginBottom: 16 }} /><List loading={loading} dataSource={matching}
     locale={{ emptyText: <Empty description={query ? '没有匹配的场次' : '本章尚无场次，请先从原文划分场次'}>{query ? <Button onClick={() => { setQuery(''); saveChapterBrowse(projectId, chapterId, { query: '', top: 0 }) }}>清除搜索</Button> : <Button onClick={onSource}>从原文划分场次</Button>}</Empty> }}
-    renderItem={sequence => {
-      const action = sequenceAction(sequence, readWorkspaceContext(projectId, sequence.id).view)
-      return <List.Item key={sequence.id} className={selectedId === sequence.id ? 'chapter-scene-selected' : ''} style={{ flexWrap: 'wrap', gap: 12 }}>
+    renderItem={sequence =>
+      <List.Item key={sequence.id} className={selectedId === sequence.id ? 'chapter-scene-selected' : ''} style={{ flexWrap: 'wrap', gap: 12 }}>
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <Button type="link" onClick={() => onDetails(sequence.id)} style={{ padding: 0, height: 'auto', maxWidth: '100%', whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'left', fontWeight: 600 }}>{sequence.position + 1}. {sequence.title}</Button>
           <p style={{ color: '#64748b', overflowWrap: 'anywhere', margin: '8px 0' }}>{sequence.source_excerpt}</p>
           <Space wrap size={4}>
-            {!!sequence.unreviewed_take_count && <Tag color="processing">{sequence.unreviewed_take_count} 个候选待审</Tag>}
-            {sequence.active_cut_revision_id && <Tag color="success">已有确认粗剪</Tag>}
-            {!sequence.confirmed_design_count && <Tag>设计待确认</Tag>}
+            {!!sequence.unreviewed_take_count && <Tag color="processing">{sequence.unreviewed_take_count} 个旧版候选待审</Tag>}
+            {sequence.active_cut_revision_id && <Tag color="success">旧版已有确认粗剪</Tag>}
+            {!sequence.confirmed_design_count && <Tag>旧版设计待确认</Tag>}
           </Space>
         </div>
         <Space wrap>
           <Button onClick={() => onDetails(sequence.id)}>详情</Button>
-          <Button type="primary" onClick={() => action.view
-            ? navigate(sequenceLocation(projectId, chapterId, sequence.id, action.view))
-            : onDetails(sequence.id)}>{action.label}</Button>
+          <Button type="primary" onClick={() => navigate(scenePreparationLocation(projectId, chapterId, sequence.id))}>打开场次工作台</Button>
         </Space>
       </List.Item>
-    }} />
+    } />
     <Button onClick={() => historyOpen ? setHistoryOpen(false) : void loadHistory()}>{historyOpen ? '收起历史场次' : '查看历史场次'}</Button>
     {historyOpen && <section aria-label="历史场次"><p>已退出当前划分，保留原身份和成果。</p>
       {historyError && <Alert type="error" message={historyError} action={<Button onClick={() => void loadHistory()}>重试历史读取</Button>} />}

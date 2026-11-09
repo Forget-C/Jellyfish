@@ -62,8 +62,14 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(16000)
-  const prep = `http://127.0.0.1:4328/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
-  await page.goto(prep)
+  const projectUrl = `http://127.0.0.1:4328/projects/${project}`
+  const prep = `${projectUrl}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
+  const openScene = async () => {
+    await page.goto(`${projectUrl}?tab=chapters&chapter=${chapter}`)
+    await page.getByRole('button', { name: '打开场次工作台', exact: true }).click()
+    await page.waitForURL(prep)
+  }
+  await openScene()
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
@@ -74,7 +80,7 @@ try {
     ['image', '分镜测试图片模型', 'img', '/images/generations'],
     ['video', 'viduq2', 'video', '/text2video'],
   ]) {
-    await page.goto(prep)
+    await openScene()
     await page.getByRole('button', { name: '生成分镜', exact: true }).click()
     const config = page.getByRole('dialog', { name: '生成分镜', exact: true })
     await config.getByText('忠实提取', { exact: true }).click()
