@@ -179,7 +179,7 @@ export async function verifyIndependentDesigns(scenario, port) {
     }
     const assertDesignGeometry = async target => {
       await target.locator('[data-card-id="criterion"]').waitFor({ state: 'attached' })
-      const boxes = await target.locator('[data-card-type^="direction."]').evaluateAll(cards => cards.map(card => {
+      const boxes = await target.locator('[data-card-id][data-card-type^="direction."]').evaluateAll(cards => cards.map(card => {
         const body = card.querySelector('.generation-card-body')
         return { id: card.dataset.cardId, type: card.dataset.cardType, width: card.offsetWidth, height: card.offsetHeight,
           extra: (body.getBoundingClientRect().bottom - body.querySelector('.visual-design-card').getBoundingClientRect().bottom)
