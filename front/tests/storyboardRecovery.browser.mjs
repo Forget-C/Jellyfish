@@ -127,6 +127,13 @@ try {
   assert.equal(new URL(page.url()).searchParams.get('canvas'), other.id)
   assert.equal(await nameEditor.evaluate(element => element === document.activeElement), true)
 
+  const reviewEntry = await context.newPage()
+  await reviewEntry.goto(freeUrl)
+  await reviewEntry.getByRole('button', { name: '核对差异', exact: true }).waitFor()
+  assert.equal((await data(canvas(original.canvas_id))).revision, 1)
+  await reviewEntry.close()
+  await page.bringToFront()
+
   // Task center opens the scoped task route. The result remains unapplied until explicit review.
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.getByRole('button', { name: '历史', exact: true }).click()
@@ -204,5 +211,77 @@ try {
   assert.equal((await data(canvas(replacement.canvas_id))).revision, 0)
   assert.deepEqual((await data(canvas(replacement.canvas_id) + '/runtime')).runs, [])
   await page.screenshot({ path: join(output, 'storyboard-background-ready.png'), animations: 'disabled' })
+  // A plain canvas link from either host must find the finished task without a task URL.
+  for (const [label, url, release] of [
+    ['项目', id => `${origin}/projects/${project}/generation-canvas?canvas=${id}`, 4],
+    ['工作台', id => `${prep}?canvas=${id}`, 5],
+  ]) {
+    const created = await data(tasks, 'POST', { request_id: `discover-${release}`, name: `${label}打开后应用` })
+    const candidateUrl = `${scene}/canvases/${created.canvas_id}/storyboards/candidate`
+    await control({ storyboard_release: release })
+    const found = await poll(() => data(candidateUrl), row => !!row?.candidate)
+    assert.equal(found.task_id, created.task_id)
+    assert.equal((await data(canvas(created.canvas_id))).revision, 0)
+    assert.equal((await fetch(`${candidateUrl}?task_id=${original.task_id}`)).status, 404)
+    await page.goto(url(created.canvas_id))
+    await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+    const adopted = await poll(() => data(canvas(created.canvas_id)), row => row.document.storyboard?.task_id === created.task_id)
+    assert.equal(adopted.revision, 1)
+    await page.reload()
+    await page.locator('[data-card-type="direction.shot"]').first().waitFor()
+    assert.equal((await data(canvas(created.canvas_id))).revision, 1)
+    assert.equal(await data(candidateUrl), null)
+  }
+
+  // A successful retry still requires review, even if its canvas was never edited.
+  await page.goto(`${origin}/projects/${project}/generation-canvas?canvas=${replacement.canvas_id}`)
+  await page.getByRole('button', { name: '核对差异', exact: true }).waitFor()
+  assert.equal((await data(canvas(replacement.canvas_id))).revision, 0)
+
+  // A local save that has not reached the server must be recovered before adopting a candidate.
+  const draftTask = await data(tasks, 'POST', { request_id: 'discover-after-draft', name: '待恢复的分镜画布' })
+  await page.goto(`${origin}/projects/${project}/generation-canvas?canvas=${draftTask.canvas_id}`)
+  await page.locator('[data-card-type="content.basis"]').waitFor()
+  const saveRoute = `**/generation-canvases/${project}/${draftTask.canvas_id}`
+  await page.route(saveRoute, route => route.request().method() === 'PUT' ? route.abort('failed') : route.fallback())
+  await openCanvasManagement(page)
+  await page.getByRole('textbox', { name: '画布名称', exact: true }).fill('未收到保存回执的人工名称')
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
+  await control({ storyboard_release: 6 })
+  await poll(() => data(`${tasks}/${draftTask.task_id}`), row => row.status === 'succeeded')
+  await page.unroute(saveRoute)
+  await page.reload()
+  await restore.waitFor()
+  assert.equal((await data(canvas(draftTask.canvas_id))).revision, 0)
+  await restore.click()
+  await restore.waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: '核对差异', exact: true }).waitFor()
+  const recoveredDraft = await data(canvas(draftTask.canvas_id))
+  assert.equal(recoveredDraft.revision, 1)
+  assert.equal(recoveredDraft.document.name, '未收到保存回执的人工名称')
+  assert.equal(recoveredDraft.document.storyboard, undefined)
+
+  // Retirement blocks fresh extraction but does not invalidate a completed, unchanged source.
+  const archivedTask = await data(`${scene}/canvases/${other.id}/storyboards`, 'POST', {
+    request_id: 'candidate-before-retirement', name: other.document.name, adopt_current_source: true,
+  })
+  await control({ storyboard_release: 7 })
+  await poll(() => data(`${tasks}/${archivedTask.task_id}`), row => row.status === 'succeeded')
+  const chapterPath = scenes.slice(0, -'/sequences'.length)
+  const chapterState = await data(chapterPath)
+  const member = chapterState.sequences[0]
+  const draft = { source_version: chapterState.source_version,
+    baseline: [{ sequence_id: member.id, version: member.version }], members: [],
+    lineage: [{ sequence_id: member.id, target_keys: [] }], exited_sequence_ids: [member.id] }
+  const preview = await data(`${chapterPath}/division/preview`, 'POST', draft)
+  await data(`${chapterPath}/division`, 'PUT', { request_id: 'retire-after-extraction', draft,
+    preview_token: preview.preview_token, identity_changes_confirmed: true })
+  assert.equal((await data(canvas(other.id))).scene.is_current, false)
+  await page.goto(`${prep}?canvas=${other.id}`)
+  await page.getByRole('button', { name: '核对差异', exact: true }).click()
+  await review.getByRole('button', { name: '应用分镜', exact: true }).click()
+  const historical = await poll(() => data(canvas(other.id)), row => row.document.storyboard?.task_id === archivedTask.task_id)
+  assert.equal(historical.scene.is_current, false)
   process.stdout.write(JSON.stringify({ output, passed: true }) + '\n')
 } finally { await cleanup() }

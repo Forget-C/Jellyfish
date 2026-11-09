@@ -139,7 +139,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         : await Directing.directingStoryboardRestore({ ...scope, requestBody: { request_id: command.request_id,
           expected_revision: command.expected_revision, direction: scene.action, document: command.document as CanvasDocument } })
       if (response.data?.id !== canvas.id || response.data.revision !== command.expected_revision + 1) throw new Error('invalid scene receipt')
-      return response.data
+      return { ...response.data, scene: response.data.scene ?? canvas.scene }
     }
     const result = await Canvases.canvasSave({ projectId, canvasId: canvas.id, requestBody: command })
     if (!result.data || result.data.request_id !== command.request_id || result.data.canvas_id !== canvas.id) throw new Error('invalid receipt')

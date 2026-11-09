@@ -3,7 +3,7 @@ import { Alert, Empty, Input, Space, Spin } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
-import type { SceneCanvasesRead, StoryboardTaskRead } from '../../../services/generated'
+import type { SceneCanvasesRead } from '../../../services/generated'
 import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { CanvasTextPreview } from './CanvasTextPreview'
@@ -35,7 +35,6 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [refresh, setRefresh] = useState(0)
-  const [candidate, setCandidate] = useState<StoryboardTaskRead>()
   const [name, setName] = useState<string>()
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -55,9 +54,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, canvasId, refresh])
   const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试读取场次</Button>
-  const openCanvas = (id: string) => setQuery({ canvas: id })
+  const openCanvas = (id: string, taskId?: string) => setQuery(taskId ? { canvas: id, storyboardTask: taskId } : { canvas: id })
   const returnToPreparation = () => {
-    setCandidate(undefined)
     setQuery(canvasId ? { selected: canvasId } : {})
   }
   const chapter = () => navigate(chapterLocation(projectId, chapterId, sequenceId))
@@ -78,8 +76,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
   if (canvasId && scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
-      initialCandidate={candidate?.canvas_id === canvasId ? candidate.candidate ?? undefined : undefined}
-      storyboardScope={{ chapterId, sequenceId, requiresReview: candidate?.pending_application }}
+      storyboardTaskId={selectedTaskId}
       back={{ label: '返回场次准备', onClick: returnToPreparation }}
       renderCanvasManagement={({ nameEditor }) => <span className="scene-canvas-name-editor">{nameEditor}</span>}
       renderSceneActions={({ current, editable, requestLeave }) => {
@@ -94,11 +91,9 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
             productionModelId: model && 'model_id' in model ? model.model_id ?? undefined : undefined,
             pendingModality: model?.type === 'model.video' ? 'video' : 'image',
             confirmSource: () => void requestLeave().then(allowed => { if (allowed) chapter() }),
-          }} onResult={(result, follow) => setCandidate(previous => {
-            if (follow && previous?.canvas_id === current.id && previous.candidate &&
-                previous.task_id !== current.document.storyboard?.task_id && previous.task_id !== result.task_id) return previous
-            return { ...result, pending_application: true }
-          })} />
+          }} onResult={result => {
+            if (result.canvas_id === current.id) openCanvas(current.id, result.task_id)
+          }} />
       }} />
   }
 
@@ -132,10 +127,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
                       onClick={() => { setCreateError(''); setName(defaultCanvasName()) }}>新建空白画布</Button>
                     <SceneStoryboardPreparation scope={{ projectId, chapterId, sequenceId }} nameForNewCanvas={defaultCanvasName}
                       navigationKey={navigationKey} selectedTaskId={selectedTaskId}
-                      editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()} onResult={(result, follow) => {
-                        setCandidate({ ...result, pending_application: !follow || result.pending_application })
-                        openCanvas(result.canvas_id)
-                      }} />
+                      editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()}
+                      onResult={result => openCanvas(result.canvas_id, result.task_id)} />
                   </Space>
                 </div>
                 {scene.canvases.length ? <ul className="scene-canvas-list">

@@ -243,6 +243,7 @@ export type { CanvasRunSubmit } from './models/CanvasRunSubmit';
 export type { CanvasRuntimeEvent } from './models/CanvasRuntimeEvent';
 export type { CanvasSave } from './models/CanvasSave';
 export type { CanvasSaved } from './models/CanvasSaved';
+export type { CanvasSceneAssociation } from './models/CanvasSceneAssociation';
 export type { CanvasSceneDependency } from './models/CanvasSceneDependency';
 export type { CanvasSnapshot } from './models/CanvasSnapshot';
 export type { CanvasSourceIndex } from './models/CanvasSourceIndex';

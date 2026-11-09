@@ -100,6 +100,7 @@ async def test_create_canvas_returns_created_response_and_readable_document(canv
     assert body['data']['document']['name'] == '新画布'
     reopened = await canvas_client.get(f"/canvases/p/{body['data']['id']}")
     assert reopened.json()['data'] == body['data']
+    assert 'scene' not in reopened.json()['data']
 
 
 @pytest.mark.asyncio
@@ -686,12 +687,60 @@ async def test_scene_canvases_open_through_both_entries_and_keep_independent_ide
     assert second['document']['name'] == '我的分镜'
     project_canvas = (await canvas_client.get(f"/canvases/p/{first['id']}")).json()['data']
     assert project_canvas == first
+    assert project_canvas['scene'] == {'chapter_id': 'chapter', 'sequence_id': 'scene-a', 'is_current': True}
     scene = (await canvas_client.get(scene_canvas_path)).json()['data']
     assert {canvas['id'] for canvas in scene['canvases']} == {first['id'], second['id']}
     other_scene = (await canvas_client.get(scene_canvas_path.replace('scene-a', 'scene-b'))).json()['data']
     assert other_scene['canvases'] == []
     assert (await canvas_client.get(scene_canvas_path.replace('/p/', '/other/'))).status_code == 404
     assert (await canvas_client.post(scene_canvas_path.replace('/chapter/', '/wrong/'), json={})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_candidate_discovery_is_scoped_to_the_verified_canvas(canvas_client, scene_canvas_path):
+    canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']
+    path = f"{scene_canvas_path}/{canvas['id']}/storyboards/candidate"
+    response = await canvas_client.get(path)
+    assert response.status_code == 200 and response.json()['data'] is None
+    assert (await canvas_client.get(path, params={'task_id': 'missing'})).status_code == 404
+    assert (await canvas_client.get(path.replace('scene-a', 'scene-b'))).status_code == 404
+    assert (await canvas_client.get(path.replace('/p/', '/other/'))).status_code == 404
+    free_canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    assert (await canvas_client.get(path.replace(canvas['id'], free_canvas['id']))).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_historical_scene_canvas_still_saves_but_cannot_reextract(canvas_client, scene_canvas_path, canvas_file_store):
+    from app.models.llm import Provider
+    async with canvas_file_store['sessions'].begin() as db:
+        (await db.get(Provider, 'canvas-provider')).api_key = 'test'
+    canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']
+    chapter_path = '/projects/p/directing/chapters/chapter'
+    chapter = (await canvas_client.get(chapter_path)).json()['data']
+    first, second = chapter['sequences']
+    draft = {'source_version': chapter['source_version'],
+        'baseline': [{'sequence_id': row['id'], 'version': row['version']} for row in (first, second)],
+        'members': [{'key': 'second', 'sequence_id': second['id'], 'title': second['title'], 'span': second['span']}],
+        'lineage': [{'sequence_id': first['id'], 'target_keys': []},
+                    {'sequence_id': second['id'], 'target_keys': ['second']}],
+        'exited_sequence_ids': [first['id']]}
+    preview = await canvas_client.post(chapter_path + '/division/preview', json=draft)
+    assert preview.status_code == 200, preview.text
+    saved = await canvas_client.put(chapter_path + '/division', json={'request_id': 'retire', 'draft': draft,
+        'preview_token': preview.json()['data']['preview_token'], 'identity_changes_confirmed': True})
+    assert saved.status_code == 200, saved.text
+    path = f"/canvases/p/{canvas['id']}"
+    archived = (await canvas_client.get(path)).json()['data']
+    assert archived['scene']['is_current'] is False
+    assert archived['document'] == canvas['document']
+    result = await canvas_client.post(f"{scene_canvas_path}/{canvas['id']}/storyboards", json={
+        'request_id': 'old-scene', 'text_model_id': 'canvas-text', 'mode': 'faithful',
+    })
+    assert result.status_code == 409, result.text
+    edited = {**archived['document'], 'name': '历史场次仍可编辑'}
+    result = await canvas_client.put(path, json={'request_id': 'manual-edit', 'expected_revision': 0, 'document': edited})
+    assert result.status_code == 200, result.text
+    assert (await canvas_client.get(path)).json()['data']['document'] == edited
 
 
 @pytest.mark.asyncio

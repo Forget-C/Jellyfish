@@ -141,6 +141,15 @@ async def submit_storyboard(project_id: str, chapter_id: str, sequence_id: str, 
     return created_response(await _call(SceneStoryboardService(db, project_id).submit_storyboard(chapter_id, sequence_id, body)))
 
 
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards/candidate",
+            response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_candidate")
+async def read_canvas_candidate(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,
+                                task_id: str | None = None, db: AsyncSession = Depends(get_db, scope="function")):
+    """为共同工作区读取同一目标画布的待应用候选。"""
+    return success_response(await SceneStoryboardService(db, project_id).read_canvas_candidate(
+        chapter_id, sequence_id, canvas_id, task_id))
+
+
 @router.post("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards",
              response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_reextract")
 async def reextract_storyboard(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,

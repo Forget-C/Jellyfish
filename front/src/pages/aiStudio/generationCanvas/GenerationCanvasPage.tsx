@@ -26,7 +26,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const refreshList = () => Canvases.canvasList({ projectId }).then(response => setCanvases(response.data || []))
   const select = (id?: string) => setSearch(previous => {
     const next = new URLSearchParams(previous)
-    next.delete('run'); next.delete('node'); next.delete('check'); next.delete('report')
+    next.delete('run'); next.delete('node'); next.delete('check'); next.delete('report'); next.delete('storyboardTask')
     if (id) next.set('canvas', id)
     else next.delete('canvas')
     return next
@@ -79,7 +79,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
       } else setError('画布状态核实失败，删除结果仍未确认，请重试核实')
     } finally { setDeleting(false) }
   }
-  return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId}
+  return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId} storyboardTaskId={search.get('storyboardTask')}
     back={{ label: '返回项目', onClick: () => navigate(`/projects/${encodeURIComponent(projectId)}`) }}
     onCanvasRead={rememberCanvas}
     hostError={error}
