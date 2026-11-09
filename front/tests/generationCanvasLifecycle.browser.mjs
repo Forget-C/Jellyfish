@@ -90,19 +90,20 @@ try {
     await closeCanvasDetails(page)
     await openCanvasManagement(page)
     await page.getByRole('button', { name: '删除画布', exact: true }).click()
-    await page.getByRole('button', { name: /确\s*定/ }).click()
+    await page.getByRole('dialog', { name: '删除画布' }).getByRole('button', { name: '确认删除' }).click()
   }
   // A server failure cannot claim cleanup; verification confirms the canvas still exists.
-  await page.route('**/api/v1/studio/generation-canvases/canvas-project/' + canvas.id, async route => {
+  const canvasEndpoint = address => address.pathname === '/api/v1/studio/generation-canvases/canvas-project/' + canvas.id
+  await page.route(canvasEndpoint, async route => {
     if (route.request().method() === 'DELETE') await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })
     else await route.continue()
   })
   await deleteCanvas()
   await page.getByRole('button', { name: '核实画布状态', exact: true }).click()
   await page.getByText('画布仍存在；删除尚未完成，可重试', { exact: true }).waitFor()
-  await page.unroute('**/api/v1/studio/generation-canvases/canvas-project/' + canvas.id)
+  await page.unroute(canvasEndpoint)
   // A lost response after commit is resolved by reading the server, without recreating the canvas.
-  await page.route('**/api/v1/studio/generation-canvases/canvas-project/' + canvas.id, async route => {
+  await page.route(canvasEndpoint, async route => {
     if (route.request().method() === 'DELETE') { await route.fetch(); await route.abort('failed') }
     else await route.continue()
   })

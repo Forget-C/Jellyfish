@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const lockName = 'jellyfish:scene-editor:local-user'
+export const generationCanvasEditScope = (projectId: string, canvasId: string | null) => `jellyfish:generation-editor:${projectId}:${canvasId}`
 type HandoffAction = 'request' | 'save' | 'discard' | 'cancel'
 type HandoffResult = 'ready' | 'choice' | 'failed'
 type OwnershipState = 'checking' | 'editing' | 'readonly' | 'waiting' | 'choice' | 'unresponsive' | 'unsupported'
