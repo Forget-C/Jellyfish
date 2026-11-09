@@ -149,8 +149,13 @@ try {
       assert.equal(pending.type, 'model.' + modality)
       assert.equal(pending.model_id, null)
       const detail = await openCanvasCard(page, cardId)
-      await detail.getByRole('combobox', { name: '选择模型', exact: true }).click()
-      await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(modelName, { exact: true }).click()
+      const chooser = detail.getByRole('combobox', { name: '选择模型', exact: true })
+      await chooser.click()
+      const popupId = await chooser.getAttribute('aria-controls')
+      assert.ok(popupId, 'the opened model chooser exposes its list ID')
+      const popup = page.locator('.ant-select-dropdown').filter({ has: page.locator(`[id=${JSON.stringify(popupId)}]`) })
+      await popup.locator('.ant-select-item-option').getByText(modelName, { exact: true }).click()
+      assert.equal(await chooser.getAttribute('aria-expanded'), 'false')
       await poll(() => request(canvas), saved => saved.document.cards.find(card => card.id === cardId)?.model_id,
         'first model assignment was not saved')
       return detail
