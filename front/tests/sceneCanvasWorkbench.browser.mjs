@@ -88,6 +88,27 @@ try {
   assert.equal(new URL(page.url()).searchParams.get('selected'), id)
   assert.equal((await read()).document.name, '改名后方案')
 
+  const sceneRead = url => url.pathname.endsWith('/sequences/' + sequence.id + '/canvases')
+  let disconnect
+  const interrupt = new Promise(resolve => { disconnect = resolve })
+  await page.route(sceneRead, async route => { await interrupt; await route.abort('connectionreset') }, { times: 1 })
+  await page.getByRole('button', { name: '改名后方案', exact: true }).click()
+  const workspace = page.getByRole('region', { name: '生成画布工作台' })
+  const title = workspace.getByRole('textbox', { name: '画布名称', exact: true })
+  await title.fill('刷新失败保留草稿')
+  disconnect()
+  const retry = workspace.getByRole('button', { name: '重试读取场次', exact: true })
+  await retry.waitFor()
+  assert.equal(await title.inputValue(), '刷新失败保留草稿')
+  const refreshed = page.waitForResponse(response => sceneRead(new URL(response.url())) && response.ok())
+  await retry.click()
+  await refreshed
+  await retry.waitFor({ state: 'hidden' })
+  await workspace.getByRole('button', { name: '撤销操作', exact: true }).click()
+  assert.equal(await title.inputValue(), '改名后方案')
+  await workspace.getByRole('button', { name: '返回场次准备', exact: true }).click()
+  await page.getByRole('button', { name: '改名后方案', exact: true }).waitFor()
+
   const beforeBatch = await read()
   await request(`${base}/${id}`, 'PUT', { request_id: 'prepare-batch', expected_revision: beforeBatch.revision,
     document: { ...beforeBatch.document, cards: [...beforeBatch.document.cards, { id: 'ordinary-note', type: 'content.text', text: '备注' }] } })

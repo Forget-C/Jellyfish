@@ -32,7 +32,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
   scope: Scope; editable: boolean; nameForNewCanvas?: () => string;
   selectedTaskId?: string | null; navigationKey: string;
   onResult: (result: StoryboardTaskRead, follow: boolean) => void;
-  target?: { id: string; appliedTaskId?: string; sourceChanged: boolean; sourceReady: boolean; productionModelId?: string; confirmSource: () => void };
+  target?: { id: string; appliedTaskId?: string; sourceChanged: boolean; sourceReady: boolean; productionModelId?: string; pendingModality?: StoryboardReextractRequest['pending_modality']; confirmSource: () => void };
 }) {
   const action = target ? '重新提取' : '生成分镜'
   const { projectId, chapterId, sequenceId } = scope
@@ -135,7 +135,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
       return
     }
     setDraft({ request_id: crypto.randomUUID(), name: nameForNewCanvas?.(), mode: 'complete',
-      production_model_id: target?.productionModelId })
+      production_model_id: target?.productionModelId, pending_modality: target?.pendingModality })
     setError('')
   }
   const submit = async (submission: Submission, follow = false) => {
@@ -252,6 +252,12 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
           style={{ width: '100%' }} disabled={!!pending}
           options={models.filter(model => ['image', 'video'].includes(model.category)).map(model => ({ value: model.id, label: model.name }))}
           onChange={production_model_id => setDraft(value => value && { ...value, production_model_id })} />
+        {!draft?.production_model_id && <Radio.Group aria-label="待配置卡片类型" value={draft?.pending_modality || 'image'} disabled={!!pending}
+          options={[{ value: 'image', label: '图片模型卡' }, { value: 'video', label: '视频模型卡' }]}
+          onChange={event => {
+            const pending_modality: StoryboardReextractRequest['pending_modality'] = event.target.value
+            setDraft(value => value && { ...value, pending_modality })
+          }} />}
         {modelError && <Alert type="warning" showIcon message={modelError} />}
       </Space>}
       {error && <Alert type="warning" showIcon message={error} />}

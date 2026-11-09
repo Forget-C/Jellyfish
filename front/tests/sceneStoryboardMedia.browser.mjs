@@ -72,6 +72,13 @@ try {
   await openScene()
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
+  const prepared = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
+  await prepared.getByRole('combobox', { name: '关联资产' }).click()
+  await page.getByText('已有角色（提取建议）', { exact: true }).click()
+  await prepared.getByRole('combobox', { name: '选择参考图' }).click()
+  await page.getByText('参考图 1', { exact: true }).click()
+  await prepared.getByText('已选参考图', { exact: true }).waitFor()
+
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
   const confirm = preview.getByRole('button', { name: '确认执行', exact: true })
   const warning = preview.getByRole('alert').filter({ hasText: 'CREATIVE_REFERENCE_IMAGE_MISSING' })
@@ -84,14 +91,32 @@ try {
     await page.getByRole('button', { name: '生成分镜', exact: true }).click()
     const config = page.getByRole('dialog', { name: '生成分镜', exact: true })
     await config.getByText('忠实提取', { exact: true }).click()
-    await config.getByRole('combobox', { name: '生产模型' }).click()
-    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(modelName, { exact: true }).click()
+    if (modality === 'video') await config.getByRole('radio', { name: '视频模型卡', exact: true }).check()
     await config.getByRole('button', { name: '开始提取', exact: true }).click()
     await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
     const canvas = base + '/' + new URL(page.url()).searchParams.get('canvas')
     const state = await poll(() => request(canvas), data => data.document.storyboard, 'storyboard was not saved')
     const { shots, objects } = state.document.storyboard
+    const assign = async cardId => {
+      const pending = state.document.cards.find(card => card.id === cardId)
+      assert.equal(pending.type, 'model.' + modality)
+      assert.equal(pending.model_id, null)
+      const detail = await openCanvasCard(page, cardId)
+      await detail.getByRole('combobox', { name: '选择模型', exact: true }).click()
+      await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(modelName, { exact: true }).click()
+      await poll(() => request(canvas), saved => saved.document.cards.find(card => card.id === cardId)?.model_id,
+        'first model assignment was not saved')
+      return detail
+    }
+    const preparedModel = shots[0].model_card_ids[0]
+    await assign(preparedModel)
+    const preparedPreview = await request(canvas + '/precheck', 'POST', { card_id: preparedModel })
+    assert.deepEqual(preparedPreview.input.media.map(media => media.file_id), ['object-browser-image'])
+    await closeCanvasDetails(page)
+
     const shot = shots[1], cardId = shot.model_card_ids[0]
+    await assign(cardId)
+    await closeCanvasDetails(page)
     const { reference_card_id: referenceId } = objects.find(item => item.object_id === shot.object_ids[0])
     assert.equal(state.document.cards.find(card => card.id === referenceId).image_binding, null)
     const readRuntime = () => request(canvas + '/runtime')
@@ -142,7 +167,7 @@ try {
     const success = await run('succeeded')
     const file = success.node.outputs[0].file_id
     assert.ok(file)
-    assert.deepEqual(Object.keys(success.result.current_outputs), [cardId])
+    assert.deepEqual(Object.keys(success.result.current_outputs).filter(key => success.result.current_outputs[key].some(output => output.result_set_id)), [cardId])
     const formal = detail.getByRole('region', { name: '当前正式输出', exact: true })
     await formal.locator(outputTag).waitFor()
     if (modality === 'video') {

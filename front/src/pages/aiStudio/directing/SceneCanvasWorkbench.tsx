@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Empty, Input, Space, Spin } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
-import { StudioDirectingService } from '../../../services/generated'
+import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneCanvasesRead, StoryboardTaskRead } from '../../../services/generated'
 import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
@@ -48,10 +48,13 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
       if (!response.data) throw new Error('无法读取场次准备')
       setScene(response.data)
     }).catch(cause => {
-      if (active) { setLoadError(directingError(cause)); setScene(undefined) }
+      if (!active) return
+      setLoadError(directingError(cause))
+      if (cause instanceof ApiError && cause.status === 404) setScene(undefined)
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, canvasId, refresh])
+  const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试读取场次</Button>
   const openCanvas = (id: string) => setQuery({ canvas: id })
   const returnToPreparation = () => {
     setCandidate(undefined)
@@ -74,6 +77,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
   }
   if (canvasId && scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
+      hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       initialCandidate={candidate?.canvas_id === canvasId ? candidate.candidate ?? undefined : undefined}
       storyboardScope={{ chapterId, sequenceId, requiresReview: candidate?.pending_application }}
       back={{ label: '返回场次准备', onClick: returnToPreparation }}
@@ -88,6 +92,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
             sourceChanged: !!current.source_changed || !!basis && 'text' in basis && basis.text !== scene.sequence.source_text,
             sourceReady: !!scene.sequence.is_current && !scene.sequence.source_changed,
             productionModelId: model && 'model_id' in model ? model.model_id ?? undefined : undefined,
+            pendingModality: model?.type === 'model.video' ? 'video' : 'image',
             confirmSource: () => void requestLeave().then(allowed => { if (allowed) chapter() }),
           }} onResult={(result, follow) => setCandidate(previous => {
             if (follow && previous?.canvas_id === current.id && previous.candidate &&
@@ -108,10 +113,9 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
       </PageToolbar>
       <WorkspaceScrollPanel>
         <div className="scene-canvas-preparation-content">
-          {loadError ? <Alert type="error" showIcon message={loadError}
-            action={<Button onClick={() => setRefresh(value => value + 1)}>重试</Button>} /> : loading
-            ? <Spin aria-label="正在读取场次准备" /> : canvasId
-            ? <Alert type="error" showIcon message="此画布不属于当前场次或已不可用" />
+          {loadError && <Alert type="error" showIcon message={loadError} action={retry} />}
+          {loading && (!scene || canvasId) ? <Spin aria-label="正在读取场次准备" /> : canvasId
+            ? !loadError && <Alert type="error" showIcon message="此画布不属于当前场次或已不可用" />
             : scene && <>
               <section aria-labelledby="scene-canvas-source-title">
                 <h2 id="scene-canvas-source-title">场次原文</h2>

@@ -77,7 +77,9 @@ class SceneObjectService(SceneCanvasService):
     async def read_objects(self, chapter_id: str, sequence_id: str) -> SceneObjectsRead:
         """保留上次成功准备，单独展示最新任务及当前文件有效性。"""
         sequence, _ = await self._scene(chapter_id, sequence_id)
-        task = await self.db.scalar(self._tasks(sequence_id).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
+        task = (await self.db.execute(self._tasks(sequence_id)
+            .with_only_columns(Task.id, Task.status, Task.stage, Task.error_message)
+            .order_by(Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
         if task and task.status == TaskStatus.succeeded:
             # 任务可能在两次查询之间提交，成功状态要随最新准备结果返回。
             await self.db.refresh(sequence, ['object_preparation'])

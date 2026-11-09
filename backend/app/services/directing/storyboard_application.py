@@ -113,18 +113,19 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
              for card_id, ports in {**candidate.input_order,
                                    **{key: ports for key, ports in current.input_order.items() if key in keep}}.items()
              if card_id in final}
-    generated_groups = {shot.group_id for shot in current.storyboard.shots} if current.storyboard else set()
-    old_groups = {group.id: group for group in current.groups}
-    groups = {key: group for key, group in old_groups.items() if key not in generated_groups}
+    # Existing cards keep their current groups or their deliberate absence from one.
+    groups = {group.id: group.model_copy(update={'card_ids': [key for key in group.card_ids if key in final]})
+              for group in current.groups}
     for group in candidate.groups:
-        old = old_groups.get(group.id)
-        extra = [key for key in old.card_ids if key in keep] if old else []
-        groups[group.id] = (old or group).model_copy(update={'card_ids': list(dict.fromkeys([*group.card_ids, *extra]))})
-    groups = [group.model_copy(update={'card_ids': [key for key in group.card_ids if key in final]})
-              for group in groups.values()]
+        new_members = [key for key in group.card_ids if key in final and key not in previous]
+        existing = groups.get(group.id)
+        if new_members and (not existing or existing.kind != 'stack'):
+            groups[group.id] = (existing or group).model_copy(update={
+                'card_ids': [*(existing.card_ids if existing else []), *new_members],
+            })
     shots = carry_reference_choices(current, candidate, final, keep, edges, order, production_ports or [], invalidated)
     document = current.model_copy(update={'cards': list(final.values()), 'edges': edges,
-        'input_order': order, 'groups': [group for group in groups if group.card_ids],
+        'input_order': order, 'groups': [group for group in groups.values() if group.card_ids],
         'storyboard': candidate.storyboard.model_copy(update={'origins': origins, 'shots': shots}),
         'fixed_source': candidate.fixed_source, 'archived_sources': archives})
     diff = StoryboardDiff(added=[_display(final[key]) for key in incoming if key not in previous],

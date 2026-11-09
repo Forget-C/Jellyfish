@@ -6,12 +6,11 @@ from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import defer
 
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
-from app.models.generation_canvas import CanvasSaveReceipt
+from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.studio import FileItem, FileUsage
 from app.models.task import Task
@@ -119,7 +118,7 @@ class SceneStoryboardService(SceneObjectService):
                     await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id,
                         chapter_id=chapter.id, usage_kind='canvas_storyboard_source', source_ref=f'{canvas.id}:{file_id}')
         args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
-                'objects': frozen_objects, 'production_model_id': body.production_model_id,
+                'objects': frozen_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
             title='生成完整分镜' if body.mode == 'complete' else '忠实提取分镜', target_type='directing_sequence',
@@ -183,20 +182,23 @@ class SceneStoryboardService(SceneObjectService):
         """恢复入口只读取轻量状态，不加载完整分镜图。"""
         await self._scene(chapter_id, sequence_id)
         query = self._storyboards(sequence_id).where(Task.input_snapshot['chapter_id'].as_string() == chapter_id)
+        target = Task.input_snapshot['canvas_id'].as_string()
         if canvas_id:
-            canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
-            if canvas.sequence_id != sequence_id:
+            member = await self.db.scalar(select(GenerationCanvas.id).where(GenerationCanvas.id == canvas_id,
+                GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence_id))
+            if not member:
                 raise HTTPException(404, 'Canvas not found in scene')
-            query = query.where(Task.input_snapshot['canvas_id'].as_string() == canvas_id)
-        tasks = list(await self.db.scalars(query.options(defer(Task.result)).order_by(
-            Task.created_at.desc(), Task.id.desc()).limit(20)))
+            query = query.where(target == canvas_id)
+        tasks = (await self.db.execute(query.with_only_columns(
+            Task.id, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id, target.label('canvas_id'))
+            .order_by(Task.created_at.desc(), Task.id.desc()).limit(20))).all()
         saved = set(await self.db.scalars(select(CanvasSaveReceipt.request_id).where(
             CanvasSaveReceipt.request_id.in_(['storyboard:' + task.id for task in tasks if task.status == TaskStatus.succeeded]))))
-        return [self._storyboard_summary(task, task.status == TaskStatus.succeeded and 'storyboard:' + task.id not in saved)
+        return [self._storyboard_summary(task, task.canvas_id, task.status == TaskStatus.succeeded and 'storyboard:' + task.id not in saved)
                 for task in tasks]
 
-    def _storyboard_summary(self, task: Task, candidate_available: bool) -> StoryboardTaskSummary:
-        return StoryboardTaskSummary(**self.task_read(task).model_dump(), canvas_id=task.input_snapshot['canvas_id'],
+    def _storyboard_summary(self, task, canvas_id: str, candidate_available: bool) -> StoryboardTaskSummary:
+        return StoryboardTaskSummary(**self.task_read(task).model_dump(), canvas_id=canvas_id,
                                      candidate_available=candidate_available, retry_of_task_id=task.retry_of_task_id)
 
     async def read_storyboard(self, chapter_id: str, sequence_id: str, task_id: str) -> StoryboardTaskRead:
@@ -295,7 +297,7 @@ class SceneStoryboardService(SceneObjectService):
                 candidate = None
             else:
                 pending = bool(task.input_snapshot.get('reextract_canvas_id')) or canvas.revision != candidate.base_revision
-        return StoryboardTaskRead(**self._storyboard_summary(task, candidate is not None).model_dump(),
+        return StoryboardTaskRead(**self._storyboard_summary(task, canvas_id, candidate is not None).model_dump(),
                                   candidate=candidate, pending_application=pending)
 
     async def complete_storyboard(self, task: Task, result: SceneStoryboard) -> StoryboardCandidate:

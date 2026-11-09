@@ -17,6 +17,7 @@ class StoryboardRequest(Contract):
     name: str = Field(default='', max_length=255)
     text_model_id: Identity | None = None
     production_model_id: Identity | None = None
+    pending_modality: Literal['image', 'video'] | None = Field(default=None, exclude_if=lambda value: value is None)
     mode: CanvasStoryboardMode = 'complete'
 
 

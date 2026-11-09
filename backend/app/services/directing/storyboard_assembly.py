@@ -140,6 +140,8 @@ class StoryboardAssembly:
 
     def __init__(self, args: dict, task_id: str, baseline: CanvasDocument):
         self.args, self.baseline = args, baseline
+        capability = args.get('production_capability')
+        self.production_modality = capability['modality'] if capability else args.get('pending_modality', 'image')
         self.document = baseline.model_dump()
         self.document['storyboard'] = self.index = {
             'task_id': task_id, 'mode': args['mode'], 'source_version': args['source_version'],
@@ -317,11 +319,11 @@ class StoryboardAssembly:
 
     def _production(self, key, sources, evidence, object_keys, *, segment=None, seconds=None, targets=()) -> dict:
         capability = self.args.get('production_capability')
-        modality = capability['modality'] if capability else 'image'
+        modality = self.production_modality
         config = {}
         if capability and modality == 'image':
             config['count'] = capability['min_count']
-        if modality == 'video':
+        if capability and modality == 'video':
             ratios = capability['ratios']
             config['ratio'] = segment.ratio if segment else '16:9' if '16:9' in ratios else next(iter(ratios), None)
             minimum, maximum = capability['min_seconds'], capability['max_seconds']
@@ -372,8 +374,7 @@ class StoryboardAssembly:
         return cards
 
     def _shot_production(self, key, result, shot, story, plan, designs, executable):
-        capability = self.args.get('production_capability')
-        phase = capability['modality'] if capability else 'image'
+        phase = self.production_modality
         occurrences = {item.id: item for item in shot.occurrences}
         organized = result.production_segments(shot.id)
         cards, models, segments, uses = [], [], [], []

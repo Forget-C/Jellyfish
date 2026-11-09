@@ -66,7 +66,7 @@ import { rendererRegistry } from './rendererRegistry'
 import { visibleSourceEdges, sourceConnectionEdges } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { StoryboardReferences } from './StoryboardReferences'
-import { chooseStoryboardOverride, storyboardImageBinding, updateStoryboardReference } from './storyboardReferenceEdits'
+import { assignStoryboardModel, chooseStoryboardOverride, firstStoryboardModelAssignment, storyboardImageBinding, updateStoryboardReference } from './storyboardReferenceEdits'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
 import type { GenerationCard, GenerationEdge } from './graphRules'
@@ -218,6 +218,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [modelDefaults, setModelDefaults] = useState<ModelSettingsRead>()
   const [models, setModels] = useState<ModelRead[]>([])
   const [capabilities, setCapabilities] = useState<Record<string, CanvasModelCapability>>({})
+  const pendingModelAssignments = useRef(new Map<string, symbol>())
   const [capabilityErrors, setCapabilityErrors] = useState<Record<string, string>>({})
   const filterActive = !!(displayFilter.group || displayFilter.modality || displayFilter.problems)
   const matched = new Set(cards.filter(card => {
@@ -535,15 +536,44 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }
     return () => { active = false }
   }, [document.id, document.project_id, modelIds])
+  useEffect(() => {
+    const requests = pendingModelAssignments.current
+    return () => requests.clear()
+  }, [document.id])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => {
-    const result = updateStoryboardReference(latest.current, next, operations, capability)
-    if (result.document) {
-      edit(result.document)
-      if (invalidRequirementNames.has(next.id) && next.type === 'direction.criterion' && 'name' in next && next.name?.trim() && reason === '请先填写验收要求名称') setReason('')
-      return true
+    const apply = (result: ReturnType<typeof updateStoryboardReference>) => {
+      if (result.document) {
+        edit(result.document)
+        if (invalidRequirementNames.has(next.id) && next.type === 'direction.criterion' && 'name' in next && next.name?.trim() && reason === '请先填写验收要求名称') setReason('')
+        return true
+      }
+      setReason(result.reason); return false
     }
-    setReason(result.reason); return false
+    const current = latest.current
+    if (!firstStoryboardModelAssignment(current, next) || !('model_id' in next) || !next.model_id) {
+      return apply(updateStoryboardReference(current, next, operations, capability))
+    }
+    const choices = pendingModelAssignments.current, known = capability(next), modelId = next.model_id
+    if (known) {
+      choices.delete(next.id)
+      return apply(assignStoryboardModel(current, next, operations, known))
+    }
+    // Resolve the explicitly chosen model first. Use the latest card so the response cannot overwrite intervening edits.
+    const token = Symbol(next.id)
+    choices.set(next.id, token)
+    void Canvases.canvasModelCapability({ projectId: current.project_id, canvasId: current.id, modelId }).then(response => {
+      if (choices.get(next.id) !== token) return
+      const document = latest.current
+      const previous = document.cards?.find(card => card.id === next.id)
+      if (!previous || !('model_id' in previous)) return
+      const selected = { ...previous, model_id: modelId }
+      if (!firstStoryboardModelAssignment(document, selected)) return
+      if (!response.data) throw new Error('missing capability')
+      apply(assignStoryboardModel(document, selected, operations, response.data))
+    }).catch(() => { if (choices.get(next.id) === token) setReason('模型能力读取失败，请重新选择模型') })
+      .finally(() => { if (choices.get(next.id) === token) choices.delete(next.id) })
+    return true
   }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
     setReason(protection.message); setDetailId(protection.cardId)

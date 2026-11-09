@@ -187,6 +187,10 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             detached = {edge['id'] for edge in data['edges'] if edge['source_card'] == specific and edge['target_card'] == card['id']}
             data['edges'] = [edge for edge in data['edges'] if edge['id'] not in detached]
             data['input_order'][card['id']]['text'] = [key for key in data['input_order'][card['id']]['text'] if key not in detached]
+            ungrouped = first['model_card_ids'][0]
+            for group in data['groups']:
+                group['card_ids'] = [key for key in group['card_ids'] if key not in (card['id'], ungrouped)]
+            data['groups'].append({'id': 'manual-model-group', 'name': '人工制作组', 'card_ids': [card['id']]})
             await read_data(client, 'PUT', video_path, {'request_id': 'manual', 'expected_revision': video['revision'], 'document': data})
             edited = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
             assert '分段动作举高' not in edited['text']
@@ -202,6 +206,9 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             assert any(item['id'] == card['id'] and item['manually_edited'] for item in diff['modified'])
             merged = await read_data(client, 'POST', application + '/apply', choice)
             assert merged['document']['storyboard']['shots'][1]['segments'] == second['segments']
+            groups = merged['document']['groups']
+            assert [group['id'] for group in groups if card['id'] in group['card_ids']] == ['manual-model-group']
+            assert all(ungrouped not in group['card_ids'] for group in groups)
             assert merged['document']['storyboard']['origins'][specific]['applicability'] == data['storyboard']['origins'][specific]['applicability']
             after = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
             assert '分段动作举高' not in after['text']

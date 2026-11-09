@@ -135,7 +135,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         assert saved == (await client.get(late_path)).json()['data']
         replay = await client.post(late_task_path + '/apply', json={'expected_revision': untouched['revision']})
         assert replay.json()['data'] == saved
-        rejected = (await client.post(path, json={**request, 'request_id': 'unrepairable'})).json()['data']
+        rejected = (await client.post(path, json={**request, 'request_id': 'unrepairable', 'pending_modality': 'video'})).json()['data']
         await complete_task()
         failed = (await client.get(path + '/' + rejected['task_id'])).json()['data']
         assert failed['status'] == 'failed' and failed['candidate'] is None
@@ -161,6 +161,8 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         recovered = (await client.get(path + '/' + retry['task_id'])).json()['data']
         assert recovered['status'] == 'succeeded' and recovered['pending_application']
         assert recovered['candidate_available'] and recovered['candidate']['base_revision'] == 0
+        pending_models = [card for card in recovered['candidate']['document']['cards'] if card['type'].startswith('model.')]
+        assert pending_models and all(card['type'] == 'model.video' and card['model_id'] is None for card in pending_models)
         assert (await client.get(rejected_path)).json()['data'] == after_failure
         tasks = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1'})).json()['data']['items']
         assert {item['task_kind'] for item in tasks} == {'directing_storyboard'}

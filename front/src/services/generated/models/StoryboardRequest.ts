@@ -10,5 +10,6 @@ export type StoryboardRequest = {
     name?: string;
     text_model_id?: (string | null);
     production_model_id?: (string | null);
+    pending_modality?: ('image' | 'video' | null);
     mode?: 'complete' | 'faithful';
 };

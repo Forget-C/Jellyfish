@@ -28,7 +28,7 @@ const modelUses = (shot: CanvasStoryboardShot, objectId: string) =>
   (shot.reference_uses ?? []).filter(use => use.object_id === objectId && shot.model_card_ids.includes(use.model_card_id))
 
 /** 只改仍指向原有效参考的采用，用户自己取消或改绑的采用维持现状。 */
-function synchronizeUses(document: CanvasDocument, changes: ReferenceChange[], operations: Operations, capabilityFor: CapabilityFor): CanvasOperationResult {
+function synchronizeUses(document: CanvasDocument, changes: ReferenceChange[], operations: Operations, capabilityFor: CapabilityFor, modelId?: string): CanvasOperationResult {
   if (!document.storyboard) return { document }
   const changed = new Map<string, boolean>()
   let next = document
@@ -37,6 +37,7 @@ function synchronizeUses(document: CanvasDocument, changes: ReferenceChange[], o
       return { reason: '参考卡已改绑其他对象，请先核对对象身份' }
     }
     for (const use of modelUses(shot, object.object_id)) {
+      if (modelId && use.model_card_id !== modelId) continue
       const model = next.cards?.find(card => card.id === use.model_card_id)
       if (!model || model.type !== 'model.image' && model.type !== 'model.video' || !('prompt' in model)) continue
       const port = model.type === 'model.image' ? 'image' : 'subject_image'
@@ -85,6 +86,34 @@ function synchronizeUses(document: CanvasDocument, changes: ReferenceChange[], o
   return { document: { ...next, storyboard: { ...storyboard, shots: storyboard.shots.map(shot => ({ ...shot,
     reference_uses: shot.reference_uses?.map(use => changed.has(use.binding_id) ? { ...use, active: changed.get(use.binding_id)! } : use),
   })) } } }
+}
+
+/** Only an unconfigured extracted model with declared object uses needs reconciliation. */
+export function firstStoryboardModelAssignment(document: CanvasDocument, next: GenerationCard) {
+  if (!('model_id' in next) || !next.model_id || !document.storyboard?.origins[next.id]) return false
+  const previous = document.cards?.find(card => card.id === next.id)
+  return !!previous && 'model_id' in previous && !previous.model_id &&
+    document.storyboard.shots.some(shot => shot.reference_uses?.some(use => use.model_card_id === next.id))
+}
+
+/** Bind effective ready references when the user first supplies a compatible model. */
+export function assignStoryboardModel(document: CanvasDocument, next: GenerationCard, operations: Operations,
+  capability: CanvasModelCapability): CanvasOperationResult {
+  const result = operations.update(document, next, capability)
+  if (!result.document || !document.storyboard || !('input_bindings' in next)) return result
+  const port = next.type === 'model.image' ? 'image' : 'subject_image'
+  if (capability.modality !== next.type?.split('.')[1] || !capability.input_ports.includes(port)) return result
+  const adopted = new Set((next.input_bindings || []).filter(binding => binding.input_port === port && binding.source.port_id === 'image')
+    .map(binding => storyboardReferenceCard(document, binding.source.card_id))
+    .map(reference => reference?.name_binding?.object_id ?? reference?.object_id))
+  const changes = document.storyboard.shots.flatMap(shot => document.storyboard!.objects.flatMap(object => {
+    const use = shot.reference_uses?.find(item => item.model_card_id === next.id && item.object_id === object.object_id)
+    if (!use || use.active || adopted.has(object.object_id)) return []
+    const reference = storyboardReferenceCard(document, shot.reference_overrides?.[object.object_id] ?? object.reference_card_id)
+    if (!reference?.image_binding || (reference.name_binding?.object_id ?? reference.object_id) !== object.object_id) return []
+    return [{ shot, object, prior: reference, chosen: reference }]
+  }))
+  return changes.length ? synchronizeUses(result.document, changes, operations, () => capability, next.id) : result
 }
 
 /** 引用卡自己的换图入口和分镜设置共用一笔编辑。 */
