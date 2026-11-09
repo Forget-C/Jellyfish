@@ -71,6 +71,7 @@ import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneV
 import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
+import type { ApiResponse_StoryboardBasis_ } from '../models/ApiResponse_StoryboardBasis_';
 import type { ApiResponse_StoryboardDiff_ } from '../models/ApiResponse_StoryboardDiff_';
 import type { ApiResponse_StoryboardTaskRead_ } from '../models/ApiResponse_StoryboardTaskRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
@@ -471,6 +472,34 @@ export class StudioDirectingService {
             },
             query: {
                 'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Storyboard Basis
+     * 读取创建分镜画布前用户可核对的实际依据。
+     * @returns ApiResponse_StoryboardBasis_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardBasis({
+        projectId,
+        chapterId,
+        sequenceId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_StoryboardBasis_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/basis',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
             },
             errors: {
                 422: `Validation Error`,

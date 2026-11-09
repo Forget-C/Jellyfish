@@ -8,7 +8,10 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate
-from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
+from app.core.contracts.directing.scene_objects import SceneObjectsRead
+from app.core.contracts.directing.scene_storyboard import (SceneStoryboard, StoryboardApplication, StoryboardBasis,
+    StoryboardBasisObject, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore,
+    StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary)
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.llm import Model, ModelCategoryKey, Provider
@@ -40,6 +43,44 @@ class SceneStoryboardService(SceneObjectService):
         """在同一事务建立空白目标及冻结任务，重放不重复创建。"""
         return await self._submit(chapter_id, sequence_id, body)
 
+    async def read_storyboard_basis(self, chapter_id: str, sequence_id: str) -> StoryboardBasis:
+        """返回创建前可核对的场次摘录和经过验证的参考。"""
+        sequence, chapter = await self._scene(chapter_id, sequence_id)
+        if not sequence.is_current or not sequence.source_text.strip():
+            raise RevisionConflict('此场次没有可用的已确认原文')
+        objects = await self.read_objects(chapter_id, sequence_id)
+        return await self._storyboard_basis(sequence, chapter, objects, self._prepared_object_inputs(objects))
+
+    @staticmethod
+    def _prepared_object_inputs(objects: SceneObjectsRead) -> list[dict]:
+        available = {(asset.kind, asset.id) for asset in objects.assets}
+        return [{
+            'id': item.id, 'kind': item.kind, 'name': item.name, 'excerpt': item.excerpt,
+            'asset_id': item.asset_id if (item.kind, item.asset_id) in available else None,
+            'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
+        } for item in objects.objects]
+
+    async def _storyboard_basis(self, sequence, chapter, objects: SceneObjectsRead, inputs: list[dict]) -> StoryboardBasis:
+        """标记用户所见依据的变化，排队到运行的阶段更新不改变选择。"""
+        active_task_id = await self.db.scalar(self._tasks(sequence.id).with_only_columns(Task.id)
+            .where(Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1))
+        chapter_version = sha256(chapter.raw_text.encode()).hexdigest()
+        source = sequence.source
+        token = CanvasStore.command_digest({
+            'scene_id': sequence.id, 'chapter_version': chapter_version, 'source': source,
+            'start': sequence.source_start, 'end': sequence.source_end, 'text': sequence.source_text,
+            'preparation_revision': objects.revision, 'preparation_stale': objects.source_changed, 'objects': inputs,
+            'active_task_id': active_task_id,
+        })
+        names = {(asset.kind, asset.id): asset.name for asset in objects.assets}
+        return StoryboardBasis(token=token, source_text=sequence.source_text,
+            source_changed=source.get('version') != chapter_version,
+            preparation_revision=objects.revision, preparation_stale=objects.source_changed,
+            object_task_active=active_task_id is not None, objects=[StoryboardBasisObject(
+                id=item['id'], name=item['name'], kind=item['kind'], asset_id=item['asset_id'],
+                asset_name=names.get((item['kind'], item['asset_id'])), image_file_id=item['image_file_id'],
+            ) for item in inputs])
+
     async def reextract_storyboard(self, chapter_id: str, sequence_id: str, canvas_id: str,
                                    body: StoryboardReextractRequest) -> StoryboardTaskRead:
         """Keep the canvas identity and freeze the selected, verified text evidence."""
@@ -70,12 +111,19 @@ class SceneStoryboardService(SceneObjectService):
                     or existing.retry_of_task_id != retry_of_task_id):
                 raise RevisionConflict('分镜请求身份已用于另一份内容')
             return await self._storyboard_read(existing)
-        if canvas_id and not sequence.is_current:
-            raise RevisionConflict('历史场次不能重新提取或重试分镜')
+        if not sequence.is_current:
+            raise RevisionConflict('历史场次不能重新提取或重试分镜' if canvas_id else '历史场次不能新建分镜画布')
         if retry_of_task_id and await self.db.scalar(self._storyboards(sequence_id).where(
                 Task.retry_of_task_id == retry_of_task_id).limit(1)):
             raise RevisionConflict('已提交该任务的重试，请查看最新分镜任务')
         objects = await self.read_objects(chapter_id, sequence_id)
+        prepared_inputs = self._prepared_object_inputs(objects)
+        if not canvas_id and body.basis_token is not None:
+            confirmed = await self._storyboard_basis(sequence, chapter, objects, prepared_inputs)
+            if body.basis_token != confirmed.token:
+                raise RevisionConflict('本场原文或对象参考已变化，请重新核对生成依据')
+            if confirmed.object_task_active and (not body.use_saved_objects or not objects.revision):
+                raise RevisionConflict('对象提取进行中，请等待或明确使用已保存对象继续')
         if objects.source_changed and not canvas_id:
             raise ValueError('场次原文范围已变化，请先刷新对象准备')
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.text_model_id)
@@ -100,12 +148,7 @@ class SceneStoryboardService(SceneObjectService):
         basis = next(card for card in canvas.document.cards if card.id == fixed.card_id)
         if not objects.source_changed and (fixed.chapter_version, basis.selection_start, basis.text) == (
                 sequence.source['version'], sequence.source_start, sequence.source_text):
-            available = {(asset.kind, asset.id) for asset in objects.assets}
-            frozen_objects = [{
-                'id': item.id, 'kind': item.kind, 'name': item.name, 'excerpt': item.excerpt,
-                'asset_id': item.asset_id if (item.kind, item.asset_id) in available else None,
-                'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
-            } for item in objects.objects]
+            frozen_objects = prepared_inputs
         else:
             frozen_objects = await self._previous_object_inputs(canvas, prior_task_id, basis)
 

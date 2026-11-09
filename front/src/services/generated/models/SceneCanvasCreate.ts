@@ -7,4 +7,5 @@
  */
 export type SceneCanvasCreate = {
     name?: string;
+    request_id?: (string | null);
 };
