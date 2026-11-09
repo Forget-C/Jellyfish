@@ -303,20 +303,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/ChapterSourcePanel.tsx",
-      "rule": "@typescript-eslint/consistent-type-imports",
-      "severity": 1,
-      "fingerprint": "833b65307d96a0ecf296ec22ff7eb81b52956a7c4b14910f195bef71a43e5cdd",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/ChapterSourcePanel.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "3515a43574f41e9cdc99095034c5616e22b6afd0d7e37f67643b9ec8ac01d9fd",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/ChapterSourceSelection.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,

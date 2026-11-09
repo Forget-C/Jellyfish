@@ -19,7 +19,10 @@ from app.core.contracts.directing.scene_storyboard import (StoryboardApplication
     StoryboardTaskRead, StoryboardTaskSummary)
 from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
-from app.core.contracts.directing.scene_objects import ObjectExtractionRequest, SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead
+from app.core.contracts.directing.scene_objects import (
+    ObjectExtractionRequest, SceneObjectCandidateApplication, SceneObjectCandidateReceipt, SceneObjectCandidateReview,
+    SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead,
+)
 from app.services.directing.scene_objects import SceneObjectService
 from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionReceiptDetail, DivisionVersionDetail
 from app.services.directing.division_history import DivisionHistoryService
@@ -127,6 +130,22 @@ async def extract_scene_objects(project_id: str, chapter_id: str, sequence_id: s
                                 db: AsyncSession = Depends(get_db, scope="function")):
     """明确启动场次对象提取，不提交媒体或分镜。"""
     return success_response(await _call(SceneObjectService(db, project_id).submit_extraction(chapter_id, sequence_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions/{task_id}/candidate",
+            response_model=ApiResponse[SceneObjectCandidateReview], operation_id="directing_scene_object_candidate")
+async def read_scene_object_candidate(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                                      db: AsyncSession = Depends(get_db, scope="function")):
+    """读取冻结对象和当前准备的整批差异。"""
+    return success_response(await SceneObjectService(db, project_id).read_candidate(chapter_id, sequence_id, task_id))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions/{task_id}/apply",
+             response_model=ApiResponse[SceneObjectCandidateReceipt], operation_id="directing_scene_object_candidate_apply")
+async def apply_scene_object_candidate(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                                       body: SceneObjectCandidateApplication, db: AsyncSession = Depends(get_db, scope="function")):
+    """确认应用已核对的整批对象，响应未知可用相同命令核实。"""
+    return success_response(await _call(SceneObjectService(db, project_id).apply_candidate(chapter_id, sequence_id, task_id, body)))
 
 
 @router.put("/chapters/{chapter_id}/sequences/{sequence_id}/objects/{object_id}",

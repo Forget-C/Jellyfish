@@ -6,8 +6,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.core.contracts.directing.scene_objects import (
-    ObjectExtractionRequest, SceneObjectCandidate, SceneObjectChoice, SceneObjectExtraction,
-    SceneObjectRead, SceneObjectsRead, SceneObjectTaskRead,
+    ObjectExtractionRequest, SceneObjectCandidate, SceneObjectCandidateApplication, SceneObjectCandidateReceipt,
+    SceneObjectCandidateReview, SceneObjectChoice, SceneObjectExtraction,
+    SceneObjectExtractionResult, SceneObjectRead, SceneObjectsRead, SceneObjectTaskRead,
 )
 from app.core.contracts.directing.workspace import SourceSpan
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
@@ -99,9 +100,13 @@ class SceneObjectService(SceneCanvasService):
                 state = 'unassociated' if not candidate.asset_id else 'missing' if asset else 'unavailable'
             objects.append(SceneObjectRead(**candidate.model_dump(), reference_state=state))
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
+        candidate_task_id = await self.db.scalar(self._tasks(sequence_id).with_only_columns(Task.id).where(
+            Task.input_snapshot['chapter_id'].as_string() == chapter_id,
+            Task.status == TaskStatus.succeeded, Task.result['pending_application'].as_boolean().is_(True),
+        ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
         return SceneObjectsRead(revision=prepared.get('revision', 0), source_version=prepared.get('source_version'),
             source_changed=bool(prepared and prepared['source_digest'] != digest), objects=objects, assets=assets,
-            task=self.task_read(task) if task else None)
+            task=self.task_read(task) if task else None, candidate_task_id=candidate_task_id)
 
     async def submit_extraction(self, chapter_id: str, sequence_id: str, body: ObjectExtractionRequest) -> SceneObjectTaskRead:
         """冻结已确认场次摘录和有限资产目录，禁止同场重复排队。"""
@@ -159,24 +164,93 @@ class SceneObjectService(SceneCanvasService):
         await self.db.flush()
         return await self.read_objects(chapter_id, sequence_id)
 
-    async def complete_extraction(self, task: Task, result: SceneObjectExtraction) -> None:
-        """仅在成功事务交付，按精确身份保留并发人工选择。"""
+    async def _candidate_task(self, chapter_id: str, sequence_id: str, task_id: str) -> tuple[Task, SceneObjectExtractionResult]:
+        """候选读取及应用均先核实任务的真实章节和场次归属。"""
+        task = await self.db.scalar(self._tasks(sequence_id).where(Task.id == task_id,
+            Task.input_snapshot['chapter_id'].as_string() == chapter_id))
+        if not task or task.status != TaskStatus.succeeded or 'pending_application' not in (task.result or {}):
+            raise HTTPException(404, '未找到此场次可核对的对象提取结果')
+        return task, SceneObjectExtractionResult.model_validate(task.result)
+
+    def _candidate_plan(self, sequence: Sequence, task: Task, result: SceneObjectExtractionResult
+                        ) -> tuple[SceneObjectCandidateReview, list[SceneObjectCandidate]]:
+        """按冻结出处产生的身份匹配，保留当前人工选择，并绑定当前准备修订。"""
+        prepared = sequence.object_preparation or {}
+        revision = prepared.get('revision', 0)
+        digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
+        source_changed = digest != task.input_snapshot['run_args']['source_digest']
+        previous = {row['id']: SceneObjectCandidate.model_validate(row) for row in prepared.get('objects', [])}
+        new_ids = {row.id for row in result.objects}
+        added, modified, retained_choices, merged = [], [], [], []
+        removed = [row for row in previous.values() if row.id not in new_ids]
+        for row in result.objects:
+            prior = previous.get(row.id)
+            if prior:
+                row = row.model_copy(update={'asset_id': prior.asset_id, 'image_file_id': prior.image_file_id})
+                if row != prior:
+                    modified.append(row)
+                if prior.asset_id or prior.image_file_id:
+                    retained_choices.append(row)
+            else:
+                added.append(row)
+            merged.append(row)
+        token = None
+        if sequence.is_current and not source_changed and result.pending_application:
+            token = sha256(f'{task.id}:{revision}:{digest}'.encode()).hexdigest()
+        review = SceneObjectCandidateReview(task=self.task_read(task), revision=revision, source_changed=source_changed,
+            is_current=sequence.is_current, applied_revision=result.applied_revision, preview_token=token,
+            added=added, removed=removed, modified=modified, retained_choices=retained_choices)
+        return review, merged
+
+    async def read_candidate(self, chapter_id: str, sequence_id: str, task_id: str) -> SceneObjectCandidateReview:
+        """按任务身份重开差异，不产生任何准备写入或重新调用模型。"""
+        sequence, _ = await self._scene(chapter_id, sequence_id)
+        task, result = await self._candidate_task(chapter_id, sequence_id, task_id)
+        review, _ = self._candidate_plan(sequence, task, result)
+        return review
+
+    async def apply_candidate(self, chapter_id: str, sequence_id: str, task_id: str,
+                              body: SceneObjectCandidateApplication) -> SceneObjectCandidateReceipt:
+        """在场次写锁内核对预览，并同时保存整批准备和该任务的原回执。"""
+        sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
+        task, result = await self._candidate_task(chapter_id, sequence_id, task_id)
+        if not result.pending_application:
+            if result.application == body and result.applied_revision is not None:
+                return SceneObjectCandidateReceipt(task_id=task.id, revision=result.applied_revision)
+            raise RevisionConflict('该对象提取结果已应用')
+        review, merged = self._candidate_plan(sequence, task, result)
+        if not review.is_current:
+            raise RevisionConflict('此场次已退出当前划分，不能应用对象候选')
+        if review.source_changed:
+            raise RevisionConflict('已确认场次原文已变化，请重新提取对象')
+        if review.revision != body.expected_revision or review.preview_token != body.preview_token:
+            raise RevisionConflict('场次对象准备已更新，请重新核对差异')
+        revision = review.revision + 1
+        self._save_preparation(sequence, task.input_snapshot['run_args'], merged, revision)
+        result.pending_application = False
+        result.applied_revision = revision
+        result.application = body
+        task.result = result.model_dump(mode='json')
+        await self.db.flush()
+        return SceneObjectCandidateReceipt(task_id=task.id, revision=revision)
+
+    @staticmethod
+    def _save_preparation(sequence: Sequence, args: dict, objects: list[SceneObjectCandidate], revision: int) -> None:
+        """沿用准备存储，使既有分镜输入只读取已采用对象。"""
+        sequence.object_preparation = {'revision': revision, 'source_version': args['source_version'],
+            'source_digest': args['source_digest'], 'objects': [item.model_dump(mode='json') for item in objects]}
+
+    async def complete_extraction(self, task: Task, result: SceneObjectExtraction) -> SceneObjectExtractionResult:
+        """首次适用结果直接交付，其他成功结果保留为待核对候选。"""
         args = task.input_snapshot['run_args']
         sequence = await self.db.scalar(select(Sequence).where(Sequence.id == task.target_id,
             Sequence.chapter_id == task.input_snapshot['chapter_id']).with_for_update().execution_options(populate_existing=True))
-        if sequence is None or not sequence.is_current:
-            raise RevisionConflict('此场次已退出当前划分')
-        if _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start) != args['source_digest']:
-            raise RevisionConflict('场次原文已改变，请重新提取对象')
-        previous = sequence.object_preparation or {}
-        if previous.get('revision', 0) != args['preparation_revision']:
-            raise RevisionConflict('提取期间对象参考已修改，已保留人工选择，请重新提取')
-        by_id = {item['id']: item for item in previous.get('objects', [])}
+        if sequence is None:
+            raise RevisionConflict('此场次已不可用')
         objects = object_candidates(result, args)
-        for candidate in objects:
-            if old := by_id.get(candidate.id):
-                candidate.asset_id = old['asset_id']
-                candidate.image_file_id = old['image_file_id']
-        sequence.object_preparation = {'revision': previous.get('revision', 0) + 1,
-            'source_version': args['source_version'], 'source_digest': args['source_digest'],
-            'objects': [item.model_dump(mode='json') for item in objects]}
+        digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
+        revision = (sequence.object_preparation or {}).get('revision', 0)
+        if sequence.is_current and digest == args['source_digest'] and revision == args['preparation_revision'] == 0:
+            self._save_preparation(sequence, args, objects, 1)
+            return SceneObjectExtractionResult(objects=objects, pending_application=False, applied_revision=1)
+        return SceneObjectExtractionResult(objects=objects, pending_application=True)

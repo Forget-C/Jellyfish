@@ -16,7 +16,7 @@ const project = 'canvas-project', chapter = 'object-test-chapter', excerpt = '�
 const raw = excerpt + '空镜。'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
-    CANVAS_BROWSER_SCENE_OBJECTS: '1', CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'),
+    CANVAS_BROWSER_SCENE_OBJECTS: '1', CANVAS_BROWSER_OBJECT_CANDIDATE: '1', CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'),
     CANVAS_BROWSER_PORT: '8258' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
@@ -138,6 +138,55 @@ try {
   await page.goto(prep)
   await page.getByRole('button', { name: '已有方案', exact: true }).click()
   await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+  await page.goto(management)
+  await page.getByRole('button', { name: '重新提取对象', exact: true }).click()
+  const reviewButton = page.getByRole('button', { name: '核对对象差异', exact: true })
+  await reviewButton.click()
+  const review = page.getByRole('dialog', { name: '核对对象差异', exact: true })
+  await review.getByRole('heading', { name: '新增 1 项', exact: true }).waitFor()
+  await review.getByRole('heading', { name: '移除 1 项', exact: true }).waitFor()
+  await review.getByRole('heading', { name: '保留人工选择 2 项', exact: true }).waitFor()
+  const pending = await read()
+  assert.equal(pending.revision, prepared.revision)
+  assert.deepEqual(pending.objects, prepared.objects)
+  await review.getByRole('button', { name: '暂不应用', exact: true }).click()
+  await review.waitFor({ state: 'hidden' })
+  await page.goto(`${management}&objectTask=${pending.candidate_task_id}`)
+  const apply = review.getByRole('button', { name: '应用整批对象', exact: true })
+  await apply.waitFor()
+  await review.getByRole('heading', { name: '保留人工选择 2 项', exact: true }).waitFor()
+  const previousBack = pending.objects.find(object => object.id === backObject.id)
+  await request(`${objectsUrl}/${backObject.id}`, 'PUT', { expected_revision: pending.revision,
+    asset_id: null, image_file_id: previousBack.image_file_id })
+  await apply.click()
+  await review.getByText(/重新核对差异/).waitFor()
+  await review.getByText('保留参考图', { exact: true }).waitFor()
+
+  const applicationPath = `**/objects/extractions/${pending.candidate_task_id}/apply`
+  let confirmedBody
+  await page.route(applicationPath, async route => {
+    confirmedBody = route.request().postDataJSON()
+    const response = await route.fetch()
+    assert.ok(response.ok(), await response.text())
+    await route.abort('failed')
+  }, { times: 1 })
+  await apply.click()
+  const verify = review.getByRole('button', { name: '核实应用结果', exact: true })
+  await verify.waitFor()
+  const adopted = await read()
+  assert.equal(adopted.revision, pending.revision + 2)
+  assert.equal(adopted.candidate_task_id, null)
+  assert.equal(adopted.objects.find(object => object.id === backObject.id).asset_id, null)
+  assert.equal(adopted.objects.find(object => object.id === backObject.id).image_file_id, previousBack.image_file_id)
+  assert.equal(adopted.objects.find(object => object.kind === 'scene').name, '前门')
+  assert.ok(adopted.assets.some(asset => asset.name === '信封'))
+  assert.deepEqual(await request(canvasUrl), canvasBefore)
+  const replay = page.waitForRequest(req => req.method() === 'POST' && req.url().endsWith('/apply'))
+  await verify.click()
+  assert.deepEqual((await replay).postDataJSON(), confirmedBody)
+  await review.waitFor({ state: 'hidden' })
+  assert.equal((await read()).revision, adopted.revision)
+
   const assetUrl = `${studio}/entities/character/object-browser-character`
   await request(assetUrl, 'DELETE')
   await page.goto(management)
@@ -168,8 +217,8 @@ try {
   assert.equal(await front.getByRole('button', { name: '对象更多操作' }).isDisabled(), true)
   const rejected = (url, method, body) => fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   assert.equal((await rejected(`${objectsUrl}/extractions`, 'POST', { request_id: 'archive-extract' })).status, 422)
-  assert.equal((await rejected(`${objectsUrl}/${backObject.id}`, 'PUT', { expected_revision: prepared.revision, asset_id: null })).status, 422)
-  assert.equal((await read()).revision, prepared.revision)
+  assert.equal((await rejected(`${objectsUrl}/${backObject.id}`, 'PUT', { expected_revision: adopted.revision, asset_id: null })).status, 422)
+  assert.equal((await read()).revision, adopted.revision)
   console.log(JSON.stringify({ output, passed: true }))
 } catch (reason) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true })

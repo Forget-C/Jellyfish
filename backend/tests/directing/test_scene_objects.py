@@ -25,7 +25,8 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
     responses = iter([
         {'objects': [{**first, 'asset_id': 'invented'}]}, {'objects': [first, second]},
         {'objects': [{**first, 'excerpt': '不在原文'}]}, {'objects': [{**first, 'excerpt': '仍不在原文'}]},
-        {'objects': [first, second]}, {'objects': [first, second]},
+        {'objects': [{**first, 'name': '前门来客'}, {'kind': 'prop', 'name': '信封', 'excerpt': '拿着信封'}]},
+        {'objects': [first, second]},
     ])
     calls = []
 
@@ -123,16 +124,163 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             refreshed = await run()
             assert refreshed['task']['status'] == 'succeeded'
             assert refreshed['objects'] == selected['objects']
+            assert refreshed['revision'] == selected['revision']
+            candidate_path = endpoint + '/extractions/' + successful_retry.json()['data']['task_id']
+            assert refreshed['candidate_task_id'] == successful_retry.json()['data']['task_id']
+            result = await client.get(candidate_path + '/candidate')
+            assert result.status_code == 200, result.text
+            preview = result.json()['data']
+            assert [item['name'] for item in preview['added']] == ['信封']
+            assert [item['excerpt'] for item in preview['removed']] == ['后门的阿同']
+            assert preview['modified'][0]['id'] == selected['objects'][0]['id']
+            assert preview['modified'][0]['name'] == '前门来客'
+            assert preview['retained_choices'][0]['image_file_id'] == 'image1'
 
             concurrent = await client.post(endpoint + '/extractions', json={**request, 'request_id': 'concurrent'})
             assert concurrent.status_code == 200, concurrent.text
             edited = await client.put(object_url, json={**choice, 'expected_revision': refreshed['revision'], 'image_file_id': None})
             assert edited.status_code == 200, edited.text
             preserved = await run()
-            assert preserved['task']['status'] == 'failed'
-            assert '对象参考已修改' in preserved['task']['error']
+            assert preserved['task']['status'] == 'succeeded'
+            assert preserved['candidate_task_id'] == concurrent.json()['data']['task_id']
+            assert preserved['revision'] == edited.json()['data']['revision']
             assert preserved['objects'] == edited.json()['data']['objects']
+            assert (await client.get(candidate_path.replace('/p1/', '/p2/') + '/candidate')).status_code == 404
+
+            async def review(path=candidate_path):
+                response = await client.get(path + '/candidate')
+                assert response.status_code == 200, response.text
+                return response.json()['data']
+
+            def apply_command(value):
+                return {'expected_revision': value['revision'], 'preview_token': value['preview_token']}
+
+            old_apply = await client.post(candidate_path + '/apply', json=apply_command(preview))
+            assert old_apply.status_code == 409, old_apply.text
+            rebased = await review()
+            assert rebased['retained_choices'][0]['asset_id'] == 'front-asset'
+            assert rebased['retained_choices'][0]['image_file_id'] is None
+            restored = await client.put(object_url, json={**choice, 'expected_revision': rebased['revision']})
+            assert restored.status_code == 200, restored.text
+            assert (await client.post(candidate_path + '/apply', json=apply_command(rebased))).status_code == 409
+            confirmed = await review()
+            assert confirmed['retained_choices'][0]['image_file_id'] == 'image1'
+            command = apply_command(confirmed)
+            wrong_task = await client.post(candidate_path.replace('/p1/', '/p2/') + '/apply', json=command)
+            assert wrong_task.status_code == 404
+            applied = await client.post(candidate_path + '/apply', json=command)
+            assert applied.status_code == 200, applied.text
+            assert (await client.post(candidate_path + '/apply', json=command)).json() == applied.json()
+            adopted = await read_objects()
+            assert adopted['revision'] == confirmed['revision'] + 1
+            assert adopted['revision'] == applied.json()['data']['revision']
+            assert [(item['name'], item['image_file_id']) for item in adopted['objects']] == [('前门来客', 'image1'), ('信封', None)]
+            assert (await review())['applied_revision'] == adopted['revision']
+            assert len(calls) == 6
+
+            pending_path = endpoint + '/extractions/' + concurrent.json()['data']['task_id']
+            before_source = await review(pending_path)
+            new_text = original + '远景。'
+            assert (await client.patch('/api/v1/studio/chapters/ch1', json={'raw_text': new_text})).status_code == 200
+            assert (await review(pending_path))['preview_token'] == before_source['preview_token']
+            current_chapter = (await client.get(base)).json()['data']
+            scene_path = endpoint.removesuffix('/objects')
+            scene_row = current_chapter['sequences'][0]
+            reconfirmed = await client.put(scene_path, json={'title': scene_row['title'], 'position': scene_row['position'],
+                'expected_version': scene_row['version'], 'source_version': current_chapter['source_version'],
+                'span': {'start': 0, 'end': len(new_text)}})
+            assert reconfirmed.status_code == 200, reconfirmed.text
+            stale = await review(pending_path)
+            assert stale['source_changed'] and stale['preview_token'] is None
+            assert stale['added'] and stale['removed']
+            assert (await client.post(pending_path + '/apply', json=apply_command(before_source))).status_code == 409
+            assert (await read_objects())['objects'] == adopted['objects']
             tasks = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1'})).json()['data']['items']
             assert {item['task_kind'] for item in tasks} == {'directing_object_extract'}
+        finally:
+            worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_first_object_result_survives_source_and_membership_changes(tmp_path, monkeypatch):
+    """Late first results remain readable and cannot overwrite newly adopted preparation."""
+    original = '小雨提包。小雨开门。'
+    calls = []
+
+    class ControlledModel:
+        """Only the provider response is fixed."""
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, messages):
+            calls.append(str(messages))
+            return SimpleNamespace(content='{"objects":[{"kind":"character","name":"小雨","excerpt":"小雨提包"}]}')
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = original
+            db.add(Provider(id='object-provider', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
+            await db.flush()
+            db.add(Model(id='object-model', name='fixture-text', category='text', provider_id='object-provider', params={}))
+
+        def data(response):
+            assert response.status_code == 200, response.text
+            return response.json()['data']
+
+        base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        chapter = data(await client.get(base))
+        source = chapter['source_version']
+        scene = data(await client.post(base + '/sequences', json={'title': '测试场次', 'position': 0,
+            'source_version': source, 'span': {'start': 0, 'end': len(original)}}))
+        scene_path = f"{base}/sequences/{scene['id']}"
+        objects = scene_path + '/objects'
+        worker = TaskWorker(sessions)
+        try:
+            async def submit(request_id):
+                result = data(await client.post(objects + '/extractions', json={'request_id': request_id, 'model_id': 'object-model'}))
+                return f"{objects}/extractions/{result['task_id']}"
+
+            async def work():
+                await worker.tick()
+                await asyncio.gather(*worker.jobs.values())
+
+            async def update_range(row, end):
+                return data(await client.put(scene_path, json={'title': row['title'], 'position': row['position'],
+                    'expected_version': row['version'], 'source_version': source, 'span': {'start': 0, 'end': end}}))
+
+            first = await submit('stale-first')
+            shortened = await update_range(scene, len('小雨提包。'))
+            await work()
+            stale = data(await client.get(first + '/candidate'))
+            assert stale['task']['status'] == 'succeeded' and stale['added'][0]['name'] == '小雨'
+            assert stale['source_changed'] and stale['preview_token'] is None
+            assert data(await client.get(objects))['revision'] == 0
+
+            scene = await update_range(shortened, len(original))
+            second = await submit('first-with-concurrent-application')
+            preview = data(await client.get(first + '/candidate'))
+            command = {'expected_revision': preview['revision'], 'preview_token': preview['preview_token']}
+            adopted = data(await client.post(first + '/apply', json=command))
+            assert adopted['revision'] == 1
+            await work()
+            ready = data(await client.get(second + '/candidate'))
+            assert ready['applied_revision'] is None and ready['preview_token']
+            assert data(await client.get(objects))['revision'] == 1
+
+            draft = {'source_version': source, 'baseline': [{'sequence_id': scene['id'], 'version': scene['version']}],
+                'members': [], 'lineage': [{'sequence_id': scene['id'], 'target_keys': []}],
+                'exited_sequence_ids': [scene['id']]}
+            division = data(await client.post(base + '/division/preview', json=draft))
+            data(await client.put(base + '/division', json={'request_id': 'historical', 'draft': draft,
+                'preview_token': division['preview_token'], 'identity_changes_confirmed': True}))
+            historical = data(await client.get(second + '/candidate'))
+            assert not historical['is_current'] and not historical['source_changed'] and historical['preview_token'] is None
+            rejected = await client.post(second + '/apply', json={'expected_revision': ready['revision'],
+                'preview_token': ready['preview_token']})
+            assert rejected.status_code == 409 and '已退出当前划分' in rejected.text
+            assert data(await client.post(first + '/apply', json=command)) == adopted
+            assert data(await client.get(objects))['revision'] == 1
+            assert len(calls) == 2
         finally:
             worker.text_pool.shutdown(wait=False)
