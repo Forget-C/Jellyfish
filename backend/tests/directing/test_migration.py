@@ -95,10 +95,14 @@ def test_foundation_migration_and_next_upgrade():
         seam_bases.op = migration.op
         seam_bases.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
-        assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
         connection.execute(sa.text("INSERT INTO chapters (id,project_id,`index`,title,summary,raw_text,condensed_text,status) VALUES ('ch','p',1,'ch','','','','draft')"))
         connection.execute(sa.text("INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('seq','ch',0,'scene','{}',1)"))
+        scene_objects = revision_module('d34171ab93f2_add_scene_object_preparation.py')
+        scene_objects.op = migration.op
+        scene_objects.upgrade()
+        assert connection.scalar(sa.text("SELECT object_preparation FROM directing_sequences WHERE id='seq'")) is None
+        assert not compare_metadata(context, Base.metadata)
         for statement in (
             "INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('bad','missing',1,'scene','{}',1)",
             "INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('bad','ch',0,'scene','{}',1)",
@@ -164,6 +168,7 @@ def test_foundation_migration_and_next_upgrade():
         instruction_bases.downgrade()
         scene_versions.downgrade()
         versions.downgrade()
+        scene_objects.downgrade()
         division.downgrade()
         display_numbers.downgrade()
         review_source.downgrade()
