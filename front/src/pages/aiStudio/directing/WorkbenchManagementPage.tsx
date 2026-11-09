@@ -113,6 +113,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const select = (sequenceId: string | undefined, nextStep: WorkbenchManagementStep) => {
     setParams(previous => {
       const next = new URLSearchParams(previous)
+      if (next.get('sequence') !== sequenceId || nextStep !== 'objects') next.delete('objectTask')
       if (sequenceId) next.set('sequence', sequenceId)
       else next.delete('sequence')
       next.set('step', nextStep)
@@ -187,7 +188,12 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                 {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
                   editable={!historical && !!selected.source_excerpt.trim()}
                   management={{ host: objectActions, onContinue: () => select(selected.id, 'storyboard'),
-                    onChange: () => setRevision(value => value + 1) }} />}
+                    onChange: () => setRevision(value => value + 1), candidateTaskId: params.get('objectTask'),
+                    clearCandidateTask: () => setParams(previous => {
+                      const next = new URLSearchParams(previous)
+                      next.delete('objectTask')
+                      return next
+                    }, { replace: true }) }} />}
                 {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} />}
               </section>}
             </>}

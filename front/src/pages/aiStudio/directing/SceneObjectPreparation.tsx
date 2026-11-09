@@ -8,6 +8,7 @@ import { AssetEditPageBase } from '../assets/components/AssetEditPageBase'
 import { assetAdapters } from '../assets/assetAdapters'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { CanvasTextPreview } from './CanvasTextPreview'
+import { SceneObjectCandidateReview } from './SceneObjectCandidateReview'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
@@ -16,7 +17,10 @@ import './workbench-object-preparation.css'
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 const kinds = { character: '角色', scene: '场所', prop: '道具' } as const
 type ObjectChoice = { objectId: string; assetId?: string; imageFileId?: string }
-type ManagementActions = { host: HTMLDivElement | null; onContinue: () => void; onChange: () => void }
+type ManagementActions = {
+  host: HTMLDivElement | null; onContinue: () => void; onChange: () => void;
+  candidateTaskId: string | null; clearCandidateTask: () => void;
+}
 const referenceLabels = { unassociated: '尚未关联资产', missing: '未选参考图', ready: '已选参考图', unavailable: '关联或图片不可用' }
 
 function activeTask(data?: SceneObjectsRead) {
@@ -36,6 +40,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [draft, setDraft] = useState<{ object: SceneObjectRead; name: string; description: string; requestId: string; attempted: boolean }>()
   const [createError, setCreateError] = useState('')
   const [failedChoice, setFailedChoice] = useState<ObjectChoice>()
+  const [localReview, setLocalReview] = useState<string>()
+  const reviewTaskId = management?.candidateTaskId ?? localReview
   const [kindFilter, setKindFilter] = useState<keyof typeof kinds | 'all'>('all')
   const [unpreparedOnly, setUnpreparedOnly] = useState(false)
   const lastRead = useRef<SceneObjectsRead>()
@@ -212,6 +218,15 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       description={data.task.error} />}
     {data?.task?.status === 'cancelled' && <Alert type="warning" message="对象提取已取消，已保留此前准备" />}
     {data?.source_changed && <Alert type="warning" showIcon message="场次原文已变更，请重新提取对象后核对参考。" />}
+    {data?.candidate_task_id && <Alert type="info" showIcon message="对象候选已就绪，当前准备仍可使用。" action={management
+      ? <MainButton onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>核对对象差异</MainButton>
+      : <Button onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>核对对象差异</Button>} />}
+    {reviewTaskId && <SceneObjectCandidateReview key={reviewTaskId} {...scope} taskId={reviewTaskId} editable={editable}
+      onClose={() => {
+        setLocalReview(undefined)
+        if (management?.candidateTaskId) management.clearCandidateTask()
+        void read()
+      }} />}
     {data && !data.objects.length && !error && (management
       ? <p>{data.revision ? '本场未提取到对象，可以继续分镜。' : '尚未提取对象，可提取后准备参考，也可直接继续。'}</p>
       : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.revision ? '本场未提取到对象' : '尚未提取对象'} />)}

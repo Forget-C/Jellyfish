@@ -33,6 +33,9 @@ storyboard_video_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_VIDEO_FIXTU
 control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False, 'check_release': False, 'check_calls': []}
 if storyboard_video_fixture:
     control.update(media_calls=[], media_fail_next=False)
+object_candidate_fixture = os.environ.get('CANVAS_BROWSER_OBJECT_CANDIDATE') == '1'
+if object_candidate_fixture:
+    control['object_extraction_calls'] = 0
 storyboard_recovery_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_RECOVERY') == '1'
 if storyboard_recovery_fixture:
     control.update(storyboard_calls=0, storyboard_release=0, storyboard_fail_on=0)
@@ -99,6 +102,15 @@ class ControlledModel:
                 {'id': 'back', 'excerpt': '后门的阿同等待。', 'object_ids': [objects['后门的阿同']]},
                 *extra,
             ]}, ensure_ascii=False))
+        if object_candidate_fixture:
+            control['object_extraction_calls'] += 1
+            if control['object_extraction_calls'] > 1:
+                return SimpleNamespace(content=json.dumps({'objects': [
+                    {'kind': 'character', 'name': '阿同', 'description': '前门等候', 'excerpt': '前门的阿同',
+                     'asset_id': 'object-browser-character'},
+                    {'kind': 'character', 'name': '阿同', 'description': '后门等候', 'excerpt': '后门的阿同'},
+                    {'kind': 'scene', 'name': '前门', 'excerpt': '前门'},
+                ]}, ensure_ascii=False))
         return SimpleNamespace(content=json.dumps({'objects': [
             {'kind': 'character', 'name': '阿同', 'description': '前门等候', 'excerpt': '前门的阿同',
              'asset_id': 'object-browser-character'},
