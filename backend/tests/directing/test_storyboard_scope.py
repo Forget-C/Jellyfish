@@ -1,0 +1,190 @@
+"""复杂分镜的正式任务、保存和编译使用同一共同画布。"""
+
+import asyncio
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from app.models.llm import Model, Provider
+from app.models.studio import Chapter, Character, CharacterImage
+from app.task_worker import TaskWorker
+from tests.directing.storyboard_scope_fixture import START, END, SCRIPT, complex_design
+from tests.directing.test_api import client_for
+from tests.directing.test_store import database
+
+
+async def read_data(client, method, path, body=None):
+    response = await client.request(method, path, json=body)
+    assert response.status_code == 200, response.text
+    return response.json()['data']
+
+
+def verify_all_design_fields(document, fixture):
+    cards = {card['id']: card for card in document['cards']}
+    storyboard = document['storyboard']
+    shot_ids = {item['id']: row['shot_id'] for item, row in zip(fixture['shots'], storyboard['shots'])}
+    checked = scoped = 0
+    for design in fixture['designs']:
+        prefix = f"scene:design:{design['id']}"
+        items = [(cards[key], origin) for key, origin in storyboard['origins'].items()
+                 if origin['semantic_key'] == prefix or origin['semantic_key'].startswith(prefix + ':scope:')]
+        fields = list(design['fields'].items()) + [('phase:' + row['id'], row['frame']) for row in design.get('phases', [])]
+        for field, original in fields:
+            if field.startswith('phase:'):
+                phase_name = next(row['name'] for row in design['phases'] if 'phase:' + row['id'] == field)
+                matches = [(phase['frame'], origin, 'phase:' + phase['id']) for card, origin in items for phase in card['phases']
+                           if phase['name'] == phase_name]
+            else:
+                matches = [(values[field], origin, field) for card, origin in items
+                           if (values := card.get('fields', card)) and values[field].get('extraction_context') == 'storyboard']
+            [(actual, origin, actual_field)] = matches
+            assert (actual['state'], actual['purpose'], actual['text'], actual['source_locator'], actual['extraction_reason']) == (
+                original['state'], original['purpose'], original['text'], original['excerpt'], original['reason'])
+            evidence = next(item for item in origin['sources'] if item['field_id'] == actual_field)
+            assert SCRIPT[evidence['start']:evidence['end']] == original['excerpt']
+            assert evidence['source_version'] == storyboard['source_version']
+            checked += 1
+            if applies := original.get('scope'):
+                stored = origin['applicability']
+                assert actual_field in stored['fields']
+                assert stored['shot_ids'] == [shot_ids[key] for key in applies['shot_ids']]
+                assert stored['phase'] == applies['phase'] and stored['condition_id'] == applies['condition_id']
+                assert stored['occurrence_ids'] == applies['occurrence_ids']
+                scoped += 1
+    assert (checked, scoped) == (129, 122)
+
+
+@pytest.mark.asyncio
+async def test_complex_scope_reaches_real_compiler_without_expanding_dependencies(tmp_path, monkeypatch):
+    calls = []
+    outputs = []
+
+    class ControlledModel:
+        """替换供应商输出，保留任务、验证、保存及真实编译。"""
+
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, messages):
+            args = json.loads(messages[1].content)
+            if 'organization_inputs' in args:
+                calls.append('organization')
+                assert [item['id'] for item in args['organization_inputs']] == ['rear']
+                segments = [{'id': 'take-out', 'excerpt': START, 'seconds': 9, 'ratio': '16:9'},
+                            {'id': 'lift', 'excerpt': END, 'seconds': 9, 'ratio': '16:9'}]
+                if len(messages) == 2:
+                    segments[0]['ratio'] = '4:5'
+                output = {'shots': [{'id': 'rear', 'segments': segments}]}
+            elif 'mode' in args:
+                calls.append('storyboard')
+                output = complex_design(args['objects'][0]['id'])
+                if len(calls) == 2:
+                    output['designs'][1]['fields']['position']['dependencies'][0]['field_id'] = 'orientation'
+                else:
+                    outputs.append(output)
+            else:
+                calls.append('objects')
+                output = {'objects': [{'kind': 'character', 'name': '林舟', 'description': '码头勘查者',
+                                       'excerpt': '林舟在码头', 'asset_id': 'scope-character'}]}
+            return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = SCRIPT
+            db.add_all([Provider(id='scope-openai', name='openai', base_url='https://fixture.test/v1', api_key='test'),
+                        Provider(id='scope-vidu', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
+                        Character(id='scope-character', project_id='p1', name='林舟', style='真人都市')])
+            await db.flush()
+            db.add_all([Model(id='scope-text', name='fixture-text', category='text', provider_id='scope-openai'),
+                        Model(id='scope-image', name='gpt-image-1', category='image', provider_id='scope-openai'),
+                        Model(id='scope-video', name='viduq2', category='video', provider_id='scope-vidu'),
+                        CharacterImage(character_id='scope-character', file_id='image1')])
+        chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        chapter = await read_data(client, 'GET', chapter_path)
+        scene = await read_data(client, 'POST', chapter_path + '/sequences', {'title': '码头', 'position': 0,
+            'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(SCRIPT)}})
+        endpoint = chapter_path + '/sequences/' + scene['id']
+        worker = TaskWorker(sessions)
+        try:
+            async def work():
+                await worker.tick()
+                await asyncio.gather(*worker.jobs.values())
+
+            await read_data(client, 'POST', endpoint + '/objects/extractions', {'request_id': 'objects', 'model_id': 'scope-text'})
+            await work()
+            prepared = await read_data(client, 'GET', endpoint + '/objects')
+            await read_data(client, 'PUT', endpoint + '/objects/' + prepared['objects'][0]['id'],
+                            {'expected_revision': prepared['revision'], 'asset_id': 'scope-character', 'image_file_id': 'image1'})
+
+            async def build(model):
+                task = await read_data(client, 'POST', endpoint + '/storyboards',
+                    {'request_id': model, 'text_model_id': 'scope-text', 'production_model_id': model})
+                await work()
+                finished = await read_data(client, 'GET', endpoint + '/storyboards/' + task['task_id'])
+                assert finished['status'] == 'succeeded', finished
+                candidate = finished['candidate']
+                path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+                await read_data(client, 'PUT', path, {'request_id': 'storyboard:' + task['task_id'],
+                    'expected_revision': candidate['base_revision'], 'document': candidate['document']})
+                return path, await read_data(client, 'GET', path)
+
+            image_path, image = await build('scope-image')
+            assert calls == ['objects', 'storyboard', 'storyboard']
+            verify_all_design_fields(image['document'], outputs[0])
+            image_story = image['document']['storyboard']
+            first_model = image_story['shots'][0]['model_card_ids'][0]
+            compiled = await read_data(client, 'GET', f'{image_path}/cards/{first_model}/compile')
+            used_cards = {item['source']['card_id'] for item in compiled['used']}
+            origins = image_story['origins']
+            adopted_anchor = [key for key in used_cards if origins.get(key, {}).get('semantic_key', '').startswith('scene:design:anchor')]
+            [anchor_id] = adopted_anchor
+            assert origins[anchor_id]['applicability']['fields'] == ['position']
+            assert all(text in compiled['text'] for text in ('合用前段锚点', '开启画面定位', '前镜调度选择'))
+            assert all(text not in compiled['text'] for text in ('排除后镜锚点', '排除候选锚点', '排除另一镜头画面', '仅声音阶段风声'))
+            assert any(item['payload'].get('frame_target_state', {}).get('label') == '开启画面'
+                       for item in compiled['used'] if item.get('payload'))
+            image_model = next(item for item in image['document']['cards'] if item['id'] == first_model)
+            assert anchor_id not in {item['source']['card_id'] for item in image_model['input_bindings']}
+            assert image_model['frame_targets'][0]['binding_id'] in {item['id'] for item in image_model['input_bindings']}
+            checked = await read_data(client, 'POST', image_path + '/precheck', {'card_id': first_model})
+            assert checked['can_run'], checked['diagnostics']
+            assert [item['file_id'] for item in checked['input']['media']] == ['image1']
+
+            video_path, video = await build('scope-video')
+            assert calls == ['objects', 'storyboard', 'storyboard', 'storyboard', 'organization', 'organization']
+            verify_all_design_fields(video['document'], outputs[1])
+            data = video['document']
+            first, second = data['storyboard']['shots']
+            models = {card['id']: card for card in data['cards'] if card['type'] == 'model.video'}
+            assert [models[key]['config']['seconds'] for key in first['model_card_ids']] == [5]
+            assert [models[key]['config']['seconds'] for key in second['model_card_ids']] == [9, 9]
+            assert [len(segment['object_ids']) for segment in second['segments']] == [1, 2]
+            assert [(use['model_card_id'], use['active']) for use in second['reference_uses']] == [
+                (second['model_card_ids'][0], True), (second['model_card_ids'][1], True), (second['model_card_ids'][1], False)]
+            assert len([card for card in data['cards'] if card['type'] == 'direction.shot']) == 2
+            assert len([card for card in data['cards'] if card['type'] == 'direction.beat']) == 2
+            assert len({item for shot in (first, second) for item in shot['object_ids']}) == 2
+            for model_id, include, exclude in zip(second['model_card_ids'],
+                    ['分段动作取出', '分段动作举高'], ['分段动作举高', '分段动作取出']):
+                checked = await read_data(client, 'POST', video_path + '/precheck', {'card_id': model_id})
+                assert checked['can_run'], checked['diagnostics']
+                assert include in checked['input']['text'] and exclude not in checked['input']['text']
+                assert '仅声音阶段风声' not in checked['input']['text'] and '未满足条件不降灯' not in checked['input']['text']
+                assert checked['input']['media'][0]['file_id'] == 'image1'
+            assert not (await read_data(client, 'GET', video_path + '/runtime'))['runs']
+
+            card = next(item for item in data['cards'] if item['id'] == second['model_card_ids'][1])
+            specific = next(key for key, origin in data['storyboard']['origins'].items()
+                            if origin['semantic_key'].startswith('scene:design:continuity') and
+                            origin.get('applicability', {}).get('fields') == ['after'])
+            card['input_bindings'] = [item for item in card['input_bindings'] if item['source']['card_id'] != specific]
+            detached = {edge['id'] for edge in data['edges'] if edge['source_card'] == specific and edge['target_card'] == card['id']}
+            data['edges'] = [edge for edge in data['edges'] if edge['id'] not in detached]
+            data['input_order'][card['id']]['text'] = [key for key in data['input_order'][card['id']]['text'] if key not in detached]
+            await read_data(client, 'PUT', video_path, {'request_id': 'manual', 'expected_revision': video['revision'], 'document': data})
+            edited = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
+            assert '分段动作举高' not in edited['text']
+        finally:
+            worker.text_pool.shutdown(wait=False)

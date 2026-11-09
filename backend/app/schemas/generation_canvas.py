@@ -771,12 +771,23 @@ class CanvasSourceIndex(BaseModel):
     source_version: str | None = None
 
 
+class CanvasStoryboardApplicability(BaseModel):
+    """工作台原始字段适用声明，普通保存不据此建立关系。"""
+    model_config = ConfigDict(extra='forbid')
+    fields: list[str]
+    shot_ids: list[str]
+    phase: Literal['all', 'image', 'video', 'sound', 'postproduction']
+    condition_id: str | None = None
+    occurrence_ids: list[str]
+
+
 class CanvasStoryboardOrigin(BaseModel):
     """保留创建来源，人工修改不会把提取卡变为人工新增卡。"""
     model_config = ConfigDict(extra='forbid')
     semantic_key: str
     sources: list[CanvasSourceIndex] = Field(default_factory=list)
     manually_edited: bool = False
+    applicability: CanvasStoryboardApplicability | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasStoryboardObject(BaseModel):
@@ -797,6 +808,17 @@ class CanvasStoryboardReferenceUse(BaseModel):
     active: bool
 
 
+class CanvasStoryboardSegment(BaseModel):
+    """同一故事镜头的独立生产卡和明确覆盖。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str
+    occurrence_id: str
+    model_card_id: str
+    basis_card_id: str
+    object_ids: list[str]
+    condition_ids: list[str]
+
+
 class CanvasStoryboardShot(BaseModel):
     """镜头的明确参与关系，与画布分组的显示职责分开。"""
     model_config = ConfigDict(extra='forbid')
@@ -805,6 +827,7 @@ class CanvasStoryboardShot(BaseModel):
     group_id: str
     object_ids: list[str]
     model_card_ids: list[str]
+    segments: list[CanvasStoryboardSegment] = Field(default_factory=list, exclude_if=lambda value: not value)
     reference_uses: list[CanvasStoryboardReferenceUse] = Field(default_factory=list, exclude_if=lambda value: not value)
     reference_overrides: dict[str, str] = Field(default_factory=dict, exclude_if=lambda value: not value)
 

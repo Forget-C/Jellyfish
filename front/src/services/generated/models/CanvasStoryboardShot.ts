@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasStoryboardReferenceUse } from './CanvasStoryboardReferenceUse';
+import type { CanvasStoryboardSegment } from './CanvasStoryboardSegment';
 /**
  * 镜头的明确参与关系，与画布分组的显示职责分开。
  */
@@ -12,6 +13,7 @@ export type CanvasStoryboardShot = {
     group_id: string;
     object_ids: Array<string>;
     model_card_ids: Array<string>;
+    segments?: Array<CanvasStoryboardSegment>;
     reference_uses?: Array<CanvasStoryboardReferenceUse>;
     reference_overrides?: Record<string, string>;
 };

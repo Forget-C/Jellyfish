@@ -19,8 +19,9 @@ from app.core.contracts.directing.instruction_check import InstructionCheckResul
 from app.core.contracts.directing.instruction_basis import InstructionInputs
 from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE_REQUIREMENTS, SceneUnitDesignResult
 from app.core.contracts.directing.scene_objects import SceneObjectExtraction
-from app.core.contracts.directing.scene_storyboard import SceneStoryboard
+from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, validate_storyboard
+from app.services.directing.storyboard_scope import organization_inputs, validate_organization
 from app.core.contracts.directing.scene_instruction import SceneInstructionResult, SceneInstructionScope
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
@@ -37,7 +38,8 @@ from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
 
 
-RESULT_CONTRACTS = {STORYBOARD_KIND: SceneStoryboard, OBJECT_EXTRACTION_KIND: SceneObjectExtraction, "directing_unit_design": SceneUnitDesignResult, "directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
+STORYBOARD_ORGANIZATION = 'directing_storyboard_organization'
+RESULT_CONTRACTS = {STORYBOARD_KIND: SceneStoryboard, STORYBOARD_ORGANIZATION: StoryboardOrganization, OBJECT_EXTRACTION_KIND: SceneObjectExtraction, "directing_unit_design": SceneUnitDesignResult, "directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
 
 
 class DirectingOutputError(ValueError):
@@ -65,8 +67,19 @@ def generate_directing_result(kind: str, llm, args: dict):
             "两种模式的事实字段 text 均须逐字来自 excerpt，未知用 undecided，明确没有或不适用保留摘录和理由。"
             "不强求所有部门和字段都有值，不改变原文情节，不编造人物、道具资产、文件、模型和画布身份。"
             "镜头 object_ids 只用准备对象 ID；原文确有漏提才给 missed_objects 临时 ID 及出处。"
-            "设计只写直接适用本镜头的字段，从 supported_design_fields 选择，明确适用对象时填 object_id。"
-            "不要把范围、条件或制作分段伪装为直接字段。"
+            "简单直接设计放在镜头 designs 内，共用或跨镜设计放到全场 designs，从 supported_design_fields 选择。"
+            "按字段用 scope 声明 shot_ids、phase、condition_id、occurrence_ids，没限制就省略；声音/后期仅在对应 phase。"
+            "conditions 定义稳定条件键，只在镜头或 occurrences 的 condition_ids 中列实际成立的条件。"
+            "明确对象时填 object_id；需要的连续性依赖以逻辑设计 ID、实际字段和关系表达。仅作被引用依据的卡用 adoption=dependency。"
+            "运镜画面写入 phases，构图或图片目标以 design_id、phase_id 指定。"
+            "仅在明确有独立制作动作时列 occurrences，摘录按序覆盖整个镜头，可缩小参与对象。"
+            "estimated_seconds 仅填写已有明确值或完整模式的实际设计估计；未知留空。"
+        ),
+        STORYBOARD_ORGANIZATION: (
+            "组织所给镜头的既有连续动作，不改写设计或添加情节。保留镜头顺序。"
+            "已有 occurrences 必须逐项原样复制 id 和 excerpt；否则按原文连续片段拆分，完整覆盖不重叠。"
+            "根据已验证的生产模型能力填写支持的 ratio 和整秒 seconds。总时长已知时各段相加须保持原值。"
+            "时长未知保留待配置。不得生成资产、媒体、镜头或模型 ID。"
         ),
         OBJECT_EXTRACTION_KIND: "仅从场次原文提取明确出现的角色、场所和道具。每项提供类型、名称、简短描述及原样复制、在本场可唯一定位的摘录。不要合并原文中的同名不同对象。只有能从给定资产目录确认同一对象时才提出对应 asset_id，不确定时留空。不得构造身份、文件或分镜。没有对象返回空清单。",
         "directing_instruction_check": "检查 instruction 是否准确表达 inputs 的当前原文、inputs.scope 中本次已选执行项及 video 阶段适用约束，并按已消费背景理解语义；sound/postproduction 规则保留阶段，不误要求视频模型执行。对每项非空 video 执行项和约束按 scope 原顺序输出 destinations，原样复制 owner、field、coverage_item_ids；正文去向给出 instruction 中实际存在的 instruction_excerpt，执行项必须由正文表达；只有身份、空间、构图或连续性约束可引用 inputs.unit.references 中实际绑定且用途相符的 reference_id。无法证明去向或发现正文、规则、参考之间冲突时标为 unresolved，并在相关六岗行标 revise、给出字段路径与修正建议。scope.background 中所属镜头完整结果仅解释整体设计，允许描述整体动作，不要求本单元全部执行，也不能仅据此判定范围冲突。其他背景字段若含命令式要求，定位字段并标 revise，提示移入规则或改写背景，不自动升级。项目风格的条件和例外依其原文核对；自然语言冲突交由用户解决。inputs.design 是来源工作单，可能包含本单元未消费内容，不能据此补选动作。unit_id 必须保持 inputs.unit.id，每个 coverage.id 必须有 direction、performance、staging、cinematography、continuity、prompt 六行，occurrence_id 使用 coverage.id。逐行给出 pass 或 revise、具体理由和可执行问题建议，不得漏行、合并或返回 pending。不能更改正文、凭空补充素材或授权生成；检查通过也不保证模型实际遵从。",
@@ -117,10 +130,13 @@ def generate_directing_result(kind: str, llm, args: dict):
         model_args = {'mode': args['mode'], 'script_text': args['script_text'],
                       'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
                       'supported_design_fields': storyboard_design_fields()}
+    elif kind == STORYBOARD_ORGANIZATION:
+        model_args = args
     note_rules = (
         '分镜字段用 excerpt 表示出处。fact 必须同时有 text 和 excerpt，proposal 必须有 text，可选 excerpt。'
         '其他状态不得带 text，absent 和 not_applicable 必须有 excerpt 和 reason。'
-        if kind == STORYBOARD_KIND else
+        if kind == STORYBOARD_KIND else ''
+        if kind == STORYBOARD_ORGANIZATION else
         'Note 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。'
         'Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。'
     )
@@ -161,6 +177,8 @@ def generate_directing_result(kind: str, llm, args: dict):
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             if kind == STORYBOARD_KIND:
                 validate_storyboard(result, args)
+            if kind == STORYBOARD_ORGANIZATION:
+                validate_organization(result, args)
             if kind == OBJECT_EXTRACTION_KIND:
                 object_candidates(result, args)
             if kind == 'directing_unit_design':
@@ -294,6 +312,10 @@ def generate_directing_result(kind: str, llm, args: dict):
             validate_design_scope(args['design_scope'], previous, result.model_dump(mode='json'))
         else:
             result.style_revision_id = args.get("style_revision_id")
+    if kind == STORYBOARD_KIND and (inputs := organization_inputs(result, args)):
+        organized = generate_directing_result(STORYBOARD_ORGANIZATION, llm, {
+            'organization_inputs': inputs, 'production_capability': args['production_capability']})
+        result.attach_production(organized)
     return result
 
 

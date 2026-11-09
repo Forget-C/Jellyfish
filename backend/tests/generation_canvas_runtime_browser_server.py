@@ -41,6 +41,20 @@ class ControlledModel:
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)
+        if os.environ.get('CANVAS_BROWSER_STORYBOARD_SCOPE') == '1':
+            from tests.directing.storyboard_scope_fixture import START, END, complex_design
+            if 'organization_inputs' in args:
+                result = {'shots': [{'id': 'rear', 'segments': [
+                    {'id': 'take-out', 'excerpt': START, 'seconds': 9, 'ratio': '16:9'},
+                    {'id': 'lift', 'excerpt': END, 'seconds': 9, 'ratio': '16:9'},
+                ]}]}
+            elif 'mode' in args:
+                result = complex_design(args['objects'][0]['id'])
+                result['designs'] = result['designs'][:6]
+            else:
+                result = {'objects': [{'kind': 'character', 'name': '林舟', 'description': '码头勘查者',
+                                       'excerpt': '林舟在码头', 'asset_id': 'object-browser-character'}]}
+            return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
         assert '前门的阿同' in args['script_text']
         if args.get('mode') in ('complete', 'faithful'):
             objects = {item['excerpt']: item['id'] for item in args['objects']}
@@ -207,6 +221,10 @@ async def prepare():
                 image_model = 'story-image-model'
                 db.add(Model(id=image_model, name='分镜测试图片模型', provider_id=provider_id, category='image'))
                 await db.flush()
+            if os.environ.get('CANVAS_BROWSER_STORYBOARD_SCOPE') == '1':
+                db.add(Provider(id='scope-browser-vidu', name='vidu', api_key='fixture', base_url='https://fixture.test/v1'))
+                await db.flush()
+                db.add(Model(id='scope-browser-video', name='viduq2', provider_id='scope-browser-vidu', category='video'))
             db.add(ModelSettings(id=1, default_text_model_id=model_id, default_image_model_id=image_model))
             db.add(Character(id='object-browser-character', project_id=project_id, name='已有角色', style='真人都市'))
             db.add(FileItem(id='object-browser-image', type='image', name='已有角色图片', storage_key='fixture/asset.png',
