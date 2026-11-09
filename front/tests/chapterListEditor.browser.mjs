@@ -43,15 +43,21 @@ try {
       if (url.searchParams.get('is_desc') === 'true') matching = [...matching].reverse()
       return respond({ items: matching.slice((pageNumber - 1) * size, pageNumber * size), pagination: { page: pageNumber, page_size: size, total: matching.length, max_page: Math.ceil(matching.length / size) } })
     }
-    const management = path.match(/\/projects\/p1\/directing\/chapters\/([^/]+)\/workbench-management$/)
-    if (management?.[1] === 'foreign') return route.fulfill({ status: 404, json: { detail: '章节不属于当前项目' } })
-    if (management) return respond({
-      chapter_id: management[1], title: chapters.find(ch => ch.id === management[1]).title,
-      source_version: 'v1', has_source: true, historical_sequences: [],
-      sequences: management[1] === 'ch1' ? [1, 2].map(i => ({
-        id: `s${i}`, position: i - 1, title: `场次 ${i}`, source_excerpt: '她推开门。', source_changed: sourceChanged,
-      })) : [],
-    })
+    const directingChapter = path.match(/\/projects\/p1\/directing\/chapters\/([^/]+)(?:\/(workbench-management|division\/history))?$/)
+    if (directingChapter) {
+      const [, id, resource] = directingChapter
+      const chapter = chapters.find(ch => ch.id === id)
+      if (!chapter) return route.fulfill({ status: 404, json: { detail: '章节不属于当前项目' } })
+      if (resource === 'division/history') return respond({ items: [], total: 0, active_task_ids: [] })
+      return respond({
+        chapter_id: id, title: chapter.title, raw_text: chapter.raw_text,
+        source_version: 'v1', has_source: true, historical_sequences: [],
+        sequences: id === 'ch1' ? [1, 2].map(i => ({
+          id: `s${i}`, position: i - 1, title: `场次 ${i}`, version: 1,
+          source_excerpt: '她推开门。', source_text: '她推开门。', source_changed: sourceChanged,
+        })) : [],
+      })
+    }
     const overview = path.match(/\/directing\/chapters\/(ch\d+)\/overview$/)
     if (overview) return respond({ chapter_id: overview[1], title: chapters.find(ch => ch.id === overview[1]).title, source_version: 'v1', sequences: overview[1] === 'ch1' ? [1, 2].map(i => ({ id: `s${i}`, position: i - 1, title: `场次 ${i}`, source_excerpt: '她推开门。', source_changed: sourceChanged, design_count: 0, confirmed_design_count: 0, plan_count: 0, confirmed_plan_count: 0, take_count: 0, unreviewed_take_count: 0, active_cut_revision_id: null })) : [] })
     const chapterRead = path.match(/\/studio\/chapters\/([^/]+)$/)

@@ -332,4 +332,5 @@ if __name__ == '__main__':
     asyncio.run(prepare())
     app.router.lifespan_context = lifespan
     app.dependency_overrides[get_db] = database
-    uvicorn.run(app, host='127.0.0.1', port=int(os.environ.get('CANVAS_BROWSER_PORT', '8276')))
+    uvicorn.run(app, host='127.0.0.1', port=int(os.environ.get('CANVAS_BROWSER_PORT', '8276')),
+                timeout_graceful_shutdown=5)
