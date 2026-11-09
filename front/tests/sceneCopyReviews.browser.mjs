@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
+import { locateCanvasNode } from './workbenchControls.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -67,36 +68,44 @@ try {
   assert.equal(seamResponse.status, 200, await seamResponse.clone().text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('button', { name: '用于章节', exact: true }).click()
-  await page.getByText('章节当前使用：覆盖编辑验收', { exact: true }).waitFor()
+  const publishDelivery = async (id, revision) => {
+    const response = await fetch(`${versionsUrl}/${id}/deliveries`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: revision }),
+    })
+    assert.equal(response.status, 200, await response.clone().text())
+  }
+  await publishDelivery(version.id, savedVersion.revision)
   const deliveriesUrl = `${api}/api/v1/studio/projects/canvas-project/directing/chapters/canvas-chapter/deliveries`
   const beforeCopy = (await (await fetch(deliveriesUrl)).json()).data
   assert.equal(beforeCopy.sequences[0].delivery.version_id, version.id)
+  await page.getByRole('button', { name: '版本管理', exact: true }).click()
   await page.getByRole('button', { name: '另存为新版本', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('version') !== version.id)
   const copiedId = new URL(page.url()).searchParams.get('version')
   assert.deepEqual((await (await fetch(deliveriesUrl)).json()).data, beforeCopy)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
-  await page.getByRole('button', { name: '时间线', exact: true }).click()
+  await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
+  await locateCanvasNode(page, '时间线')
   await page.getByText('当前画面验收通过', { exact: true }).waitFor()
   await page.getByText(`引用原版本审片：${version.id}`, { exact: true }).waitFor({ timeout: 5000 })
   await page.getByRole('button', { name: '审查接缝：片段 1 → 2', exact: true }).click()
   await page.getByText(`引用原版本接缝审查：${version.id}`, { exact: true }).waitFor({ timeout: 5000 })
-  await page.getByRole('button', { name: '同场次素材', exact: true }).click()
+  await locateCanvasNode(page, '同场次素材')
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
-  await page.getByRole('button', { name: '方案判断', exact: true }).click()
+  await locateCanvasNode(page, '方案判断')
   await page.getByText('当前判断与固定审片依据一致', { exact: true }).waitFor()
   await page.getByText(`引用原版本素材审查：${version.id}`, { exact: true }).waitFor({ timeout: 5000 })
-  await page.getByText('章节当前使用：覆盖编辑验收', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '更新到章节', exact: true }).click()
-  await page.getByText('章节当前使用：覆盖编辑验收（副本）', { exact: true }).waitFor()
+  assert.deepEqual((await (await fetch(deliveriesUrl)).json()).data, beforeCopy)
+  const copy = (await (await fetch(`${versionsUrl}/${copiedId}`)).json()).data
+  await publishDelivery(copiedId, copy.revision)
   const delivery = (await (await fetch(`${api}/api/v1/studio/projects/canvas-project/directing/chapters/canvas-chapter/deliveries`)).json()).data.sequences[0].delivery
   assert.equal(delivery.version_id, copiedId)
   assert.equal(delivery.review_id, review.id)
   assert.equal(delivery.review.verdict, 'pass')
   assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}/cut-reviews`)).json()).data, [review])
-  console.log(`PASS copied cut review provenance and explicit chapter delivery; evidence: ${output}`)
+  console.log(`PASS copied cut review provenance and retained chapter delivery API; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})
   console.error(`Browser evidence: ${output}`)

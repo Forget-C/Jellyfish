@@ -4,6 +4,7 @@ type Stage = 'design' | 'shoot' | 'cut'
 type Action = { label: string; view: Stage | null }
 
 export type WorkbenchManagementStep = 'division' | 'objects' | 'storyboard'
+export const chapterCompositionRetired = { chapterCompositionRetired: true }
 
 export function managementStep(value?: string | null): WorkbenchManagementStep | undefined {
   return value === 'division' || value === 'objects' || value === 'storyboard' ? value : undefined

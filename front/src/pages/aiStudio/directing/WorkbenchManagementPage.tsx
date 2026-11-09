@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { EditOutlined, MenuOutlined, MoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Drawer, Dropdown, Empty, Grid, Input, Spin } from 'antd'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { usePageTitle } from '../../../layouts/pageTitle'
 import { StudioDirectingService, type ChapterWorkbenchManagement, type WorkbenchSceneSummary } from '../../../services/generated'
@@ -65,6 +65,7 @@ function SceneList({ overview, selected, historyOpen, setHistoryOpen, onSelect }
 }
 
 function ChapterManagement({ projectId, chapterId }: { projectId: string; chapterId: string }) {
+  const { state } = useLocation()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [overview, setOverview] = useState<ChapterWorkbenchManagement>()
@@ -165,6 +166,8 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       {overview && <span className="management-chapter-name">{overview.title}</span>}
       <div className="app-page-actions"><Link to={chapterLocation(projectId, chapterId)}>返回章节</Link></div>
     </PageToolbar>
+    {state?.chapterCompositionRetired === true && <Alert type="info" showIcon
+      message="章节组合已停用，可在工作台管理中继续准备场次。" />}
     {error && <Alert showIcon type="error" message={error} action={<Button size="small" onClick={() => {
       setError('')
       setRevision(value => value + 1)

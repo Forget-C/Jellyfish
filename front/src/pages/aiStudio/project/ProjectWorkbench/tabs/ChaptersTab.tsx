@@ -12,7 +12,6 @@ import { chapterAction, chapterLocation, readChapterBrowse, saveChapterBrowse } 
 import { SequenceDetails } from '../../../directing/SequenceDetails'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { ChapterSourcePanel } from '../../../directing/ChapterSourcePanel'
-import { ChapterDeliveryPanel } from '../../../directing/ChapterDeliveryPanel'
 import '../../../directing/workspace.css'
 
 /** 章节表格负责总览；仅打开指定章节后加载场次管理内容。 */
@@ -159,13 +158,10 @@ function ChaptersContent() {
             { title: '原文预览', key: 'preview', responsive: ['lg'], render: (_, chapter) => <p className="chapter-table-preview">{chapter.rawText || '未填写原文'}</p> },
             { title: '原文字数', key: 'words', width: 100, responsive: ['md'], render: (_, chapter) => chapter.rawText?.length ?? 0 },
             { title: '场次数量', key: 'count', width: 100, render: (_, chapter) => <Button type="link" aria-label={`${chapter.title} · ${chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}`} onClick={() => openAction(chapter, true)}>{chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}</Button> },
-            { title: '操作', key: 'actions', width: 160, render: (_, chapter) => <Space wrap size={4}><Button type="primary" onClick={() => openAction(chapter)}>{chapterAction(chapter).label}</Button><Button onClick={() => {
-              trigger.current = document.activeElement as HTMLElement
-              navigate(`${chapterLocation(projectId, chapter.id)}&panel=assembly`)
-            }}>章节组合</Button></Space> },
+            { title: '操作', key: 'actions', width: 160, render: (_, chapter) => <Button type="primary" onClick={() => openAction(chapter)}>{chapterAction(chapter).label}</Button> },
           ]} />}
     </Card>
-    <Drawer title={`${panel === 'source' ? '划分场次' : panel === 'assembly' ? '章节组合' : '场次管理'}${selectedChapter ? ` · ${selectedChapter.title}` : ''}`}
+    <Drawer title={`${panel === 'source' ? '划分场次' : '场次管理'}${selectedChapter ? ` · ${selectedChapter.title}` : ''}`}
       width={panel === 'source' ? '100vw' : 'min(1180px, 96vw)'} rootClassName="chapter-manager" open={!!chapterId && !editingId} onClose={closePanel} destroyOnClose
       afterOpenChange={open => { if (!open && !editingId) restoreFocus() }}>
       {chapterError ? <Alert type="error" message={chapterError} action={<Button onClick={() => setChapterRetry(value => value + 1)}>重试</Button>} />
@@ -173,8 +169,7 @@ function ChaptersContent() {
           {!panel && <Space wrap style={{ marginBottom: 16 }}><Button onClick={() => showSource()}>调整划分</Button></Space>}
           {panel === 'source' ? <ChapterSourcePanel key={chapterId} projectId={projectId} chapterId={chapterId} refreshKey={revision} sequenceId={params.get('mode') === 'manual' ? sequenceId : undefined}
             onChanged={id => { saveChapterBrowse(projectId, chapterId, { sequence: id }); setRevision(value => value + 1); void refresh() }} onEdit={editCurrent} />
-            : panel === 'assembly' ? <ChapterDeliveryPanel projectId={projectId} chapterId={chapterId} />
-              : <div className={`chapter-scenes-layout${sequenceId ? ' has-selection' : ''}`}>
+            : <div className={`chapter-scenes-layout${sequenceId ? ' has-selection' : ''}`}>
                 <div className="chapter-scenes-list"><ChapterSceneList key={chapterId} projectId={projectId} chapterId={chapterId}
                   selectedId={sequenceId} refreshKey={revision} onDetails={selectSequence} onRestore={selectSequence} onSource={() => showSource()} /></div>
                 {sequenceId ? <SequenceDetails projectId={projectId} chapterId={chapterId} sequenceId={sequenceId}

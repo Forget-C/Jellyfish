@@ -1,5 +1,6 @@
 import type React from 'react'
 import { lazy, Suspense } from 'react'
+import { Alert } from 'antd'
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation, useParams } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
@@ -20,6 +21,7 @@ import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
 import { WorkbenchManagementPage } from './pages/aiStudio/directing/WorkbenchManagementPage'
+import { chapterCompositionRetired, workbenchManagementLocation } from './pages/aiStudio/directing/chapterNavigation'
 import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
 import { SceneCanvasWorkbench } from './pages/aiStudio/directing/SceneCanvasWorkbench'
 import { GenerationCanvasRoute } from './pages/aiStudio/generationCanvas/GenerationCanvasRoute'
@@ -34,12 +36,18 @@ function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
   return <Navigate to={`/lab?${params.toString()}`} replace />
 }
 
-/** 旧画布链接直接转入独立工作区，不初始化项目页的章节加载。 */
+/** 旧画布和章节组合链接在初始化项目页之前重定向。 */
 function ProjectEntry() {
   const location = useLocation()
   const { projectId } = useParams()
-  return projectId && new URLSearchParams(location.search).get('tab') === 'generation'
-    ? <Navigate replace to={generationCanvasLocation(projectId, new URLSearchParams(location.search))} />
+  const params = new URLSearchParams(location.search)
+  if (projectId && params.get('panel') === 'assembly') {
+    const chapterId = params.get('chapter')
+    return chapterId ? <Navigate replace to={workbenchManagementLocation(projectId, chapterId, params.get('sequence') || undefined)}
+      state={chapterCompositionRetired} /> : <Alert type="error" showIcon message="章节组合已停用，旧链接缺少章节标识。" />
+  }
+  return projectId && params.get('tab') === 'generation'
+    ? <Navigate replace to={generationCanvasLocation(projectId, params)} />
     : <ProjectWorkbench />
 }
 
