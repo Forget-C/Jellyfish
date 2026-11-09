@@ -46,10 +46,11 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       if (generation === loadVersion.current) setLoading(false)
     }
   }, [projectId, chapterId, sequenceId])
+  const invalidateRead = useCallback(() => { loadVersion.current++ }, [])
   useEffect(() => {
     void read()
-    return () => { loadVersion.current++ }
-  }, [read])
+    return invalidateRead
+  }, [read, invalidateRead])
   const running = activeTask(data)
   useEffect(() => {
     if (!running || submitting || saving) return
