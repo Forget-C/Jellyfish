@@ -102,7 +102,7 @@ try {
   })
   await text.fill('丢失回执的保存')
   await page.getByRole('button', { name: '保存画布' }).click()
-  await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
+  await page.getByRole('alert').getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
   const verified = []
   await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}`)
   await page.route(`**/generation-canvases/canvas-project/${canvas.id}`, async route => {

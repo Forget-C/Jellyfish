@@ -40,6 +40,7 @@ try {
   await page.goto(`http://127.0.0.1:4276/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   const sourceSummary = page.locator('[data-card-id="m"]')
   const card = page.locator('.wb-details:visible')
+  const runStatus = text => card.getByRole('region', { name: '本次运行', exact: true }).getByRole('status').filter({ hasText: text })
   await openCanvasCard(page, 'consumer')
   assert.equal(await card.getByRole('button', { name: '@文本1', exact: true }).count(), 0, 'future output is not offered')
   await openCanvasCard(page, 'm')
@@ -138,7 +139,7 @@ try {
   assert.equal((await control()).calls.length, 1)
   assert.equal((await (await fetch(`${base}/${canvas.id}`)).json()).data.revision, savedRevision, 'runtime increments never save the document')
   await control({ release: 2 })
-  await card.getByRole('status').filter({ hasText: '已完成' }).waitFor()
+  await runStatus('已完成').waitFor()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段第三段')
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }).locator('.canvas-text-preview > p'), '第一段第二段第三段')
   assert.equal((await control()).calls.length, 1)
@@ -156,7 +157,7 @@ try {
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await control({ release: 2 })
-  await card.getByRole('status').filter({ hasText: '失败 · 未完成' }).waitFor()
+  await runStatus('失败 · 未完成').waitFor()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }).locator('.canvas-text-preview > p'), '第一段第二段第三段')
   assert.equal((await control()).calls.length, 2)
@@ -171,7 +172,7 @@ try {
   await page.screenshot({ path: join(output, 'runtime-failure.png'), fullPage: true })
   await page.reload()
   await openCanvasCard(page, 'm')
-  await card.getByRole('status').filter({ hasText: '失败 · 未完成' }).waitFor()
+  await runStatus('失败 · 未完成').waitFor()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
   assert.equal((await control()).calls.length, 2)
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }).locator('.canvas-text-preview > p'), '第一段第二段第三段')
@@ -179,9 +180,16 @@ try {
   // Structured precheck diagnostics locate the actual offending card.
   await openCanvasCard(page, 'consumer')
   assert.equal(await card.getByRole('button', { name: '预检运行', exact: true }).isDisabled(), true, 'empty input is explained before submission')
-  await card.getByRole('textbox', { name: '模型正文', exact: true }).fill('定位诊断用正文')
-  await card.locator('.generation-material-model').hover()
-  await card.locator('.generation-material-model .ant-select-clear').click()
+  const beforeDiagnostic = (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const diagnosticCards = beforeDiagnostic.document.cards.map(item => item.id === 'consumer'
+    ? { ...item, model_id: null, prompt: { segments: [{ id: 'diagnostic', kind: 'text', text: '定位诊断用正文' }] } }
+    : item)
+  const diagnosticSave = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    request_id: 'missing-model-fixture', expected_revision: beforeDiagnostic.revision, document: { ...beforeDiagnostic.document, cards: diagnosticCards },
+  }) })
+  assert.ok(diagnosticSave.ok, await diagnosticSave.text())
+  await page.reload()
+  await openCanvasCard(page, 'consumer')
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const diagnostic = preview.getByRole('alert').filter({ hasText: 'MODEL_REQUIRED' })
   await diagnostic.waitFor()
@@ -196,7 +204,7 @@ try {
   await task.getByRole('button', { name: /查看/ }).click()
   await page.waitForURL(url => url.pathname === '/projects/canvas-project/generation-canvas' && url.searchParams.get('canvas') === canvas.id && url.searchParams.has('run') && url.searchParams.has('node'))
   await openCanvasCard(page, 'm')
-  await card.getByRole('status').filter({ hasText: '失败 · 未完成' }).waitFor()
+  await runStatus('失败 · 未完成').waitFor()
   console.log(JSON.stringify({ output, success: true, calls: (await control()).calls.length }))
 } catch (reason) {
   if (page) { console.log((await page.locator('body').innerText()).slice(-9000)); await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }) }
