@@ -1,5 +1,7 @@
 """参考映射的就绪条件；草稿校验不阻止自动保存，也不虚构有效输出。"""
-from app.schemas.generation_canvas import NamedImageReferenceCard, ObjectDescriptionCard
+from app.schemas.generation_canvas import (
+    CanvasDiagnostic, ModelCard, NamedImageReferenceCard, ObjectDescriptionCard, ShotDesignCard,
+)
 
 
 def reference_name_issue(document, card):
@@ -16,6 +18,44 @@ def reference_name_issue(document, card):
            and (item.angle.strip() or '正面') == (card.angle.strip() or '正面') for item in document.cards) > 1:
         return 'DUPLICATE_REFERENCE_NAME', '同类型、同名称、同角度的参考已存在'
     return None
+
+
+def _reference_object(card):
+    return card.name_binding.object_id if card.name_binding else card.object_id or card.id
+
+
+def storyboard_reference_warnings(context, card, capability):
+    """提示当前生产卡未采用的有效空占位；实际采用继续走正常输入校验。"""
+    storyboard = context.document.storyboard
+    if not storyboard or not isinstance(card, ModelCard) or not capability:
+        return []
+    port = {'model.image': 'image', 'model.video': 'subject_image'}.get(card.type)
+    if capability.modality != card.type.removeprefix('model.') or port not in capability.input_ports:
+        return []
+    bindings = {binding.id for binding in card.input_bindings}
+    adopted = {
+        _reference_object(source)
+        for binding in card.input_bindings
+        if binding.input_port == port and binding.source.port_id == 'image'
+        and isinstance(source := context.cards.get(binding.source.card_id), NamedImageReferenceCard)
+    }
+    defaults = {row.object_id: row.reference_card_id for row in storyboard.objects}
+    warnings = {}
+    for shot in storyboard.shots:
+        design = context.cards.get(shot.card_id)
+        if card.id not in shot.model_card_ids or not isinstance(design, ShotDesignCard) or design.shot_id != shot.shot_id:
+            continue
+        for use in shot.reference_uses:
+            if (use.model_card_id != card.id or use.active or use.binding_id in bindings
+                    or use.object_id not in shot.object_ids or use.object_id in adopted):
+                continue
+            reference = context.cards.get(shot.reference_overrides.get(use.object_id, defaults.get(use.object_id)))
+            if (isinstance(reference, NamedImageReferenceCard) and not reference.image_binding
+                    and _reference_object(reference) == use.object_id and not reference_name_issue(context.document, reference)):
+                warnings[reference.id] = CanvasDiagnostic(
+                    code='CREATIVE_REFERENCE_IMAGE_MISSING', message=f'{reference.name} 尚未选择创作参考图，可确认不携带该图片继续',
+                    severity='warning', target={'card_id': reference.id, 'path': []}, blocks=[])
+    return list(warnings.values())
 
 
 def clean_reference_image_sources(document, previous=None):

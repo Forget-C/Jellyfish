@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from app.models.generation_canvas import CanvasRun, CanvasRunNode
 from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead
 from app.services.generation_canvas.output_resolution import CanvasOutputContext
+from app.services.generation_canvas.reference_rules import storyboard_reference_warnings
 from app.services.generation_canvas.execution_basis import digest, restore_basis
 
 
@@ -28,8 +29,9 @@ async def plan(current_state, canvas, command, *, lock_config=False):
     nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis, 'hash': basis.basis_hash,
         'dependencies': [], 'private': basis.to_snapshot()}}
     reused = {item.result_set_id for item in compiled.used if item.result_set_id}
-    return {'nodes': nodes, 'diagnostics': compiled.diagnostics,
-        'can_run': compiled.can_run and not any('run' in issue.blocks for issue in compiled.diagnostics),
+    diagnostics = compiled.diagnostics + storyboard_reference_warnings(context, basis.card, basis.capability)
+    return {'nodes': nodes, 'diagnostics': diagnostics,
+        'can_run': compiled.can_run and not any('run' in issue.blocks for issue in diagnostics),
         'reused': sorted(reused), 'hash': digest({key: {'hash': item['hash'], 'dependencies': item['dependencies']} for key, item in nodes.items()})}
 
 

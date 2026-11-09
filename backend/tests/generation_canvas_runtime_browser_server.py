@@ -1,4 +1,4 @@
-"""Isolated real HTTP + TaskWorker fixture, fake only external text provider."""
+"""Isolated real HTTP + TaskWorker fixture, controlled external providers."""
 import asyncio
 import json
 import os
@@ -28,7 +28,10 @@ project_id = os.environ.get('CANVAS_BROWSER_PROJECT_ID', 'canvas-project')
 provider_id = project_id + '-provider' if database_url else 'canvas-runtime-provider'
 model_id = project_id + '-text' if database_url else 'canvas-runtime-text'
 sessions = async_sessionmaker(engine, expire_on_commit=False)
+storyboard_video_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_VIDEO_FIXTURE')
 control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False, 'check_release': False, 'check_calls': []}
+if storyboard_video_fixture:
+    control.update(media_calls=[], media_fail_next=False)
 
 
 class ControlledModel:
@@ -135,6 +138,8 @@ async def set_control(body: dict = Body(...)):
     for key in ('release', 'release_for', 'fail_next', 'duplicate_next', 'check_release'):
         if key in body:
             control[key] = body[key]
+    if storyboard_video_fixture and 'media_fail_next' in body:
+        control['media_fail_next'] = body['media_fail_next']
     return control
 
 
@@ -156,12 +161,26 @@ async def lifespan(_app):
                 yield chunk
     stream.stream_events = controlled_stream
     client = None
-    if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
+    if storyboard_video_fixture or os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
         import httpx
-        def image_provider(request):
+
+        def media_provider(request):
+            if storyboard_video_fixture and request.method == 'POST':
+                control['media_calls'].append({'path': request.url.path, 'body': json.loads(request.content)})
+                if control['media_fail_next']:
+                    control['media_fail_next'] = False
+                    return httpx.Response(400, json={'message': 'controlled media failure'})
+            if storyboard_video_fixture and request.url.host == 'video.test':
+                if request.method == 'POST':
+                    return httpx.Response(200, json={'task_id': 'storyboard-video'})
+                return httpx.Response(200, json={'status': 'succeeded', 'creations': [{'url': 'https://media.test/storyboard.mp4'}]})
+            if storyboard_video_fixture and request.url.host == 'media.test':
+                return httpx.Response(200, content=Path(storyboard_video_fixture).read_bytes(),
+                                      headers={'Content-Type': 'video/mp4'})
             assert request.method == 'POST' and request.url.host == 'fixture.test'
             return httpx.Response(200, json={'data': [{'b64_json': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII='}]})
-        client = httpx.AsyncClient(transport=httpx.MockTransport(image_provider))
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(media_provider))
     worker = TaskWorker(sessions, client=client)
     async def tick():
         while True:
@@ -197,6 +216,10 @@ async def prepare():
         db.add(Provider(id=provider_id, name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name=model_id if database_url else 'controlled-text', provider_id=provider_id, category='text', params={'temperature': 0.2}))
+        if storyboard_video_fixture:
+            db.add(Provider(id='story-video-provider', name='vidu', api_key='test', base_url='https://video.test'))
+            await db.flush()
+            db.add(Model(id='story-video-model', name='viduq2', category='video', provider_id='story-video-provider'))
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') == '1':
             from base64 import b64decode
             from app.models.llm import ModelSettings
@@ -239,14 +262,15 @@ if __name__ == '__main__':
 
         storage.upload_file = upload_file
         storage.download_file = download_file
-        if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
+        if storyboard_video_fixture or os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
             from botocore.exceptions import ClientError
 
             async def get_file_info(*, key):
                 path = object_path(key)
                 if not path.exists():
                     raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
-                return storage.StoredFileInfo(key=key, url='', size=path.stat().st_size, content_type='image/png')
+                return storage.StoredFileInfo(key=key, url='', size=path.stat().st_size,
+                    content_type='video/mp4' if path.suffix == '.mp4' else 'image/png')
 
             storage.get_file_info = get_file_info
     asyncio.run(prepare())
