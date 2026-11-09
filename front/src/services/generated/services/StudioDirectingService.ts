@@ -73,6 +73,7 @@ import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_Sc
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_StoryboardBasis_ } from '../models/ApiResponse_StoryboardBasis_';
 import type { ApiResponse_StoryboardDiff_ } from '../models/ApiResponse_StoryboardDiff_';
+import type { ApiResponse_StoryboardRetryBasis_ } from '../models/ApiResponse_StoryboardRetryBasis_';
 import type { ApiResponse_StoryboardTaskRead_ } from '../models/ApiResponse_StoryboardTaskRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
@@ -607,6 +608,37 @@ export class StudioDirectingService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Storyboard Retry Basis
+     * 读取重试原画布时实际采用的原文、对象参考和模型。
+     * @returns ApiResponse_StoryboardRetryBasis_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardRetryBasis({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+    }): CancelablePromise<ApiResponse_StoryboardRetryBasis_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry/basis',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
+            },
             errors: {
                 422: `Validation Error`,
             },

@@ -7,6 +7,7 @@ import { readChapterBrowse, saveChapterBrowse, scenePreparationLocation } from '
 import { directingError } from './common'
 import { SceneCanvasDeletion } from './SceneCanvasDeletion'
 import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
+import { WorkbenchStoryboardRetry } from './WorkbenchStoryboardRetry'
 import { useWorkspaceDraftStatus } from './WorkspaceDrafts'
 import './workbench-canvas-cards.css'
 
@@ -154,6 +155,10 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               {candidateId && <Button type="link" onClick={() => openCanvas(canvas.id, candidateId)}>
                 {canvas.storyboard_review_required ? '核对分镜' : '查看分镜'}
               </Button>}
+              <WorkbenchStoryboardRetry {...{ projectId, chapterId, sequenceId, canvas, historical }} onAccepted={() => {
+                setRevision(value => value + 1)
+                onChange()
+              }} />
             </div>
           </Card>
         </li>

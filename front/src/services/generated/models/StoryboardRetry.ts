@@ -7,4 +7,6 @@
  */
 export type StoryboardRetry = {
     request_id: string;
+    basis_token?: (string | null);
+    use_saved_objects?: boolean;
 };
