@@ -4,9 +4,13 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+from sqlalchemy.util.concurrency import await_only
 
 from app.models.llm import Model, Provider
 from app.models.studio import Chapter, Character, CharacterImage
+from app.models.task import Task
 from app.task_worker import TaskWorker
 from tests.directing.test_api import client_for
 from tests.directing.test_store import database
@@ -58,14 +62,35 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
         assert (await client.post(endpoint + '/extractions', json={**request, 'request_id': 'other'})).status_code == 409
         worker = TaskWorker(sessions)
         try:
-            async def run():
+            async def work():
                 await worker.tick()
                 await asyncio.gather(*worker.jobs.values())
+
+            async def read_objects():
                 read = await client.get(endpoint)
                 assert read.status_code == 200, read.text
                 return read.json()['data']
 
-            ready = await run()
+            async def run():
+                await work()
+                return await read_objects()
+
+            # Let the real worker commit after the scene read but before the task read.
+            completed_during_read = False
+
+            def complete_at_task_read(query):
+                nonlocal completed_during_read
+                columns = getattr(query.statement, 'column_descriptions', ())
+                if not completed_during_read and query.is_select and any(column.get('entity') is Task for column in columns):
+                    completed_during_read = True
+                    await_only(work())
+
+            event.listen(Session, 'do_orm_execute', complete_at_task_read)
+            try:
+                ready = await read_objects()
+            finally:
+                event.remove(Session, 'do_orm_execute', complete_at_task_read)
+            assert completed_during_read
             assert ready['task']['status'] == 'succeeded', ready
             assert len(ready['objects']) == 2 and ready['objects'][0]['id'] != ready['objects'][1]['id']
             assert [obj['name'] for obj in ready['objects']] == ['阿同', '阿同']
