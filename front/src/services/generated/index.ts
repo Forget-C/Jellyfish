@@ -39,6 +39,7 @@ export type { ApiResponse_ChapterDeliveriesRead_ } from './models/ApiResponse_Ch
 export type { ApiResponse_ChapterOverview_ } from './models/ApiResponse_ChapterOverview_';
 export type { ApiResponse_ChapterRead_ } from './models/ApiResponse_ChapterRead_';
 export type { ApiResponse_ChapterSequences_ } from './models/ApiResponse_ChapterSequences_';
+export type { ApiResponse_ChapterWorkbenchManagement_ } from './models/ApiResponse_ChapterWorkbenchManagement_';
 export type { ApiResponse_CharacterPortraitAnalysisResult_ } from './models/ApiResponse_CharacterPortraitAnalysisResult_';
 export type { ApiResponse_CompileResult_ } from './models/ApiResponse_CompileResult_';
 export type { ApiResponse_ContinuityRead_ } from './models/ApiResponse_ContinuityRead_';
@@ -268,6 +269,7 @@ export type { ChapterSequenceRead } from './models/ChapterSequenceRead';
 export type { ChapterSequences } from './models/ChapterSequences';
 export type { ChapterStatus } from './models/ChapterStatus';
 export type { ChapterUpdate } from './models/ChapterUpdate';
+export type { ChapterWorkbenchManagement } from './models/ChapterWorkbenchManagement';
 export type { CharacterCreate } from './models/CharacterCreate';
 export type { CharacterDescriptionCard } from './models/CharacterDescriptionCard';
 export type { CharacterPerformanceCard } from './models/CharacterPerformanceCard';
@@ -803,6 +805,8 @@ export type { VideoReferenceCapabilities } from './models/VideoReferenceCapabili
 export type { VideoSubjectMediaReference } from './models/VideoSubjectMediaReference';
 export type { VisualRequest } from './models/VisualRequest';
 export type { VisualStyleCard } from './models/VisualStyleCard';
+export type { WorkbenchSceneSummary } from './models/WorkbenchSceneSummary';
+export type { WorkbenchTaskSummary } from './models/WorkbenchTaskSummary';
 export type { WorkspaceRead } from './models/WorkspaceRead';
 
 export { DefaultService } from './services/DefaultService';

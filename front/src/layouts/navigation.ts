@@ -23,6 +23,9 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
     if (path.length === 5 && path[2] === 'roles' && path[3] && path[4] === 'edit') {
       return [...items, { label: '角色', to: `${project}?tab=roles` }, { label: titles.page || '角色档案' }]
     }
+    if (path.length === 5 && path[2] === 'chapters' && path[4] === 'workbench-management') {
+      return [...items, { label: '章节', to: `${project}?tab=chapters` }, { label: titles.page || '工作台管理' }]
+    }
     if ((path.length === 5 || path.length === 6) && path[2] === 'chapters' && path[3] && path[4] === 'sequences') {
       if (!path[5]) return [...items, { label: titles.page || '章节场次' }]
       return [...items, { label: titles.chapter || '章节', to: `${project}?tab=chapters&chapter=${path[3]}&sequence=${path[5]}` }, { label: titles.page || '场次工作台' }]

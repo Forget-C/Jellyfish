@@ -3,7 +3,14 @@ import type { SequenceOverview } from '../../../services/generated'
 type Stage = 'design' | 'shoot' | 'cut'
 type Action = { label: string; view: Stage | null }
 
-type ChapterBrowse = { chapter?: string; sequence?: string; query?: string; top?: number; sourceTop?: number; page?: number }
+export type WorkbenchManagementStep = 'division' | 'objects' | 'storyboard'
+
+export function managementStep(value?: string | null): WorkbenchManagementStep | undefined {
+  return value === 'division' || value === 'objects' || value === 'storyboard' ? value : undefined
+}
+
+type ChapterBrowse = { chapter?: string; sequence?: string; query?: string; top?: number; sourceTop?: number; page?: number
+  managementSequence?: string; managementStep?: WorkbenchManagementStep }
 /** 浏览记忆按项目和章节隔离；不保存原文或未保存修改。 */
 export function readChapterBrowse(projectId: string, chapterId = ''): ChapterBrowse {
   try {
@@ -11,7 +18,9 @@ export function readChapterBrowse(projectId: string, chapterId = ''): ChapterBro
     return { chapter: typeof value?.chapter === 'string' ? value.chapter : undefined, sequence: typeof value?.sequence === 'string' ? value.sequence : undefined,
       page: Number.isInteger(value?.page) && value.page > 0 ? value.page : undefined, query: typeof value?.query === 'string' ? value.query : undefined,
       sourceTop: Number.isFinite(value?.sourceTop) && value.sourceTop >= 0 ? value.sourceTop : undefined,
-      top: Number.isFinite(value?.top) && value.top >= 0 ? value.top : undefined }
+      top: Number.isFinite(value?.top) && value.top >= 0 ? value.top : undefined,
+      managementSequence: typeof value?.managementSequence === 'string' ? value.managementSequence : undefined,
+      managementStep: managementStep(value?.managementStep) }
   } catch { return {} }
 }
 
@@ -37,6 +46,15 @@ export function chapterLocation(projectId: string, chapterId?: string, sequenceI
   if (chapterId) query.set('chapter', chapterId)
   if (sequenceId) query.set('sequence', sequenceId)
   return `/projects/${encodeURIComponent(projectId)}?${query}`
+}
+
+/** 工作台管理深链接使用显式场次和步骤，浏览记忆只作为缺省值。 */
+export function workbenchManagementLocation(projectId: string, chapterId: string, sequenceId?: string, step?: WorkbenchManagementStep): string {
+  const params = new URLSearchParams()
+  if (sequenceId) params.set('sequence', sequenceId)
+  if (step) params.set('step', step)
+  const path = `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/workbench-management`
+  return params.size ? `${path}?${params}` : path
 }
 
 function sequencePath(projectId: string, chapterId: string, sequenceId: string) {

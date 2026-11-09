@@ -10,6 +10,8 @@ from app.core.contracts.directing.workspace import (
 )
 from app.core.contracts.directing.division import DivisionDraft, DivisionPreview, DivisionSave, DivisionSaved
 from app.services.directing.division import DivisionService
+from app.core.contracts.directing.workbench_management import ChapterWorkbenchManagement
+from app.services.directing.workbench_management import WorkbenchManagementService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
 from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
@@ -199,6 +201,14 @@ async def restore_storyboard(project_id: str, chapter_id: str, sequence_id: str,
     """在真实应用回执约束下撤销或重做同一批次。"""
     return success_response(await _call(SceneStoryboardService(db, project_id).restore_storyboard(
         chapter_id, sequence_id, task_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/workbench-management", response_model=ApiResponse[ChapterWorkbenchManagement],
+            operation_id="directing_chapter_workbench_management")
+async def chapter_workbench_management(project_id: str, chapter_id: str,
+                                       db: AsyncSession = Depends(get_db, scope="function")):
+    """读取章节工作台管理的轻量摘要。"""
+    return success_response(await _call(WorkbenchManagementService(db, project_id).chapter_management(chapter_id)))
 
 
 @router.get("/chapters/{chapter_id}/overview", response_model=ApiResponse[ChapterOverview], operation_id="directing_chapter_overview")

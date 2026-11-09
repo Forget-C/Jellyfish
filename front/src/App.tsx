@@ -19,6 +19,7 @@ import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
 import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
+import { WorkbenchManagementPage } from './pages/aiStudio/directing/WorkbenchManagementPage'
 import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
 import { SceneCanvasWorkbench } from './pages/aiStudio/directing/SceneCanvasWorkbench'
 import { GenerationCanvasRoute } from './pages/aiStudio/generationCanvas/GenerationCanvasRoute'
@@ -53,6 +54,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="projects/:projectId/generation-canvas" element={<GenerationCanvasRoute />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
+          <Route path="projects/:projectId/chapters/:chapterId/workbench-management" element={<WorkbenchManagementPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId/canvas-workbench" element={<SceneCanvasWorkbench />} />
           <Route path="assets" element={<AssetManager />} />

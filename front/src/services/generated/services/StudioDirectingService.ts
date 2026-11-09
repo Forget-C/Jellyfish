@@ -10,6 +10,7 @@ import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_Cha
 import type { ApiResponse_ChapterDeliveriesRead_ } from '../models/ApiResponse_ChapterDeliveriesRead_';
 import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
+import type { ApiResponse_ChapterWorkbenchManagement_ } from '../models/ApiResponse_ChapterWorkbenchManagement_';
 import type { ApiResponse_CompileResult_ } from '../models/ApiResponse_CompileResult_';
 import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
 import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
@@ -608,6 +609,31 @@ export class StudioDirectingService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Chapter Workbench Management
+     * 读取章节工作台管理的轻量摘要。
+     * @returns ApiResponse_ChapterWorkbenchManagement_ Successful Response
+     * @throws ApiError
+     */
+    public static directingChapterWorkbenchManagement({
+        projectId,
+        chapterId,
+    }: {
+        projectId: string,
+        chapterId: string,
+    }): CancelablePromise<ApiResponse_ChapterWorkbenchManagement_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/workbench-management',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
             errors: {
                 422: `Validation Error`,
             },
