@@ -42,14 +42,16 @@ try {
 
 
   const results=[]
-  const probe=async(name,run,documentOverrides={},contextOptions={})=>{
+  const probe=async(name,run,documentOverrides={},contextOptions={},prepare)=>{
     const facts={}
     const fixture=await request('/api/v1/studio/generation-canvases/canvas-project',{name})
     const cards=[{id:'place',type:'reference.place',name:'场所',angle:'正面'}, {id:'other',type:'reference.place',name:'其他场所',angle:'正面'}, {id:'director',type:'direction.fact',scope:{},examples:[],input_bindings:[]}]
-    const seeded=await fetch(`${base}/${fixture.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...fixture.document,cards,edges:[],...documentOverrides}})})
+    const overrides=typeof documentOverrides==='function'?documentOverrides(fixture.id):documentOverrides
+    const seeded=await fetch(`${base}/${fixture.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...fixture.document,cards,edges:[],...overrides}})})
     assert.ok(seeded.ok,await seeded.text())
     const isolated=await browser.newContext({viewport:{width:1920,height:790},...contextOptions})
     page=await isolated.newPage();page.setDefaultTimeout(6000)
+    const prepared=await prepare?.(fixture.id)
     await page.addInitScript(({key})=>{window.__ENV={BACKEND_URL:location.origin};localStorage.setItem(key,JSON.stringify({schema:1,positions:{place:{x:innerWidth<700?120:400,y:innerWidth<700?300:250},other:{x:1000,y:250},director:{x:1800,y:250}},sizes:{},transform:{x:0,y:0,scale:.8}}))},{key:`jellyfish:generation-layout:canvas-project:${fixture.id}:view:canvas`})
     await page.goto(`http://127.0.0.1:4630/projects/canvas-project/generation-canvas?canvas=${fixture.id}`)
     const card=page.locator('[data-card-id="place"]');await page.locator('[data-card-id], [data-stack-id]').first().waitFor();await delay(100)
@@ -57,7 +59,7 @@ try {
     const view=()=>page.locator('.generation-world').getAttribute('style')
     const scale=()=>page.getByLabel('画布缩放比例').textContent()
     const drag=async(target=card)=>{const box=await target.boundingBox();await page.mouse.move(box.x+60,box.y+80);await page.mouse.down();await page.mouse.move(box.x+140,box.y+100,{steps:6});await delay(70);return box}
-    try{await run({card,position,view,scale,drag,facts});results.push({name,status:'passed',facts})}
+    try{await run({card,position,view,scale,drag,facts,prepared});results.push({name,status:'passed',facts})}
     catch(error){await page.screenshot({path:join(output,`probe-${results.length+1}.png`)});results.push({name,status:'failed',error:error.message,facts})}
     await page.mouse.up();await page.keyboard.up('Space');await page.keyboard.press('Escape');await page.keyboard.press('Escape')
     console.log(JSON.stringify(results.at(-1)))
@@ -544,6 +546,166 @@ try {
     assert.equal(await panel.getByRole('button',{name:'关闭详情',exact:true}).count(),0,'desktop model header remains unchanged')
     await panel.getByRole('button',{name:/^(展开|收起)详情$/}).waitFor()
   },modelFixture)
+  const factIds=['place','other','director']
+  const referenceSource=canvasId=>({canvas_id:canvasId,card_id:'provider',port_id:'text',position:0})
+  const factFixture=(canvasId,groups=[])=>({
+    cards:[
+      ...factIds.map(id=>({id,type:'direction.fact',fact:{authorship:'user',document:{segments:Array.from({length:5},(_,index)=>({id:`reference-${index}`,kind:'reference',source:referenceSource(canvasId)}))}}})),
+      {id:'provider',type:'model.text'},
+    ],
+    edges:factIds.map(id=>({id:`provider-${id}`,source_card:'provider',source_port:'text',target_card:id,target_port:'text'})),
+    input_order:Object.fromEntries(factIds.map(id=>[id,{text:[`provider-${id}`]}])),
+    groups,
+  })
+  const referenceRuntime=async canvasId=>{
+    let current=true,cursor=0
+    const outputs=()=>({provider:[{source:referenceSource(canvasId),modality:'text',available:true,basis_current:current,text:'真实来源'}]})
+    await page.route('**/runtime',route=>route.fulfill({json:{code:200,data:{cursor,runs:[],current_outputs:outputs()}}}))
+    await page.route(/\/events(?:\?|$)/,route=>{
+      const previous=Number(new URL(route.request().url()).searchParams.get('cursor')||0)
+      const event={version:1,canvas_id:canvasId,type:'run.finished',cursor,payload:{run_id:'fixture-run',current_outputs:outputs()}}
+      return route.fulfill({contentType:'text/event-stream',body:cursor>previous?`data: ${JSON.stringify(event)}\n\n`:': waiting\n\n'})
+    })
+    return async next=>{
+      current=next;cursor++
+      await page.waitForFunction(({id,current})=>{
+        const summary=document.querySelector(`[data-card-id="${id}"] dd`)
+        return summary?.textContent.includes('依据已变')===!current
+      },{id:'place',current})
+    }
+  }
+  const fact=id=>page.locator(`[data-card-id="${id}"]`)
+  const height=id=>fact(id).evaluate(node=>node.offsetHeight)
+  const waitHeight=(id,expected)=>page.waitForFunction(({id,expected})=>document.querySelector(`[data-card-id="${id}"]`)?.offsetHeight===expected,{id,expected})
+  const arrangeButton=()=>page.getByRole('button',{name:'整理布局',exact:true,includeHidden:true})
+  await probe('Q17 单卡拖动保持高度，摘要更新后在释放时选档',async({drag,prepared})=>{
+    await waitHeight('place',128)
+    await drag()
+    await prepared(false)
+    await waitHeight('other',160)
+    assert.equal(await height('place'),128,'dragged card keeps its displayed height')
+    assert.equal(await arrangeButton().isDisabled(),true,'layout arrangement is disabled during dragging')
+    await page.mouse.up()
+    await waitHeight('place',160)
+    assert.equal(await arrangeButton().isDisabled(),false,'release restores arrangement')
+    await page.screenshot({path:join(output,'gesture-height-release.png')})
+  },factFixture,{},referenceRuntime)
+  await probe('Q17 多选拖动取消后所有成员使用最新高度',async({drag,prepared,position})=>{
+    const modifier=process.platform==='darwin'?'Meta':'Control'
+    await waitHeight('place',128)
+    await fact('place').click({modifiers:[modifier]})
+    await fact('other').click({modifiers:[modifier]})
+    const before=await Promise.all([position(fact('place')),position(fact('other'))])
+    await drag()
+    await prepared(false)
+    await waitHeight('director',160)
+    assert.deepEqual(await Promise.all([height('place'),height('other')]),[128,128])
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    await Promise.all([waitHeight('place',160),waitHeight('other',160)])
+    assert.deepEqual(await Promise.all([position(fact('place')),position(fact('other'))]),before)
+  },factFixture,{},referenceRuntime)
+  await probe('Q17 分组拖动期间保留组框及可见成员高度',async({prepared})=>{
+    await waitHeight('place',128)
+    const group=page.locator('[data-group-id="facts"]')
+    const before=await group.boundingBox()
+    await page.mouse.move(before.x+6,before.y+before.height-6)
+    await page.mouse.down()
+    await page.mouse.move(before.x+46,before.y+before.height+14,{steps:5})
+    await prepared(false)
+    await waitHeight('director',160)
+    assert.deepEqual(await Promise.all([height('place'),height('other')]),[128,128])
+    assert.ok(Math.abs((await group.boundingBox()).height-before.height)<1,'group height stays stable')
+    await page.screenshot({path:join(output,'group-height-locked.png')})
+    await page.mouse.up()
+    await Promise.all([waitHeight('place',160),waitHeight('other',160)])
+    assert.ok((await group.boundingBox()).height>before.height,'group border follows released sizes')
+  },canvasId=>factFixture(canvasId,[{id:'facts',name:'事实编组',card_ids:['place','other']}]),{},referenceRuntime)
+  const port=(id,side)=>fact(id).getByRole('button',{name:`${side}侧连接点`,exact:true})
+  const portCenter=async(id,side)=>{
+    const box=await port(id,side).boundingBox()
+    return {x:box.x+box.width/2,y:box.y+box.height/2}
+  }
+  await probe('Q17 指针连线切换目标并在取消后释放来源',async({prepared})=>{
+    await waitHeight('place',128)
+    await fact('place').hover()
+    const source=await portCenter('place','右')
+    await page.mouse.move(source.x,source.y)
+    await page.mouse.down()
+    const target=await portCenter('other','左')
+    await page.mouse.move(target.x,target.y,{steps:5})
+    await prepared(false)
+    await waitHeight('director',160)
+    assert.deepEqual(await Promise.all([height('place'),height('other')]),[128,128],'source and active pointer target keep their heights')
+    assert.equal(await arrangeButton().isDisabled(),true)
+    const next=await portCenter('director','左')
+    await page.mouse.move(next.x,next.y,{steps:5})
+    await waitHeight('other',160)
+    await prepared(true)
+    await waitHeight('other',128)
+    assert.deepEqual(await Promise.all([height('place'),height('director')]),[128,160],'new target retains its current height')
+    await page.screenshot({path:join(output,'connection-height-locked.png')})
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    await waitHeight('director',128)
+    assert.equal(await arrangeButton().isDisabled(),false)
+    const edges=page.locator('[data-generation-edge-id]')
+    const count=await edges.count()
+    await fact('place').hover()
+    await page.mouse.move(source.x,source.y)
+    await page.mouse.down()
+    await page.mouse.move(target.x,target.y,{steps:5})
+    await prepared(false)
+    await waitHeight('director',160)
+    assert.deepEqual(await Promise.all([height('place'),height('other')]),[128,128])
+    await page.mouse.up()
+    await Promise.all([waitHeight('place',160),waitHeight('other',160)])
+    assert.equal(await edges.count(),count+1,'successful connection also releases both cards')
+  },factFixture,{},referenceRuntime)
+  await probe('Q17 键盘连线随焦点更换目标并保留临时隐藏详情',async({prepared})=>{
+    await waitHeight('place',128)
+    await fact('provider').press('Enter')
+    const detail=page.locator('.generation-card-editor:visible')
+    await detail.waitFor()
+    await port('place','右').press('Enter')
+    const targets=page.getByRole('dialog',{name:'选择连接目标',exact:true})
+    await targets.waitFor()
+    await detail.waitFor({state:'hidden'})
+    const target=targets.getByRole('button',{name:/^连接到.*卡片 2$/})
+    await target.focus()
+    await prepared(false)
+    await waitHeight('director',160)
+    assert.deepEqual(await Promise.all([height('place'),height('other')]),[128,128])
+    await targets.getByRole('button',{name:/^连接到.*卡片 3$/}).focus()
+    await waitHeight('other',160)
+    await prepared(true)
+    await waitHeight('other',128)
+    assert.equal(await height('director'),160)
+    await page.keyboard.press('Escape')
+    await waitHeight('director',128)
+    await detail.waitFor()
+    assert.equal(await fact('provider').getAttribute('data-selected'),'true','cancelling connection restores the same details session')
+  },factFixture,{},referenceRuntime)
+  await probe('Q17 窄屏触摸取消释放拖动卡片的高度锁',async({prepared,position})=>{
+    await waitHeight('place',128)
+    await page.getByRole('button',{name:'适应全部',exact:true}).click()
+    const touch=await page.context().newCDPSession(page)
+    const box=await fact('place').boundingBox()
+    const start={x:box.x+box.width/2,y:box.y+box.height*.7}
+    const before=await position()
+    try{
+      assert.equal(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.closest('[data-card-id]')?.getAttribute('data-card-id'),start),'place','touch starts on a visible card')
+      await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[start]})
+      await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:start.x+30,y:start.y+24}]})
+      assert.notDeepEqual(await position(),before,'touch crosses the drag threshold')
+      await prepared(false)
+      await waitHeight('other',160)
+      assert.equal(await height('place'),128)
+      await touch.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]})
+      await waitHeight('place',160)
+      assert.equal(await arrangeButton().isDisabled(),false)
+    } finally { await touch.detach() }
+  },factFixture,{viewport:{width:390,height:844},hasTouch:true,isMobile:true},referenceRuntime)
   writeFileSync(join(output,'audit.json'),JSON.stringify({results},null,2))
   assert.equal(results.filter(result => result.status === 'failed').length, 0, JSON.stringify(results))
 }finally{await cleanup()}
