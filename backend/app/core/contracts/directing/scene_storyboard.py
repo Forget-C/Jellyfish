@@ -28,6 +28,7 @@ class StoryboardBasisObject(Contract):
 
     id: Identity
     name: str
+    excerpt: str
     kind: Literal['character', 'scene', 'prop']
     asset_id: Identity | None = None
     asset_name: str | None = None

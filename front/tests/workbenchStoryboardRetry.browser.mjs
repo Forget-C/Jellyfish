@@ -82,7 +82,8 @@ try {
   await dialog.getByText('稍后配置视频模型卡', { exact: true }).waitFor()
   await dialog.getByText(raw, { exact: true }).waitFor()
   await dialog.getByText('本次采用的对象与参考（3）', { exact: true }).click()
-  await dialog.getByText(/阿同.*无参考图/).first().waitFor()
+  await dialog.getByText(/阿同（前门的阿同）.*无参考图/).waitFor()
+  await dialog.getByText(/阿同（后门的阿同）.*无参考图/).waitFor()
   await page.screenshot({ path: join(output, 'retry-confirmation.png') })
 
   const current = await data(canvas)

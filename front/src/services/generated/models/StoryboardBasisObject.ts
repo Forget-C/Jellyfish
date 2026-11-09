@@ -8,6 +8,7 @@
 export type StoryboardBasisObject = {
     id: string;
     name: string;
+    excerpt: string;
     kind: 'character' | 'scene' | 'prop';
     asset_id?: (string | null);
     asset_name?: (string | null);

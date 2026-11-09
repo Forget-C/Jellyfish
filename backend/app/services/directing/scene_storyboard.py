@@ -86,7 +86,7 @@ class SceneStoryboardService(SceneObjectService):
         return StoryboardBasis(token=token, source_text=text, source_changed=source_version != chapter_version,
             preparation_revision=objects.revision, preparation_stale=objects.source_changed,
             object_task_active=active_task_id is not None, objects=[StoryboardBasisObject(
-                id=item['id'], name=item['name'], kind=item['kind'], asset_id=item['asset_id'],
+                id=item['id'], name=item['name'], excerpt=item['excerpt'], kind=item['kind'], asset_id=item['asset_id'],
                 asset_name=names.get((item['kind'], item['asset_id'])), image_file_id=item['image_file_id'],
             ) for item in inputs])
 
