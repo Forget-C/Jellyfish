@@ -42,6 +42,15 @@ class ControlledModel:
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)
         assert '前门的阿同' in args['script_text']
+        if args.get('mode') == 'faithful':
+            objects = {item['excerpt']: item['id'] for item in args['objects']}
+            front = objects['前门的阿同']
+            return SimpleNamespace(content=json.dumps({'shots': [
+                {'id': 'front', 'excerpt': '前门的阿同拿着信封。', 'object_ids': [front, objects['拿着信封']],
+                 'designs': [{'id': 'action', 'card_type': 'direction.performance', 'object_id': front,
+                              'fields': {'physical_action': {'state': 'fact', 'text': '拿着信封', 'excerpt': '拿着信封'}}}]},
+                {'id': 'back', 'excerpt': '后门的阿同等待。', 'object_ids': [objects['后门的阿同']]},
+            ]}, ensure_ascii=False))
         return SimpleNamespace(content=json.dumps({'objects': [
             {'kind': 'character', 'name': '阿同', 'description': '前门等候', 'excerpt': '前门的阿同',
              'asset_id': 'object-browser-character'},
@@ -175,7 +184,12 @@ async def prepare():
             from app.models.llm import ModelSettings
             from app.models.studio import Character, CharacterImage, FileItem
             await db.flush()
-            db.add(ModelSettings(id=1, default_text_model_id=model_id))
+            image_model = None
+            if os.environ.get('CANVAS_BROWSER_SCENE_STORYBOARD') == '1':
+                image_model = 'story-image-model'
+                db.add(Model(id=image_model, name='分镜测试图片模型', provider_id=provider_id, category='image'))
+                await db.flush()
+            db.add(ModelSettings(id=1, default_text_model_id=model_id, default_image_model_id=image_model))
             db.add(Character(id='object-browser-character', project_id=project_id, name='已有角色', style='真人都市'))
             db.add(FileItem(id='object-browser-image', type='image', name='已有角色图片', storage_key='fixture/asset.png',
                             content_type='image/png'))

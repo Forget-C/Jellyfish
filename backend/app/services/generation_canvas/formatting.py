@@ -17,6 +17,10 @@ PURPOSE_LABELS = {'background': '背景', 'design': '设计', 'constraint': '约
 def design_field_line(label: str, field: DesignField, text: str | None = None, *, source: bool = True) -> str:
     """用户设定省略内部默认标签；提取和历史字段保留既有编译含义与格式。"""
     body = field.text if text is None else text
+    if field.extraction_context:
+        state = STATE_LABELS.get(field.state) or {'empty': '未填写', 'not_applicable': '不适用'}[field.state]
+        return f'{PURPOSE_LABELS[field.purpose]} / {label} [{state}]：{body}' + (
+            f'（来源：{field.source_locator}）' if source and field.source_locator else '')
     if field.authorship == 'user':
         return f'{label}：{body}'
     if field.authorship == 'model':

@@ -12,6 +12,7 @@ from time import monotonic
 from uuid import uuid4
 
 import httpx
+from fastapi import HTTPException
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -338,7 +339,7 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            directing = task.kind in {"directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
+            directing = task.kind in {"directing_storyboard", "directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
@@ -374,6 +375,20 @@ class TaskWorker:
                         await SceneObjectService(db, current.project_id).complete_extraction(current, generated)
                     except RevisionConflict as error:
                         raise DirectingOutputError(str(error)) from error
+
+            elif task.kind == "directing_storyboard":
+                from app.services.directing.scene_storyboard import SceneStoryboardService
+
+                async def deliver(db, current):
+                    """真实候选校验成功后才发布任务成功，不在后台改写文档。"""
+                    try:
+                        candidate = await SceneStoryboardService(db, current.project_id).complete_storyboard(current, generated)
+                    except (HTTPException, ValueError) as error:
+                        detail = getattr(error, 'detail', None)
+                        message = detail.get('message') if isinstance(detail, dict) else detail
+                        raise DirectingOutputError(message or '分镜结果无法建立有效画布') from error
+                    result.clear()
+                    result.update(candidate.model_dump(mode='json'))
 
             elif task.kind == "directing_review_revision":
                 async def deliver(db, current):

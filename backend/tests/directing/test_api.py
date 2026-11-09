@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.routes.studio.directing import router
 from app.api.v1.routes.studio.files import router as file_router
+from app.api.v1.routes.studio.generation_canvases import router as canvas_router
 from app.api.v1.routes.film.task_status import router as task_router
 from app.dependencies import get_db
 from app.models.studio import FileUsage
@@ -53,6 +54,7 @@ async def client_for(sessions):
     app.include_router(router, prefix="/api/v1/studio")
     app.include_router(task_router, prefix="/api/v1/film")
     app.include_router(file_router, prefix="/api/v1/studio/files")
+    app.include_router(canvas_router, prefix="/api/v1/studio/generation-canvases")
 
     async def scoped_db():
         """模拟真实请求提交和异常回滚，不共享未提交的测试会话。"""

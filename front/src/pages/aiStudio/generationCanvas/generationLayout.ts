@@ -63,3 +63,28 @@ export function arrangeGenerationCards(ids: string[], groups: GenerationCanvasGr
   })
   return positions
 }
+
+/** 新提取成员用实际尺寸分行。已有坐标仍由用户控制。 */
+export function placeStoryboardCards(positions: Record<string, CanvasPoint>, retained: Record<string, CanvasPoint>,
+  groups: GenerationCanvasGroup[], origins: Record<string, unknown>, sizes: Record<string, GraphSize>) {
+  const generated = groups.filter(group => group.kind !== 'stack' && group.card_ids?.some(id => origins[id] && !retained[id] && sizes[id]))
+  if (!generated.length) return positions
+  const added = new Set(generated.flatMap(group => (group.card_ids || []).filter(id => origins[id] && !retained[id])))
+  const next = { ...positions }
+  const start = 200, gap = 64
+  let top = Math.max(0, ...Object.entries(positions).filter(([id]) => !added.has(id) && sizes[id])
+    .map(([id, point]) => point.y + sizes[id].height + gap))
+  for (const group of generated) {
+    const ids = (group.card_ids || []).filter(id => added.has(id) && sizes[id])
+    for (let offset = 0; offset < ids.length; offset += 3) {
+      const row = ids.slice(offset, offset + 3)
+      let left = start
+      for (const id of row) {
+        next[id] = { x: left, y: top }
+        left += sizes[id].width + gap
+      }
+      top += Math.max(...row.map(id => sizes[id].height)) + gap
+    }
+  }
+  return next
+}

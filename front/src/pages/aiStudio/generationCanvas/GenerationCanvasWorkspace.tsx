@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard } from '../../../services/generated'
+import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardCandidate } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -50,6 +50,7 @@ interface GenerationCanvasWorkspaceProps {
   canvasId: string | null
   back: { label: string; onClick: () => void }
   renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
+  initialCandidate?: StoryboardCandidate
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
   hostErrorAction?: ReactNode
@@ -62,7 +63,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, onCanvasRead, hostError, hostErrorAction,
+  projectId, canvasId, back, renderCanvasManagement, initialCandidate, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
@@ -70,7 +71,20 @@ export function GenerationCanvasWorkspace({
   const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
   const pendingInspect = useRef<CanvasInspectTarget>()
   const editor = useGenerationCanvasEditor(projectId, canvasId)
-  const { current, document, edit, save, saving, dirty, ownership, configureCatalog: configureEditorCatalog } = editor
+  const { current, document, edit, save, saving, dirty, ownership, applyInitialCandidate, configureCatalog: configureEditorCatalog } = editor
+  const handledCandidate = useRef<string>()
+  const [candidatePending, setCandidatePending] = useState(false)
+  const candidateTask = initialCandidate?.document.storyboard?.task_id
+  useEffect(() => {
+    if (!current || !initialCandidate || !candidateTask || handledCandidate.current === candidateTask) return
+    if (current.document.storyboard?.task_id === candidateTask) {
+      handledCandidate.current = candidateTask
+      return
+    }
+    if (!ownership.editable && ownership.state === 'checking') return
+    handledCandidate.current = candidateTask
+    void applyInitialCandidate(initialCandidate).then(result => setCandidatePending(result === 'pending'))
+  }, [candidateTask, current, initialCandidate, applyInitialCandidate, ownership.editable, ownership.state])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -116,7 +130,7 @@ export function GenerationCanvasWorkspace({
         {renderCanvasManagement?.({
           current, saving, editable: ownership.editable, running: !!runtime.busyCards.size,
           canEdit: ownership.canEdit, requestLeave: editor.requestLeave,
-          nameEditor: document && <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery}
+          nameEditor: document && <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
               onChange={event => change({ ...document, name: event.target.value })} />,
         })}
         <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : current ? '已保存' : '尚无画布'}</span>
@@ -137,6 +151,7 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
+    {candidatePending && current?.document.storyboard?.task_id !== candidateTask && <Alert type="warning" showIcon message="分镜结果待应用，现有画布内容已保留。" />}
     {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留创建时的原文依据。" />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
@@ -158,7 +173,7 @@ export function GenerationCanvasWorkspace({
       <GenerationCanvasGraph onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
-      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery}
+      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </div>}

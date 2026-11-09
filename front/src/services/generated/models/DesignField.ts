@@ -18,4 +18,6 @@ export type DesignField = {
      * 模型实际返回的元信息项；保存后保持缺项，不将契约默认值视为提取结果。
      */
     metadata_fields?: (Array<'state' | 'purpose' | 'source_locator'> | null);
+    extraction_context?: (string | null);
+    extraction_reason?: (string | null);
 };

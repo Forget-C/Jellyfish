@@ -1,8 +1,8 @@
 import { DesignMetadataLine } from './DesignMetadataLine'
 import { useId, type ReactNode } from 'react'
-import { Input } from 'antd'
+import { Input, Select, Space } from 'antd'
 import type { DesignField } from '../../../services/generated'
-import { designFieldMetadataParts, userDesignField } from './designFieldMetadata'
+import { designFieldMetadataParts, purposes, states, userDesignField } from './designFieldMetadata'
 
 /** Metadata describes retained extraction or legacy values; only the design content is editable. */
 export function DesignFieldEditor({ label, value, purpose = 'design', defaults, metadataId, onChange, editor, labelAction }: { editor?: ReactNode; labelAction?: ReactNode; label: string; value?: DesignField; purpose?: DesignField['purpose']; defaults?: DesignField; metadataId?: string; compact?: boolean; onChange: (field: DesignField) => void }) {
@@ -13,6 +13,14 @@ export function DesignFieldEditor({ label, value, purpose = 'design', defaults, 
     {editor ?? <Input.TextArea aria-label={`${label}内容`} aria-describedby={metadata.length ? descriptionId : undefined} value={value?.text || ''} autoSize={{ minRows: 2, maxRows: 7 }} onChange={event => {
       if (event.target.value !== (value?.text || '')) onChange(userDesignField({ ...value, text: event.target.value }))
     }} />}
+    {value?.extraction_context === 'storyboard' && <Space wrap>
+      <Select aria-label={`${label}状态`} size="small" value={value.state || 'empty'}
+        options={Object.entries(states).map(([key, text]) => ({ value: key as DesignField['state'], label: text }))}
+        onChange={state => onChange(userDesignField({ ...value, state }))} />
+      <Select aria-label={`${label}用途`} size="small" value={value.purpose || 'design'}
+        options={Object.entries(purposes).map(([key, text]) => ({ value: key as DesignField['purpose'], label: text }))}
+        onChange={purpose => onChange(userDesignField({ ...value, purpose }))} />
+    </Space>}
     <DesignMetadataLine id={descriptionId} items={metadata} />
   </section>
 }

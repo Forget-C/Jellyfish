@@ -152,9 +152,14 @@ class DesignField(BaseModel):
     metadata_fields: list[Literal['state', 'purpose', 'source_locator']] | None = Field(default=None, exclude_if=lambda value: value is None,
         description='模型实际返回的元信息项；保存后保持缺项，不将契约默认值视为提取结果。')
 
+    extraction_context: Literal['storyboard'] | None = Field(default=None, exclude_if=lambda value: value is None)
+    extraction_reason: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
     @model_validator(mode='after')
     def normalize_user_setting(self):
         """用户设定按实际内容生效，不继承提取的停用状态或原文定位。"""
+        if self.extraction_context:
+            return self
         if self.authorship == 'model' and self.metadata_fields is None:
             self.metadata_fields = [key for key in ('state', 'purpose', 'source_locator') if key in self.model_fields_set]
         elif self.authorship == 'user':

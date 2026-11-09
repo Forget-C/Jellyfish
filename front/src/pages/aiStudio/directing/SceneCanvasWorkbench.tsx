@@ -3,10 +3,11 @@ import { Alert, Empty, Input, Space, Spin } from 'antd'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { StudioDirectingService } from '../../../services/generated'
-import type { SceneCanvasesRead } from '../../../services/generated'
+import type { SceneCanvasesRead, StoryboardCandidate } from '../../../services/generated'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { SceneObjectPreparation } from './SceneObjectPreparation'
+import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
 import { chapterLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
@@ -31,6 +32,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [candidate, setCandidate] = useState<StoryboardCandidate>()
   const [name, setName] = useState<string>()
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -48,7 +50,10 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, canvasId, refresh])
   const openCanvas = (id: string) => setQuery({ canvas: id })
-  const returnToPreparation = () => setQuery(canvasId ? { selected: canvasId } : {})
+  const returnToPreparation = () => {
+    setCandidate(undefined)
+    setQuery(canvasId ? { selected: canvasId } : {})
+  }
   const chapter = () => navigate(chapterLocation(projectId, chapterId, sequenceId))
   const create = async () => {
     if (name === undefined || creating) return
@@ -66,6 +71,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
   }
   if (canvasId && scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId}
+      initialCandidate={candidate?.document.id === canvasId ? candidate : undefined}
       back={{ label: '返回场次准备', onClick: returnToPreparation }}
       renderCanvasManagement={({ nameEditor }) => <span className="scene-canvas-name-editor">{nameEditor}</span>} />
   }
@@ -95,8 +101,15 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
               <section aria-labelledby="scene-canvas-list-title">
                 <div className="scene-canvas-list-header">
                   <h2 id="scene-canvas-list-title">本场画布</h2>
-                  <Button variant="primary" disabled={!scene.sequence.is_current || !scene.sequence.source_text.trim()}
-                    onClick={() => { setCreateError(''); setName(defaultCanvasName()) }}>新建空白画布</Button>
+                  <Space wrap>
+                    <Button disabled={!scene.sequence.is_current || !scene.sequence.source_text.trim()}
+                      onClick={() => { setCreateError(''); setName(defaultCanvasName()) }}>新建空白画布</Button>
+                    <SceneStoryboardPreparation scope={{ projectId, chapterId, sequenceId }} nameForNewCanvas={defaultCanvasName}
+                      editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()} onCompleted={result => {
+                        setCandidate(result.candidate || undefined)
+                        openCanvas(result.canvas_id)
+                      }} />
+                  </Space>
                 </div>
                 {scene.canvases.length ? <ul className="scene-canvas-list">
                   {scene.canvases.map(canvas => <li key={canvas.id} className={selected === canvas.id ? 'scene-canvas-selected' : undefined}>

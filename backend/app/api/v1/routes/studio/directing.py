@@ -12,6 +12,8 @@ from app.core.contracts.directing.division import DivisionDraft, DivisionPreview
 from app.services.directing.division import DivisionService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
+from app.core.contracts.directing.scene_storyboard import StoryboardRequest, StoryboardTaskRead
+from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.scene_objects import ObjectExtractionRequest, SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead
 from app.services.directing.scene_objects import SceneObjectService
@@ -129,6 +131,22 @@ async def choose_scene_object_reference(project_id: str, chapter_id: str, sequen
                                         body: SceneObjectChoice, db: AsyncSession = Depends(get_db, scope="function")):
     """只保存本场对象候选的资产和参考图片选择。"""
     return success_response(await _call(SceneObjectService(db, project_id).save_choice(chapter_id, sequence_id, object_id, body)))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards",
+             response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_submit")
+async def submit_storyboard(project_id: str, chapter_id: str, sequence_id: str, body: StoryboardRequest,
+                            db: AsyncSession = Depends(get_db, scope="function")):
+    """显式建立目标画布并提交文本分镜任务。"""
+    return created_response(await _call(SceneStoryboardService(db, project_id).submit_storyboard(chapter_id, sequence_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}",
+            response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_get")
+async def read_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                          db: AsyncSession = Depends(get_db, scope="function")):
+    """读取当前任务状态、候选和应用基线。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard(chapter_id, sequence_id, task_id)))
 
 
 @router.get("/chapters/{chapter_id}/overview", response_model=ApiResponse[ChapterOverview], operation_id="directing_chapter_overview")

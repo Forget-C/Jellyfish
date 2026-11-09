@@ -67,6 +67,7 @@ import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneV
 import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
+import type { ApiResponse_StoryboardTaskRead_ } from '../models/ApiResponse_StoryboardTaskRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
 import type { ApiResponse_UnitCanvasGraph_ } from '../models/ApiResponse_UnitCanvasGraph_';
@@ -120,6 +121,7 @@ import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
 import type { SourceResolveRequest } from '../models/SourceResolveRequest';
+import type { StoryboardRequest } from '../models/StoryboardRequest';
 import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
 import type { TransitionWrite_Input } from '../models/TransitionWrite_Input';
@@ -329,6 +331,69 @@ export class StudioDirectingService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Submit Storyboard
+     * 显式建立目标画布并提交文本分镜任务。
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardSubmit({
+        projectId,
+        chapterId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        requestBody: StoryboardRequest,
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Read Storyboard
+     * 读取当前任务状态、候选和应用基线。
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardGet({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
+            },
             errors: {
                 422: `Validation Error`,
             },

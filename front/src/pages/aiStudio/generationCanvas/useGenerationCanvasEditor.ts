@@ -3,7 +3,7 @@ import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave, StoryboardCandidate } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
@@ -17,6 +17,18 @@ const preservesFixedSource = (server: CanvasDocument, draft: CanvasDocument) => 
   if (!same(source ?? null, draft.fixed_source ?? null)) return false
   return !source || same(server.cards?.find(card => card.id === source.card_id), draft.cards?.find(card => card.id === source.card_id))
 }
+const initialStoryboardSave = (requestId: string) => requestId.startsWith('storyboard:')
+const markStoryboardEdits = (before: CanvasDocument, next: CanvasDocument): CanvasDocument => {
+  if (!next.storyboard || before.storyboard?.task_id !== next.storyboard.task_id) return next
+  const old = new Map(before.cards?.map(card => [card.id, card]))
+  const origins = { ...next.storyboard.origins }
+  for (const card of next.cards || []) {
+    if (origins[card.id] && old.has(card.id) && !same(card, old.get(card.id))) {
+      origins[card.id] = { ...origins[card.id], manually_edited: true }
+    }
+  }
+  return { ...next, storyboard: { ...next.storyboard, origins } }
+}
 const describe = (reason: unknown) => reason instanceof ApiError
   ? `${reason.body?.data?.code || reason.status}: ${reason.body?.data?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
 
@@ -27,12 +39,13 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [current, setCurrent] = useState<CanvasRead>()
   const [document, setDocument] = useState<CanvasDocument>()
   const [saving, setSaving] = useState(false)
+  const [initialApplying, setInitialApplying] = useState(false)
   const [error, setError] = useState('')
   const [failedDiagnostic, setFailedDiagnostic] = useState<{ scope: string; document: unknown; issue: CanvasDiagnostic }>()
   const [storageError, setStorageError] = useState('')
   const [recovery, setRecovery] = useState<Recovery>()
   const [conflict, setConflict] = useState(false)
-  const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; blocked?: CanvasDocument; recovery?: Recovery; conflict: boolean }>({ scope: key, conflict: false })
+  const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; blocked?: CanvasDocument; recovery?: Recovery; initialBefore?: CanvasDocument; conflict: boolean }>({ scope: key, conflict: false })
   const cleaner = useRef<(value: CanvasDocument) => CanvasDocument>()
   const configureCatalog = useCallback((catalog: CanvasCatalog) => { cleaner.current = createCanvasOperations(createGraphRules(catalog)).clean }, [])
   const inFlight = useRef<Promise<boolean>>()
@@ -51,7 +64,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     let active = true
     state.current = { scope: key, conflict: false }; inFlight.current = undefined; cleaner.current = undefined
     history.current = { scope: key, past: [], future: [] }
-    setCurrent(undefined); setDocument(undefined); setError(''); setConflict(false); setRecovery(undefined); setSaving(false)
+    setCurrent(undefined); setDocument(undefined); setError(''); setConflict(false); setRecovery(undefined); setSaving(false); setInitialApplying(false)
     if (canvasId) void Canvases.canvasGet({ projectId, canvasId }).then(response => {
       if (!active || !response.data) return
       const server = response.data
@@ -70,8 +83,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }, [key, projectId, canvasId])
   const edit = (next: CanvasDocument | ((previous: CanvasDocument) => CanvasDocument)) => {
     const s = state.current
-    if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key) return
-    const value = cleanObjectSources(typeof next === 'function' ? next(s.document) : next)
+    if (!ownership.canEdit() || !s.document || s.recovery || s.initialBefore || s.scope !== key) return
+    const proposed = cleanObjectSources(typeof next === 'function' ? next(s.document) : next)
+    const value = markStoryboardEdits(s.document, proposed)
     if (same(value, s.document)) return
     history.current = { scope: key, past: [...history.current.past.slice(-49), { document: s.document }], future: [] }
     s.document = value
@@ -79,14 +93,14 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const [, refreshHistory] = useState(0)
   const recordAction = (undo: () => void, redo: () => void) => {
-    if (!ownership.canEdit() || state.current.scope !== key || state.current.recovery) return
+    if (!ownership.canEdit() || state.current.scope !== key || state.current.recovery || state.current.initialBefore) return
     history.current = { scope: key, past: [...history.current.past.slice(-49), { apply: undo, reverse: redo }], future: [] }
     refreshHistory(value => value + 1)
   }
   // 文档和布局按操作顺序撤销；普通视口浏览不进入历史。
   const travel = (direction: 'past' | 'future') => {
     const s = state.current, h = history.current
-    if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key || h.scope !== key || !cleaner.current) return
+    if (!ownership.canEdit() || !s.document || s.recovery || s.initialBefore || s.scope !== key || h.scope !== key || !cleaner.current) return
     const next = h[direction].pop()
     if (!next) return
     if ('apply' in next) {
@@ -110,7 +124,14 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           const result = await Canvases.canvasSave({ projectId, canvasId: s.current!.id, requestBody: command })
           if (!result.data || result.data.request_id !== command.request_id || result.data.canvas_id !== s.current!.id) throw new Error('invalid receipt')
           if (s !== state.current) return false
-          s.current = { ...s.current!, revision: result.data.revision, document: cleanObjectSources(command.document as CanvasDocument) }; s.pending = undefined; s.blocked = undefined
+          const committed = cleanObjectSources(command.document as CanvasDocument)
+          if (s.initialBefore && initialStoryboardSave(command.request_id)) {
+            history.current = { scope: key, past: [...history.current.past.slice(-49), { document: s.initialBefore }], future: [] }
+            s.document = committed
+            s.initialBefore = undefined
+            setDocument(committed); setInitialApplying(false)
+          }
+          s.current = { ...s.current!, revision: result.data.revision, document: committed }; s.pending = undefined; s.blocked = undefined
           setCurrent(s.current); persist()
         }
         return true
@@ -119,7 +140,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         const failedDocument = s.pending?.document
         if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
           s.pending = undefined
-          if (reason.status === 409) { s.conflict = true; setConflict(true) }
+          if (s.initialBefore) {
+            s.initialBefore = undefined; setInitialApplying(false)
+          } else if (reason.status === 409) { s.conflict = true; setConflict(true) }
         }
         // 暂停相同失败正文；未知结果保留原请求，手动保存可随时核实。
         s.blocked = structuredClone(s.pending ? s.document : failedDocument as CanvasDocument)
@@ -139,14 +162,17 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     try {
       // 先重放未明请求取得原回执，再读取最新服务端；恢复不产生新的保存意图。
       let baseline = saved.baseline
+      let recovered = saved.document
+      const initial = !!saved.pending && initialStoryboardSave(saved.pending.request_id)
       if (saved.pending) {
         const receipt = await Canvases.canvasSave({ projectId, canvasId: baseline.id, requestBody: saved.pending })
         if (!receipt.data || receipt.data.request_id !== saved.pending.request_id) throw new Error('invalid receipt')
         baseline = { ...baseline, revision: receipt.data.revision, document: saved.pending.document as CanvasDocument }
+        if (initial) recovered = baseline.document
       }
       const response = await Canvases.canvasGet({ projectId, canvasId: baseline.id })
       if (!response.data || s !== state.current) return
-      if (!preservesFixedSource(response.data.document, saved.document)) {
+      if (!preservesFixedSource(response.data.document, recovered)) {
         setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
         return
       }
@@ -156,11 +182,13 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         if (!catalog.data) throw new Error('empty catalog')
         configureCatalog(catalog.data)
       }
-      if (response.data.revision !== baseline.revision || !same(cleaner.current!(response.data.document), cleaner.current!(baseline.document))) {
+      const changed = response.data.revision !== baseline.revision || !same(cleaner.current!(response.data.document), cleaner.current!(baseline.document))
+      if (changed && initial) recovered = response.data.document
+      if (changed && !initial) {
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
-      s.current = response.data; s.document = cleaner.current!(saved.document); s.pending = undefined; s.recovery = undefined
-      history.current = { scope: key, past: [], future: [] }
+      s.current = response.data; s.document = cleaner.current!(recovered); s.pending = undefined; s.recovery = undefined
+      history.current = { scope: key, past: initial && !changed ? [{ document: saved.baseline.document }] : [], future: [] }
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
     } catch (reason) {
       if (s === state.current) {
@@ -194,6 +222,20 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     const s = state.current
     if (s.current && !s.recovery && !s.pending && same(s.document, s.current.document)) void latestActions.current.reload()
   }, [ownership.editable])
+  const applyInitialCandidate = async (candidate: StoryboardCandidate): Promise<'applied' | 'pending'> => {
+    const s = state.current
+    const next = candidate.document, taskId = next.storyboard?.task_id
+    if (!taskId || !ownership.canEdit() || !s.current || !s.document || s.scope !== key || s.pending || s.recovery ||
+      s.conflict || inFlight.current || s.current.id !== next.id || s.current.revision !== candidate.base_revision ||
+      !same(s.document, s.current.document) || !preservesFixedSource(s.current.document, next)) return 'pending'
+    // Stage only the command: the previous document remains visible until CAS is confirmed.
+    s.initialBefore = s.document
+    s.pending = { request_id: `storyboard:${taskId}`, expected_revision: candidate.base_revision, document: next }
+    setInitialApplying(true); persist()
+    const applied = await save()
+    if (!applied && s === state.current && !s.pending) await reload()
+    return applied ? 'applied' : 'pending'
+  }
   const requestLeave = async () => {
     const s = state.current
     if (s.recovery) return false
@@ -216,6 +258,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
   useEffect(() => { if (blocker.state === 'blocked') void latest.current.requestLeave().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
   const saveDiagnostic = failedDiagnostic?.scope === key && same(document, failedDiagnostic.document) ? failedDiagnostic.issue : undefined
-  return { saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
+  return { saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, applyInitialCandidate, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

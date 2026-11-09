@@ -37,6 +37,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
     previous_document = CanvasDocument.model_validate(canvas.document)
     _validate_fixed_source(previous_document, document)
     document, previous_document = _normalize_document(document, previous_document)
+    await _mark_storyboard_edits(db, document)
     identities = dict(canvas.card_types)
     seen = set()
     for card in document.cards:
@@ -227,6 +228,25 @@ def _restores_only_moved_slots(previous, current: CanvasResultScope | None, posi
     if current.mode == 'only':
         return not still_excluded.intersection(current.positions)
     return still_excluded <= set(current.positions)
+
+
+async def _mark_storyboard_edits(db, document: CanvasDocument) -> None:
+    """以已应用任务的原始卡片判断人工修改，撤销到原样可恢复未修改状态。"""
+    storyboard = document.storyboard
+    if not storyboard:
+        return
+    from app.models.task import Task
+    task = await db.get(Task, storyboard.task_id)
+    if not task or task.kind != 'directing_storyboard' or task.project_id != document.project_id:
+        return
+    baseline = (task.result or {}).get('document', {})
+    if baseline.get('id') != document.id:
+        return
+    original = {card['id']: card for card in baseline.get('cards', ())}
+    for card in document.cards:
+        origin = storyboard.origins.get(card.id)
+        if origin and card.id in original:
+            origin.manually_edited = original[card.id] != card.model_dump(mode='json')
 
 
 def _validate_fixed_source(previous: CanvasDocument, current: CanvasDocument) -> None:

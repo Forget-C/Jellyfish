@@ -1,18 +1,28 @@
 import type { DesignField, ReferenceDesignField } from '../../../services/generated'
 
-const states = { empty: '未填写', not_applicable: '不适用', absent: '明确没有', undecided: '待确定', proposal: '提议', fact: '事实' }
-const purposes = { background: '背景', design: '设计', constraint: '约束' }
+export const states = { empty: '未填写', not_applicable: '不适用', absent: '明确没有', undecided: '待确定', proposal: '提议', fact: '事实' }
+export const purposes = { background: '背景', design: '设计', constraint: '约束' }
 
 const hasContent = (value: ReferenceDesignField & { size?: string | null }) => !!(value.size || (value.document ? value.document.segments?.some(part => part.kind === 'reference' || part.text?.trim()) : value.text?.trim()))
 
 /** An actual edit replaces extraction metadata; reference-only and structured values are populated too. */
 export function userDesignField<T extends ReferenceDesignField & { size?: string | null }>(value: T): T {
+  if (value.extraction_context === 'storyboard') return { ...value, authorship: 'user' }
   return { ...value, authorship: 'user', metadata_fields: undefined, state: hasContent(value) ? 'fact' : 'empty', purpose: 'design', source_locator: '' }
 }
 
 /** Legacy defaults are not evidence of extraction; meaningful inactive states remain visible. */
 export function designFieldMetadataParts(value?: ReferenceDesignField & { size?: string | null }, defaults?: DesignField): { label: string; text: string }[] {
-  if (!value || value.authorship === 'user') return []
+  if (!value) return []
+  if (value.extraction_context === 'storyboard') {
+    return [
+      { label: '状态', text: states[value.state || 'empty'] },
+      { label: '用途', text: purposes[value.purpose || 'design'] },
+      ...(value.source_locator ? [{ label: '来源', text: value.source_locator }] : []),
+      ...(value.extraction_reason ? [{ label: '理由', text: value.extraction_reason }] : []),
+    ]
+  }
+  if (value.authorship === 'user') return []
   const extracted = value.authorship === 'model'
   const supplied = (key: 'state' | 'purpose' | 'source_locator') => value.metadata_fields?.includes(key) || false
   const inactive = value.state === 'not_applicable' || value.state === 'empty' && hasContent(value)

@@ -758,6 +758,56 @@ class CanvasFixedSource(BaseModel):
     chapter_version: str
 
 
+class CanvasSourceIndex(BaseModel):
+    """卡片或字段的来源定位，不参与实际模型输入绑定。"""
+    model_config = ConfigDict(extra='forbid')
+    card_id: str
+    field_id: str | None = None
+    source_field_id: str | None = None
+    segment_id: str | None = None
+    start: int | None = Field(default=None, ge=0, description='Python Unicode 字符偏移')
+    end: int | None = Field(default=None, gt=0)
+    excerpt: str | None = None
+    source_version: str | None = None
+
+
+class CanvasStoryboardOrigin(BaseModel):
+    """保留创建来源，人工修改不会把提取卡变为人工新增卡。"""
+    model_config = ConfigDict(extra='forbid')
+    semantic_key: str
+    sources: list[CanvasSourceIndex] = Field(default_factory=list)
+    manually_edited: bool = False
+
+
+class CanvasStoryboardObject(BaseModel):
+    """同一个故事对象在当前画布的共享描述与参考卡。"""
+    model_config = ConfigDict(extra='forbid')
+    object_id: str
+    description_card_id: str
+    reference_card_id: str
+
+
+class CanvasStoryboardShot(BaseModel):
+    """镜头的明确参与关系，与画布分组的显示职责分开。"""
+    model_config = ConfigDict(extra='forbid')
+    shot_id: str
+    card_id: str
+    group_id: str
+    object_ids: list[str]
+    model_card_ids: list[str]
+
+
+class CanvasStoryboard(BaseModel):
+    """由工作台建立的分镜采用范围和溯源索引。"""
+    model_config = ConfigDict(extra='forbid')
+    task_id: str
+    mode: Literal['faithful']
+    source_version: str
+    origins: dict[str, CanvasStoryboardOrigin]
+    objects: list[CanvasStoryboardObject]
+    shots: list[CanvasStoryboardShot]
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -771,6 +821,7 @@ class CanvasDocument(BaseModel):
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
     fixed_source: CanvasFixedSource | None = Field(default=None, exclude_if=lambda value: value is None)
+    storyboard: CanvasStoryboard | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 

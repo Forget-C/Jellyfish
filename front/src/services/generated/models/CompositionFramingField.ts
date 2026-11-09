@@ -19,6 +19,8 @@ export type CompositionFramingField = {
      * 模型实际返回的元信息项；保存后保持缺项，不将契约默认值视为提取结果。
      */
     metadata_fields?: (Array<'state' | 'purpose' | 'source_locator'> | null);
+    extraction_context?: (string | null);
+    extraction_reason?: (string | null);
     document?: (DesignFieldDocument | null);
     size?: ('extreme_close_up' | 'close_up' | 'medium' | 'full' | 'wide' | 'extreme_wide' | null);
     target_id?: string;
