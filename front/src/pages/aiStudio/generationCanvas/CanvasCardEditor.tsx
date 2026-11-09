@@ -22,8 +22,8 @@ export const CanvasEditorTitle = createContext<{ host: HTMLElement | null; open:
 export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
-export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, longForm = false, material = false, focusLayout = false, modality, cardType, diagnosticFocus, onReveal, suppressed = false, children }: {
-  title: string; editableTitle?: boolean; typeLabel?: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
+export function CanvasCardEditor({ title, editableTitle = false, typeLabel = title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, longForm = false, material = false, focusLayout = false, modality, cardType, diagnosticFocus, onReveal, suppressed = false, layoutAction, children }: {
+  title: string; editableTitle?: boolean; typeLabel?: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement; layoutAction?: ReactNode;
   anchor?: HTMLElement | null; layoutKey: string; suppressed?: boolean; onReveal: (offset: { x: number; y: number }) => (() => void);
   expandRequest?: number; forceModal?: boolean; longForm?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; diagnosticFocus?: { selector: string; serial: number }; children: ReactNode;
 }) {
@@ -224,6 +224,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       style={!modal ? { left: placement.left, top: placement.top, width: placement.width, maxHeight: Math.min(anchoredHeightLimit, placement.maxHeight) } : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading" data-name-editor={editableTitle}>{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}{editableTitle ? <div ref={setTitleHost} className="design-title-host" /> : <h2 title={title}>{title}</h2>}{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
+        {layoutAction}
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
         {(!desktop || !material) && <WorkbenchIconButton style={!desktop && formLayout ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>

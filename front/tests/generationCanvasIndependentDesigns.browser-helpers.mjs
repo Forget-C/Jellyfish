@@ -78,6 +78,10 @@ export async function verifyIndependentDesigns(scenario, port) {
     }
     if(scenario==='summaries')cards.push(
       ...types.map(kind=>({id:'empty-'+kind,type:'direction.'+kind})),
+      ...types.map((kind, index)=>({id:'long-'+kind,type:'direction.'+kind,fields:{
+        [fieldKeys[index]]:{text:'记录这一画面的构图、光线和主体动作。'.repeat(20),authorship:'user'}
+      }})),
+      {id:'invalid-frame',type:'direction.composition',frame_target:{card_id:'stage-only',state_id:'phase:draft'}},
       {id:'stage-only',type:'direction.movement',phases:[{id:'draft',name:'待定落幅'.repeat(30),frame:{state:'empty'}}]},
       {id:'size-only',type:'direction.composition',fields:{shot_size:{state:'fact',size:'close_up'}}},
       {id:'scope-only',type:'direction.style',scope:{description:'整场黄昏'}},
@@ -132,9 +136,10 @@ export async function verifyIndependentDesigns(scenario, port) {
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
-    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 } }
+    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, camera: { x: 1860, y: 840 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 }, 'empty-style': { x: 1860, y: 180 }, 'invalid-frame': { x: 1860, y: 500 } }
     if (scenario === 'summaries') {
       document.edges.push(
+        { id: 'movement-invalid-frame', source_card: 'stage-only', source_port: 'text', target_card: 'invalid-frame', target_port: 'text' },
         { id: 'movement-composition', source_card: 'movement', source_port: 'text', target_card: 'composition', target_port: 'text' },
         { id: 'person-focus', source_card: 'person', source_port: 'object', target_card: 'relation-only', target_port: 'focus_object' },
         { id: 'style-criterion', source_card: 'style', source_port: 'text', target_card: 'criterion', target_port: 'text' },
@@ -143,6 +148,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       )
       document.input_order['relation-only'] = { focus_object: ['person-focus'] }
       document.input_order.composition = { text: ['movement-composition'] }
+      document.input_order['invalid-frame'] = { text: ['movement-invalid-frame'] }
       document.input_order.criterion = { text: ['style-criterion', 'shot-criterion', 'performance-criterion'] }
       document.groups = [
         { id: 'existing-group', name: '验收依据', card_ids: ['criterion', 'fact'] },
@@ -173,12 +179,12 @@ export async function verifyIndependentDesigns(scenario, port) {
     }
     const assertDesignGeometry = async target => {
       await target.locator('[data-card-id="criterion"]').waitFor({ state: 'attached' })
-      const boxes = await target.locator('[data-card-type^="direction."]').evaluateAll(cards => cards.map(card => {
+      const boxes = await target.locator('[data-card-id][data-card-type^="direction."]').evaluateAll(cards => cards.map(card => {
         const body = card.querySelector('.generation-card-body')
         return { id: card.dataset.cardId, type: card.dataset.cardType, width: card.offsetWidth, height: card.offsetHeight,
           extra: (body.getBoundingClientRect().bottom - body.querySelector('.visual-design-card').getBoundingClientRect().bottom)
             * card.offsetHeight / card.getBoundingClientRect().height
-            - parseFloat(getComputedStyle(body).paddingBottom) - body.offsetHeight + body.clientHeight,
+            - parseFloat(getComputedStyle(body).paddingBottom) - parseFloat(getComputedStyle(body).borderBottomWidth),
           overflow: body.scrollHeight - body.clientHeight }
       }))
       assert.equal(boxes.length, cards.length - 1)
@@ -189,10 +195,14 @@ export async function verifyIndependentDesigns(scenario, port) {
             : id.startsWith('long-') ? (kind === 'situation' ? 160 : 224)
               : structuredSampleHeights[id] ?? 128
           : undefined
-        const heightByType = Object.hasOwn(compactExamples, kind) ? (id === 'criterion' ? 192 : id === 'middle-fact' ? 160 : 128) : structuredHeight ?? 368
-        assert.deepEqual({ width, height }, { width: 360, height: heightByType }, id)
+        const visualHeight = id.startsWith('empty-') || id.startsWith('long-') ? 240 : id === 'movement' ? 304 : id === 'style' ? 272 : undefined
+        const heightByType = Object.hasOwn(compactExamples, kind) ? (id === 'criterion' ? 192 : id === 'middle-fact' ? 160 : 128) : structuredHeight ?? visualHeight
+        assert.equal(width, 360, id)
+        if (heightByType !== undefined) assert.equal(height, heightByType, id)
+        if (types.includes(kind)) assert.ok([240, 272, 304].includes(height), id + ': supported visual band')
         assert.ok(overflow <= 1, id + ': card body contains its full summary')
         if (Object.hasOwn(compactExamples, kind) && height > 128) assert.ok(extra >= -1 && extra < 32, id + ': compact summary uses the smallest fitting band')
+        if (types.includes(kind) && height > 240) assert.ok(extra >= -1 && extra < 32, id + ': visual summary uses the smallest fitting band')
         if (structuredHeight && height > 128) assert.ok(extra >= -1 && extra < 32, id + ': structured summary uses the smallest fitting band')
       }
     }
@@ -278,6 +288,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       const guidanceFields = () => guidanceLabels.map(label => detail.getByRole('textbox', { name: label + '内容', exact: true }))
       const guidanceHeight = () => guidance.evaluate(card => card.offsetHeight)
       await guidance.press('Enter')
+      await detail.waitFor()
       if (await advanced.count()) await advanced.click()
       const extended = Object.values(structuredExamples.guidance).map(text => text.repeat(25))
       for (const [index, field] of guidanceFields().entries()) await field.fill(extended[index])
@@ -290,14 +301,18 @@ export async function verifyIndependentDesigns(scenario, port) {
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       await page.waitForFunction(() => document.querySelector('[data-card-id="guidance"]').offsetHeight === 224)
       assert.deepEqual(await guidance.getByRole('definition').allInnerTexts(), extended, 'closing restores the normal summary capacity')
+      await detail.waitFor({ state: 'hidden' })
       await guidance.press('Enter')
+      await detail.waitFor()
       if (await advanced.count()) await advanced.click()
       for (const field of guidanceFields()) await field.fill('')
       await guidance.getByRole('definition').filter({ hasText: '尚未填写生成指导' }).waitFor({ state: 'attached' })
       assert.equal(await guidanceHeight(), 224, 'clearing a structured summary keeps the open card height')
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       await page.waitForFunction(() => document.querySelector('[data-card-id="guidance"]').offsetHeight === 128)
+      await detail.waitFor({ state: 'hidden' })
       await guidance.press('Enter')
+      await detail.waitFor()
       if (await advanced.count()) await advanced.click()
       for (const [index, field] of guidanceFields().entries()) await field.fill(Object.values(structuredExamples.guidance)[index])
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
@@ -409,9 +424,54 @@ export async function verifyIndependentDesigns(scenario, port) {
         const card=page.locator(`[data-card-id="${id}"]`)
         await card.getByRole('definition').filter({hasText:text}).waitFor({state:'attached'})
       }
-      const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().height)))
+      await page.locator('[data-card-id="invalid-frame"]').getByRole('definition').filter({hasText:'定位画面已失效'}).waitFor({state:'attached'})
+      for (const kind of types) {
+        const long = page.locator(`[data-card-id="long-${kind}"]`)
+        const value = await long.getByRole('definition').evaluate(node => ({
+          visible: node.clientHeight, full: node.scrollHeight, lineHeight: parseFloat(getComputedStyle(node).lineHeight),
+        }))
+        assert.ok(value.full > value.visible && Math.abs(value.visible - value.lineHeight * 2) <= 1, kind + ': one long parameter remains a complete two-line summary')
+      }
+      const emptyStyle = page.locator('[data-card-id="empty-style"]')
+      await page.setViewportSize({ width: 2300, height: 960 })
+      await emptyStyle.screenshot({ path: join(output, 'visual-style-empty.png'), animations: 'disabled' })
+      await page.locator('[data-card-id="invalid-frame"]').screenshot({ path: join(output, 'visual-composition-invalid-frame.png'), animations: 'disabled' })
+      await emptyStyle.press('Enter')
+      await detail.getByRole('button', { name: '高级设置', exact: true }).click()
+      const direction = detail.getByRole('textbox', { name: '风格方向内容', exact: true })
+      const features = detail.getByRole('textbox', { name: '视觉特征内容', exact: true })
+      const longStyle = '让人物在亮面和暗面之间转身。'.repeat(20)
+      await direction.fill(longStyle)
+      await features.fill(longStyle)
+      const styleHeight = height => page.waitForFunction(height => document.querySelector('[data-card-id="empty-style"]').offsetHeight === height, height)
+      await styleHeight(240)
+      const lockedFigure = emptyStyle.locator('.visual-design-card:not([data-measuring]) .design-purpose svg')
+      const latest = emptyStyle.locator('.visual-design-card:not([data-measuring]) dd')
+      assert.equal(await lockedFigure.count(), 1, 'one visible layout illustration remains while locked')
+      assert.equal(await latest.first().textContent(), longStyle, 'the locked card shows the current parameters')
+      const latestLineCounts = await latest.evaluateAll(rows => rows.map(row => Math.round(row.clientHeight / parseFloat(getComputedStyle(row).lineHeight))))
+      assert.deepEqual(latestLineCounts, [2], 'the current capacity keeps whole lines in priority order')
+      await emptyStyle.screenshot({ path: join(output, 'visual-style-locked.png'), animations: 'disabled', style: '.generation-card-editor, .generation-editor-mask { visibility: hidden }' })
+      await detail.getByRole('button', { name: '返回预设', exact: true }).click()
+      await styleHeight(240)
+      await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await styleHeight(304)
+      assert.equal(await emptyStyle.getByRole('definition').count(), 2, 'unlock restores the normal two-parameter summary')
+      await emptyStyle.press('Enter')
+      await detail.waitFor()
+      if (await advanced.count()) await advanced.click()
+      await direction.clear()
+      await features.clear()
+      await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await styleHeight(240)
+      await poll(state => {
+        const fields = state.document.cards.find(card => card.id === 'empty-style').fields
+        return !fields?.direction?.text?.trim() && !fields?.visual_features?.text?.trim()
+      })
+      await page.setViewportSize({ width: 1440, height: 960 })
+      const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>parseFloat(getComputedStyle(node).height)))
       assert.equal(figures.length,cards.filter(card => types.includes(card.type?.slice('direction.'.length))).length,'only designs using the illustration layout have purpose illustrations')
-      assert.equal(new Set(figures).size,1,'type-specific illustrations keep the same visible height')
+      assert.deepEqual([...new Set(figures)], [96], 'the original illustrations retain the same 96px logical height')
       assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=3)),true,'cards keep at most three labelled summary rows')
       assert.equal(await page.locator('.visual-design-card dl > div').evaluateAll(nodes=>nodes.every(node=>{const row=node.getBoundingClientRect();return [...node.children].every(child=>{const r=child.getBoundingClientRect();return r.left>=row.left-1&&r.right<=row.right+1})})),true,'long stage labels and values remain inside the summary')
       await assertDesignGeometry(page)
