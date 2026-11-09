@@ -199,6 +199,18 @@ class StoryboardAssembly:
             self._adopt(subject, 'object', card, SUBJECT_PORTS[item.card_type], object_id=subject['object_id'])
         return card
 
+    def _reference_uses(self, model: dict, object_keys: list[str]) -> list[dict]:
+        """即使缺图，也登记可由用户明确补齐的当前镜头参考。"""
+        port = 'image' if model['type'] == 'model.image' else 'subject_image'
+        active_ids = {item['id'] for item in model.get('input_bindings', [])}
+        uses = []
+        for object_key in object_keys:
+            description, reference = self.objects[object_key]
+            binding_id = self._id(f"edge:{reference['id']}:image:{model['id']}:{port}")
+            uses.append({'object_id': description['object_id'], 'model_card_id': model['id'],
+                         'binding_id': binding_id, 'active': binding_id in active_ids})
+        return uses
+
     def _production(self, key: str, sources: list[dict], shot) -> dict:
         capability = self.args.get('production_capability')
         modality = capability['modality'] if capability else 'image'
@@ -251,5 +263,6 @@ class StoryboardAssembly:
             group_id = self._group(key + ':group', card['name'], [item['id'] for item in [*cards, model]])
             self.index['shots'].append({'shot_id': shot_id, 'card_id': card['id'], 'group_id': group_id,
                                         'object_ids': [self.objects[item][0]['object_id'] for item in shot.object_ids],
-                                        'model_card_ids': [model['id']]})
+                                        'model_card_ids': [model['id']],
+                                        'reference_uses': self._reference_uses(model, shot.object_ids)})
         return CanvasDocument.model_validate(self.document)

@@ -45,11 +45,13 @@ class ControlledModel:
         if args.get('mode') == 'faithful':
             objects = {item['excerpt']: item['id'] for item in args['objects']}
             front = objects['前门的阿同']
+            extra = [{'id': 'return', 'excerpt': '他绕过门廊。', 'object_ids': [front]}] if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1' else []
             return SimpleNamespace(content=json.dumps({'shots': [
                 {'id': 'front', 'excerpt': '前门的阿同拿着信封。', 'object_ids': [front, objects['拿着信封']],
                  'designs': [{'id': 'action', 'card_type': 'direction.performance', 'object_id': front,
                               'fields': {'physical_action': {'state': 'fact', 'text': '拿着信封', 'excerpt': '拿着信封'}}}]},
                 {'id': 'back', 'excerpt': '后门的阿同等待。', 'object_ids': [objects['后门的阿同']]},
+                *extra,
             ]}, ensure_ascii=False))
         return SimpleNamespace(content=json.dumps({'objects': [
             {'kind': 'character', 'name': '阿同', 'description': '前门等候', 'excerpt': '前门的阿同',
@@ -146,7 +148,14 @@ async def lifespan(_app):
                 control['duplicate_next'] = False
                 yield chunk
     stream.stream_events = controlled_stream
-    worker = TaskWorker(sessions)
+    client = None
+    if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
+        import httpx
+        def image_provider(request):
+            assert request.method == 'POST' and request.url.host == 'fixture.test'
+            return httpx.Response(200, json={'data': [{'b64_json': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII='}]})
+        client = httpx.AsyncClient(transport=httpx.MockTransport(image_provider))
+    worker = TaskWorker(sessions, client=client)
     async def tick():
         while True:
             await worker.tick()
@@ -166,6 +175,8 @@ async def lifespan(_app):
             job.cancel()
         await asyncio.gather(runner, *list(worker.jobs.values()), return_exceptions=True)
         worker.text_pool.shutdown(wait=False)
+        if client is not None:
+            await client.aclose()
         await engine.dispose()
 
 
@@ -207,13 +218,30 @@ if __name__ == '__main__':
         from app.core import storage
         media_dir = Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'])
         media_dir.mkdir(parents=True, exist_ok=True)
+        def object_path(key):
+            return media_dir / (key if key.startswith('generated/') else Path(key).name)
+
         async def upload_file(*, key, data, **kwargs):
             """只替换外部对象存储 I/O，保留真实文件路由及服务。"""
-            (media_dir / Path(key).name).write_bytes(data.read())
+            path = object_path(key)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data.read())
+
         async def download_file(*, key):
-            return (media_dir / Path(key).name).read_bytes()
+            return object_path(key).read_bytes()
+
         storage.upload_file = upload_file
         storage.download_file = download_file
+        if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
+            from botocore.exceptions import ClientError
+
+            async def get_file_info(*, key):
+                path = object_path(key)
+                if not path.exists():
+                    raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
+                return storage.StoredFileInfo(key=key, url='', size=path.stat().st_size, content_type='image/png')
+
+            storage.get_file_info = get_file_info
     asyncio.run(prepare())
     app.router.lifespan_context = lifespan
     app.dependency_overrides[get_db] = database

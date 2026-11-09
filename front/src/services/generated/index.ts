@@ -248,6 +248,7 @@ export type { CanvasSourceMapping } from './models/CanvasSourceMapping';
 export type { CanvasStoryboard } from './models/CanvasStoryboard';
 export type { CanvasStoryboardObject } from './models/CanvasStoryboardObject';
 export type { CanvasStoryboardOrigin } from './models/CanvasStoryboardOrigin';
+export type { CanvasStoryboardReferenceUse } from './models/CanvasStoryboardReferenceUse';
 export type { CanvasStoryboardShot } from './models/CanvasStoryboardShot';
 export type { CanvasStreamConnection } from './models/CanvasStreamConnection';
 export type { CanvasSummaryField } from './models/CanvasSummaryField';

@@ -787,6 +787,15 @@ class CanvasStoryboardObject(BaseModel):
     reference_card_id: str
 
 
+class CanvasStoryboardReferenceUse(BaseModel):
+    """一个生产卡的明确参考采用意图，空占位时保留绑定身份。"""
+    model_config = ConfigDict(extra='forbid')
+    object_id: str
+    model_card_id: str
+    binding_id: str
+    active: bool
+
+
 class CanvasStoryboardShot(BaseModel):
     """镜头的明确参与关系，与画布分组的显示职责分开。"""
     model_config = ConfigDict(extra='forbid')
@@ -795,6 +804,8 @@ class CanvasStoryboardShot(BaseModel):
     group_id: str
     object_ids: list[str]
     model_card_ids: list[str]
+    reference_uses: list[CanvasStoryboardReferenceUse] = Field(default_factory=list, exclude_if=lambda value: not value)
+    reference_overrides: dict[str, str] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 
 class CanvasStoryboard(BaseModel):

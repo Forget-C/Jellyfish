@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasStoryboardReferenceUse } from './CanvasStoryboardReferenceUse';
 /**
  * 镜头的明确参与关系，与画布分组的显示职责分开。
  */
@@ -11,4 +12,6 @@ export type CanvasStoryboardShot = {
     group_id: string;
     object_ids: Array<string>;
     model_card_ids: Array<string>;
+    reference_uses?: Array<CanvasStoryboardReferenceUse>;
+    reference_overrides?: Record<string, string>;
 };

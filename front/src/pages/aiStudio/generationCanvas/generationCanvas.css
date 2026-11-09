@@ -314,3 +314,37 @@
 .generation-canvas-cover img { position: absolute; inset: 0; }
 
 .generation-output-choice-content { display: inline-flex; align-items: center; gap: 12px; }
+
+.generation-storyboard-reference {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--wb-border);
+}
+
+.generation-storyboard-reference h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.generation-storyboard-reference-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.generation-storyboard-reference-row small {
+  display: block;
+  color: var(--wb-muted);
+}
+
+@media (max-width: 540px) {
+  .generation-storyboard-reference-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .generation-storyboard-reference-row > button {
+    justify-self: start;
+  }
+}

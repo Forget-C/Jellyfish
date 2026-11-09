@@ -64,6 +64,8 @@ import { PlaybackCardPreview } from './PlaybackCardPreview'
 import { rendererRegistry } from './rendererRegistry'
 import { visibleSourceEdges, sourceConnectionEdges } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
+import { StoryboardReferences } from './StoryboardReferences'
+import { chooseStoryboardOverride, storyboardImageBinding, updateStoryboardReference } from './storyboardReferenceEdits'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
 import type { GenerationCard, GenerationEdge } from './graphRules'
@@ -497,7 +499,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [document.id, document.project_id, modelIds])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => {
-    const result = operations.update(latest.current, next, capability(next))
+    const result = updateStoryboardReference(latest.current, next, operations, capability)
     if (result.document) {
       edit(result.document)
       if (invalidRequirementNames.has(next.id) && next.type === 'direction.criterion' && 'name' in next && next.name?.trim() && reason === '请先填写验收要求名称') setReason('')
@@ -1232,6 +1234,20 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       <span aria-label="画布缩放比例">{Math.round(transform.scale * 100)}%</span>
       <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => zoomAt(transform.scale + .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
       <Button variant="quiet" onClick={fitVisibleCards}>适应全部</Button>
+      {document.storyboard && <StoryboardReferences document={document} readonly={readonly}
+        setDefault={(reference, image) => {
+          const current = latest.current
+          const result = updateStoryboardReference(current, {
+            ...reference, image_binding: image ? storyboardImageBinding(current, image) : null,
+          }, operations, capability, true)
+          if (result.document) edit(result.document)
+          return result.reason
+        }}
+        setOverride={(shotId, objectId, image) => {
+          const result = chooseStoryboardOverride(latest.current, shotId, objectId, image, operations, capability)
+          if (result.document) edit(result.document)
+          return result.reason
+        }} />}
       <CanvasToolbarMenu label="布局" caption="布局">
         <Button disabled={arrangementBlocked} onClick={arrangeLayout}>整理布局</Button>
         <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
