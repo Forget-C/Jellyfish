@@ -312,10 +312,15 @@ class SceneStoryboardService(SceneObjectService):
 
     async def _storyboard_read(self, task: Task) -> StoryboardTaskRead:
         canvas_id = task.input_snapshot['canvas_id']
+        try:
+            canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            raise HTTPException(404, '此分镜任务的原画布已不可用') from error
         candidate, pending = None, False
         if task.status == TaskStatus.succeeded:
             candidate = StoryboardCandidate.model_validate(task.result)
-            canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
             receipt = await self.db.get(CanvasSaveReceipt, (canvas_id, 'storyboard:' + task.id))
             if receipt:
                 candidate = None

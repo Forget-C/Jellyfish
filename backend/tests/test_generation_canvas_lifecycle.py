@@ -43,13 +43,13 @@ async def test_deleted_cards_keep_history_and_canvas_deletion_releases_only_its_
     assert next(run for run in history if run['id'] == accepted['run_id'])['nodes'][0]['outputs'] == node['outputs']
     assert (await runtime.client.get('/files/' + second + '/download')).content == b'second'
     assert (await runtime.client.delete('/files/' + second)).status_code == 409
-    assert (await runtime.client.delete(runtime.url)).status_code == 200
+    assert (await runtime.client.delete(runtime.url, params={'expected_revision': 3})).status_code == 200
     assert (await runtime.client.get(runtime.url + '/runtime')).status_code == 404
     assert (await runtime.client.delete('/files/' + second)).status_code == 200
     assert (await runtime.client.delete('/files/' + first)).status_code == 409
     assert (await runtime.client.get('/files/' + first + '/download')).content == b'first'
     assert (await runtime.client.get(other_url)).json()['data']['document']['cards'][0]['file_id'] == first
-    assert (await runtime.client.delete(other_url)).status_code == 200
+    assert (await runtime.client.delete(other_url, params={'expected_revision': 1})).status_code == 200
     assert (await runtime.client.delete('/files/' + first)).status_code == 200
 
 
@@ -125,7 +125,9 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
         detail = (await runtime.client.get('/files/' + file_id)).json()['data']
         assert {'generation_upload', 'canvas_content', 'canvas_run'} <= {usage['usage_kind'] for usage in detail['usages']}
         assert (await runtime.client.delete('/files/' + file_id)).status_code == 409
-        assert (await runtime.client.delete(runtime.url)).status_code == 409
+        revision = (await runtime.client.get(runtime.url)).json()['data']['revision']
+        rejected = await runtime.client.delete(runtime.url, params={'expected_revision': revision})
+        assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
         assert (await runtime.client.delete('/projects/' + runtime.project_id)).status_code == 409
         doc['cards'] = [card for card in doc['cards'] if card['id'] != 'known']
         doc['cards'][1]['prompt']['segments'] = [doc['cards'][1]['prompt']['segments'][0]]
@@ -137,7 +139,8 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
         cancelled = await runtime.client.post(runtime.url + '/runs/' + accepted['run_id'] + '/cancel')
         assert cancelled.status_code == 200, cancelled.text
         assert (await runtime.client.delete(release)).status_code == 409
-        assert (await runtime.client.delete(runtime.url)).status_code == 200
+        revision = (await runtime.client.get(runtime.url)).json()['data']['revision']
+        assert (await runtime.client.delete(runtime.url, params={'expected_revision': revision})).status_code == 200
         assert (await runtime.client.delete('/files/' + file_id)).status_code == 409
         assert (await runtime.client.delete(release)).status_code == 200
         assert (await runtime.client.get('/files/' + file_id + '/download')).content == b'known'

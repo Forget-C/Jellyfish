@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService, type SceneCanvasSummary, type StoryboardTaskSummary } from '../../../services/generated'
 import { readChapterBrowse, saveChapterBrowse, scenePreparationLocation } from './chapterNavigation'
 import { directingError } from './common'
+import { SceneCanvasDeletion } from './SceneCanvasDeletion'
+import { useWorkspaceDraftStatus } from './WorkspaceDrafts'
 import './workbench-canvas-cards.css'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
@@ -22,7 +24,7 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
-export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical }: Scope & { historical: boolean }) {
+export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, onChange }: Scope & { historical: boolean; onChange?: () => void }) {
   const navigate = useNavigate()
   const [notices, noticeContext] = message.useMessage()
   const [canvases, setCanvases] = useState<SceneCanvasSummary[]>()
@@ -32,6 +34,9 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [revision, setRevision] = useState(0)
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<string>()
+  const [deleteTarget, setDeleteTarget] = useState<string>()
+  const [deleteError, setDeleteError] = useState('')
+  const drafts = useWorkspaceDraftStatus()
   const recentCanvas = readChapterBrowse(projectId, chapterId).managementCanvas
   const detailCard = canvases?.find(canvas => canvas.id === detail)
   const detailTask = detailCard?.latest_storyboard
@@ -97,6 +102,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     </div>
     {error && <Alert showIcon type="error" message={error} action={<Button size="small"
       onClick={() => setRevision(value => value + 1)}>重试读取画布</Button>} />}
+    {deleteError && <Alert showIcon type="warning" message={deleteError} />}
     {loading && !canvases && !error && <Spin aria-label="正在读取本场画布" />}
     {!error && canvases?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={historical ? '此历史场次没有画布' : '本场尚无画布，可生成新分镜画布开始设计'} />}
@@ -111,11 +117,15 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
           <Card size="small">
             <div className="management-canvas-card-heading">
               <h4>{canvas.name}</h4>
-              {task && <Dropdown trigger={['click']} menu={{ items: [
-                { key: 'detail', label: '查看任务详情', onClick: () => setDetail(canvas.id) },
+              <Dropdown trigger={['click']} menu={{ items: [
+                ...(task ? [{ key: 'detail', label: '查看任务详情', onClick: () => setDetail(canvas.id) }] : []),
+                { key: 'delete', label: '删除画布', danger: true, onClick: () => drafts.transition(() => {
+                  setDeleteError('')
+                  setDeleteTarget(canvas.id)
+                }) },
               ] }}>
                 <Button type="text" icon={<MoreOutlined />} aria-label={`${canvas.name}更多操作`} />
-              </Dropdown>}
+              </Dropdown>
             </div>
             <div className="management-canvas-status">
               {task && !currentTaskIsCandidate && task.task_id !== adoptedId && <Tag
@@ -149,5 +159,12 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
         ...(detailTask.error ? [{ key: 'error', label: '原因', children: detailTask.error }] : []),
       ]} />}
     </Modal>
+    {deleteTarget && <SceneCanvasDeletion key={deleteTarget} {...{ projectId }} canvasId={deleteTarget}
+      onClose={() => setDeleteTarget(undefined)} onFailure={setDeleteError}
+      onDeleted={() => {
+        setCanvases(previous => previous?.filter(canvas => canvas.id !== deleteTarget))
+        setRevision(value => value + 1)
+        onChange?.()
+      }} />}
   </section>
 }

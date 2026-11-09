@@ -5,7 +5,7 @@ import { useBlocker } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave, StoryboardApplication, StoryboardCandidate } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
-import { useSceneEditOwnership } from '../directing/useSceneEditOwnership'
+import { generationCanvasEditScope, useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
@@ -40,7 +40,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
 export function useGenerationCanvasEditor(projectId: string, canvasId: string | null) {
   const key = `jellyfish:generation:${projectId}:${canvasId}:recovery`
-  const ownership = useSceneEditOwnership(`jellyfish:generation-editor:${projectId}:${canvasId}`)
+  const ownership = useSceneEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [current, setCurrent] = useState<CanvasRead>()
   const [document, setDocument] = useState<CanvasDocument>()
   const [saving, setSaving] = useState(false)
@@ -83,7 +83,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           state.current.recovery = saved; setRecovery(saved)
         }
       } catch { setStorageError('本地恢复记录无法读取；未覆盖服务器内容') }
-    }).catch(reason => { if (active) setError(describe(reason)) })
+    }).catch(reason => { if (active) setError(reason instanceof ApiError && reason.status === 404 ? '此画布已不可用' : describe(reason)) })
     return () => { active = false }
   }, [key, projectId, canvasId])
   const edit = (next: CanvasDocument | ((previous: CanvasDocument) => CanvasDocument)) => {

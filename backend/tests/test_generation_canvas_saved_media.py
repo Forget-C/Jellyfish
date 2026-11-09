@@ -46,7 +46,7 @@ async def test_shared_fixed_file_keeps_every_usage_and_releases_only_removed_rol
     doc['cards'][1]['image_binding'] = None
     assert (await save(client, url, doc, 3, 'clear-reference')).status_code == 200
     assert await protections(client, files[0]) == [other_ref]
-    assert (await client.delete(f"/canvases/p/{other['id']}")).status_code == 200
+    assert (await client.delete(f"/canvases/p/{other['id']}", params={'expected_revision': 1})).status_code == 200
     assert await protections(client, files[0]) == []
 
 

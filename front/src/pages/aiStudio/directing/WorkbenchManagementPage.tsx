@@ -211,7 +211,8 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                   editable={!historical && !!selected.source_excerpt.trim()}
                   management={{ host: objectActions, onContinue: () => select(selected.id, 'storyboard'),
                     onChange: () => setRevision(value => value + 1) }} />}
-                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} />}
+                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id}
+                  onChange={() => setRevision(value => value + 1)} />}
               </section>}
               {step === 'division' && <WorkbenchDivisionStep {...{ projectId, chapterId }}
                 sequenceId={historical ? undefined : selected?.id} refreshKey={divisionRevision}

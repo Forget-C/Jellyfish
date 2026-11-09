@@ -190,7 +190,8 @@ async def test_activity_guards_allow_edits_but_reject_card_canvas_project_deleti
     response = await runtime.client.put(runtime.url, json={'request_id': 'delete-card', 'expected_revision': 1, 'document': changed})
     assert response.status_code == 409
     assert response.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
-    assert (await runtime.client.delete(runtime.url)).status_code == 409
+    rejected = await runtime.client.delete(runtime.url, params={'expected_revision': 1})
+    assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
     assert (await runtime.client.delete('/projects/' + runtime.project_id)).status_code == 409
 
 
@@ -385,7 +386,7 @@ async def test_mysql_activity_guard_sees_run_committed_after_earlier_read(runtim
     await CanvasStore(deleting, runtime.project_id).get(runtime.canvas_id)
     await accept(runtime)
     with pytest.raises(HTTPException) as error:
-        await CanvasStore(deleting, runtime.project_id).delete(runtime.canvas_id)
+        await CanvasStore(deleting, runtime.project_id).delete(runtime.canvas_id, expected_revision=1)
     assert error.value.status_code == 409
     await deleting.rollback()
     await CanvasStore(deleting, runtime.project_id).get(runtime.canvas_id)
