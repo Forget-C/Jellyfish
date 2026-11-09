@@ -215,6 +215,6 @@ python -m py_compile $(rg --files app tests)
 
 ## 扩展说明
 
-- **数据库**：在 `app/models/` 下新增模型并继承 `Base`，在 `app/core/db.py` 中可调用 `init_db()` 建表。
-- **提示词**：在 `app/chains/prompts.py` 中增加 `PromptTemplate`。
-- **工作流**：在 `app/chains/graphs.py` 中定义 `StateGraph` 并 `compile()`，在路由中 `ainvoke` 调用。
+- **数据库**：在 `app/models/` 下新增或修改模型，通过 `alembic/versions/` 中的 revision 发布结构变更；初始化与升级统一运行 `uv run python -m app.scripts.migrate_database`。迁移约束见[数据库迁移与系统种子](../docs/development/architecture/database-migrations.md)，操作步骤见[数据库升级与回退](../docs/development/guides/database-upgrade.md)。
+- **提示词与 Agent**：在 [app/chains/agents/](app/chains/agents/) 中按具体业务维护 `PromptTemplate` 和输出模型，复用 [AgentBase](app/chains/agents/base.py) 的调用与解析能力。
+- **业务编排**：在 `app/services/` 中组织业务步骤和 Agent 调用；脚本处理可参考 [script_processing_worker.py](app/services/script_processing_worker.py)。路由与服务职责见[后端说明](../docs/development/guides/backend.md)，异步执行与恢复边界见[任务执行架构](../docs/development/architecture/task-execution.md)。

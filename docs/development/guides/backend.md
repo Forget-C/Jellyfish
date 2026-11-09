@@ -7,7 +7,7 @@
 | `app/main.py`、`app/api/v1/` | 应用入口和路由。路由负责接收参数、鉴权和组织响应。 |
 | `app/services/` | 业务逻辑、数据编排与状态流转。 |
 | `app/models/`、`app/schemas/` | ORM 模型与请求响应模型。 |
-| `app/chains/` | Agent、提示词和工作流。 |
+| `app/chains/agents/` | Agent 与提示词，业务编排由服务层负责。 |
 | `app/core/contracts/`、`app/core/integrations/` | 共享生成契约与供应商协议适配。 |
 
 ## 路由与服务
