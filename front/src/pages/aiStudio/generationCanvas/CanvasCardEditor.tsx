@@ -224,7 +224,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       style={!modal ? { left: placement.left, top: placement.top, width: placement.width, maxHeight: Math.min(anchoredHeightLimit, placement.maxHeight) } : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading" data-name-editor={editableTitle}>{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}{editableTitle ? <div ref={setTitleHost} className="design-title-host" /> : <h2 title={title}>{title}</h2>}{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
-        {layoutAction}
+        {modal && layoutAction}
         {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
         {(!desktop || !material) && <WorkbenchIconButton style={!desktop && formLayout ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>

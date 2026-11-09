@@ -307,6 +307,7 @@ try {
     { id: 'member-a', type: 'content.text', text: '开放编组成员' },
     { id: 'member-b', type: 'direction.fact', fact: { text: '保留相对位置', authorship: 'user' } },
     { id: 'collapsed-a', type: 'model.video' }, { id: 'collapsed-b', type: 'content.text' },
+    { id: 'hidden-check', type: 'review.check' },
     { id: 'stack-a', type: 'content.text' }, { id: 'stack-b', type: 'model.video' },
     { id: 'result-model', type: 'model.text', show_result_cards: true },
     { id: 'ordinary-b', type: 'content.text' }, { id: 'ordinary-c', type: 'content.audio' },
@@ -314,15 +315,23 @@ try {
   await openLayoutFixture('组与收纳封面参与整理', mixedCards, {
     'member-a': { x: 250, y: 210 }, 'member-b': { x: 320, y: 266 },
     'collapsed-a': { x: 790, y: 110 }, 'collapsed-b': { x: 900, y: 840 },
-    'stack-a': { x: 720, y: 400 }, 'stack-b': { x: 240, y: 900 },
-    'result-model': { x: 1250, y: 340 }, 'ordinary-b': { x: 1250, y: 700 }, 'ordinary-c': { x: 820, y: 800 },
+    'hidden-check': { x: 800, y: 180 },
+    'stack-a': { x: 400, y: 140 }, 'stack-b': { x: 450, y: 480 },
+    'result-model': { x: 50, y: 360 }, 'ordinary-b': { x: 1250, y: 700 }, 'ordinary-c': { x: 820, y: 800 },
   }, [
     { id: 'open', name: '开放编组', card_ids: ['member-a', 'member-b'] },
-    { id: 'closed', name: '收起编组', collapsed: true, card_ids: ['collapsed-a', 'collapsed-b'] },
+    { id: 'closed', name: '收起编组', collapsed: true, card_ids: ['collapsed-a', 'collapsed-b', 'hidden-check'] },
     { id: 'stack', name: '堆叠', kind: 'stack', card_ids: ['stack-a', 'stack-b'] },
   ], id => ({ 'result-model': [{ source: { canvas_id: id, card_id: 'result-model', port_id: 'text', position: 0 }, modality: 'text', available: true, basis_current: true, text: '正式输出' }] }))
   const resultCard = page.locator('[data-card-id^="linked-result:result-model:"]')
   await resultCard.waitFor({ state: 'attached' })
+  const initialStack = await arrangeFrame(page.locator('[data-stack-id="stack"]'))
+  assert.equal((await arrangeFrame(resultCard)).y, initialStack.y + initialStack.height + 24, 'result clears visible stack cover without avoiding its hidden members')
+  assert.equal(await card('hidden-check').count(), 0, 'collapsed check card does not expose a card face')
+  await page.getByRole('button', { name: '布局', exact: true }).click()
+  await page.getByRole('button', { name: '展开小地图', exact: true }).click()
+  assert.equal(await page.locator('[data-minimap-node="hidden-check"]').count(), 0, 'collapsed check card has no visible geometry')
+  await page.keyboard.press('Escape')
   await arrange()
   const openBox = await arrangeFrame(page.locator('[data-group-id="open"]'))
   const closedBox = await arrangeFrame(page.locator('[data-group-id="closed"]'))
@@ -337,8 +346,25 @@ try {
   assert.deepEqual([neighbor.y, audio.y], [model.y, model.y], 'ordinary cards retain three columns below group units')
   const projected = await arrangeFrame(resultCard)
   assert.equal(projected.x - model.x - model.width, 64, 'result still follows the model')
-  assert.ok(projected.y >= neighbor.y + neighbor.height + 24, 'result keeps its dedicated obstacle clearance')
+  assert.equal(projected.y, neighbor.y + neighbor.height + 24, 'result clears only visible obstacles at its dedicated spacing')
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   await page.screenshot({ path: join(output, 'arrangement-groups-and-results.png') })
+  const fixedDetail = page.locator('.generation-card-editor:visible')
+  await openCanvasCard(page, 'ordinary-b')
+  assert.equal(await fixedDetail.getByRole('button', { name: '整理布局', exact: true }).count(), 0, 'floating detail uses the canvas toolbar')
+  await page.keyboard.press('Escape')
+  await fixedDetail.waitFor({ state: 'hidden' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  const resultId = await resultCard.getAttribute('data-card-id')
+  for (const id of ['ordinary-b', resultId]) {
+    await openCanvasCard(page, id)
+    assert.equal(await fixedDetail.getAttribute('aria-modal'), 'true')
+    const fixedCard = card(id), height = (await arrangeFrame(fixedCard)).height
+    await fixedDetail.getByRole('button', { name: '整理布局', exact: true }).click()
+    assert.equal(await fixedDetail.isVisible(), true, 'fixed-height modal stays open while organizing')
+    assert.equal((await arrangeFrame(fixedCard)).height, height)
+    await page.keyboard.press('Escape')
+    await fixedDetail.waitFor({ state: 'hidden' })
+  }
   console.log('PASS explicit multiselection and visual group saved through HTTP')
 } finally { await cleanup() }

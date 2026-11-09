@@ -54,22 +54,28 @@ export function retainedResultIds(cards: GenerationCard[], positions: Record<str
   return Object.keys(positions).filter(id => prefixes.some(prefix => id.startsWith(prefix)))
 }
 
-/** 首次展开从来源右侧找空位，既有卡片和已移动结果均保持原位。 */
-export function placeLinkedResults(results: LinkedResult[], positions: Record<string, CanvasPoint>, sizes: Record<string, GraphSize>, retained: Record<string, CanvasPoint> = {}) {
+/** 首次展开从来源右侧避让可见外框，已有结果保留坐标并参与避让。 */
+export function placeLinkedResults(results: LinkedResult[], positions: Record<string, CanvasPoint>, sizes: Record<string, GraphSize>,
+  visibleFrames: (CanvasPoint & GraphSize)[], retained: Record<string, CanvasPoint> = {}) {
   const placed = { ...positions }
+  const occupied = [...visibleFrames]
+  for (const { id } of results) {
+    if (!retained[id]) continue
+    placed[id] = retained[id]
+    occupied.push({ ...placed[id], ...sizes[id] })
+  }
   for (const result of results) {
     const id = result.id, sourceId = result.output.source.card_id
-    if (retained[id]) { placed[id] = retained[id]; continue }
+    if (retained[id]) continue
     const source = placed[sourceId] || { x: 0, y: 0 }, size = sizes[id]
     const x = source.x + sizes[sourceId].width + 64
     let y = source.y
-    for (const [otherId, point] of Object.entries(placed).sort(([, a], [, b]) => a.y - b.y)) {
-      const other = sizes[otherId]
-      if (!other) continue
-      if (x < point.x + other.width + 24 && x + size.width + 24 > point.x
-        && y < point.y + other.height + 24 && y + size.height + 24 > point.y) y = point.y + other.height + 24
+    for (const other of occupied.sort((a, b) => a.y - b.y)) {
+      if (x < other.x + other.width + 24 && x + size.width + 24 > other.x
+        && y < other.y + other.height + 24 && y + size.height + 24 > other.y) y = other.y + other.height + 24
     }
     placed[id] = { x, y }
+    occupied.push({ x, y, ...size })
   }
   return placed
 }

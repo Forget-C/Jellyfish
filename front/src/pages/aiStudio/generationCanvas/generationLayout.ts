@@ -16,6 +16,17 @@ export function generationGroupBounds(group: GenerationCanvasGroup, members: rea
   }
 }
 
+/** 可见卡片和收纳外框共同参与适应全部、小地图与放置避让。 */
+export function generationVisibleFrames(visibleIds: readonly string[], groups: GenerationCanvasGroup[], point: (id: string) => CanvasPoint, sizes: Record<string, GraphSize>) {
+  const cardFrames = visibleIds.map(id => ({ id, ...point(id), ...sizes[id] }))
+  const groupFrames = new Map(groups.flatMap(group => {
+    const members = (group.card_ids || []).filter(id => sizes[id])
+    if (group.kind === 'stack' && !members.length) return []
+    return [[group.id, generationGroupBounds(group, members, point, sizes)] as const]
+  }))
+  return { cardFrames, groupFrames }
+}
+
 /** 先纵排可见组织外框，再以真实行高、列宽整理普通卡。成员只做整体平移。 */
 export function arrangeGenerationCards(ids: string[], groups: GenerationCanvasGroup[], previous: Record<string, CanvasPoint>, sizes: Record<string, GraphSize>) {
   const positions: Record<string, CanvasPoint> = {}
