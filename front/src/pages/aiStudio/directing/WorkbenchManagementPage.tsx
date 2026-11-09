@@ -7,10 +7,12 @@ import { usePageTitle } from '../../../layouts/pageTitle'
 import { StudioDirectingService, type ChapterWorkbenchManagement, type WorkbenchSceneSummary } from '../../../services/generated'
 import {
   chapterLocation, legacySceneCanvasLocation, managementStep, readChapterBrowse,
-  saveChapterBrowse, scenePreparationLocation, type WorkbenchManagementStep,
+  saveChapterBrowse, type WorkbenchManagementStep,
 } from './chapterNavigation'
 import { directingError } from './common'
+import { SceneObjectPreparation } from './SceneObjectPreparation'
 import { SequenceDetails } from './SequenceDetails'
+import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
 import { WorkbenchDivisionStep } from './WorkbenchDivisionStep'
 import { useWorkspaceDraftStatus, WorkspaceDrafts } from './WorkspaceDrafts'
 import './workbench-management.css'
@@ -72,6 +74,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [editingMetadata, setEditingMetadata] = useState(false)
   const [historyOpen, setHistoryOpen] = useState<boolean>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [objectActions, setObjectActions] = useState<HTMLDivElement | null>(null)
   const sceneToggle = useRef<HTMLButtonElement>(null)
   const search = useRef('')
   search.current = params.toString()
@@ -87,7 +90,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const invalidScene = overview && explicitId !== null && !selected
   const step = selected ? managementStep(params.get('step')) ??
     (rememberedScene ? remembered.managementStep : undefined) ?? 'division' : 'division'
-  const preparation = selected && scenePreparationLocation(projectId, chapterId, selected.id)
   const loading = !overview && !error
   const hasActive = scenes.some(scene => [scene.object_task, scene.storyboard_task]
     .some(task => task?.status === 'queued' || task?.status === 'running'))
@@ -153,10 +155,8 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     { key: 'units', label: <Link to={legacySceneCanvasLocation(projectId, chapterId, selected.id, 'units')}>旧版试拍</Link> },
     { key: 'edit', label: <Link to={legacySceneCanvasLocation(projectId, chapterId, selected.id, 'edit')}>旧版审片与剪辑</Link> },
   ] : []
-  const action = !overview || invalidScene || step === 'division' ? null
-    : preparation && <Button type="primary" onClick={() => navigate(preparation)}>
-      {step === 'objects' ? '查看对象与参考' : '查看本场画布'}
-    </Button>
+  const action = overview && !invalidScene && step === 'objects' &&
+    <div className="management-object-actions" ref={setObjectActions} />
 
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
     <PageToolbar title="工作台管理">
@@ -200,16 +200,18 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                 {historical && <Alert type="info" showIcon message="此场次已退出当前划分，可查看原有准备和画布。" />}
                 {selected.source_changed && <Alert type="warning" showIcon message="章节原文已变化，仍使用本场已确认摘录。"
                   action={step !== 'division' && <Button size="small" onClick={() => select(selected.id, 'division')}>前往核对场次范围</Button>} />}
-                {selected.preparation_stale && !historical && <Alert type="warning" showIcon
+                {selected.preparation_stale && !historical && step !== 'objects' && <Alert type="warning" showIcon
                   message="对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。"
-                  action={step !== 'objects' && <Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />}
+                  action={<Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />}
                 {(step !== 'division' || historical || selected.source_changed) && <>
                   <h3>已确认场次原文摘要</h3>
                   <p className="management-excerpt">{selected.source_excerpt || '暂无场次原文'}</p>
                 </>}
-                {step === 'objects' && <p>{selected.preparation_stale ? '对象准备已过时' : selected.has_object_preparation
-                  ? `已准备 ${selected.object_count} 个对象` : '尚未提取对象'}</p>}
-                {step === 'storyboard' && <p>{selected.canvas_count ? `本场有 ${selected.canvas_count} 张画布` : '本场尚无画布'}</p>}
+                {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
+                  editable={!historical && !!selected.source_excerpt.trim()}
+                  management={{ host: objectActions, onContinue: () => select(selected.id, 'storyboard'),
+                    onChange: () => setRevision(value => value + 1) }} />}
+                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} />}
               </section>}
               {step === 'division' && <WorkbenchDivisionStep {...{ projectId, chapterId }}
                 sequenceId={historical ? undefined : selected?.id} refreshKey={divisionRevision}

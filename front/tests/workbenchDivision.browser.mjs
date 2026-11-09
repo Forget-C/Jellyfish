@@ -172,6 +172,14 @@ try {
   assert.deepEqual((await request(aiApi)).sequences.map(row => row.title), ['AI 前厅人工确认', 'AI 后院'])
   assert.equal(new URL(page.url()).searchParams.get('step'), 'division')
   assert.equal((await request(aiApi + '/workbench-management')).sequences.reduce((count, row) => count + row.object_count + row.canvas_count, 0), 0)
+  await preview.waitFor({ state: 'hidden' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await reader.waitFor()
+  const bounds = await reader.boundingBox()
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391)
+  await page.screenshot({ path: join(output, 'division-mobile.png') })
+  await page.getByRole('button', { name: '查看当前选区', exact: true }).click()
+  assert.equal(await page.getByRole('textbox', { name: '场次标题', exact: true }).inputValue(), 'AI 前厅人工确认')
 } finally {
   await cleanup()
 }

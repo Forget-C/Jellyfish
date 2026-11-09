@@ -1,0 +1,44 @@
+.management-object-actions,
+.management-object-filters,
+.management-object-reference,
+.management-reference-option {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.management-object-preparation { margin-block-start: 16px; }
+.management-object-filters .ant-select { min-width: 112px; }
+.management-object-kind { margin-block-start: 12px; }
+.management-object-list { list-style: none; margin: 0; padding: 0; }
+.management-object-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(132px, .8fr) auto;
+  align-items: start;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-block-start: 1px solid var(--app-border);
+}
+.management-object-info { min-width: 0; overflow-wrap: anywhere; }
+.management-object-description {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-muted);
+}
+.management-object-info details { margin-block-start: 4px; font-size: 12px; }
+.management-object-info details summary { cursor: pointer; }
+.management-object-info details p { margin: 4px 0; white-space: pre-wrap; }
+.management-object-asset .ant-select { width: 100%; }
+.management-object-warning { color: #8a5610; }
+.management-reference-button.ant-btn { width: 40px; padding: 2px; }
+.management-reference-button img,
+.management-reference-option img { width: 34px; height: 26px; object-fit: contain; }
+.management-reference-button img { display: block; }
+
+@media (max-width: 740px) {
+  .management-object-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .management-object-info,
+  .management-object-asset { grid-column: 1 / -1; }
+}

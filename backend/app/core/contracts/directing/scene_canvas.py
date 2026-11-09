@@ -1,7 +1,10 @@
 """场次准备页只使用当前场次、真实画布身份及固定依据状态。"""
 
+from datetime import datetime
+
 from pydantic import Field
 from app.core.contracts.directing.common import Contract, Identity
+from app.core.contracts.directing.scene_storyboard import StoryboardTaskSummary
 from app.core.contracts.directing.workspace import SequenceRead
 
 
@@ -17,6 +20,11 @@ class SceneCanvasSummary(Contract):
     id: Identity
     name: str
     source_changed: bool
+    created_at: datetime
+    latest_storyboard: StoryboardTaskSummary | None = None
+    candidate_storyboard_task_id: Identity | None = None
+    storyboard_review_required: bool = False
+    applied_storyboard_task_id: Identity | None = None
 
 
 class SceneCanvasesRead(Contract):

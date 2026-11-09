@@ -1,0 +1,32 @@
+.management-canvas-toolbar, .management-canvas-card-heading, .management-canvas-status, .management-canvas-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.management-canvas-toolbar, .management-canvas-card-heading { justify-content: space-between; }
+.management-canvas-toolbar { flex-wrap: wrap; margin: 12px 0; }
+.management-canvas-toolbar h3, .management-canvas-card-heading h4 { margin: 0; }
+.management-canvas-toolbar .ant-input-affix-wrapper { width: min(100%, 240px); }
+.management-canvas-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+}
+.management-canvas-card-heading h4, .management-canvas-error { overflow-wrap: anywhere; }
+.management-canvas-status, .management-canvas-actions { flex-wrap: wrap; }
+.management-canvas-status:not(:empty), .management-canvas-actions { margin-top: 8px; }
+.management-canvas-status .ant-tag { margin-inline-end: 0; }
+.management-canvas-error {
+  color: var(--app-muted);
+  margin: 8px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (max-width: 575px) {
+  .management-canvas-list { grid-template-columns: minmax(0, 1fr); }
+}
