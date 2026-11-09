@@ -33,6 +33,7 @@
 ## 开发规范
 
 - 实施或审查代码、接口、文档及验证变更时，读取[开发规范](docs/development/standards/development.md)的适用章节。
+- 新增、更新或整理文档时，读取[文档规范](docs/development/standards/documentation.md)，按内容归属和对应流程维护。
 - 修改场次工作台的控件、布局、主题或交互时，读取[工作台前端设计标准](docs/development/standards/workbench-design.md)，使用共享组件并按适用范围验收。
 - 准备或审查提交说明时，读取[提交规范](docs/development/standards/commit-convention.md)。
 

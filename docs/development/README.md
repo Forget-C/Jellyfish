@@ -5,6 +5,7 @@
 ## 规范
 
 - [开发规范](standards/development.md)
+- [文档规范](standards/documentation.md)
 - [工作台前端设计标准](standards/workbench-design.md)
 - [提交规范](standards/commit-convention.md)
 - [代码审查来源索引](standards/review-sources.md)

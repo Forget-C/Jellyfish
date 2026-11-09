@@ -1,0 +1,3 @@
+interface:
+  display_name: "文档编写与维护"
+  short_description: "按读者与内容职责新增和更新项目文档，核实依据并同步必要入口和引用"
