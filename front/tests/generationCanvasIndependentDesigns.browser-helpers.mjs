@@ -136,7 +136,7 @@ export async function verifyIndependentDesigns(scenario, port) {
     if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
     const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
-    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 }, 'empty-style': { x: 1860, y: 180 }, 'invalid-frame': { x: 1860, y: 500 } }
+    const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, camera: { x: 1860, y: 840 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 }, 'empty-style': { x: 1860, y: 180 }, 'invalid-frame': { x: 1860, y: 500 } }
     if (scenario === 'summaries') {
       document.edges.push(
         { id: 'movement-invalid-frame', source_card: 'stage-only', source_port: 'text', target_card: 'invalid-frame', target_port: 'text' },
@@ -464,7 +464,10 @@ export async function verifyIndependentDesigns(scenario, port) {
       await features.clear()
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       await styleHeight(240)
-      await poll(state => !state.document.cards.find(card => card.id === 'empty-style').fields?.direction?.text)
+      await poll(state => {
+        const fields = state.document.cards.find(card => card.id === 'empty-style').fields
+        return !fields?.direction?.text?.trim() && !fields?.visual_features?.text?.trim()
+      })
       await page.setViewportSize({ width: 1440, height: 960 })
       const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>parseFloat(getComputedStyle(node).height)))
       assert.equal(figures.length,cards.filter(card => types.includes(card.type?.slice('direction.'.length))).length,'only designs using the illustration layout have purpose illustrations')
