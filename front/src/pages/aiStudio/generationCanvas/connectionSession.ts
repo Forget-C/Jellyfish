@@ -6,6 +6,7 @@ type Point = { x: number; y: number }
 export type ConnectionState = {
   drag?: Source & Point
   accessibleConnection?: Source
+  target?: string
 }
 type ConnectionHost = {
   change: (state: ConnectionState) => void
@@ -34,8 +35,11 @@ export function createConnectionSession(host: ConnectionHost) {
       pointer = !!point
       change(point ? { drag: { ...source, ...point } } : { accessibleConnection: source })
     },
-    move(point: Point) {
-      if (state.drag) change({ ...state, drag: { ...state.drag, ...point } })
+    move(point: Point, target?: string) {
+      if (state.drag) change({ ...state, target, drag: { ...state.drag, ...point } })
+    },
+    focusTarget(target?: string) {
+      if (state.accessibleConnection && state.target !== target) change({ ...state, target })
     },
     choose(target: string, side: ConnectionSide) {
       const source = state.drag || state.accessibleConnection

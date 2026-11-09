@@ -5,6 +5,7 @@ type MovementHost = {
   view: () => GraphView
   update: (change: (view: GraphView) => GraphView) => void
   record: (undo: () => void, redo: () => void) => void
+  onMembersChange?: (members: readonly string[]) => void
 }
 
 /** 画布移动共用一个事务；取消恢复完整视图，历史仅恢复位置并保留浏览视角。 */
@@ -12,12 +13,17 @@ export function createMoveTransaction(host: MovementHost) {
   let snapshot: GraphView | undefined
   let ids: string[] = []
   let pointer = false
+  const setMembers = (members: string[]) => {
+    if (members.length === ids.length && members.every((id, index) => id === ids[index])) return
+    ids = members
+    host.onMembersChange?.(ids)
+  }
   return {
     get active() { return !!snapshot },
     get pointerActive() { return pointer },
     begin(members: string[], fromPointer = false) {
       snapshot ||= host.view()
-      ids = members
+      setMembers(members)
       pointer = fromPointer
     },
     move(id: string, position: CanvasPoint) {
@@ -33,7 +39,7 @@ export function createMoveTransaction(host: MovementHost) {
     },
     moveHandle(members: string[], next: CanvasPoint, origin: CanvasPoint) {
       snapshot ||= host.view()
-      ids = members
+      setMembers(members)
       const transform = host.view().transform, start = snapshot.transform
       const delta = { x: next.x - (transform.x - start.x) / transform.scale - origin.x, y: next.y - (transform.y - start.y) / transform.scale - origin.y }
       host.update(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(ids.map(id => [id,
@@ -51,7 +57,7 @@ export function createMoveTransaction(host: MovementHost) {
       pointer = false
       const before = snapshot
       snapshot = undefined
-      ids = []
+      setMembers([])
       if (!before) return
       if (cancelled) { host.update(() => before); return }
       const after = host.view()
