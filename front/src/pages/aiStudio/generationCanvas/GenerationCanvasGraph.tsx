@@ -55,6 +55,7 @@ import { ReferenceCard } from './ReferenceCard'
 import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
 import { designHeightBands, generationCardSize, useDesignCardSizes } from './cardGeometry'
+import { generationGroupBounds } from './generationLayout'
 import { knownResultPositions, linkedResultCards, placeLinkedResults, retainedResultIds, type LinkedResult } from './linkedResults'
 import { resultScopeIncludes } from './resultConnections'
 import { capturedResult } from './detachedResults'
@@ -416,13 +417,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   historicalPositions.current = { ...historicalPositions.current, ...layout.view.positions }
   retainedPositions.current = layout.view.positions
   const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
-  const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
-  useLayoutEffect(() => {
-    if (!creationView.current || !layout.ready || !layout.view.positions[creationView.current.cardId]) return
-    const retained = creationView.current.transform
-    creationView.current = undefined
-    layout.setView(previous => ({ ...previous, transform: retained }))
-  }, [layout])
+  const creationView = useRef<{ cardId: string; autoPlace: boolean; transform: typeof layout.view.transform }>()
+  const pastedView = useRef<{ ids: string[]; origin: { x: number; y: number }; transform: typeof layout.view.transform }>()
   useEffect(() => {
     if (!layout.ready) return
     const missing = edges.filter(edge => !connectionLayout.sides[edge.id])
@@ -631,30 +627,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       : type === 'review.check' ? { id: crypto.randomUUID(), type, type_version: 1, disabled_items: [] }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
-    creationView.current = { cardId: card.id, transform: { ...transform } }
+    creationView.current = { cardId: card.id, autoPlace: !position, transform }
     edit({ ...latest.current, cards: [...(latest.current.cards || []), card] })
-    const box = container.current?.getBoundingClientRect()
-    let point = position
-    if (!point && box) {
-      const left = ((box.width > 700 ? 120 : 88) - transform.x) / transform.scale
-      const top = ((box.width > 700 ? 180 : 300) - transform.y) / transform.scale
-      const availableWidth = Math.max(320, (box.width - (box.width > 700 ? 600 : 140)) / transform.scale)
-      const availableHeight = Math.max(250, (box.height - 320) / transform.scale)
-      const newSize = generationCardSize(card.type)
-      point = { x: left, y: top }
-      for (let y = top; y < top + availableHeight; y += 40) {
-        let found = false
-        for (let x = left; x < left + availableWidth; x += 40) {
-          if (!nodes.some(existing => {
-            const occupied = layout.view.positions[existing.id]
-            const size = cardSizes[existing.id]
-            return occupied && x < occupied.x + size.width + 16 && x + newSize.width + 16 > occupied.x && y < occupied.y + size.height + 16 && y + newSize.height + 16 > occupied.y
-          })) { point = { x, y }; found = true; break }
-        }
-        if (found) break
-      }
-    }
-    if (point) layout.move(card.id, point)
+    if (position) layout.move(card.id, position)
     setSelected([card.id])
     setDetailId(selectOnly || card.type?.startsWith('direction.') ? undefined : card.id)
   }
@@ -706,21 +681,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const left=Math.min(...clipboard.positions.map(point=>point.x)), top=Math.min(...clipboard.positions.map(point=>point.y))
     const copies=clipboard.cards.map(cloneCard)
     const positions=Object.fromEntries(copies.map((card,index)=>[card.id,{x:origin.x+clipboard.positions[index].x-left,y:origin.y+clipboard.positions[index].y-top}]))
+    if (box) pastedView.current = { ids: copies.map(card => card.id), origin, transform: pasteTransform }
     layout.setView(previous=>({...previous,positions:{...previous.positions,...positions}}))
     edit({...latest.current,cards:[...(latest.current.cards || []),...copies]})
     setSelected(copies.map(card=>card.id));setDetailId(undefined);setSelectedEdgeId(undefined)
-    if (box && copies.every(card => {
-      const point = positions[card.id], size = generationCardSize(card.type)
-      const x = point.x * pasteTransform.scale + pasteTransform.x
-      const y = point.y * pasteTransform.scale + pasteTransform.y
-      return x >= box.width || y >= box.height || x + size.width * pasteTransform.scale <= 0 || y + size.height * pasteTransform.scale <= 0
-    })) {
-      const x = origin.x * pasteTransform.scale + pasteTransform.x
-      const y = origin.y * pasteTransform.scale + pasteTransform.y
-      layout.setView(previous => ({ ...previous, transform: { ...previous.transform,
-        x: previous.transform.x + Math.max(16, Math.min(x, box.width - 80)) - x,
-        y: previous.transform.y + Math.max(16, Math.min(y, box.height - 80)) - y } }))
-    }
   }
   const copyTarget = (id: string): { card?: GenerationCard; reason?: string } => {
     const result = resultsById.get(id)
@@ -1008,18 +972,66 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   })}</>
 
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
+  const visibleCards = [...cards.filter(card => !hidden.has(card.id)), ...linkedResults]
+  const cardFrames = visibleCards.map(({ id }) => ({ id, ...point(id), ...cardSizes[id] }))
+  const groupFrames = new Map(groups.flatMap(group => {
+    const members = (group.card_ids || []).filter(id => cardSizes[id])
+    if (group.kind === 'stack' && !members.length) return []
+    return [[group.id, generationGroupBounds(group, members, point, cardSizes)] as const]
+  }))
+  const visibleFrames = [...cardFrames, ...groupFrames.values()]
+  // 新卡和副本先挂载摘要测量，完成后在首次绘制前提交落点与可见性修正。
+  useLayoutEffect(() => {
+    if (!sizesReady || !layout.ready) return
+    const creation = creationView.current
+    if (creation && layout.view.positions[creation.cardId]) {
+      creationView.current = undefined
+      const box = container.current?.getBoundingClientRect()
+      if (creation.autoPlace && box) {
+        const { x: offsetX, y: offsetY, scale } = creation.transform
+        const wide = box.width > 700
+        const left = ((wide ? 120 : 88) - offsetX) / scale
+        const top = ((wide ? 180 : 300) - offsetY) / scale
+        const availableWidth = Math.max(320, (box.width - (wide ? 600 : 140)) / scale)
+        const availableHeight = Math.max(250, (box.height - 320) / scale)
+        const { width, height } = cardSizes[creation.cardId]
+        const occupied = [...cardFrames.filter(frame => frame.id !== creation.cardId), ...groupFrames.values()]
+        let position = { x: left, y: top }
+        search: for (let y = top; y < top + availableHeight; y += 40) {
+          for (let x = left; x < left + availableWidth; x += 40) {
+            if (occupied.some(frame => x < frame.x + frame.width + 16 && x + width + 16 > frame.x && y < frame.y + frame.height + 16 && y + height + 16 > frame.y)) continue
+            position = { x, y }
+            break search
+          }
+        }
+        layout.move(creation.cardId, position)
+      }
+      layout.setView(previous => ({ ...previous, transform: creation.transform }))
+    }
+    const paste = pastedView.current
+    if (!paste || !paste.ids.every(id => layout.view.positions[id] && cardSizes[id])) return
+    pastedView.current = undefined
+    const box = viewport.surface.current?.getBoundingClientRect()
+    if (!box) return
+    const { x: offsetX, y: offsetY, scale } = paste.transform
+    if (!paste.ids.every(id => {
+      const position = point(id), size = cardSizes[id]
+      const x = position.x * scale + offsetX, y = position.y * scale + offsetY
+      return x >= box.width || y >= box.height || x + size.width * scale <= 0 || y + size.height * scale <= 0
+    })) return
+    const x = paste.origin.x * scale + offsetX, y = paste.origin.y * scale + offsetY
+    layout.setView(previous => ({ ...previous, transform: { ...previous.transform,
+      x: previous.transform.x + Math.max(16, Math.min(x, box.width - 80)) - x,
+      y: previous.transform.y + Math.max(16, Math.min(y, box.height - 80)) - y } }))
+  })
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
   const fitVisibleCards = () => {
     if (movement.active) return
     const surface = viewport.surface.current
-    const visible = [...cards.filter(card => !hidden.has(card.id)), ...linkedResults]
-    if (!surface || !visible.length && !groups.length) { viewport.fit(); return }
+    if (!surface || !visibleFrames.length) { viewport.fit(); return }
     // Focus/scrollIntoView can scroll an overflow-hidden surface independently of the saved transform.
     surface.scrollTo(0, 0)
-    const bounds = visible.map(card => {
-      const origin = point(card.id), size = cardSizes[card.id]
-      return { left: origin.x, top: origin.y - 36, right: origin.x + size.width, bottom: origin.y + size.height }
-    })
+    const bounds = cardFrames.map(({ x, y, width, height }) => ({ left: x, top: y - 36, right: x + width, bottom: y + height }))
     // 分组标题高于成员卡；收起组也需参与适应范围，避免操作落在顶部导航后。
     const surfaceBox = surface.getBoundingClientRect()
     container.current?.querySelectorAll<HTMLElement>('[data-group-id], [data-stack-id]').forEach(group => {
@@ -1038,9 +1050,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     layout.setView(previous => ({ ...previous, transform: { scale, x: paddingLeft + (availableWidth - width * scale) / 2 - left * scale, y: paddingTop + (availableHeight - height * scale) / 2 - top * scale } }))
   }
 
-  // Use a real member position so cross-row selections do not occupy an unrelated empty corner.
-  const stackOrigin = (ids: string[]) => point(ids[0])
-  const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), cardSizes[id]?.width || 400, cardSizes[id]?.height || 172, side)
+  const anchor = (id: string, side: ConnectionSide) => {
+    const stack = stackFor(id), frame = stack && groupFrames.get(stack.id)
+    return frame ? sidePoint(frame, frame.width, frame.height, side) : sidePoint(point(id), cardSizes[id]?.width || 400, cardSizes[id]?.height || 172, side)
+  }
   const resultPath = (source: string, target: string, label: string, result: LinkedResult, adopted = false, edge?: GenerationEdge, lane = 0) => {
     const sides = defaultSides(point(source), point(target))
     const resultSource = edge ? result.output.source : undefined
@@ -1056,12 +1069,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
   const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }
-  const mapCards = [...cards.filter(card => !hidden.has(card.id)), ...linkedResults]
-  const mapBoundsCards = [...cards, ...linkedResults]
-  const mapLeft = Math.min(0, visibleWorld.x, ...mapBoundsCards.map(card => point(card.id).x))
-  const mapTop = Math.min(0, visibleWorld.y, ...mapBoundsCards.map(card => point(card.id).y))
-  const mapWidth = Math.max(visibleWorld.x + visibleWorld.width, ...mapBoundsCards.map(card => point(card.id).x + cardSizes[card.id].width)) - mapLeft
-  const mapHeight = Math.max(visibleWorld.y + visibleWorld.height, ...mapBoundsCards.map(card => point(card.id).y + cardSizes[card.id].height)) - mapTop
+  const mapLeft = Math.min(0, visibleWorld.x, ...visibleFrames.map(frame => frame.x))
+  const mapTop = Math.min(0, visibleWorld.y, ...visibleFrames.map(frame => frame.y))
+  const mapWidth = Math.max(visibleWorld.x + visibleWorld.width, ...visibleFrames.map(frame => frame.x + frame.width)) - mapLeft
+  const mapHeight = Math.max(visibleWorld.y + visibleWorld.height, ...visibleFrames.map(frame => frame.y + frame.height)) - mapTop
   const panMap = (event: PointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect()
     const x = mapLeft + (event.clientX - box.left) / box.width * mapWidth
@@ -1358,12 +1369,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         </svg>
         {stacks.map(group => {
           const members = group.card_ids || []
-          if (!members.length) return null
-          const origin = stackOrigin(members)
+          const frame = groupFrames.get(group.id)
+          if (!frame) return null
           const cover = cards.find(card => card.id === members[0])!
           const coverImage = 'image_binding' in cover ? cover.image_binding?.file_id : cover.type === 'content.image' && 'file_id' in cover ? cover.file_id : runtime?.outputs[cover.id]?.find(output => output.modality === 'image')?.file_id
           const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
-          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
+          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}
             onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) { clearSelection(); setViewStackId(group.id) } stackMoved.current = false }}
             onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clearSelection(); setViewStackId(group.id) } }}
             onPointerDown={event => {
@@ -1390,11 +1401,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         })}
         {groups.filter(group => group.kind !== 'stack').map(group => {
           const members = (group.card_ids || []).filter(id => cards.some(card => card.id === id))
-          const positions = members.map(point)
-          const origin = { x: positions.length ? Math.min(...positions.map(pos => pos.x)) - 16 : 0,
-            y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 48 : 0 }
-          const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (cardSizes[id]?.width || 400) - origin.x + 16))
-          const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (cardSizes[id]?.height || 350) - origin.y + 16))
+          const origin = groupFrames.get(group.id)!
+          const { width, height } = origin
           return <section key={group.id} data-group-id={group.id} tabIndex={-1} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
             if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
@@ -1548,7 +1556,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
       onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
       <title>小地图导航；方向键平移画布</title>
-      {mapCards.map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={cardSizes[card.id].width} height={cardSizes[card.id].height} />)}
+      {[...groupFrames].map(([id, frame]) => <rect key={id} data-minimap-group={id} {...frame} />)}
+      {cardFrames.map(({ id, ...frame }) => <rect key={id} data-minimap-node={id} {...frame} />)}
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     {cards.filter(card => card.type !== 'review.check' && (detailSessions.includes(card.id) || card.id === detailId)).map(renderEditor)}

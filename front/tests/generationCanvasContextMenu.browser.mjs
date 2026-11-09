@@ -1,5 +1,5 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openCanvasCard, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -87,6 +87,94 @@ try {
   await page.screenshot({path:join(output,'context-menu.png')})
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   const request=async(path,body,method='POST')=>{const response=await fetch(base+path,body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);assert.ok(response.ok,await response.clone().text());return(await response.json()).data}
+  const placement = await request('', { name: '设计卡放置和收纳' })
+  const placementPath = '/' + placement.id
+  await request(placementPath, { request_id: 'seed', expected_revision: 0, document: { ...placement.document,
+    cards: [
+      { id: 'short', type: 'direction.fact', fact: { state: 'fact', text: '门朝里开。' } },
+      { id: 'long', type: 'direction.fact', fact: { state: 'fact', text: '门朝里打开再把钥匙放回桌面。'.repeat(18) } },
+      { id: 'group-head', type: 'direction.fact' },
+      { id: 'group-far', type: 'direction.fact', fact: { state: 'fact', text: '从门后进入大厅。' } },
+      { id: 'stack-head', type: 'direction.fact' },
+      { id: 'stack-far', type: 'direction.fact', fact: { state: 'fact', text: '灯光由左侧缓慢转到右侧。'.repeat(18) } },
+    ],
+    groups: [
+      { id: 'collapsed', name: '折叠编组', card_ids: ['group-head', 'group-far'], collapsed: true },
+      { id: 'stacked', name: '尺寸堆叠', kind: 'stack', card_ids: ['stack-head', 'stack-far'] },
+    ],
+  } }, 'PUT')
+  await page.addInitScript(({ key, value }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value)) }, {
+    key: `jellyfish:generation-layout:canvas-project:${placement.id}:view:canvas`,
+    value: { schema: 1, positions: {
+      short: { x: 120, y: 360 }, long: { x: 560, y: 360 }, 'group-head': { x: 1000, y: 550 },
+      'group-far': { x: 6100, y: 6000 }, 'stack-head': { x: 1000, y: 160 }, 'stack-far': { x: 120, y: 180 },
+    }, sizes: { 'group-far': { width: 360, height: 240 }, 'stack-far': { width: 360, height: 240 } }, transform: { x: 0, y: 0, scale: 1 } },
+  })
+  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${placement.id}`)
+  const shortFact = page.locator('[data-card-id="short"]')
+  await shortFact.waitFor()
+  const point = locator => locator.evaluate(el => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }))
+  await openCardList(page, '连续性与约束')
+  await page.getByRole('button', { name: '不可改事实卡', exact: true }).click()
+  const newFact = page.locator('[data-card-type="direction.fact"]').filter({ hasText: '尚未填写不可改事实' })
+  await newFact.waitFor()
+  assert.deepEqual(await point(newFact), { x: 120, y: 180, width: 360, height: 128 }, 'new empty fact fits the gap above the existing card at its measured height')
+  await page.getByRole('button', { name: '布局', exact: true }).click()
+  await page.getByRole('button', { name: '展开小地图', exact: true }).click()
+  await page.keyboard.press('Escape')
+  const map = page.getByRole('img', { name: '小地图导航', exact: true })
+  const coverSizes = await map.locator('[data-minimap-group]').evaluateAll(nodes => nodes.map(node => [Number(node.getAttribute('width')), Number(node.getAttribute('height'))]))
+  assert.deepEqual(coverSizes.sort((a, b) => a[0] - b[0]), [[300, 110], [400, 300]], 'minimap includes the two visible cover sizes')
+  assert.ok((await map.getAttribute('viewBox')).split(' ').map(Number)[2] < 1800, 'hidden far members do not expand the minimap extent')
+  await page.screenshot({ path: join(output, 'placement-covers-desktop.png') })
+  await shortFact.click({ button: 'right' })
+  await cardMenu.getByRole('menuitem', { name: '复制', exact: true }).click()
+  for (let i = 0; i < 14; i++) await map.press('ArrowDown')
+  const beforeDuplicate = await shortFact.boundingBox()
+  const viewport = page.getByLabel('生成画布视口', { exact: true })
+  const duplicateModifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+  await viewport.press(`${duplicateModifier}+d`)
+  const shortCopy = page.locator('[data-card-type="direction.fact"][data-selected="true"]')
+  await page.waitForFunction(() => document.querySelectorAll('[data-card-type="direction.fact"]').length === 4)
+  assert.equal((await point(shortCopy)).height, 128)
+  assert.ok((await shortCopy.boundingBox()).y >= 0, 'duplication brings a fully offscreen short copy into view')
+  assert.ok((await shortFact.boundingBox()).y > beforeDuplicate.y, 'visibility uses actual copied height when deciding whether to move the viewport')
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  const longFact = page.locator('[data-card-id="long"]')
+  await longFact.click({ button: 'right' })
+  await cardMenu.getByRole('menuitem', { name: '复制副本', exact: true }).click()
+  await page.waitForFunction(() => document.querySelectorAll('[data-card-type="direction.fact"]').length === 5)
+  assert.equal((await point(page.locator('[data-card-type="direction.fact"][data-selected="true"]'))).height, (await point(longFact)).height, 'long copy uses its own full summary height')
+  await page.getByRole('status', { name: '画布保存状态', exact: true }).filter({ hasText: '已保存' }).waitFor()
+  const beforeHiddenEdit = await request(placementPath)
+  await request(placementPath, { request_id: 'edit-hidden', expected_revision: beforeHiddenEdit.revision, document: { ...beforeHiddenEdit.document,
+    cards: beforeHiddenEdit.document.cards.map(item => item.id === 'group-far'
+      ? { ...item, fact: { state: 'fact', text: '从门后沿走廊进入大厅。'.repeat(18) } } : item),
+  } }, 'PUT')
+  await page.reload()
+  const collapsed = page.locator('[data-group-id="collapsed"]')
+  await collapsed.getByRole('button', { name: '选择编组 折叠编组', exact: true }).click()
+  await collapsed.getByRole('button', { name: '管理编组', exact: true }).click()
+  await page.getByRole('menuitem', { name: '展开组', exact: true }).click()
+  const revealed = page.locator('[data-card-id="group-far"]')
+  await revealed.waitFor()
+  const revealedPoint = await point(revealed)
+  assert.deepEqual(revealedPoint, { x: 6100, y: 6000, width: 360, height: 160 }, 'unfolded member retains its position and measures current content')
+  const groupBounds = await point(collapsed)
+  assert.ok(groupBounds.y + groupBounds.height > revealedPoint.y + revealedPoint.height, 'expanded group frame surrounds the actual member')
+  const stack = page.getByRole('button', { name: '查看堆叠 尺寸堆叠', exact: true })
+  await stack.hover()
+  await stack.getByRole('button', { name: '解除堆叠', exact: true }).click()
+  const unstacked = page.locator('[data-card-id="stack-far"]')
+  await unstacked.waitFor()
+  assert.deepEqual(await point(unstacked), { x: 120, y: 180, width: 360, height: 160 }, 'unstacking preserves position even where a new card was placed while the member was hidden')
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await page.screenshot({ path: join(output, 'placement-groups-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  assert.equal((await point(unstacked)).height, 160, 'compact height uses logical pixels after narrow fit')
+  await page.screenshot({ path: join(output, 'placement-groups-narrow.png') })
+  await page.setViewportSize({ width: 1440, height: 1000 })
   const imageCanvas=await request('',{name:'右键图片与引用'})
   await request('/'+imageCanvas.id,{request_id:'seed',expected_revision:0,document:{...imageCanvas.document,cards:[
     {id:'text',type:'content.text',text:'下载的正文'},
