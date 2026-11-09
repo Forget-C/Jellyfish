@@ -4,6 +4,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from time import monotonic, sleep
 from types import SimpleNamespace
 import uvicorn
 from fastapi import Body
@@ -32,6 +33,9 @@ storyboard_video_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_VIDEO_FIXTU
 control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False, 'check_release': False, 'check_calls': []}
 if storyboard_video_fixture:
     control.update(media_calls=[], media_fail_next=False)
+storyboard_recovery_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_RECOVERY') == '1'
+if storyboard_recovery_fixture:
+    control.update(storyboard_calls=0, storyboard_release=0, storyboard_fail_on=0)
 
 
 class ControlledModel:
@@ -63,6 +67,15 @@ class ControlledModel:
             revised = '前门的阿同放下信封。'
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'front', 'excerpt': revised}]}, ensure_ascii=False))
         if args.get('mode') in ('complete', 'faithful'):
+            if storyboard_recovery_fixture and len(messages) == 2:
+                from httpx import ConnectError
+                control['storyboard_calls'] += 1
+                call = control['storyboard_calls']
+                deadline = monotonic() + 45
+                while control['storyboard_release'] < call and monotonic() < deadline:
+                    sleep(.03)
+                if control['storyboard_fail_on'] == call or control['storyboard_release'] < call:
+                    raise ConnectError('controlled storyboard provider failure')
             objects = {item['excerpt']: item['id'] for item in args['objects']}
             front = objects['前门的阿同']
             extra = [{'id': 'return', 'excerpt': '他绕过门廊。', 'object_ids': [front]}] if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1' else []
@@ -161,6 +174,10 @@ async def set_control(body: dict = Body(...)):
             control[key] = body[key]
     if storyboard_video_fixture and 'media_fail_next' in body:
         control['media_fail_next'] = body['media_fail_next']
+    if storyboard_recovery_fixture:
+        for key in ('storyboard_release', 'storyboard_fail_on'):
+            if key in body:
+                control[key] = body[key]
     return control
 
 

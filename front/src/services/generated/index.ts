@@ -92,6 +92,7 @@ export type { ApiResponse_list_SceneVersionRead__ } from './models/ApiResponse_l
 export type { ApiResponse_list_SceneVideoRead__ } from './models/ApiResponse_list_SceneVideoRead__';
 export type { ApiResponse_list_SequenceRead__ } from './models/ApiResponse_list_SequenceRead__';
 export type { ApiResponse_list_SourceRead__ } from './models/ApiResponse_list_SourceRead__';
+export type { ApiResponse_list_StoryboardTaskSummary__ } from './models/ApiResponse_list_StoryboardTaskSummary__';
 export type { ApiResponse_MediaRead_ } from './models/ApiResponse_MediaRead_';
 export type { ApiResponse_ModelRead_ } from './models/ApiResponse_ModelRead_';
 export type { ApiResponse_ModelSettingsRead_ } from './models/ApiResponse_ModelSettingsRead_';
@@ -738,7 +739,9 @@ export type { StoryboardDiffCard } from './models/StoryboardDiffCard';
 export type { StoryboardReextractRequest } from './models/StoryboardReextractRequest';
 export type { StoryboardRequest } from './models/StoryboardRequest';
 export type { StoryboardRestore } from './models/StoryboardRestore';
+export type { StoryboardRetry } from './models/StoryboardRetry';
 export type { StoryboardTaskRead } from './models/StoryboardTaskRead';
+export type { StoryboardTaskSummary } from './models/StoryboardTaskSummary';
 export type { StyleDesignFields } from './models/StyleDesignFields';
 export type { StyleOption } from './models/StyleOption';
 export type { StyleRule_Input } from './models/StyleRule_Input';

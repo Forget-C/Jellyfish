@@ -13,6 +13,8 @@ export type StoryboardTaskRead = {
     stage: string;
     error?: (string | null);
     canvas_id: string;
+    candidate_available?: boolean;
+    retry_of_task_id?: (string | null);
     pending_application?: boolean;
     candidate?: (StoryboardCandidate | null);
 };

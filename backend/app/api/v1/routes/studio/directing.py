@@ -12,7 +12,7 @@ from app.core.contracts.directing.division import DivisionDraft, DivisionPreview
 from app.services.directing.division import DivisionService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
-from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardTaskRead
+from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
 from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.scene_objects import ObjectExtractionRequest, SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead
@@ -148,6 +148,22 @@ async def reextract_storyboard(project_id: str, chapter_id: str, sequence_id: st
     """针对既有场次画布创建可核对的重新提取任务。"""
     return created_response(await _call(SceneStoryboardService(db, project_id).reextract_storyboard(
         chapter_id, sequence_id, canvas_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards",
+            response_model=ApiResponse[list[StoryboardTaskSummary]], operation_id="directing_storyboard_list")
+async def list_storyboards(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str | None = None,
+                           db: AsyncSession = Depends(get_db, scope="function")):
+    """读取本场或本画布近期任务的真实状态。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).list_storyboards(chapter_id, sequence_id, canvas_id)))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry",
+             response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_storyboard_retry")
+async def retry_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str, body: StoryboardRetry,
+                           db: AsyncSession = Depends(get_db, scope="function")):
+    """在同一画布恢复失败任务，原任务及已保存内容保持可查。"""
+    return created_response(await _call(SceneStoryboardService(db, project_id).retry_storyboard(chapter_id, sequence_id, task_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}",

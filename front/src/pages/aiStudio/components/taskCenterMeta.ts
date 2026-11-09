@@ -16,8 +16,10 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
   if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
-  else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_object_extract') {
-    navigateTo = `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/sequences/${encodeURIComponent(id)}/canvas-workbench`
+  else if (kind === 'sequence' && projectId && chapterId &&
+      (task.taskKind === 'directing_object_extract' || task.taskKind === 'directing_storyboard')) {
+    const path = `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/sequences/${encodeURIComponent(id)}/canvas-workbench`
+    navigateTo = task.taskKind === 'directing_storyboard' ? path + '?' + new URLSearchParams({ storyboardTask: task.taskId }) : path
   }
   else if (kind === 'sequence' && projectId && chapterId) {
     const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'

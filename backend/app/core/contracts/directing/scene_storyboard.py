@@ -159,12 +159,25 @@ class StoryboardCandidate(Contract):
     document: CanvasDocument
 
 
-class StoryboardTaskRead(SceneObjectTaskRead):
-    """真实任务状态及成功后可读取的候选。"""
+class StoryboardTaskSummary(SceneObjectTaskRead):
+    """轻量任务状态，用于离开后恢复查看。"""
 
     canvas_id: Identity
+    candidate_available: bool = False
+    retry_of_task_id: Identity | None = None
+
+
+class StoryboardTaskRead(StoryboardTaskSummary):
+    """真实任务状态及成功后可读取的候选。"""
+
     pending_application: bool = False
     candidate: StoryboardCandidate | None = None
+
+
+class StoryboardRetry(Contract):
+    """使用失败任务的原配置，在同一目标上提交新的文本任务。"""
+
+    request_id: Identity
 
 
 class StoryboardApplication(Contract):

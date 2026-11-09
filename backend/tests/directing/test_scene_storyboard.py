@@ -36,7 +36,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
 
         def invoke(self, messages):
             calls.append(str(messages))
-            output = {'shots': [{'id': 'bad', 'excerpt': '不存在的原文'}]} if len(calls) not in (2, 3) else result
+            output = {'shots': [{'id': 'bad', 'excerpt': '不存在的原文'}]} if len(calls) not in (2, 3, 6) else result
             return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
@@ -143,8 +143,28 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         rejected_path = '/api/v1/studio/generation-canvases/p1/' + rejected['canvas_id']
         after_failure = (await client.get(rejected_path)).json()['data']
         assert after_failure['revision'] == 0 and len(after_failure['document']['cards']) == 1
+        listed = await client.get(path, params={'canvas_id': rejected['canvas_id']})
+        assert listed.status_code == 200, listed.text
+        assert [task['task_id'] for task in listed.json()['data']] == [failed['task_id']]
+        assert not listed.json()['data'][0]['candidate_available']
+        assert (await client.get(path.replace('/p1/', '/p2/'))).status_code == 404
+        retry_path = f"{path}/{failed['task_id']}/retry"
+        retry_request = {'request_id': 'retry-same-target'}
+        retried = await client.post(retry_path, json=retry_request)
+        assert retried.status_code == 200, retried.text
+        retry = retried.json()['data']
+        assert retry['canvas_id'] == rejected['canvas_id'] and retry['task_id'] != failed['task_id']
+        assert (await client.post(retry_path, json=retry_request)).json()['data']['task_id'] == retry['task_id']
+        assert (await client.post(retry_path, json={'request_id': 'parallel-retry'})).status_code == 409
+        assert (await client.post(retry_path.replace('/p1/', '/p2/'), json=retry_request)).status_code == 404
+        await complete_task()
+        recovered = (await client.get(path + '/' + retry['task_id'])).json()['data']
+        assert recovered['status'] == 'succeeded' and recovered['pending_application']
+        assert recovered['candidate_available'] and recovered['candidate']['base_revision'] == 0
+        assert (await client.get(rejected_path)).json()['data'] == after_failure
         tasks = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1'})).json()['data']['items']
         assert {item['task_kind'] for item in tasks} == {'directing_storyboard'}
+        assert len(tasks) == 4
 
 
 @pytest.mark.asyncio

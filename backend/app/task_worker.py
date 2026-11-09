@@ -346,6 +346,10 @@ class TaskWorker:
             if directing or task.kind == "text_chat":
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
             llm = ChatOpenAI(**params)
+            stage = {"directing_storyboard": "extracting_storyboard", "directing_object_extract": "extracting_objects"}.get(task.kind)
+            if stage:
+                await TaskService(db).report_progress(task.id, progress=None, stage=stage)
+                await db.commit()
         if task.kind == "text_chat":
             roles = {"system": SystemMessage, "user": HumanMessage, "assistant": AIMessage}
             messages = task.input_snapshot["operation_input"]["messages"]
@@ -378,6 +382,9 @@ class TaskWorker:
 
             elif task.kind == "directing_storyboard":
                 from app.services.directing.scene_storyboard import SceneStoryboardService
+                async with self.sessions() as db:
+                    await TaskService(db).report_progress(task.id, progress=None, stage="assembling_storyboard")
+                    await db.commit()
 
                 async def deliver(db, current):
                     """真实候选校验成功后才发布任务成功，不在后台改写文档。"""

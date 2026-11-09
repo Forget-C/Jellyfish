@@ -45,6 +45,7 @@ import type { ApiResponse_list_SceneVersionRead__ } from '../models/ApiResponse_
 import type { ApiResponse_list_SceneVideoRead__ } from '../models/ApiResponse_list_SceneVideoRead__';
 import type { ApiResponse_list_SequenceRead__ } from '../models/ApiResponse_list_SequenceRead__';
 import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
+import type { ApiResponse_list_StoryboardTaskSummary__ } from '../models/ApiResponse_list_StoryboardTaskSummary__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_ReviewRevisionApplication_ } from '../models/ApiResponse_ReviewRevisionApplication_';
 import type { ApiResponse_SceneCanvasesRead_ } from '../models/ApiResponse_SceneCanvasesRead_';
@@ -126,6 +127,7 @@ import type { StoryboardApplication } from '../models/StoryboardApplication';
 import type { StoryboardReextractRequest } from '../models/StoryboardReextractRequest';
 import type { StoryboardRequest } from '../models/StoryboardRequest';
 import type { StoryboardRestore } from '../models/StoryboardRestore';
+import type { StoryboardRetry } from '../models/StoryboardRetry';
 import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
 import type { TransitionWrite_Input } from '../models/TransitionWrite_Input';
@@ -373,6 +375,39 @@ export class StudioDirectingService {
         });
     }
     /**
+     * List Storyboards
+     * 读取本场或本画布近期任务的真实状态。
+     * @returns ApiResponse_list_StoryboardTaskSummary__ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardList({
+        projectId,
+        chapterId,
+        sequenceId,
+        canvasId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        canvasId?: (string | null),
+    }): CancelablePromise<ApiResponse_list_StoryboardTaskSummary__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            query: {
+                'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Reextract Storyboard
      * 针对既有场次画布创建可核对的重新提取任务。
      * @returns ApiResponse_StoryboardTaskRead_ Successful Response
@@ -399,6 +434,41 @@ export class StudioDirectingService {
                 'chapter_id': chapterId,
                 'sequence_id': sequenceId,
                 'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Retry Storyboard
+     * 在同一画布恢复失败任务，原任务及已保存内容保持可查。
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardRetry({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+        requestBody: StoryboardRetry,
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
             },
             body: requestBody,
             mediaType: 'application/json',

@@ -28,7 +28,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [assetEditor, setAssetEditor] = useState<AssetSummary>()
   const [draft, setDraft] = useState<{ object: SceneObjectRead; name: string; description: string; requestId: string; attempted: boolean }>()
   const [createError, setCreateError] = useState('')
-  const extractRequest = useRef<string>()
+  const requestKey = 'jellyfish:scene-object-request:' + JSON.stringify([projectId, chapterId, sequenceId])
+  const [pendingRequest, setPendingRequest] = useState(() => {
+    try { return localStorage.getItem(requestKey) ?? undefined } catch { return undefined }
+  })
   const loadVersion = useRef(0)
   const fileInput = useRef<HTMLInputElement>(null)
   const uploadObject = useRef<SceneObjectRead>()
@@ -59,19 +62,28 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }, [running, submitting, saving, data, error, read])
 
   const extract = async () => {
-    if (!editable || submitting || running) return
-    setSubmitting(true); setError('')
-    extractRequest.current ??= crypto.randomUUID()
+    if (!editable || submitting || running && !pendingRequest) return
+    let requestId: string
     try {
-      const response = await StudioDirectingService.directingSceneObjectExtract({ ...scope, requestBody: { request_id: extractRequest.current } })
+      requestId = localStorage.getItem(requestKey) || pendingRequest || crypto.randomUUID()
+      localStorage.setItem(requestKey, requestId)
+    } catch (cause) { setError(directingError(cause)); return }
+    setPendingRequest(requestId); setSubmitting(true); setError('')
+    const clear = () => {
+      try { if (localStorage.getItem(requestKey) === requestId) localStorage.removeItem(requestKey) }
+      catch { /* 相同身份可安全重放。 */ }
+      setPendingRequest(undefined)
+    }
+    try {
+      const response = await StudioDirectingService.directingSceneObjectExtract({ ...scope, requestBody: { request_id: requestId } })
       if (!response.data) throw new Error('提取提交结果待核实，请使用原请求重试')
-      extractRequest.current = undefined
+      clear()
       const task = response.data
       setData(previous => previous && { ...previous, task })
       await read()
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status < 500) {
-        extractRequest.current = undefined
+      if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) {
+        clear()
         if (cause.status === 409) await read()
       }
       setError(directingError(cause))
@@ -138,8 +150,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   return <section aria-labelledby="scene-object-preparation-title">
     <div className="scene-canvas-list-header">
       <h2 id="scene-object-preparation-title">场次对象与参考</h2>
-      <Button variant="primary" loading={submitting} disabled={!editable || loading || running || saving}
-        onClick={() => void extract()}>{extractRequest.current && error ? '核实提取请求' : action}</Button>
+      <Button variant="primary" loading={submitting} disabled={!editable || loading || running && !pendingRequest || saving}
+        onClick={() => void extract()}>{pendingRequest ? '核实提取请求' : action}</Button>
     </div>
     <p>这里选的是场次候选。各画布采用后独立管理，参考图可留空。</p>
     {loading && <Spin aria-label="正在读取对象准备" />}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Alert, Empty, Input, Space, Spin } from 'antd'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { StudioDirectingService } from '../../../services/generated'
 import type { SceneCanvasesRead, StoryboardTaskRead } from '../../../services/generated'
+import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { SceneObjectPreparation } from './SceneObjectPreparation'
@@ -26,6 +27,8 @@ function defaultCanvasName(date = new Date()) {
 function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
   const [query, setQuery] = useSearchParams()
   const navigate = useNavigate()
+  const navigationKey = useLocation().key
+  const selectedTaskId = query.get('storyboardTask')
   const canvasId = query.get('canvas')
   const selected = query.get('selected')
   const [scene, setScene] = useState<SceneCanvasesRead>()
@@ -70,7 +73,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
     } finally { setCreating(false) }
   }
   if (canvasId && scene?.canvases.some(canvas => canvas.id === canvasId)) {
-    return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId}
+    return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
       initialCandidate={candidate?.canvas_id === canvasId ? candidate.candidate ?? undefined : undefined}
       storyboardScope={{ chapterId, sequenceId, requiresReview: candidate?.pending_application }}
       back={{ label: '返回场次准备', onClick: returnToPreparation }}
@@ -81,12 +84,16 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
         const basis = document.cards?.find(card => card.id === document.fixed_source?.card_id)
         const model = document.cards?.find(card => document.storyboard?.shots[0]?.model_card_ids.includes(card.id))
         return <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
-          editable={editable && !!scene.sequence.is_current} target={{ id: current.id,
+          navigationKey={navigationKey} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current} target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
             sourceChanged: !!current.source_changed || !!basis && 'text' in basis && basis.text !== scene.sequence.source_text,
             sourceReady: !!scene.sequence.is_current && !scene.sequence.source_changed,
             productionModelId: model && 'model_id' in model ? model.model_id ?? undefined : undefined,
             confirmSource: () => void requestLeave().then(allowed => { if (allowed) chapter() }),
-          }} onCompleted={setCandidate} />
+          }} onResult={(result, follow) => setCandidate(previous => {
+            if (follow && previous?.canvas_id === current.id && previous.candidate &&
+                previous.task_id !== current.document.storyboard?.task_id && previous.task_id !== result.task_id) return previous
+            return { ...result, pending_application: true }
+          })} />
       }} />
   }
 
@@ -95,6 +102,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
       <PageToolbar title={scene?.sequence.title || '场次准备'}>
         <Space wrap>
           <Button variant="quiet" onClick={chapter}>返回章节</Button>
+          <TaskCenter workbench />
           {canvasId && <Button onClick={returnToPreparation}>返回场次准备</Button>}
         </Space>
       </PageToolbar>
@@ -119,8 +127,9 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
                     <Button disabled={!scene.sequence.is_current || !scene.sequence.source_text.trim()}
                       onClick={() => { setCreateError(''); setName(defaultCanvasName()) }}>新建空白画布</Button>
                     <SceneStoryboardPreparation scope={{ projectId, chapterId, sequenceId }} nameForNewCanvas={defaultCanvasName}
-                      editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()} onCompleted={result => {
-                        setCandidate(result)
+                      navigationKey={navigationKey} selectedTaskId={selectedTaskId}
+                      editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()} onResult={(result, follow) => {
+                        setCandidate({ ...result, pending_application: !follow || result.pending_application })
                         openCanvas(result.canvas_id)
                       }} />
                   </Space>

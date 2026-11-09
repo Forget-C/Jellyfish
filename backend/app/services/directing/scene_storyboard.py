@@ -6,10 +6,11 @@ from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.orm import defer
 
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate
-from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardTaskRead
-from app.core.contracts.task import TaskStatus
+from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
+from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.generation_canvas import CanvasSaveReceipt
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.studio import FileItem, FileUsage
@@ -45,17 +46,34 @@ class SceneStoryboardService(SceneObjectService):
         """Keep the canvas identity and freeze the selected, verified text evidence."""
         return await self._submit(chapter_id, sequence_id, body, canvas_id=canvas_id)
 
+    async def retry_storyboard(self, chapter_id: str, sequence_id: str, task_id: str,
+                               body: StoryboardRetry) -> StoryboardTaskRead:
+        """保留原配置与画布身份，仍按当前画布基线组织差异。"""
+        await self._scene(chapter_id, sequence_id)
+        failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
+            raise RevisionConflict('只有失败或取消的分镜任务可以重试')
+        request = StoryboardReextractRequest.model_validate({
+            **failed.input_snapshot['storyboard_request'], 'request_id': body.request_id,
+        })
+        return await self._submit(chapter_id, sequence_id, request,
+                                  canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id)
+
     async def _submit(self, chapter_id: str, sequence_id: str, body: StoryboardRequest,
-                      *, canvas_id: str | None = None) -> StoryboardTaskRead:
+                      *, canvas_id: str | None = None, retry_of_task_id: str | None = None) -> StoryboardTaskRead:
         sequence, chapter = await self._scene(chapter_id, sequence_id, lock=True)
         request = body.model_dump(mode='json')
         existing = await self.db.scalar(self._storyboards(sequence_id).where(
             Task.input_snapshot['storyboard_request']['request_id'].as_string() == body.request_id))
         if existing:
             snapshot = existing.input_snapshot
-            if snapshot['storyboard_request'] != request or snapshot.get('reextract_canvas_id') != canvas_id:
+            if (snapshot['storyboard_request'] != request or snapshot.get('reextract_canvas_id') != canvas_id
+                    or existing.retry_of_task_id != retry_of_task_id):
                 raise RevisionConflict('分镜请求身份已用于另一份内容')
             return await self._storyboard_read(existing)
+        if retry_of_task_id and await self.db.scalar(self._storyboards(sequence_id).where(
+                Task.retry_of_task_id == retry_of_task_id).limit(1)):
+            raise RevisionConflict('已提交该任务的重试，请查看最新分镜任务')
         objects = await self.read_objects(chapter_id, sequence_id)
         if objects.source_changed and not canvas_id:
             raise ValueError('场次原文范围已变化，请先刷新对象准备')
@@ -71,6 +89,10 @@ class SceneStoryboardService(SceneObjectService):
         prior_task_id = None
         if canvas_id:
             canvas, prior_task_id = await self._reextract_baseline(sequence, chapter, canvas_id, body)
+            if await self.db.scalar(self._storyboards(sequence_id).where(
+                    Task.input_snapshot['canvas_id'].as_string() == canvas_id,
+                    Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1)):
+                raise RevisionConflict('该画布已有进行中的分镜任务')
         else:
             canvas = await self.create_canvas(chapter_id, sequence_id, SceneCanvasCreate(name=body.name))
         fixed = canvas.document.fixed_source
@@ -101,7 +123,7 @@ class SceneStoryboardService(SceneObjectService):
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
             title='生成完整分镜' if body.mode == 'complete' else '忠实提取分镜', target_type='directing_sequence',
-            target_id=sequence_id, project_id=self.project_id, provider_id=provider.id,
+            target_id=sequence_id, project_id=self.project_id, provider_id=provider.id, retry_of_task_id=retry_of_task_id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
@@ -155,6 +177,27 @@ class SceneStoryboardService(SceneObjectService):
                 sequence.source.get('reference'), sequence.source.get('version')) != (chapter.id, version):
             raise RevisionConflict('章节原文已变动，请返回章节确认本场次的新原文范围')
         return version
+
+    async def list_storyboards(self, chapter_id: str, sequence_id: str,
+                               canvas_id: str | None = None) -> list[StoryboardTaskSummary]:
+        """恢复入口只读取轻量状态，不加载完整分镜图。"""
+        await self._scene(chapter_id, sequence_id)
+        query = self._storyboards(sequence_id).where(Task.input_snapshot['chapter_id'].as_string() == chapter_id)
+        if canvas_id:
+            canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
+            if canvas.sequence_id != sequence_id:
+                raise HTTPException(404, 'Canvas not found in scene')
+            query = query.where(Task.input_snapshot['canvas_id'].as_string() == canvas_id)
+        tasks = list(await self.db.scalars(query.options(defer(Task.result)).order_by(
+            Task.created_at.desc(), Task.id.desc()).limit(20)))
+        saved = set(await self.db.scalars(select(CanvasSaveReceipt.request_id).where(
+            CanvasSaveReceipt.request_id.in_(['storyboard:' + task.id for task in tasks if task.status == TaskStatus.succeeded]))))
+        return [self._storyboard_summary(task, task.status == TaskStatus.succeeded and 'storyboard:' + task.id not in saved)
+                for task in tasks]
+
+    def _storyboard_summary(self, task: Task, candidate_available: bool) -> StoryboardTaskSummary:
+        return StoryboardTaskSummary(**self.task_read(task).model_dump(), canvas_id=task.input_snapshot['canvas_id'],
+                                     candidate_available=candidate_available, retry_of_task_id=task.retry_of_task_id)
 
     async def read_storyboard(self, chapter_id: str, sequence_id: str, task_id: str) -> StoryboardTaskRead:
         """只返回本场任务与候选，不泄露模型配置和冻结私有输入。"""
@@ -252,7 +295,7 @@ class SceneStoryboardService(SceneObjectService):
                 candidate = None
             else:
                 pending = bool(task.input_snapshot.get('reextract_canvas_id')) or canvas.revision != candidate.base_revision
-        return StoryboardTaskRead(**self.task_read(task).model_dump(), canvas_id=canvas_id,
+        return StoryboardTaskRead(**self._storyboard_summary(task, candidate is not None).model_dump(),
                                   candidate=candidate, pending_application=pending)
 
     async def complete_storyboard(self, task: Task, result: SceneStoryboard) -> StoryboardCandidate:
