@@ -139,7 +139,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       })}
     </ul>}
     <Modal title="分镜任务详情" open={!!detailTask} onCancel={() => setDetail(undefined)}
-      footer={<Button onClick={() => setDetail(undefined)}>关闭</Button>}>
+      footer={<Button aria-label="关闭分镜任务详情" onClick={() => setDetail(undefined)}>关闭</Button>}>
       {detailTask && detailCard && <Descriptions column={1} size="small" items={[
         { key: 'canvas', label: '画布', children: detailCard.name },
         { key: 'status', label: '任务状态', children: taskLabel(detailTask) },

@@ -119,7 +119,7 @@ try {
   await page.getByRole('menuitem', { name: '查看任务详情' }).press('Enter')
   const details = page.getByRole('dialog', { name: '分镜任务详情' })
   await details.getByText(failed.task_id, { exact: true }).waitFor()
-  await page.keyboard.press('Escape')
+  await details.getByRole('button', { name: '关闭分镜任务详情' }).press('Enter')
   await details.waitFor({ state: 'hidden' })
   await failedCard.getByRole('button', { name: '打开画布' }).waitFor()
 
