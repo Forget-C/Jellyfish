@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
-import { useNavigate } from 'react-router-dom'
+import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
@@ -74,6 +74,9 @@ export function GenerationCanvasWorkspace({
   const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
   const pendingInspect = useRef<CanvasInspectTarget>()
   const editor = useGenerationCanvasEditor(projectId, canvasId)
+  const leaveEditor = useRef(editor.requestLeave); leaveEditor.current = editor.requestLeave
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && editor.needsLeaveProtection())
+  useEffect(() => { if (blocker.state === 'blocked') void leaveEditor.current().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
   const { current, document, edit, save, saving, dirty, ownership, applyInitialCandidate, configureCatalog: configureEditorCatalog } = editor
   const scene = current?.id === canvasId ? current.scene : undefined
   const chapterId = scene?.chapter_id, sequenceId = scene?.sequence_id
@@ -154,7 +157,7 @@ export function GenerationCanvasWorkspace({
   const management: CanvasManagementContext = {
     current, saving, editable: ownership.editable,
     running: !!runtime.busyCards.size, canEdit: ownership.canEdit, requestLeave: editor.requestLeave,
-    nameEditor: document && <Input aria-label="画布名称" value={document.name} maxLength={255}
+    nameEditor: current?.id === canvasId && !current.scene && document && <Input aria-label="画布名称" value={document.name} maxLength={255}
       disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
       onChange={event => change({ ...document, name: event.target.value })} />,
   }

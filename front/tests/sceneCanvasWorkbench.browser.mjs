@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -82,11 +82,19 @@ try {
   assert.equal(await body.getAttribute('aria-readonly'), 'true')
   assert.equal(await page.getByRole('button', { name: '导入文本', exact: true }).count(), 0)
   await closeCanvasDetails(page)
-  await page.getByRole('textbox', { name: '画布名称', exact: true }).fill('改名后方案')
+  assert.equal(await page.getByRole('textbox', { name: '画布名称', exact: true }).count(), 0)
   await page.getByRole('button', { name: '返回场次准备', exact: true }).click()
-  await page.getByRole('button', { name: '改名后方案', exact: true }).waitFor()
+  await page.getByRole('button', { name: '第一套方案', exact: true }).waitFor()
   assert.equal(new URL(page.url()).searchParams.get('selected'), id)
+  await page.goto(`${origin}/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`)
+  await page.getByRole('button', { name: '第一套方案更多操作', exact: true }).press('Enter')
+  await page.getByRole('menuitem', { name: '更名', exact: true }).click()
+  const rename = page.getByRole('dialog', { name: '更名画布', exact: true })
+  await rename.getByRole('textbox', { name: '画布名称', exact: true }).fill('改名后方案')
+  await rename.getByRole('button', { name: '保存名称', exact: true }).click()
+  await rename.waitFor({ state: 'hidden' })
   assert.equal((await read()).document.name, '改名后方案')
+  await page.goto(prep)
 
   const sceneRead = url => url.pathname.endsWith('/sequences/' + sequence.id + '/canvases')
   let disconnect
@@ -94,18 +102,20 @@ try {
   await page.route(sceneRead, async route => { await interrupt; await route.abort('connectionreset') }, { times: 1 })
   await page.getByRole('button', { name: '改名后方案', exact: true }).click()
   const workspace = page.getByRole('region', { name: '生成画布工作台' })
-  const title = workspace.getByRole('textbox', { name: '画布名称', exact: true })
-  await title.fill('刷新失败保留草稿')
+  await openCardList(page)
+  await page.getByRole('button', { name: '文本卡', exact: true }).click()
+  const text = page.getByRole('textbox', { name: '文本内容', exact: true })
+  await text.fill('刷新失败保留草稿')
   disconnect()
   const retry = workspace.getByRole('button', { name: '重试读取场次', exact: true })
   await retry.waitFor()
-  assert.equal(await title.inputValue(), '刷新失败保留草稿')
+  assert.equal(await text.inputValue(), '刷新失败保留草稿')
   const refreshed = page.waitForResponse(response => sceneRead(new URL(response.url())) && response.ok())
   await retry.click()
   await refreshed
   await retry.waitFor({ state: 'hidden' })
   await workspace.getByRole('button', { name: '撤销操作', exact: true }).click()
-  assert.equal(await title.inputValue(), '改名后方案')
+  assert.equal(await text.inputValue(), '')
   await workspace.getByRole('button', { name: '返回场次准备', exact: true }).click()
   await page.getByRole('button', { name: '改名后方案', exact: true }).waitFor()
 

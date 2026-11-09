@@ -744,6 +744,17 @@ async def test_historical_scene_canvas_still_saves_but_cannot_reextract(canvas_c
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('invalid', ['', '  \t', '长' * 256])
+async def test_scene_canvas_rejects_blank_or_long_saved_name(canvas_client, scene_canvas_path, invalid):
+    created = (await canvas_client.post(scene_canvas_path, json={'name': '旧名称'})).json()['data']
+    path = f"/canvases/p/{created['id']}"
+    response = await canvas_client.put(path, json={'request_id': 'invalid-name', 'expected_revision': created['revision'],
+        'document': {**created['document'], 'name': invalid}})
+    assert response.status_code == 422, response.text
+    assert (await canvas_client.get(path)).json()['data'] == created
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('alteration', ['text', 'locator', 'marker', 'card', 'identity'])
 async def test_fixed_scene_source_survives_ordinary_canvas_save(canvas_client, scene_canvas_path, alteration):
     canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']

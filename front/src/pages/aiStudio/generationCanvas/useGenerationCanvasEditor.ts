@@ -1,7 +1,6 @@
 import { createGraphRules } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useBlocker } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave, StoryboardApplication, StoryboardCandidate } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
@@ -22,6 +21,7 @@ const preservesFixedSource = (server: CanvasDocument, draft: CanvasDocument) => 
   return [server.fixed_source, ...(server.archived_sources ?? [])].every(source => !source ||
     same(server.cards?.find(card => card.id === source.card_id), draft.cards?.find(card => card.id === source.card_id)))
 }
+const renameSave = (requestId?: string) => requestId?.startsWith('rename:') === true
 const initialStoryboardSave = (requestId: string) => requestId.startsWith('storyboard:')
 const markStoryboardEdits = (before: CanvasDocument, next: CanvasDocument): CanvasDocument => {
   if (!next.storyboard || before.storyboard?.task_id !== next.storyboard.task_id) return next
@@ -38,7 +38,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
   ? `${reason.body?.data?.code || reason.status}: ${reason.body?.data?.message || reason.body?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
 
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
-export function useGenerationCanvasEditor(projectId: string, canvasId: string | null) {
+export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true) {
   const key = `jellyfish:generation:${projectId}:${canvasId}:recovery`
   const ownership = useSceneEditOwnership(`jellyfish:generation-editor:${projectId}:${canvasId}`)
   const [current, setCurrent] = useState<CanvasRead>()
@@ -201,7 +201,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       // 先重放未明请求取得原回执，再读取最新服务端；恢复不产生新的保存意图。
       let baseline = saved.baseline
       let recovered = saved.document
-      const staged = !!saved.pending && (initialStoryboardSave(saved.pending.request_id) || !!saved.pending.scene)
+      const staged = !!saved.pending && (renameSave(saved.pending.request_id) || initialStoryboardSave(saved.pending.request_id) || !!saved.pending.scene)
       if (saved.pending) {
         baseline = await send(baseline, saved.pending)
         if (staged) recovered = baseline.document
@@ -228,11 +228,16 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       history.current = { scope: key, past: staged && !changed && saved.pending?.scene?.action !== 'undo' ? [entry] : [],
         future: staged && !changed && saved.pending?.scene?.action === 'undo' ? [entry] : [] }
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
+      return true
     } catch (reason) {
       if (s === state.current) {
         if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
-          saved.pending = undefined
-          try { localStorage.setItem(key, JSON.stringify(saved)) } catch { setStorageError('本地恢复保护失败') }
+          if (renameSave(saved.pending?.request_id)) {
+            s.recovery = undefined; setRecovery(undefined); persist()
+          } else {
+            saved.pending = undefined
+            try { localStorage.setItem(key, JSON.stringify(saved)) } catch { setStorageError('本地恢复保护失败') }
+          }
         }
         setError(`恢复失败：${describe(reason)}`)
       }
@@ -256,10 +261,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const latestActions = useRef({ reload, persist }); latestActions.current = { reload, persist }
   useEffect(() => {
-    if (!ownership.editable) return
+    if (!ownership.editable || !refreshOnOwnership) return
     const s = state.current
     if (s.current && !s.recovery && !s.pending && same(s.document, s.current.document)) void latestActions.current.reload()
-  }, [ownership.editable])
+  }, [ownership.editable, refreshOnOwnership])
   const applyInitialCandidate = async (candidate: StoryboardCandidate): Promise<'applied' | 'pending'> => {
     const s = state.current
     const next = candidate.document, taskId = next.storyboard?.task_id
@@ -274,6 +279,31 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     if (!applied && s === state.current && !s.pending) await reload()
     return applied ? 'applied' : 'pending'
   }
+  // 名称只作为同一保存链上的已确认命令暂存，失败时不把旧文档当作新草稿。
+  const renameSceneCanvas = async (name: string, scene: { chapterId: string; sequenceId: string }) => {
+    const s = state.current
+    const belongsToScene = () => s.current?.scene?.chapter_id === scene.chapterId && s.current.scene.sequence_id === scene.sequenceId
+    if (!ownership.canEdit() || !belongsToScene() || s.scope !== key || inFlight.current) return undefined
+    if (s.recovery || s.pending) {
+      const original = s.pending ?? s.recovery?.pending
+      if (!renameSave(original?.request_id)) return undefined
+      const saved = s.recovery ? await restore() : await save()
+      return saved ? s.current?.document.name : undefined
+    }
+    try {
+      // 另一页可能在本弹窗打开后才留下恢复内容，取得锁后再核对一次。
+      if (localStorage.getItem(key)) { setError('请在画布中处理未保存的内容，再更名。'); return undefined }
+    } catch { setError('无法核对本地恢复内容，请检查浏览器存储后重试。'); return undefined }
+    if (!await reload() || s !== state.current || !s.current || !s.document || !belongsToScene() || !ownership.canEdit()) return undefined
+    if (s.current.document.name === name) return name
+    s.initialBefore = s.document
+    s.pending = { request_id: `rename:${crypto.randomUUID()}`, expected_revision: s.current.revision,
+      document: { ...s.current.document, name } }
+    setInitialApplying(true); persist()
+    return await save() ? s.current.document.name : undefined
+  }
+  const pendingCommand = state.current.pending ?? recovery?.pending
+  const pendingRename = renameSave(pendingCommand?.request_id) ? (pendingCommand?.document as CanvasDocument).name : undefined
   const prepareReview = async () => {
     const s = state.current
     if (!await save() || s !== state.current || !s.current || s.initialBefore) return undefined
@@ -304,15 +334,17 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     const s = state.current
     return s.pending || s.recovery || (s.current && !same(s.document, s.current.document)) ? 'choice' : 'ready'
   }
-  const latest = useRef({ save, dirty, recovery, requestLeave }); latest.current = { save, dirty, recovery, requestLeave }
-  useEffect(() => { const timer = window.setInterval(() => { if (latest.current.dirty && !latest.current.recovery && !same(state.current.blocked, state.current.document)) void latest.current.save() }, 1000); return () => clearInterval(timer) }, [key])
+  const latest = useRef({ save, dirty }); latest.current = { save, dirty }
+  useEffect(() => { const timer = window.setInterval(() => { if (latest.current.dirty && !state.current.recovery && !same(state.current.blocked, state.current.document)) void latest.current.save() }, 1000); return () => clearInterval(timer) }, [key])
   useEffect(() => {
     const leave = (event: BeforeUnloadEvent) => { if (latest.current.dirty || state.current.pending || state.current.recovery) { latestActions.current.persist(); event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', leave); return () => window.removeEventListener('beforeunload', leave)
   }, [key])
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
-  useEffect(() => { if (blocker.state === 'blocked') void latest.current.requestLeave().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
+  const needsLeaveProtection = () => {
+    const s = state.current
+    return !!(s.pending || s.recovery || s.current && !same(s.document, s.current.document))
+  }
   const saveDiagnostic = failedDiagnostic?.scope === key && same(document, failedDiagnostic.document) ? failedDiagnostic.issue : undefined
-  return { saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, applyInitialCandidate, applyReviewedCandidate, prepareReview, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
+  return { saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, applyInitialCandidate, applyReviewedCandidate, prepareReview, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

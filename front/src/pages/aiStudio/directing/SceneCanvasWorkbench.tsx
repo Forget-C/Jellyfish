@@ -78,7 +78,6 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId}
       back={{ label: '返回场次准备', onClick: returnToPreparation }}
-      renderCanvasManagement={({ nameEditor }) => <span className="scene-canvas-name-editor">{nameEditor}</span>}
       renderSceneActions={({ current, editable, requestLeave }) => {
         if (!current?.document.fixed_source) return null
         const document = current.document

@@ -134,6 +134,8 @@ class CanvasStore:
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
         prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources)
+        if canvas.sequence_id and prepared.document.name != prepared.previous_document.name and not prepared.document.name.strip():
+            raise diagnostic('INVALID_CANVAS_NAME', '场次画布名称不能为空白', {'canvas_id': canvas_id, 'path': ['name']})
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
         changed = changed_check_connections(prepared.previous_document, prepared.document)
         check_edge_revisions = canvas.check_edge_revisions

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openCanvasManagement } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -107,25 +107,26 @@ try {
   await page.waitForFunction(() => document.activeElement?.textContent?.trim() === '生成分镜')
   await page.setViewportSize({ width: 1440, height: 960 })
   await page.getByRole('button', { name: '继续编辑的画布', exact: true }).click()
-  const nameEditor = page.getByRole('textbox', { name: '画布名称', exact: true })
-  await nameEditor.focus()
+  const focusTarget = page.getByRole('button', { name: '保存画布', exact: true })
+  await focusTarget.focus()
 
   const free = await context.newPage()
   const freeUrl = `${origin}/projects/${project}/generation-canvas?canvas=${original.canvas_id}`
-  await free.goto(freeUrl)
-  await free.locator('[data-card-type="content.basis"]').waitFor()
-  await openCanvasManagement(free)
-  await free.getByRole('textbox', { name: '画布名称', exact: true }).fill('自由入口先保存')
-  await free.getByRole('button', { name: '保存画布', exact: true }).click()
-  await poll(() => data(canvas(original.canvas_id)), row => row.revision === 1 && row.document.name === '自由入口先保存')
+  await free.goto(`${origin}/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`)
+  await free.getByRole('button', { name: '离页后完成更多操作', exact: true }).press('Enter')
+  await free.getByRole('menuitem', { name: '更名', exact: true }).click()
+  const rename = free.getByRole('dialog', { name: '更名画布', exact: true })
+  await rename.getByRole('textbox', { name: '画布名称', exact: true }).fill('管理入口先保存')
+  await rename.getByRole('button', { name: '保存名称', exact: true }).click()
+  await poll(() => data(canvas(original.canvas_id)), row => row.revision === 1 && row.document.name === '管理入口先保存')
   await free.close()
   await page.bringToFront()
-  await nameEditor.focus()
+  await focusTarget.focus()
   await control({ storyboard_release: 1 })
   const completed = await poll(() => data(tasks + '/' + original.task_id), row => row.status === 'succeeded')
   assert.ok(completed.pending_application)
   assert.equal(new URL(page.url()).searchParams.get('canvas'), other.id)
-  assert.equal(await nameEditor.evaluate(element => element === document.activeElement), true)
+  assert.equal(await focusTarget.evaluate(element => element === document.activeElement), true)
 
   const reviewEntry = await context.newPage()
   await reviewEntry.goto(freeUrl)
@@ -155,7 +156,7 @@ try {
   }, { times: 1 })
   await review.getByRole('button', { name: '应用分镜', exact: true }).click()
   const written = await poll(() => data(canvas(original.canvas_id)), row => row.revision === 2)
-  assert.equal(written.document.name, '自由入口先保存')
+  assert.equal(written.document.name, '管理入口先保存')
   await review.getByText(/结果未知|应用尚未完成/).first().waitFor()
   await page.reload()
   const restore = page.getByRole('button', { name: '恢复本地内容', exact: true })
@@ -244,8 +245,9 @@ try {
   await page.locator('[data-card-type="content.basis"]').waitFor()
   const saveRoute = `**/generation-canvases/${project}/${draftTask.canvas_id}`
   await page.route(saveRoute, route => route.request().method() === 'PUT' ? route.abort('failed') : route.fallback())
-  await openCanvasManagement(page)
-  await page.getByRole('textbox', { name: '画布名称', exact: true }).fill('未收到保存回执的人工名称')
+  await openCardList(page)
+  await page.getByRole('button', { name: '文本卡', exact: true }).click()
+  await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('未收到保存回执的人工备注')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
   await control({ storyboard_release: 6 })
@@ -259,7 +261,7 @@ try {
   await page.getByRole('button', { name: '核对差异', exact: true }).waitFor()
   const recoveredDraft = await data(canvas(draftTask.canvas_id))
   assert.equal(recoveredDraft.revision, 1)
-  assert.equal(recoveredDraft.document.name, '未收到保存回执的人工名称')
+  assert.ok(recoveredDraft.document.cards.some(card => card.text === '未收到保存回执的人工备注'))
   assert.equal(recoveredDraft.document.storyboard, undefined)
 
   // Retirement blocks fresh extraction but does not invalidate a completed, unchanged source.
@@ -284,4 +286,9 @@ try {
   const historical = await poll(() => data(canvas(other.id)), row => row.document.storyboard?.task_id === archivedTask.task_id)
   assert.equal(historical.scene.is_current, false)
   process.stdout.write(JSON.stringify({ output, passed: true }) + '\n')
-} finally { await cleanup() }
+} finally {
+  if (backend.exitCode === null) {
+    await http(`${api}/test/runtime-controls`, 'POST', { disconnect: true, storyboard_release: 100 }).catch(() => {})
+  }
+  await cleanup()
+}

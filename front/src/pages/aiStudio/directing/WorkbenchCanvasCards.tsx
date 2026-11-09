@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { MoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Spin, Tag, message } from 'antd'
+import type { InputRef } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService, type SceneCanvasSummary, type StoryboardTaskSummary } from '../../../services/generated'
 import { readChapterBrowse, saveChapterBrowse, scenePreparationLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
+import { WorkbenchCanvasRename } from './WorkbenchCanvasRename'
 import './workbench-canvas-cards.css'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
@@ -35,6 +37,9 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [revision, setRevision] = useState(0)
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<string>()
+  const [rename, setRename] = useState<Pick<SceneCanvasSummary, 'id' | 'name'>>()
+  const menuButtons = useRef(new Map<string, HTMLElement>())
+  const searchInput = useRef<InputRef>(null)
   const [created, setCreated] = useState<string>()
   const recentCanvas = readChapterBrowse(projectId, chapterId).managementCanvas
   const detailCard = canvases?.find(canvas => canvas.id === detail)
@@ -90,6 +95,20 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     saveChapterBrowse(projectId, chapterId, { managementCanvas: canvasId })
     navigate(scenePreparationLocation(projectId, chapterId, sequenceId) + '?' + params)
   }
+  const closeRename = (name?: string) => {
+    if (!rename) return
+    const id = rename.id
+    setRename(undefined)
+    if (name !== undefined) {
+      setCanvases(previous => previous?.map(canvas => canvas.id === id ? { ...canvas, name } : canvas))
+      setRevision(value => value + 1)
+    }
+    requestAnimationFrame(() => {
+      const button = menuButtons.current.get(id)
+      if (button) button.focus({ preventScroll: true })
+      else searchInput.current?.focus({ preventScroll: true })
+    })
+  }
   const keyword = query.trim().toLocaleLowerCase()
   const shown = canvases?.filter(canvas => canvas.name.toLocaleLowerCase().includes(keyword))
   return <section aria-labelledby="management-canvas-list-title" className="management-canvas-cards">
@@ -102,7 +121,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     }} />
     <div className="management-canvas-toolbar">
       <h3 id="management-canvas-list-title">本场画布</h3>
-      {!!canvases?.length && <Input aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
+      {!!canvases?.length && <Input ref={searchInput} aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
         onChange={event => setQuery(event.target.value)} />}
     </div>
     {error && <Alert showIcon type="error" message={error} action={<Button size="small"
@@ -121,11 +140,15 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
           <Card size="small" className={canvas.id === created ? 'management-canvas-created' : undefined}>
             <div className="management-canvas-card-heading">
               <h4>{canvas.name}</h4>
-              {task && <Dropdown trigger={['click']} menu={{ items: [
-                { key: 'detail', label: '查看任务详情', onClick: () => setDetail(canvas.id) },
+              <Dropdown trigger={['click']} menu={{ items: [
+                { key: 'rename', label: '更名', onClick: () => setRename({ id: canvas.id, name: canvas.name }) },
+                ...(task ? [{ key: 'detail', label: '查看任务详情', onClick: () => setDetail(canvas.id) }] : []),
               ] }}>
-                <Button type="text" icon={<MoreOutlined />} aria-label={`${canvas.name}更多操作`} />
-              </Dropdown>}
+                <Button type="text" icon={<MoreOutlined />} aria-label={`${canvas.name}更多操作`} ref={element => {
+                  if (element) menuButtons.current.set(canvas.id, element)
+                  else menuButtons.current.delete(canvas.id)
+                }} />
+              </Dropdown>
             </div>
             <div className="management-canvas-status">
               {task && !currentTaskIsCandidate && task.task_id !== adoptedId && <Tag
@@ -149,6 +172,8 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
         </li>
       })}
     </ul>}
+    {rename && <WorkbenchCanvasRename {...{ projectId, chapterId, sequenceId }} canvasId={rename.id}
+      initialName={rename.name} onClose={closeRename} />}
     <Modal title="分镜任务详情" open={!!detailTask} onCancel={() => setDetail(undefined)}
       footer={<Button aria-label="关闭分镜任务详情" onClick={() => setDetail(undefined)}>关闭</Button>}>
       {detailTask && detailCard && <Descriptions column={1} size="small" items={[

@@ -72,10 +72,6 @@
   text-overflow: ellipsis;
 }
 
-.scene-canvas-name-editor {
-  width: min(160px, 32vw);
-  flex: 0 1 auto;
-}
 
 .scene-object-kind h3 {
   margin: 12px 0 8px;
