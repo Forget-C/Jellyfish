@@ -73,16 +73,15 @@ try {
   await close()
   for(const [id,key,label,preset] of cases){
     const card = page.locator(`[data-card-id="${id}"]`)
-    if (id !== 'anchor') {
-      assert.deepEqual(await card.evaluate(node => [node.offsetWidth, node.offsetHeight]), [360, id === 'performance_rule' ? 240 : 304])
-      assert.equal(await card.getByRole('img', { name: /用途示意/ }).count(), 0)
-    }
+    assert.deepEqual(await card.evaluate(node => [node.offsetWidth, node.offsetHeight]), [360, 128])
+    assert.equal(await card.getByRole('img', { name: /用途示意/ }).count(), 0)
     await open(id)
     assert.equal(await detail.getByRole('tab').count(),0)
     if(preset){
       await detail.getByRole('button',{name:'预览 '+preset,exact:true}).click()
       await detail.getByRole('button',{name:'应用',exact:true}).click()
       await poll(s=>s.document.cards.find(c=>c.id===id)[key]?.text)
+      assert.equal(await card.evaluate(node => node.offsetHeight), 128, id + ': applying a preset keeps the open card height')
       await close();await open(id)
       assert.equal(await detail.getByRole('button',{name:'预览 '+preset,exact:true}).getAttribute('aria-pressed'),'true')
       await detail.getByRole('button',{name:'高级设置',exact:true}).click()
@@ -112,6 +111,7 @@ try {
       await detail.screenshot({path:join(output,'performance-advanced.png')})
     }
     await close()
+    await card.getByRole('definition').filter({hasText:'@文本内容卡'}).waitFor({state:'attached'})
   }
   const compiled=(await(await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data
   assert.deepEqual(compiled.media.map(item=>item.file_id),[file.id])

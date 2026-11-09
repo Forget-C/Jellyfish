@@ -26,12 +26,14 @@ export function generationCardSize(type?: string) {
 }
 
 const compactHeights = [128, 160, 192]
+const structuredHeights = [128, 160, 192, 224]
 const visualHeights = [240, 272, 304]
 
 /** 启用按可见摘要测量的卡型，其他卡继续使用固定外框。 */
 export function designHeightBands(type?: string) {
   if (!type) return undefined
   if (compactDesignFields[type]) return compactHeights
+  if (structuredDesignFields[type]) return structuredHeights
   return visualDesignTypes.includes(type) ? visualHeights : undefined
 }
 
