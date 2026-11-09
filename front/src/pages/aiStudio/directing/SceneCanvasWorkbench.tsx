@@ -6,6 +6,7 @@ import { StudioDirectingService } from '../../../services/generated'
 import type { SceneCanvasesRead } from '../../../services/generated'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { CanvasTextPreview } from './CanvasTextPreview'
+import { SceneObjectPreparation } from './SceneObjectPreparation'
 import { chapterLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
@@ -89,6 +90,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
                 {scene.sequence.source_changed && <Alert type="warning" showIcon message="章节原文已变化，场次仍保留已确认的摘录。" />}
                 <CanvasTextPreview label="场次原文" text={scene.sequence.source_text} lines={4} />
               </section>
+              <SceneObjectPreparation {...{ projectId, chapterId, sequenceId }}
+                editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()} />
               <section aria-labelledby="scene-canvas-list-title">
                 <div className="scene-canvas-list-header">
                   <h2 id="scene-canvas-list-title">本场画布</h2>

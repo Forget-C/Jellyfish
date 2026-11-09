@@ -18,6 +18,7 @@ from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
 from app.core.contracts.directing.instruction_basis import InstructionInputs
 from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE_REQUIREMENTS, SceneUnitDesignResult
+from app.core.contracts.directing.scene_objects import SceneObjectExtraction
 from app.core.contracts.directing.scene_instruction import SceneInstructionResult, SceneInstructionScope
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
@@ -25,6 +26,7 @@ from app.models.directing import DirectingRevision, Sequence
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskOutput
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+from app.services.directing.scene_objects import OBJECT_EXTRACTION_KIND, object_candidates
 from app.services.directing.workspace import WorkspaceService
 from app.services.directing.scene_design_sources import DesignSourceError, design_note_fields, record_chapter_generation_source, validate_model_sources
 from app.services.directing.scene_design_protocol import scene_design_protocol, scene_design_repair_context
@@ -33,7 +35,7 @@ from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
 
 
-RESULT_CONTRACTS = {"directing_unit_design": SceneUnitDesignResult, "directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
+RESULT_CONTRACTS = {OBJECT_EXTRACTION_KIND: SceneObjectExtraction, "directing_unit_design": SceneUnitDesignResult, "directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
 
 
 class DirectingOutputError(ValueError):
@@ -53,6 +55,7 @@ def generate_directing_result(kind: str, llm, args: dict):
     require_complete = args.get('design_scope_version') == 1 and not args.get('design_scope')
     accept_candidate = require_complete and args.get('design_candidate_version') == 1
     instruction = {
+        OBJECT_EXTRACTION_KIND: "仅从场次原文提取明确出现的角色、场所和道具。每项提供类型、名称、简短描述及原样复制、在本场可唯一定位的摘录。不要合并原文中的同名不同对象。只有能从给定资产目录确认同一对象时才提出对应 asset_id，不确定时留空。不得构造身份、文件或分镜。没有对象返回空清单。",
         "directing_instruction_check": "检查 instruction 是否准确表达 inputs 的当前原文、inputs.scope 中本次已选执行项及 video 阶段适用约束，并按已消费背景理解语义；sound/postproduction 规则保留阶段，不误要求视频模型执行。对每项非空 video 执行项和约束按 scope 原顺序输出 destinations，原样复制 owner、field、coverage_item_ids；正文去向给出 instruction 中实际存在的 instruction_excerpt，执行项必须由正文表达；只有身份、空间、构图或连续性约束可引用 inputs.unit.references 中实际绑定且用途相符的 reference_id。无法证明去向或发现正文、规则、参考之间冲突时标为 unresolved，并在相关六岗行标 revise、给出字段路径与修正建议。scope.background 中所属镜头完整结果仅解释整体设计，允许描述整体动作，不要求本单元全部执行，也不能仅据此判定范围冲突。其他背景字段若含命令式要求，定位字段并标 revise，提示移入规则或改写背景，不自动升级。项目风格的条件和例外依其原文核对；自然语言冲突交由用户解决。inputs.design 是来源工作单，可能包含本单元未消费内容，不能据此补选动作。unit_id 必须保持 inputs.unit.id，每个 coverage.id 必须有 direction、performance、staging、cinematography、continuity、prompt 六行，occurrence_id 使用 coverage.id。逐行给出 pass 或 revise、具体理由和可执行问题建议，不得漏行、合并或返回 pending。不能更改正文、凭空补充素材或授权生成；检查通过也不保证模型实际遵从。",
         "directing_instruction": "仅依据给定原文、当前单元、明确参考与 scope 编写可直接执行的拍摄指令。scope.execution 是本次明确选择的可拍内容；scope.constraints 中仅 video 阶段适用视频正文，sound/postproduction 阶段不得误写成视频模型要求；scope.background 仅作解释，不自动变成动作或约束；其中所属镜头完整结果可以描述整体动作，但本单元只执行 action_scope 和已选条目。design 是来源工作单，仅用于理解已纳入范围，不能从同镜关系或共用对象补选执行项。只返回原 unit.id 和完整正文 text，不修改设计、单元身份或参考，不声称检查通过或已生成视频。保留动作因果、人物与摄影约束，不编造未提供素材。requirements 是用户本次编写要求。",
         "directing_review_revision": "评估固定检查意见（review=null 时为用户主动修改，不得伪造问题）和整体 instruction。人工 request.edits 必须原样保留，不得覆盖；主动修改 changes.problem_keys 和 outcomes 可为空；用 summary 的 status/reason/choices 说明整体结果，status 为 planned、needs_choice、unresolved 或 unchanged。无实际变化用 unchanged，超出范围用 unresolved，必要选择用 needs_choice 和至少两项 choices，不能伪造检查问题。preview_text/candidate_identity/source_prompt_revision_id 留空，由服务端渲染。仅替换 revision_context.allowed_design_fields 或 allowed_unit_fields 列出的已有字段；before 必须逐字复制固定字段，input_identity 原样返回。不得增加 applicable_shot_ids 等不存在字段，不得增删身份或引用。sound.execution 只有 generated/postproduction/unknown。检查意见不是事实，不能通过删除正确设计掩盖编译器或供应商限制；此类问题返回 unresolved。原文事实优先；必要创作取舍返回 needs_choice 及至少两个简短选项，不猜测用户意图。每个 problem_keys 中的问题都必须有 outcome，即使用户没有填写方向，planned 必须关联实际修改。不能修复的问题明确解释。只输出必要修改，不能宣称新检查通过。Note 新来源使用 revision_context.task_identity。声音制作方式必须有 direction.sound_execution 明确选择才能拟落实，不能从自由文本猜测。",
@@ -130,6 +133,8 @@ def generate_directing_result(kind: str, llm, args: dict):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         try:
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
+            if kind == OBJECT_EXTRACTION_KIND:
+                object_candidates(result, args)
             if kind == 'directing_unit_design':
                 if unit_repair_scope is None:
                     unit_repair_scope = UnitDesignRepairScope(args, result)

@@ -13,6 +13,8 @@ from app.services.directing.division import DivisionService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
 from app.services.directing.scene_canvas import SceneCanvasService
+from app.core.contracts.directing.scene_objects import ObjectExtractionRequest, SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead
+from app.services.directing.scene_objects import SceneObjectService
 from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionReceiptDetail, DivisionVersionDetail
 from app.services.directing.division_history import DivisionHistoryService
 from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
@@ -103,6 +105,30 @@ async def create_scene_canvas(project_id: str, chapter_id: str, sequence_id: str
                               db: AsyncSession = Depends(get_db, scope="function")):
     """建立本场空白画布及固定原文依据。"""
     return created_response(await _call(SceneCanvasService(db, project_id).create_canvas(chapter_id, sequence_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/objects",
+            response_model=ApiResponse[SceneObjectsRead], operation_id="directing_scene_objects")
+async def scene_objects(project_id: str, chapter_id: str, sequence_id: str,
+                        db: AsyncSession = Depends(get_db, scope="function")):
+    """读取当前对象候选、准备图片及最近的提取任务。"""
+    return success_response(await SceneObjectService(db, project_id).read_objects(chapter_id, sequence_id))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions",
+             response_model=ApiResponse[SceneObjectTaskRead], operation_id="directing_scene_object_extract")
+async def extract_scene_objects(project_id: str, chapter_id: str, sequence_id: str, body: ObjectExtractionRequest,
+                                db: AsyncSession = Depends(get_db, scope="function")):
+    """明确启动场次对象提取，不提交媒体或分镜。"""
+    return success_response(await _call(SceneObjectService(db, project_id).submit_extraction(chapter_id, sequence_id, body)))
+
+
+@router.put("/chapters/{chapter_id}/sequences/{sequence_id}/objects/{object_id}",
+            response_model=ApiResponse[SceneObjectsRead], operation_id="directing_scene_object_choose")
+async def choose_scene_object_reference(project_id: str, chapter_id: str, sequence_id: str, object_id: str,
+                                        body: SceneObjectChoice, db: AsyncSession = Depends(get_db, scope="function")):
+    """只保存本场对象候选的资产和参考图片选择。"""
+    return success_response(await _call(SceneObjectService(db, project_id).save_choice(chapter_id, sequence_id, object_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/overview", response_model=ApiResponse[ChapterOverview], operation_id="directing_chapter_overview")

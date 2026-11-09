@@ -16,6 +16,9 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
   if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
+  else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_object_extract') {
+    navigateTo = `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/sequences/${encodeURIComponent(id)}/canvas-workbench`
+  }
   else if (kind === 'sequence' && projectId && chapterId) {
     const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'
     const query = new URLSearchParams({ view, task: task.taskId, focus: 'tasks' })

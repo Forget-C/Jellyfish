@@ -36,6 +36,19 @@ class ControlledModel:
     def __init__(self, **params):
         self.params = params
 
+    def invoke(self, messages):
+        """只为对象浏览器旅程替换外部模型输出。"""
+        if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
+            raise AssertionError('Unexpected direct text request')
+        args = json.loads(messages[1].content)
+        assert '前门的阿同' in args['script_text']
+        return SimpleNamespace(content=json.dumps({'objects': [
+            {'kind': 'character', 'name': '阿同', 'description': '前门等候', 'excerpt': '前门的阿同',
+             'asset_id': 'object-browser-character'},
+            {'kind': 'character', 'name': '阿同', 'description': '后门等候', 'excerpt': '后门的阿同'},
+            {'kind': 'prop', 'name': '信封', 'description': '手持物件', 'excerpt': '拿着信封'},
+        ]}, ensure_ascii=False))
+
     async def astream(self, messages):
         if database_url and self.params.get('model') != model_id:
             yield SimpleNamespace(content='unrelated isolated fixture')
@@ -157,6 +170,20 @@ async def prepare():
         db.add(Provider(id=provider_id, name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name=model_id if database_url else 'controlled-text', provider_id=provider_id, category='text', params={'temperature': 0.2}))
+        if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') == '1':
+            from base64 import b64decode
+            from app.models.llm import ModelSettings
+            from app.models.studio import Character, CharacterImage, FileItem
+            await db.flush()
+            db.add(ModelSettings(id=1, default_text_model_id=model_id))
+            db.add(Character(id='object-browser-character', project_id=project_id, name='已有角色', style='真人都市'))
+            db.add(FileItem(id='object-browser-image', type='image', name='已有角色图片', storage_key='fixture/asset.png',
+                            content_type='image/png'))
+            await db.flush()
+            db.add(CharacterImage(character_id='object-browser-character', file_id='object-browser-image'))
+            Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'], 'asset.png').write_bytes(b64decode(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII='))
+
     # Bootstrap and Uvicorn run on separate loops; no pooled MySQL connection may cross them.
     await engine.dispose()
 

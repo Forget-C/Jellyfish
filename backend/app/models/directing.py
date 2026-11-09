@@ -27,6 +27,7 @@ class Sequence(Base, TimestampMixin):
     source_end: Mapped[int | None] = mapped_column(Integer)
     source_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("('')"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    object_preparation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("chapter_id", "current_position", name="uq_directing_sequence_current_position"),

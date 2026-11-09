@@ -57,6 +57,8 @@ import type { ApiResponse_SceneExportInspection_ } from '../models/ApiResponse_S
 import type { ApiResponse_SceneExportRead_ } from '../models/ApiResponse_SceneExportRead_';
 import type { ApiResponse_SceneInstructionApply_ } from '../models/ApiResponse_SceneInstructionApply_';
 import type { ApiResponse_SceneInstructionPreview_ } from '../models/ApiResponse_SceneInstructionPreview_';
+import type { ApiResponse_SceneObjectsRead_ } from '../models/ApiResponse_SceneObjectsRead_';
+import type { ApiResponse_SceneObjectTaskRead_ } from '../models/ApiResponse_SceneObjectTaskRead_';
 import type { ApiResponse_SceneSeamReviewRead_ } from '../models/ApiResponse_SceneSeamReviewRead_';
 import type { ApiResponse_SceneTakeReviewRead_ } from '../models/ApiResponse_SceneTakeReviewRead_';
 import type { ApiResponse_SceneUnitDesignPreview_ } from '../models/ApiResponse_SceneUnitDesignPreview_';
@@ -82,6 +84,7 @@ import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
 import type { FeedbackWrite } from '../models/FeedbackWrite';
 import type { InstructionBasisConfirm } from '../models/InstructionBasisConfirm';
 import type { InstructionCheckRequest } from '../models/InstructionCheckRequest';
+import type { ObjectExtractionRequest } from '../models/ObjectExtractionRequest';
 import type { RegroupRequest } from '../models/RegroupRequest';
 import type { RepairPlanRequest } from '../models/RepairPlanRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
@@ -99,6 +102,7 @@ import type { SceneExportRequest } from '../models/SceneExportRequest';
 import type { SceneExportRetry } from '../models/SceneExportRetry';
 import type { SceneIdentityCleanup } from '../models/SceneIdentityCleanup';
 import type { SceneInstructionRequest } from '../models/SceneInstructionRequest';
+import type { SceneObjectChoice } from '../models/SceneObjectChoice';
 import type { SceneSeamReviewCreate } from '../models/SceneSeamReviewCreate';
 import type { SceneTakeReviewConfirm } from '../models/SceneTakeReviewConfirm';
 import type { SceneUnitCanvasPreview } from '../models/SceneUnitCanvasPreview';
@@ -227,6 +231,101 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'chapter_id': chapterId,
                 'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Objects
+     * 读取当前对象候选、准备图片及最近的提取任务。
+     * @returns ApiResponse_SceneObjectsRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneObjects({
+        projectId,
+        chapterId,
+        sequenceId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_SceneObjectsRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/objects',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Extract Scene Objects
+     * 明确启动场次对象提取，不提交媒体或分镜。
+     * @returns ApiResponse_SceneObjectTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneObjectExtract({
+        projectId,
+        chapterId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        requestBody: ObjectExtractionRequest,
+    }): CancelablePromise<ApiResponse_SceneObjectTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Choose Scene Object Reference
+     * 只保存本场对象候选的资产和参考图片选择。
+     * @returns ApiResponse_SceneObjectsRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneObjectChoose({
+        projectId,
+        chapterId,
+        sequenceId,
+        objectId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        objectId: string,
+        requestBody: SceneObjectChoice,
+    }): CancelablePromise<ApiResponse_SceneObjectsRead_> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/objects/{object_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'object_id': objectId,
             },
             body: requestBody,
             mediaType: 'application/json',

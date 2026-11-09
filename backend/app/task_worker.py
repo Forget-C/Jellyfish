@@ -29,7 +29,7 @@ from app.services.directing.ai import DirectingOutputError
 from app.services.directing.scene_export_execution import execute_scene_export
 from app.services.directing.scene_export_render import render_scene_cut
 from app.services.directing.review_revision import ReviewRevisionService
-from app.services.directing.store import DirectingStore, ContinuityNotReady
+from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
@@ -338,7 +338,7 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            directing = task.kind in {"directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
+            directing = task.kind in {"directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
@@ -365,7 +365,17 @@ class TaskWorker:
             result = generated.model_dump()
 
             deliver = None
-            if task.kind == "directing_review_revision":
+            if task.kind == "directing_object_extract":
+                from app.services.directing.scene_objects import SceneObjectService
+
+                async def deliver(db, current):
+                    """成功任务与候选准备在同一事务交付。"""
+                    try:
+                        await SceneObjectService(db, current.project_id).complete_extraction(current, generated)
+                    except RevisionConflict as error:
+                        raise DirectingOutputError(str(error)) from error
+
+            elif task.kind == "directing_review_revision":
                 async def deliver(db, current):
                     """候选和服务端预览同时完成，展示历史无需重读模型配置。"""
                     candidate = await ReviewRevisionService(db, current.project_id).complete_candidate(current, result)
