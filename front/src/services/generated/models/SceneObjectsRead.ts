@@ -13,6 +13,7 @@ export type SceneObjectsRead = {
     source_version?: (string | null);
     source_changed?: boolean;
     task?: (SceneObjectTaskRead | null);
+    candidate_task_id?: (string | null);
     objects: Array<SceneObjectRead>;
     assets: Array<AssetSummary>;
 };

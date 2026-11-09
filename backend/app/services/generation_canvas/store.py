@@ -28,6 +28,7 @@ class SceneCanvasSeed:
     sequence_id: str
     basis: CreativeBasisCard
     fixed_source: CanvasFixedSource
+    canvas_id: str | None = None
 
 
 class CanvasStore:
@@ -87,7 +88,7 @@ class CanvasStore:
     async def create(self, name: str, *, scene: SceneCanvasSeed | None = None) -> GenerationCanvas:
         """建立共同文档和运行事件头，场次入口可提供已校验的固定依据。"""
         await get_or_404(self.db, Project, self.project_id, detail="Project not found")
-        canvas_id = uuid4().hex
+        canvas_id = scene.canvas_id if scene and scene.canvas_id else uuid4().hex
         document = CanvasDocument(id=canvas_id, project_id=self.project_id, name=name,
                                   cards=[scene.basis] if scene else [],
                                   fixed_source=scene.fixed_source if scene else None)

@@ -155,6 +155,7 @@ try {
   await dialog.waitFor({ state: 'hidden' })
   await page.getByRole('heading', { name: '管理入口并发保存', exact: true }).waitFor({ state: 'hidden' })
   assert.equal((await fetch(canvasUrl(managed.id))).status, 404)
+  assert.ok((await request(base)).every(canvas => canvas.id !== managed.id))
   assert.equal((await request(sceneApi + '/canvases')).canvases.length, 2)
   assert.equal((await request(sceneApi + '/storyboards/' + active.task_id)).status, 'running')
   await request(api + '/test/runtime-controls', 'POST', { storyboard_release: 1, release: 3 })

@@ -376,9 +376,11 @@ class TaskWorker:
                 async def deliver(db, current):
                     """成功任务与候选准备在同一事务交付。"""
                     try:
-                        await SceneObjectService(db, current.project_id).complete_extraction(current, generated)
+                        candidate = await SceneObjectService(db, current.project_id).complete_extraction(current, generated)
                     except RevisionConflict as error:
                         raise DirectingOutputError(str(error)) from error
+                    result.clear()
+                    result.update(candidate.model_dump(mode="json"))
 
             elif task.kind == "directing_storyboard":
                 from app.services.directing.scene_storyboard import SceneStoryboardService

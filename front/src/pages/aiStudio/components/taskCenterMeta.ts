@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type NavigateFunction } from 'react-router-dom'
 import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
-import { scenePreparationLocation } from '../directing/chapterNavigation'
+import { scenePreparationLocation, workbenchManagementLocation } from '../directing/chapterNavigation'
 import { generationCanvasLocation } from '../generationCanvas/navigation'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { TaskUiItem } from './taskUiStore'
@@ -17,10 +17,11 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
   if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
-  else if (kind === 'sequence' && projectId && chapterId &&
-      (task.taskKind === 'directing_object_extract' || task.taskKind === 'directing_storyboard')) {
-    const path = scenePreparationLocation(projectId, chapterId, id)
-    navigateTo = task.taskKind === 'directing_storyboard' ? path + '?' + new URLSearchParams({ storyboardTask: task.taskId }) : path
+  else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_object_extract') {
+    navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'objects') + '&' + new URLSearchParams({ objectTask: task.taskId })
+  }
+  else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_storyboard') {
+    navigateTo = scenePreparationLocation(projectId, chapterId, id) + '?' + new URLSearchParams({ storyboardTask: task.taskId })
   }
   else if (kind === 'sequence' && projectId && chapterId) {
     const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'

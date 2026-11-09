@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Select } from 'antd'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DownOutlined, PictureOutlined } from '@ant-design/icons'
@@ -18,13 +18,18 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const [error, setError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string>()
+  const listRead = useRef(0)
   const deleting = !!deleteTarget && deleteTarget === canvasId
 
   const fail = (reason: unknown) => {
     const detail = reason instanceof ApiError ? reason.body?.data : undefined
     setError(detail?.code ? `${detail.code}: ${detail.message}` : reason instanceof ApiError ? reason.body?.message || '操作失败，请重试' : '操作失败，请重试')
   }
-  const refreshList = () => Canvases.canvasList({ projectId }).then(response => setCanvases(response.data || []))
+  const refreshList = useCallback(async () => {
+    const read = ++listRead.current
+    const response = await Canvases.canvasList({ projectId })
+    if (read === listRead.current) setCanvases(response.data || [])
+  }, [projectId])
   const select = (id?: string) => setSearch(previous => {
     const next = new URLSearchParams(previous)
     next.delete('run'); next.delete('node'); next.delete('check'); next.delete('report'); next.delete('storyboardTask')
@@ -42,10 +47,12 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     }, { replace: true })
   }
   useEffect(() => {
-    let active = true
-    Canvases.canvasList({ projectId }).then(response => { if (active) setCanvases(response.data || []) }).catch(fail)
-    return () => { active = false }
-  }, [projectId])
+    const requests = listRead
+    const load = () => { void refreshList().catch(fail) }
+    load()
+    window.addEventListener('focus', load)
+    return () => { requests.current++; window.removeEventListener('focus', load) }
+  }, [refreshList])
   const create = async (requestLeave: () => Promise<boolean>) => {
     if (!await requestLeave()) return
     try {

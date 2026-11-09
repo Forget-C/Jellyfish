@@ -6,6 +6,7 @@ import { ApiError, StudioDirectingService, type SceneCanvasSummary, type Storybo
 import { readChapterBrowse, saveChapterBrowse, scenePreparationLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { SceneCanvasDeletion } from './SceneCanvasDeletion'
+import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
 import { useWorkspaceDraftStatus } from './WorkspaceDrafts'
 import './workbench-canvas-cards.css'
 
@@ -24,7 +25,9 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
-export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, onChange }: Scope & { historical: boolean; onChange?: () => void }) {
+export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost, onChange }: Scope & {
+  historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
+}) {
   const navigate = useNavigate()
   const [notices, noticeContext] = message.useMessage()
   const [canvases, setCanvases] = useState<SceneCanvasSummary[]>()
@@ -37,6 +40,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [deleteTarget, setDeleteTarget] = useState<string>()
   const [deleteError, setDeleteError] = useState('')
   const drafts = useWorkspaceDraftStatus()
+  const [created, setCreated] = useState<string>()
   const recentCanvas = readChapterBrowse(projectId, chapterId).managementCanvas
   const detailCard = canvases?.find(canvas => canvas.id === detail)
   const detailTask = detailCard?.latest_storyboard
@@ -95,6 +99,12 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const shown = canvases?.filter(canvas => canvas.name.toLocaleLowerCase().includes(keyword))
   return <section aria-labelledby="management-canvas-list-title" className="management-canvas-cards">
     {noticeContext}
+    <WorkbenchCanvasCreation {...{ projectId, chapterId, sequenceId, actionHost }} editable={canCreate} onAccepted={id => {
+      setCreated(id)
+      setQuery('')
+      setRevision(value => value + 1)
+      onChange()
+    }} />
     <div className="management-canvas-toolbar">
       <h3 id="management-canvas-list-title">本场画布</h3>
       {!!canvases?.length && <Input aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
@@ -114,7 +124,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
         const adoptedId = canvas.applied_storyboard_task_id
         const currentTaskIsCandidate = candidateId && task?.task_id === candidateId
         return <li key={canvas.id}>
-          <Card size="small">
+          <Card size="small" className={canvas.id === created ? 'management-canvas-created' : undefined}>
             <div className="management-canvas-card-heading">
               <h4>{canvas.name}</h4>
               <Dropdown trigger={['click']} menu={{ items: [
@@ -136,6 +146,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               {adoptedId && <Tag color="success" title={`采用任务 ${adoptedId}`}>当前已采用</Tag>}
               {canvas.source_changed && <Tag color="warning">原文已变化</Tag>}
               {canvas.id === recentCanvas && <Tag>最近打开</Tag>}
+              {canvas.id === created && <Tag color="processing">刚创建</Tag>}
             </div>
             {task?.status === 'failed' && task.error && <p className="management-canvas-error">{task.error}</p>}
             <div className="management-canvas-actions">
@@ -164,7 +175,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       onDeleted={() => {
         setCanvases(previous => previous?.filter(canvas => canvas.id !== deleteTarget))
         setRevision(value => value + 1)
-        onChange?.()
+        onChange()
       }} />}
   </section>
 }

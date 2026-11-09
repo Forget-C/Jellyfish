@@ -12,6 +12,7 @@ class SceneCanvasCreate(Contract):
     """允许用户采用默认名称或提供自己的画布名称。"""
 
     name: str = Field(default='', max_length=255)
+    request_id: Identity | None = None
 
 
 class SceneCanvasSummary(Contract):
