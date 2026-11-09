@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "scene-storyboard-sources": { "file": "sceneStoryboardSources.browser.mjs", "ports": [4327, 8327], "timeoutMs": 180000 },
     "scene-storyboard": { "file": "sceneStoryboard.browser.mjs", "ports": [4260, 8260], "timeoutMs": 180000 },
     "scene-object-preparation": { "file": "sceneObjectPreparation.browser.mjs", "ports": [4258, 8258], "timeoutMs": 180000 },
     "scene-canvas-workbench": { "file": "sceneCanvasWorkbench.browser.mjs", "ports": [4259, 8259], "timeoutMs": 180000 },

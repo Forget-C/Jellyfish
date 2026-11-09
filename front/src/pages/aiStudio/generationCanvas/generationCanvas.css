@@ -314,3 +314,25 @@
 .generation-canvas-cover img { position: absolute; inset: 0; }
 
 .generation-output-choice-content { display: inline-flex; align-items: center; gap: 12px; }
+
+/* 来源入口复用现有卡底空间，仅带来源的卡片留出按钮宽度。 */
+.generation-card-body:has(> .generation-source-trigger) { position: relative; }
+.generation-workbench .generation-card .generation-card-body:has(> .generation-source-trigger) .generation-card-footer { padding-inline-end: 44px; }
+.generation-source-trigger {
+  position: absolute; right: 7px; bottom: 4px; padding: 2px 4px; background: transparent;
+  color: var(--wb-muted); border: 0; border-radius: 4px; cursor: pointer; font-size: 11px; line-height: 18px;
+}
+.generation-source-trigger:hover, .generation-source-trigger[aria-expanded="true"] { color: var(--wb-text); }
+.generation-source-trigger:focus-visible, .generation-source-list button:focus-visible { outline: 1px solid var(--wb-focus); }
+.generation-source-list { width: min(256px, calc(100vw - 48px)); max-height: min(260px, 50dvh); overflow-y: auto; }
+.generation-source-list ul { list-style: none; margin: 0; padding: 0; }
+.generation-source-list li { display: grid; gap: 2px; padding: 4px; overflow-wrap: anywhere; }
+.generation-source-list li + li { border-top: 1px solid var(--wb-border); }
+.generation-source-list button {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+  min-height: 32px; color: var(--wb-text); background: transparent; border: 0; border-radius: 4px;
+  padding: 4px; text-align: start; cursor: pointer; overflow-wrap: anywhere;
+}
+.generation-source-list button:hover { background: var(--wb-surface); }
+.generation-source-list small { color: var(--wb-muted); }
+@media (max-width: 700px) { .generation-source-list button { min-height: 36px; } }
