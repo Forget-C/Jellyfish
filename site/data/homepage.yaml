@@ -3,7 +3,7 @@ hero:
   subtitle: "面向短剧生产的 AI 工作台，从剧本拆解到分镜、资产、生成与剪辑，一站完成。"
   primary:
     text: "查看文档"
-    link: "/docs/"
+    link: "docs/"
   secondary:
     text: "访问 GitHub"
     link: "https://github.com/Forget-C/Jellyfish"
@@ -34,11 +34,11 @@ scenarios:
 
 highlights:
   - label: "工作台主轴"
-    value: "项目 → 章节 → 分镜"
-  - label: "后端能力"
-    value: "FastAPI + LangChain / LangGraph"
-  - label: "前端协作"
-    value: "React + Vite + OpenAPI 生成"
+    value: "项目 → 章节 → 场次"
+  - label: "场次创作"
+    value: "导演设计、拍摄、审片与剪辑"
+  - label: "独立生成"
+    value: "文本、图片与视频模型"
   - label: "本地部署"
     value: "Compose 拉起前后端、MySQL、RustFS"
 
@@ -46,33 +46,33 @@ workflow:
   title: "一条龙的短剧生产流程"
   steps:
     - "剧本输入"
-    - "脚本优化与拆分"
-    - "角色、场景、道具提取"
-    - "分镜生成与编辑"
-    - "图片 / 视频任务生成"
-    - "时间线剪辑与导出"
+    - "章节划分场次"
+    - "导演设计与资产准备"
+    - "准备单元与拍摄"
+    - "审片与人工采用"
+    - "剪辑、交付与导出"
 
 screenshots:
   title: "核心界面预览"
   items:
     - title: "项目概览"
-      image: "/images/screenshots/project.png"
+      image: "images/screenshots/project.png"
       alt: "Jellyfish 项目概览"
     - title: "资产管理"
-      image: "/images/screenshots/assets.png"
+      image: "images/screenshots/assets.png"
       alt: "Jellyfish 资产管理"
 
 cta:
-  title: "从源码到文档，一次搭好"
-  description: "查看快速开始、部署说明和项目结构文档，快速进入 Jellyfish 的开发与使用流程。"
+  title: "开始使用 Jellyfish"
+  description: "获取项目，按部署说明启动应用，再跟随使用指南完成创作。"
   primary:
-    text: "开始阅读"
-    link: "/docs/getting-started/local-dev/"
+    text: "安装说明"
+    link: "docs/getting-started/installation/"
   secondary:
     text: "Docker 部署"
-    link: "/docs/getting-started/docker/"
+    link: "docs/getting-started/docker/"
 
 quickstart:
   title: "快速开始"
-  command: "cp deploy/compose/.env.example deploy/compose/.env && docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build"
-  note: "如果你偏向本地联调，也可以分别启动 `backend/` 和 `front/`。"
+  command: "docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build"
+  note: "首次部署前，请按部署说明准备配置。已有部署应保留现有配置和数据卷。"

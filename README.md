@@ -223,62 +223,11 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 ## 🧑‍💻 Local Development
 
-To run the frontend and backend locally while using Compose-managed middleware,
-first copy the matching environment templates and start MySQL, RustFS,
-and the Compose migration and system-seed jobs:
-
-```bash
-cp deploy/compose/.env.example deploy/compose/.env
-cp backend/.env.example backend/.env
-cp front/.env.example front/.env
-docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
-  up --build -d mysql rustfs backend-migrate backend-seed-system-data
-```
-
-Keep `--build` when rerunning this command after updating the code so the
-migration and system-seed images include the current scripts. If migration
-fails with `Can't locate revision identified by ...`, check that the revision
-exists in `backend/alembic/versions/` and rebuild the images with this command.
-Do not reset the database volume or change `alembic_version` to work around a
-stale image. If the revision is absent from the checkout, use the code version
-that contains it before retrying.
-
-The default credentials in `backend/.env.example` match
-`deploy/compose/.env.example`. When changing MySQL or RustFS credentials in the
-Compose file, update the corresponding values in `backend/.env` too.
-If `MYSQL_PORT` is changed in `deploy/compose/.env`, also update the port in
-`backend/.env`'s `DATABASE_URL` (for example, `127.0.0.1:13306`). Local processes
-use the published host port; Compose services continue to use `mysql:3306`.
-Restart the local backend and task worker after changing their environment.
-
-### Backend
-
-```bash
-cd backend
-uv sync
-uv run python -m app.dev api
-```
-
-### Task Worker
-
-图片、视频和脚本处理等异步任务需要单独启动任务 Worker。确保 MySQL 与对象存储可用后，在另一个终端执行：
-
-```bash
-cd backend
-uv run python -m app.dev worker
-```
-
-Worker 与后端使用同一份 `backend/.env`，直接读取 MySQL 任务表，不再依赖 Redis/Celery。使用完整 Docker Compose 启动时，`task-worker` 服务会自动运行，无需手动执行该命令。只启动一个 Worker 调度进程，不要与旧 Celery Worker 混跑。
-
-本地开发入口适用于 macOS/Linux。先停止原先直接启动的进程，再使用以上入口登记启动时间和代码身份；`uv run python -m app.dev status` 可识别待重启的 Worker，`uv run python -m app.dev task <task_id>` 按当前配置只读查询任务诊断。身份日志保存在已忽略的 `backend/.dev-runtime/`；运行参数、状态含义和权限排查见[本地开发说明](site/content/docs/getting-started/local-dev.md)。
-
-### Frontend
-
-```bash
-cd front
-pnpm install
-pnpm dev
-```
+Use the [local development guide](docs/development/guides/local-development.md)
+to start the API, task worker, and Vite frontend with Compose-managed services.
+The [developer documentation](docs/development/README.md) lists architecture,
+integration guides, and project standards. See the [site maintenance guide](site/README.md)
+when working on the website itself.
 
 ## 📄 License
 

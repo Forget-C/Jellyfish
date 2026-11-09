@@ -8,10 +8,10 @@
     <h1>{{ $hero.title }}</h1>
     <p class="jf-lead">{{ $hero.subtitle }}</p>
     <div class="jf-actions">
-      <a class="jf-btn jf-btn-primary" href="{{ $hero.primary.link }}">
+      <a class="jf-btn jf-btn-primary" href="{{ $hero.primary.link | relURL }}">
         {{ $hero.primary.text }}
       </a>
-      <a class="jf-btn jf-btn-secondary" href="{{ $hero.secondary.link }}">
+      <a class="jf-btn jf-btn-secondary" href="{{ $hero.secondary.link | relURL }}">
         {{ $hero.secondary.text }}
       </a>
     </div>
@@ -28,18 +28,18 @@
     <div class="jf-panel-grid">
       <div class="jf-panel-item">
         <div class="jf-panel-kicker">Studio</div>
-        <h3>项目 / 章节 / 分镜</h3>
+        <h3>项目 / 章节 / 场次</h3>
         <p>围绕短剧制作链路组织业务工作台。</p>
       </div>
       <div class="jf-panel-item">
         <div class="jf-panel-kicker">AI</div>
-        <h3>Agent / Prompt / 任务</h3>
+        <h3>内容 / 模型 / 任务</h3>
         <p>把文本理解与图片视频生成接入生产流。</p>
       </div>
       <div class="jf-panel-item">
-        <div class="jf-panel-kicker">API</div>
-        <h3>FastAPI + OpenAPI</h3>
-        <p>前后端接口生成与联调链路清晰可维护。</p>
+        <div class="jf-panel-kicker">Canvas</div>
+        <h3>独立生成画布</h3>
+        <p>组织素材、模型和结果，按需检查输入与产物。</p>
       </div>
       <div class="jf-panel-item">
         <div class="jf-panel-kicker">Deploy</div>

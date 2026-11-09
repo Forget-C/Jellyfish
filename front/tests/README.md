@@ -43,9 +43,9 @@ pnpm --dir front run test:browser -- --list
 
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 
-章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），覆盖 105 章分页/搜索、表格滚动恢复、无跨章节汇总、未知数量、名称/精简/原文/对比/AI 优化后保存、影响确认、错误恢复、创建序号、归属校验和四尺寸截图。`node front/tests/chapterSequenceNavigation.browser.mjs`（默认 4201 端口）覆盖单层场次抽屉、默认详情、基本信息保存与手动选区、草稿保护、深链接、阶段往返、迟到响应及窄屏返回列表。两者拦截全部业务接口，不执行真实模型请求。验收记录见[章节列表与场次抽屉计划](../../site/content/docs/plans/chapter-list-and-sequence-drawer-plan.md)。
+章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），覆盖 105 章分页/搜索、表格滚动恢复、无跨章节汇总、未知数量、名称/精简/原文/对比/AI 优化后保存、影响确认、错误恢复、创建序号、归属校验和四尺寸截图。`node front/tests/chapterSequenceNavigation.browser.mjs`（默认 4201 端口）覆盖单层场次抽屉、默认详情、基本信息保存与手动选区、草稿保护、深链接、阶段往返、迟到响应及窄屏返回列表。两者拦截全部业务接口，不执行真实模型请求。当前章节契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
-`node front/tests/chapterSourceSelection.browser.mjs`（默认 4207，可用 `SOURCE_SELECTION_PORT` 修改）覆盖五列表格与直接划场、默认场次、改名保留旧来源、真实鼠标框选、跨 DOM 节点及 Unicode/CRLF 范围、重复匹配、重叠/版本冲突、AI 候选逐场确认、未保存保护、返回焦点、长原文位置恢复和四尺寸布局。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。验收和后端并发测试见[原文选区划场计划](../../site/content/docs/plans/chapter-source-selection-and-division-plan.md)。
+`node front/tests/chapterSourceSelection.browser.mjs`（默认 4207，可用 `SOURCE_SELECTION_PORT` 修改）覆盖五列表格与直接划场、默认场次、改名保留旧来源、真实鼠标框选、跨 DOM 节点及 Unicode/CRLF 范围、重复匹配、重叠/版本冲突、AI 候选逐场确认、未保存保护、返回焦点、长原文位置恢复和四尺寸布局。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。章节划分与并发保存边界见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
 ```bash
 node front/tests/workspaceUsage.browser.mjs
@@ -67,7 +67,7 @@ node front/tests/workspaceWrite.browser.mjs
 | `workspaceAcceptance.browser.mjs` | A18：1440/1024/768/375 宽度 × 16 个页面状态，检查文档和路由实际滚动宽度、主要动作无遮挡、键盘焦点/折叠/选择/导航、窄屏主导航打开关闭及桌面侧栏。每个组合保留首屏和内容截图及 `results.json`，使用合成视频，不发业务写入。 |
 | `workspaceWrite.browser.mjs` | A08/A09/A14 延迟写入保护：设计、计划、风格、反馈、剪辑、审片和接缝的成功/失败恢复；保存中后退、取消与完成后继续，媒体提示与整页恢复。不调用真实模型。 |
 
-测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。A17 的场景矩阵由前四组综合覆盖；A18 为 Chromium CSS 视口检查，不宣称真实手机硬件或全部浏览器通过。这些脚本不证明真实模型艺术质量或目标用户理解。A19 五秒用户测试已由用户明确取消，不再作为本次 UX5 门槛；取消说明见 `site/content/docs/plans/directing-workbench-usability-check.md`。
+测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。A17 的场景矩阵由前四组综合覆盖；A18 为 Chromium CSS 视口检查，不宣称真实手机硬件或全部浏览器通过。这些脚本不证明真实模型艺术质量或目标用户理解。A19 五秒用户测试已由用户明确取消，不再作为本次 UX5 门槛。
 
 ## 全站布局框架回归（A1–A3）
 
@@ -84,6 +84,8 @@ node front/tests/shellFocus.browser.mjs
 `shellFocus.browser.mjs` 临时监听 `127.0.0.1:4185`，验证桌面与手机导航的 Tab 往返、2px 可见焦点及 Escape 关闭；手机导航位于应用壳外的抽屉门户中，因此单独覆盖其焦点样式。
 
 ## 新场次工作台回归（B 阶段）
+
+当前四画布投影、导航和保存的回归范围见[共享画布接入指南](../../docs/development/guides/canvas-graph.md#验证与接口同步)。
 
 ```bash
 node --test front/tests/designWorkspace.test.mjs front/tests/workspaceTaskContext.test.mjs
@@ -108,7 +110,7 @@ B5 响应式回归使用 1440×900、1024×768、768×1024、375×812，检查�
 - `node front/tests/workspaceRefinement.browser.mjs`：12镜头范围/视图/选择联动、节点布局与聚焦恢复、合法关联添加/解除、缺失引用修复、间接边定位、一对多试拍回跳、试拍筛选/滚动恢复及窄屏布局。
 - `node front/tests/sourceProvenance.browser.mjs`：五类来源、历史原文与模型名称、失败重试、只读历史、返回保留编辑、迟到响应隔离。使用隔离接口与ffmpeg合成媒体，验证读取失败后重试、真实入点播放和出点暂停；不验证生成内容质量。
 
-浏览器命令沿用上文 Playwright `NODE_PATH` 配置，各自启动4192/4193端口。测试结果和截图输出到独立临时目录。C5完整结果见 `site/static/images/directing-workbench/refinement/verification.json`：48项纯行为测试、8项后端来源/API测试、11组浏览器回归、四尺寸×16状态，以及1586×992框架几何。`workspaceDesignViews`另覆盖1/12/60/200镜头、表格/分镜滚动与版本隔离；`workspaceCut`核对精确片段、筛选、缩放及时间线重载恢复。后端Pylint的5项既有问题与验证边界在方案中单独记录。
+浏览器命令沿用上文 Playwright `NODE_PATH` 配置，各自启动4192/4193端口。测试结果和截图输出到独立临时目录。`workspaceDesignViews`另覆盖1/12/60/200镜头、表格/分镜滚动与版本隔离；`workspaceCut`核对精确片段、筛选、缩放及时间线重载恢复。
 
 
 ### D阶段镜头视图与全场关系总览
@@ -180,7 +182,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 
 `workspaceShootSteps.browser.mjs` 在上述五宽度逐步比较单元标题、主操作、步骤栏、内容起点及桌面 344px 辅助栏；`workspaceShootFlow.browser.mjs` 验证预览打开后候选网格宽度不变。`workspaceCompactReview.browser.mjs` 验证窄屏检查抽屉处理后关闭，再阅读完整指令；主操作断言位于统一标题栏。共享滚动存储以 `positions[identity]` 保留多个对象／视图位置，剪辑回归继续验证刷新后的实际位置。
 
-本次实际结果、截图及两项可在改动前复现的既有失败见[布局统一计划](../../site/content/docs/plans/sequence-workbench-layout-unification-plan.md)。接口替身不验证真实供应商、模型生成质量或全部浏览器。
+旧布局验收记录已随历史计划清理；本节列出的脚本范围不代表当前工作树已重新执行。接口替身不验证真实供应商、模型生成质量或全部浏览器。
 
 ### 单元指令内容区（实施中）
 

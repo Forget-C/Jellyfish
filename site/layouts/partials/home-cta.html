@@ -8,10 +8,10 @@
         <p class="jf-lead" style="margin-top:12px;">{{ $cta.description }}</p>
       </div>
       <div class="jf-actions" style="margin-top:0;">
-        <a class="jf-btn jf-btn-primary" href="{{ $cta.primary.link }}">
+        <a class="jf-btn jf-btn-primary" href="{{ $cta.primary.link | relURL }}">
           {{ $cta.primary.text }}
         </a>
-        <a class="jf-btn jf-btn-secondary" href="{{ $cta.secondary.link }}">
+        <a class="jf-btn jf-btn-secondary" href="{{ $cta.secondary.link | relURL }}">
           {{ $cta.secondary.text }}
         </a>
       </div>
