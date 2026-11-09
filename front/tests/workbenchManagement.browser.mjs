@@ -120,6 +120,7 @@ try {
   const openScenes = page.getByRole('button', { name: '切换场次' })
   await openScenes.press('Enter')
   const drawer = page.getByRole('dialog').filter({ hasText: '本章场次' })
+  await drawer.waitFor()
   await drawer.getByRole('button', { name: /后院/ }).press('Enter')
   await drawer.waitFor({ state: 'hidden' })
   await page.getByRole('heading', { name: '后院', exact: true }).waitFor()

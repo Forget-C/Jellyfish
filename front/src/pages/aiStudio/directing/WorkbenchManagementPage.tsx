@@ -118,11 +118,16 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       return next
     })
   }
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    // Closing during the opening animation can skip the drawer's focus callback.
+    sceneToggle.current?.focus({ preventScroll: true })
+  }
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? historical}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
       if (overview.historical_sequences.some(scene => scene.id === id)) setHistoryOpen(true)
       select(id, step)
-      setDrawerOpen(false)
+      closeDrawer()
     }} />
   const legacy = selected ? [
     { key: 'director', label: <Link to={legacySceneCanvasLocation(projectId, chapterId, selected.id, 'director')}>旧版导演</Link> },
@@ -186,7 +191,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
         </WorkspaceScrollPanel>
       </div>
       {!desktop && <Drawer title="本章场次" placement="left" width="min(320px, 100vw)" open={drawerOpen}
-        onClose={() => setDrawerOpen(false)} afterOpenChange={open => { if (!open) sceneToggle.current?.focus() }}>{list}</Drawer>}
+        onClose={closeDrawer}>{list}</Drawer>}
     </div>}
   </WorkspaceLayout>
 }
