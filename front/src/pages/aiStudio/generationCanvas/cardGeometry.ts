@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { GraphSize } from '../directing/graphLayout'
 import { compactDesignFields, structuredDesignFields } from './designSummaryFields'
+import { visualDesignTypes } from './designFieldReferences'
 
 const compactMediaSize = { width: 300, height: 251 }
 const compactAudioSize = { width: 300, height: 172 }
@@ -25,10 +26,13 @@ export function generationCardSize(type?: string) {
 }
 
 const compactHeights = [128, 160, 192]
+const visualHeights = [240, 272, 304]
 
 /** 启用按可见摘要测量的卡型，其他卡继续使用固定外框。 */
 export function designHeightBands(type?: string) {
-  return type && compactDesignFields[type] ? compactHeights : undefined
+  if (!type) return undefined
+  if (compactDesignFields[type]) return compactHeights
+  return visualDesignTypes.includes(type) ? visualHeights : undefined
 }
 
 export type DesignCardSizing = {

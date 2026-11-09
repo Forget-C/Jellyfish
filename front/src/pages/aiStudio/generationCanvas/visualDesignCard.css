@@ -19,4 +19,4 @@
 .visual-design-card[data-multiline="true"] dd[data-summary-parts] { display: block; }
 .visual-design-card dd[data-summary-parts] > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .design-summary-fit { position: relative; flex: none; }
-.visual-design-card[data-measuring] { position: absolute; inset: 0 0 auto; visibility: hidden; pointer-events: none; }
+.design-summary-probe { position: absolute; inset: 0 0 auto; height: 0; overflow: clip; visibility: hidden; pointer-events: none; }

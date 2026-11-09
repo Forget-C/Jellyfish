@@ -9,7 +9,7 @@ import { styleLabels } from './visualPresets'
 import { DesignPurposeIllustration } from './DesignPurposeIllustration'
 import { movementFrameOptions } from './CompositionFrameCandidate'
 import { designSummarySourceLabel } from './designSummarySource'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import type { DesignCardSizing } from './cardGeometry'
 import './visualDesignCard.css'
@@ -92,7 +92,7 @@ function DesignSummary({ kind, title, rows, summaryOnly, emptyHint, measuring, s
         <dt title={row.label}>{row.label}</dt>
         {measuring ? definition : <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>{definition}</Tooltip>}
       </div>
-    })}</dl> : empty && <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
+    })}</dl> : empty && <div className="visual-design-empty"><strong>尚未填写{title}</strong>{emptyHint && <p>{emptyHint}</p>}</div>}
   </section>
 }
 
@@ -100,9 +100,9 @@ function DesignSummary({ kind, title, rows, summaryOnly, emptyHint, measuring, s
 export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填写设计参数', ...props }: SummaryProps & { sizing?: DesignCardSizing }) {
   const measureRef = useRef<HTMLElement>(null)
   const lastMeasurement = useRef<{ id: string; height: number }>()
-  const [fittedLines, setFittedLines] = useState<number[]>([])
+  const [fit, setFit] = useState<{ lines: number[]; hint: boolean }>({ lines: [], hint: true })
   const { locked, cardId, onMeasure } = sizing || {}
-  const measure = () => {
+  const measure = useCallback(() => {
     const summary = measureRef.current
     const body = summary?.closest<HTMLElement>('.generation-card-body')
     const header = body?.parentElement?.querySelector<HTMLElement>('header')
@@ -110,7 +110,8 @@ export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填�
     const style = getComputedStyle(body)
     const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
     const chrome = padding + (body.offsetHeight - body.clientHeight) + header.offsetHeight
-    const requiredHeight = chrome + parseFloat(getComputedStyle(summary).height)
+    const summaryHeight = parseFloat(getComputedStyle(summary).height)
+    const requiredHeight = chrome + summaryHeight
     if (lastMeasurement.current?.id !== cardId || lastMeasurement.current.height !== requiredHeight) {
       lastMeasurement.current = { id: cardId, height: requiredHeight }
       onMeasure(cardId, requiredHeight)
@@ -130,8 +131,10 @@ export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填�
       fitted.push(lineCount)
       if ((rowBounds.bottom - bounds.top) / scale > available + .01) break
     }
-    setFittedLines(previous => previous.length === fitted.length && previous.every((lines, index) => lines === fitted[index]) ? previous : fitted)
-  }
+    const hint = summaryHeight <= available
+    setFit(previous => previous.hint === hint && previous.lines.length === fitted.length
+      && previous.lines.every((lines, index) => lines === fitted[index]) ? previous : { lines: fitted, hint })
+  }, [locked, cardId, onMeasure])
   useLayoutEffect(measure)
   useLayoutEffect(() => {
     const summary = measureRef.current
@@ -139,15 +142,17 @@ export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填�
     const observer = new ResizeObserver(measure)
     observer.observe(summary)
     return () => observer.disconnect()
-  }, [locked, cardId, onMeasure])
+  }, [measure, onMeasure])
   if (!sizing) return <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} />
   if (!locked) return <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} summaryRef={measureRef} />
-  const rows = props.rows.slice(0, fittedLines.length).map((row, index) => {
-    const lines = Math.min(row.parts?.length || row.lines || 1, fittedLines[index])
+  const rows = props.rows.slice(0, fit.lines.length).map((row, index) => {
+    const lines = Math.min(row.parts?.length || row.lines || 1, fit.lines[index])
     return { ...row, lines, parts: row.parts?.slice(0, lines) }
   })
   return <div className="design-summary-fit">
-    <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} measuring summaryRef={measureRef} />
-    <DesignSummary {...props} rows={rows} emptyHint={emptyHint} empty={!props.rows.length} />
+    <div className="design-summary-probe">
+      <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} measuring summaryRef={measureRef} />
+    </div>
+    <DesignSummary {...props} rows={rows} emptyHint={fit.hint ? emptyHint : undefined} empty={!props.rows.length} />
   </div>
 }
