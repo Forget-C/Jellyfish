@@ -289,20 +289,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/ChapterDeliveryPanel.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "846fc63778f1779277fe7766044e50f98de7885100505f729879fc98812be884",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/ChapterDeliveryPanel.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "a262d634a2c5c9f982c28f678830fcc0fae88e969a6dd85c44e8a29d7019765f",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/ChapterSourceSelection.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,

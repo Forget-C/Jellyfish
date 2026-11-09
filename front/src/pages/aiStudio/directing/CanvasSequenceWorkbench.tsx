@@ -21,7 +21,6 @@ import { useSceneEditOwnership } from './useSceneEditOwnership'
 import type { SceneEditOwnership } from './useSceneEditOwnership'
 import { useSceneUnitGraph } from './useSceneUnitGraph'
 import { SceneUnitCanvas } from './SceneUnitCanvas'
-import { SceneDeliveryPanel } from './SceneDeliveryPanel'
 import { OverviewDesignHistory, OverviewUnitHistory } from './SceneWorkbenchOverview'
 import { SceneExportPanel } from './SceneExportPanel'
 import { SceneEditCanvas } from './SceneEditCanvas'
@@ -149,7 +148,6 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     measure()
     return () => observer.disconnect()
   }, [directorNavigationHost])
-  const [deliveryBusy, setDeliveryBusy] = useState(false)
   const [currentExportBusy, setExportBusy] = useState(false)
   const [historyExportBusy, setHistoryExportBusy] = useState(false)
   const exportBusy = currentExportBusy || historyExportBusy
@@ -682,7 +680,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   }
 
   const copyVersion = async () => {
-    if (copyRunning.current || readonly || handingOff || leaving || deliveryBusy || exportBusy || loadState !== 'ready' || copyInitial.error) return
+    if (copyRunning.current || readonly || handingOff || leaving || exportBusy || loadState !== 'ready' || copyInitial.error) return
     const origin = latest.current
     if (!copyPending && (!origin.selected || !origin.content || recovery)) return
     copyRunning.current = true; copyLock.current = true
@@ -940,7 +938,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   }
   const status = recovery ? '有待核实的本地编辑' : currentConflict ? '保存冲突' : busy === 'save' ? (videoUnverified ? (pendingSave.current?.videoOnly ? '正在核实视频请求' : '正在保存并核实视频请求') : '保存中') : videoUnverified ? '视频提交待核实' : failure?.versionId === selected?.id && failure?.versionId ? '保存失败' : dirty ? '未保存' : currentDirectVideo ? (currentDirectVideo.submitting ? '正在核实视频请求' : '视频提交待核实') : '已保存'
   periodicSave.current = () => {
-    if (copyLock.current || copyError || (!hasChanges() && !pendingSave.current) || busy || inFlight.current || deliveryBusy || exportBusy || readonly || transition || leaving || recovery || handingOff) return
+    if (copyLock.current || copyError || (!hasChanges() && !pendingSave.current) || busy || inFlight.current || exportBusy || readonly || transition || leaving || recovery || handingOff) return
     const blocked = blockedAutoSave.current
     if (blocked && blocked.versionId === latest.current.selected?.id && (blocked.conflict || blocked.contentKey === contentKey(latest.current.content))) return
     void save()
@@ -975,7 +973,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
           <Select aria-label="场次版本" placeholder="尚无场次版本" value={selectedId} disabled={handingOff || !!recovery || busy === 'create' || leaving || loadState !== 'ready'}
             options={versions.map(row => ({ value: row.id, label: row.title }))} onChange={select} />
           <WorkbenchButton data-menu-close onClick={() => void requestTransition({ action: () => { void create() } })} disabled={handingOff || !!recovery || busy === 'create' || leaving || readonly || loadState !== 'ready'} loading={busy === 'create'}>新建场次版本</WorkbenchButton>
-          <WorkbenchButton data-menu-close disabled={!selected || readonly || !!recovery || handingOff || leaving || deliveryBusy || exportBusy || busy === 'create' || loadState !== 'ready'} onClick={() => void copyVersion()}>另存为新版本</WorkbenchButton>
+          <WorkbenchButton data-menu-close disabled={!selected || readonly || !!recovery || handingOff || leaving || exportBusy || busy === 'create' || loadState !== 'ready'} onClick={() => void copyVersion()}>另存为新版本</WorkbenchButton>
         </CanvasToolbarMenu>
         <CanvasToolbarMenu label="保存设置" caption={<span role="status" aria-live="polite">{!selected ? loadState === 'loading' ? '读取中' : '尚无版本' : sequence?.is_current === false ? '历史场次 · 只读' : readonly ? '只读' : status}</span>}>
           <label>自动保存 <Switch aria-label="自动保存" checked={autoSave} onChange={value => {
@@ -983,7 +981,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
             try { localStorage.setItem(autoSavePreference, value ? 'on' : 'off') } catch { /* 存储不可用时仍可在本页选择。 */ }
           }} /></label>
         </CanvasToolbarMenu>
-        {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || !!currentConflict || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
+        {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || !!currentConflict || (!dirty && !pendingSave.current) || !!busy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
         <div ref={setBrowseHistoryHost} />
       </div>
       <nav className="canvas-toolbar-views" aria-label="画布切换">
@@ -1016,24 +1014,13 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
               content={content} historical={sequence?.is_current === false}
               currentClipIds={content.timeline.items.map(item => item.id)} onLocate={clipId => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('edit'); setMediaFocus({ versionId: selected.id, target: { kind: 'clip', clipId }, serial: Date.now() }) }}
               focusTaskId={exportVersionId === selected.id ? params.get('exportTask') || undefined : undefined} onClose={closeExportHistory}
-              disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || historyExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setExportBusy}
+              disabled={(readonly && sequence?.is_current !== false) || !!busy || historyExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setExportBusy}
               onSave={async () => {
                 const target = latest.current.selected
                 const submitted = latest.current.content
                 if (!target || !submitted || !ownership.canEdit() || !(await save())) return undefined
                 const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: target.id })
                 if (!response.data || !sameContent(response.data.content, submitted)) throw new Error('保存结果与本次导出内容不一致，未提交导出；请核对后重试。')
-                return response.data
-              }} />}
-            {selected && content && <SceneDeliveryPanel feedbackHost={feedbackHost} key={`delivery:${selected.id}`} projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} versionId={selected.id}
-              hasItems={!!content.timeline.items.length} disabled={readonly || !!busy || deliveryBusy || exportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setDeliveryBusy}
-              onSave={async () => {
-                const original = latest.current
-                const target = original.selected
-                const submitted = original.content
-                if (!target || !submitted || !ownership.canEdit() || !(await save())) return undefined
-                const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: target.id })
-                if (!response.data || !sameContent(response.data.content, submitted)) throw new Error('保存结果与本次交付内容不一致，未更新章节；请重新核对后明确交付。')
                 return response.data
               }} />}
           </div>
@@ -1063,7 +1050,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       content={exportHistory.content} dirty={false} historical={sequence?.is_current === false} historyOnly
       currentClipIds={[]} onLocate={() => {}} onSave={async () => undefined} onClose={closeExportHistory}
       focusTaskId={params.get('exportTask') || undefined} onBusy={setHistoryExportBusy}
-      disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || currentExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} />}
+      disabled={(readonly && sequence?.is_current !== false) || !!busy || currentExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} />}
     {loadState === 'ready' && params.get('exportTask') && exportVersionId !== selectedId && !exportHistory && <WorkbenchDetails title="整场导出记录" status="只读" open onClose={closeExportHistory}>
       <Alert type="warning" message="导出所属版本不可用，未切换或替换当前编辑。" />
     </WorkbenchDetails>}

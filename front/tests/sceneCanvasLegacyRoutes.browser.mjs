@@ -51,6 +51,7 @@ try {
   const task = await request(`${versions}/${first.id}/exports`, 'POST', { request_id: 'legacy-export', expected_revision: saved.revision, size: 720 })
   const second = await request(versions, 'POST', { request_id: 'legacy-version-b', title: '旧版方案乙' })
   const chapterPage = `${origin}/projects/${project}?tab=chapters&chapter=${chapter}`
+  const managementPath = `/projects/${project}/chapters/${chapter}/workbench-management`
   const old = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}`
   const prep = old + '/canvas-workbench'
   const used = async () => (await request(`${directing}/chapters/${chapter}/deliveries`)).sequences[0].delivery
@@ -71,7 +72,10 @@ try {
   })
 
   await page.goto(chapterPage)
-  await page.getByRole('button', { name: '打开场次工作台', exact: true }).click()
+  const openPreparation = page.getByRole('button', { name: '打开场次工作台', exact: true })
+  await openPreparation.waitFor()
+  assert.equal(await page.getByRole('button', { name: '章节组合', exact: true }).count(), 0)
+  await openPreparation.click()
   await page.waitForURL(prep)
   await newHost.getByRole('heading', { name: '本场画布', exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
@@ -85,17 +89,34 @@ try {
   await legacy.getByRole('button', { name: '打开剪辑工作区', exact: true }).waitFor()
   await page.goto(`${old}?canvas=edit&version=${first.id}`)
   await legacy.getByText('旧版交付甲', { exact: true }).first().waitFor()
+  await legacy.getByRole('button', { name: '更多操作', exact: true }).click()
+  assert.equal(await legacy.getByRole('button', { name: /用于章节|更新到章节|章节当前使用/ }).count(), 0)
   await legacy.getByRole('button', { name: '定位时间线片段', exact: true }).waitFor()
   await legacy.getByRole('button', { name: '定位源素材', exact: true }).click()
   await page.getByRole('combobox', { name: '当前方案素材审查', exact: true }).waitFor()
   await page.goto(`${old}?version=${second.id}`)
   await legacy.getByText('旧版方案乙', { exact: true }).first().waitFor()
 
-  await page.goto(chapterPage + '&panel=assembly')
-  await page.getByText('交付来源：旧版交付甲', { exact: true }).waitFor()
-  await page.getByRole('link', { name: '继续场次创作', exact: true }).click()
-  await page.waitForURL(url => url.pathname === new URL(old).pathname)
-  await legacy.getByText('旧版交付甲', { exact: true }).first().waitFor()
+  const management = page.getByRole('region', { name: '工作台管理', exact: true })
+  const retired = page.getByText('章节组合已停用，可在工作台管理中继续准备场次。', { exact: true })
+  for (const link of [chapterPage + '&panel=assembly', old.replace('/' + sequence.id, '') + '?panel=assembly&sequence=' + sequence.id]) {
+    await page.goto(link)
+    await page.waitForURL(url => url.pathname === managementPath && !url.searchParams.has('panel'))
+    await retired.waitFor()
+    await management.getByRole('heading', { name: sequence.title, exact: true }).waitFor()
+    assert.equal(await management.getByRole('button', { name: '按场次顺序播放', exact: true }).count(), 0)
+  }
+  await page.goto(chapterPage.replace('/projects/' + project, '/projects/wrong-project') + '&panel=assembly')
+  await page.waitForURL(url => url.pathname === managementPath.replace(project, 'wrong-project'))
+  await management.getByText('章节不属于当前项目', { exact: true }).waitFor()
+  assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
+  for (const [name, canvas] of [['旧版导演', 'director'], ['旧版试拍', 'units'], ['旧版审片与剪辑', 'edit']]) {
+    await page.goto(origin + managementPath + '?sequence=' + sequence.id)
+    await management.getByRole('button', { name: '场次更多操作' }).click()
+    await page.getByRole('link', { name, exact: true }).click()
+    await page.waitForURL(url => url.pathname === new URL(old).pathname && url.searchParams.get('canvas') === canvas)
+    await legacy.waitFor()
+  }
 
   await page.goto(prep)
   await newHost.getByRole('button', { name: '任务中心', exact: true }).click()
@@ -108,6 +129,10 @@ try {
   await page.getByRole('region', { name: '当前导出记录', exact: true }).waitFor()
   assert.equal((await used()).id, delivery.id)
   assert.equal((await used()).version_id, first.id)
+  const history = await request(`${directing}/sequences/${sequence.id}/deliveries`)
+  assert.deepEqual(history.map(item => item.id), [delivery.id])
+  const file = await request(`${api}/api/v1/studio/files/${take.file_id}`)
+  assert.ok(file.usages.some(usage => usage.source_ref === 'scene-delivery:' + delivery.id))
   assert.equal((await request(`${versions}/${first.id}`)).revision, saved.revision)
   assert.equal((await request(versions)).length, 2)
   console.log('legacy scene routes preserved', output)

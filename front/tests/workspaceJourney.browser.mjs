@@ -238,11 +238,8 @@ try {
   await page.getByRole('button', { name: '返回章节', exact: true }).click()
   await page.locator('.ant-drawer-open').getByRole('textbox', { name: '场次标题', exact: true }).waitFor()
   await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
-  await page.getByRole('button', { name: '章节组合', exact: true }).click()
-  await page.getByText('尚未验收 · 声音待后期 · 3 秒', { exact: true }).waitFor()
-  assert.equal(await page.getByRole('button', { name: '按场次顺序播放', exact: true }).isDisabled(), false)
-  await record('章节组合消费已确认真实区间并保留声音状态')
-  await page.getByRole('link', { name: '查看场次验收与返工', exact: true }).click()
+  assert.equal(await page.getByRole('button', { name: '章节组合', exact: true }).count(), 0)
+  await page.goto(`http://127.0.0.1:4188/projects/${project.id}/chapters/${chapter.id}/sequences/${workspace.sequence.id}?view=feedback`)
 
   await page.getByRole('button', { name: '新建最小返工单', exact: true }).click()
   await page.getByRole('textbox', { name: '症状', exact: true }).fill('入点稍早，只调整此片段')
