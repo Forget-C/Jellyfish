@@ -54,7 +54,7 @@ import { referenceNameError } from './referenceCardRules'
 import { ReferenceCard } from './ReferenceCard'
 import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
-import { generationCardSize } from './cardGeometry'
+import { designHeightBands, generationCardSize, useDesignCardSizes } from './cardGeometry'
 import { knownResultPositions, linkedResultCards, placeLinkedResults, retainedResultIds, type LinkedResult } from './linkedResults'
 import { resultScopeIncludes } from './resultConnections'
 import { capturedResult } from './detachedResults'
@@ -287,15 +287,18 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     for (const id of cachedResultIds) if (!positions[id] && retained?.[id]) positions[id] = retained[id]
     return positions
   }
-  const nodes = useMemo(() => [
-    ...cards.map(card => ({ id: card.id, size: generationCardSize(card.type) })),
+  const lockedDesignCardIds = detailId ? [detailId] : []
+  const designSizes = useDesignCardSizes(cards, lockedDesignCardIds)
+  const sizesReady = cards.every(card => !designHeightBands(card.type) || hidden.has(card.id) || designSizes.measured(card.id))
+  const nodes = [
+    ...cards.map(card => ({ id: card.id, size: designSizes.sizes[card.id] })),
     ...linkedResults.map(result => ({ id: result.id, size: generationCardSize(`result.${result.output.modality}`) })),
-  ], [cards, linkedResults])
-  const cardSizes = useMemo(() => Object.fromEntries(nodes.map(({ id, size }) => [id, size])), [nodes])
+  ]
+  const cardSizes = Object.fromEntries(nodes.map(({ id, size }) => [id, size]))
   const layout = useGraphLayout({ storageKey: layoutKey, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '',
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
-    onStorageError: setStorageError }, nodes, cardSizes, container.current?.clientWidth || 1200)
+    onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, container.current?.clientWidth || 1200)
   const movementHost = useRef({ layout, history })
   movementHost.current = { layout, history }
   const [movement] = useState(() => createMoveTransaction({
@@ -1307,7 +1310,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       onLostPointerCapture={event => { surfaceGesture.interrupt(); delete event.currentTarget.dataset.panning; viewport.surfaceProps.onLostPointerCapture?.(event) }}>
 
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
-      <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, '--generation-canvas-scale': transform.scale } as CSSProperties}>
+      <div className="generation-world" style={{ visibility: sizesReady ? undefined : 'hidden', transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, '--generation-canvas-scale': transform.scale } as CSSProperties}>
         <svg className="generation-edges" width={12000} height={12000}>
           {linkedResults.map(result => resultPath(result.output.source.card_id, result.id, '随生成更新 · ' + linkedResultTitle(result.output), result))}
           {projectedConnections.map(({ edge, results, projected, direct }) => {
@@ -1451,6 +1454,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {cards.map(card => {
           if (hidden.has(card.id) && card.type !== 'review.check') return null
           const size = cardSizes[card.id]
+          const designSizing = designHeightBands(card.type) ? designSizes.sizing(card.id) : undefined
           const isReference = card.type?.startsWith('reference.')
           const isDescription = isDescriptionCard(card)
           const isTextContent = card.type === 'content.text' || card.type === 'content.basis'
@@ -1481,14 +1485,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}
             onConnect={card.type === 'review.check' ? undefined : trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
-            footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && !readonly || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
+            footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && (!readonly || designSizing) || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
             {card.type === 'review.check' && <CheckCardFace onOpen={openCheck} />}
             {isTextContent && <TextCardPreview label="正文预览" text={'text' in card && card.text || '未填写正文'}
               status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />} />}
             {playbackType && <PlaybackCardPreview key={playbackFile} type={playbackType} fileId={playbackFile} label="媒体预览"
               status={<>{playbackFile && <span>固定媒体</span>}<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} /></>} />}
-            {!isModel && !isReference && !isDescription && !isTextContent && !playbackType && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} outputs={summaryOutputs} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} outputs={summaryOutputs} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {!isModel && !isReference && !isDescription && !isTextContent && !playbackType && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} outputs={summaryOutputs} sizing={designSizing} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} outputs={summaryOutputs} sizing={designSizing} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
@@ -1520,7 +1524,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
     </div>
     {minimapOpen && <WorkbenchIconButton className="director-minimap-toggle director-minimap-toggle-open" label="关闭小地图" variant="quiet" icon={<CloseOutlined />} onClick={() => setMinimapOpen(false)} />}
-    {minimapOpen && <svg className="director-minimap generation-minimap" width="200" height="132" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
+    {minimapOpen && sizesReady && <svg className="director-minimap generation-minimap" width="200" height="132" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
       onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); panMap(event) }}
       onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) panMap(event) }}
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}

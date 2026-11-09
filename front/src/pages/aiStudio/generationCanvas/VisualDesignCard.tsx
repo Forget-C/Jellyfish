@@ -9,7 +9,9 @@ import { styleLabels } from './visualPresets'
 import { DesignPurposeIllustration } from './DesignPurposeIllustration'
 import { movementFrameOptions } from './CompositionFrameCandidate'
 import { designSummarySourceLabel } from './designSummarySource'
-import type { CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties, Ref } from 'react'
+import type { DesignCardSizing } from './cardGeometry'
 import './visualDesignCard.css'
 
 const states: Record<string, string> = { empty: '未填写', not_applicable: '不适用', absent: '明确没有', fact: '事实', undecided: '待确定', proposal: '提议' }
@@ -62,28 +64,90 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
 }
 
 /** Six designs share one card body and entry; their field ownership and modal editors stay independent. */
-export function VisualDesignCard({ card, document, outputs }: { card: DesignCard; document: CanvasDocument; outputs?: Record<string, CanvasResolvedOutput[]> }) {
+export function VisualDesignCard({ card, document, outputs, sizing }: { card: DesignCard; document: CanvasDocument; outputs?: Record<string, CanvasResolvedOutput[]>; sizing?: DesignCardSizing }) {
   const { cardDefinitions } = useGraphRules()
   const defaults = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.default_value]))
   const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document, defaults, designSummarySourceLabel(document, card.id, cardDefinitions, outputs))
-  return <DesignCardBody kind={kind} title={title} rows={rows} />
+  return <DesignCardBody kind={kind} title={title} rows={rows} sizing={sizing} />
 }
 
 export type DesignSummaryRow = { label: string; text: string; lines?: number; parts?: string[] }
 
-/** Layout is bounded by the selected card size; the full design belongs in its detail. */
-export function DesignCardBody({ kind, title, rows, summaryOnly = false, emptyHint = '选择预设或直接填写设计参数' }: { kind: string; title: string; rows: DesignSummaryRow[]; summaryOnly?: boolean; emptyHint?: string }) {
+type SummaryProps = { kind: string; title: string; rows: DesignSummaryRow[]; summaryOnly?: boolean; emptyHint?: string }
+
+function DesignSummary({ kind, title, rows, summaryOnly, emptyHint, measuring, summaryRef, empty }: SummaryProps & {
+  measuring?: boolean; summaryRef?: Ref<HTMLElement>; empty?: boolean
+}) {
   const hasLineBudget = rows.some(row => row.lines)
   const visibleRows = hasLineBudget ? rows : rows.slice(0, 2)
-  return <section className="visual-design-card" data-multiline={hasLineBudget} aria-label={`${title}摘要`}>
+  return <section ref={summaryRef} className="visual-design-card" data-measuring={measuring || undefined} data-multiline={hasLineBudget}
+    aria-hidden={measuring || undefined} aria-label={measuring ? undefined : `${title}摘要`}>
     {!summaryOnly && <DesignPurposeIllustration kind={kind} />}
-    {visibleRows.length ? <dl>{visibleRows.map((row, index) => <div key={index}>
-      <dt title={row.label}>{row.label}</dt>
-      <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>
-        <dd tabIndex={0} aria-label={`${row.label}：${row.text}`} data-summary-parts={row.parts ? true : undefined} style={row.lines ? { '--design-summary-lines': row.lines } as CSSProperties : undefined}>
-          {row.parts ? row.parts.map(part => <span key={part}>{part}</span>) : row.text}
-        </dd>
-      </Tooltip>
-    </div>)}</dl> : <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
+    {visibleRows.length ? <dl>{visibleRows.map((row, index) => {
+      const definition = <dd tabIndex={measuring ? undefined : 0} aria-label={measuring ? undefined : `${row.label}：${row.text}`}
+        data-summary-parts={row.parts ? true : undefined} style={row.lines ? { '--design-summary-lines': row.lines } as CSSProperties : undefined}>
+        {row.parts ? row.parts.map(part => <span key={part}>{part}</span>) : row.text}
+      </dd>
+      return <div key={index}>
+        <dt title={row.label}>{row.label}</dt>
+        {measuring ? definition : <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>{definition}</Tooltip>}
+      </div>
+    })}</dl> : empty && <div className="visual-design-empty"><strong>尚未填写{title}</strong><p>{emptyHint}</p></div>}
   </section>
+}
+
+/** 正常摘要决定目标档位。锁高时按原版摘要逐行测量，避免临时省略参与选档。 */
+export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填写设计参数', ...props }: SummaryProps & { sizing?: DesignCardSizing }) {
+  const measureRef = useRef<HTMLElement>(null)
+  const lastMeasurement = useRef<{ id: string; height: number }>()
+  const [fittedLines, setFittedLines] = useState<number[]>([])
+  const { locked, cardId, onMeasure } = sizing || {}
+  const measure = () => {
+    const summary = measureRef.current
+    const body = summary?.closest<HTMLElement>('.generation-card-body')
+    const header = body?.parentElement?.querySelector<HTMLElement>('header')
+    if (!summary || !body || !header || !cardId || !onMeasure || !summary.offsetWidth) return
+    const style = getComputedStyle(body)
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+    const chrome = padding + (body.offsetHeight - body.clientHeight) + header.offsetHeight
+    const requiredHeight = chrome + parseFloat(getComputedStyle(summary).height)
+    if (lastMeasurement.current?.id !== cardId || lastMeasurement.current.height !== requiredHeight) {
+      lastMeasurement.current = { id: cardId, height: requiredHeight }
+      onMeasure(cardId, requiredHeight)
+    }
+    if (!locked) return
+    const available = body.clientHeight - padding
+    const bounds = summary.getBoundingClientRect()
+    const scale = bounds.width / summary.offsetWidth
+    const fitted: number[] = []
+    for (const row of summary.querySelectorAll('dl > div')) {
+      const value = row.querySelector('dd')!
+      const rowBounds = row.getBoundingClientRect()
+      const top = (rowBounds.top - bounds.top) / scale
+      const lineHeight = parseFloat(getComputedStyle(value).lineHeight)
+      const lineCount = Math.floor((available - top + .01) / lineHeight)
+      if (lineCount < 1) break
+      fitted.push(lineCount)
+      if ((rowBounds.bottom - bounds.top) / scale > available + .01) break
+    }
+    setFittedLines(previous => previous.length === fitted.length && previous.every((lines, index) => lines === fitted[index]) ? previous : fitted)
+  }
+  useLayoutEffect(measure)
+  useLayoutEffect(() => {
+    const summary = measureRef.current
+    if (!summary || !onMeasure) return
+    const observer = new ResizeObserver(measure)
+    observer.observe(summary)
+    return () => observer.disconnect()
+  }, [locked, cardId, onMeasure])
+  if (!sizing) return <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} />
+  if (!locked) return <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} summaryRef={measureRef} />
+  const rows = props.rows.slice(0, fittedLines.length).map((row, index) => {
+    const lines = Math.min(row.parts?.length || row.lines || 1, fittedLines[index])
+    return { ...row, lines, parts: row.parts?.slice(0, lines) }
+  })
+  return <div className="design-summary-fit">
+    <DesignSummary {...props} emptyHint={emptyHint} empty={!props.rows.length} measuring summaryRef={measureRef} />
+    <DesignSummary {...props} rows={rows} emptyHint={emptyHint} empty={!props.rows.length} />
+  </div>
 }

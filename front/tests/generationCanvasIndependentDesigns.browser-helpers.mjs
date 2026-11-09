@@ -93,6 +93,10 @@ export async function verifyIndependentDesigns(scenario, port) {
           ...(sample ? { [sample[0]]: { state: 'fact', text: sample[1] } } : {}),
           ...Object.fromEntries(Object.entries(structuredExamples[kind] || {}).reverse().map(([key, value]) => [key, { authorship: 'user', text: value }])) }
       }))
+      cards.push(...Object.keys(compactExamples).filter(kind => kind !== 'criterion').map(kind => ({
+        id: 'empty-' + kind, type: 'direction.' + kind, ...(kind === 'dialogue' ? { dialogue_id: 'empty-dialogue' } : {})
+      })))
+      cards.push({ id: 'middle-fact', type: 'direction.fact', fact: { state: 'fact', text: '门朝里打开再把钥匙放回桌面。'.repeat(4) } })
       cards.find(card => card.id === 'criterion').name = '道具连续性验收'
       cards.find(card => card.id === 'criterion').scope = { description: '只核对镜头末尾' }
       cards.find(card => card.id === 'guidance').sound_strategy = { authorship: 'user', text: '仅保留脚步声' }
@@ -161,14 +165,18 @@ export async function verifyIndependentDesigns(scenario, port) {
       const boxes = await target.locator('[data-card-type^="direction."]').evaluateAll(cards => cards.map(card => {
         const body = card.querySelector('.generation-card-body')
         return { id: card.dataset.cardId, type: card.dataset.cardType, width: card.offsetWidth, height: card.offsetHeight,
+          extra: (body.getBoundingClientRect().bottom - body.querySelector('.visual-design-card').getBoundingClientRect().bottom)
+            * card.offsetHeight / card.getBoundingClientRect().height
+            - parseFloat(getComputedStyle(body).paddingBottom) - body.offsetHeight + body.clientHeight,
           overflow: body.scrollHeight - body.clientHeight }
       }))
       assert.equal(boxes.length, cards.length - 1)
-      for (const { id, type, width, height, overflow } of boxes) {
+      for (const { id, type, width, height, extra, overflow } of boxes) {
         const kind = type.slice('direction.'.length)
-        const heightByType = Object.hasOwn(compactExamples, kind) ? 240 : Object.hasOwn(structuredExamples, kind) ? 304 : 368
+        const heightByType = Object.hasOwn(compactExamples, kind) ? (id === 'criterion' ? 192 : id === 'middle-fact' ? 160 : 128) : Object.hasOwn(structuredExamples, kind) ? 304 : 368
         assert.deepEqual({ width, height }, { width: 360, height: heightByType }, id)
         assert.ok(overflow <= 1, id + ': card body contains its full summary')
+        if (Object.hasOwn(compactExamples, kind) && height > 128) assert.ok(extra >= -1 && extra < 32, id + ': compact summary uses the smallest fitting band')
       }
     }
     if(scenario==='summaries') {
@@ -261,7 +269,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       assert.ok(coreGeometry.visible <= coreGeometry.lineHeight * 4 + 1, 'the core fits four lines')
       const before = await criterion.evaluate(card => [card.style.left, card.style.top])
       assert.deepEqual(before, ['200px', '220px'], 'old cache position is retained')
-      assert.equal(await page.locator('[data-group-id="existing-group"]').evaluate(node => node.offsetHeight), 304, 'group fits the new compact card height')
+      assert.equal(await page.locator('[data-group-id="existing-group"]').evaluate(node => node.offsetHeight), 256, 'group fits the new compact card height')
       const endpoint = await page.locator('[data-generation-edge-id="style-criterion"] .canvas-edge-line').evaluate(path => {
         const point = path.getPointAtLength(path.getTotalLength()).matrixTransform(path.getScreenCTM())
         const box = document.querySelector('[data-card-id="criterion"]').getBoundingClientRect()
@@ -270,14 +278,45 @@ export async function verifyIndependentDesigns(scenario, port) {
       assert.ok(Math.abs(endpoint.x - endpoint.right) < 1 && Math.abs(endpoint.y - endpoint.center) < 1, 'connected edge follows the compact card')
       const cache = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), compactLayoutKey)
       assert.deepEqual(cache.transform, { x: 24, y: 32, scale: 1 })
-      assert.deepEqual(cache.sizes.criterion, { width: 360, height: 240 })
+      assert.deepEqual(cache.sizes.criterion, { width: 360, height: 192 })
       assert.deepEqual(cache.sizes.shot, { width: 360, height: 304 })
       assert.deepEqual(cache.sizes.performance, { width: 360, height: 304 })
       await criterion.screenshot({ path: join(output, 'compact-criterion-desktop.png'), animations: 'disabled' })
+      await page.getByRole('button', { name: '布局', exact: true }).click()
+      await page.getByRole('button', { name: '展开小地图', exact: true }).click()
       await criterion.locator('.generation-card-body').click()
       await detail.waitFor()
-      assert.equal(await detail.getByRole('textbox', { name: '可观察判断标准内容', exact: true }).innerText(), compactExamples.criterion[1])
+      const standard = detail.getByRole('textbox', { name: '可观察判断标准内容', exact: true })
+      assert.equal(await standard.innerText(), compactExamples.criterion[1])
+      const shortStandard = '确认钥匙在左手'
+      const expectCriterionHeight = async height => {
+        await page.waitForFunction(height => document.querySelector('[data-card-id="criterion"]').offsetHeight === height, height)
+        assert.equal(await page.locator('[data-minimap-node="criterion"]').getAttribute('height'), String(height))
+        const edgeOffset = await page.locator('[data-generation-edge-id="style-criterion"] .canvas-edge-line').evaluate(path => {
+          const end = path.getPointAtLength(path.getTotalLength()).matrixTransform(path.getScreenCTM())
+          const box = document.querySelector('[data-card-id="criterion"]').getBoundingClientRect()
+          return Math.abs(end.y - box.top - box.height / 2)
+        })
+        assert.ok(edgeOffset < 1, 'edge follows the actual locked or unlocked height')
+      }
+      await standard.fill(shortStandard)
+      await criterion.getByRole('definition').filter({ hasText: shortStandard }).waitFor({ state: 'attached' })
+      await expectCriterionHeight(192)
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await expectCriterionHeight(128)
+      await criterion.screenshot({ path: join(output, 'compact-criterion-short.png'), animations: 'disabled' })
+      await criterion.press('Enter')
+      await standard.fill(compactExamples.criterion[1])
+      const latestCore = criterion.getByRole('definition').filter({ hasText: compactExamples.criterion[1] })
+      await latestCore.waitFor({ state: 'attached' })
+      await expectCriterionHeight(128)
+      const lockedLines = await latestCore.evaluate(node => node.clientHeight / parseFloat(getComputedStyle(node).lineHeight))
+      assert.ok(lockedLines >= 1 && lockedLines < 4, 'locked card shows only complete lines of the latest core')
+      await criterion.screenshot({ path: join(output, 'compact-criterion-locked.png'), animations: 'disabled', style: '.ant-modal-root { visibility: hidden }' })
+      await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await expectCriterionHeight(192)
+      await page.getByRole('button', { name: '关闭小地图', exact: true }).click()
+      await poll(state => (state.document.cards.find(card => card.id === 'criterion').standard?.text || '') === compactExamples.criterion[1])
       assert.deepEqual(await criterion.evaluate(card => [card.style.left, card.style.top]), before)
       await page.reload()
       await criterion.waitFor({ state: 'attached' })

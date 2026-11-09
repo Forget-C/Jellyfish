@@ -6,13 +6,14 @@ import { designFieldEntries } from './designFieldReferences'
 import { useGraphRules } from './CanvasCatalogContext'
 import { DesignCardBody } from './VisualDesignCard'
 import type { DesignSummaryRow } from './VisualDesignCard'
+import type { DesignCardSizing } from './cardGeometry'
 import { compactDesignFields, structuredDesignFields } from './designSummaryFields'
 import { designSummarySourceLabel } from './designSummarySource'
 
 const states: Record<string, string> = { not_applicable: '不适用', absent: '明确没有', undecided: '待确定', fact: '事实', proposal: '提议' }
 
 /** Summaries show authored configuration, including retained references, independently of generation readiness. */
-export function FlatDesignCardBody({ card, document, outputs }: { card: FlatDesignCard; document: CanvasDocument; outputs?: Record<string, CanvasResolvedOutput[]> }) {
+export function FlatDesignCardBody({ card, document, outputs, sizing }: { card: FlatDesignCard; document: CanvasDocument; outputs?: Record<string, CanvasResolvedOutput[]>; sizing?: DesignCardSizing }) {
   const { cardDefinitions, portLabels } = useGraphRules()
   const definition = cardDefinitions[card.type!], title = definition.title.replace(/卡$/, '')
   const sourceName = designSummarySourceLabel(document, card.id, cardDefinitions, outputs)
@@ -46,7 +47,7 @@ export function FlatDesignCardBody({ card, document, outputs }: { card: FlatDesi
       core ? { ...core, lines: speaker ? 3 : 4 } : { label: '核心内容', text: `尚未填写${title}`, lines: 1 },
       ...(auxiliary ? [{ ...auxiliary, lines: 1 }] : []),
     ] : []
-    return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} />
+    return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} sizing={sizing} />
   }
 
   const addGroup = (id: string, label: string, fields: string[], separator: string) => {
@@ -78,7 +79,7 @@ export function FlatDesignCardBody({ card, document, outputs }: { card: FlatDesi
     const emptyCore = { id: 'empty-core', label: '核心内容', text: `尚未填写${title}`, lines: 1 }
     if (!summary.length && auxiliary) summary.push(emptyCore, { ...auxiliary, lines: 2 })
     else if (kind === 'continuity' && summary.length && !summary.some(row => row.id === 'continuity_sequence')) summary.splice(1, 0, emptyCore)
-    return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} />
+    return <DesignCardBody kind={kind} title={title} rows={summary} summaryOnly emptyHint={emptyHint} sizing={sizing} />
   }
-  return <DesignCardBody kind={kind} title={title} rows={rows} emptyHint={emptyHint} />
+  return <DesignCardBody kind={kind} title={title} rows={rows} emptyHint={emptyHint} sizing={sizing} />
 }
