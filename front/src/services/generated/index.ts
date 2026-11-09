@@ -142,6 +142,7 @@ export type { ApiResponse_SceneVideoPreparation_ } from './models/ApiResponse_Sc
 export type { ApiResponse_SceneVideoSaveResult_ } from './models/ApiResponse_SceneVideoSaveResult_';
 export type { ApiResponse_ScriptConsistencyCheckResult_ } from './models/ApiResponse_ScriptConsistencyCheckResult_';
 export type { ApiResponse_SequenceRead_ } from './models/ApiResponse_SequenceRead_';
+export type { ApiResponse_StoryboardBasis_ } from './models/ApiResponse_StoryboardBasis_';
 export type { ApiResponse_StoryboardDiff_ } from './models/ApiResponse_StoryboardDiff_';
 export type { ApiResponse_StoryboardTaskRead_ } from './models/ApiResponse_StoryboardTaskRead_';
 export type { ApiResponse_TaskAccepted_ } from './models/ApiResponse_TaskAccepted_';
@@ -736,6 +737,8 @@ export type { Staging_Output } from './models/Staging_Output';
 export type { StagingActivity_Input } from './models/StagingActivity_Input';
 export type { StagingActivity_Output } from './models/StagingActivity_Output';
 export type { StoryboardApplication } from './models/StoryboardApplication';
+export type { StoryboardBasis } from './models/StoryboardBasis';
+export type { StoryboardBasisObject } from './models/StoryboardBasisObject';
 export type { StoryboardCandidate } from './models/StoryboardCandidate';
 export type { StoryboardDiff } from './models/StoryboardDiff';
 export type { StoryboardDiffCard } from './models/StoryboardDiffCard';

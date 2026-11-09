@@ -12,4 +12,6 @@ export type StoryboardRequest = {
     production_model_id?: (string | null);
     pending_modality?: ('image' | 'video' | null);
     mode?: 'complete' | 'faithful';
+    basis_token?: (string | null);
+    use_saved_objects?: boolean;
 };

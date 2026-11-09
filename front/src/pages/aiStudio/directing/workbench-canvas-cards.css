@@ -19,6 +19,21 @@
 .management-canvas-status, .management-canvas-actions { flex-wrap: wrap; }
 .management-canvas-status:not(:empty), .management-canvas-actions { margin-top: 8px; }
 .management-canvas-status .ant-tag { margin-inline-end: 0; }
+.management-canvas-created.ant-card { border-color: #91caff; }
+.management-canvas-configuration { margin-top: 12px; }
+.management-canvas-configuration fieldset {
+  border: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.management-canvas-configuration fieldset > .ant-input,
+.management-canvas-configuration fieldset > .ant-select { width: min(100%, 440px); }
+.management-canvas-configuration p { margin: 0; }
+.management-storyboard-basis { display: grid; gap: 8px; }
+.management-storyboard-basis .management-excerpt { margin-top: 8px; }
 .management-canvas-error {
   color: var(--app-muted);
   margin: 8px 0 0;

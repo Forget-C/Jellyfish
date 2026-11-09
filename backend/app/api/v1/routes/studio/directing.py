@@ -14,7 +14,7 @@ from app.core.contracts.directing.workbench_management import ChapterWorkbenchMa
 from app.services.directing.workbench_management import WorkbenchManagementService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
-from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
+from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardBasis, StoryboardDiff, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary
 from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.scene_objects import ObjectExtractionRequest, SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead
@@ -141,6 +141,14 @@ async def submit_storyboard(project_id: str, chapter_id: str, sequence_id: str, 
                             db: AsyncSession = Depends(get_db, scope="function")):
     """显式建立目标画布并提交文本分镜任务。"""
     return created_response(await _call(SceneStoryboardService(db, project_id).submit_storyboard(chapter_id, sequence_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/basis",
+            response_model=ApiResponse[StoryboardBasis], operation_id="directing_storyboard_basis")
+async def storyboard_basis(project_id: str, chapter_id: str, sequence_id: str,
+                           db: AsyncSession = Depends(get_db, scope="function")):
+    """读取创建分镜画布前用户可核对的实际依据。"""
+    return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard_basis(chapter_id, sequence_id)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards/candidate",

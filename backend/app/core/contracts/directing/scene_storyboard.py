@@ -19,6 +19,31 @@ class StoryboardRequest(Contract):
     production_model_id: Identity | None = None
     pending_modality: Literal['image', 'video'] | None = Field(default=None, exclude_if=lambda value: value is None)
     mode: CanvasStoryboardMode = 'complete'
+    basis_token: str | None = Field(default=None, min_length=64, max_length=64, exclude_if=lambda value: value is None)
+    use_saved_objects: bool = Field(default=False, exclude_if=lambda value: not value)
+
+
+class StoryboardBasisObject(Contract):
+    """供用户核对的实际对象与参考身份，不返回项目资产目录。"""
+
+    id: Identity
+    name: str
+    kind: Literal['character', 'scene', 'prop']
+    asset_id: Identity | None = None
+    asset_name: str | None = None
+    image_file_id: Identity | None = None
+
+
+class StoryboardBasis(Contract):
+    """提交时以同一来源、准备修订及参考身份重新核对。"""
+
+    token: str
+    source_text: str
+    source_changed: bool
+    preparation_revision: int
+    preparation_stale: bool
+    object_task_active: bool
+    objects: list[StoryboardBasisObject]
 
 
 class StoryboardScope(Contract):

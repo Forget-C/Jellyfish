@@ -11,6 +11,7 @@ import {
 } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
+import { WorkspaceDrafts } from './WorkspaceDrafts'
 import './workbench-management.css'
 
 const steps: { id: WorkbenchManagementStep; label: string }[] = [
@@ -68,6 +69,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [revision, setRevision] = useState(0)
   const [historyOpen, setHistoryOpen] = useState<boolean>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [storyboardActions, setStoryboardActions] = useState<HTMLDivElement | null>(null)
   const sceneToggle = useRef<HTMLButtonElement>(null)
   const desktop = Grid.useBreakpoint().lg
   const explicitId = params.get('sequence')
@@ -164,6 +166,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
               onClick={() => select(invalidScene ? explicitId ?? undefined : selected?.id, id)}>{label}</Button>)}
           </nav>
           {action}
+          {step === 'storyboard' && selected && <div ref={setStoryboardActions} />}
         </header>
         <WorkspaceScrollPanel className="management-panel">
           {invalidScene ? <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />
@@ -185,7 +188,9 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                 <p className="management-excerpt">{selected.source_excerpt || '暂无场次原文'}</p>
                 {step === 'objects' && <p>{selected.preparation_stale ? '对象准备已过时' : selected.has_object_preparation
                   ? `已准备 ${selected.object_count} 个对象` : '尚未提取对象'}</p>}
-                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} />}
+                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id}
+                  canCreate={!historical && !!selected.source_excerpt.trim()} actionHost={storyboardActions}
+                  onChange={() => setRevision(value => value + 1)} />}
               </section>}
             </>}
         </WorkspaceScrollPanel>
@@ -199,6 +204,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
 export function WorkbenchManagementPage() {
   const { projectId, chapterId } = useParams()
   return projectId && chapterId
-    ? <ChapterManagement key={JSON.stringify([projectId, chapterId])} projectId={projectId} chapterId={chapterId} />
+    ? <WorkspaceDrafts><ChapterManagement key={JSON.stringify([projectId, chapterId])} projectId={projectId} chapterId={chapterId} /></WorkspaceDrafts>
     : null
 }

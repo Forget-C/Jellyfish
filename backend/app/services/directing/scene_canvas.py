@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from hashlib import sha256
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 from fastapi import HTTPException
 from sqlalchemy import case, func, literal, select
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead, SceneCanvasSummary
@@ -94,6 +94,16 @@ class SceneCanvasService(WorkspaceService):
     async def create_canvas(self, chapter_id: str, sequence_id: str, body: SceneCanvasCreate) -> CanvasRead:
         """从已确认摘录建立固定依据，不用旧坐标截取刚修改的章节正文。"""
         sequence, chapter = await self._scene(chapter_id, sequence_id, lock=True)
+        store = CanvasStore(self.db, self.project_id)
+        canvas_id = None
+        digest = None
+        if body.request_id:
+            identity = store.command_digest({'project': self.project_id, 'scene': sequence.id, 'request': body.request_id})
+            canvas_id = uuid5(NAMESPACE_URL, f'scene-blank-canvas:{identity}').hex
+            digest = store.command_digest({'name': body.name})
+            receipt = await store.save_receipt(canvas_id, 'scene-blank-create', digest)
+            if receipt:
+                return CanvasRead.model_validate(receipt['scene_canvas'])
         if not sequence.is_current or not sequence.source_text.strip():
             raise ValueError('此场次没有可用的已确认原文')
         source = self.sequence_read(sequence, chapter).source
@@ -103,8 +113,11 @@ class SceneCanvasService(WorkspaceService):
         basis = CreativeBasisCard(id=uuid4().hex, text=sequence.source_text,
                                   source_locator=f'章节 {chapter.title} · 场次 {sequence.title}',
                                   selection_start=sequence.source_start, selection_end=sequence.source_end)
-        store = CanvasStore(self.db, self.project_id)
         canvas = await store.create(name, scene=SceneCanvasSeed(
-            sequence_id=sequence.id, basis=basis, fixed_source=CanvasFixedSource(
+            sequence_id=sequence.id, basis=basis, canvas_id=canvas_id, fixed_source=CanvasFixedSource(
                 card_id=basis.id, chapter_id=chapter.id, chapter_version=source.version)))
-        return await store.read(canvas.id)
+        result = await store.read(canvas.id)
+        if digest:
+            self.db.add(CanvasSaveReceipt(canvas_id=canvas.id, request_id='scene-blank-create', request_hash=digest,
+                                          response={'scene_canvas': result.model_dump(mode='json')}))
+        return result
