@@ -11,13 +11,13 @@ from app.core.contracts.directing.scene_canvas import SceneCanvasCreate
 from app.core.contracts.directing.scene_objects import SceneObjectsRead
 from app.core.contracts.directing.scene_storyboard import (SceneStoryboard, StoryboardApplication, StoryboardBasis,
     StoryboardBasisObject, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore,
-    StoryboardRetry, StoryboardTaskRead, StoryboardTaskSummary)
+    StoryboardRetry, StoryboardRetryBasis, StoryboardTaskRead, StoryboardTaskSummary)
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.studio import FileItem, FileUsage
 from app.models.task import Task
-from app.schemas.generation_canvas import CanvasDocument, CanvasFixedSource, CanvasRead, CanvasSave, CreativeBasisCard
+from app.schemas.generation_canvas import CanvasDocument, CanvasFixedSource, CanvasModelCapability, CanvasRead, CanvasSave, CreativeBasisCard
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.storyboard_application import plan_application
@@ -60,21 +60,30 @@ class SceneStoryboardService(SceneObjectService):
             'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
         } for item in objects.objects]
 
-    async def _storyboard_basis(self, sequence, chapter, objects: SceneObjectsRead, inputs: list[dict]) -> StoryboardBasis:
+    async def _storyboard_basis(self, sequence, chapter, objects: SceneObjectsRead, inputs: list[dict],
+                                *, canvas: CanvasRead | None = None, settings: dict | None = None) -> StoryboardBasis:
         """标记用户所见依据的变化，排队到运行的阶段更新不改变选择。"""
         active_task_id = await self.db.scalar(self._tasks(sequence.id).with_only_columns(Task.id)
             .where(Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1))
         chapter_version = sha256(chapter.raw_text.encode()).hexdigest()
         source = sequence.source
+        text = sequence.source_text
+        source_version = source.get('version')
+        target = {}
+        if canvas:
+            fixed, evidence = self._canvas_evidence(canvas)
+            source_version, text = fixed.chapter_version, evidence.text
+            target = {'canvas_id': canvas.id, 'revision': canvas.revision,
+                      'fixed_source': fixed.model_dump(mode='json'), 'evidence': evidence.model_dump(mode='json'),
+                      'settings': settings}
         token = CanvasStore.command_digest({
-            'scene_id': sequence.id, 'chapter_version': chapter_version, 'source': source,
-            'start': sequence.source_start, 'end': sequence.source_end, 'text': sequence.source_text,
+            'scene_id': sequence.id, 'chapter_version': chapter_version, 'source': source, **target,
+            'start': sequence.source_start, 'end': sequence.source_end, 'text': text,
             'preparation_revision': objects.revision, 'preparation_stale': objects.source_changed, 'objects': inputs,
             'active_task_id': active_task_id,
         })
         names = {(asset.kind, asset.id): asset.name for asset in objects.assets}
-        return StoryboardBasis(token=token, source_text=sequence.source_text,
-            source_changed=source.get('version') != chapter_version,
+        return StoryboardBasis(token=token, source_text=text, source_changed=source_version != chapter_version,
             preparation_revision=objects.revision, preparation_stale=objects.source_changed,
             object_task_active=active_task_id is not None, objects=[StoryboardBasisObject(
                 id=item['id'], name=item['name'], kind=item['kind'], asset_id=item['asset_id'],
@@ -93,11 +102,78 @@ class SceneStoryboardService(SceneObjectService):
         failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
         if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
             raise RevisionConflict('只有失败或取消的分镜任务可以重试')
-        request = StoryboardReextractRequest.model_validate({
-            **failed.input_snapshot['storyboard_request'], 'request_id': body.request_id,
-        })
+        request = self._retry_request(failed, body.request_id, body.basis_token, use_saved=body.use_saved_objects)
         return await self._submit(chapter_id, sequence_id, request,
                                   canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id)
+
+    @staticmethod
+    def _retry_request(failed: Task, request_id: str, basis_token: str | None = None, *,
+                       use_saved: bool = False, preview: bool = False) -> StoryboardReextractRequest:
+        """保留原任务实际文本模型，单独记录本次确认依据。"""
+        config = {**failed.input_snapshot['storyboard_request'], 'request_id': request_id,
+                  'basis_token': basis_token, 'use_saved_objects': use_saved}
+        if basis_token or preview:
+            config['text_model_id'] = failed.input_snapshot['model_id']
+        return StoryboardReextractRequest.model_validate(config)
+
+    async def read_storyboard_retry_basis(self, chapter_id: str, sequence_id: str, task_id: str) -> StoryboardRetryBasis:
+        """先核对真实原画布，预览与提交共用输入及模型解析。"""
+        sequence, chapter = await self._scene(chapter_id, sequence_id)
+        failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        if not sequence.is_current:
+            raise RevisionConflict('历史场次不能重试分镜')
+        if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
+            raise RevisionConflict('只有失败或取消的分镜任务可以重试')
+        body = self._retry_request(failed, 'preview', preview=True)
+        canvas, prior_task_id = await self._reextract_baseline(sequence, chapter, failed.input_snapshot['canvas_id'], body, lock=False)
+        await self._ensure_no_active_storyboard(sequence_id, canvas.id)
+        await self._ensure_not_retried(sequence_id, task_id)
+        objects = await self.read_objects(chapter_id, sequence_id)
+        inputs = await self._inputs_for_canvas(sequence, canvas, prior_task_id, objects)
+        model, production, capability = await self._storyboard_models(body)
+        settings = self._retry_settings(task_id, body, model, production, capability)
+        basis = await self._storyboard_basis(sequence, chapter, objects, inputs, canvas=canvas, settings=settings)
+        return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis,
+            source_kind='confirmed_scene' if body.adopt_current_source else 'fixed',
+            mode=body.mode, text_model_name=model.name, production_model_id=body.production_model_id,
+            production_model_name=production.name if production else None, pending_modality=body.pending_modality or 'image')
+
+    async def _ensure_no_active_storyboard(self, sequence_id: str, canvas_id: str) -> None:
+        if await self.db.scalar(self._storyboards(sequence_id).with_only_columns(Task.id).where(
+                Task.input_snapshot['canvas_id'].as_string() == canvas_id,
+                Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1)):
+            raise RevisionConflict('该画布已有进行中的分镜任务')
+
+    async def _ensure_not_retried(self, sequence_id: str, task_id: str) -> None:
+        if await self.db.scalar(self._storyboards(sequence_id).with_only_columns(Task.id)
+                .where(Task.retry_of_task_id == task_id).limit(1)):
+            raise RevisionConflict('已提交该任务的重试，请查看最新分镜任务')
+
+    async def _storyboard_models(self, body: StoryboardRequest) -> tuple[Model, Model | None, CanvasModelCapability | None]:
+        model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.text_model_id)
+        if not body.production_model_id:
+            return model, None, None
+        production = await self.db.get(Model, body.production_model_id)
+        if not production or production.category not in (ModelCategoryKey.image, ModelCategoryKey.video):
+            raise ValueError('请选择可用的图片或视频生产模型')
+        return model, production, await model_capability(self.db, production.id)
+
+    @staticmethod
+    def _retry_settings(task_id: str, body: StoryboardReextractRequest, model: Model, production: Model | None,
+                        capability: CanvasModelCapability | None) -> dict:
+        return {'retry_of': task_id, 'mode': body.mode, 'adopt_current_source': body.adopt_current_source,
+                'text_model': [model.id, model.name], 'production_model': [production.id, production.name] if production else None,
+                'pending_modality': body.pending_modality or 'image',
+                'production_capability': capability.model_dump(mode='json') if capability else None}
+
+    @staticmethod
+    def _verify_basis(confirmed: StoryboardBasis, body: StoryboardRequest) -> None:
+        if body.basis_token != confirmed.token:
+            raise RevisionConflict('原文、画布或对象参考已变化，请重新核对生成依据')
+        if confirmed.preparation_stale:
+            raise ValueError('场次原文范围已变化，请先刷新对象准备')
+        if confirmed.object_task_active and (not body.use_saved_objects or not confirmed.preparation_revision):
+            raise RevisionConflict('对象提取进行中，请等待或明确使用已保存对象继续')
 
     async def _submit(self, chapter_id: str, sequence_id: str, body: StoryboardRequest,
                       *, canvas_id: str | None = None, retry_of_task_id: str | None = None) -> StoryboardTaskRead:
@@ -113,44 +189,30 @@ class SceneStoryboardService(SceneObjectService):
             return await self._storyboard_read(existing)
         if not sequence.is_current:
             raise RevisionConflict('历史场次不能重新提取或重试分镜' if canvas_id else '历史场次不能新建分镜画布')
-        if retry_of_task_id and await self.db.scalar(self._storyboards(sequence_id).where(
-                Task.retry_of_task_id == retry_of_task_id).limit(1)):
-            raise RevisionConflict('已提交该任务的重试，请查看最新分镜任务')
+        if retry_of_task_id:
+            await self._ensure_not_retried(sequence_id, retry_of_task_id)
         objects = await self.read_objects(chapter_id, sequence_id)
         prepared_inputs = self._prepared_object_inputs(objects)
         if not canvas_id and body.basis_token is not None:
             confirmed = await self._storyboard_basis(sequence, chapter, objects, prepared_inputs)
-            if body.basis_token != confirmed.token:
-                raise RevisionConflict('本场原文或对象参考已变化，请重新核对生成依据')
-            if confirmed.object_task_active and (not body.use_saved_objects or not objects.revision):
-                raise RevisionConflict('对象提取进行中，请等待或明确使用已保存对象继续')
+            self._verify_basis(confirmed, body)
         if objects.source_changed and not canvas_id:
             raise ValueError('场次原文范围已变化，请先刷新对象准备')
-        model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.text_model_id)
+        model, production, capability = await self._storyboard_models(body)
         provider = await self.db.get(Provider, model.provider_id)
         config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
-        capability = None
-        if body.production_model_id:
-            production = await self.db.get(Model, body.production_model_id)
-            if not production or production.category not in (ModelCategoryKey.image, ModelCategoryKey.video):
-                raise ValueError('请选择可用的图片或视频生产模型')
-            capability = await model_capability(self.db, production.id)
         prior_task_id = None
         if canvas_id:
             canvas, prior_task_id = await self._reextract_baseline(sequence, chapter, canvas_id, body)
-            if await self.db.scalar(self._storyboards(sequence_id).where(
-                    Task.input_snapshot['canvas_id'].as_string() == canvas_id,
-                    Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1)):
-                raise RevisionConflict('该画布已有进行中的分镜任务')
+            await self._ensure_no_active_storyboard(sequence_id, canvas_id)
         else:
             canvas = await self.create_canvas(chapter_id, sequence_id, SceneCanvasCreate(name=body.name))
-        fixed = canvas.document.fixed_source
-        basis = next(card for card in canvas.document.cards if card.id == fixed.card_id)
-        if not objects.source_changed and (fixed.chapter_version, basis.selection_start, basis.text) == (
-                sequence.source['version'], sequence.source_start, sequence.source_text):
-            frozen_objects = prepared_inputs
-        else:
-            frozen_objects = await self._previous_object_inputs(canvas, prior_task_id, basis)
+        fixed, basis = self._canvas_evidence(canvas)
+        frozen_objects = await self._inputs_for_canvas(sequence, canvas, prior_task_id, objects)
+        if retry_of_task_id and body.basis_token:
+            settings = self._retry_settings(retry_of_task_id, body, model, production, capability)
+            confirmed = await self._storyboard_basis(sequence, chapter, objects, frozen_objects, canvas=canvas, settings=settings)
+            self._verify_basis(confirmed, body)
 
         files = sorted({item['image_file_id'] for item in frozen_objects if item['image_file_id']})
         if files:
@@ -174,10 +236,23 @@ class SceneStoryboardService(SceneObjectService):
                       'provider_key': config.provider_key, 'run_args': args})
         return await self._storyboard_read(task)
 
+    @staticmethod
+    def _canvas_evidence(canvas: CanvasRead) -> tuple[CanvasFixedSource, CreativeBasisCard]:
+        fixed = canvas.document.fixed_source
+        return fixed, next(card for card in canvas.document.cards if card.id == fixed.card_id)
+
+    async def _inputs_for_canvas(self, sequence, canvas: CanvasRead, prior_task_id: str | None,
+                                 objects: SceneObjectsRead) -> list[dict]:
+        fixed, basis = self._canvas_evidence(canvas)
+        if not objects.source_changed and (fixed.chapter_version, basis.selection_start, basis.text) == (
+                sequence.source['version'], sequence.source_start, sequence.source_text):
+            return self._prepared_object_inputs(objects)
+        return await self._previous_object_inputs(canvas, prior_task_id, basis)
+
     async def _reextract_baseline(self, sequence, chapter, canvas_id: str,
-                                  body: StoryboardReextractRequest) -> tuple[CanvasRead, str | None]:
+                                  body: StoryboardReextractRequest, *, lock: bool = True) -> tuple[CanvasRead, str | None]:
         store = CanvasStore(self.db, self.project_id)
-        row = await store.get(canvas_id, lock=True)
+        row = await store.get(canvas_id, lock=lock)
         current = CanvasDocument.model_validate(row.document)
         fixed = current.fixed_source
         if row.sequence_id != sequence.id or not fixed or fixed.chapter_id != chapter.id:

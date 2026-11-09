@@ -204,6 +204,21 @@ class StoryboardRetry(Contract):
     """使用失败任务的原配置，在同一目标上提交新的文本任务。"""
 
     request_id: Identity
+    basis_token: str | None = Field(default=None, min_length=64, max_length=64)
+    use_saved_objects: bool = False
+
+
+class StoryboardRetryBasis(Contract):
+    """本次重试实际可采用的依据与沿用的模型配置。"""
+
+    canvas_id: Identity
+    basis: StoryboardBasis
+    source_kind: Literal['fixed', 'confirmed_scene']
+    mode: CanvasStoryboardMode
+    text_model_name: str
+    production_model_id: Identity | None = None
+    production_model_name: str | None = None
+    pending_modality: Literal['image', 'video']
 
 
 class StoryboardApplication(Contract):
