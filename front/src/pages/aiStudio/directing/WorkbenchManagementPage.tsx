@@ -10,6 +10,7 @@ import {
   saveChapterBrowse, scenePreparationLocation, type WorkbenchManagementStep,
 } from './chapterNavigation'
 import { directingError } from './common'
+import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
 import './workbench-management.css'
 
 const steps: { id: WorkbenchManagementStep; label: string }[] = [
@@ -131,9 +132,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const action = !overview || invalidScene ? null : step === 'division' ? overview.has_source
     ? <Button type="primary" onClick={() => navigate(sourceLocation)}>划分场次</Button>
     : <Button type="primary" onClick={() => navigate(chapterPage + '&edit=' + encodeURIComponent(chapterId))}>填写章节原文</Button>
-    : preparation && <Button type="primary" onClick={() => navigate(preparation)}>
-      {step === 'objects' ? '查看对象与参考' : '查看本场画布'}
-    </Button>
+    : step === 'objects' && preparation && <Button type="primary" onClick={() => navigate(preparation)}>查看对象与参考</Button>
 
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
     <PageToolbar title="工作台管理">
@@ -181,7 +180,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                 <p className="management-excerpt">{selected.source_excerpt || '暂无场次原文'}</p>
                 {step === 'objects' && <p>{selected.preparation_stale ? '对象准备已过时' : selected.has_object_preparation
                   ? `已准备 ${selected.object_count} 个对象` : '尚未提取对象'}</p>}
-                {step === 'storyboard' && <p>{selected.canvas_count ? `本场有 ${selected.canvas_count} 张画布` : '本场尚无画布'}</p>}
+                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} />}
               </section>}
             </>}
         </WorkspaceScrollPanel>
