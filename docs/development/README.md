@@ -14,6 +14,7 @@
 
 - [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
 - [场次设计、生产与交付设计](design/scene-production.md)
+- [场次工作台与共同画布设计](design/shared-canvas-workbench.md)
 - [生成画布首版检查项目录](design/generation-canvas-check-catalog.md)
 - [ComfyUI 多结果与局部执行调研](design/research/comfyui-canvas-research.md)
 
@@ -41,6 +42,7 @@
 - [生成画布的组件与协议边界](adr/0002-generation-canvas-protocol-boundaries.md)
 - [生成画布检查卡的范围与职责](adr/0003-generation-canvas-check-cards.md)
 - [声音设计与生成职责](adr/0004-sound-design-and-generation-responsibilities.md)
+- [场次工作台与自由生成共享画布基础](adr/0005-shared-canvas-foundation.md)
 
 ## 开发与维护指南
 
