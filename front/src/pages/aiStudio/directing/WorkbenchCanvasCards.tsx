@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { MoreOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Spin, Tag, message } from 'antd'
+import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Space, Spin, Tag, message } from 'antd'
 import type { InputRef } from 'antd'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService, type SceneCanvasSummary, type StoryboardTaskSummary } from '../../../services/generated'
-import { readChapterBrowse, saveChapterBrowse, scenePreparationLocation } from './chapterNavigation'
+import { readChapterBrowse, saveChapterBrowse, sceneCanvasLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { SceneCanvasDeletion } from './SceneCanvasDeletion'
 import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
@@ -28,10 +28,13 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
-export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost, onChange }: Scope & {
+export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost,
+  targetCanvas, targetTask, onCloseTask, onChange }: Scope & {
   historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
+  targetCanvas?: string | null; targetTask?: string | null; onCloseTask: (canvasId?: string) => void
 }) {
   const navigate = useNavigate()
+  const { state } = useLocation()
   const [notices, noticeContext] = message.useMessage()
   const [canvases, setCanvases] = useState<SceneCanvasSummary[]>()
   const lastRead = useRef<SceneCanvasSummary[]>()
@@ -40,6 +43,9 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [revision, setRevision] = useState(0)
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<string>()
+  const [linkedTask, setLinkedTask] = useState<{ id: string; task?: StoryboardTaskSummary; error?: string }>()
+  const targetElement = useRef<HTMLLIElement>(null)
+  const focusedTarget = useRef<string>()
   const [rename, setRename] = useState<Pick<SceneCanvasSummary, 'id' | 'name'>>()
   const menuButtons = useRef(new Map<string, HTMLElement>())
   const searchInput = useRef<InputRef>(null)
@@ -48,9 +54,40 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const drafts = useWorkspaceDraftStatus()
   const [created, setCreated] = useState<string>()
   const recentCanvas = readChapterBrowse(projectId, chapterId).managementCanvas
-  const detailCard = canvases?.find(canvas => canvas.id === detail)
-  const detailTask = detailCard?.latest_storyboard
+  const linked = linkedTask?.id === targetTask ? linkedTask : undefined
+  const mismatched = !!(targetCanvas && linked?.task && linked.task.canvas_id !== targetCanvas)
+  const targetId = !mismatched && !linked?.error ? targetCanvas ?? linked?.task?.canvas_id : undefined
+  const invalidCanvas = !!(targetId && canvases && !canvases.some(canvas => canvas.id === targetId))
+  const taskCard = canvases?.find(canvas => canvas.id === linked?.task?.canvas_id)
+  const linkedSummary = taskCard?.latest_storyboard?.task_id === linked?.task?.task_id ? taskCard?.latest_storyboard : linked?.task
+  const taskDetail = !targetCanvas && !invalidCanvas ? linkedSummary : undefined
+  const detailCard = canvases?.find(canvas => canvas.id === (detail ?? taskDetail?.canvas_id))
+  const detailTask = detail ? detailCard?.latest_storyboard : detailCard && taskDetail
   const hasActive = canvases?.some(canvas => activeTask(canvas.latest_storyboard))
+
+  useEffect(() => {
+    setQuery('')
+    setDetail(undefined)
+    focusedTarget.current = undefined
+    if (!targetTask) return
+    let active = true
+    const request = StudioDirectingService.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: targetTask })
+    void request.then(response => {
+      if (!response.data) throw new Error('分镜任务结果未返回')
+      if (active) setLinkedTask({ id: targetTask, task: response.data })
+    }).catch(cause => {
+      if (active) setLinkedTask({ id: targetTask,
+        error: cause instanceof ApiError && cause.status === 404 ? '此分镜任务或原画布已不可用' : directingError(cause) })
+    })
+    return () => { active = false; request.cancel() }
+  }, [projectId, chapterId, sequenceId, targetTask, targetCanvas])
+
+  useEffect(() => {
+    if (!targetId || !targetElement.current || focusedTarget.current === targetId || targetTask && !linked) return
+    focusedTarget.current = targetId
+    targetElement.current.scrollIntoView({ block: 'nearest' })
+    if (!taskDetail) targetElement.current.focus({ preventScroll: true })
+  }, [canvases, targetId, targetTask, linked, taskDetail])
 
   useEffect(() => {
     let current = true
@@ -96,10 +133,12 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   }, [])
 
   const openCanvas = (canvasId: string, taskId?: string) => {
-    const params = new URLSearchParams({ canvas: canvasId })
-    if (taskId) params.set('storyboardTask', taskId)
     saveChapterBrowse(projectId, chapterId, { managementCanvas: canvasId })
-    navigate(scenePreparationLocation(projectId, chapterId, sequenceId) + '?' + params)
+    navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, canvasId, taskId), { state })
+  }
+  const closeDetail = () => {
+    if (detail) setDetail(undefined)
+    else onCloseTask(taskDetail?.canvas_id)
   }
   const closeRename = (name?: string) => {
     if (!rename) return
@@ -132,6 +171,8 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     </div>
     {error && <Alert showIcon type="error" message={error} action={<Button size="small"
       onClick={() => setRevision(value => value + 1)}>重试读取画布</Button>} />}
+    {(linked?.error || mismatched || invalidCanvas) && <Alert showIcon type="warning"
+      message={linked?.error ?? (mismatched ? '此分镜任务不属于指定画布' : '此画布不属于当前场次或已不可用')} />}
     {deleteError && <Alert showIcon type="warning" message={deleteError} />}
     {loading && !canvases && !error && <Spin aria-label="正在读取本场画布" />}
     {!error && canvases?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -143,8 +184,9 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
         const candidateId = canvas.candidate_storyboard_task_id
         const adoptedId = canvas.applied_storyboard_task_id
         const currentTaskIsCandidate = candidateId && task?.task_id === candidateId
-        return <li key={canvas.id}>
-          <Card size="small" className={canvas.id === created ? 'management-canvas-created' : undefined}>
+        const located = canvas.id === targetId
+        return <li key={canvas.id} ref={located ? targetElement : undefined} tabIndex={located ? -1 : undefined}>
+          <Card size="small" className={canvas.id === created || located ? 'management-canvas-created' : undefined}>
             <div className="management-canvas-card-heading">
               <h4>{canvas.name}</h4>
               <Dropdown trigger={['click']} menu={{ items: [
@@ -170,11 +212,13 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               {adoptedId && <Tag color="success" title={`采用任务 ${adoptedId}`}>当前已采用</Tag>}
               {canvas.source_changed && <Tag color="warning">原文已变化</Tag>}
               {canvas.id === recentCanvas && <Tag>最近打开</Tag>}
+              {located && <Tag color="processing">当前定位</Tag>}
               {canvas.id === created && <Tag color="processing">刚创建</Tag>}
             </div>
             {task?.status === 'failed' && task.error && <p className="management-canvas-error">{task.error}</p>}
             <div className="management-canvas-actions">
-              <Button onClick={() => openCanvas(canvas.id)}>打开画布</Button>
+              <Button onClick={() => openCanvas(canvas.id, located && linked?.task?.canvas_id === canvas.id
+                ? linked.task.task_id : undefined)}>打开画布</Button>
               {candidateId && <Button type="link" onClick={() => openCanvas(canvas.id, candidateId)}>
                 {canvas.storyboard_review_required ? '核对分镜' : '查看分镜'}
               </Button>}
@@ -189,8 +233,10 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     </ul>}
     {rename && <WorkbenchCanvasRename {...{ projectId, chapterId, sequenceId }} canvasId={rename.id}
       initialName={rename.name} onClose={closeRename} />}
-    <Modal title="分镜任务详情" open={!!detailTask} onCancel={() => setDetail(undefined)}
-      footer={<Button aria-label="关闭分镜任务详情" onClick={() => setDetail(undefined)}>关闭</Button>}>
+    <Modal title="分镜任务详情" open={!!detailTask} onCancel={closeDetail}
+      footer={<Space wrap><Button aria-label="关闭分镜任务详情" onClick={closeDetail}>关闭</Button>
+        {taskDetail && <Button type="primary" onClick={() => openCanvas(taskDetail.canvas_id, taskDetail.task_id)}>打开此任务画布</Button>}
+      </Space>}>
       {detailTask && detailCard && <Descriptions column={1} size="small" items={[
         { key: 'canvas', label: '画布', children: detailCard.name },
         { key: 'status', label: '任务状态', children: taskLabel(detailTask) },

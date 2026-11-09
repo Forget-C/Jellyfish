@@ -22,7 +22,7 @@ import { useProject, useChapters } from './hooks/useProjectData'
 import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 import { StudioDirectingService } from '../../../../services/generated'
 import { readRecentWork } from '../../directing/workspaceContext'
-import { chapterLocation, scenePreparationLocation } from '../../directing/chapterNavigation'
+import { chapterLocation, workbenchManagementLocation } from '../../directing/chapterNavigation'
 
 const TAB_PARAM = 'tab'
 
@@ -48,7 +48,7 @@ const ProjectWorkbench: React.FC = () => {
       StudioDirectingService.directingChapterOverview({ projectId, chapterId: recent.chapterId }).then(response => {
         const sequence = response.data?.sequences.find(row => row.id === recent.sequenceId)
         if (active && sequence) {
-          setRecentDestination(scenePreparationLocation(projectId, recent.chapterId, recent.sequenceId))
+          setRecentDestination(workbenchManagementLocation(projectId, recent.chapterId, recent.sequenceId))
         }
       }).catch(() => { /* 最近工作不可核实时，仍可从章节浏览。 */ })
     }
@@ -56,7 +56,7 @@ const ProjectWorkbench: React.FC = () => {
   }, [projectId, chapters])
   const primaryCta = {
     label: recentDestination ? '继续工作' : chapters.length ? '进入章节场次' : '创建第一章',
-    hint: '章节原文 → 场次准备 → 分镜画布',
+    hint: '章节原文 → 工作台管理 → 工作台画布',
     icon: <PlusOutlined />,
     onClick: () => {
       if (recentDestination) navigate(recentDestination)

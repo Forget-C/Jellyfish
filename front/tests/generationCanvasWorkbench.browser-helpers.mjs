@@ -287,3 +287,11 @@ export async function selectCanvasReferenceImage(page, label) {
   await (typeof label === 'string' ? picker.locator(`[data-reference-source-card=${JSON.stringify(label)}]`) : picker.getByRole('button', { name: label })).click()
   await picker.waitFor({ state: 'hidden' })
 }
+
+/** 生成成功后留在管理页，明确打开指定候选画布。 */
+export async function openReadyStoryboard(page, name) {
+  const cards = page.getByRole('list', { name: '本场画布', exact: true })
+  const card = cards.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) })
+  await card.getByRole('button', { name: '查看分镜', exact: true }).click()
+  await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
+}

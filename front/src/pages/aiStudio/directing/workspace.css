@@ -639,17 +639,7 @@
 }
 .chapter-table .chapter-title-link { padding: 0; height: auto; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .chapter-table .ant-table-cell { overflow-wrap: anywhere; }
-.chapter-scenes-layout { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr); gap: 24px; height: calc(100% - 52px); }
-.chapter-scenes-list, .chapter-sequence-details { min-width: 0; overflow: auto; padding: 4px 12px 16px 4px; }
-.chapter-scene-selected { background: var(--ant-color-primary-bg, #e6f4ff); }
-.chapter-sequence-details > h3 { margin: 0 0 16px; overflow-wrap: anywhere; }
-.chapter-scenes-back { display: none; }
 @media (max-width: 767px) {
-  .chapter-manager .ant-drawer-content-wrapper { width: 100% !important; }
-  .chapter-manager .ant-drawer-body { padding: 16px; }
-  .chapter-scenes-layout { display: block; height: auto; }
-  .chapter-scenes-layout.has-selection .chapter-scenes-list, .chapter-scenes-placeholder { display: none; }
-  .chapter-scenes-back { display: inline-block; margin-bottom: 16px; }
   .chapter-table .ant-table-cell { padding: 12px 6px !important; }
   .chapter-table .ant-btn { padding-inline: 4px; }
   .chapter-editor-modal { top: 0; max-width: 100vw; width: 100vw !important; margin: 0; padding-bottom: 0; }

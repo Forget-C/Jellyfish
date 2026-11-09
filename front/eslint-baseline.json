@@ -1528,20 +1528,6 @@
       "count": 2
     },
     {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/tabs/ChaptersTab.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "57742cd3e1488055c8775f6afaa76d4ff481ca905a92210e70e7a751d45cf71b",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/tabs/ChaptersTab.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "5e52eecff413e1feab17b379ddb879ed3ece51aaef4d92fb6e2e6108f399007f",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/project/ProjectWorkbench/tabs/PropsTab.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,

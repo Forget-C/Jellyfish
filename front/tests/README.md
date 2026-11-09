@@ -43,9 +43,7 @@ pnpm --dir front run test:browser -- --list
 
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 
-章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），覆盖 105 章分页/搜索、表格滚动恢复、无跨章节汇总、未知数量、名称/精简/原文/对比/AI 优化后保存、影响确认、错误恢复、创建序号、归属校验和四尺寸截图。`node front/tests/chapterSequenceNavigation.browser.mjs`（默认 4201 端口）覆盖单层场次抽屉、默认详情、基本信息保存与手动选区、草稿保护、深链接、阶段往返、迟到响应及窄屏返回列表。两者拦截全部业务接口，不执行真实模型请求。当前章节契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
-
-`node front/tests/chapterSourceSelection.browser.mjs`（默认 4207，可用 `SOURCE_SELECTION_PORT` 修改）覆盖五列表格与直接划场、默认场次、改名保留旧来源、真实鼠标框选、跨 DOM 节点及 Unicode/CRLF 范围、重复匹配、重叠/版本冲突、AI 候选逐场确认、未保存保护、返回焦点、长原文位置恢复和四尺寸布局。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。章节划分与并发保存边界见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
+章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），通过隔离接口覆盖分页搜索、滚动恢复、未知场次数量、章节编辑、保存失败、创建及归属校验。工作台管理、划分和旧路由通过 `pnpm --dir front run test:browser workbench` 中的真实浏览器用例验证。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。当前契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
 ```bash
 node front/tests/workspaceUsage.browser.mjs
@@ -163,9 +161,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 
 ### 章节场次入口与连续划场
 
-`node --test front/tests/chapterNavigation.test.mjs` 验证来源核对优先、阶段恢复、整场计数建议入口和规范路由。
-
-`node front/tests/chapterSequenceNavigation.browser.mjs` 沿用上述 Playwright 环境，默认监听 4201，可用 `CHAPTER_NAV_PORT` 指定空闲端口。隔离接口验证详情按需加载、名称与顺序保存留页、未保存关闭及后退跨章保护、冲突保留输入、连续划场、旧链接面板定位、概览与原文读取恢复、过期建议只读，以及长列表返回恢复。1440／1024／768／375 宽度下检查标题键盘入口、页面与抽屉宽度及保存按钮命中；版本弹窗和试拍图由下述专项覆盖。
+`node --test front/tests/chapterNavigation.test.mjs` 验证场次建议入口及新旧路由。运行 `pnpm --dir front run test:browser workbench-management`、`workbench-division` 和 `scene-canvas-legacy-routes` 验证管理步骤、划分与历史、窄屏场次抽屉、旧入口重定向与仍受支持的旧宿主。`scene-storyboard-media` 从章节列表贯通划分、对象参考、后台分镜、画布编辑保存和明确单卡执行。
 
 ### 工作台统一版本
 

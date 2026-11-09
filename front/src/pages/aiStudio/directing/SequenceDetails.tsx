@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Alert, Button, Input, InputNumber, Modal, Space, Spin } from 'antd'
-import { useNavigate } from 'react-router-dom'
 import { StudioDirectingService, type ChapterSequences, type SequenceRead } from '../../../services/generated'
 import { directingError } from './common'
-import { legacySceneCanvasLocation, scenePreparationLocation, sequenceLocation } from './chapterNavigation'
 import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 
 /** 场次管理容器内的编辑区；保存保留当前场次，离开沿用统一草稿保护。 */
-export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onSaved, onRange, compact = false }: {
+export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onSaved, onRange }: {
   projectId: string; chapterId: string; sequenceId?: string; onClose: () => void; onSaved: () => void; onRange: () => void
-  compact?: boolean
 }) {
-  const navigate = useNavigate()
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [sequence, setSequence] = useState<SequenceRead>()
   const [title, setTitle] = useState('')
@@ -62,7 +58,7 @@ export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onS
     <Space>场次顺序<InputNumber aria-label="场次顺序" min={1} precision={0} value={position + 1} onChange={value => setPosition((value || 1) - 1)} /></Space>
   </>
   const failure = error && <Alert type="error" showIcon message={error} action={!sequence && <Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />
-  if (compact) return <Modal open title="编辑场次名称与顺序" width={480} onCancel={() => guard(onClose)}
+  return <Modal open title="编辑场次名称与顺序" width={480} onCancel={() => guard(onClose)}
     closable={!busy} keyboard={!busy} maskClosable={!busy} footer={<Space wrap>
       <Button disabled={busy} onClick={() => guard(onClose)}>取消</Button>
       <Button type="primary" loading={busy} disabled={!dirty || sequence?.is_current === false} onClick={() => void save()}>保存</Button>
@@ -74,24 +70,4 @@ export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onS
         <Button type="link" onClick={() => guard(onRange)}>在原文中调整范围</Button>
       </Space></WorkspaceWriteBoundary>}
   </Modal>
-  return <section aria-label="场次详情" className="chapter-sequence-details">
-    <Button className="chapter-scenes-back" onClick={onClose}>返回场次列表</Button>
-    <h3>{sequence?.title || '场次详情'}</h3>
-    {failure}
-    {sequence?.is_current === false && <><Alert type="info" message="场次已退出当前划分，历史成果保留；不能发起新的生产写入。" /><p className="chapter-source-excerpt">{sequence.source_text}</p><Button onClick={() => navigate(sequenceLocation(projectId, chapterId, sequence.id, 'design'))}>查看历史成果</Button></>}
-    {loading ? <Spin /> : sequence && sequence.is_current !== false && <WorkspaceWriteBoundary busy={busy}><Space direction="vertical" size="large" style={{ width: '100%' }}>
-      {sequence.source_changed && <Alert type="warning" message="章节原文已变化，请在原文中重新核对范围；修改名称或顺序不会更新来源" />}
-      {fields}
-      <section aria-label="场次原文范围"><strong>原文范围</strong><p className="chapter-source-excerpt">{sequence.source_text}</p>
-        <Button onClick={onRange}>在原文中调整范围</Button></section>
-      <Space wrap>
-        <Button type="primary" loading={busy} disabled={!dirty} onClick={() => { void save() }}>保存</Button>
-        <Button onClick={async () => { if (await save()) navigate(scenePreparationLocation(projectId, chapterId, sequence.id)) }}>保存并打开工作台</Button>
-      </Space>
-      <Space wrap>{([
-        ['director', '旧版导演设计'], ['units', '旧版单元试拍'], ['edit', '旧版审片与剪辑'],
-      ] as const).map(([canvas, label]) => <Button key={canvas}
-        onClick={() => navigate(legacySceneCanvasLocation(projectId, chapterId, sequence.id, canvas))}>{label}</Button>)}</Space>
-    </Space></WorkspaceWriteBoundary>}
-  </section>
 }

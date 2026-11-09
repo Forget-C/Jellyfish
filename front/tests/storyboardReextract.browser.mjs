@@ -1,3 +1,4 @@
+import { openReadyStoryboard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -44,23 +45,25 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(16000)
-  const prep = `http://127.0.0.1:4329/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
-  await page.goto(prep)
+  const prep = `http://127.0.0.1:4329/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
+  await page.goto(prep.replace('step=storyboard', 'step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
   await front.getByRole('combobox', { name: '关联资产' }).click()
   await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await front.getByRole('combobox', { name: '选择参考图' }).click()
+  await front.getByRole('button', { name: '选择参考图' }).click()
   await page.getByText('参考图 1', { exact: true }).click()
   await front.getByText('已选参考图', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '生成分镜', exact: true }).click()
-  const config = page.getByRole('dialog', { name: '生成分镜' })
+  await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
+  await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
+  const config = page.getByRole('region', { name: '生成新分镜画布配置' })
   await config.getByText('忠实提取', { exact: true }).click()
   await config.getByRole('textbox', { name: '画布名称' }).fill('忠实分镜验收')
   await config.getByRole('combobox', { name: '生产模型' }).click()
   await page.getByText('分镜测试图片模型', { exact: true }).click()
+  const storyboardName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
   await config.getByRole('button', { name: '开始提取', exact: true }).click()
-  await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+  await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
   const canvas = `${studio}/generation-canvases/${project}/${id}`
   const read = () => request(canvas)
@@ -207,4 +210,7 @@ try {
 } catch (reason) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true })
   throw reason
-} finally { await cleanup() }
+} finally {
+  if (backend.exitCode === null) await request(`${api}/test/runtime-controls`, 'POST', { disconnect: true }).catch(() => {})
+  await cleanup()
+}

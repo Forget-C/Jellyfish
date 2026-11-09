@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openReadyStoryboard, closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -46,21 +46,23 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(20000)
-  const prep = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
-  await page.goto(prep)
+  const prep = `${origin}/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
+  await page.goto(prep.replace('step=storyboard', 'step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   const object = page.getByRole('region', { name: '林舟 · 林舟在码头', exact: true })
   await object.getByRole('combobox', { name: '关联资产' }).click()
   await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await object.getByRole('combobox', { name: '选择参考图' }).click()
+  await object.getByRole('button', { name: '选择参考图' }).click()
   await page.getByText('参考图 1', { exact: true }).click()
   await object.getByText('已选参考图', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '生成分镜', exact: true }).click()
-  const config = page.getByRole('dialog', { name: '生成分镜' })
+  await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
+  await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
+  const config = page.getByRole('region', { name: '生成新分镜画布配置' })
   await config.getByRole('combobox', { name: '生产模型' }).click()
   await page.getByText('viduq2', { exact: true }).click()
+  const storyboardName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
   await config.getByRole('button', { name: '开始提取', exact: true }).click()
-  await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+  await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
   const path = `${studio}/generation-canvases/${project}/${id}`
   const poll = async predicate => {

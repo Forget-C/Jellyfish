@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Checkbox, Input, Radio, Select, Space } from 'antd'
+import { Alert, Checkbox, Radio, Select, Space } from 'antd'
 import { ApiError, LlmService, StudioDirectingService as Directing } from '../../../services/generated'
 import type { ModelRead, StoryboardReextractRequest, StoryboardTaskRead, StoryboardTaskSummary } from '../../../services/generated'
 import { directingError } from './common'
@@ -7,14 +7,13 @@ import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
-type Submission = { kind: 'create' | 'reextract'; body: StoryboardReextractRequest }
-  | { kind: 'retry'; taskId: string; body: { request_id: string } }
+type Submission = { kind: 'reextract'; body: StoryboardReextractRequest }
 const activeTask = (task?: StoryboardTaskSummary) => task?.status === 'queued' || task?.status === 'running'
 
 function pendingSubmission(key: string): Submission | undefined {
   try {
     const value = JSON.parse(localStorage.getItem(key) || 'null') as Submission | null
-    return value?.body.request_id && (value.kind === 'create' || value.kind === 'reextract' || value.kind === 'retry' && value.taskId)
+    return value?.body.request_id && value.kind === 'reextract'
       ? value : undefined
   } catch { return undefined }
 }
@@ -28,16 +27,16 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 只有当前打开的等待容器可以继续原流程，恢复或离页完成均由用户主动查看。 */
-export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, target, selectedTaskId, navigationKey, onResult }: {
-  scope: Scope; editable: boolean; nameForNewCanvas?: () => string;
+export function SceneStoryboardPreparation({ scope, editable, target, selectedTaskId, navigationKey, onResult }: {
+  scope: Scope; editable: boolean
   selectedTaskId?: string | null; navigationKey: string;
   onResult: (result: StoryboardTaskRead, follow: boolean) => void;
-  target?: { id: string; appliedTaskId?: string; sourceChanged: boolean; sourceReady: boolean; productionModelId?: string; pendingModality?: StoryboardReextractRequest['pending_modality']; confirmSource: () => void };
+  target: { id: string; appliedTaskId?: string; sourceChanged: boolean; sourceReady: boolean; productionModelId?: string; pendingModality?: StoryboardReextractRequest['pending_modality']; confirmSource: () => void };
 }) {
-  const action = target ? '重新提取' : '生成分镜'
+  const action = '重新提取'
   const { projectId, chapterId, sequenceId } = scope
-  const targetId = target?.id
-  const key = 'jellyfish:storyboard-submission:' + JSON.stringify([projectId, chapterId, sequenceId, targetId ?? null])
+  const targetId = target.id
+  const key = 'jellyfish:storyboard-submission:' + JSON.stringify([projectId, chapterId, sequenceId, targetId])
   const [pending, setPending] = useState(() => pendingSubmission(key))
   const [draft, setDraft] = useState<StoryboardReextractRequest>()
   const [waiting, setWaiting] = useState(false)
@@ -45,7 +44,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
   const [reportedTask, setTask] = useState<StoryboardTaskSummary>()
-  const task = reportedTask && reportedTask.task_id === target?.appliedTaskId
+  const task = reportedTask && reportedTask.task_id === target.appliedTaskId
     ? { ...reportedTask, candidate_available: false } : reportedTask
   const [models, setModels] = useState<ModelRead[]>([])
   const [modelError, setModelError] = useState('')
@@ -76,7 +75,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
     void request.then(response => {
       if (!active || version !== load.current) return
       const row = Array.isArray(response.data) ? response.data[0] : response.data
-      if (row && targetId && row.canvas_id !== targetId) throw new Error('此分镜任务不属于当前画布')
+      if (row && row.canvas_id !== targetId) throw new Error('此分镜任务不属于当前画布')
       setTask(row ?? undefined)
     }).catch(cause => { if (active && version === load.current) setError(directingError(cause)) })
     return () => { active = false; request.cancel() }
@@ -101,7 +100,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
     if (!flow || flow.taskId !== result.task_id || !isLive(flow) || activeTask(result)) return
     if (document.visibilityState !== 'visible') { wait.current = undefined; return }
     close()
-    if (result.status === 'succeeded' && result.candidate && (targetId || !result.pending_application)) {
+    if (result.status === 'succeeded' && result.candidate) {
       resultHandler.current(result, true)
     }
   }
@@ -129,13 +128,9 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
 
   const start = () => {
     if (polling) { setWaiting(true); return }
-    if (pending) {
-      if (pending.kind === 'retry') void submit(pending)
-      else setDraft(pending.body)
-      return
-    }
-    setDraft({ request_id: crypto.randomUUID(), name: nameForNewCanvas?.(), mode: 'complete',
-      production_model_id: target?.productionModelId, pending_modality: target?.pendingModality })
+    if (pending) { setDraft(pending.body); return }
+    setDraft({ request_id: crypto.randomUUID(), mode: 'complete',
+      production_model_id: target.productionModelId, pending_modality: target.pendingModality })
     setError('')
   }
   const submit = async (submission: Submission, follow = false) => {
@@ -159,11 +154,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
       if (mounted.current) setPending(pendingSubmission(key))
     }
     try {
-      const response = submission.kind === 'retry'
-        ? await Directing.directingStoryboardRetry({ ...scope, taskId: submission.taskId, requestBody: submission.body })
-        : submission.kind === 'reextract' && targetId
-        ? await Directing.directingStoryboardReextract({ ...scope, canvasId: targetId, requestBody: submission.body })
-        : await Directing.directingStoryboardSubmit({ ...scope, requestBody: submission.body })
+      const response = await Directing.directingStoryboardReextract({ ...scope, canvasId: targetId, requestBody: submission.body })
       if (!response.data) throw new Error('分镜提交结果待核实')
       clear()
       if (!captured || !isLive(captured)) return
@@ -189,7 +180,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
       const response = await Directing.directingStoryboardGet({ ...scope, taskId })
       if (!captured || !isLive(captured) || !response.data) return
       setTask(response.data)
-      if (response.data.candidate || !targetId) {
+      if (response.data.candidate) {
         close()
         resultHandler.current(response.data, false)
       }
@@ -197,18 +188,14 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
       if (captured && isLive(captured)) setError(directingError(cause))
     } finally { if (captured && isLive(captured)) setChecking(false) }
   }
-  const retry = () => {
-    if (taskId) void submit({ kind: 'retry', taskId, body: { request_id: crypto.randomUUID() } })
-  }
   const failed = task?.status === 'failed' || task?.status === 'cancelled'
   return <>
     <Space wrap>
       <Button variant="primary" onClick={start} disabled={!editable}>{action}</Button>
       {!open && task && <span role="status">{taskLabel(task)}</span>}
       {!open && pending && <Button loading={submitting} disabled={!editable} onClick={() => void submit(pending)}>核实提交</Button>}
-      {!open && !pending && failed && <Button disabled={!editable || submitting} onClick={retry}>重试分镜</Button>}
-      {!open && task?.status === 'succeeded' && (task.candidate_available || !targetId) &&
-        <Button loading={checking} onClick={() => void viewResult()}>{task.candidate_available ? '查看分镜结果' : '打开分镜画布'}</Button>}
+      {!open && task?.status === 'succeeded' && task.candidate_available &&
+        <Button loading={checking} onClick={() => void viewResult()}>查看分镜结果</Button>}
     </Space>
     {!open && pending && !submitting && <Alert type="warning" message="分镜提交结果待核实，将使用原请求身份。" />}
     {!open && error && <Alert type="warning" showIcon message={error} />}
@@ -221,7 +208,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
         : <WorkbenchDialogActions secondary={<Button variant="quiet" onClick={close}>取消</Button>}>
           <Button variant="primary" loading={submitting} onClick={() => {
             if (pending) void submit(pending)
-            else if (draft) void submit({ kind: targetId ? 'reextract' : 'create', body: draft }, true)
+            else if (draft) void submit({ kind: 'reextract', body: draft }, true)
           }}>{pending ? '核实提交' : '开始提取'}</Button>
         </WorkbenchDialogActions>}>
       {waiting && task ? <>
@@ -240,14 +227,11 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
         <p>{draft?.mode === 'faithful'
           ? '保留原文明示内容，未写明的设计保持待确定。'
           : '保留原文事实，为适用镜头补充设计建议，仍不确定的内容保留待确定。'}</p>
-        {target ? target.sourceChanged && (target.sourceReady
+        {target.sourceChanged && (target.sourceReady
           ? <Checkbox checked={draft?.adopt_current_source || false} disabled={!!pending}
             onChange={event => setDraft(value => value && { ...value, adopt_current_source: event.target.checked })}>采用章节最新已确认原文</Checkbox>
           : <Alert type="warning" showIcon message="仍可使用画布的固定原文。采用章节新版前，请先确认场次范围。"
-            action={<Button variant="quiet" onClick={target.confirmSource}>在章节确认新范围</Button>} />)
-          : <><label htmlFor="scene-storyboard-name">画布名称</label>
-            <Input id="scene-storyboard-name" maxLength={255} value={draft?.name || ''} disabled={!!pending}
-              onChange={event => setDraft(value => value && { ...value, name: event.target.value })} /></>}
+            action={<Button variant="quiet" onClick={target.confirmSource}>在章节确认新范围</Button>} />)}
         <Select aria-label="生产模型" placeholder="稍后配置生产模型" allowClear value={draft?.production_model_id || undefined}
           style={{ width: '100%' }} disabled={!!pending}
           options={models.filter(model => ['image', 'video'].includes(model.category)).map(model => ({ value: model.id, label: model.name }))}

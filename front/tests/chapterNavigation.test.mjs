@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource } from './directing-fixtures.mjs'
 
-const { chapterAction, sequenceAction, chapterLocation, sequenceLocation, readChapterBrowse, saveChapterBrowse } = await loadSource('chapterNavigation')
+const { legacyChapterManagementLocation, sceneCanvasLocation, sequenceAction, chapterLocation,
+  sequenceLocation, readChapterBrowse, saveChapterBrowse } = await loadSource('chapterNavigation')
 const scene = { id: 's1', source_changed: false, confirmed_design_count: 0, plan_count: 0, take_count: 0, unreviewed_take_count: 0, active_cut_revision_id: null }
 
 test('chapter revision changes do not redirect away from a version with fixed basis; unknown stages are ignored', () => {
@@ -51,12 +52,12 @@ test('chapter browsing stays isolated and tolerates damaged or unavailable stora
   } finally { delete globalThis.sessionStorage }
 })
 
-test('chapter actions distinguish missing source, known counts and unknown data', () => {
-  assert.deepEqual(chapterAction({ rawText: '' }), { label: '填写原文', target: 'edit' })
-  assert.equal(chapterAction({ rawText: '原文', sequenceCount: 0 }).target, 'source')
-  assert.equal(chapterAction({ rawText: '原文', sequenceCount: 2 }).label, '场次管理')
-  assert.equal(chapterAction({ rawText: '原文' }).label, '查看场次')
-  assert.equal(chapterAction({ sequenceCount: 0 }).label, '查看场次')
-  assert.equal(chapterAction({ rawText: '  ', sequenceCount: 2 }).target, 'edit')
-  assert.equal(chapterAction({ rawText: '', sequenceCount: 2 }, true).target, 'manage')
+test('old links preserve explicit scope and task targets when entering management', () => {
+  const target = query => legacyChapterManagementLocation('p1', 'ch1', new URLSearchParams(query))
+  assert.equal(target('panel=source&sequence=s1'), '/projects/p1/chapters/ch1/workbench-management?sequence=s1&step=division')
+  assert.equal(target('sequence=s1&selected=c1&storyboardTask=t1'),
+    '/projects/p1/chapters/ch1/workbench-management?sequence=s1&step=storyboard&canvas=c1&storyboardTask=t1')
+  assert.equal(target('sequence=s1&objectTask=t2'), '/projects/p1/chapters/ch1/workbench-management?sequence=s1&step=objects&objectTask=t2')
+  assert.equal(sceneCanvasLocation('p1', 'ch1', 's1', 'c1', 't1'),
+    '/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=c1&storyboardTask=t1')
 })

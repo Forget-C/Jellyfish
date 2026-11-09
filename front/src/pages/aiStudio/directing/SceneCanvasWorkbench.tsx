@@ -1,50 +1,35 @@
 import { useEffect, useState } from 'react'
-import { Alert, Empty, Input, Space, Spin } from 'antd'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Alert, Space, Spin } from 'antd'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
-import { ApiError, StudioDirectingService } from '../../../services/generated'
-import type { SceneCanvasesRead } from '../../../services/generated'
+import { ApiError, StudioDirectingService, type SceneCanvasesRead } from '../../../services/generated'
 import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
-import { CanvasTextPreview } from './CanvasTextPreview'
-import { SceneObjectPreparation } from './SceneObjectPreparation'
 import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
-import { chapterLocation } from './chapterNavigation'
+import { sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
-import './sceneCanvasWorkbench.css'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 
-function defaultCanvasName(date = new Date()) {
-  const pair = (number: number) => String(number).padStart(2, '0')
-  return `分镜画布-${date.getFullYear()}${pair(date.getMonth() + 1)}${pair(date.getDate())}-${pair(date.getHours())}${pair(date.getMinutes())}${pair(date.getSeconds())}`
-}
-
-/** 通过已验证的场次列表打开共同工作区，两个入口使用同一画布身份。 */
-function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
-  const [query, setQuery] = useSearchParams()
+/** 打开经过场次归属核对的共同画布，返回时带上当前画布和任务。 */
+function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope & { canvasId: string }) {
+  const [query] = useSearchParams()
   const navigate = useNavigate()
-  const navigationKey = useLocation().key
+  const location = useLocation()
   const selectedTaskId = query.get('storyboardTask')
-  const canvasId = query.get('canvas')
-  const selected = query.get('selected')
   const [scene, setScene] = useState<SceneCanvasesRead>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [refresh, setRefresh] = useState(0)
-  const [name, setName] = useState<string>()
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState('')
   useEffect(() => {
     let active = true
     setLoading(true); setLoadError('')
     const request = StudioDirectingService.directingSceneCanvases({ projectId, chapterId, sequenceId })
     void request.then(response => {
       if (!active) return
-      if (!response.data) throw new Error('无法读取场次准备')
+      if (!response.data) throw new Error('无法读取本场画布')
       setScene(response.data)
     }).catch(cause => {
       if (!active) return
@@ -53,111 +38,61 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId }: Scope) {
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, canvasId, refresh])
+  useEffect(() => {
+    const reload = () => setRefresh(value => value + 1)
+    window.addEventListener('focus', reload)
+    return () => window.removeEventListener('focus', reload)
+  }, [])
   const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试读取场次</Button>
-  const openCanvas = (id: string, taskId?: string) => setQuery(taskId ? { canvas: id, storyboardTask: taskId } : { canvas: id })
-  const returnToPreparation = () => {
-    setQuery(canvasId ? { selected: canvasId } : {})
-  }
-  const chapter = () => navigate(chapterLocation(projectId, chapterId, sequenceId))
-  const create = async () => {
-    if (name === undefined || creating) return
-    setCreating(true); setCreateError('')
-    try {
-      const response = await StudioDirectingService.directingSceneCanvasCreate({
-        projectId, chapterId, sequenceId, requestBody: { name },
-      })
-      if (!response.data) throw new Error('创建结果未返回，请刷新画布列表后核实')
-      setName(undefined)
-      openCanvas(response.data.id)
-    } catch (cause) {
-      setCreateError(directingError(cause))
-    } finally { setCreating(false) }
-  }
-  if (canvasId && scene?.canvases.some(canvas => canvas.id === canvasId)) {
+  const management = (step: 'division' | 'storyboard' = 'storyboard') => navigate(workbenchManagementLocation(
+    projectId, chapterId, sequenceId, step, step === 'storyboard' ? { canvas: canvasId, storyboardTask: selectedTaskId } : undefined),
+  { state: location.state })
+  if (scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId}
-      back={{ label: '返回场次准备', onClick: returnToPreparation }}
+      back={{ label: '返回工作台管理', onClick: () => management() }}
       renderSceneActions={({ current, editable, requestLeave }) => {
         if (!current?.document.fixed_source) return null
         const document = current.document
         const basis = document.cards?.find(card => card.id === document.fixed_source?.card_id)
         const model = document.cards?.find(card => document.storyboard?.shots[0]?.model_card_ids.includes(card.id))
         return <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
-          navigationKey={navigationKey} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current} target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
+          navigationKey={location.key} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current}
+          target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
             sourceChanged: !!current.source_changed || !!basis && 'text' in basis && basis.text !== scene.sequence.source_text,
             sourceReady: !!scene.sequence.is_current && !scene.sequence.source_changed,
             productionModelId: model && 'model_id' in model ? model.model_id ?? undefined : undefined,
             pendingModality: model?.type === 'model.video' ? 'video' : 'image',
-            confirmSource: () => void requestLeave().then(allowed => { if (allowed) chapter() }),
+            confirmSource: () => void requestLeave().then(allowed => { if (allowed) management('division') }),
           }} onResult={result => {
-            if (result.canvas_id === current.id) openCanvas(current.id, result.task_id)
+            if (result.canvas_id === current.id) navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, current.id, result.task_id),
+              { replace: true, state: location.state })
           }} />
       }} />
   }
-
   return <WorkbenchTheme>
-    <WorkspaceLayout className="workbench-ui scene-canvas-preparation" aria-label="场次准备">
-      <PageToolbar title={scene?.sequence.title || '场次准备'}>
-        <Space wrap>
-          <Button variant="quiet" onClick={chapter}>返回章节</Button>
-          <TaskCenter workbench />
-          {canvasId && <Button onClick={returnToPreparation}>返回场次准备</Button>}
-        </Space>
+    <WorkspaceLayout className="workbench-ui" aria-label="工作台画布">
+      <PageToolbar title="工作台画布">
+        <Space wrap><Button onClick={() => management()}>返回工作台管理</Button><TaskCenter workbench /></Space>
       </PageToolbar>
       <WorkspaceScrollPanel>
-        <div className="scene-canvas-preparation-content">
-          {loadError && <Alert type="error" showIcon message={loadError} action={retry} />}
-          {loading && (!scene || canvasId) ? <Spin aria-label="正在读取场次准备" /> : canvasId
-            ? !loadError && <Alert type="error" showIcon message="此画布不属于当前场次或已不可用" />
-            : scene && <>
-              <section aria-labelledby="scene-canvas-source-title">
-                <h2 id="scene-canvas-source-title">场次原文</h2>
-                {scene.sequence.source_changed && <Alert type="warning" showIcon message="章节原文已变化，场次仍保留已确认的摘录。" />}
-                <CanvasTextPreview label="场次原文" text={scene.sequence.source_text} lines={4} />
-              </section>
-              <SceneObjectPreparation {...{ projectId, chapterId, sequenceId }}
-                editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()} />
-              <section aria-labelledby="scene-canvas-list-title">
-                <div className="scene-canvas-list-header">
-                  <h2 id="scene-canvas-list-title">本场画布</h2>
-                  <Space wrap>
-                    <Button disabled={!scene.sequence.is_current || !scene.sequence.source_text.trim()}
-                      onClick={() => { setCreateError(''); setName(defaultCanvasName()) }}>新建空白画布</Button>
-                    <SceneStoryboardPreparation scope={{ projectId, chapterId, sequenceId }} nameForNewCanvas={defaultCanvasName}
-                      navigationKey={navigationKey} selectedTaskId={selectedTaskId}
-                      editable={!!scene.sequence.is_current && !!scene.sequence.source_text.trim()}
-                      onResult={result => openCanvas(result.canvas_id, result.task_id)} />
-                  </Space>
-                </div>
-                {scene.canvases.length ? <ul className="scene-canvas-list">
-                  {scene.canvases.map(canvas => <li key={canvas.id} className={selected === canvas.id ? 'scene-canvas-selected' : undefined}>
-                    <Button variant="quiet" onClick={() => openCanvas(canvas.id)}>{canvas.name}</Button>
-                    {selected === canvas.id && <small>上次打开</small>}
-                    {canvas.source_changed && <small>原文已变化</small>}
-                  </li>)}
-                </ul> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本场尚无画布" />}
-              </section>
-            </>}
-        </div>
+        {loadError ? <Alert type="error" showIcon message={loadError} action={retry} /> : loading
+          ? <Spin aria-label="正在读取本场画布" />
+          : <Alert type="error" showIcon message="此画布不属于当前场次或已不可用" />}
       </WorkspaceScrollPanel>
-      <WorkbenchModal title="新建空白画布" open={name !== undefined} width={480}
-        closable={!creating} keyboard={!creating} maskClosable={!creating} onCancel={() => { if (!creating) setName(undefined) }}
-        footer={<WorkbenchDialogActions secondary={<Button variant="quiet" disabled={creating} onClick={() => setName(undefined)}>取消</Button>}>
-          <Button variant="primary" loading={creating} onClick={() => void create()}>创建画布</Button>
-        </WorkbenchDialogActions>}>
-        {createError && <Alert type="error" showIcon message={createError} />}
-        <label htmlFor="scene-canvas-create-name">画布名称</label>
-        <Input id="scene-canvas-create-name" value={name ?? ''} maxLength={255} disabled={creating}
-          onChange={event => setName(event.target.value)} onPressEnter={() => void create()} />
-      </WorkbenchModal>
     </WorkspaceLayout>
   </WorkbenchTheme>
 }
 
 export function SceneCanvasWorkbench() {
   const { projectId, chapterId, sequenceId } = useParams()
-  return projectId && chapterId && sequenceId
-    ? <SceneCanvasHost key={JSON.stringify([projectId, chapterId, sequenceId])} {...{ projectId, chapterId, sequenceId }} />
-    : null
+  const [query] = useSearchParams()
+  const { state } = useLocation()
+  if (!projectId || !chapterId || !sequenceId) return null
+  const canvasId = query.get('canvas')
+  if (canvasId === null) return <Navigate replace state={state}
+    to={workbenchManagementLocation(projectId, chapterId, sequenceId, query.has('objectTask') ? 'objects' : 'storyboard',
+      { canvas: query.get('selected'), storyboardTask: query.get('storyboardTask'), objectTask: query.get('objectTask') })} />
+  return <SceneCanvasHost key={JSON.stringify([projectId, chapterId, sequenceId, canvasId])} {...{ projectId, chapterId, sequenceId, canvasId }} />
 }

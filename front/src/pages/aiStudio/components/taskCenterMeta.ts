@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type NavigateFunction } from 'react-router-dom'
 import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
-import { scenePreparationLocation, workbenchManagementLocation } from '../directing/chapterNavigation'
+import { workbenchManagementLocation } from '../directing/chapterNavigation'
 import { generationCanvasLocation } from '../generationCanvas/navigation'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { TaskUiItem } from './taskUiStore'
@@ -16,12 +16,12 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   if (!source) return {}
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
-  if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
+  if (kind === 'chapter' && projectId) navigateTo = workbenchManagementLocation(projectId, id, undefined, 'division')
   else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_object_extract') {
-    navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'objects') + '&' + new URLSearchParams({ objectTask: task.taskId })
+    navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'objects', { objectTask: task.taskId })
   }
   else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_storyboard') {
-    navigateTo = scenePreparationLocation(projectId, chapterId, id) + '?' + new URLSearchParams({ storyboardTask: task.taskId })
+    navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'storyboard', { storyboardTask: task.taskId })
   }
   else if (kind === 'sequence' && projectId && chapterId) {
     const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'
@@ -100,7 +100,7 @@ async function resolveTaskMeta(task: TaskUiItem): Promise<ResolvedTaskMeta | nul
     if (!chapter) return null
     return {
       sourceLabel: chapter.title ? `章节：${chapter.title}` : `章节：${relationEntityId}`,
-      navigateTo: `/projects/${chapter.project_id}/chapters/${chapter.id}/sequences`,
+      navigateTo: workbenchManagementLocation(chapter.project_id, chapter.id, undefined, 'division'),
     }
   }
 

@@ -50,7 +50,8 @@ try {
   const delivery = await request(`${versions}/${first.id}/deliveries`, 'POST', { request_id: 'legacy-delivery', expected_revision: saved.revision })
   const task = await request(`${versions}/${first.id}/exports`, 'POST', { request_id: 'legacy-export', expected_revision: saved.revision, size: 720 })
   const second = await request(versions, 'POST', { request_id: 'legacy-version-b', title: '旧版方案乙' })
-  const chapterPage = `${origin}/projects/${project}?tab=chapters&chapter=${chapter}`
+  const chapters = `${origin}/projects/${project}?tab=chapters`
+  const chapterPage = chapters + '&chapter=' + chapter
   const managementPath = `/projects/${project}/chapters/${chapter}/workbench-management`
   const old = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}`
   const prep = old + '/canvas-workbench'
@@ -65,26 +66,29 @@ try {
   page.setDefaultTimeout(15000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const legacy = page.getByRole('region', { name: '场次画布工作台', exact: true })
-  const newHost = page.getByRole('region', { name: '场次准备', exact: true })
+  const newHost = page.getByRole('region', { name: '工作台管理', exact: true })
   const versionReads = []
   page.on('request', request => {
     if (request.url().includes(`/directing/sequences/${sequence.id}/versions`)) versionReads.push(request.url())
   })
 
-  await page.goto(chapterPage)
-  const openPreparation = page.getByRole('button', { name: '打开场次工作台', exact: true })
-  await openPreparation.waitFor()
+  await page.goto(chapters)
+  const openManagement = page.getByRole('button', { name: '工作台管理', exact: true })
+  await openManagement.waitFor()
   assert.equal(await page.getByRole('button', { name: '章节组合', exact: true }).count(), 0)
-  await openPreparation.click()
-  await page.waitForURL(prep)
+  await openManagement.click()
+  await page.waitForURL(url => url.pathname === managementPath)
+  await page.goto(prep)
+  await page.waitForURL(url => url.pathname === managementPath && url.searchParams.get('sequence') === sequence.id)
   await newHost.getByRole('heading', { name: '本场画布', exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
   await page.goto(`${prep}?version=${first.id}&canvas=edit`)
-  await newHost.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
+  await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
 
   await page.goto(chapterPage)
-  await page.getByRole('button', { name: '旧版审片与剪辑', exact: true }).click()
+  await newHost.getByRole('button', { name: '场次更多操作' }).click()
+  await page.getByRole('link', { name: '旧版审片与剪辑', exact: true }).click()
   await page.waitForURL(old + '?canvas=edit')
   await legacy.getByRole('button', { name: '打开剪辑工作区', exact: true }).waitFor()
   await page.goto(`${old}?canvas=edit&version=${first.id}`)
@@ -119,9 +123,9 @@ try {
   }
 
   await page.goto(prep)
-  await newHost.getByRole('button', { name: '任务中心', exact: true }).click()
+  await page.getByRole('button', { name: '任务中心', exact: true }).click()
   const active = page.locator('.app-task-card').filter({ hasText: '导出整场视频' })
-  await active.getByRole('button', { name: '查看', exact: true }).click()
+  await active.getByRole('button', { name: /查\s*看/ }).click()
   await page.waitForURL(url => url.pathname === new URL(old).pathname && url.searchParams.get('exportTask') === task.task_id)
   const query = new URL(page.url()).searchParams
   assert.equal(query.get('version'), first.id)

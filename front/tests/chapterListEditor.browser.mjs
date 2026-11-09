@@ -19,7 +19,7 @@ const taskResults = { check: { has_issues: false, issues: [], summary: "无混�
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
 try {
-  await server.listen(); browser = await chromium.launch({ headless: true })
+  await server.listen(); browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } }); page.setDefaultTimeout(10000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   page.on('pageerror', error => errors.push(error.message))
@@ -43,6 +43,15 @@ try {
       if (url.searchParams.get('is_desc') === 'true') matching = [...matching].reverse()
       return respond({ items: matching.slice((pageNumber - 1) * size, pageNumber * size), pagination: { page: pageNumber, page_size: size, total: matching.length, max_page: Math.ceil(matching.length / size) } })
     }
+    const management = path.match(/\/projects\/p1\/directing\/chapters\/([^/]+)\/workbench-management$/)
+    if (management?.[1] === 'foreign') return route.fulfill({ status: 404, json: { detail: '章节不属于当前项目' } })
+    if (management) return respond({
+      chapter_id: management[1], title: chapters.find(ch => ch.id === management[1]).title,
+      source_version: 'v1', has_source: true, historical_sequences: [],
+      sequences: management[1] === 'ch1' ? [1, 2].map(i => ({
+        id: `s${i}`, position: i - 1, title: `场次 ${i}`, source_excerpt: '她推开门。', source_changed: sourceChanged,
+      })) : [],
+    })
     const overview = path.match(/\/directing\/chapters\/(ch\d+)\/overview$/)
     if (overview) return respond({ chapter_id: overview[1], title: chapters.find(ch => ch.id === overview[1]).title, source_version: 'v1', sequences: overview[1] === 'ch1' ? [1, 2].map(i => ({ id: `s${i}`, position: i - 1, title: `场次 ${i}`, source_excerpt: '她推开门。', source_changed: sourceChanged, design_count: 0, confirmed_design_count: 0, plan_count: 0, confirmed_plan_count: 0, take_count: 0, unreviewed_take_count: 0, active_cut_revision_id: null })) : [] })
     const chapterRead = path.match(/\/studio\/chapters\/([^/]+)$/)
@@ -66,13 +75,13 @@ try {
   const editor = page.locator('.chapter-editor-modal:visible')
   const save = () => editor.getByRole('button', { name: /^保\s*存$/ }).click()
   await page.goto(base)
-  await page.getByRole('button', { name: '章节 1 · 2 场', exact: true }).waitFor()
+  await page.getByRole('cell', { name: '2 场', exact: true }).waitFor()
   assert.deepEqual(await page.getByRole('columnheader').allTextContents(), ['章节名称', '原文预览', '原文字数', '场次数量', '操作'])
   assert.equal(requests.some(row => /overview|assembly|sequences/.test(row.path)), false)
   const row = title => page.locator('.ant-table-row').filter({ has: page.getByRole('button', { name: title, exact: true }) })
-  await row('1. 章节 1 · 编辑章节').getByRole('button', { name: '场次管理', exact: true }).waitFor()
-  await row('2. 章节 2 · 编辑章节').getByRole('button', { name: '划分场次', exact: true }).waitFor()
-  await row('3. 章节 3 · 编辑章节').getByRole('button', { name: '填写原文', exact: true }).waitFor()
+  await row('1. 章节 1 · 编辑章节').getByRole('button', { name: '工作台管理', exact: true }).waitFor()
+  await row('2. 章节 2 · 编辑章节').getByRole('button', { name: '工作台管理', exact: true }).waitFor()
+  await row('3. 章节 3 · 编辑章节').getByRole('button', { name: '工作台管理', exact: true }).waitFor()
   assert.equal(await page.locator('.ant-drawer-open').count(), 0)
   await page.getByRole('button', { name: '10. 章节 10 · 编辑章节', exact: true }).scrollIntoViewIfNeeded()
   const tableTop = await page.locator('.app-workspace-scroll').evaluate(element => element.scrollTop)
@@ -83,8 +92,9 @@ try {
   await page.waitForFunction(top => Math.abs(document.querySelector('.app-workspace-scroll').scrollTop - top) < 2, tableTop)
   await page.locator('.ant-pagination-item-11').click()
   await page.getByRole('button', { name: '105. 章节 105 · 编辑章节', exact: true }).waitFor()
-  await page.getByRole('button', { name: '章节 105 · 查看场次', exact: true }).waitFor()
-  assert.equal(await page.getByRole('button', { name: '章节 105 · 0 场', exact: true }).count(), 0)
+  const unknownCount = row('105. 章节 105 · 编辑章节')
+  await unknownCount.getByRole('cell', { name: '—', exact: true }).waitFor()
+  assert.equal(await unknownCount.getByRole('cell', { name: '0 场', exact: true }).count(), 0)
   await page.reload()
   await page.getByRole('button', { name: '105. 章节 105 · 编辑章节', exact: true }).waitFor()
   await page.getByRole('textbox', { name: '搜索章节', exact: true }).fill('章节 104')
@@ -160,10 +170,11 @@ try {
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门。新的一天！' })
   // A patch response without sequence_count must not overwrite the reliable count with zero.
   await page.getByRole('textbox', { name: '搜索章节', exact: true }).fill('')
-  await page.getByRole('button', { name: '第一章重命名 · 2 场', exact: true }).click()
-  await page.getByText('原文已变化', { exact: true }).first().waitFor()
-  assert.equal(await page.locator('.ant-drawer-open').count(), 1)
-  await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
+  const firstChapter = row('1. 第一章重命名 · 编辑章节')
+  await firstChapter.getByRole('cell', { name: '2 场', exact: true }).waitFor()
+  await firstChapter.getByRole('button', { name: '工作台管理', exact: true }).click()
+  await page.getByText('章节原文已变化，仍使用本场已确认摘录。', { exact: true }).waitFor()
+  await page.getByRole('link', { name: '返回章节', exact: true }).click()
   await page.getByRole('button', { name: '2. 章节 2 · 编辑章节', exact: true }).click()
   await editor.getByRole('textbox', { name: '章节原文', exact: true }).fill('零场章节的新原文')
   await save()
@@ -221,8 +232,8 @@ try {
   assert.equal(await editor.getByRole('button', { name: /^保\s*存$/ }).isDisabled(), true)
   await editor.getByRole('button', { name: /^关\s*闭$/ }).click()
   await page.goto(`${base}&chapter=foreign`)
-  await page.locator('.ant-drawer-open').getByText('章节不存在或不属于当前项目', { exact: true }).waitFor()
-  assert.equal(new URL(page.url()).searchParams.get('chapter'), 'foreign')
+  await page.getByText('章节不属于当前项目', { exact: true }).waitFor()
+  assert.match(new URL(page.url()).pathname, /\/chapters\/foreign\/workbench-management$/)
   assert.deepEqual(errors, [])
   console.log(`Chapter list/editor passed: pagination, lazy reads, save paths, failure recovery, count integrity, keyboard and four sizes. Evidence: ${evidence}`)
 } catch (error) { await page?.screenshot({ path: join(evidence, 'failure.png'), fullPage: true }); console.error('Evidence:', evidence); console.error(await page?.locator('body').innerText()); console.error(errors); throw error }

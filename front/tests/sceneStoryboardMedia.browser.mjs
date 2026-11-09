@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { closeCanvasDetails, closePrecheck, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, closePrecheck, openCanvasCard, openReadyStoryboard } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -51,11 +50,9 @@ try {
     return fetch(base).then(response => response.ok, () => false)
   }, Boolean, 'isolated backend did not start')
   await request(studio + '/chapters', 'POST', { id: chapter, project_id: project, index: 0, title: '候车', raw_text: text })
-  const scenes = `${studio}/projects/${project}/directing/chapters/${chapter}/sequences`
-  const sequence = await request(scenes, 'POST', { title: '两人等候', position: 0,
-    source_version: createHash('sha256').update(text).digest('hex'), span: { start: 0, end: Array.from(text).length } })
+  const chapterApi = `${studio}/projects/${project}/directing/chapters/${chapter}`
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: {
-    host: '127.0.0.1', port: 4328, strictPort: true, proxy: { '/api': api },
+    host: '127.0.0.1', port: 4328, strictPort: true, hmr: false, proxy: { '/api': api },
   } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -63,21 +60,41 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(16000)
   const projectUrl = `http://127.0.0.1:4328/projects/${project}`
-  const prep = `${projectUrl}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
-  const openScene = async () => {
-    await page.goto(`${projectUrl}?tab=chapters&chapter=${chapter}`)
-    await page.getByRole('button', { name: '打开场次工作台', exact: true }).click()
-    await page.waitForURL(prep)
-  }
-  await openScene()
+  const chapters = projectUrl + '?tab=chapters'
+  await page.goto(chapters)
+  await page.getByRole('textbox', { name: '搜索章节' }).fill('候车')
+  await page.getByRole('button', { name: '工作台管理', exact: true }).press('Enter')
+  await page.getByRole('region', { name: '完整章节原文' }).waitFor()
+  await page.getByRole('button', { name: '新增场次', exact: true }).click()
+  await page.getByRole('textbox', { name: '场次标题' }).fill('两人等候')
+  await page.getByRole('button', { name: '键盘/触屏选区', exact: true }).click()
+  await page.getByRole('textbox', { name: '键盘或触屏选择原文' }).evaluate((element, end) => {
+    element.focus(); element.setSelectionRange(0, end); document.dispatchEvent(new Event('selectionchange'))
+  }, text.length)
+  await page.locator(`[aria-label="选中原文"][data-start="0"][data-end="${text.length}"]`).waitFor()
+  await page.getByRole('button', { name: '保存新版本', exact: true }).click()
+  await page.getByRole('button', { name: '保存本章划分', exact: true }).click()
+  await page.getByRole('dialog', { name: '划分变更预览' }).waitFor({ state: 'hidden' })
+  const { sequences: [sequence] } = await request(chapterApi)
+  const sceneApi = `${chapterApi}/sequences/${sequence.id}`
+  assert.equal(sequence.source_text, text)
+  const management = `${projectUrl}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
+  await page.getByRole('button', { name: '对象与参考〔本场〕', exact: true }).click()
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
   const prepared = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
   await prepared.getByRole('combobox', { name: '关联资产' }).click()
   await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await prepared.getByRole('combobox', { name: '选择参考图' }).click()
+  await prepared.getByRole('button', { name: '对象更多操作' }).click()
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'),
+    page.getByRole('menuitem', { name: '上传参考图', exact: true }).click()])
+  await chooser.setFiles({ name: '前门备用参考.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=', 'base64') })
+  await prepared.getByText('已选参考图', { exact: true }).waitFor()
+  await prepared.getByRole('button', { name: '选择参考图' }).click()
   await page.getByText('参考图 1', { exact: true }).click()
   await prepared.getByText('已选参考图', { exact: true }).waitFor()
+  await poll(() => request(sceneApi + '/objects'), result => result.objects[0].image_file_id === 'object-browser-image', 'reference selection did not save')
 
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
   const confirm = preview.getByRole('button', { name: '确认执行', exact: true })
@@ -87,16 +104,46 @@ try {
     ['image', '分镜测试图片模型', 'img', '/images/generations'],
     ['video', 'viduq2', 'video', '/text2video'],
   ]) {
-    await openScene()
-    await page.getByRole('button', { name: '生成分镜', exact: true }).click()
-    const config = page.getByRole('dialog', { name: '生成分镜', exact: true })
+    await page.goto(management)
+    await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
+    const config = page.getByRole('region', { name: '生成新分镜画布配置', exact: true })
     await config.getByText('忠实提取', { exact: true }).click()
     if (modality === 'video') await config.getByRole('radio', { name: '视频模型卡', exact: true }).check()
+    const defaultName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
+    assert.match(defaultName, /^分镜画布-\d{8}-\d{6}$/)
     await config.getByRole('button', { name: '开始提取', exact: true }).click()
-    await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+    const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: defaultName, exact: true }) })
+    await card.getByText('分镜已就绪', { exact: true }).waitFor()
+    assert.equal(page.url(), management)
+    if (modality === 'image') {
+      await page.getByRole('button', { name: '任务中心', exact: true }).click()
+      await page.getByRole('button', { name: /^历\s*史$/ }).click()
+      const taskRow = page.getByRole('row').filter({ hasText: '忠实提取分镜' })
+      await taskRow.getByRole('button', { name: /查\s*看/ }).click()
+      const task = page.getByRole('dialog', { name: '分镜任务详情', exact: true })
+      await task.getByText(defaultName, { exact: true }).waitFor()
+      await task.getByRole('button', { name: '打开此任务画布', exact: true }).click()
+    } else await openReadyStoryboard(page, defaultName)
+    await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
     const canvas = base + '/' + new URL(page.url()).searchParams.get('canvas')
     const state = await poll(() => request(canvas), data => data.document.storyboard, 'storyboard was not saved')
     const { shots, objects } = state.document.storyboard
+    if (modality === 'image') {
+      const edited = '阿同继续拿着信封。'
+      await openCanvasCard(page, shots[0].card_id)
+      await page.getByRole('textbox', { name: '可见结果内容', exact: true }).fill(edited)
+      await closeCanvasDetails(page)
+      const noteSaved = row => row.document.cards.find(item => item.id === shots[0].card_id)?.visible_result?.text === edited
+      await poll(() => request(canvas), noteSaved, 'edited storyboard did not auto-save')
+      const opened = new URL(page.url())
+      await page.getByRole('button', { name: '返回工作台管理', exact: true }).click()
+      await card.getByText('当前定位', { exact: true }).waitFor()
+      assert.equal(new URL(page.url()).searchParams.get('canvas'), opened.searchParams.get('canvas'))
+      assert.equal(new URL(page.url()).searchParams.get('storyboardTask'), opened.searchParams.get('storyboardTask'))
+      await card.getByRole('button', { name: '打开画布', exact: true }).press('Enter')
+      await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
+      assert.ok(noteSaved(await request(canvas)))
+    }
     const assign = async cardId => {
       const pending = state.document.cards.find(card => card.id === cardId)
       assert.equal(pending.type, 'model.' + modality)
@@ -202,10 +249,16 @@ try {
       assert.equal((await request(controls)).media_calls.length, callCount)
     }
   }
+  await page.getByRole('button', { name: '返回工作台管理', exact: true }).click()
+  await page.getByRole('link', { name: '返回章节', exact: true }).click()
+  await page.waitForURL(chapters)
+  assert.equal(await page.getByRole('textbox', { name: '搜索章节' }).inputValue(), '候车')
+  await page.getByRole('button', { name: '工作台管理', exact: true }).and(page.locator(':focus')).waitFor()
   console.log('scene storyboard media browser passed', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   throw error
 } finally {
+  if (backend.exitCode === null) await request(controls, 'POST', { disconnect: true }).catch(() => {})
   await cleanup()
 }

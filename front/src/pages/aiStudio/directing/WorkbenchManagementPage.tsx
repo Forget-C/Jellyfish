@@ -114,6 +114,9 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
             if (id) query.set('sequence', id)
             else query.delete('sequence')
             query.set('step', 'division')
+            query.delete('canvas')
+            query.delete('storyboardTask')
+            query.delete('objectTask')
             navigate({ search: query.toString() }, { replace: true, state: { directingContextSync: true } })
           }
         }
@@ -136,11 +139,15 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     setParams(previous => {
       const next = new URLSearchParams(previous)
       if (next.get('sequence') !== sequenceId || nextStep !== 'objects') next.delete('objectTask')
+      if (next.get('sequence') !== sequenceId || nextStep !== 'storyboard') {
+        next.delete('canvas')
+        next.delete('storyboardTask')
+      }
       if (sequenceId) next.set('sequence', sequenceId)
       else next.delete('sequence')
       next.set('step', nextStep)
       return next
-    })
+    }, { state })
   }
   const closeDrawer = () => {
     setDrawerOpen(false)
@@ -164,7 +171,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
     <PageToolbar title="工作台管理">
       {overview && <span className="management-chapter-name">{overview.title}</span>}
-      <div className="app-page-actions"><Link to={chapterLocation(projectId, chapterId)}>返回章节</Link></div>
+      <div className="app-page-actions"><Link to={chapterLocation(projectId)} state={{ chapterReturn: chapterId }}>返回章节</Link></div>
     </PageToolbar>
     {state?.chapterCompositionRetired === true && <Alert type="info" showIcon
       message="章节组合已停用，可在工作台管理中继续准备场次。" />}
@@ -224,6 +231,13 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                     }, { replace: true }) }} />}
                 {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id}
                   canCreate={!historical && !!selected.source_excerpt.trim()} actionHost={storyboardActions}
+                  targetCanvas={params.get('canvas')} targetTask={params.get('storyboardTask')}
+                  onCloseTask={canvasId => setParams(previous => {
+                    const next = new URLSearchParams(previous)
+                    next.delete('storyboardTask')
+                    if (canvasId) next.set('canvas', canvasId)
+                    return next
+                  }, { replace: true, state }) }
                   onChange={() => setRevision(value => value + 1)} />}
               </section>}
               {step === 'division' && <WorkbenchDivisionStep {...{ projectId, chapterId }}
@@ -238,7 +252,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       </div>
       {!desktop && <Drawer title="本章场次" placement="left" width="min(320px, 100vw)" open={drawerOpen}
         onClose={closeDrawer}>{list}</Drawer>}
-      {editingMetadata && selected && !historical && <SequenceDetails key={selected.id} compact
+      {editingMetadata && selected && !historical && <SequenceDetails key={selected.id}
         {...{ projectId, chapterId }} sequenceId={selected.id} onClose={() => setEditingMetadata(false)}
         onSaved={() => {
           setEditingMetadata(false)

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Select } from 'antd'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { DownOutlined, PictureOutlined } from '@ant-design/icons'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasRead } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
+import { workbenchManagementLocation } from '../directing/chapterNavigation'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { GenerationCanvasWorkspace } from './GenerationCanvasWorkspace'
 import { CanvasDeletionDialog } from './CanvasDeletionDialog'
@@ -14,12 +15,14 @@ import { CanvasDeletionDialog } from './CanvasDeletionDialog'
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
+  const { state } = useLocation()
   const canvasId = search.get('canvas')
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const [error, setError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string>()
   const listRead = useRef(0)
   const deleting = !!deleteTarget && deleteTarget === canvasId
+  const scene = canvases.find(canvas => canvas.id === canvasId)?.scene
 
   const fail = (reason: unknown) => {
     const detail = reason instanceof ApiError ? reason.body?.data : undefined
@@ -71,7 +74,9 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     }
   }
   return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId} storyboardTaskId={search.get('storyboardTask')}
-    back={{ label: '返回项目', onClick: () => navigate(`/projects/${encodeURIComponent(projectId)}`) }}
+    back={canvasId && scene ? { label: '返回工作台管理', onClick: () => navigate(workbenchManagementLocation(
+      projectId, scene.chapter_id, scene.sequence_id, 'storyboard', { canvas: canvasId, storyboardTask: search.get('storyboardTask') }), { state }) }
+      : { label: '返回项目', onClick: () => navigate(`/projects/${encodeURIComponent(projectId)}`) }}
     onCanvasRead={rememberCanvas}
     hostError={error}
     targetRun={search.get('run')} targetNode={search.get('node')}

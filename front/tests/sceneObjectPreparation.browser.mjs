@@ -53,7 +53,6 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(12000)
-  const prep = `http://127.0.0.1:4258/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
   const management = `http://127.0.0.1:4258/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=objects`
   await page.goto(management)
   await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).waitFor()
@@ -135,8 +134,7 @@ try {
   await page.screenshot({ path: join(output, 'objects-mobile.png'), animations: 'disabled' })
   await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('step') === 'storyboard')
-  await page.goto(prep)
-  await page.getByRole('button', { name: '已有方案', exact: true }).click()
+  await page.getByRole('list', { name: '本场画布', exact: true }).getByRole('button', { name: '打开画布', exact: true }).click()
   await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
   await page.goto(management)
   await page.getByRole('button', { name: '重新提取对象', exact: true }).click()
