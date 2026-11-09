@@ -103,9 +103,10 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
     }
     fields(card)
     if ('frame_target' in card && card.frame_target) {
-      const source = document.cards?.find(item => item.id === card.frame_target!.card_id)
-      const states = source?.type === 'direction.movement' && 'phases' in source ? ['field:movement_start', 'field:end_frame', ...(source.phases || []).map(phase => 'phase:' + phase.id)] : []
-      if (states.includes(card.frame_target.state_id || '')) add({ canvas_id: document.id, card_id: card.frame_target.card_id, port_id: 'text', position: 0 }, card, 'text')
+      const source = { canvas_id: document.id, card_id: card.frame_target.card_id, port_id: 'text', position: 0 }
+      const movement = document.cards?.find(item => item.id === source.card_id)
+      // 阶段删除只会使定位失效，仍有合法运镜来源时保留定位供用户修复。
+      if (movement?.type === 'direction.movement' && rules.connectionPolicy(document, endpoint(source, card, 'text'))) add(source, card, 'text')
       else card.frame_target = null
     }
   }

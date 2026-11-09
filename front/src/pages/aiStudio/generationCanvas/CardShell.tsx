@@ -34,6 +34,7 @@ export function CardShell({ id, title, name, label, type, contextKey, point, sca
     connections: ReactNode; children: ReactNode; footer?: ReactNode; issueIndicator?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement) => void }) {
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; viewport?: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
+  const pendingTouchOpen = useRef(false)
   const menuTrigger = useRef<HTMLElement>(null)
   const menuChange = useRef(setMenu); menuChange.current = setMenu
   const end = useRef(onDragEnd); end.current = onDragEnd
@@ -48,14 +49,15 @@ export function CardShell({ id, title, name, label, type, contextKey, point, sca
     const escape = (event: KeyboardEvent) => {
       if (!event.isComposing && event.key === 'Escape' && gesture.current) { event.preventDefault(); event.stopPropagation(); menuChange.current?.(false); cancel() }
     }
-    const blur = () => { if (gesture.current?.ready) end.current?.(); gesture.current = undefined; setHolding(false) }
+    const blur = () => { pendingTouchOpen.current = false; if (gesture.current?.ready) end.current?.(); gesture.current = undefined; setHolding(false) }
     window.addEventListener('blur', blur)
     window.addEventListener('keydown', escape, true)
-    return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', escape, true); gesture.current = undefined }
+    return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', escape, true); gesture.current = undefined; pendingTouchOpen.current = false }
   }, [contextKey, cancel])
 
   const DesignIcon = designIcons[type as keyof typeof designIcons] || CameraOutlined
   return <article tabIndex={0} onPointerDown={event => {
+    pendingTouchOpen.current = false
     if (event.button !== 0 || (event.target as Element).closest('button:not([data-keyboard-move]), input, textarea, select, a, summary, [role="button"], [role="combobox"], audio, video')) return
     event.preventDefault(); event.stopPropagation()
     event.currentTarget.focus({ preventScroll: true })
@@ -78,9 +80,18 @@ export function CardShell({ id, title, name, label, type, contextKey, point, sca
     gesture.current = undefined; setHolding(false)
     event.stopPropagation()
     if (!current.ready && (multiSelectMode || (navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey))) onSelect(!selected)
-    else if (!current.ready) onOpen(event.currentTarget)
+    else if (!current.ready) {
+      // 触摸释放后浏览器还会派发 click，等它到达卡面再打开详情。
+      if (event.pointerType === 'touch') pendingTouchOpen.current = true
+      else onOpen(event.currentTarget)
+    }
     if (current.ready) onDragEnd?.()
-  }} onPointerCancel={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onLostPointerCapture={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onKeyDown={event => {
+  }} onClick={event => {
+    if (!pendingTouchOpen.current) return
+    pendingTouchOpen.current = false
+    event.stopPropagation()
+    onOpen(event.currentTarget)
+  }} onPointerCancel={() => { pendingTouchOpen.current = false; if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onLostPointerCapture={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onKeyDown={event => {
     if (!event.defaultPrevented && !event.nativeEvent.isComposing && !gesture.current?.ready && event.target === event.currentTarget && event.key === 'Enter') { event.preventDefault(); if (multiSelectMode) onSelect(!selected); else onOpen(event.currentTarget) }
     if (!event.nativeEvent.isComposing && event.key === 'Escape' && menu) { event.preventDefault(); event.stopPropagation(); setMenu?.(false); menuTrigger.current?.focus({ preventScroll: true }) }
   }} aria-label={label} data-card-id={id} data-card-type={type} data-canvas-node={id} data-selected={selected} data-filter-match={filterMatch} aria-description={filterMatch ? '符合筛选' : undefined} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, height }}>

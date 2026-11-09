@@ -517,6 +517,7 @@ try {
     assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width,'close is within viewport')
     assert.equal(await close.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}),true,'close target is not covered')
     await page.screenshot({path:join(output,`touch-close-${width}.png`)})
+    assert.equal(await page.getByRole('dialog',{name:'从当前画布选择参考图'}).count(),0,'opening tap never activates a control in the new editor')
     await close.tap();await panel.waitFor({state:'hidden'})
     assert.equal(await page.locator('.canvas-workbench').evaluate(node=>node.inert),false)
     await card.press('Enter');await panel.waitFor();await page.keyboard.press('Escape');await panel.waitFor({state:'hidden'})
