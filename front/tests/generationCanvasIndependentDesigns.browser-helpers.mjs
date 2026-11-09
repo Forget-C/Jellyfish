@@ -312,7 +312,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       await expectCriterionHeight(128)
       const lockedLines = await latestCore.evaluate(node => node.clientHeight / parseFloat(getComputedStyle(node).lineHeight))
       assert.ok(lockedLines >= 1 && lockedLines < 4, 'locked card shows only complete lines of the latest core')
-      await criterion.screenshot({ path: join(output, 'compact-criterion-locked.png'), animations: 'disabled', style: '.ant-modal-root { visibility: hidden }' })
+      await criterion.screenshot({ path: join(output, 'compact-criterion-locked.png'), animations: 'disabled', style: '.generation-card-editor, .generation-editor-mask { visibility: hidden }' })
       await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
       await expectCriterionHeight(192)
       await page.getByRole('button', { name: '关闭小地图', exact: true }).click()
@@ -359,7 +359,7 @@ export async function verifyIndependentDesigns(scenario, port) {
         await card.getByRole('definition').filter({hasText:text}).waitFor({state:'attached'})
       }
       const figures=await page.locator('.visual-design-card .design-purpose svg').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().height)))
-      assert.equal(figures.length,cards.length-1-Object.keys(compactExamples).length-2-Object.keys(structuredExamples).length-5,'only designs using the illustration layout have purpose illustrations')
+      assert.equal(figures.length,cards.filter(card => types.includes(card.type?.slice('direction.'.length))).length,'only designs using the illustration layout have purpose illustrations')
       assert.equal(new Set(figures).size,1,'type-specific illustrations keep the same visible height')
       assert.equal(await page.locator('.visual-design-card dl').evaluateAll(nodes=>nodes.every(node=>node.children.length<=3)),true,'cards keep at most three labelled summary rows')
       assert.equal(await page.locator('.visual-design-card dl > div').evaluateAll(nodes=>nodes.every(node=>{const row=node.getBoundingClientRect();return [...node.children].every(child=>{const r=child.getBoundingClientRect();return r.left>=row.left-1&&r.right<=row.right+1})})),true,'long stage labels and values remain inside the summary')
