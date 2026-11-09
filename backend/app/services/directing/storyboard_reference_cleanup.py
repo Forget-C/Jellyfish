@@ -12,13 +12,14 @@ def card_name(card):
     return getattr(card, 'name', '').strip() or CARD_TITLES[card.type]
 
 
-def clean_lost_references(card, before, after, canvas_id: str, expired=None, invalidated=None) -> set[str]:
+def clean_lost_references(card, before, after, canvas_id: str, expired, invalidated) -> set[str]:
     """Remove actual adoption and translate only body references to the old name."""
     lost = set()
 
     def removed(source):
-        if source and source.canvas_id == canvas_id and source.card_id in before and (
-                source.card_id not in after or invalidated and (source.card_id, source.port_id) in invalidated):
+        if not source or source.canvas_id != canvas_id or source.card_id not in before:
+            return False
+        if source.card_id not in after or (source.card_id, source.port_id) in invalidated:
             lost.add(source.card_id)
             return True
         return False
