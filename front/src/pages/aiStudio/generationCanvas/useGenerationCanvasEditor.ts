@@ -12,6 +12,11 @@ type HistoryEntry = { document: CanvasDocument } | { apply: () => void; reverse:
 type Recovery = { schema: 1; baseline: CanvasRead; document: CanvasDocument; pending?: CanvasSave }
 const validDocument = (value: CanvasDocument, projectId: string, canvasId: string) => value && value.id === canvasId && value.project_id === projectId && typeof value.name === 'string' && Array.isArray(value.cards) && value.cards.every(card => card && typeof card.id === 'string' && typeof card.type === 'string')
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+const preservesFixedSource = (server: CanvasDocument, draft: CanvasDocument) => {
+  const source = server.fixed_source
+  if (!same(source ?? null, draft.fixed_source ?? null)) return false
+  return !source || same(server.cards?.find(card => card.id === source.card_id), draft.cards?.find(card => card.id === source.card_id))
+}
 const describe = (reason: unknown) => reason instanceof ApiError
   ? `${reason.body?.data?.code || reason.status}: ${reason.body?.data?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
 
@@ -141,6 +146,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       }
       const response = await Canvases.canvasGet({ projectId, canvasId: baseline.id })
       if (!response.data || s !== state.current) return
+      if (!preservesFixedSource(response.data.document, saved.document)) {
+        setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
+        return
+      }
       if (!cleaner.current) {
         const catalog = await Canvases.canvasCatalog({ projectId, canvasId: baseline.id })
         if (s !== state.current) return
@@ -170,6 +179,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     try {
       const response = await Canvases.canvasGet({ projectId, canvasId: canvasId! })
       if (!response.data || s !== state.current) return false
+      if (keepLocal && s.document && !preservesFixedSource(response.data.document, s.document)) {
+        setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
+        return false
+      }
       s.current = response.data; if (!keepLocal) { s.document = response.data.document; history.current = { scope: key, past: [], future: [] } }
       s.conflict = false; s.recovery = undefined
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); setConflict(false); setError(''); persist(); return true

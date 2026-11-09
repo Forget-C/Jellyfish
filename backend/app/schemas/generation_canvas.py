@@ -750,6 +750,14 @@ class CheckCard(CardDefinition):
     input_ports: ClassVar[tuple[str, ...]] = ('check_basis',)
 
 
+class CanvasFixedSource(BaseModel):
+    """服务端建立的固定原文身份，适用于从任一入口打开的同一画布。"""
+    model_config = ConfigDict(extra='forbid')
+    card_id: str
+    chapter_id: str
+    chapter_version: str
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -762,6 +770,7 @@ class CanvasDocument(BaseModel):
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
+    fixed_source: CanvasFixedSource | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 
@@ -797,6 +806,7 @@ class CanvasRead(BaseModel):
     project_id: str
     revision: int
     document: CanvasDocument
+    source_changed: bool | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasSaved(BaseModel):

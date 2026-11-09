@@ -10,12 +10,15 @@ from app.core.contracts.directing.workspace import (
 )
 from app.core.contracts.directing.division import DivisionDraft, DivisionPreview, DivisionSave, DivisionSaved
 from app.services.directing.division import DivisionService
+from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
+from app.schemas.generation_canvas import CanvasRead
+from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionReceiptDetail, DivisionVersionDetail
 from app.services.directing.division_history import DivisionHistoryService
 from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
 from app.core.contracts.video_generation import VideoReferenceCapabilities
 from app.dependencies import get_db
-from app.schemas.common import ApiResponse, success_response
+from app.schemas.common import ApiResponse, created_response, success_response
 from app.services.directing.production import ProductionService
 from app.services.directing.review_revision import ReviewRevisionService
 from app.core.contracts.directing.review_revision import ReviewRevisionRequest, ApplyReviewRevisionRequest, ReviewRevisionApplication, EditableRevisionFields
@@ -84,6 +87,22 @@ async def reference_capabilities(project_id: str, model_id: str, db: AsyncSessio
 async def chapter(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope="function")):
     """返回章节原文和有序场次。"""
     return success_response(await _call(ProductionService(db, project_id).list_sequences(chapter_id)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases",
+            response_model=ApiResponse[SceneCanvasesRead], operation_id="directing_scene_canvases")
+async def scene_canvases(project_id: str, chapter_id: str, sequence_id: str,
+                         db: AsyncSession = Depends(get_db, scope="function")):
+    """读取场次准备页的原文摘要与独立画布。"""
+    return success_response(await SceneCanvasService(db, project_id).read_canvases(chapter_id, sequence_id))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/canvases",
+             response_model=ApiResponse[CanvasRead], operation_id="directing_scene_canvas_create")
+async def create_scene_canvas(project_id: str, chapter_id: str, sequence_id: str, body: SceneCanvasCreate,
+                              db: AsyncSession = Depends(get_db, scope="function")):
+    """建立本场空白画布及固定原文依据。"""
+    return created_response(await _call(SceneCanvasService(db, project_id).create_canvas(chapter_id, sequence_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/overview", response_model=ApiResponse[ChapterOverview], operation_id="directing_chapter_overview")

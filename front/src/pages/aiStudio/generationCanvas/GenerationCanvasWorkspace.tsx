@@ -137,6 +137,7 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
+    {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留创建时的原文依据。" />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
 

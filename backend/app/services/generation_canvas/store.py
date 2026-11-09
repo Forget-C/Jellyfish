@@ -1,19 +1,30 @@
 """项目归属、结构校验与原子 CAS 保存集中在此边界。"""
 import hashlib
 import json
+from dataclasses import dataclass
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
-from app.models.studio import Project
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard, CanvasDiagnostic, CanvasCompiledInput
+from app.models.studio import Chapter, FileUsage, Project
+from app.schemas.generation_canvas import (
+    CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasRead,
+    CanvasSave, CreativeBasisCard, ModelCard,
+)
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.capabilities import model_capability
-from app.models.studio import FileUsage
 
 
+
+@dataclass(frozen=True)
+class SceneCanvasSeed:
+    """场次入口校验后的初始依据与归属，与画布在同一事务内保存。"""
+
+    sequence_id: str
+    basis: CreativeBasisCard
+    fixed_source: CanvasFixedSource
 
 
 class CanvasStore:
@@ -40,12 +51,30 @@ class CanvasStore:
             raise HTTPException(404, 'Canvas not found')
         return canvas
 
-    async def create(self, name: str) -> GenerationCanvas:
-        """建立空文档，不创建场次或发布版本。"""
+    async def read(self, canvas_id: str) -> CanvasRead:
+        """附带固定依据的新鲜度，普通画布仍只读取自身文档。"""
+        canvas = await self.get(canvas_id)
+        document = CanvasDocument.model_validate(canvas.document)
+        source = document.fixed_source
+        source_changed = None
+        if source:
+            chapter_text = await self.db.scalar(select(Chapter.raw_text).where(
+                Chapter.id == source.chapter_id, Chapter.project_id == self.project_id))
+            source_changed = chapter_text is None or hashlib.sha256(chapter_text.encode()).hexdigest() != source.chapter_version
+        return CanvasRead(id=canvas.id, project_id=canvas.project_id, revision=canvas.revision,
+                          document=document, source_changed=source_changed)
+
+    async def create(self, name: str, *, scene: SceneCanvasSeed | None = None) -> GenerationCanvas:
+        """建立共同文档和运行事件头，场次入口可提供已校验的固定依据。"""
         await get_or_404(self.db, Project, self.project_id, detail="Project not found")
         canvas_id = uuid4().hex
-        document = CanvasDocument(id=canvas_id, project_id=self.project_id, name=name)
-        canvas = GenerationCanvas(id=canvas_id, project_id=self.project_id, document=document.model_dump(), revision=0)
+        document = CanvasDocument(id=canvas_id, project_id=self.project_id, name=name,
+                                  cards=[scene.basis] if scene else [],
+                                  fixed_source=scene.fixed_source if scene else None)
+        canvas = GenerationCanvas(id=canvas_id, project_id=self.project_id,
+                                  sequence_id=scene.sequence_id if scene else None,
+                                  document=document.model_dump(), revision=0,
+                                  card_types={scene.basis.id: scene.basis.type} if scene else {})
         self.db.add(canvas)
         await self.db.flush()
         from app.models.generation_canvas import CanvasEventHead

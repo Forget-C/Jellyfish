@@ -54,7 +54,11 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
         from app.main import app
     else:
         app = FastAPI()
+        from app.api.v1.routes.studio.chapters import router as chapters_router
+        from app.api.v1.routes.studio.directing import router as directing_router
         app.include_router(router, prefix='/canvases')
+        app.include_router(chapters_router, prefix='/chapters')
+        app.include_router(directing_router)
     from app.api.v1.routes.studio.files import router as files_router
     from app.core import storage
     async def upload(**kwargs):
@@ -647,3 +651,82 @@ async def test_video_usage_capability_keeps_canvas_policy(canvas_client, provide
         assert actual['supports_subject_reference_with_frame_reference'] is False
     finally:
         clear_video_model_capability_overrides(provider=provider_name)
+
+
+@pytest_asyncio.fixture
+async def scene_canvas_path(canvas_client, canvas_file_store):
+    """Seed two confirmed scenes; all canvas operations use public routes."""
+    from hashlib import sha256
+    from app.models.directing import Sequence
+    from app.models.studio import Chapter
+
+    chapter_text = '序。🌱门打开。灯亮了。'
+    async with canvas_file_store['sessions'].begin() as db:
+        db.add(Chapter(id='chapter', project_id='p', index=0, title='第一章', raw_text=chapter_text))
+        await db.flush()
+        source = {'kind': 'chapter', 'reference': 'chapter', 'version': sha256(chapter_text.encode()).hexdigest()}
+        db.add_all([
+            Sequence(id='scene-a', chapter_id='chapter', position=0, title='开门', source=source,
+                     source_start=2, source_end=8, source_text='🌱门打开。灯'),
+            Sequence(id='scene-b', chapter_id='chapter', position=1, title='亮灯', source=source,
+                     source_start=8, source_end=11, source_text='亮了。'),
+        ])
+    return '/projects/p/directing/chapters/chapter/sequences/scene-a/canvases'
+
+
+@pytest.mark.asyncio
+async def test_scene_canvases_open_through_both_entries_and_keep_independent_identity(canvas_client, scene_canvas_path):
+    first = await canvas_client.post(scene_canvas_path, json={})
+    assert first.status_code == 200, first.text
+    first = first.json()['data']
+    assert first['document']['name'].startswith('分镜画布-')
+    assert [(card['type'], card['text']) for card in first['document']['cards']] == [('content.basis', '🌱门打开。灯')]
+    second = (await canvas_client.post(scene_canvas_path, json={'name': '我的分镜'})).json()['data']
+    assert second['id'] != first['id']
+    assert second['document']['name'] == '我的分镜'
+    project_canvas = (await canvas_client.get(f"/canvases/p/{first['id']}")).json()['data']
+    assert project_canvas == first
+    scene = (await canvas_client.get(scene_canvas_path)).json()['data']
+    assert {canvas['id'] for canvas in scene['canvases']} == {first['id'], second['id']}
+    other_scene = (await canvas_client.get(scene_canvas_path.replace('scene-a', 'scene-b'))).json()['data']
+    assert other_scene['canvases'] == []
+    assert (await canvas_client.get(scene_canvas_path.replace('/p/', '/other/'))).status_code == 404
+    assert (await canvas_client.post(scene_canvas_path.replace('/chapter/', '/wrong/'), json={})).status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('alteration', ['text', 'locator', 'marker', 'card', 'identity'])
+async def test_fixed_scene_source_survives_ordinary_canvas_save(canvas_client, scene_canvas_path, alteration):
+    canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']
+    path = f"/canvases/p/{canvas['id']}"
+    document = (await canvas_client.get(path)).json()['data']['document']
+    if alteration == 'text':
+        document['cards'][0]['text'] = '替换原文'
+    elif alteration == 'locator':
+        document['cards'][0]['selection_start'] = 3
+    elif alteration == 'marker':
+        document.pop('fixed_source')
+    elif alteration == 'card':
+        document['cards'].clear()
+    else:
+        document['cards'][0]['id'] = 'new-basis'
+        document['fixed_source']['card_id'] = 'new-basis'
+    response = await canvas_client.put(path, json={'request_id': 'rewrite', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 422, response.text
+    assert response.json()['detail']['code'] == 'FIXED_SOURCE_IMMUTABLE'
+    assert (await canvas_client.get(path)).json()['data'] == canvas
+
+
+@pytest.mark.asyncio
+async def test_scene_source_change_warns_without_altering_saved_canvas(canvas_client, scene_canvas_path):
+    canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']
+    assert canvas['source_changed'] is False
+    updated = await canvas_client.patch('/chapters/chapter', json={'raw_text': '序。🌱门未打开。'})
+    assert updated.status_code == 200, updated.text
+    data = (await canvas_client.get(scene_canvas_path)).json()['data']
+    assert data['sequence']['source_changed']
+    assert data['canvases'][0]['source_changed']
+    reopened = (await canvas_client.get(f"/canvases/p/{canvas['id']}")).json()['data']
+    assert reopened['source_changed']
+    assert reopened['document'] == canvas['document']
+    assert reopened['revision'] == canvas['revision']

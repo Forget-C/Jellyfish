@@ -25,7 +25,7 @@ async def create_canvas(project_id: str, body: CanvasCreate, db: AsyncSession = 
 @router.get('/{project_id}/{canvas_id}', response_model=ApiResponse[CanvasRead], operation_id='canvas_get')
 async def get_canvas(project_id: str, canvas_id: str, db: AsyncSession = Depends(get_db, scope='function')):
     """读取当前文档。"""
-    return success_response(await CanvasStore(db, project_id).get(canvas_id))
+    return success_response(await CanvasStore(db, project_id).read(canvas_id))
 
 
 @router.put('/{project_id}/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_save',

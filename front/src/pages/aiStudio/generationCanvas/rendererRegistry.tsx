@@ -49,7 +49,8 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'reference.costume': NamedImageReferenceEditor,
   'content.text': ({ card, onChange, disabled }) => <TextContentEditor card={card as TextContentCard} onChange={onChange} disabled={disabled} />,
   ...Object.fromEntries(DESCRIPTION_CARD_TYPES.map(type => [type, ({ card, onChange, disabled }: CardRendererProps) => <ObjectDescriptionEditor card={card as DescriptionCardData} onChange={onChange} disabled={disabled} />])),
-  'content.basis': ({ card, onChange, disabled }) => <TextContentEditor card={card as CreativeBasisCard} onChange={onChange} disabled={disabled} />,
+  'content.basis': ({ card, document, onChange, disabled }) => <TextContentEditor card={card as CreativeBasisCard}
+    onChange={document.fixed_source?.card_id === card.id ? undefined : onChange} disabled={disabled} />,
   'content.image': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.video': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.audio': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,

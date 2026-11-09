@@ -35,6 +35,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict) -> P
             from app.services.generation_canvas.check_selection import initial_check_categories
             card.enabled_categories = initial_check_categories()
     previous_document = CanvasDocument.model_validate(canvas.document)
+    _validate_fixed_source(previous_document, document)
     document, previous_document = _normalize_document(document, previous_document)
     identities = dict(canvas.card_types)
     seen = set()
@@ -226,6 +227,19 @@ def _restores_only_moved_slots(previous, current: CanvasResultScope | None, posi
     if current.mode == 'only':
         return not still_excluded.intersection(current.positions)
     return still_excluded <= set(current.positions)
+
+
+def _validate_fixed_source(previous: CanvasDocument, current: CanvasDocument) -> None:
+    """普通保存不能建立、替换或移除固定依据；位置及分组不属于依据。"""
+    source = previous.fixed_source
+    if source != current.fixed_source:
+        card_id = (source or current.fixed_source).card_id
+    elif source and next((card for card in previous.cards if card.id == source.card_id), None) != next(
+            (card for card in current.cards if card.id == source.card_id), None):
+        card_id = source.card_id
+    else:
+        return
+    raise diagnostic('FIXED_SOURCE_IMMUTABLE', '固定原文不可修改或删除', {'card_id': card_id})
 
 
 def _normalize_document(document, previous_document):

@@ -49,7 +49,7 @@ export default function MainLayout() {
     ? [{ key: 'parents', title: <Dropdown overlayClassName="app-context-menu" trigger={['click']} menu={{ items: crumbs.slice(0, -1).map((item, index) => ({ key: String(index), label: item.label, onClick: () => { if (item.to) navigate(item.to) } })) }}><Button type="text" size="small" aria-label="查看上级页面" icon={<MoreOutlined />} /></Dropdown> }, breadcrumbItems[breadcrumbItems.length - 1]]
     : breadcrumbItems
 
-  if (/^\/projects\/[^/]+\/generation-canvas\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+\/?$/.test(pathname)) {
+  if (/^\/projects\/[^/]+\/generation-canvas\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+(?:\/canvas-workbench)?\/?$/.test(pathname)) {
     return <TaskRuntimeProvider><Outlet /></TaskRuntimeProvider>
   }
 

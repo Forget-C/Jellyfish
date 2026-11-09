@@ -5,6 +5,7 @@
 import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSummary_';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
+import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
 import type { ApiResponse_ChapterDeliveriesRead_ } from '../models/ApiResponse_ChapterDeliveriesRead_';
 import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
@@ -46,6 +47,7 @@ import type { ApiResponse_list_SequenceRead__ } from '../models/ApiResponse_list
 import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_ReviewRevisionApplication_ } from '../models/ApiResponse_ReviewRevisionApplication_';
+import type { ApiResponse_SceneCanvasesRead_ } from '../models/ApiResponse_SceneCanvasesRead_';
 import type { ApiResponse_SceneCopyReadiness_ } from '../models/ApiResponse_SceneCopyReadiness_';
 import type { ApiResponse_SceneCutReviewRead_ } from '../models/ApiResponse_SceneCutReviewRead_';
 import type { ApiResponse_SceneDeliveryRead_ } from '../models/ApiResponse_SceneDeliveryRead_';
@@ -86,6 +88,7 @@ import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { ReviewRequest } from '../models/ReviewRequest';
 import type { ReviewRevisionRequest } from '../models/ReviewRevisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
+import type { SceneCanvasCreate } from '../models/SceneCanvasCreate';
 import type { SceneCutReviewCreate } from '../models/SceneCutReviewCreate';
 import type { SceneDeliveryCreate } from '../models/SceneDeliveryCreate';
 import type { SceneDesignPreviewRequest } from '../models/SceneDesignPreviewRequest';
@@ -167,6 +170,66 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'chapter_id': chapterId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Canvases
+     * 读取场次准备页的原文摘要与独立画布。
+     * @returns ApiResponse_SceneCanvasesRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneCanvases({
+        projectId,
+        chapterId,
+        sequenceId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_SceneCanvasesRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/canvases',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Scene Canvas
+     * 建立本场空白画布及固定原文依据。
+     * @returns ApiResponse_CanvasRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneCanvasCreate({
+        projectId,
+        chapterId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        requestBody: SceneCanvasCreate,
+    }): CancelablePromise<ApiResponse_CanvasRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/canvases',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

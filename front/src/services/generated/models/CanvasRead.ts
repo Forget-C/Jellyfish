@@ -11,4 +11,5 @@ export type CanvasRead = {
     project_id: string;
     revision: number;
     document: CanvasDocument;
+    source_changed?: (boolean | null);
 };

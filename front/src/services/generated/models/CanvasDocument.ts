@@ -6,6 +6,7 @@ import type { AcceptanceCriterionCard } from './AcceptanceCriterionCard';
 import type { AudioContentCard } from './AudioContentCard';
 import type { BlockingDirectionCard } from './BlockingDirectionCard';
 import type { CameraCard } from './CameraCard';
+import type { CanvasFixedSource } from './CanvasFixedSource';
 import type { CharacterDescriptionCard } from './CharacterDescriptionCard';
 import type { CharacterPerformanceCard } from './CharacterPerformanceCard';
 import type { CharacterSituationCard } from './CharacterSituationCard';
@@ -56,4 +57,5 @@ export type CanvasDocument = {
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;
+    fixed_source?: (CanvasFixedSource | null);
 };

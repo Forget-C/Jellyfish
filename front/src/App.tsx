@@ -20,6 +20,7 @@ import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
 import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
+import { SceneCanvasWorkbench } from './pages/aiStudio/directing/SceneCanvasWorkbench'
 import { GenerationCanvasRoute } from './pages/aiStudio/generationCanvas/GenerationCanvasRoute'
 import { generationCanvasLocation } from './pages/aiStudio/generationCanvas/navigation'
 import './App.css'
@@ -53,6 +54,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
+          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId/canvas-workbench" element={<SceneCanvasWorkbench />} />
           <Route path="assets" element={<AssetManager />} />
           <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
           <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />

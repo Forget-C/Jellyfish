@@ -1164,7 +1164,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {label:'复制副本',shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} D`,reason:readonly ? '当前只读' : copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids,true)},
       {label:'设置为封面',reason:readonly ? '当前只读' : contextMenu.ids.length!==1 ? '请选择一张卡片' : !cardOutputs(contextMenu.ids).some(output=>output.modality==='image') ? '没有可用图片' : undefined,run:()=>openOutputAction('cover',contextMenu.ids)},
       {label:'下载',reason:!cardOutputs(contextMenu.ids).length ? '没有可下载输出' : undefined,run:()=>openOutputAction('download',contextMenu.ids)},
-      {label:'删除',danger:true,reason:readonly ? '当前只读' : undefined,run:()=>removeCards(contextMenu.ids)},
+      {label:'删除',danger:true,reason:readonly ? '当前只读' : document.fixed_source && contextMenu.ids.includes(document.fixed_source.card_id) ? '固定原文不可删除' : undefined,run:()=>removeCards(contextMenu.ids)},
     ] : [
       {label:'新建节点', reason:readonly ? '当前只读' : undefined, run:()=>{}},
       {label:'粘贴', reason:readonly ? '当前只读' : !readCardClipboard(document.project_id) ? '剪贴板没有卡片' : undefined, run:()=>{const box=viewport.surface.current!.getBoundingClientRect();pasteCards(readCardClipboard(document.project_id),{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale})}},
@@ -1493,7 +1493,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               })} onLocate={(issue, trigger, diagnostic = issue.target) => {
                 const cardId = typeof diagnostic.card_id === 'string' ? diagnostic.card_id : card.id
                 setDetailTrigger(trigger); navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic })
-              }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+              }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={document.fixed_source?.card_id === card.id || runtime?.busyCards.has(card.id)}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}

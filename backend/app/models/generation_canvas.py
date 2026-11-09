@@ -11,6 +11,8 @@ class GenerationCanvas(Base, TimestampMixin):
     __tablename__ = 'generation_canvases'
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
+    sequence_id: Mapped[str | None] = mapped_column(
+        ForeignKey('directing_sequences.id', name='fk_generation_canvas_sequence', ondelete='SET NULL'), index=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     card_types: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
