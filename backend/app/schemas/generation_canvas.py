@@ -887,6 +887,13 @@ class CanvasSave(BaseModel):
     document: Any
 
 
+class CanvasSceneAssociation(BaseModel):
+    """由服务端从真实场次归属读取，不使用固定原文卡推断。"""
+    chapter_id: str
+    sequence_id: str
+    is_current: bool
+
+
 class CanvasRead(BaseModel):
     """当前保存的内容和 CAS 修订。"""
     id: str
@@ -894,6 +901,7 @@ class CanvasRead(BaseModel):
     revision: int
     document: CanvasDocument
     source_changed: bool | None = Field(default=None, exclude_if=lambda value: value is None)
+    scene: CanvasSceneAssociation | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasSaved(BaseModel):

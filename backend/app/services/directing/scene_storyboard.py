@@ -70,6 +70,8 @@ class SceneStoryboardService(SceneObjectService):
                     or existing.retry_of_task_id != retry_of_task_id):
                 raise RevisionConflict('分镜请求身份已用于另一份内容')
             return await self._storyboard_read(existing)
+        if canvas_id and not sequence.is_current:
+            raise RevisionConflict('历史场次不能重新提取或重试分镜')
         if retry_of_task_id and await self.db.scalar(self._storyboards(sequence_id).where(
                 Task.retry_of_task_id == retry_of_task_id).limit(1)):
             raise RevisionConflict('已提交该任务的重试，请查看最新分镜任务')
@@ -172,7 +174,7 @@ class SceneStoryboardService(SceneObjectService):
     def _confirmed_source_version(sequence, chapter) -> str:
         """Use only the scene range already confirmed against the current chapter."""
         version = sha256(chapter.raw_text.encode()).hexdigest()
-        if not sequence.is_current or not sequence.source_text.strip() or sequence.source.get('kind') != 'chapter' or (
+        if not sequence.source_text.strip() or sequence.source.get('kind') != 'chapter' or (
                 sequence.source.get('reference'), sequence.source.get('version')) != (chapter.id, version):
             raise RevisionConflict('章节原文已变动，请返回章节确认本场次的新原文范围')
         return version
@@ -200,6 +202,28 @@ class SceneStoryboardService(SceneObjectService):
     def _storyboard_summary(self, task, canvas_id: str, candidate_available: bool) -> StoryboardTaskSummary:
         return StoryboardTaskSummary(**self.task_read(task).model_dump(), canvas_id=canvas_id,
                                      candidate_available=candidate_available, retry_of_task_id=task.retry_of_task_id)
+
+    async def read_canvas_candidate(self, chapter_id: str, sequence_id: str, canvas_id: str,
+                                    task_id: str | None = None) -> StoryboardTaskRead | None:
+        """按可信画布范围查找指定候选或最新成功结果，独立于近期任务列表。"""
+        await self._scene(chapter_id, sequence_id)
+        canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
+        if canvas.sequence_id != sequence_id:
+            raise HTTPException(404, 'Canvas not found in scene')
+        if task_id:
+            task = await self._get_storyboard(chapter_id, sequence_id, task_id)
+            if task.input_snapshot.get('canvas_id') != canvas_id:
+                raise HTTPException(404, 'Storyboard task not found in canvas')
+        else:
+            task = await self.db.scalar(self._storyboards(sequence_id).where(
+                Task.input_snapshot['chapter_id'].as_string() == chapter_id,
+                Task.input_snapshot['canvas_id'].as_string() == canvas_id,
+                Task.status == TaskStatus.succeeded,
+            ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
+        if task is None or task.status != TaskStatus.succeeded:
+            return None
+        result = await self._storyboard_read(task)
+        return result if result.candidate is not None else None
 
     async def read_storyboard(self, chapter_id: str, sequence_id: str, task_id: str) -> StoryboardTaskRead:
         """只返回本场任务与候选，不泄露模型配置和冻结私有输入。"""

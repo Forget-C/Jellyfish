@@ -409,6 +409,42 @@ export class StudioDirectingService {
         });
     }
     /**
+     * Read Canvas Candidate
+     * 为共同工作区读取同一目标画布的待应用候选。
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingStoryboardCandidate({
+        projectId,
+        chapterId,
+        sequenceId,
+        canvasId,
+        taskId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        canvasId: string,
+        taskId?: (string | null),
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards/candidate',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'canvas_id': canvasId,
+            },
+            query: {
+                'task_id': taskId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Reextract Storyboard
      * 针对既有场次画布创建可核对的重新提取任务。
      * @returns ApiResponse_StoryboardTaskRead_ Successful Response

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardCandidate } from '../../../services/generated'
+import { StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
+import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -11,6 +11,7 @@ import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
 import { CheckArchive } from './CheckArchive'
 import { SceneStoryboardReview } from '../directing/SceneStoryboardReview'
+import { directingError } from '../directing/common'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDetailsProvider } from '../directing/ui/WorkbenchDetails'
@@ -52,8 +53,7 @@ interface GenerationCanvasWorkspaceProps {
   back: { label: string; onClick: () => void }
   renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
   renderSceneActions?: (context: CanvasManagementContext) => ReactNode
-  initialCandidate?: StoryboardCandidate
-  storyboardScope?: { chapterId: string; sequenceId: string; requiresReview?: boolean }
+  storyboardTaskId?: string | null
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
   hostErrorAction?: ReactNode
@@ -66,7 +66,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, initialCandidate, storyboardScope, onCanvasRead, hostError, hostErrorAction,
+  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, storyboardTaskId, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
@@ -75,20 +75,45 @@ export function GenerationCanvasWorkspace({
   const pendingInspect = useRef<CanvasInspectTarget>()
   const editor = useGenerationCanvasEditor(projectId, canvasId)
   const { current, document, edit, save, saving, dirty, ownership, applyInitialCandidate, configureCatalog: configureEditorCatalog } = editor
+  const scene = current?.id === canvasId ? current.scene : undefined
+  const chapterId = scene?.chapter_id, sequenceId = scene?.sequence_id
+  const candidateKey = JSON.stringify([projectId, canvasId, chapterId, sequenceId, storyboardTaskId])
+  const [discovery, setDiscovery] = useState<{ key: string; result?: StoryboardTaskRead; error?: string }>()
+  const [candidateRefresh, setCandidateRefresh] = useState(0)
   const handledCandidate = useRef<string>()
-  const [candidatePending, setCandidatePending] = useState(false)
-  const candidateTask = initialCandidate?.document.storyboard?.task_id
+  const [reviewTask, setReviewTask] = useState<string>()
+  const discovered = discovery?.key === candidateKey ? discovery : undefined
+  const candidate = discovered?.result?.candidate
+  const candidateTask = discovered?.result?.task_id
+  const requiresReview = discovered?.result?.pending_application
   useEffect(() => {
-    if (!current || !initialCandidate || !candidateTask || handledCandidate.current === candidateTask) return
+    if (!canvasId || !chapterId || !sequenceId) return
+    let active = true
+    const request = Directing.directingStoryboardCandidate({ projectId, chapterId, sequenceId, canvasId,
+      taskId: storyboardTaskId ?? undefined })
+    void request.then(({ data }) => {
+      if (!active) return
+      if (data && (data.canvas_id !== canvasId || data.candidate?.document.id !== canvasId ||
+          data.candidate.document.storyboard?.task_id !== data.task_id)) throw new Error('此分镜候选不属于当前画布')
+      setDiscovery({ key: candidateKey, result: data ?? undefined })
+    }).catch(cause => {
+      if (active) setDiscovery({ key: candidateKey, error: directingError(cause) })
+    })
+    return () => { active = false; request.cancel() }
+  }, [candidateKey, projectId, canvasId, chapterId, sequenceId, storyboardTaskId, candidateRefresh])
+  useEffect(() => {
+    if (!current || !candidate || !candidateTask || handledCandidate.current === candidateTask) return
     if (current.document.storyboard?.task_id === candidateTask) {
       handledCandidate.current = candidateTask
       return
     }
     if (!ownership.editable && ownership.state === 'checking') return
     handledCandidate.current = candidateTask
-    if (storyboardScope?.requiresReview) setCandidatePending(true)
-    else void applyInitialCandidate(initialCandidate).then(result => setCandidatePending(result === 'pending'))
-  }, [candidateTask, current, initialCandidate, applyInitialCandidate, ownership.editable, ownership.state, storyboardScope?.requiresReview])
+    if (requiresReview) setReviewTask(candidateTask)
+    else void applyInitialCandidate(candidate).then(result => {
+      if (result === 'pending' && handledCandidate.current === candidateTask) setReviewTask(candidateTask)
+    })
+  }, [candidateTask, current, candidate, applyInitialCandidate, ownership.editable, ownership.state, requiresReview])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -158,14 +183,14 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
-    {candidatePending && candidateTask && storyboardScope && current?.document.storyboard?.task_id !== candidateTask &&
-      <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId: storyboardScope.chapterId,
-        sequenceId: storyboardScope.sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
+    {discovered?.error && <Alert type="error" showIcon message={discovered.error}
+      action={<Button onClick={() => setCandidateRefresh(value => value + 1)}>重试读取分镜</Button>} />}
+    {candidateTask && candidateTask === reviewTask && chapterId && sequenceId && current?.document.storyboard?.task_id !== candidateTask &&
+      <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
         prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
         apply={async choice => {
-          const applied = await editor.applyReviewedCandidate({ chapterId: storyboardScope.chapterId,
-            sequenceId: storyboardScope.sequenceId, taskId: candidateTask }, choice)
-          if (applied) { runtime.invalidate(); setCandidatePending(false) }
+          const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: candidateTask }, choice)
+          if (applied) { runtime.invalidate(); setReviewTask(undefined) }
           return applied
         }} />}
     {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}

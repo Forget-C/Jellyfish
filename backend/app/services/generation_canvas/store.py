@@ -6,11 +6,12 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.directing import Sequence
 from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Chapter, FileUsage, Project
 from app.schemas.generation_canvas import (
     CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasRead,
-    CanvasSave, CreativeBasisCard, ModelCard,
+    CanvasSave, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
 )
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
@@ -62,7 +63,18 @@ class CanvasStore:
                 Chapter.id == source.chapter_id, Chapter.project_id == self.project_id))
             source_changed = chapter_text is None or hashlib.sha256(chapter_text.encode()).hexdigest() != source.chapter_version
         return CanvasRead(id=canvas.id, project_id=canvas.project_id, revision=canvas.revision,
-                          document=document, source_changed=source_changed)
+                          document=document, source_changed=source_changed, scene=await self._scene_association(canvas))
+
+    async def _scene_association(self, canvas: GenerationCanvas) -> CanvasSceneAssociation | None:
+        """只有画布、场次和章节确实同属当前项目时才返回关联。"""
+        if not canvas.sequence_id:
+            return None
+        row = (await self.db.execute(select(Sequence.chapter_id, Sequence.is_current).join(
+            Chapter, Chapter.id == Sequence.chapter_id).where(
+            Sequence.id == canvas.sequence_id, Chapter.project_id == canvas.project_id))).one_or_none()
+        if row is None:
+            return None
+        return CanvasSceneAssociation(chapter_id=row.chapter_id, sequence_id=canvas.sequence_id, is_current=row.is_current)
 
     async def create(self, name: str, *, scene: SceneCanvasSeed | None = None) -> GenerationCanvas:
         """建立共同文档和运行事件头，场次入口可提供已校验的固定依据。"""
@@ -137,7 +149,8 @@ class CanvasStore:
         if chapter_version is not None:
             response['scene_canvas'] = CanvasRead(id=canvas_id, project_id=self.project_id,
                 revision=response['revision'], document=prepared.document,
-                source_changed=prepared.document.fixed_source.chapter_version != chapter_version).model_dump(mode='json')
+                source_changed=prepared.document.fixed_source.chapter_version != chapter_version,
+                scene=await self._scene_association(canvas)).model_dump(mode='json')
         if source_history is not None:
             response['source_history'] = source_history
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))

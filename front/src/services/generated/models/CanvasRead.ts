@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasDocument } from './CanvasDocument';
+import type { CanvasSceneAssociation } from './CanvasSceneAssociation';
 /**
  * 当前保存的内容和 CAS 修订。
  */
@@ -12,4 +13,5 @@ export type CanvasRead = {
     revision: number;
     document: CanvasDocument;
     source_changed?: (boolean | null);
+    scene?: (CanvasSceneAssociation | null);
 };
