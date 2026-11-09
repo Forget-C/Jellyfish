@@ -214,5 +214,131 @@ try {
   assert.ok(mobileMenu.y + mobileMenu.height <= Math.min((await card('a').boundingBox()).y, (await card('b').boundingBox()).y), 'mobile wrapped menu stays above selection')
   assert.ok(mobileMenu.x >= 0 && mobileMenu.x + mobileMenu.width <= 390)
   await page.screenshot({ path: join(output, 'multi-group-mobile.png'), fullPage: true })
+  const openLayoutFixture = async (name, cards, positions, groups = [], outputs) => {
+    const fresh = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+    const { data: fixture } = await fresh.json()
+    const seeded = await fetch(`${base}/${fixture.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...fixture.document, cards, groups } }) })
+    assert.ok(seeded.ok, await seeded.text())
+    if (outputs) await page.route(`**/${fixture.id}/runtime`, route => route.fulfill({
+      json: { code: 200, data: { cursor: 0, runs: [], current_outputs: outputs(fixture.id) } },
+    }))
+    await page.addInitScript(({ key, positions }) => {
+      localStorage.setItem(key, JSON.stringify({ schema: 1, positions, sizes: {}, transform: { x: 18, y: 12, scale: .8 } }))
+    }, { key: `jellyfish:generation-layout:canvas-project:${fixture.id}:view:canvas`, positions })
+    await page.goto(`http://127.0.0.1:4458/projects/canvas-project/generation-canvas?canvas=${fixture.id}`)
+    await page.getByRole('button', { name: '布局', exact: true }).waitFor()
+  }
+  const arrangeFrame = node => node.evaluate(element => ({
+    x: Number.parseFloat(element.style.left), y: Number.parseFloat(element.style.top),
+    width: element.offsetWidth, height: element.offsetHeight,
+  }))
+  const arrange = async () => {
+    await page.getByRole('button', { name: '布局', exact: true }).click()
+    await page.getByRole('button', { name: '整理布局', exact: true }).click()
+    await page.keyboard.press('Escape')
+  }
+  const undoArrange = async () => {
+    await page.getByRole('button', { name: '布局', exact: true }).click()
+    await page.getByRole('button', { name: '撤销布局整理', exact: true }).click()
+    await page.keyboard.press('Escape')
+  }
+  const view = () => page.locator('.generation-world').getAttribute('style')
+  await page.setViewportSize({ width: 1440, height: 960 })
+  const ordinary = [
+    { id: 'lock', type: 'direction.criterion', criterion_id: 'layout-rule', name: '当前帧', standard: { text: '钥匙可见', authorship: 'user' }, scope: { description: '片段结尾' } },
+    { id: 'audio', type: 'content.audio' },
+    { id: 'fact', type: 'direction.fact', fact: { text: '钥匙在左手', authorship: 'user' } },
+    { id: 'text', type: 'content.text', text: '使用画布整理' },
+    { id: 'video-model', type: 'model.video' },
+  ]
+  await openLayoutFixture('按实际宽高整理', ordinary, {
+    lock: { x: 300, y: 270 }, audio: { x: 770, y: 250 }, fact: { x: 1200, y: 250 },
+    text: { x: 360, y: 590 }, 'video-model': { x: 850, y: 565 },
+  })
+  const frames = () => Promise.all(ordinary.map(item => arrangeFrame(card(item.id))))
+  const originalFrames = await frames(), originalView = await view()
+  await page.screenshot({ path: join(output, 'arrangement-before.png') })
+  await arrange()
+  const [first, second, third, fourth, fifth] = await frames()
+  assert.equal(second.x - fourth.x - fourth.width, 64, 'first column uses its wider second-row card')
+  assert.equal(third.x - second.x - Math.max(second.width, fifth.width), 64, 'second column uses its widest card')
+  assert.equal(fourth.y - first.y - Math.max(first.height, second.height, third.height), 64, 'second row follows first row actual height')
+  assert.deepEqual([second.y, third.y], [first.y, first.y])
+  assert.deepEqual([fourth.x, fifth.x, fifth.y], [first.x, second.x, fourth.y])
+  await page.screenshot({ path: join(output, 'arrangement-actual-sizes.png') })
+  await undoArrange()
+  assert.deepEqual(await frames(), originalFrames)
+  assert.equal(await view(), originalView)
+  const positions = boxes => boxes.map(({ x, y }) => ({ x, y }))
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 960 })
+    await openCanvasCard(page, 'lock')
+    const detail = page.locator('.generation-card-editor:visible')
+    assert.equal(await detail.getAttribute('aria-modal'), 'true')
+    const beforeLayout = positions(await frames()), beforeView = await view()
+    const locked = await arrangeFrame(card('lock'))
+    const edit = detail.getByRole('textbox', { name: '可观察判断标准内容', exact: true })
+    const next = width === 1440 ? '钥匙仍在人物的左手，拍到完整的动作并保持画面边缘干净。'.repeat(10) : '钥匙可见'
+    await edit.fill(next)
+    assert.equal((await arrangeFrame(card('lock'))).height, locked.height)
+    const action = detail.getByRole('button', { name: '整理布局', exact: true })
+    assert.equal(await action.count(), 1, 'locked detail has its own arrange action')
+    await action.click()
+    assert.equal(await detail.isVisible(), true, 'organizing keeps the detail session open')
+    assert.equal(await edit.innerText(), next)
+    const arranged = await frames()
+    assert.equal(arranged[0].height, locked.height)
+    assert.equal(arranged[3].y - arranged[0].y - Math.max(...arranged.slice(0, 3).map(item => item.height)), 64)
+    await page.screenshot({ path: join(output, `arrangement-detail-${width}.png`) })
+    const arrangedView = await view()
+    await detail.getByRole('button', { name: '关闭详情', exact: true }).click()
+    const releasedHeight = width === 1440 ? 192 : 128
+    await page.waitForFunction(height => document.querySelector('[data-card-id="lock"]').offsetHeight === height, releasedHeight)
+    assert.deepEqual(positions(await frames()), positions(arranged), 'unlock does not arrange again')
+    assert.equal(await view(), arrangedView)
+    await undoArrange()
+    assert.deepEqual(positions(await frames()), beforeLayout)
+    assert.equal(await view(), beforeView)
+    assert.equal((await arrangeFrame(card('lock'))).height, releasedHeight, 'undo restores geometry from current content')
+  }
+  await page.setViewportSize({ width: 1440, height: 960 })
+  const mixedCards = [
+    { id: 'member-a', type: 'content.text', text: '开放编组成员' },
+    { id: 'member-b', type: 'direction.fact', fact: { text: '保留相对位置', authorship: 'user' } },
+    { id: 'collapsed-a', type: 'model.video' }, { id: 'collapsed-b', type: 'content.text' },
+    { id: 'stack-a', type: 'content.text' }, { id: 'stack-b', type: 'model.video' },
+    { id: 'result-model', type: 'model.text', show_result_cards: true },
+    { id: 'ordinary-b', type: 'content.text' }, { id: 'ordinary-c', type: 'content.audio' },
+  ]
+  await openLayoutFixture('组与收纳封面参与整理', mixedCards, {
+    'member-a': { x: 250, y: 210 }, 'member-b': { x: 320, y: 266 },
+    'collapsed-a': { x: 790, y: 110 }, 'collapsed-b': { x: 900, y: 840 },
+    'stack-a': { x: 720, y: 400 }, 'stack-b': { x: 240, y: 900 },
+    'result-model': { x: 1250, y: 340 }, 'ordinary-b': { x: 1250, y: 700 }, 'ordinary-c': { x: 820, y: 800 },
+  }, [
+    { id: 'open', name: '开放编组', card_ids: ['member-a', 'member-b'] },
+    { id: 'closed', name: '收起编组', collapsed: true, card_ids: ['collapsed-a', 'collapsed-b'] },
+    { id: 'stack', name: '堆叠', kind: 'stack', card_ids: ['stack-a', 'stack-b'] },
+  ], id => ({ 'result-model': [{ source: { canvas_id: id, card_id: 'result-model', port_id: 'text', position: 0 }, modality: 'text', available: true, basis_current: true, text: '正式输出' }] }))
+  const resultCard = page.locator('[data-card-id^="linked-result:result-model:"]')
+  await resultCard.waitFor({ state: 'attached' })
+  await arrange()
+  const openBox = await arrangeFrame(page.locator('[data-group-id="open"]'))
+  const closedBox = await arrangeFrame(page.locator('[data-group-id="closed"]'))
+  const stackBox = await arrangeFrame(page.locator('[data-stack-id="stack"]'))
+  assert.equal(closedBox.y - openBox.y - openBox.height, 64)
+  assert.equal(stackBox.y - closedBox.y - closedBox.height, 64)
+  assert.deepEqual([closedBox.width, closedBox.height, stackBox.width, stackBox.height], [300, 110, 400, 300])
+  const memberABox = await arrangeFrame(card('member-a')), memberBBox = await arrangeFrame(card('member-b'))
+  assert.deepEqual([memberBBox.x - memberABox.x, memberBBox.y - memberABox.y], [70, 56], 'overlapping group members keep their relative positions')
+  const model = await arrangeFrame(card('result-model')), neighbor = await arrangeFrame(card('ordinary-b')), audio = await arrangeFrame(card('ordinary-c'))
+  assert.equal(model.y - stackBox.y - stackBox.height, 64)
+  assert.deepEqual([neighbor.y, audio.y], [model.y, model.y], 'ordinary cards retain three columns below group units')
+  const projected = await arrangeFrame(resultCard)
+  assert.equal(projected.x - model.x - model.width, 64, 'result still follows the model')
+  assert.ok(projected.y >= neighbor.y + neighbor.height + 24, 'result keeps its dedicated obstacle clearance')
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await page.screenshot({ path: join(output, 'arrangement-groups-and-results.png') })
   console.log('PASS explicit multiselection and visual group saved through HTTP')
 } finally { await cleanup() }

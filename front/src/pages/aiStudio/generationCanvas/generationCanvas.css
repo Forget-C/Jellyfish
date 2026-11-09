@@ -206,7 +206,7 @@
 @media (prefers-reduced-motion: reduce) { .generation-edges [data-edge-active="true"] .canvas-edge-line { animation: none; } }
 
 
-.generation-stack { position:absolute; width:400px; height:300px; cursor:grab; z-index:2; }
+.generation-stack { position:absolute; cursor:grab; z-index:2; }
 .generation-stack:focus-visible { outline:2px solid var(--wb-focus); }
 .generation-stack-face { position:absolute; inset:0; border:1px solid var(--wb-border); background:var(--wb-surface); border-radius:16px; padding:24px; box-shadow:-10px 10px 0 var(--wb-raised),-20px 20px 0 var(--wb-inset); }
 .generation-stack-face>span { position:absolute; right:20px; bottom:20px; border:1px solid var(--wb-border); border-radius:50%; padding:12px; }

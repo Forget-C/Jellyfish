@@ -26,7 +26,7 @@ import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent, ReactNode } from 'react'
-import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined, GroupOutlined, MoreOutlined } from '@ant-design/icons'
+import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined, GroupOutlined, MoreOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { WorkbenchModal, WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
@@ -37,6 +37,7 @@ import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../compon
 import { createSurfaceGesture } from './surfaceGesture'
 import { createConnectionSession, type ConnectionState } from './connectionSession'
 import { createMoveTransaction } from './moveTransaction'
+import { arrangeGenerationCards, generationGroupBounds } from './generationLayout'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { readStoredGraphView, useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange } from '../directing/graphLayout'
@@ -275,26 +276,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return { edge, projected: displayed.length > 0 || direct.length > 0 || known.length > 0 && !known.some(output => covered(output.source)),
       results: displayed.filter(result => covered(result.output.source)), direct }
   })
-  // 整理把编组当一个布局单元，成员仅平移，避免公共网格排布打散组内位置。
-  const arrangeGroups: GraphArrange = (items, sizes, width, anchorId, retained) => {
-    if (retained || !groups.length) return arrange(items, sizes, width, anchorId, retained ? { ...Object.fromEntries(items.filter(item => historicalPositions.current[item.id]).map(item => [item.id, historicalPositions.current[item.id]])), ...retained } : retained)
-    const owned = new Set(groups.flatMap(group => group.card_ids || []))
-    const units = [...groups.map(group => group.card_ids || []), ...items.filter(item => !owned.has(item.id)).map(item => [item.id])]
-    const positions: Record<string, { x: number; y: number }> = {}
-    let row = 0
-    for (const members of units) {
-      const left = Math.min(...members.map(id => retainedPositions.current[id]?.x || 0))
-      const top = Math.min(...members.map(id => retainedPositions.current[id]?.y || 0))
-      for (const id of members) {
-        const origin = retainedPositions.current[id] || { x: 0, y: 0 }
-        positions[id] = { x: 200 + origin.x - left, y: row + origin.y - top }
-      }
-      row += Math.max(0, ...members.map(id => positions[id].y + (sizes[id]?.height || 350) - row)) + 140
-    }
-    return positions
-  }
   const arrangeCards: GraphArrange = (items, sizes, width, anchorId, retained) => {
-    const base = arrangeGroups(items.filter(item => !resultsById.has(item.id)), sizes, width, anchorId, retained)
+    const cards = items.filter(item => !resultsById.has(item.id))
+    const base = retained
+      ? arrange(cards, sizes, width, anchorId, { ...historicalPositions.current, ...retained })
+      : arrangeGenerationCards(cards.map(card => card.id), groups, retainedPositions.current, sizes)
     const positions = placeLinkedResults(linkedResults, base, sizes, retained && { ...historicalPositions.current, ...retained })
     for (const id of cachedResultIds) if (!positions[id] && retained?.[id]) positions[id] = retained[id]
     return positions
@@ -314,6 +300,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '',
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
     onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, container.current?.clientWidth || 1200)
+  const arrangeLayout = () => { if (!arrangementBlocked) layout.rearrange() }
   const movementHost = useRef({ layout, history })
   movementHost.current = { layout, history }
   const [movement] = useState(() => createMoveTransaction({
@@ -1039,8 +1026,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
 
   // Use a real member position so cross-row selections do not occupy an unrelated empty corner.
-  const stackOrigin = (ids: string[]) => point(ids[0])
-  const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), cardSizes[id]?.width || 400, cardSizes[id]?.height || 172, side)
+  const anchor = (id: string, side: ConnectionSide) => {
+    const stack = stackFor(id)
+    if (!stack) return sidePoint(point(id), cardSizes[id]?.width || 400, cardSizes[id]?.height || 172, side)
+    const bounds = generationGroupBounds(stack, stack.card_ids || [], point, cardSizes)
+    return sidePoint(bounds, bounds.width, bounds.height, side)
+  }
   const resultPath = (source: string, target: string, label: string, result: LinkedResult, adopted = false, edge?: GenerationEdge, lane = 0) => {
     const sides = defaultSides(point(source), point(target))
     const resultSource = edge ? result.output.source : undefined
@@ -1125,7 +1116,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return <AssociationInspectionContext.Provider key={detailCard.id} value={{
         request: associationRequest,
         onLocateFrameRelation: cardId => navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic: { card_id: cardId, path: ['frame_target'] } }),
-      }}><EditorContainer diagnosticFocus={control?.selector && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={isCheck || detailCard.type?.startsWith('direction.')} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
+      }}><EditorContainer diagnosticFocus={control?.selector && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={isCheck || detailCard.type?.startsWith('direction.')} layoutAction={isReferenceDesign(detailCard) && <WorkbenchIconButton label="整理布局" variant="quiet" icon={<AppstoreOutlined />} disabled={arrangementBlocked} onClick={arrangeLayout} />} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => { setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
         {!desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && detailCard.type !== 'review.check' && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {control?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的正文片段已不可用。</div>}
@@ -1234,7 +1225,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => zoomAt(transform.scale + .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
       <Button variant="quiet" onClick={fitVisibleCards}>适应全部</Button>
       <CanvasToolbarMenu label="布局" caption="布局">
-        <Button disabled={arrangementBlocked} onClick={() => layout.rearrange()}>整理布局</Button>
+        <Button disabled={arrangementBlocked} onClick={arrangeLayout}>整理布局</Button>
         <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
         <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
         <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
@@ -1359,11 +1350,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {stacks.map(group => {
           const members = group.card_ids || []
           if (!members.length) return null
-          const origin = stackOrigin(members)
+          const origin = generationGroupBounds(group, members, point, cardSizes)
           const cover = cards.find(card => card.id === members[0])!
           const coverImage = 'image_binding' in cover ? cover.image_binding?.file_id : cover.type === 'content.image' && 'file_id' in cover ? cover.file_id : runtime?.outputs[cover.id]?.find(output => output.modality === 'image')?.file_id
           const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
-          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
+          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{ left: origin.x, top: origin.y, width: origin.width, height: origin.height }}
             onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) { clearSelection(); setViewStackId(group.id) } stackMoved.current = false }}
             onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clearSelection(); setViewStackId(group.id) } }}
             onPointerDown={event => {
@@ -1390,11 +1381,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         })}
         {groups.filter(group => group.kind !== 'stack').map(group => {
           const members = (group.card_ids || []).filter(id => cards.some(card => card.id === id))
-          const positions = members.map(point)
-          const origin = { x: positions.length ? Math.min(...positions.map(pos => pos.x)) - 16 : 0,
-            y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 48 : 0 }
-          const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (cardSizes[id]?.width || 400) - origin.x + 16))
-          const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (cardSizes[id]?.height || 350) - origin.y + 16))
+          const origin = generationGroupBounds(group, members, point, cardSizes)
           return <section key={group.id} data-group-id={group.id} tabIndex={-1} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
             if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
@@ -1414,7 +1401,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               if (Math.hypot(event.clientX - current.x, event.clientY - current.y) < 6) selectGroup(group.id)
               finishMove()
             }
-          }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
+          }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }} style={{ left: origin.x, top: origin.y, width: origin.width, height: origin.height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
             <div className="generation-group-header">
               <button type="button" className="generation-group-title" aria-label={`选择编组 ${group.name}`} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
               {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); movement.begin(members, true) } }} onPointerUpCapture={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
