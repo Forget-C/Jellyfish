@@ -1,4 +1,4 @@
-"""核对忠实分镜语义并组装共同画布；不分配运行或写文档。"""
+"""核对分镜语义并组装共同画布；不分配运行或写文档。"""
 
 from functools import lru_cache
 from uuid import NAMESPACE_URL, uuid5
@@ -28,14 +28,18 @@ def _range(text: str, excerpt: str) -> tuple[int, int]:
     return start, start + len(excerpt)
 
 
-def _validate_field(note: StoryboardField, text: str, shot_span: tuple[int, int]) -> None:
-    """忠实提取不得将未写明内容作为事实或推断。"""
+def _validate_field(note: StoryboardField, text: str, shot_span: tuple[int, int], *, complete: bool) -> None:
+    """两模式均要求原文事实可核实，只有完整模式允许标记创作提议。"""
     if note.excerpt:
         start, end = _range(text, note.excerpt)
         if not shot_span[0] <= start < end <= shot_span[1]:
             raise ValueError('设计字段出处不属于当前镜头')
+    if note.state == 'proposal':
+        if not complete or not note.text.strip():
+            raise ValueError('创作提议必须包含内容，且只允许在完整分镜模式使用')
+        return
     if note.state == 'fact' and (not note.excerpt or not note.text.strip() or note.text not in note.excerpt):
-        raise ValueError('忠实事实必须逐字来自已核对原文')
+        raise ValueError('原文事实必须逐字来自已核对原文')
     if note.state != 'fact' and note.text:
         raise ValueError('待确定或不适用字段不得带推断内容')
     if note.state in ('absent', 'not_applicable') and (not note.reason.strip() or not note.excerpt):
@@ -52,14 +56,20 @@ def storyboard_design_fields() -> dict[str, list[str]]:
 def validate_storyboard(result: SceneStoryboard, args: dict) -> None:
     """在模型纠错周期内拒绝无出处、非法身份与无法表达的字段。"""
     source = args['script_text']
+    complete = args['mode'] == 'complete'
     objects = {item['id']: item['kind'] for item in args['objects']}
+    object_sources = {(item['kind'], item['excerpt']) for item in args['objects']}
     for item in result.missed_objects:
+        source_key = (item.kind, item.excerpt)
+        if source_key in object_sources:
+            raise ValueError('同类型对象出处已存在，必须使用现有对象身份')
         if item.id in objects:
             raise ValueError('补漏对象身份不能重复或覆盖已准备对象')
         if item.name not in item.excerpt:
             raise ValueError('补漏对象名称必须来自原文')
         _range(source, item.excerpt)
         objects[item.id] = item.kind
+        object_sources.add(source_key)
     catalog = storyboard_design_fields()
     shot_ids, last = set(), 0
     for shot in result.shots:
@@ -70,9 +80,9 @@ def validate_storyboard(result: SceneStoryboard, args: dict) -> None:
         last = span[1]
         if len(shot.object_ids) != len(set(shot.object_ids)) or any(item not in objects for item in shot.object_ids):
             raise ValueError('镜头参与对象必须明确存在且不可重复')
-        for field in (shot.narrative_role, shot.estimated_duration, shot.beat):
+        for field in (shot.narrative_role, shot.visible_result, shot.estimated_duration, shot.beat):
             if field:
-                _validate_field(field, source, span)
+                _validate_field(field, source, span, complete=complete)
         design_ids = set()
         for design in shot.designs:
             fields = set(catalog.get(design.card_type, ()))
@@ -84,10 +94,10 @@ def validate_storyboard(result: SceneStoryboard, args: dict) -> None:
                     objects[design.object_id] == 'scene'):
                 raise ValueError('设计对象与本镜头的实际关系不符')
             if design.card_type in SUBJECT_PORTS and not design.object_id and any(
-                    note.state == 'fact' for note in design.fields.values()):
+                    note.state in ('fact', 'proposal') for note in design.fields.values()):
                 raise ValueError('本设计需明确适用的参与对象')
             for field in design.fields.values():
-                _validate_field(field, source, span)
+                _validate_field(field, source, span, complete=complete)
 
 
 def _identity(canvas_id: str, key: str) -> str:
@@ -176,7 +186,8 @@ class StoryboardAssembly:
                 reference['image_binding'] = {'file_id': file_id, 'source': self._output(image, 'image')}
                 members.append(image['id'])
             self.index['objects'].append({'object_id': object_id, 'description_card_id': description['id'],
-                                          'reference_card_id': reference['id']})
+                                          'reference_card_id': reference['id'],
+                                          'origin': 'missed' if 'semantic_id' in row else 'prepared'})
             self.objects[row.get('semantic_id', object_id)] = (description, reference)
         self._group('common', '原文与共享对象', members)
 
@@ -239,9 +250,10 @@ class StoryboardAssembly:
         for ordinal, shot in enumerate(result.shots, 1):
             key = f'shot:{shot.id}'
             shot_id = self._id(key + ':identity')
-            source = self._source(shot.excerpt, 'visible_result')
+            visible = shot.visible_result or StoryboardField(state='fact', text=shot.excerpt, excerpt=shot.excerpt)
+            source = self._source(visible.excerpt, 'visible_result') if visible.excerpt else self._source(shot.excerpt)
             card = self._card(key, 'direction.shot', sources=[source], shot_id=shot_id, name=f'镜头 {ordinal:02d}',
-                              visible_result=self._field(StoryboardField(state='fact', text=shot.excerpt, excerpt=shot.excerpt)))
+                              visible_result=self._field(visible))
             for field in ('narrative_role', 'estimated_duration'):
                 note = getattr(shot, field) or StoryboardField(state='undecided')
                 card[field] = self._field(note)

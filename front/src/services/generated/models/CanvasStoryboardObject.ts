@@ -9,4 +9,5 @@ export type CanvasStoryboardObject = {
     object_id: string;
     description_card_id: string;
     reference_card_id: string;
+    origin?: 'prepared' | 'missed';
 };

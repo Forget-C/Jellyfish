@@ -168,13 +168,18 @@ try {
   await page.goto(`http://127.0.0.1:4264/projects/${project}/generation-canvas?canvas=${id}`)
   await references.click()
   await shoot.getByText('镜头指定', { exact: true }).waitFor()
-  await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"]')]
-    .some(element => element.getBoundingClientRect().width >= 600))
-  await dialog.screenshot({ path: join(output, 'reference-settings.png'), animations: 'disabled' })
+  const waitForReferenceDialog = width => page.waitForFunction(viewport => {
+    const panel = document.querySelector('.ant-modal [aria-label="阿同默认参考"]')?.closest('.ant-modal')
+    if (!panel || window.innerWidth !== viewport || getComputedStyle(panel).opacity !== '1' ||
+        [...panel.classList].some(name => name.startsWith('ant-zoom-'))) return false
+    const bounds = panel.getBoundingClientRect()
+    return bounds.width > 0 && bounds.left >= -0.5 && bounds.right <= viewport + 0.5
+  }, width)
+  await waitForReferenceDialog(1440)
+  await page.screenshot({ path: join(output, 'reference-settings.png') })
   await page.setViewportSize({ width: 390, height: 844 })
-  const mobile = await dialog.boundingBox()
-  assert.ok(mobile && mobile.x >= 0 && mobile.x + mobile.width <= 390)
-  await dialog.screenshot({ path: join(output, 'reference-settings-mobile.png'), animations: 'disabled' })
+  await waitForReferenceDialog(390)
+  await page.screenshot({ path: join(output, 'reference-settings-mobile.png') })
   await page.setViewportSize({ width: 1440, height: 960 })
   await dialog.getByRole('button', { name: '完成', exact: true }).click()
 

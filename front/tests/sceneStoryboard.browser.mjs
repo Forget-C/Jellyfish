@@ -56,7 +56,9 @@ try {
   await front.getByText('已选参考图', { exact: true }).waitFor()
   await page.getByRole('button', { name: '生成分镜', exact: true }).click()
   const config = page.getByRole('dialog', { name: '生成分镜' })
-  await config.getByRole('textbox', { name: '画布名称' }).fill('忠实分镜验收')
+  assert.equal(await config.getByRole('radio', { name: '自动产出完整分镜', exact: true }).isChecked(), true)
+  assert.ok(await config.getByRole('textbox', { name: '画布名称' }).inputValue())
+  await config.getByRole('textbox', { name: '画布名称' }).fill('完整分镜验收')
   await config.getByRole('combobox', { name: '生产模型' }).click()
   await page.getByText('分镜测试图片模型', { exact: true }).click()
   await config.getByRole('button', { name: '开始提取', exact: true }).click()
@@ -64,9 +66,9 @@ try {
   const id = new URL(page.url()).searchParams.get('canvas')
   const canvas = `${studio}/generation-canvases/${project}/${id}`
   const read = () => request(canvas)
-  const poll = async predicate => {
+  const poll = async (predicate, readState = read) => {
     for (let attempt = 0; attempt < 130; attempt++) {
-      const state = await read()
+      const state = await readState()
       if (predicate(state)) return state
       await delay(100)
     }
@@ -74,8 +76,14 @@ try {
   }
   const applied = await poll(state => !!state.document.storyboard)
   const { shots, objects } = applied.document.storyboard
+  assert.equal(applied.document.storyboard.mode, 'complete')
+  const camera = applied.document.cards.find(card => card.type === 'direction.camera')
+  assert.equal(camera.fields.viewpoint.text, '低机位跟拍')
+  assert.equal(camera.fields.viewpoint.state, 'proposal')
   assert.equal(shots.length, 2)
-  assert.equal(objects.length, 3)
+  assert.equal(objects.filter(object => object.origin === 'prepared').length, 3)
+  const missed = objects.find(object => object.origin === 'missed')
+  assert.equal(applied.document.cards.find(card => card.id === missed.reference_card_id).type, 'reference.place')
   assert.equal(applied.document.cards.filter(card => card.type === 'content.character').length, 2)
   assert.notEqual(...applied.document.cards.filter(card => card.type === 'content.character').map(card => card.name))
   assert.equal(applied.document.groups.length, 3)
@@ -94,6 +102,9 @@ try {
   await page.getByRole('button', { name: '重做操作', exact: true }).click()
   await poll(state => state.document.storyboard?.task_id === applied.document.storyboard.task_id)
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await openCanvasCard(page, missed.reference_card_id)
+  await page.getByText('补漏对象 · 未选择图片', { exact: true }).waitFor()
+  await closeCanvasDetails(page)
   await openCanvasCard(page, shots[0].card_id)
   const visible = page.getByRole('textbox', { name: '可见结果内容', exact: true })
   await visible.fill('阿同继续拿着信封。')
@@ -112,5 +123,28 @@ try {
   await visible.waitFor()
   assert.equal(await visible.innerText(), result.text)
   await page.screenshot({ path: join(output, 'storyboard-edited.png'), animations: 'disabled' })
+  await page.goto(prep)
+  await page.getByRole('button', { name: '生成分镜', exact: true }).click()
+  await config.getByRole('radio', { name: '忠实提取', exact: true }).check()
+  await config.getByRole('button', { name: '开始提取', exact: true }).click()
+  await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+  const faithfulId = new URL(page.url()).searchParams.get('canvas')
+  assert.notEqual(faithfulId, id)
+  const faithfulRead = () => request(`${studio}/generation-canvases/${project}/${faithfulId}`)
+  const faithful = await poll(state => state.document.storyboard?.mode === 'faithful', faithfulRead)
+  assert.equal(faithful.document.cards.some(card => card.type === 'direction.camera'), false)
+  const faithfulShot = faithful.document.storyboard.shots[0]
+  const unconfigured = faithful.document.cards.find(card => card.id === faithfulShot.model_card_ids[0])
+  assert.equal(unconfigured.model_id, null)
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await openCanvasCard(page, faithfulShot.card_id)
+  await visible.fill('阿同站在前门，手持信封。')
+  await closeCanvasDetails(page)
+  await poll(state => state.document.cards.find(card => card.id === faithfulShot.card_id)?.visible_result?.text === '阿同站在前门，手持信封。', faithfulRead)
+  await page.reload()
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await openCanvasCard(page, faithfulShot.card_id)
+  await visible.waitFor()
+  assert.equal(await visible.innerText(), '阿同站在前门，手持信封。')
   process.stdout.write(JSON.stringify({ output, passed: true }) + '\n')
 } finally { await cleanup() }

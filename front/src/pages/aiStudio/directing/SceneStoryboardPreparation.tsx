@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Input, Select, Space } from 'antd'
+import { Alert, Input, Radio, Select, Space } from 'antd'
 import { LlmService, StudioDirectingService } from '../../../services/generated'
 import type { ModelRead, StoryboardRequest, StoryboardTaskRead } from '../../../services/generated'
 import { directingError } from './common'
@@ -64,7 +64,7 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
     return () => { active = false; clearTimeout(timer) }
   }, [projectId, chapterId, sequenceId, taskId, taskStatus])
   const start = () => {
-    setRequest({ request_id: crypto.randomUUID(), name: nameForNewCanvas(), mode: 'faithful' })
+    setRequest({ request_id: crypto.randomUUID(), name: nameForNewCanvas(), mode: 'complete' })
     setSent(false); setError('')
   }
   const submit = async () => {
@@ -95,7 +95,18 @@ export function SceneStoryboardPreparation({ scope, editable, nameForNewCanvas, 
         <Button variant="primary" loading={submitting} onClick={() => void submit()}>{sent ? '核实提交' : '开始提取'}</Button>
       </WorkbenchDialogActions>}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <p>忠实提取 · 保留原文明示内容，未写明的设计保持待确定。</p>
+        <Radio.Group aria-label="分镜模式" value={request?.mode} disabled={sent}
+          onChange={event => {
+            const mode: StoryboardRequest['mode'] = event.target.value
+            setRequest(value => value && { ...value, mode })
+          }}
+          options={[
+            { value: 'complete', label: '自动产出完整分镜' },
+            { value: 'faithful', label: '忠实提取' },
+          ]} />
+        <p>{request?.mode === 'faithful'
+          ? '保留原文明示内容，未写明的设计保持待确定。'
+          : '保留原文事实，为适用镜头补充设计建议，仍不确定的内容保留待确定。'}</p>
         <label htmlFor="scene-storyboard-name">画布名称</label>
         <Input id="scene-storyboard-name" maxLength={255} value={request?.name || ''} disabled={sent}
           onChange={event => setRequest(value => value && { ...value, name: event.target.value })} />

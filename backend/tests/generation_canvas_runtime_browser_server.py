@@ -37,19 +37,26 @@ class ControlledModel:
         self.params = params
 
     def invoke(self, messages):
-        """只为对象浏览器旅程替换外部模型输出。"""
+        """为场次准备和分镜浏览器旅程替换外部模型输出。"""
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)
         assert '前门的阿同' in args['script_text']
-        if args.get('mode') == 'faithful':
+        if args.get('mode') in ('complete', 'faithful'):
             objects = {item['excerpt']: item['id'] for item in args['objects']}
             front = objects['前门的阿同']
             extra = [{'id': 'return', 'excerpt': '他绕过门廊。', 'object_ids': [front]}] if os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1' else []
-            return SimpleNamespace(content=json.dumps({'shots': [
-                {'id': 'front', 'excerpt': '前门的阿同拿着信封。', 'object_ids': [front, objects['拿着信封']],
-                 'designs': [{'id': 'action', 'card_type': 'direction.performance', 'object_id': front,
-                              'fields': {'physical_action': {'state': 'fact', 'text': '拿着信封', 'excerpt': '拿着信封'}}}]},
+            designs = [{'id': 'action', 'card_type': 'direction.performance', 'object_id': front,
+                        'fields': {'physical_action': {'state': 'fact', 'text': '拿着信封', 'excerpt': '拿着信封'}}}]
+            if args['mode'] == 'complete':
+                designs.append({'id': 'camera', 'card_type': 'direction.camera', 'fields': {'viewpoint': {
+                    'state': 'proposal', 'text': '低机位跟拍', 'excerpt': '前门的阿同拿着信封。', 'reason': '突出手部动作',
+                }}})
+            missed = {'id': 'door', 'kind': 'scene', 'name': '前门', 'excerpt': '前门的阿同拿着信封。'}
+            if args['mode'] == 'complete' and len(messages) == 2:
+                missed = {'id': 'door', 'kind': 'character', 'name': '阿同', 'excerpt': '前门的阿同'}
+            return SimpleNamespace(content=json.dumps({'missed_objects': [missed], 'shots': [
+                {'id': 'front', 'excerpt': '前门的阿同拿着信封。', 'object_ids': [front, objects['拿着信封'], 'door'], 'designs': designs},
                 {'id': 'back', 'excerpt': '后门的阿同等待。', 'object_ids': [objects['后门的阿同']]},
                 *extra,
             ]}, ensure_ascii=False))

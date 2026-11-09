@@ -74,7 +74,8 @@ class SceneStoryboardService(SceneObjectService):
         args = {'mode': body.mode, 'script_text': sequence.source_text, 'source_version': canvas.document.fixed_source.chapter_version,
                 'objects': frozen_objects, 'production_model_id': body.production_model_id,
                 'production_capability': capability.model_dump(mode='json') if capability else None}
-        task = await TaskService(self.db).submit(kind=STORYBOARD_KIND, title='忠实提取分镜', target_type='directing_sequence',
+        task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
+            title='生成完整分镜' if body.mode == 'complete' else '忠实提取分镜', target_type='directing_sequence',
             target_id=sequence_id, project_id=self.project_id, provider_id=provider.id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
