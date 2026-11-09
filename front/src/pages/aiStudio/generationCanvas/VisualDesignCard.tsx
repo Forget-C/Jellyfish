@@ -101,6 +101,7 @@ export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填�
   const measureRef = useRef<HTMLElement>(null)
   const lastMeasurement = useRef<{ id: string; height: number }>()
   const [fit, setFit] = useState<{ lines: number[]; hint: boolean }>({ lines: [], hint: true })
+  const lastFit = useRef(fit)
   const { locked, cardId, onMeasure } = sizing || {}
   const measure = useCallback(() => {
     const summary = measureRef.current
@@ -127,13 +128,17 @@ export function DesignCardBody({ sizing, emptyHint = '选择预设或直接填�
       const top = (rowBounds.top - bounds.top) / scale
       const lineHeight = parseFloat(getComputedStyle(value).lineHeight)
       const lineCount = Math.floor((available - top + .01) / lineHeight)
-      if (lineCount < 1) break
+      if (!Number.isFinite(lineCount) || lineCount < 1) break
       fitted.push(lineCount)
       if ((rowBounds.bottom - bounds.top) / scale > available + .01) break
     }
     const hint = summaryHeight <= available
-    setFit(previous => previous.hint === hint && previous.lines.length === fitted.length
-      && previous.lines.every((lines, index) => lines === fitted[index]) ? previous : { lines: fitted, hint })
+    const previous = lastFit.current
+    if (previous.hint !== hint || previous.lines.length !== fitted.length
+      || previous.lines.some((lines, index) => lines !== fitted[index])) {
+      lastFit.current = { lines: fitted, hint }
+      setFit(lastFit.current)
+    }
   }, [locked, cardId, onMeasure])
   useLayoutEffect(measure)
   useLayoutEffect(() => {
