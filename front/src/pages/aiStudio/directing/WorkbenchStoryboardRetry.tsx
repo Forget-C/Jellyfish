@@ -16,6 +16,12 @@ function readIntent(key: string): RetryIntent | undefined {
   } catch { return undefined }
 }
 
+function retryError(cause: unknown) {
+  const reason = directingError(cause)
+  if (!(cause instanceof ApiError) || cause.status !== 404) return reason
+  return /model not found/i.test(reason) ? '原文本模型已不可用。' : '原画布或任务已不可用'
+}
+
 /** 确认本次依据后重试原画布，未知结果只重放已保存的同一请求。 */
 export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted }: {
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary
@@ -50,7 +56,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
       if (!response.data || response.data.canvas_id !== canvasId) throw new Error('原画布或任务已不可用')
       setPreview(response.data)
     }).catch(cause => {
-      if (active) setError(cause instanceof ApiError && cause.status === 404 ? '原画布或任务已不可用' : directingError(cause))
+      if (active) setError(retryError(cause))
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, target, canvasId, revision])
@@ -87,7 +93,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
         clear()
         if (mounted.current) setPreview(undefined)
       }
-      if (mounted.current) setError(cause instanceof ApiError && cause.status === 404 ? '原画布或任务已不可用' : directingError(cause))
+      if (mounted.current) setError(retryError(cause))
     } finally {
       sending.current = false
       if (mounted.current) setSubmitting(false)
@@ -131,6 +137,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
         ]} />
         <StoryboardBasisPreview basis={preview.basis} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refresh}
           sourceLabel={preview.source_kind === 'fixed' ? '本次采用的画布固定原文' : '本次采用的场次摘录'}
+          emptyText="本次重试未采用对象参考，可以继续核对。"
           onOpenSource={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'division'))}
           onOpenObjects={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'objects'))} />
       </>}

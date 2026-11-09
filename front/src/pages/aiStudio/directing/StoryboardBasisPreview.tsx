@@ -3,9 +3,9 @@ import type { StoryboardBasis } from '../../../services/generated'
 
 /** 显示本次会固定的摘录及可用参考，和当前对象任务状态分别表达。 */
 export function StoryboardBasisPreview({ basis, useSaved, onUseSaved, onRefresh, onOpenSource, onOpenObjects,
-  sourceLabel = '本次采用的场次摘录' }: {
+  sourceLabel = '本次采用的场次摘录', emptyText }: {
   basis: StoryboardBasis; useSaved: boolean; onUseSaved: (value: boolean) => void
-  onRefresh: () => void; onOpenSource: () => void; onOpenObjects: () => void; sourceLabel?: string
+  onRefresh: () => void; onOpenSource: () => void; onOpenObjects: () => void; sourceLabel?: string; emptyText?: string
 }) {
   return <div className="management-storyboard-basis">
     {basis.source_changed && <Alert showIcon type="warning" message="章节正文已变化，本次仍采用下方已确认摘录。"
@@ -26,7 +26,7 @@ export function StoryboardBasisPreview({ basis, useSaved, onUseSaved, onRefresh,
           <ul>{basis.objects.map(object => <li key={object.id}>
             {object.name} · {object.asset_name || '未关联资产'} · {object.image_file_id ? '已选参考图' : '无参考图'}
           </li>)}</ul>
-        </details> : <p>{basis.preparation_revision ? '已保存准备没有对象，可以继续生成。' : '尚未准备对象，可以直接生成分镜。'}</p>}
+        </details> : <p>{emptyText ?? (basis.preparation_revision ? '已保存准备没有对象，可以继续生成。' : '尚未准备对象，可以直接生成分镜。')}</p>}
       </>}
   </div>
 }

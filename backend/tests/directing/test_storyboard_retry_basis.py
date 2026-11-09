@@ -65,9 +65,12 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
         document = {**canvas['document'], 'name': '保留人工修改'}
         saved = await data(await client.put(canvas_path, json={'request_id': 'edit-before-retry',
             'expected_revision': canvas['revision'], 'document': document}))
+        await data(await client.patch('/api/v1/studio/chapters/ch1', json={'raw_text': '新正文待核对。'}))
         command = {'request_id': 'confirmed-retry', 'basis_token': preview['basis']['token']}
         assert (await client.post(retry, json=command)).status_code == 409
         updated = await data(await client.get(retry + '/basis'))
+        assert updated['basis']['source_changed'] and updated['basis']['source_text'] == excerpt
+        assert updated['source_kind'] == 'fixed'
         command['basis_token'] = updated['basis']['token']
         accepted = await data(await client.post(retry, json=command))
         assert accepted['canvas_id'] == original['canvas_id'] and accepted['task_id'] != original['task_id']
@@ -88,3 +91,16 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
         assert candidate['candidate']['base_revision'] == saved['revision']
         assert (await data(await client.get(canvas_path)))['document'] == document
         assert observed == [('faithful', excerpt, [])]
+
+        chapter_read = await data(await client.get(chapter))
+        draft = {'source_version': chapter_read['source_version'], 'baseline': [
+            {'sequence_id': item['id'], 'version': item['version']} for item in chapter_read['sequences']],
+            'members': [], 'lineage': [{'sequence_id': scene['id'], 'target_keys': []}], 'exited_sequence_ids': [scene['id']]}
+        retirement = await data(await client.post(chapter + '/division/preview', json=draft))
+        await data(await client.put(chapter + '/division', json={'request_id': 'retire-retry-target',
+            'draft': draft, 'preview_token': retirement['preview_token'], 'identity_changes_confirmed': True}))
+        archived = await client.get(retry + '/basis')
+        assert archived.status_code == 409 and '历史场次' in archived.text
+        archived = await client.post(retry, json={**command, 'request_id': 'new-on-history'})
+        assert archived.status_code == 409 and '历史场次' in archived.text
+        assert (await data(await client.post(retry, json=command)))['task_id'] == accepted['task_id']
