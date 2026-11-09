@@ -1,0 +1,3 @@
+interface:
+  display_name: "文档审计与清理"
+  short_description: "核实文档替代关系与独有信息，按授权清理正文、引用及历史附件"
