@@ -7,10 +7,11 @@ import { usePageTitle } from '../../../layouts/pageTitle'
 import { StudioDirectingService, type ChapterWorkbenchManagement, type WorkbenchSceneSummary } from '../../../services/generated'
 import {
   chapterLocation, legacySceneCanvasLocation, managementStep, readChapterBrowse,
-  saveChapterBrowse, scenePreparationLocation, type WorkbenchManagementStep,
+  saveChapterBrowse, type WorkbenchManagementStep,
 } from './chapterNavigation'
 import { directingError } from './common'
 import { SceneObjectPreparation } from './SceneObjectPreparation'
+import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
 import './workbench-management.css'
 
 const steps: { id: WorkbenchManagementStep; label: string }[] = [
@@ -82,7 +83,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     (rememberedScene ? remembered.managementStep : undefined) ?? 'division' : 'division'
   const chapterPage = chapterLocation(projectId)
   const sourceLocation = chapterLocation(projectId, chapterId, selected?.id) + '&panel=source'
-  const preparation = selected && scenePreparationLocation(projectId, chapterId, selected.id)
   const loading = !overview && !error
   const hasActive = scenes.some(scene => [scene.object_task, scene.storyboard_task]
     .some(task => task?.status === 'queued' || task?.status === 'running'))
@@ -119,11 +119,16 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       return next
     })
   }
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    // Closing during the opening animation can skip the drawer's focus callback.
+    sceneToggle.current?.focus({ preventScroll: true })
+  }
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? historical}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
       if (overview.historical_sequences.some(scene => scene.id === id)) setHistoryOpen(true)
       select(id, step)
-      setDrawerOpen(false)
+      closeDrawer()
     }} />
   const legacy = selected ? [
     { key: 'director', label: <Link to={legacySceneCanvasLocation(projectId, chapterId, selected.id, 'director')}>旧版导演</Link> },
@@ -133,8 +138,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const action = !overview || invalidScene ? null : step === 'division' ? overview.has_source
     ? <Button type="primary" onClick={() => navigate(sourceLocation)}>划分场次</Button>
     : <Button type="primary" onClick={() => navigate(chapterPage + '&edit=' + encodeURIComponent(chapterId))}>填写章节原文</Button>
-    : step === 'objects' ? <div className="management-object-actions" ref={setObjectActions} />
-      : preparation && <Button type="primary" onClick={() => navigate(preparation)}>查看本场画布</Button>
+    : step === 'objects' && <div className="management-object-actions" ref={setObjectActions} />
 
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
     <PageToolbar title="工作台管理">
@@ -184,13 +188,13 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                   editable={!historical && !!selected.source_excerpt.trim()}
                   management={{ host: objectActions, onContinue: () => select(selected.id, 'storyboard'),
                     onChange: () => setRevision(value => value + 1) }} />}
-                {step === 'storyboard' && <p>{selected.canvas_count ? `本场有 ${selected.canvas_count} 张画布` : '本场尚无画布'}</p>}
+                {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} />}
               </section>}
             </>}
         </WorkspaceScrollPanel>
       </div>
       {!desktop && <Drawer title="本章场次" placement="left" width="min(320px, 100vw)" open={drawerOpen}
-        onClose={() => setDrawerOpen(false)} afterOpenChange={open => { if (!open) sceneToggle.current?.focus() }}>{list}</Drawer>}
+        onClose={closeDrawer}>{list}</Drawer>}
     </div>}
   </WorkspaceLayout>
 }

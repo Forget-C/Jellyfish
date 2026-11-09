@@ -10,7 +10,7 @@ export function managementStep(value?: string | null): WorkbenchManagementStep |
 }
 
 type ChapterBrowse = { chapter?: string; sequence?: string; query?: string; top?: number; sourceTop?: number; page?: number
-  managementSequence?: string; managementStep?: WorkbenchManagementStep }
+  managementSequence?: string; managementStep?: WorkbenchManagementStep; managementCanvas?: string }
 /** 浏览记忆按项目和章节隔离；不保存原文或未保存修改。 */
 export function readChapterBrowse(projectId: string, chapterId = ''): ChapterBrowse {
   try {
@@ -20,7 +20,8 @@ export function readChapterBrowse(projectId: string, chapterId = ''): ChapterBro
       sourceTop: Number.isFinite(value?.sourceTop) && value.sourceTop >= 0 ? value.sourceTop : undefined,
       top: Number.isFinite(value?.top) && value.top >= 0 ? value.top : undefined,
       managementSequence: typeof value?.managementSequence === 'string' ? value.managementSequence : undefined,
-      managementStep: managementStep(value?.managementStep) }
+      managementStep: managementStep(value?.managementStep),
+      managementCanvas: typeof value?.managementCanvas === 'string' ? value.managementCanvas : undefined }
   } catch { return {} }
 }
 

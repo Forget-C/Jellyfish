@@ -4,12 +4,16 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import uuid4
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import case, func, literal, select
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead, SceneCanvasSummary
+from app.core.contracts.directing.scene_storyboard import StoryboardTaskSummary
+from app.core.contracts.task import TaskStatus
 from app.models.directing import Sequence
-from app.models.generation_canvas import GenerationCanvas
+from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Chapter
+from app.models.task import Task
 from app.schemas.generation_canvas import CanvasFixedSource, CanvasRead, CreativeBasisCard
+from app.services.directing.storyboard_assembly import STORYBOARD_KIND
 from app.services.directing.workspace import WorkspaceService
 from app.services.generation_canvas.store import CanvasStore, SceneCanvasSeed
 
@@ -33,12 +37,59 @@ class SceneCanvasService(WorkspaceService):
         """读取场次摘要与本场画布，不加载旧版本或写入新依据。"""
         sequence, chapter = await self._scene(chapter_id, sequence_id)
         version = sha256(chapter.raw_text.encode()).hexdigest()
-        rows = await self.db.scalars(select(GenerationCanvas).where(
+        rows = (await self.db.execute(select(
+            GenerationCanvas.id, GenerationCanvas.created_at, GenerationCanvas.revision,
+            GenerationCanvas.document['name'].as_string().label('name'),
+            GenerationCanvas.document['fixed_source']['chapter_version'].as_string().label('source_version'),
+            GenerationCanvas.document['storyboard']['task_id'].as_string().label('applied_task'),
+        ).where(
             GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence.id
-        ).order_by(GenerationCanvas.created_at, GenerationCanvas.id))
-        canvases = [SceneCanvasSummary(id=row.id, name=row.document['name'],
-                    source_changed=row.document['fixed_source']['chapter_version'] != version) for row in rows]
+        ).order_by(GenerationCanvas.created_at.desc(), GenerationCanvas.id.desc()))).all()
+        latest, candidates = await self._canvas_storyboards(chapter_id, sequence_id) if rows else ({}, {})
+        canvases = []
+        for row in rows:
+            task, candidate = latest.get(row.id), candidates.get(row.id)
+            canvases.append(SceneCanvasSummary(
+                id=row.id, name=row.name, created_at=row.created_at, source_changed=row.source_version != version,
+                applied_storyboard_task_id=row.applied_task,
+                latest_storyboard=StoryboardTaskSummary(
+                    canvas_id=row.id, task_id=task.id, status=TaskStatus(task.status), stage=task.stage, error=task.error_message,
+                    candidate_available=bool(candidate and candidate.id == task.id), retry_of_task_id=task.retry_of_task_id,
+                ) if task else None,
+                candidate_storyboard_task_id=candidate.id if candidate else None,
+                storyboard_review_required=bool(candidate and (
+                    candidate.reextract_target == row.id or candidate.base_revision != row.revision)),
+            ))
         return SceneCanvasesRead(sequence=self.sequence_read(sequence, chapter), canvases=canvases)
+
+    async def _canvas_storyboards(self, chapter_id: str, sequence_id: str):
+        """每张画布最多读取一条成功任务与一条其他任务，不传输候选正文。"""
+        canvas_id = Task.input_snapshot['canvas_id'].as_string()
+        priority = case((Task.status.in_((TaskStatus.queued, TaskStatus.running)), 0), else_=1)
+        ranked = select(
+            Task.id, Task.created_at, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id,
+            canvas_id.label('canvas_id'), priority.label('priority'),
+            Task.input_snapshot['reextract_canvas_id'].as_string().label('reextract_target'),
+            Task.result['base_revision'].as_integer().label('base_revision'),
+            func.row_number().over(
+                partition_by=(canvas_id, Task.status == TaskStatus.succeeded),
+                order_by=(priority, Task.created_at.desc(), Task.id.desc()),
+            ).label('rank'),
+        ).join(GenerationCanvas, GenerationCanvas.id == canvas_id).where(
+            Task.project_id == self.project_id, Task.target_type == 'directing_sequence', Task.target_id == sequence_id,
+            Task.kind == STORYBOARD_KIND, Task.input_snapshot['chapter_id'].as_string() == chapter_id,
+            GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence_id,
+        ).subquery()
+        rows = await self.db.execute(select(ranked, CanvasSaveReceipt.request_id.label('receipt')).outerjoin(
+            CanvasSaveReceipt, (CanvasSaveReceipt.canvas_id == ranked.c.canvas_id)
+            & (CanvasSaveReceipt.request_id == literal('storyboard:') + ranked.c.id),
+        ).where(ranked.c.rank == 1).order_by(ranked.c.priority, ranked.c.created_at.desc(), ranked.c.id.desc()))
+        latest, candidates = {}, {}
+        for row in rows:
+            latest.setdefault(row.canvas_id, row)
+            if row.status == TaskStatus.succeeded and row.receipt is None and row.base_revision is not None:
+                candidates[row.canvas_id] = row
+        return latest, candidates
 
     async def create_canvas(self, chapter_id: str, sequence_id: str, body: SceneCanvasCreate) -> CanvasRead:
         """从已确认摘录建立固定依据，不用旧坐标截取刚修改的章节正文。"""
