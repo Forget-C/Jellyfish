@@ -1,15 +1,15 @@
 ---
 name: docs-maintain
-description: Create and update repository documentation and synchronize it with confirmed behavior or design. Use for product guides, developer docs, README updates, and documentation follow-up after implementation. Use docs-cleanup for document reorganization, duplication audits, or file deletion.
+description: Create and update long-lived project documentation and synchronize it with confirmed behavior or design. Use for product guides, developer docs, README updates, and documentation follow-up after implementation. Use docs-cleanup for document reorganization, duplication audits, or file deletion.
 ---
 
 # 文档编写与维护
 
-为当前读者维护准确、可用、可发现的文档。项目目录与内容规则统一读取[文档规范](../../../docs/development/standards/documentation.md)，不在技能中维护第二份分类表。
+为当前读者维护准确、可用、可发现的长期项目文档。适用范围、其他技能专属产物的归属及项目目录与内容规则统一读取[文档规范](../../../docs/development/standards/documentation.md)，不在技能中维护第二份分类表。
 
 ## 范围与协作
 
-- 用户要求评估、建议或“先不要修改”时，只在对话中交付方案；新增或更新文件沿用当前任务授权。技能被加载不等于获得写入、提交、推送或发布许可。
+- 用户仅要求评估或建议，且未授权保存成果时，只在对话中交付。明确要求保存、更新，或已有明确选用工作流的适用写入授权时，按授权范围写入；“先不要修改”等当前明确限制优先。保存方案不等于授权实施方案，技能被加载本身也不构成写入、提交、推送或发布许可。
 - 普通文字修正直接处理。需要拆分现有文件、跨目录迁移、审计重复或删除整篇文档及附件时，使用 [docs-cleanup](../docs-cleanup/SKILL.md) 的核查流程并复用已有授权；日常修订可以替换同一文档内已过时的表述，无须为每次正文删改启动清理。
 - 术语与重要决策的创建或变更使用 [domain-modeling](../domain-modeling/SKILL.md)，遵循项目领域布局；仅使用既有术语不启动领域建模。Agent 指令使用 [writing-for-agents](../writing-for-agents/SKILL.md)；技能本身由技能创建流程维护。
 - 文档维护不自动批准新设计、创建 ADR、修改业务代码或扩展为全产品手册。只处理本次受影响的材料，其他发现作为建议汇报。
@@ -18,7 +18,7 @@ description: Create and update repository documentation and synchronize it with 
 
 1. 从当前请求确定读者、主题、内容状态和写入范围。读取相关正文与项目入口，找到已有权威来源；已有文件能够承接时优先更新。
 2. 核对支持关键表述的代码、配置、测试或已确认决策。区分本地实现、验证证据和部署情况；代码与规范冲突时定位差异，不把缺陷写成预期行为。影响需求或对外行为且证据无法解决的矛盾才请求澄清，独立部分继续。
-3. 按文档规范确定目标。用户操作、已确认设计、当前架构和查询参考分别表达；新建文档须有独立用途，不能为目录完整创建空页。若当前只要求方案，在此给出目标位置、依据与必要修改后结束。
+3. 按文档规范确定目标。用户操作、已确认设计、当前架构和查询参考分别表达；新建文档须有独立用途，不能为目录完整创建空页。若当前只要求方案，按已授权的交付方式给出目标位置、依据与必要修改后结束，不执行方案。
 
 ## 编写与同步
 
@@ -30,6 +30,6 @@ description: Create and update repository documentation and synchronize it with 
 
 ## 验收与交付
 
-对照授权范围检查差异，核实每项新增或改变的能力表述有依据、目标目录与读者相符、状态没有被改写。检查受影响的索引、链接与锚点；站点渲染、导航或资源变化按文档规范运行构建和必要预览。只有仓库 Markdown 变更时采用对应的源检查，不运行无关应用测试。
+对照授权范围检查差异，核实每项新增或改变的能力表述有依据、目标目录与读者相符、状态没有被改写。检查受影响的索引、链接与锚点；站点渲染、导航或资源变化按文档规范运行构建和必要预览。独立文档任务只有仓库 Markdown 变更时采用对应的源检查，不运行无关应用测试；作为其他工作流的辅助步骤时，仍完成主流程要求的验证、审查与提交。
 
 报告实际修改及位置、完成的验证和未解决的具体问题。区分本地完成、提交和发布，不把未执行的操作写成已完成。
