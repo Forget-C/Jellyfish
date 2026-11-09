@@ -42,7 +42,7 @@ try {
   }
   const defaults = await fetch(api+'/api/v1/llm/model-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({default_text_model_id:null,default_image_model_id:null,default_video_model_id:null})})
   assert.ok(defaults.ok,await defaults.text())
-  const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '模型卡统一尺寸与底部状态' })
+  const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '模型卡固定尺寸与底部状态' })
   const ids = ['short', 'long', 'empty', 'image', 'video']
   const positions = Object.fromEntries([...ids, 'content'].map((id, index) => [id, { x: 120 + index % 3 * 400, y: 200 + Math.floor(index / 3) * 500 }]))
   const contentCards = [
@@ -51,7 +51,7 @@ try {
     {id:'basis',type:'content.basis',text:'长原文。'.repeat(500)},
   ]
   Object.assign(positions,{description:{x:1500,y:200},basis:{x:1500,y:450}})
-  const sizes = { description:{width:440,height:204}, basis:{width:480,height:250}, short: {width:560,height:400}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
+  const sizes = { description:{width:440,height:204}, basis:{width:480,height:250}, short: {width:360,height:424}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
   const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   const transform = {x:0,y:0,scale:1}
   const upload = async (name, data, type) => {
@@ -94,14 +94,21 @@ try {
   })
   await page.addInitScript(({layoutKey,positions,sizes,transform})=>{
     if(!sessionStorage.getItem('model-shell-seeded')){localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions,sizes,transform,manuallyPlaced:['short','video']}));sessionStorage.setItem('model-shell-seeded','1')}
+    const captureFirstFrame=()=>{
+      const card=document.querySelector('[data-card-id="short"]')
+      if(card?.checkVisibility()) window.firstTextModelHeight=card.offsetHeight
+      else requestAnimationFrame(captureFirstFrame)
+    }
+    requestAnimationFrame(captureFirstFrame)
   },{layoutKey,positions,sizes,transform})
   const url=`http://127.0.0.1:${port}/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  const modelHeights = {short:304,long:304,empty:304,image:424,video:424}
   const checkGeometry = async (scale=1) => {
     for (const id of ids) {
       const card = page.locator(`[data-card-id="${id}"]`), body = card.locator(':scope > .generation-card-body'), footer=card.locator('.generation-card-footer')
-      const b=await body.boundingBox(),f=await footer.boundingBox()
+      const outer=await card.boundingBox(), b=await body.boundingBox(),f=await footer.boundingBox()
       assert.ok(Math.abs(b.width-360*scale)<1,`${id}: shared model card width`)
-      assert.ok(Math.abs(b.height-392*scale)<1,`${id}: shared model card body height`)
+      assert.ok(Math.abs(outer.height-modelHeights[id]*scale)<1,`${id}: fixed outer height including title, saw ${outer.height}`)
       assert.ok(Math.abs(b.y+b.height-f.y-f.height-scale)<1,`${id}: footer is anchored above the bottom border`)
       const font = await card.locator('header strong').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))
       const statusFont = await footer.evaluate(e=>parseFloat(getComputedStyle(e).fontSize))
@@ -109,9 +116,16 @@ try {
       assert.ok(statusFont*scale>=10.99,`${id}: status remains readable when zoomed out`)
       assert.equal(await card.evaluate(e=>e.style.left),positions[id].x+'px');assert.equal(await card.evaluate(e=>e.style.top),positions[id].y+'px')
     }
-    const endpoint=await page.locator('[data-generation-edge-id="caption"] .canvas-edge-line').evaluate(path=>{const end=path.getPointAtLength(path.getTotalLength()).matrixTransform(path.getScreenCTM()),card=document.querySelector('[data-card-id="image"]').getBoundingClientRect();return {x:end.x,y:end.y,left:card.left,right:card.right,middle:card.top+card.height/2}})
-    assert.ok(Math.min(Math.abs(endpoint.x-endpoint.left),Math.abs(endpoint.x-endpoint.right))<1,'edge ends on the image card side')
-    assert.ok(Math.abs(endpoint.y-endpoint.middle)<1,'edge follows the resized image card center')
+    const endpoints=await page.locator('[data-generation-edge-id="caption"] .canvas-edge-line').evaluate(path=>
+      [['short',0],['image',path.getTotalLength()]].map(([id,length])=>{
+        const point=path.getPointAtLength(length).matrixTransform(path.getScreenCTM())
+        const card=document.querySelector(`[data-card-id="${id}"]`).getBoundingClientRect()
+        return {id,x:point.x,y:point.y,left:card.left,right:card.right,middle:card.top+card.height/2}
+      }))
+    for(const endpoint of endpoints) {
+      assert.ok(Math.min(Math.abs(endpoint.x-endpoint.left),Math.abs(endpoint.x-endpoint.right))<1,`${endpoint.id}: edge touches the card side`)
+      assert.ok(Math.abs(endpoint.y-endpoint.middle)<1,`${endpoint.id}: edge follows the card center`)
+    }
     const layout=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
     for (const [id, point] of Object.entries(positions)) assert.deepEqual(layout.positions[id],point)
     for (const [id, expected] of [['content',{width:400,height:172}],['description',{width:400,height:172}],['basis',{width:400,height:172}],['voice',{width:300,height:172}],['clip',{width:300,height:251}]]) {
@@ -119,14 +133,35 @@ try {
       assert.deepEqual(await page.locator(`[data-card-id="${id}"]`).evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),expected)
     }
     assert.deepEqual(layout.manuallyPlaced,['short','video'])
-    for(const id of ids) assert.deepEqual(layout.sizes[id],{width:360,height:424})
+    for(const id of ids) assert.deepEqual(layout.sizes[id],{width:360,height:modelHeights[id]})
   }
   for (scenario of ['succeeded','empty','running','failed','cancelled']) {
     await page.goto(url);await page.locator('[data-card-id="video"] .generation-card-footer').waitFor()
     if(scenario!=='empty')await page.locator('[data-card-id="short"]').getByText(scenario==='succeeded'?'已完成':scenario==='running'?'运行中':scenario==='failed'?'失败 · 未完成':'已取消 · 未完成',{exact:true}).waitFor()
-    await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key))?.sizes.short?.width===360,layoutKey,{timeout:2000}).catch(()=>{})
     if(scenario!=='empty') assert.equal(await page.locator('[data-card-id="image"] .generation-image-result > img').evaluate(e=>getComputedStyle(e).objectFit),'contain','generated image remains fully visible')
     await checkGeometry()
+    if(scenario==='succeeded') {
+      await page.waitForFunction(()=>window.firstTextModelHeight!==undefined)
+      assert.equal(await page.evaluate(()=>window.firstTextModelHeight),304,'a legacy 424px cache does not appear in the first visible frame')
+    }
+    const preview=page.locator('[data-card-id="long"]').getByRole('region',{name:'模型输出预览'})
+    if(scenario==='empty') await preview.getByText('尚未生成',{exact:true}).waitFor()
+    else {
+      const official=preview.getByText(/^很长的生成内容。/)
+      const textBox=await official.boundingBox(), previewBox=await preview.boundingBox()
+      const line=await official.evaluate(node=>parseFloat(getComputedStyle(node).lineHeight))
+      assert.ok(Math.abs(textBox.height-4*line)<1,'four lines of retained or formal text remain readable')
+      assert.ok(textBox.y+textBox.height<=previewBox.y+previewBox.height+1,'formal text is contained in the preview')
+      if(scenario==='running') {
+        const temporary=preview.getByRole('region',{name:'临时生成预览'})
+        await temporary.getByText('临时生成内容 · 未成为正式输出',{exact:true}).waitFor()
+        const temporaryTextBox=await temporary.getByText(/^正在生成/).boundingBox()
+        assert.ok(Math.abs(temporaryTextBox.height-4*line)<1,'four lines of temporary text remain readable')
+        const temporaryBox=await temporary.boundingBox()
+        const overrun=temporaryBox.y+temporaryBox.height+12-previewBox.y-previewBox.height
+        assert.ok(overrun<=1,`temporary explanation and summary fit alongside the retained result, overflow ${overrun}px`)
+      }
+    }
     if(scenario==='succeeded') {
       const imageCard=page.locator('[data-card-id="image"]');await imageCard.getByRole('button',{name:'预览下一张图片',exact:true}).click();await imageCard.getByText('2 / 2',{exact:true}).waitFor()
       await imageCard.getByRole('button',{name:'打开完整图片',exact:true}).click();await page.getByRole('dialog',{name:'图片预览',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('dialog',{name:'图片预览',exact:true}).waitFor({state:'hidden'})
@@ -142,6 +177,8 @@ try {
   }
   // Cached zoom survives reload and the fixed logical dimensions scale with the canvas.
   await page.getByRole('button',{name:'缩小',exact:true}).click();await page.reload();await page.locator('[data-card-id="video"] .generation-card-footer').waitFor();await checkGeometry(.9)
+  await page.waitForFunction(()=>window.firstTextModelHeight!==undefined)
+  assert.equal(await page.evaluate(()=>window.firstTextModelHeight),304,'the first visible frame after reopen uses the text model size')
   await page.setViewportSize({width:390,height:844});await checkGeometry(.9);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   await page.screenshot({path:join(output,'model-cards-mobile.png')})
   await page.setViewportSize({width:1440,height:1200})
@@ -262,5 +299,5 @@ try {
   const afterPlayback = await readCanvas()
   assert.equal(afterPlayback.revision, beforePlayback.revision)
   assert.deepEqual(afterPlayback.document, beforePlayback.document, 'reading and runtime updates do not edit canvas')
-  console.log('PASS unified model dimensions, full image preview, readable zoom, fixed footer and cached positions',output)
+  console.log('PASS fixed model dimensions, full image preview, readable zoom, fixed footer and cached positions',output)
 } catch(error) { if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error } finally { await cleanup() }
