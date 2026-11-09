@@ -62,6 +62,8 @@ class ControlledModel:
                 result = {'objects': [{'kind': 'character', 'name': '林舟', 'description': '码头勘查者',
                                        'excerpt': '林舟在码头', 'asset_id': 'object-browser-character'}]}
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
+        if args['script_text'] == '空镜。' and 'mode' not in args:
+            return SimpleNamespace(content='{"objects": []}')
         assert '前门的阿同' in args['script_text']
         if os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1' and '放下信封' in args['script_text']:
             revised = '前门的阿同放下信封。'
