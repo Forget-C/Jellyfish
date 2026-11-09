@@ -49,3 +49,18 @@
 .management-panel h3 { margin: 12px 0 8px; }
 .management-panel .ant-alert { margin-top: 8px; }
 .management-excerpt { max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.management-division { margin-top: 16px; min-width: 0; }
+.management-division .chapter-division-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 0;
+  background: var(--app-background);
+}
+.management-division .chapter-source-text { max-width: 70ch; }
+@media (min-width: 768px) {
+  .management-division .chapter-division-layout {
+    grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) minmax(180px, 220px);
+    gap: 12px;
+  }
+}

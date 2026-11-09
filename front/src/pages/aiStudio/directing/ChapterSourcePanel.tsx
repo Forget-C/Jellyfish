@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
-import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
+import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
 import { directingError } from './common'
 import { sourceSlice } from './sourceSelection'
 import { analysisDivision, divisionBaselineMatches, divisionRequest, initialDivision, versionDivision, type ChapterDivisionDraft } from './chapterDivision'
@@ -15,8 +15,9 @@ const changes = { added: '新增', title: '名称', position: '顺序', range: '
 const newKey = () => crypto.randomUUID()
 
 /** 单一草稿承接手动、AI 和历史方案；保存后才切换正式版本。 */
-export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, refreshKey, sequenceId }: {
+export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, refreshKey, sequenceId, embedded = false }: {
   projectId: string; chapterId: string; onChanged: (sequenceId: string) => void; onEdit: () => void; refreshKey: number; sequenceId?: string
+  embedded?: boolean
 }) {
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [editor, setEditor] = useState<Editor>()
@@ -53,13 +54,21 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       return response.data
     } catch (cause) { if (identity.current === key) setLoadError(directingError(cause)); return undefined }
   }, [projectId, chapterId])
-  useEffect(() => { identity.current = `${projectId}:${chapterId}`; void reload(); return () => { identity.current = ''; epoch.current++ } }, [reload, refreshKey, projectId, chapterId])
+  useEffect(() => {
+    const editingEpoch = epoch
+    identity.current = `${projectId}:${chapterId}`
+    void reload()
+    return () => { identity.current = ''; editingEpoch.current++ }
+  }, [reload, refreshKey, projectId, chapterId])
   useEffect(() => {
     if (chapter && !editor) {
-      setEditor({ chapter, draft: initialDivision(chapter) }); setActiveId(sequenceId || chapter.sequences[0]?.id)
+      setEditor({ chapter, draft: initialDivision(chapter) }); setActiveId(embedded ? sequenceId : sequenceId || chapter.sequences[0]?.id)
       if (sequenceId && !chapter.sequences.some(row => row.id === sequenceId)) setError('场次不存在或已退出当前划分')
     }
-  }, [chapter, editor, sequenceId])
+  }, [chapter, editor, sequenceId, embedded])
+  useEffect(() => {
+    if (embedded) { setActiveId(sequenceId); setMobileView('source') }
+  }, [embedded, sequenceId])
   const draftDirty = !!editor && JSON.stringify(editor.draft) !== JSON.stringify(initialDivision(editor.chapter))
   useEffect(() => {
     let active = true
@@ -196,7 +205,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
           : (await StudioDirectingService.directingDivisionAnalysis({ projectId, chapterId, taskId: selection.detail.analysis.id })).data
         if (!detail) throw new Error('历史详情读取失败')
         const version = 'version' in detail ? detail : undefined
-        const draft = version ? versionDivision(latest, version) : analysisDivision(latest, detail as import('../../../services/generated').DivisionAnalysisDetail)
+        const draft = version ? versionDivision(latest, version) : analysisDivision(latest, detail as DivisionAnalysisDetail)
         epoch.current++; setEditor({ chapter: latest, draft, history: version }); setActiveId(draft.members[0]?.key)
         setViewing(undefined); setHistoryOpen(false); setPreview(undefined); setError(''); setNotice('历史方案已载入草稿。请核对范围与身份，保存将形成新版本。')
       } catch (cause) { setError(directingError(cause)) } finally { writing.current = false; setBusy(false) }
@@ -217,14 +226,17 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       <Button loading={busy} onClick={() => void recover()}>核对上次保存</Button>{retryReady && <Button disabled={busy} onClick={() => void submit(pendingSave)}>重试同一提交</Button>}
     </Space>} />}
     {stale && <Alert type="warning" message="原文或场次集合已变化，当前仍显示编辑时的原文和完整草稿，未自动覆盖。" action={<Button disabled={busy || !!pendingSave} onClick={() => setDiscardOpen(true)}>查看最新划分</Button>} />}
-    {!chapter.raw_text.trim() && <Alert type="info" message="请先添加章节原文。" action={<Button onClick={() => guard(onEdit)}>填写章节原文</Button>} />}
+    {!chapter.raw_text.trim() && <Alert type="info" message={embedded ? '本章尚未填写原文' : '请先添加章节原文。'}
+      action={<Button onClick={() => guard(onEdit)}>填写章节原文</Button>} />}
     <WorkspaceWriteBoundary busy={busy || !!pendingSave}>
       <div className="chapter-division-toolbar">
         <div><strong>{chapter.title}</strong><span> · {chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}{draftDirty ? ' · 有未保存草稿' : ''}</span></div>
         <Space wrap><Button type="primary" disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {
           if (draftDirty) Modal.confirm({ title: '使用 AI 智能划分？', content: '分析成功后将替换当前草稿；若分析期间继续编辑，结果会保留到历史版本。', okText: '开始分析', cancelText: '取消', onOk: startAnalysis })
           else void startAnalysis()
-        }}>{running || activeTasks.length ? '划分中…' : 'AI智能划分'}</Button><Button onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button></Space>
+        }}>{running || activeTasks.length ? '划分中…' : 'AI智能划分'}</Button><Button onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
+          {embedded && !!chapter.raw_text.trim() && <Button onClick={() => guard(onEdit)}>编辑章节原文</Button>}
+        </Space>
       </div>
       {viewing && <Alert type="info" message={`正在查看 v${viewing.version.number}（只读） · 当前${chapter.current_version ? ` v${chapter.current_version.number}` : '尚无版本'}，当前草稿已保留。`} action={<Space wrap>
         <Button onClick={() => { epoch.current++; setViewing(undefined) }}>返回当前编辑</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>基于此版本编辑</Button>
