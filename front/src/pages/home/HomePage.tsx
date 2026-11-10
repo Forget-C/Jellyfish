@@ -2,6 +2,7 @@ import changanCover from './sample-covers/changan.svg'
 import rainCover from './sample-covers/rain.svg'
 import orbitCover from './sample-covers/orbit.svg'
 import { HomeProjectProgress } from './HomeProjectProgress'
+import { HomeRecentAssets } from './HomeRecentAssets'
 import { HomeRecentSessions } from './HomeRecentSessions'
 import './home.css'
 
@@ -34,5 +35,6 @@ export default function HomePage() {
       <HomeProjectProgress />
       <HomeRecentSessions />
     </div>
+    <HomeRecentAssets />
   </div>
 }

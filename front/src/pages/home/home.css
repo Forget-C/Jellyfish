@@ -22,7 +22,8 @@
 @media (min-width: 1024px) {
   .home-page { display: flex; flex: 1; flex-direction: column; min-height: 0; padding-block: clamp(12px, 2.7dvh, 24px); }
   .home-canvas-grid { grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr)); }
-  .home-canvas-cover { height: clamp(48px, calc(21dvh - 48px), 142px); }
+  .home-canvas-cover { height: clamp(48px, calc(29dvh - 151px), 142px); }
+  .home-canvas-caption { padding-block: clamp(8px, calc(4dvh - 20px), 16px); }
   .home-activity-grid { min-height: 0; }
   .home-activity-grid > section { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
   .home-activity-scroll { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
