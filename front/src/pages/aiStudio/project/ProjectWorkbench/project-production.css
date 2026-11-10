@@ -1,0 +1,36 @@
+.project-overview, .project-overview-sequences { display: grid; gap: 20px; }
+.project-overview-grid { display: grid; gap: 20px; align-items: start; }
+.project-overview-grid > section { min-width: 0; }
+.project-section-title { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
+.project-production-surface, .project-canvas-preview { min-width: 0; padding: 20px; border-radius: 12px; background: #fff; }
+.project-current-chapter { display: grid; justify-items: start; gap: 8px; }
+.project-current-chapter h3, .project-section-heading h3 { margin: 0; font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
+.project-current-chapter p { margin: 0 0 4px; color: var(--app-muted); }
+.project-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.project-section-heading .project-section-title { margin: 0; }
+.chapter-production-state { display: inline-flex; border-radius: 4px; padding: 2px 7px; background: #edf1f5; color: #475569; font-size: 12px; font-weight: 500; }
+.chapter-production-state[data-tone="pending"] { background: #faedcf; color: #774708; }
+.chapter-production-state[data-tone="ready"] { background: #e6edfa; color: #28518e; }
+.chapter-production-state[data-tone="available"] { background: #e1f0e7; color: #245c45; }
+.project-canvas-preview { overflow: hidden; padding: 0; }
+.project-canvas-preview-image { display: grid; place-items: center; height: 144px; background: #e7edf5; color: #536174; }
+.project-canvas-preview-image img { width: 100%; height: 100%; object-fit: cover; }
+.project-canvas-preview-caption { padding: 16px; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.project-chapter-list { min-width: 0; }
+.project-chapter-list .chapter-table .ant-table-cell { border-bottom: 0; }
+.project-chapter-list .chapter-table .ant-table-thead > tr > th { background: #f7f8fb; }
+.chapter-list-production { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.chapter-list-production .chapter-title-link { color: var(--app-text); font-weight: 650; }
+.chapter-list-production .chapter-title-link:hover { color: var(--app-accent); }
+.chapter-list-state { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.chapter-list-state .ant-btn { padding-inline: 0; }
+
+@media (min-width: 1024px) {
+  .project-overview-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
+}
+
+@media (max-width: 767px) {
+  .project-chapter-list .project-production-surface { padding: 12px; }
+  .project-chapter-list .chapter-table .ant-table-cell { width: auto !important; }
+}
+.project-workbench-content.app-page-content { padding-inline: var(--app-page-gutter); }

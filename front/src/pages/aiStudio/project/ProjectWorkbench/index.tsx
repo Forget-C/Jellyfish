@@ -31,6 +31,7 @@ const ProjectWorkbench: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
   const activeTab = resolveProjectTab(tabFromUrl)
+  const productionPage = activeTab === 'dashboard' || activeTab === 'chapters'
 
   const { project, loading: projectLoading } = useProject(projectId)
   usePageTitle(project?.id === projectId ? project?.name : undefined)
@@ -105,7 +106,7 @@ const ProjectWorkbench: FC = () => {
     <WorkspaceLayout>
       <PageToolbar title={projectTabLabel(activeTab)}>
         <Space size="small" wrap className="app-page-actions">
-          <Button type="primary" icon={primaryCta.icon} onClick={primaryCta.onClick}>{primaryCta.label}</Button>
+          {(!productionPage || recentDestination) && <Button type="primary" icon={primaryCta.icon} onClick={primaryCta.onClick}>{primaryCta.label}</Button>}
           <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
             <Button icon={<EllipsisOutlined />}>更多</Button>
           </Dropdown>
@@ -113,10 +114,10 @@ const ProjectWorkbench: FC = () => {
       </PageToolbar>
 
       <WorkspaceScrollPanel
-        className="app-page-content animate-fadeIn"
+        className="app-page-content project-workbench-content animate-fadeIn"
         style={{ animation: 'fadeIn 0.25s ease-out' }}
       >
-        {activeTab === 'dashboard' && <DashboardTab onSelectTab={setTabInUrl} />}
+        {activeTab === 'dashboard' && <DashboardTab />}
 
         {activeTab === 'chapters' && <ChaptersTab />}
 

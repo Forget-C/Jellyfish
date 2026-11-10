@@ -50,3 +50,9 @@ export function chapterAction(chapter: { rawText?: string; sequenceCount?: numbe
   if (chapter.rawText === undefined || chapter.sequenceCount === undefined) return { label: '查看场次', target: 'manage' }
   return chapter.sequenceCount > 0 ? { label: '场次管理', target: 'manage' } : { label: '划分场次', target: 'source' }
 }
+
+/** 继续制作入口与章节列表共享定位，保留编辑器和场次面板地址。 */
+export function chapterActionLocation(projectId: string, chapterId: string, target: ReturnType<typeof chapterAction>['target']): string {
+  if (target === 'edit') return `${chapterLocation(projectId)}&edit=${encodeURIComponent(chapterId)}`
+  return `${chapterLocation(projectId, chapterId)}${target === 'source' ? '&panel=source' : ''}`
+}
