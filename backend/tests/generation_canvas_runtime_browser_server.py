@@ -108,6 +108,13 @@ class ControlledModel:
                     'light_direction': {'state': 'proposal', 'text': '保持柔和侧光', 'excerpt': '前门的阿同拿着信封。',
                                         'reason': '保持镜头衔接', 'scope': {'shot_ids': ['front', 'back']}},
                 }}]
+            if storyboard_design_stacks and control.get('add_storyboard_content'):
+                for shot, excerpt in zip(result['shots'][:2], ('前门的阿同拿着信封。', '后门的阿同等待。'), strict=True):
+                    shot.setdefault('designs', []).append({
+                        'id': 'new-focus', 'card_type': 'direction.focus', 'adoption': 'dependency',
+                        'fields': {'depth_focus': {'state': 'proposal', 'text': '保持主体清晰', 'excerpt': excerpt, 'reason': '方便核对动作'}},
+                    })
+                result['shots'].append({'id': 'look-back', 'excerpt': '阿同回头。', 'object_ids': [front]})
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
         if object_candidate_fixture:
             control['object_extraction_calls'] += 1
@@ -197,6 +204,8 @@ async def set_control(body: dict = Body(...)):
         for key in ('media_fail_next', 'media_hold'):
             if key in body:
                 control[key] = body[key]
+    if storyboard_design_stacks and 'add_storyboard_content' in body:
+        control['add_storyboard_content'] = body['add_storyboard_content']
     if storyboard_recovery_fixture:
         for key in ('storyboard_release', 'storyboard_fail_on'):
             if key in body:

@@ -4,6 +4,8 @@ import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 
 /** 宿主可为新布局提供首卡、位置和视口，公共画布继续保存实际坐标。 */
 export type GenerationCanvasLayoutPolicy = {
+  placeAdditions?: (positions: Record<string, CanvasPoint>, retained: Record<string, CanvasPoint>,
+    sizes: Record<string, GraphSize>, width: number) => Record<string, CanvasPoint>
   initial?: {
     anchorId: string
     arrange: GraphArrange

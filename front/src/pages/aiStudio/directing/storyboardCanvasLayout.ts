@@ -26,15 +26,82 @@ function videoRows(shots: string[][], sizes: Record<string, GraphSize>, width: n
   return rows
 }
 
+/** 重提取只为新增卡安排位置，原坐标也是解除堆叠和撤销时的定位依据。 */
+function placeStoryboardAdditions(document: CanvasDocument, before: CanvasDocument): NonNullable<GenerationCanvasLayoutPolicy['placeAdditions']> {
+  const previousIds = new Set(before.cards?.map(card => card.id))
+  const storyboard = document.storyboard!
+  const videos = new Set(document.cards?.filter(card => card.type === 'model.video').map(card => card.id))
+  return (positions, retained, sizes, width) => {
+    const added = new Set(Object.keys(storyboard.origins).filter(id => sizes[id] && !retained[id] && !previousIds.has(id)))
+    if (!added.size) return positions
+    const next = { ...positions }
+    const occupied = Object.entries(retained).flatMap(([id, point]) => sizes[id] ? [{ ...point, ...sizes[id] }] : [])
+    const groups = document.groups || []
+    for (const group of groups) {
+      const members = (group.card_ids || []).filter(id => sizes[id] && retained[id])
+      if (members.length) occupied.push(generationGroupBounds(group, members, id => retained[id], sizes))
+    }
+    const placeRow = (ids: string[], left: number, top: number, cover?: GraphSize) => {
+      const height = Math.max(cover?.height || 0, ...ids.map(id => sizes[id].height))
+      const firstWidth = Math.max(cover?.width || 0, sizes[ids[0]].width)
+      const right = left + rowWidth(ids, sizes) + firstWidth - sizes[ids[0]].width
+      let y = top
+      for (const other of [...occupied].sort((a, b) => a.y - b.y)) {
+        if (left < other.x + other.width + gap && right + gap > other.x &&
+            y < other.y + other.height + gap && y + height + gap > other.y) y = other.y + other.height + gap
+      }
+      let x = left
+      ids.forEach((id, index) => {
+        next[id] = { x, y }
+        x += (index === 0 ? firstWidth : sizes[id].width) + gap
+        added.delete(id)
+      })
+      occupied.push({ x: left, y, width: right - left, height })
+      return y + height + gap
+    }
+
+    const knownVideos = [...videos].filter(id => retained[id])
+    const left = knownVideos.length ? retained[knownVideos[0]].x : 0
+    let top = knownVideos.length ? Math.max(...knownVideos.map(id => retained[id].y + sizes[id].height)) + gap : 0
+    const appended = storyboard.shots.map(shot => shot.model_card_ids.filter(id => videos.has(id) && added.has(id))).filter(ids => ids.length)
+    for (const row of videoRows(appended, sizes, width)) top = placeRow(row, left, top)
+    const right = Math.max(left, ...[...videos].filter(id => next[id]).map(id => next[id].x + sizes[id].width))
+    for (const group of groups) {
+      const ids = group.card_ids || []
+      if (group.kind !== 'stack' || !ids.length || !ids.every(id => added.has(id))) continue
+      const owner = storyboard.shots.find(shot => ids.includes(shot.card_id))
+      const anchor = owner && next[owner.model_card_ids[0]]
+      const cover = generationGroupBounds(group, ids, () => ({ x: 0, y: 0 }), sizes)
+      placeRow(ids, right + gap, anchor?.y || 0, cover)
+    }
+    for (const id of added) {
+      const origin = storyboard.origins[id]
+      const shotIds = origin.applicability?.shot_ids
+      const owner = storyboard.shots.find(shot => {
+        if (shotIds?.length) return shotIds.length === 1 && shotIds[0] === shot.shot_id
+        const key = storyboard.origins[shot.card_id]?.semantic_key
+        return key && origin.semantic_key.startsWith(key + ':')
+      })
+      const anchor = owner && next[owner.model_card_ids[0]]
+      placeRow([id], anchor ? right + gap : left - sizes[id].width - gap, anchor?.y || 0)
+    }
+    return next
+  }
+}
+
 /** 工作台按镜头关系组织视频，普通入口不使用该策略。 */
 export function storyboardCanvasLayout(document: CanvasDocument, beforeApplication?: CanvasDocument): GenerationCanvasLayoutPolicy | undefined {
-  if (!document.storyboard || !beforeApplication || beforeApplication.storyboard ||
-      beforeApplication.cards?.some(card => card.id !== beforeApplication.fixed_source?.card_id)) return
+  if (!document.storyboard) return
   const videos = new Set(document.cards?.filter(card => card.type === 'model.video').map(card => card.id))
   const shots = document.storyboard.shots.map(shot => shot.model_card_ids.filter(id => videos.has(id))).filter(row => row.length)
   const anchorId = shots[0]?.[0]
   if (!anchorId) return
-  return { initial: {
+  const placeAdditions = beforeApplication?.storyboard
+    ? placeStoryboardAdditions(document, beforeApplication)
+    : (positions: Record<string, CanvasPoint>) => positions
+  if (!beforeApplication || beforeApplication.storyboard ||
+      beforeApplication.cards?.some(card => card.id !== beforeApplication.fixed_source?.card_id)) return { placeAdditions }
+  return { placeAdditions, initial: {
     anchorId,
     arrange: (nodes, sizes, width) => {
       const positions: Record<string, CanvasPoint> = {}

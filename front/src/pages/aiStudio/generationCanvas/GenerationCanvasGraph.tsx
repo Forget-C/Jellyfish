@@ -324,11 +324,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const arranged = retained
       ? arrange(cards, sizes, width, anchorId, { ...historicalPositions.current, ...retained })
       : arrangeGenerationCards(cards.map(card => card.id), groups, retainedPositions.current, sizes)
-    const base = initialLayout && retained && !retained[initialLayout.anchorId]
+    const saved = retained && (layoutPolicy?.placeAdditions ? { ...historicalPositions.current, ...retained } : retained)
+    const initial = initialLayout && retained && !retained[initialLayout.anchorId]
+    const fallback = initial
       ? initialLayout.arrange(cards, sizes, width, anchorId, retained)
-      : document.storyboard && retained
-        ? placeStoryboardCards(arranged, retained, groups, document.storyboard.origins, sizes)
+      : document.storyboard && saved
+        ? placeStoryboardCards(arranged, saved, groups, document.storyboard.origins, sizes)
         : arranged
+    const base = !initial && saved && layoutPolicy?.placeAdditions ? layoutPolicy.placeAdditions(fallback, saved, sizes, width) : fallback
     const basePoint = (id: string) => base[id] || { x: 0, y: 0 }
     const { cardFrames, groupFrames } = generationVisibleFrames(visibleCardIds, viewGroups, basePoint, sizes)
     const positions = placeLinkedResults(linkedResults, base, sizes, [...cardFrames, ...groupFrames.values()], retained && { ...historicalPositions.current, ...retained })
