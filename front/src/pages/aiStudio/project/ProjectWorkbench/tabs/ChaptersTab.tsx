@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Drawer, Empty, Input, Modal, Space, Spin, Table, message } from 'antd'
+import { Alert, Button, Drawer, Empty, Input, Modal, Space, Spin, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { flushSync } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -8,11 +8,12 @@ import { useChapters, newId } from '../hooks/useProjectData'
 import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
 import { directingError } from '../../../directing/common'
 import { ChapterSceneList } from '../../../directing/ChapterSceneList'
-import { chapterAction, chapterLocation, readChapterBrowse, saveChapterBrowse } from '../../../directing/chapterNavigation'
+import { chapterAction, chapterActionLocation, chapterLocation, readChapterBrowse, saveChapterBrowse } from '../../../directing/chapterNavigation'
 import { SequenceDetails } from '../../../directing/SequenceDetails'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { ChapterSourcePanel } from '../../../directing/ChapterSourcePanel'
 import { ChapterDeliveryPanel } from '../../../directing/ChapterDeliveryPanel'
+import { chapterProduction } from '../chapterProduction'
 import '../../../directing/workspace.css'
 
 /** 章节表格负责总览；仅打开指定章节后加载场次管理内容。 */
@@ -103,13 +104,12 @@ function ChaptersContent() {
   }
   const openEditor = (id: string) => {
     trigger.current = document.activeElement as HTMLElement
-    navigate(`${chapterLocation(projectId)}&edit=${encodeURIComponent(id)}`)
+    navigate(chapterActionLocation(projectId, id, 'edit'))
   }
   const openAction = (chapter: { id: string; rawText?: string; sequenceCount?: number }, count = false) => {
     const action = chapterAction(chapter, count)
     trigger.current = document.activeElement as HTMLElement
-    navigate(action.target === 'edit' ? `${chapterLocation(projectId)}&edit=${encodeURIComponent(chapter.id)}`
-      : `${chapterLocation(projectId, chapter.id)}${action.target === 'source' ? '&panel=source' : ''}`)
+    navigate(chapterActionLocation(projectId, chapter.id, action.target))
   }
   const editCurrent = () => setParams(previous => {
     const next = new URLSearchParams(previous); next.set('edit', chapterId); return next
@@ -147,24 +147,39 @@ function ChaptersContent() {
     saveChapterBrowse(projectId, '', { page: nextPage, query: nextQuery, top: 0 })
     setPage(nextPage); setQuery(nextQuery)
   }
-  return <div ref={root}>
-    <Card title="章节" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>}>
-      <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
-        onChange={event => changePage(1, event.target.value)} style={{ marginBottom: 16, maxWidth: 360 }} />
+  return <div ref={root} className="project-chapter-list">
+    <header className="project-section-heading">
+      <h2 className="project-section-title">章节列表</h2>
+      <Space wrap>
+        <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
+          onChange={event => changePage(1, event.target.value)} />
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>
+      </Space>
+    </header>
+    <div className="project-production-surface">
       {error ? <Alert type="error" showIcon message={error} action={<Button onClick={() => void refresh()}>重试</Button>} />
         : <Table rowKey="id" className="chapter-table" dataSource={chapters} loading={loading}
           pagination={{ current: page, pageSize: 10, total, showSizeChanger: false, onChange: next => changePage(next) }}
           locale={{ emptyText: <Empty description={query ? '没有匹配的章节' : '添加第一章，开始划分场次'} /> }} columns={[
-            { title: '章节名称', key: 'title', width: '24%', render: (_, chapter) => <><Button type="link" className="chapter-title-link" aria-label={`${chapter.index}. ${chapter.title} · 编辑章节`} onClick={() => openEditor(chapter.id)}>{chapter.index}. {chapter.title}</Button><div className="text-gray-500">编辑章节</div></> },
+            { title: '章节名称', key: 'title', width: '38%', render: (_, chapter) => {
+              const production = chapterProduction(chapter)
+              return <div className="chapter-list-production">
+                <Button type="link" className="chapter-title-link" aria-label={`${chapter.index}. ${chapter.title} · 编辑章节`} onClick={() => openEditor(chapter.id)}>{chapter.index}. {chapter.title}</Button>
+                <div className="chapter-list-state">
+                  <span className="chapter-production-state" data-tone={production.tone}>{production.state}</span>
+                  <Button type="link" onClick={() => openAction(chapter)}>{production.label}</Button>
+                </div>
+              </div>
+            } },
             { title: '原文预览', key: 'preview', responsive: ['lg'], render: (_, chapter) => <p className="chapter-table-preview">{chapter.rawText || '未填写原文'}</p> },
             { title: '原文字数', key: 'words', width: 100, responsive: ['md'], render: (_, chapter) => chapter.rawText?.length ?? 0 },
             { title: '场次数量', key: 'count', width: 100, render: (_, chapter) => <Button type="link" aria-label={`${chapter.title} · ${chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}`} onClick={() => openAction(chapter, true)}>{chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}</Button> },
-            { title: '操作', key: 'actions', width: 160, render: (_, chapter) => <Space wrap size={4}><Button type="primary" onClick={() => openAction(chapter)}>{chapterAction(chapter).label}</Button><Button onClick={() => {
+            { title: '操作', key: 'actions', width: 112, render: (_, chapter) => <Button type="text" onClick={() => {
               trigger.current = document.activeElement as HTMLElement
               navigate(`${chapterLocation(projectId, chapter.id)}&panel=assembly`)
-            }}>章节组合</Button></Space> },
+            }}>章节组合</Button> },
           ]} />}
-    </Card>
+    </div>
     <Drawer title={`${panel === 'source' ? '划分场次' : panel === 'assembly' ? '章节组合' : '场次管理'}${selectedChapter ? ` · ${selectedChapter.title}` : ''}`}
       width={panel === 'source' ? '100vw' : 'min(1180px, 96vw)'} rootClassName="chapter-manager" open={!!chapterId && !editingId} onClose={closePanel} destroyOnClose
       afterOpenChange={open => { if (!open && !editingId) restoreFocus() }}>

@@ -86,6 +86,7 @@
     "lab-navigation": { "file": "labNavigation.browser.mjs", "ports": [4197], "timeoutMs": 120000 },
     "home-activity": { "file": "homeActivity.browser.mjs", "ports": [4798], "timeoutMs": 120000 },
     "legacy-labs": { "file": "legacyLabs.browser.mjs", "ports": [4184], "timeoutMs": 180000 },
+    "project-overview": { "file": "projectOverview.browser.mjs", "ports": [4539], "timeoutMs": 90000 },
     "project-lobby": { "file": "projectLobby.browser.mjs", "ports": [4783], "timeoutMs": 120000 },
     "generation-canvas-acceptance": { "file": "generationCanvasAcceptance.browser.mjs", "ports": [4283, 8283], "timeoutMs": 180000 },
     "generation-canvas-selection": { "file": "generationCanvasSelection.browser.mjs", "ports": [4281, 8281], "timeoutMs": 180000 },
