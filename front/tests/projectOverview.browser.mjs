@@ -69,7 +69,14 @@ try {
   await current.getByText('已有场次', { exact: true }).waitFor()
   const canvasLink = canvases.getByRole('link', { name: '真实生成画布', exact: true })
   await canvasLink.waitFor()
-  assert.ok((await canvases.getByRole('img', { name: '真实生成画布封面' }).getAttribute('src')).endsWith('/files/cover-1/download'))
+  const cover = canvases.getByRole('img', { name: '真实生成画布封面' })
+  assert.ok((await cover.getAttribute('src')).endsWith('/files/cover-1/download'))
+  const assertCoverAboveCaption = async () => {
+    await cover.evaluate(image => image.decode())
+    const coverBox = await cover.boundingBox(), captionBox = await canvasLink.boundingBox()
+    assert.ok(coverBox.y + coverBox.height <= captionBox.y, '画布封面不能遮挡下方标题链接')
+  }
+  await assertCoverAboveCaption()
   assert.equal(await canvasLink.getAttribute('href'), '/projects/p-manage/generation-canvas?canvas=c1')
   assert.ok((await canvases.boundingBox()).x > (await current.boundingBox()).x)
   await page.screenshot({ path: join(output, 'project-overview-desktop.png'), animations: 'disabled' })
@@ -90,6 +97,7 @@ try {
   await page.setViewportSize({ width: 375, height: 812 })
   await visit('manage')
   await canvasLink.waitFor()
+  await assertCoverAboveCaption()
   assert.ok((await canvases.boundingBox()).y > (await current.boundingBox()).y)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), true)
   await page.screenshot({ path: join(output, 'project-overview-mobile.png'), animations: 'disabled' })

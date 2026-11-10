@@ -13,8 +13,8 @@
 .chapter-production-state[data-tone="ready"] { background: #e6edfa; color: #28518e; }
 .chapter-production-state[data-tone="available"] { background: #e1f0e7; color: #245c45; }
 .project-canvas-preview { overflow: hidden; padding: 0; }
-.project-canvas-preview-image { display: grid; place-items: center; height: 144px; background: #e7edf5; color: #536174; }
-.project-canvas-preview-image img { width: 100%; height: 100%; object-fit: cover; }
+.project-canvas-preview-image { position: relative; display: grid; place-items: center; height: 144px; overflow: hidden; background: #e7edf5; color: #536174; }
+.project-canvas-preview-image img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
 .project-canvas-preview-caption { padding: 16px; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .project-chapter-list { min-width: 0; }
 .project-chapter-list .chapter-table .ant-table-cell { border-bottom: 0; }
