@@ -1,6 +1,6 @@
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { CanvasDocument } from '../../../services/generated'
-import type { GenerationCanvasLayoutPolicy } from '../generationCanvas/generationLayout'
+import { generationGroupBounds, type GenerationCanvasLayoutPolicy } from '../generationCanvas/generationLayout'
 import type { GraphSize } from './graphLayout'
 
 const gap = 64
@@ -49,8 +49,27 @@ export function storyboardCanvasLayout(document: CanvasDocument, beforeApplicati
         }
         top += Math.max(...row.map(id => sizes[id].height)) + gap
       }
-      // 保留所有原卡，在主区外围放置暂未堆叠的辅助内容。
+      const stacks = document.groups?.filter(group => group.kind === 'stack') || []
       let leftTop = 0, rightTop = 0
+      for (const stack of stacks) {
+        const members = (stack.card_ids || []).filter(id => sizes[id])
+        if (!members.length) continue
+        const shot = document.storyboard?.shots.find(item => members.includes(item.card_id))
+        const cover = generationGroupBounds(stack, members, () => ({ x: 0, y: 0 }), sizes)
+        const anchor = shot && positions[shot.model_card_ids[0]]
+        const y = shot ? Math.max(rightTop, anchor?.y || 0) : leftTop
+        const firstWidth = Math.max(cover.width, sizes[members[0]].width)
+        let x = shot ? mainWidth + gap : -firstWidth - gap
+        // 堆叠成员解除后在外围展开，封面和隐藏成员都不占用视频主区。
+        members.forEach((id, index) => {
+          if (!shot && index > 0) x -= sizes[id].width + gap
+          positions[id] = { x, y }
+          if (shot) x += (index === 0 ? firstWidth : sizes[id].width) + gap
+        })
+        const bottom = y + Math.max(cover.height, ...members.map(id => sizes[id].height)) + gap
+        if (shot) rightTop = bottom
+        else leftTop = bottom
+      }
       const shotGroups = new Set(document.storyboard?.shots.map(shot => shot.group_id))
       const shotCards = new Set(document.groups?.filter(group => shotGroups.has(group.id)).flatMap(group => group.card_ids || []))
       for (const { id } of nodes) {

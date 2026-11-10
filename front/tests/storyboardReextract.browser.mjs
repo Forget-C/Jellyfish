@@ -87,6 +87,7 @@ try {
   const alias = Object.values(overridden.document.storyboard.shots[0].reference_overrides)[0]
   const before = structuredClone(overridden.document)
   const shot = before.cards.find(card => card.id === before.storyboard.shots[0].card_id)
+  before.groups = before.groups.filter(group => group.kind !== 'stack' || !group.card_ids.includes(shot.id))
   shot.name = '人工镜头名'
   const removed = before.cards.find(card => card.type === 'content.prop')
   const noteId = 'manual-note'
