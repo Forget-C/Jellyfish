@@ -1,5 +1,6 @@
 """Fingerprints of the design evidence, independently of canvas arrangement."""
 
+from collections.abc import Iterable
 from hashlib import sha256
 import json
 
@@ -24,13 +25,15 @@ def affected_shots(document: CanvasDocument, shot_ids: list[str]) -> list[str]:
             if any(other in shot_ids for other in order[max(0, index - 1):index + 2])]
 
 
-def canvas_review_evidence(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False) -> dict:
+def canvas_review_evidence(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False,
+                           extra_card_ids: Iterable[str] = ()) -> dict:
     """Include relevant design cards, dependencies, fixed evidence and story order, excluding layout."""
     storyboard = document.storyboard
     selected = [(key, shot) for key, shot in _shots(document) if shot_ids is None or key in shot_ids]
     physical_ids = {shot.shot_id for _, shot in selected}
     cards = {card.id: card for card in document.cards}
     relevant = {document.fixed_source.card_id} if document.fixed_source else set()
+    relevant.update(extra_card_ids)
     for _, shot in selected:
         relevant.update([shot.card_id, *shot.model_card_ids])
     origins = storyboard.origins if storyboard else {}
@@ -70,19 +73,20 @@ def canvas_review_evidence(document: CanvasDocument, shot_ids: list[str] | None 
     }
 
 
-def canvas_review_fingerprint(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False) -> str:
+def canvas_review_fingerprint(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False,
+                              extra_card_ids: Iterable[str] = ()) -> str:
     """Identify the exact projection passed to review without embedding its contents."""
-    evidence = canvas_review_evidence(document, shot_ids, full=full)
+    evidence = canvas_review_evidence(document, shot_ids, full=full, extra_card_ids=extra_card_ids)
     # Keep existing extraction risk and application proofs compatible.
     for shot in evidence['shots']:
         shot.pop('id')
     return evidence_digest(evidence)
 
 
-def capture_review_basis(document: CanvasDocument) -> dict:
+def capture_review_basis(document: CanvasDocument, *, overwrite_card_ids: Iterable[str] = ()) -> dict:
     """Freeze both whole-scene and per-shot evidence before the model sees a draft."""
     return {
-        'all': canvas_review_fingerprint(document),
+        'all': canvas_review_fingerprint(document, extra_card_ids=overwrite_card_ids),
         'shared': canvas_review_fingerprint(document, []),
         'shots': {key: canvas_review_fingerprint(document, affected_shots(document, [key])) for key, _ in _shots(document)},
     }

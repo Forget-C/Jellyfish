@@ -301,9 +301,11 @@ class SceneStoryboardService(SceneObjectService):
             StoryboardApplication(**body.review_plan.model_dump()), preview=True)
         if not diff.continuity_review or not diff.continuity_review.can_review_plan:
             raise RevisionConflict('当前分镜方案已审查，请核对已有结果')
+        overwritten = body.review_plan.overwrite_card_ids
+        review_basis = capture_review_basis(CanvasDocument.model_validate(canvas.document), overwrite_card_ids=overwritten)
         return await self._submit_review_resume(sequence_id, task, body, task.id, 'reviewing_storyboard',
-            review_plan={'review_current_document': canvas.document, 'review_overwrite_card_ids': body.review_plan.overwrite_card_ids,
-                         'review_exact_plan': True})
+            review_plan={'review_current_document': canvas.document, 'review_overwrite_card_ids': overwritten,
+                         'review_basis': review_basis, 'review_exact_plan': True})
 
     async def _submit_review_resume(self, sequence_id: str, source: Task, body: StoryboardRetry, source_id: str,
                                     stage: str, repair: dict | None = None, *, review_plan: dict | None = None) -> StoryboardTaskRead:
@@ -650,7 +652,7 @@ class SceneStoryboardService(SceneObjectService):
             return None
         report = StoryboardReviewReport.model_validate(result['review'])
         basis = task.input_snapshot.get('review_basis')
-        latest = capture_review_basis(current)
+        latest = capture_review_basis(current, overwrite_card_ids=task.input_snapshot.get('review_overwrite_card_ids', ()))
         relevant = {shot for issue in report.issues for shot in issue.shot_ids}
         stale = bool(basis and (
             any(basis['shots'].get(shot, basis['shared']) != latest['shots'].get(shot, latest['shared']) for shot in relevant)
@@ -658,7 +660,8 @@ class SceneStoryboardService(SceneObjectService):
         planned_fingerprint = canvas_review_fingerprint(planned)
         reextract = task.kind == STORYBOARD_KIND and bool(task.input_snapshot.get('reextract_canvas_id'))
         if reextract:
-            stale = result.get('reviewed_plan_fingerprint') != planned_fingerprint
+            # The merged plan can mask a new edit to a card selected for overwrite.
+            stale = not basis or basis['all'] != latest['all'] or result.get('reviewed_plan_fingerprint') != planned_fingerprint
         active, _ = await self._applied_risks(current)
         draft = SceneStoryboard.model_validate(result['review_draft']) if result.get('review_draft') else None
         protected = {origin.semantic_key for origin in current.storyboard.origins.values()

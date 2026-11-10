@@ -262,12 +262,39 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 assert rejected.status_code == 409 and rejected.json()['data']['code'] == 'STORYBOARD_REVIEW_STALE'
                 recheck = await read_data(client, 'POST', task_path + '/retry',
                                           {'request_id': 'review-overwrite', 'review_plan': choice})
+                document = before['document']
+                manual_card = next(item for item in document['cards'] if item['id'] == continuity['id'])
+                manual_card['change']['text'] = '另一页面手动改变站位'
+                await read_data(client, 'PUT', canvas_path, {'request_id': 'concurrent-manual-design',
+                    'expected_revision': before['revision'], 'document': document})
+                edited = await read_data(client, 'GET', canvas_path)
                 checked = await complete(recheck)
                 assert checked['review_state'] == 'passed' and checked['pending_application']
                 checked_path = path + '/' + checked['task_id']
-                preserved = await read_data(client, 'POST', checked_path + '/diff', {'expected_revision': before['revision']})
+                choice['expected_revision'] = edited['revision']
+                concurrent = await read_data(client, 'POST', checked_path + '/diff', choice)
+                assert concurrent['continuity_review']['stale']
+                rejected = await client.post(checked_path + '/apply', json=choice)
+                assert rejected.status_code == 409 and rejected.json()['data']['code'] == 'STORYBOARD_REVIEW_STALE'
+                assert await read_data(client, 'GET', canvas_path) == edited
+
+                fresh = await read_data(client, 'POST', checked_path + '/retry',
+                                        {'request_id': 'review-latest-overwrite', 'review_plan': choice})
+                layout = edited['document']
+                unrelated = next(group for group in layout['groups'] if continuity['id'] not in group['card_ids'])
+                unrelated['name'] = '仅调整布局'
+                arranged = await read_data(client, 'PUT', canvas_path, {'request_id': 'arrange-during-review',
+                    'expected_revision': edited['revision'], 'document': layout})
+                fresh_path = path + '/' + (await complete(fresh))['task_id']
+                choice['expected_revision'] = arranged['revision']
+                preserved = await read_data(client, 'POST', fresh_path + '/diff', {'expected_revision': arranged['revision']})
                 assert preserved['continuity_review']['stale']
-                assert not (await read_data(client, 'POST', checked_path + '/diff', choice))['continuity_review']['stale']
+                current_plan = await read_data(client, 'POST', fresh_path + '/diff', choice)
+                assert not current_plan['continuity_review']['stale']
+                applied = await read_data(client, 'POST', fresh_path + '/apply', {**choice,
+                    'confirmed_auto_stack_ids': [stack['id'] for stack in current_plan['automatic_stacks']]})
+                assert next(group for group in applied['document']['groups'] if group['id'] == unrelated['id'])['name'] == '仅调整布局'
+                assert next(item for item in applied['document']['cards'] if item['id'] == continuity['id'])['change']['text'] == proposed
         finally:
             worker.text_pool.shutdown(wait=False)
 
