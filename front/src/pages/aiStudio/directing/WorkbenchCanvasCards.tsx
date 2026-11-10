@@ -21,6 +21,10 @@ function activeTask(task?: StoryboardTaskSummary | null) {
 
 function taskLabel(task: StoryboardTaskSummary) {
   if (task.status === 'queued') return '分镜排队中'
+  if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
+  if (task.review_state === 'incomplete') return '分镜审查未完成，草案已保留'
+  if (task.review_state === 'conflict') return '分镜存在设计冲突'
+  if (task.review_state === 'warning') return '部分连续性依据不足'
   if (task.status === 'running') return task.stage === 'assembling_storyboard' ? '正在校验并组装画布' : '正在提取分镜'
   if (task.status === 'failed') return '分镜失败'
   if (task.status === 'cancelled') return '分镜已取消'
@@ -207,8 +211,10 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               {task && !currentTaskIsCandidate && task.task_id !== adoptedId && <Tag
                 color={task.status === 'failed' ? 'error' : activeTask(task) ? 'processing' : undefined}>{taskLabel(task)}</Tag>}
               {candidateId && <Tag color={canvas.storyboard_review_required ? 'warning' : 'success'}>
-                {canvas.storyboard_review_required ? '需要核对' : '分镜已就绪'}
+                {currentTaskIsCandidate && (task?.review_state === 'conflict' || task?.review_state === 'warning')
+                  ? taskLabel(task) : canvas.storyboard_review_required ? '需要核对' : '分镜已就绪'}
               </Tag>}
+              {task?.review_state === 'warning' && task.task_id === adoptedId && <Tag color="warning">{taskLabel(task)}</Tag>}
               {adoptedId && <Tag color="success" title={`采用任务 ${adoptedId}`}>当前已采用</Tag>}
               {canvas.source_changed && <Tag color="warning">原文已变化</Tag>}
               {canvas.id === recentCanvas && <Tag>最近打开</Tag>}

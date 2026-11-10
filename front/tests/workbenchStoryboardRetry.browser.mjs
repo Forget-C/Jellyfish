@@ -29,6 +29,7 @@ const data = async (url, method = 'GET', body) => {
   return (await response.json()).data
 }
 const control = body => data(api + '/test/runtime-controls', 'POST', body)
+const readControls = async () => (await fetch(api + '/test/runtime-controls')).json()
 const poll = async (read, predicate) => {
   for (let attempt = 0; attempt < 120; attempt++) {
     const value = await read()
@@ -139,7 +140,40 @@ try {
   await page.getByRole('button', { name: '核对差异', exact: true }).click()
   await page.getByRole('dialog', { name: '核对分镜差异', exact: true }).waitFor()
   assert.equal((await data(canvas)).document.name, '保留人工编辑')
+
+  const reviewControls = await readControls()
+  const firstReview = reviewControls.storyboard_review_calls + 1
+  await control({ storyboard_release: 100, storyboard_review_release: firstReview - 1,
+    storyboard_review_fail_on: firstReview, storyboard_review_conflict_on: firstReview + 1 })
+  const reviewTask = await data(sceneApi + '/storyboards', 'POST', {
+    name: '审查恢复画布', request_id: 'review-original', mode: 'faithful',
+  })
+  const reviewCanvas = studio + '/generation-canvases/' + project + '/' + reviewTask.canvas_id
+  const untouched = await data(reviewCanvas)
+  await page.goto(management)
+  const reviewCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '审查恢复画布', exact: true }) })
+  await reviewCard.getByText('正在审查分镜连续性', { exact: true }).waitFor()
+  assert.equal((await data(reviewCanvas)).revision, untouched.revision)
+  await control({ storyboard_review_release: firstReview })
+  await reviewCard.getByText('分镜审查未完成，草案已保留', { exact: true }).waitFor()
+  await page.reload()
+  await reviewCard.getByRole('button', { name: '重试审查', exact: true }).click()
+  const reviewDialog = page.getByRole('dialog', { name: '核对重试审查' })
+  await reviewDialog.getByText('已保留分镜草案。本次从审查阶段继续，结果仍需核对后应用。', { exact: true }).waitFor()
+  await reviewDialog.getByText(raw, { exact: true }).waitFor()
+  await reviewDialog.getByRole('button', { name: '确认重试' }).click()
+  await control({ storyboard_review_release: firstReview + 1 })
+  await reviewCard.getByText('分镜存在设计冲突', { exact: true }).waitFor()
+  const reviewedControls = await readControls()
+  assert.equal(reviewedControls.storyboard_calls, reviewControls.storyboard_calls + 1)
+  assert.equal(reviewedControls.storyboard_review_calls, firstReview + 1)
+  await reviewCard.getByRole('button', { name: '核对分镜', exact: true }).click()
+  await page.getByRole('button', { name: '核对差异', exact: true }).click()
+  const findings = page.getByRole('dialog', { name: '核对分镜差异', exact: true })
+  await findings.getByText('静止与入场要求冲突', { exact: true }).waitFor()
+  assert.equal(await findings.getByRole('button', { name: '应用分镜', exact: true }).isEnabled(), false)
+  assert.deepEqual(await data(reviewCanvas), untouched)
 } finally {
-  if (backend.exitCode === null) await control({ disconnect: true, storyboard_release: 100 }).catch(() => {})
+  if (backend.exitCode === null) await control({ disconnect: true, storyboard_release: 100, storyboard_review_release: 100 }).catch(() => {})
   await cleanup()
 }

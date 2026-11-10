@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -35,6 +36,8 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             calls.append(str(messages))
             output = {'shots': [{'id': 'bad', 'excerpt': '不存在的原文'}]} if len(calls) not in (2, 3, 6) else result
             return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
@@ -93,6 +96,13 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         before = (await client.get(canvas_path)).json()['data']
         assert before['revision'] == candidate['base_revision'] == 0
         assert [card['type'] for card in before['document']['cards']] == ['content.basis']
+        edited_before_review = deepcopy(document)
+        next(card for card in edited_before_review['cards'] if card['type'] == 'direction.performance')[
+            'physical_action']['text'] = '离开车旁'
+        unreviewed = await client.put(canvas_path, json={'request_id': 'unreviewed-candidate',
+            'expected_revision': 0, 'document': edited_before_review})
+        assert unreviewed.status_code == 409
+        assert unreviewed.json()['data']['code'] == 'STORYBOARD_APPLICATION_REVIEW_REQUIRED'
         save = await client.put(canvas_path, json={'request_id': 'storyboard:' + task['task_id'],
             'expected_revision': candidate['base_revision'], 'document': document})
         assert save.status_code == 200, save.text
@@ -186,6 +196,8 @@ async def test_storyboard_repairs_the_invalid_design_subject(tmp_path, monkeypat
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             calls.append(messages[-1].content)
             design = {'id': 'door', 'card_type': card_type, 'object_id': subject,
                       'fields': {field: {'state': 'proposal', 'text': proposal}}}
@@ -266,6 +278,8 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             import httpx
             args = json.loads(messages[1].content)
             calls.append(args['mode'])
@@ -346,6 +360,8 @@ async def test_reextract_requires_confirmed_revised_scene_and_undo_restores_sour
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             excerpt = '小雨关门。' if '小雨关门。' in str(messages) else old
             verb = '关门' if excerpt != old else '推门'
             output = {'shots': [{'id': 'door', 'excerpt': excerpt, 'designs': [{

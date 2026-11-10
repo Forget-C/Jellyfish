@@ -23,6 +23,8 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
             observed.append((args['mode'], args['script_text'], args['objects']))
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'shot', 'excerpt': excerpt}]}))

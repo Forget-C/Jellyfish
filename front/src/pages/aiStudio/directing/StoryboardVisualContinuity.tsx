@@ -150,7 +150,7 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
           {ports.includes('first_frame') && <Checkbox checked={sameMotion} disabled={busy || !!switchOffer} onChange={event => setSameMotion(event.target.checked)}>
             同机位接续连续动作
           </Checkbox>}
-          <VideoFramePicker key={result.id} fileId={result.source.source_file_id} disabled={busy || !!switchOffer} onPosition={at => { if (!switchOffer) setAtMs(at) }}
+          <VideoFramePicker key={result.id} fileId={result.source.source_file_id} disabled={busy || !!switchOffer} onPosition={at => { if (!busy && !switchOffer) setAtMs(at) }}
             onUseTail={sameMotion ? () => setPurpose('first_frame') : undefined} />
         </>}
         {!target.model_id ? <p>请先在当前视频卡选择模型。</p> : capability && !ports.length ? <p>当前模型不支持采用图片画面。</p> : null}

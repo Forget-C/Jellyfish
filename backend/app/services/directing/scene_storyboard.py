@@ -25,6 +25,7 @@ from app.services.directing.storyboard_application import plan_application
 from app.services.directing.storyboard_stack_review import review_stack_changes
 from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
+from app.services.directing.storyboard_review import require_storyboard_review, review_state
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.document_save import fixed_source_state, prepare_document
 from app.services.generation_canvas.store import CanvasStore
@@ -106,6 +107,8 @@ class SceneStoryboardService(SceneObjectService):
         failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
         if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
             raise RevisionConflict('只有失败或取消的分镜任务可以重试')
+        if self._review_source(failed):
+            return await self._retry_review(chapter_id, sequence_id, failed, body)
         request = self._retry_request(failed, body.request_id, body.basis_token, use_saved=body.use_saved_objects)
         return await self._submit(chapter_id, sequence_id, request,
                                   canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id)
@@ -128,6 +131,10 @@ class SceneStoryboardService(SceneObjectService):
             raise RevisionConflict('历史场次不能重试分镜')
         if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
             raise RevisionConflict('只有失败或取消的分镜任务可以重试')
+        if self._review_source(failed):
+            await self._ensure_no_active_storyboard(sequence_id, failed.input_snapshot['canvas_id'])
+            await self._ensure_not_retried(sequence_id, task_id)
+            return await self._review_retry_basis(sequence, failed)
         body = self._retry_request(failed, 'preview', preview=True)
         canvas, prior_task_id = await self._reextract_baseline(sequence, chapter, failed.input_snapshot['canvas_id'], body, lock=False)
         await self._ensure_no_active_storyboard(sequence_id, canvas.id)
@@ -141,6 +148,57 @@ class SceneStoryboardService(SceneObjectService):
             source_kind='confirmed_scene' if body.adopt_current_source else 'fixed',
             mode=body.mode, text_model_name=model.name, production_model_id=body.production_model_id,
             production_model_name=production.name if production else None, pending_modality=body.pending_modality or 'image')
+
+    @staticmethod
+    def _review_source(task: Task) -> str | None:
+        """A retry can itself fail before the worker has opened the frozen draft."""
+        return task.id if (task.result or {}).get('review_state') == 'pending' else task.input_snapshot.get('review_retry_from')
+
+    async def _review_retry_basis(self, sequence, failed: Task) -> StoryboardRetryBasis:
+        """Preview the original draft inputs without adopting a newer source or references."""
+        snapshot = failed.input_snapshot
+        canvas = await CanvasStore(self.db, self.project_id).get(snapshot['canvas_id'])
+        if canvas.sequence_id != sequence.id:
+            raise HTTPException(404, 'Canvas not found in scene')
+        args = snapshot['run_args']
+        config = snapshot['storyboard_request']
+        token = CanvasStore.command_digest({'retry_review': failed.id, 'source': self._review_source(failed)})
+        objects = [StoryboardBasisObject.model_validate({key: item[key] for key in (
+            'id', 'kind', 'name', 'excerpt', 'asset_id', 'image_file_id')}) for item in args['objects']]
+        basis = StoryboardBasis(token=token, source_text=args['script_text'], source_changed=False,
+            preparation_revision=0, preparation_stale=False, object_task_active=False, objects=objects)
+        production = await self.db.get(Model, args['production_model_id']) if args['production_model_id'] else None
+        return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis, review_only=True,
+            source_kind='confirmed_scene' if config.get('adopt_current_source') else 'fixed',
+            mode=args['mode'], text_model_name=snapshot['model_name'], production_model_id=args['production_model_id'],
+            production_model_name=production.name if production else None, pending_modality=args['pending_modality'])
+
+    async def _retry_review(self, chapter_id: str, sequence_id: str, failed: Task, body: StoryboardRetry) -> StoryboardTaskRead:
+        sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
+        request = body.model_dump(mode='json')
+        existing = await self.db.scalar(self._storyboards(sequence_id).where(
+            Task.input_snapshot['storyboard_request']['request_id'].as_string() == body.request_id))
+        if existing:
+            if existing.retry_of_task_id != failed.id or existing.input_snapshot.get('review_retry_request') != request:
+                raise RevisionConflict('分镜请求身份已用于另一份内容')
+            return await self._storyboard_read(existing)
+        if not sequence.is_current:
+            raise RevisionConflict('历史场次不能重试分镜')
+        await self._ensure_not_retried(sequence_id, failed.id)
+        basis = await self._review_retry_basis(sequence, failed)
+        await self._ensure_no_active_storyboard(sequence_id, basis.canvas_id)
+        if body.use_saved_objects or (body.basis_token and body.basis_token != basis.basis.token):
+            raise RevisionConflict('审查须沿用原分镜草案，请重新核对重试依据')
+        snapshot = failed.input_snapshot
+        files = sorted({item['image_file_id'] for item in snapshot['run_args']['objects'] if item.get('image_file_id')})
+        task = await TaskService(self.db).submit(kind=STORYBOARD_KIND, title='重试分镜审查',
+            target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id,
+            provider_id=failed.provider_id, retry_of_task_id=failed.id,
+            inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
+            snapshot={**snapshot, 'scene_admission_order': await self._next_scene_task_order(sequence_id),
+                'storyboard_request': {**snapshot['storyboard_request'], 'request_id': body.request_id},
+                'review_retry_request': request, 'review_retry_from': self._review_source(failed)})
+        return await self._storyboard_read(task)
 
     async def _ensure_no_active_storyboard(self, sequence_id: str, canvas_id: str) -> None:
         if await self.db.scalar(self._storyboards(sequence_id).with_only_columns(Task.id).where(
@@ -317,7 +375,9 @@ class SceneStoryboardService(SceneObjectService):
                 raise HTTPException(404, 'Canvas not found in scene')
             query = query.where(target == canvas_id)
         tasks = (await self.db.execute(query.with_only_columns(
-            Task.id, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id, target.label('canvas_id'))
+            Task.id, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id, target.label('canvas_id'),
+            Task.result['review_state'].as_string().label('review_state'),
+            Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from'))
             .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(20))).all()
         saved = set(await self.db.scalars(select(CanvasSaveReceipt.request_id).where(
             CanvasSaveReceipt.request_id.in_(['storyboard:' + task.id for task in tasks if task.status == TaskStatus.succeeded]))))
@@ -325,8 +385,11 @@ class SceneStoryboardService(SceneObjectService):
                 for task in tasks]
 
     def _storyboard_summary(self, task, canvas_id: str, candidate_available: bool) -> StoryboardTaskSummary:
+        stored = task.review_state if hasattr(task, 'review_state') else (task.result or {}).get('review_state')
+        retry_from = task.review_retry_from if hasattr(task, 'review_retry_from') else task.input_snapshot.get('review_retry_from')
         return StoryboardTaskSummary(**self.task_read(task).model_dump(), canvas_id=canvas_id,
-                                     candidate_available=candidate_available, retry_of_task_id=task.retry_of_task_id)
+            candidate_available=candidate_available, retry_of_task_id=task.retry_of_task_id,
+            review_state=review_state(task.status, stored or ('pending' if retry_from else None)))
 
     async def read_canvas_candidate(self, chapter_id: str, sequence_id: str, canvas_id: str,
                                     task_id: str | None = None) -> StoryboardTaskRead | None:
@@ -383,7 +446,7 @@ class SceneStoryboardService(SceneObjectService):
             raise ValueError('本场分镜候选尚未可用')
         if await self.db.get(CanvasSaveReceipt, (canvas.id, request_id)):
             raise ValueError('这份分镜结果已经应用')
-        candidate = StoryboardCandidate.model_validate(task.result)
+        candidate = StoryboardCandidate.from_task_result(task.result)
         current = CanvasDocument.model_validate(canvas.document)
         if task.input_snapshot['storyboard_request'].get('adopt_current_source'):
             version = self._confirmed_source_version(sequence, chapter)
@@ -396,13 +459,14 @@ class SceneStoryboardService(SceneObjectService):
         previous = await self.db.get(Task, current.storyboard.task_id) if current.storyboard else None
         prior = None
         if previous and previous.kind == STORYBOARD_KIND and previous.target_id == sequence_id and previous.project_id == self.project_id and previous.status == TaskStatus.succeeded:
-            prior = StoryboardCandidate.model_validate(previous.result).document
+            prior = StoryboardCandidate.from_task_result(previous.result).document
         capability = task.input_snapshot['run_args'].get('production_capability') or {}
         document, diff = plan_application(current, candidate.document, body, prior=prior,
                                           production_ports=capability.get('input_ports'))
         diff.automatic_stacks, diff.manual_stacks = review_stack_changes(current, document)
         if preview:
             return diff
+        require_storyboard_review(task, canvas.id)
         if diff.manual_stacks:
             stack = diff.manual_stacks[0]
             raise diagnostic('STACK_READ_ONLY', f'请先手动解除堆叠「{stack.name}」，再核对提取差异', {'group_id': stack.id})
@@ -455,14 +519,16 @@ class SceneStoryboardService(SceneObjectService):
             raise HTTPException(404, '此分镜任务的原画布已不可用') from error
         candidate, pending = None, False
         if task.status == TaskStatus.succeeded:
-            candidate = StoryboardCandidate.model_validate(task.result)
+            candidate = StoryboardCandidate.from_task_result(task.result)
             receipt = await self.db.get(CanvasSaveReceipt, (canvas_id, 'storyboard:' + task.id))
             if receipt:
                 candidate = None
             else:
-                pending = bool(task.input_snapshot.get('reextract_canvas_id')) or canvas.revision != candidate.base_revision
+                pending = (bool(task.input_snapshot.get('reextract_canvas_id') or task.input_snapshot.get('review_retry_from'))
+                           or canvas.revision != candidate.base_revision or task.result.get('review_state') == 'conflict')
         return StoryboardTaskRead(**self._storyboard_summary(task, canvas_id, candidate is not None).model_dump(),
-                                  candidate=candidate, pending_application=pending)
+                                  candidate=candidate, pending_application=pending,
+                                  review=(task.result or {}).get('review'))
 
     async def complete_storyboard(self, task: Task, result: SceneStoryboard) -> StoryboardCandidate:
         """在冻结基线上校验真实共同文档，迟到结果仍可作为待应用候选。"""

@@ -31,6 +31,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   const navigate = useNavigate()
   const canvasId = canvas.id
   const task = canvas.latest_storyboard
+  const reviewOnly = task?.review_state === 'incomplete'
   const retryable = !historical && (task?.status === 'failed' || task?.status === 'cancelled')
   const key = 'jellyfish:management-storyboard-retry:' + JSON.stringify([projectId, chapterId, sequenceId, canvasId])
   const [pending, setPending] = useState(() => readIntent(key))
@@ -113,17 +114,18 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   const verifyLabel = '核实重试'
   return <>
     {pending && !target ? <Button loading={submitting} onClick={confirm}>{verifyLabel}</Button>
-      : retryable && <Button onClick={() => setTarget(task.task_id)}>重试分镜</Button>}
+      : retryable && <Button onClick={() => setTarget(task.task_id)}>{reviewOnly ? '重试审查' : '重试分镜'}</Button>}
     {!target && (error || pending && !submitting) && <p className="management-canvas-error" role="status">
       {pending ? '重试结果待核实。' : error}
     </p>}
-    <Modal title="核对重试分镜" open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
+    <Modal title={reviewOnly ? '核对重试审查' : '核对重试分镜'} open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
       <Button aria-label="关闭重试确认" onClick={() => setTarget(undefined)}>关闭</Button>
       <Button type="primary" loading={submitting} disabled={!pending && !ready} onClick={confirm}>
         {pending ? verifyLabel : '确认重试'}
       </Button>
     </Space>}>
-      <p>本次使用下方已核对的输入，任务仍在原画布中继续。生成结果需要核对后应用。</p>
+      <p>{reviewOnly ? '已保留分镜草案。本次从审查阶段继续，结果仍需核对后应用。'
+        : '本次使用下方已核对的输入，任务仍在原画布中继续。生成结果需要核对后应用。'}</p>
       {pending && !submitting && <Alert type="warning" showIcon message="重试结果待核实，将使用同一请求身份。" />}
       {error && <Alert type="error" showIcon message={error} action={target && !pending && !loading
         && <Button size="small" onClick={refresh}>重新读取依据</Button>} />}

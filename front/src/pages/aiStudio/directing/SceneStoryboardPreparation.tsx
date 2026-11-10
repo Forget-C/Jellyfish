@@ -20,6 +20,10 @@ function pendingSubmission(key: string): Submission | undefined {
 
 function taskLabel(task: StoryboardTaskSummary) {
   if (task.status === 'queued') return '分镜任务排队中'
+  if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
+  if (task.review_state === 'incomplete') return '分镜审查未完成，草案已保留'
+  if (task.review_state === 'conflict') return '分镜存在设计冲突'
+  if (task.review_state === 'warning') return '部分连续性依据不足'
   if (task.status === 'running') return task.stage === 'assembling_storyboard' ? '正在校验并组装画布' : '正在提取分镜'
   if (task.status === 'failed') return '分镜提取失败'
   if (task.status === 'cancelled') return '分镜任务已取消'
@@ -27,10 +31,11 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 只有当前打开的等待容器可以继续原流程，恢复或离页完成均由用户主动查看。 */
-export function SceneStoryboardPreparation({ scope, editable, target, selectedTaskId, navigationKey, onResult }: {
+export function SceneStoryboardPreparation({ scope, editable, target, selectedTaskId, navigationKey, onResult, onReviewRetry }: {
   scope: Scope; editable: boolean
   selectedTaskId?: string | null; navigationKey: string;
   onResult: (result: StoryboardTaskRead, follow: boolean) => void;
+  onReviewRetry: (taskId: string) => void;
   target: { id: string; appliedTaskId?: string; sourceChanged: boolean; sourceReady: boolean; productionModelId?: string; pendingModality?: StoryboardReextractRequest['pending_modality']; confirmSource: () => void };
 }) {
   const action = '重新提取'
@@ -193,6 +198,8 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
     <Space wrap>
       <Button variant="primary" onClick={start} disabled={!editable}>{action}</Button>
       {!open && task && <span role="status">{taskLabel(task)}</span>}
+      {!open && task?.review_state === 'incomplete' &&
+        <Button onClick={() => onReviewRetry(task.task_id)}>前往重试审查</Button>}
       {!open && pending && <Button loading={submitting} disabled={!editable} onClick={() => void submit(pending)}>核实提交</Button>}
       {!open && task?.status === 'succeeded' && task.candidate_available &&
         <Button loading={checking} onClick={() => void viewResult()}>查看分镜结果</Button>}

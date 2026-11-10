@@ -26,6 +26,8 @@ async def test_scene_canvas_summaries_keep_pending_and_adopted_sources_separate(
             pass
 
         def invoke(self, _messages):
+            if 'storyboard_draft' in json.loads(_messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'shot', 'excerpt': excerpt}]}))
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
