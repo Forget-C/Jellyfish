@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openReadyStoryboard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openStoryboardDefaultModels, openReadyStoryboard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -54,14 +54,12 @@ try {
   await front.getByRole('button', { name: '选择参考图' }).click()
   await page.getByText('参考图 1', { exact: true }).click()
   await front.getByText('已选参考图', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
-  await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
-  const config = page.getByRole('region', { name: '生成新分镜画布配置' })
-  await config.getByRole('textbox', { name: '画布名称' }).fill('忠实分镜验收')
-  await config.getByRole('combobox', { name: '生产模型' }).click()
-  await page.getByText('分镜测试图片模型', { exact: true }).click()
-  const storyboardName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
-  await config.getByRole('button', { name: '开始提取', exact: true }).click()
+  // 通过公开接口建立旧图片分镜，验证现有画布的编辑与引用契约。
+  const storyboardName = '已有图片分镜'
+  await request(`${scenes}/${sequence.id}/storyboards`, 'POST', {
+    request_id: 'existing-image-storyboard', name: storyboardName, mode: 'faithful', pending_modality: 'image',
+  })
+  await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
   const canvas = `${studio}/generation-canvases/${project}/${id}`
@@ -74,7 +72,11 @@ try {
     }
     throw new Error('canvas state not saved')
   }
-  const applied = await poll(state => !!state.document.storyboard)
+  const pending = await poll(state => !!state.document.storyboard)
+  const modelCards = pending.document.storyboard.shots.flatMap(shot => shot.model_card_ids)
+  await openStoryboardDefaultModels(page, modelCards, '分镜测试图片模型')
+  const applied = await poll(state => modelCards.every(id =>
+    state.document.cards.find(card => card.id === id)?.model_id === 'story-image-model'))
   const { shots } = applied.document.storyboard
   const sourceCard = applied.document.fixed_source.card_id
   const compile = async () => {

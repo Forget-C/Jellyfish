@@ -35,6 +35,7 @@ function audioCapabilityStatus(capability?: AudioCapability) {
 export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId, onLocateDesign, editorOpen, suppressAutomaticDefaults }: CardRendererProps) {
   const promptEditor = useRef<PromptEditorHandle>(null)
   const management = useRef<HTMLDetailsElement>(null)
+  const attemptedDefault = useRef<string | undefined>(undefined)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
@@ -43,8 +44,16 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs
   const category = card.type?.split('.')[1]
   useEffect(() => {
-    if (disabled || suppressAutomaticDefaults) return
-    if (!card.model_id && defaultModelId && models?.some(model => model.id === defaultModelId && model.category === category)) { onChange({ ...card, model_id: defaultModelId }); return }
+    if (disabled || suppressAutomaticDefaults) {
+      attemptedDefault.current = undefined
+      return
+    }
+    if (!card.model_id && defaultModelId && attemptedDefault.current !== defaultModelId
+      && models?.some(model => model.id === defaultModelId && model.category === category)) {
+      attemptedDefault.current = defaultModelId
+      onChange({ ...card, model_id: defaultModelId }, 'system-default')
+      return
+    }
     if (card.type === 'model.video' && !(card as VideoModelCard).config?.ratio && capability?.ratios?.length) onChange({ ...card, config: { ...card.config, ratio: capability.ratios.includes('16:9') ? '16:9' : capability.ratios[0] } })
   }, [capability, card, category, defaultModelId, disabled, models, onChange, suppressAutomaticDefaults])
   let parameters: ReactNode = null

@@ -99,19 +99,30 @@ try {
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
   const confirm = preview.getByRole('button', { name: '确认执行', exact: true })
   const warning = preview.getByRole('alert').filter({ hasText: 'CREATIVE_REFERENCE_IMAGE_MISSING' })
+  const modelSettingsUrl = api + '/api/v1/llm/model-settings'
+  const modelSettings = await request(modelSettingsUrl)
   let callCount = 0
   for (const [modality, modelName, outputTag, providerPath] of [
     ['image', '分镜测试图片模型', 'img', '/images/generations'],
     ['video', 'viduq2', 'video', '/text2video'],
   ]) {
-    await page.goto(management)
-    await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
-    const config = page.getByRole('region', { name: '生成新分镜画布配置', exact: true })
-    await config.getByText('忠实提取', { exact: true }).click()
-    if (modality === 'video') await config.getByRole('radio', { name: '视频模型卡', exact: true }).check()
-    const defaultName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
-    assert.match(defaultName, /^分镜画布-\d{8}-\d{6}$/)
-    await config.getByRole('button', { name: '开始提取', exact: true }).click()
+    let defaultName
+    if (modality === 'image') {
+      defaultName = '已有图片分镜'
+      await request(sceneApi + '/storyboards', 'POST', {
+        request_id: 'existing-image-media', name: defaultName, mode: 'faithful', pending_modality: 'image',
+      })
+      await page.goto(management)
+    } else {
+      await page.goto(management)
+      await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
+      const config = page.getByRole('region', { name: '生成新分镜画布配置', exact: true })
+      await config.getByText('忠实提取', { exact: true }).click()
+      defaultName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
+      assert.match(defaultName, /^分镜画布-\d{8}-\d{6}$/)
+      await config.getByRole('button', { name: '开始提取', exact: true }).click()
+      await request(modelSettingsUrl, 'PUT', { ...modelSettings, default_video_model_id: 'story-video-model' })
+    }
     const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: defaultName, exact: true }) })
     await card.getByText('分镜已就绪', { exact: true }).waitFor()
     assert.equal(page.url(), management)
@@ -144,31 +155,70 @@ try {
       await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
       assert.ok(noteSaved(await request(canvas)))
     }
-    const assign = async cardId => {
+    const assign = async (cardId, useDefault, beforeSave) => {
       const pending = state.document.cards.find(card => card.id === cardId)
       assert.equal(pending.type, 'model.' + modality)
       assert.equal(pending.model_id, null)
       const detail = await openCanvasCard(page, cardId)
-      const chooser = detail.getByRole('combobox', { name: '选择模型', exact: true })
-      await chooser.click()
-      const popupId = await chooser.getAttribute('aria-controls')
-      assert.ok(popupId, 'the opened model chooser exposes its list ID')
-      const popup = page.locator('.ant-select-dropdown').filter({ has: page.locator(`[id=${JSON.stringify(popupId)}]`) })
-      await popup.locator('.ant-select-item-option').getByText(modelName, { exact: true }).click()
-      assert.equal(await chooser.getAttribute('aria-expanded'), 'false')
-      await poll(() => request(canvas), saved => saved.document.cards.find(card => card.id === cardId)?.model_id,
+      if (useDefault) {
+        await detail.locator('.generation-material-model').getByText(modelName, { exact: true }).waitFor()
+        if (modality === 'image') await detail.getByText('默认画幅', { exact: true }).waitFor()
+      } else {
+        const chooser = detail.getByRole('combobox', { name: '选择模型', exact: true })
+        await chooser.click()
+        const popupId = await chooser.getAttribute('aria-controls')
+        assert.ok(popupId, 'the opened model chooser exposes its list ID')
+        const popup = page.locator('.ant-select-dropdown').filter({ has: page.locator(`[id=${JSON.stringify(popupId)}]`) })
+        await popup.locator('.ant-select-item-option').getByText(modelName, { exact: true }).click()
+        assert.equal(await chooser.getAttribute('aria-expanded'), 'false')
+      }
+      await beforeSave?.()
+      await poll(() => request(canvas), saved => {
+        const model = saved.document.cards.find(card => card.id === cardId)
+        return model?.model_id === `story-${modality}-model` && (modality !== 'video' || model.config?.ratio === '16:9')
+      },
         'first model assignment was not saved')
-      return detail
     }
     const preparedModel = shots[0].model_card_ids[0]
-    await assign(preparedModel)
+    const shot = shots[1], cardId = shot.model_card_ids[0]
+    if (modality === 'video') {
+      const saveRoute = `**${new URL(canvas).pathname}`
+      let allowSave
+      const blockedSave = new Promise(resolve => { allowSave = resolve })
+      const delaySave = async route => {
+        if (route.request().method() === 'PUT') await blockedSave
+        await route.continue()
+      }
+      await page.route(saveRoute, delaySave)
+      try {
+        await assign(cardId, true, async () => {
+          assert.equal((await request(canvas)).document.cards.find(card => card.id === cardId).model_id, null)
+          await closeCanvasDetails(page)
+          await page.getByRole('button', { name: '重新提取', exact: true }).click()
+          const settings = page.getByRole('dialog', { name: '重新提取', exact: true })
+          await settings.getByText(modelName, { exact: true }).waitFor()
+          assert.equal(await settings.getByRole('radio', { name: '图片模型卡' }).count(), 0)
+          allowSave()
+          await settings.getByRole('button', { name: '取消', exact: true }).click()
+          await settings.waitFor({ state: 'hidden' })
+        })
+      } finally {
+        allowSave()
+        await page.unroute(saveRoute, delaySave)
+      }
+      await request(modelSettingsUrl, 'PUT', modelSettings)
+      await page.reload()
+      await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
+    }
+    await assign(preparedModel, modality === 'image')
     const preparedPreview = await request(canvas + '/precheck', 'POST', { card_id: preparedModel })
     assert.deepEqual(preparedPreview.input.media.map(media => media.file_id), ['object-browser-image'])
     await closeCanvasDetails(page)
 
-    const shot = shots[1], cardId = shot.model_card_ids[0]
-    await assign(cardId)
-    await closeCanvasDetails(page)
+    if (modality === 'image') {
+      await assign(cardId, true)
+      await closeCanvasDetails(page)
+    }
     const { reference_card_id: referenceId } = objects.find(item => item.object_id === shot.object_ids[0])
     assert.equal(state.document.cards.find(card => card.id === referenceId).image_binding, null)
     const readRuntime = () => request(canvas + '/runtime')

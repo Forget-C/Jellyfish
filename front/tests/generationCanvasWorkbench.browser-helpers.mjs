@@ -13,6 +13,15 @@ export async function openCanvasCard(page, id) {
   return page.locator('.wb-details:visible')
 }
 
+/** 等待展开时的默认选模，以便后续用例检查真实生成输入。 */
+export async function openStoryboardDefaultModels(page, cardIds, modelName) {
+  for (const cardId of cardIds) {
+    const detail = await openCanvasCard(page, cardId)
+    await detail.locator('.generation-material-model').getByText(modelName, { exact: true }).waitFor()
+    await closeCanvasDetails(page)
+  }
+}
+
 export async function closeCanvasDetails(page) {
   const details = page.locator('.wb-details:visible')
   if (await details.count()) {

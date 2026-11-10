@@ -62,7 +62,7 @@ try {
   })
   await control({ storyboard_release: 1, storyboard_fail_on: 1 })
   const original = await data(sceneApi + '/storyboards', 'POST', {
-    name: '原有画布', request_id: 'retry-original', mode: 'faithful', pending_modality: 'video',
+    name: '原有画布', request_id: 'retry-original', mode: 'faithful', pending_modality: 'image',
   })
   const taskPath = sceneApi + '/storyboards/' + original.task_id
   await poll(() => data(taskPath), value => value.status === 'failed')
@@ -83,7 +83,7 @@ try {
   const dialog = page.getByRole('dialog', { name: '核对重试分镜' })
   await dialog.getByText('忠实提取', { exact: true }).waitFor()
   await dialog.getByText('controlled-text', { exact: true }).waitFor()
-  await dialog.getByText('稍后配置视频模型卡', { exact: true }).waitFor()
+  await dialog.getByText('稍后配置图片模型卡', { exact: true }).waitFor()
   await dialog.getByText(raw, { exact: true }).waitFor()
   await dialog.getByText('本次采用的对象与参考（3）', { exact: true }).click()
   const firstReference = dialog.getByRole('img', { name: '阿同采用的参考图' })
@@ -122,6 +122,10 @@ try {
   assert.equal((await data(sceneApi + '/canvases')).canvases.length, 1)
   await control({ storyboard_release: 2 })
   await page.getByText('需要核对', { exact: true }).waitFor()
+  const retryResult = await data(sceneApi + '/storyboards/' + retried.task_id)
+  const retryCards = retryResult.candidate.document.cards.filter(card => card.type.startsWith('model.'))
+  assert.ok(retryCards.length > 0)
+  assert.ok(retryCards.every(card => card.type === 'model.image'))
   assert.equal(page.url(), management)
 
   const ordinary = await context.newPage()

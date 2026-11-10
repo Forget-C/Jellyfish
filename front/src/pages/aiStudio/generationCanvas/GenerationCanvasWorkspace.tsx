@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
 import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -52,7 +52,7 @@ interface GenerationCanvasWorkspaceProps {
   canvasId: string | null
   back: { label: string; onClick: () => void }
   renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
-  renderSceneActions?: (context: CanvasManagementContext) => ReactNode
+  renderSceneActions?: (context: CanvasManagementContext & { document?: CanvasDocument }) => ReactNode
   storyboardTaskId?: string | null
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
@@ -174,7 +174,7 @@ export function GenerationCanvasWorkspace({
       <div className="generation-toolbar-center" />
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="generation-primary-host" />
-        {renderSceneActions?.({ ...management, editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
+        {renderSceneActions?.({ ...management, document, editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
         {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}

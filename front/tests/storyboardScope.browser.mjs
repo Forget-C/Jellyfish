@@ -56,12 +56,13 @@ try {
   await page.getByText('参考图 1', { exact: true }).click()
   await object.getByText('已选参考图', { exact: true }).waitFor()
   await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
-  await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
-  const config = page.getByRole('region', { name: '生成新分镜画布配置' })
-  await config.getByRole('combobox', { name: '生产模型' }).click()
-  await page.getByText('viduq2', { exact: true }).click()
-  const storyboardName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
-  await config.getByRole('button', { name: '开始提取', exact: true }).click()
+  // 使用已指定生产模型的任务验证历史/API 客户端的模型分段契约。
+  const storyboardName = '分段分镜验收'
+  await request(`${sequences}/${sequence.id}/storyboards`, 'POST', {
+    name: storyboardName, mode: 'complete', request_id: 'scope-with-production-model',
+    production_model_id: 'scope-browser-video',
+  })
+  await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
   const path = `${studio}/generation-canvases/${project}/${id}`

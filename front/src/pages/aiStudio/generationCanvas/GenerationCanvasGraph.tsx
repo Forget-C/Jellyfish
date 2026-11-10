@@ -541,7 +541,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return () => requests.clear()
   }, [document.id])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
-  const updateCard = (next: GenerationCard) => {
+  const updateCard = (next: GenerationCard, source?: 'system-default') => {
     const apply = (result: ReturnType<typeof updateStoryboardReference>) => {
       if (result.document) {
         edit(result.document)
@@ -555,15 +555,16 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return apply(updateStoryboardReference(current, next, operations, capability))
     }
     const choices = pendingModelAssignments.current, known = capability(next), modelId = next.model_id
+    if (source === 'system-default' && choices.has(next.id)) return false
     if (known) {
       choices.delete(next.id)
       return apply(assignStoryboardModel(current, next, operations, known))
     }
-    // Resolve the explicitly chosen model first. Use the latest card so the response cannot overwrite intervening edits.
+    // Resolve the model before binding references. The latest card preserves edits made while loading.
     const token = Symbol(next.id)
     choices.set(next.id, token)
     void Canvases.canvasModelCapability({ projectId: current.project_id, canvasId: current.id, modelId }).then(response => {
-      if (choices.get(next.id) !== token) return
+      if (choices.get(next.id) !== token || currentReadonly.current) return
       const document = latest.current
       const previous = document.cards?.find(card => card.id === next.id)
       if (!previous || !('model_id' in previous)) return
@@ -1203,7 +1204,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {control?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的正文片段已不可用。</div>}
         {designDestination?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的设计字段、运镜阶段或引用已不可用。</div>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={detailReadonly}><fieldset disabled={detailReadonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || !!source && detailCard.type === 'content.basis' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={targetField} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={sourceStack ? undefined : modelSources(detailCard)} disabled={detailReadonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || !!source || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !detailReadonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={document.storyboard?.origins[detailCard.id] ? undefined : detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={detailReadonly}><fieldset disabled={detailReadonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || !!source && detailCard.type === 'content.basis' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={targetField} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={sourceStack ? undefined : modelSources(detailCard)} disabled={detailReadonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || !!source || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !detailReadonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           automaticCheckRunId={automaticCheckRunId} capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={sourceStack ? undefined : references(detailCard)} disabled={detailReadonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={sourceStack || runtime?.disabled} onPrecheck={sourceStack ? undefined : () => runtime?.precheck(detailCard.id)} sourceActions={sourceStack ? undefined : modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer></AssociationInspectionContext.Provider>
   }

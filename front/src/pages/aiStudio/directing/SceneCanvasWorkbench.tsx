@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Alert, Space, Spin } from 'antd'
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
-import { ApiError, StudioDirectingService, type CanvasRead, type SceneCanvasesRead } from '../../../services/generated'
+import { ApiError, StudioDirectingService, type CanvasRead, type ImageModelCard, type SceneCanvasesRead, type VideoModelCard } from '../../../services/generated'
 import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
@@ -57,11 +57,13 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
-      renderSceneActions={({ current, editable, requestLeave }) => {
-        if (!current?.document.fixed_source) return null
-        const document = current.document
+      renderSceneActions={({ current, document, editable, requestLeave }) => {
+        if (!current || !document?.fixed_source) return null
         const basis = document.cards?.find(card => card.id === document.fixed_source?.card_id)
-        const model = document.cards?.find(card => document.storyboard?.shots[0]?.model_card_ids.includes(card.id))
+        const modelIds = new Set(document.storyboard?.shots.flatMap(shot => shot.model_card_ids))
+        const models = document.cards?.filter((card): card is ImageModelCard | VideoModelCard =>
+          modelIds.has(card.id) && (card.type === 'model.image' || card.type === 'model.video'))
+        const model = models?.find(card => card.model_id) ?? models?.[0]
         return <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
           navigationKey={location.key} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current}
           target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
@@ -70,7 +72,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
               !!basis && 'selection_start' in basis && (basis.selection_start !== scene.sequence.span?.start ||
                 basis.selection_end !== scene.sequence.span?.end),
             sourceReady: !!scene.sequence.is_current && !scene.sequence.source_changed,
-            productionModelId: model && 'model_id' in model ? model.model_id ?? undefined : undefined,
+            productionModelId: model?.model_id ?? undefined,
             pendingModality: model?.type === 'model.video' ? 'video' : 'image',
             confirmSource: () => void requestLeave().then(allowed => { if (allowed) management('division') }),
           }} onResult={result => {

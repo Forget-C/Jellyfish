@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Button, Card, Input, Radio, Select, Space, Spin } from 'antd'
+import { Alert, Button, Card, Input, Radio, Space, Spin } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import { ApiError, LlmService, StudioDirectingService as Directing } from '../../../services/generated'
-import type { ModelRead, SceneCanvasCreate, StoryboardBasis, StoryboardRequest } from '../../../services/generated'
+import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
+import type { SceneCanvasCreate, StoryboardBasis, StoryboardRequest } from '../../../services/generated'
 import { workbenchManagementLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { StoryboardBasisPreview } from './StoryboardBasisPreview'
@@ -13,7 +13,6 @@ type Intent = { kind: 'storyboard'; body: StoryboardRequest } | { kind: 'blank';
 type Kind = Intent['kind']
 type Draft = {
   kind: Kind; defaultName: string; name: string; mode: NonNullable<StoryboardRequest['mode']>
-  productionModel?: string; modality: NonNullable<StoryboardRequest['pending_modality']>
 }
 
 function defaultCanvasName() {
@@ -44,15 +43,12 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
   const [basisLoading, setBasisLoading] = useState(false)
   const [basisError, setBasisError] = useState('')
   const [basisRevision, setBasisRevision] = useState(0)
-  const [models, setModels] = useState<ModelRead[]>([])
-  const [modelError, setModelError] = useState(false)
   const [useSaved, setUseSaved] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const mounted = useRef(false), sending = useRef(false)
   const needsBasis = draft?.kind === 'storyboard'
-  const dirty = !!draft && !pending && (draft.name !== draft.defaultName || draft.mode !== 'complete'
-    || !!draft.productionModel || draft.modality !== 'image')
+  const dirty = !!draft && !pending && (draft.name !== draft.defaultName || draft.mode !== 'complete')
   useWorkspaceDraft({ name: '分镜画布配置', dirty, discard: () => setDraft(undefined) })
 
   useEffect(() => {
@@ -74,20 +70,9 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, needsBasis, basisRevision])
 
-  useEffect(() => {
-    if (!needsBasis) return
-    let active = true
-    setModelError(false)
-    const request = LlmService.listModelsApiV1LlmModelsGet({ pageSize: 100 })
-    void request.then(response => {
-      if (active) setModels(response.data?.items.filter(model => model.category === 'image' || model.category === 'video') ?? [])
-    }).catch(() => { if (active) setModelError(true) })
-    return () => { active = false; request.cancel() }
-  }, [needsBasis])
-
   const start = (kind: Kind) => {
     const name = defaultCanvasName()
-    setDraft({ kind, defaultName: name, name, mode: 'complete', modality: 'image' })
+    setDraft({ kind, defaultName: name, name, mode: 'complete' })
     setError('')
   }
   const submit = async (intent: Intent) => {
@@ -139,7 +124,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
     const body = { name: draft.name.trim() || draft.defaultName, request_id: crypto.randomUUID() }
     if (draft.kind === 'blank') void submit({ kind: 'blank', body })
     else if (basis) void submit({ kind: 'storyboard', body: { ...body, mode: draft.mode,
-      production_model_id: draft.productionModel, pending_modality: draft.productionModel ? undefined : draft.modality,
+      pending_modality: 'video',
       basis_token: basis.token, use_saved_objects: basis.object_task_active && useSaved } })
   }
   const refreshBasis = () => setBasisRevision(value => value + 1)
@@ -165,14 +150,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
               { value: 'complete', label: '自动产出完整分镜' },
               { value: 'faithful', label: '忠实提取' },
             ]} onChange={event => change({ mode: event.target.value })} />
-            <Select aria-label="生产模型" placeholder="稍后配置生产模型" allowClear value={draft.productionModel}
-              options={models.map(model => ({ value: model.id, label: model.name }))}
-              onChange={productionModel => change({ productionModel })} />
-            {!draft.productionModel && <Radio.Group aria-label="待配置卡片类型" value={draft.modality} options={[
-              { value: 'image', label: '图片模型卡' }, { value: 'video', label: '视频模型卡' },
-            ]} onChange={event => change({ modality: event.target.value })} />}
-            <p>生产模型用于后续制作，提交分镜只生成设计。</p>
-            {modelError && <Alert type="warning" showIcon message="无法读取生产模型，可以稍后在画布中选择。" />}
+            <p>生成分镜设计和视频模型卡。打开卡片后可使用系统默认模型，也可手动选择。</p>
             {basisLoading ? <Spin aria-label="正在读取分镜依据" /> : basis
               ? <StoryboardBasisPreview basis={basis} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refreshBasis}
                 onOpenSource={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'division'))}
