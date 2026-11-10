@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Dropdown, Empty, Modal, Spin, Tag, Upload, message } from 'antd'
-import { ClearOutlined, CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
+import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import {
   FilmService,
@@ -60,7 +60,7 @@ export type ImageExperimentModeProps = {
   /** 清空服务端消息，仍由统一页面的共享会话层执行。 */
   clearSessionMessages?: (sessionId: string) => Promise<void>
   /** 由统一页面壳将模态内容装配进布局。 */
-  render: (slots: { history: ReactNode; composer: ReactNode; extra: ReactNode; overlays: ReactNode; disabled: boolean }) => ReactNode
+  render: (slots: { history: ReactNode; composer: ReactNode; clearContent?: () => Promise<void>; overlays: ReactNode; disabled: boolean }) => ReactNode
 }
 
 /** 将图片任务结果转换为浏览器可直接预览的 URL。 */
@@ -242,7 +242,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   /** 清空当前会话历史，并同步清除图片任务展示。 */
   const handleClear = async () => {
     if (!activeSessionId || !clearSessionMessages) return
-    try { await clearSessionMessages(activeSessionId); history.clearLocalHistory(); await history.refresh() } catch { message.error('清空历史失败；含生成任务的会话不可清空') }
+    await clearSessionMessages(activeSessionId)
+    history.clearLocalHistory()
+    await history.refresh()
   }
 
   /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
@@ -257,7 +259,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   }
 
   const disabled = submitting || Boolean(runningTask)
-  const extra = <Button icon={<ClearOutlined />} disabled={!messages.length || disabled || !clearSessionMessages} onClick={() => void handleClear}>清空历史</Button>
+  const clearContent = messages.length && !disabled && clearSessionMessages ? handleClear : undefined
   const historyContent = <>
     {history.loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
     {history.hasMoreHistory ? <Button size="small" loading={history.loadingMore} onClick={() => void history.loadMore()}>加载更早消息</Button> : null}
@@ -286,8 +288,8 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const composer = <ExperimentComposer
       submitting={disabled} submitDisabled={disabled} submitLabel="生成图片" onSubmit={() => void handleSubmit()}
       options={<ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} templateId={templateId} modelsLoading={modelsLoading} templatesLoading={templatesLoading} disabled={disabled} modelLabel="图片模型" modelPlaceholder="选择已登记的图片模型" onModelChange={setModelId} onTemplateChange={handleSelectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />}
-      contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2"><Dropdown trigger={['click']} disabled={uploading || disabled} dropdownRender={() => <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><Upload className="block w-full" accept="image/*" showUploadList={false} beforeUpload={handleUploadReference} disabled={uploading || disabled}><Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传图片</Button></Upload><Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => setLibraryOpen(true)}>从资料库选择</Button></div>}><Button size="small" icon={<PictureOutlined />} loading={uploading}>参考图</Button></Dropdown>{selectedReferences.map((file) => <div key={file.id} className="group relative h-9 w-9 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" title={file.name}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /><button type="button" aria-label={`移除参考图：${file.name}`} className="absolute inset-0 hidden items-center justify-center bg-slate-900/50 text-white group-hover:flex focus:flex" onClick={() => setReferenceFileIds((current) => current.filter((id) => id !== file.id))}><CloseOutlined /></button></div>)}{referenceFileIds.length ? <Button size="small" type="text" onClick={() => setReferenceFileIds([])} disabled={disabled}>清空</Button> : null}</div>}
-    ><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" minRows={5} disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(renderedPrompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(renderedPrompt) }} /></ExperimentComposer>
+      contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2"><Dropdown trigger={['click']} disabled={uploading || disabled} dropdownRender={() => <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><Upload className="block w-full" accept="image/*" showUploadList={false} beforeUpload={handleUploadReference} disabled={uploading || disabled}><Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传图片</Button></Upload><Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => setLibraryOpen(true)}>从资料库选择</Button></div>}><Button size="small" icon={<PictureOutlined />} loading={uploading}>参考图</Button></Dropdown>{selectedReferences.map((file) => <div key={file.id} className="group relative h-9 w-9 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" title={file.name}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /><button type="button" aria-label={`移除参考图：${file.name}`} className="absolute inset-0 hidden items-center justify-center bg-slate-900/50 text-white group-hover:flex focus:flex" onClick={() => setReferenceFileIds((current) => current.filter((id) => id !== file.id))}><CloseOutlined /></button></div>)}{referenceFileIds.length ? <Button size="small" type="text" onClick={() => setReferenceFileIds([])} disabled={disabled}>清空</Button> : null}</div>}
+    ><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(renderedPrompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(renderedPrompt) }} /></ExperimentComposer>
   const overlays = <Modal title="从资料库选择参考图" open={libraryOpen} onCancel={() => setLibraryOpen(false)} footer={<Button type="primary" onClick={() => setLibraryOpen(false)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{files.map((file) => { const selected = referenceFileIds.includes(file.id); return <button key={file.id} type="button" onClick={() => setReferenceFileIds((current) => selected ? current.filter((id) => id !== file.id) : [...current, file.id])} className={`overflow-hidden rounded border text-left ${selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button> })}</div>{!files.length ? <Empty description="资料库中暂无图片" /> : null}</Modal>
-  return render({ history: historyContent, composer, extra, overlays, disabled })
+  return render({ history: historyContent, composer, clearContent, overlays, disabled })
 }

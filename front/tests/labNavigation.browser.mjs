@@ -16,6 +16,11 @@ const sessions = [
   session('video-1', 'video', '视频历史一'),
 ]
 let created = 0
+let clearAttempts = 0
+let deleteAttempts = 0
+const modelNames = { text: '验收文本模型', image: '验收图片模型', video: '验收视频模型' }
+const mediaRequests = []
+const persisted = new Map()
 let failHistory = false
 let failedType
 let hideHistory = false
@@ -55,10 +60,37 @@ try {
       if (labType === 'image' && lookupImage) await lookupImage
       return respond(hideHistory ? [] : sessions.filter(item => item.lab_type === labType))
     }
-    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'model-1', name: '验收文本模型', category: 'text' }] })
+    if (url.pathname.endsWith('/models')) {
+      const category = url.searchParams.get('category')
+      return respond({ items: [{ id: 'model-1', name: modelNames[category], category }] })
+    }
+    if (url.pathname.endsWith('/video-generation-options')) return respond({ allowed_ratios: ['16:9'] })
+    if (url.pathname.endsWith('/new-text/messages') && request.method() === 'DELETE') {
+      clearAttempts += 1
+      if (clearAttempts === 1) return route.fulfill({ status: 409, json: { detail: '清空失败' } })
+      persisted.delete('new-text')
+      return respond(null)
+    }
+    if (url.pathname.endsWith('/experiment-sessions/new-text') && request.method() === 'DELETE') {
+      deleteAttempts += 1
+      return respond(null)
+    }
+    const mediaRun = url.pathname.match(/\/labs\/(image|video)\/sessions\/([^/]+)\/tasks$/)
+    if (mediaRun) {
+      const [, mode, sessionId] = mediaRun
+      const body = request.postDataJSON()
+      mediaRequests.push({ mode, sessionId, prompt: body.execution_prompt })
+      const messages = [
+        message(mode + '-user', sessionId, 'user', body.execution_prompt, 1),
+        { ...message(mode + '-result', sessionId, 'assistant', mode + ' 已提交', 2), task_id: mode + '-task', status: 'succeeded' },
+      ]
+      persisted.set(sessionId, messages)
+      return respond({ task_id: mode + '-task', messages })
+    }
     if (url.pathname.endsWith('/new-text/stream')) {
       const user = message('user-1', 'new-text', 'user', request.postDataJSON().content, 1)
       const assistant = message('assistant-1', 'new-text', 'assistant', '验收回复', 2)
+      persisted.set('new-text', [user, assistant])
       return route.fulfill({
         contentType: 'text/event-stream',
         body: frame('accepted', 1, { task_id: 'lab-run', user_message: user }) +
@@ -69,7 +101,7 @@ try {
       })
     }
     if (url.pathname.endsWith('/image-1/messages') && imageLookupPending) prematureImageMessages.push(url.pathname)
-    if (url.pathname.endsWith('/messages')) return respond([])
+    if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })
@@ -81,7 +113,8 @@ try {
   await history.getByRole('button', { name: '图片历史 1', exact: true }).waitFor()
   assert.equal(await types.getByRole('button', { name: '图片', exact: true }).getAttribute('aria-pressed'), 'true')
   assert.equal(await history.getByRole('button', { name: '文本历史一', exact: true }).count(), 0)
-  const imageInput = page.getByPlaceholder('描述你想生成的图片…')
+  await page.getByRole('heading', { name: '图片实验室 · 新会话', exact: true }).waitFor()
+  const imageInput = page.getByRole('textbox', { name: '图片提示词', exact: true })
   const imageInputBefore = await imageInput.boundingBox()
   await history.getByRole('button', { name: '图片历史 24', exact: true }).scrollIntoViewIfNeeded()
   assert.deepEqual(await imageInput.boundingBox(), imageInputBefore)
@@ -104,12 +137,62 @@ try {
   await page.getByRole('button', { name: /选择模型/ }).click()
   await page.getByRole('button', { name: /验收文本模型/ }).waitFor()
   await page.keyboard.press('Escape')
-  const textInput = page.getByPlaceholder('输入提示词；Shift + Enter 换行')
+  const textInput = page.getByRole('textbox', { name: '文本提示词', exact: true })
   await textInput.fill('首次提交')
+  await textInput.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: true })
+  assert.equal(await textInput.inputValue(), '首次提交')
+  assert.equal(created, 0)
+  await textInput.press('Shift+Enter')
+  assert.equal(await textInput.inputValue(), '首次提交\n')
   await textInput.press('Enter')
   await page.waitForURL(url => url.searchParams.get('session') === 'new-text')
   await page.getByText('验收回复', { exact: true }).waitFor()
   assert.equal(created, 1)
+  await page.getByRole('heading', { name: '文本实验室 · 新文本会话', exact: true }).waitFor()
+
+  const openClear = async () => {
+    await page.getByRole('button', { name: '更多会话操作', exact: true }).click()
+    await page.getByRole('menuitem', { name: '清空会话内容', exact: true }).click()
+    return page.getByRole('dialog', { name: '清空会话内容', exact: true })
+  }
+  let confirm = await openClear()
+  await confirm.getByText(/新文本会话.*历史消息.*保留会话本身/).waitFor()
+  await confirm.getByRole('button', { name: /取\s*消/ }).click()
+  await confirm.waitFor({ state: 'hidden' })
+  assert.equal(clearAttempts, 0)
+  confirm = await openClear()
+  await confirm.getByRole('button', { name: '清空会话内容', exact: true }).click()
+  await confirm.getByRole('alert').getByText(/清空会话失败/).waitFor()
+  await page.getByText('验收回复', { exact: true }).waitFor()
+  await confirm.getByRole('button', { name: '清空会话内容', exact: true }).click()
+  await confirm.waitFor({ state: 'hidden' })
+  await page.getByText('验收回复', { exact: true }).waitFor({ state: 'hidden' })
+  assert.equal(clearAttempts, 2)
+  assert.equal(deleteAttempts, 0)
+
+  await history.getByRole('button', { name: '新文本会话', exact: true }).hover()
+  await history.getByRole('button', { name: '新文本会话 更多操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '删除会话', exact: true }).click()
+  const deletion = page.getByRole('dialog', { name: '删除会话', exact: true })
+  await deletion.getByText(/新文本会话.*历史消息/).waitFor()
+  await deletion.getByRole('button', { name: /取\s*消/ }).click()
+  await deletion.waitFor({ state: 'hidden' })
+  assert.equal(deleteAttempts, 0)
+
+  for (const [mode, sessionId, label] of [['image', 'image-24', '图片'], ['video', 'video-1', '视频']]) {
+    await page.goto(origin + '/lab?session=' + sessionId)
+    const input = page.getByRole('textbox', { name: label + '提示词', exact: true })
+    await input.waitFor()
+    await page.getByRole('button', { name: '选择模型', exact: true }).click()
+    await page.getByRole('button', { name: modelNames[mode], exact: true }).waitFor()
+    await input.fill(label + '实验输入')
+    await page.getByRole('button', { name: '生成' + label, exact: true }).click()
+    await page.getByText(mode + ' 已提交', { exact: true }).waitFor()
+  }
+  assert.deepEqual(mediaRequests, [
+    { mode: 'image', sessionId: 'image-24', prompt: '图片实验输入' },
+    { mode: 'video', sessionId: 'video-1', prompt: '视频实验输入' },
+  ])
 
   failedType = 'video'
   await page.goto(origin + '/')
@@ -168,6 +251,44 @@ try {
     await trigger.and(page.locator(':focus')).waitFor()
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2))
     await page.screenshot({ path: output + '/' + width + '-lab.png', animations: 'disabled' })
+  }
+  const sizes = [[1440, 900], [1366, 768], [1024, 440], [375, 812], [1023, 768], [767, 812], [768, 812]]
+  for (const [theme, label] of [['mist', '雾蓝微渐变'], ['solid', '雾蓝纯色']]) {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(origin + '/lab?mode=text')
+    await page.getByRole('button', { name: '用户与语言设置', exact: true }).click()
+    await page.getByRole('menuitemradio', { name: label, exact: true }).click()
+    await page.getByRole('menuitemradio', { name: label, exact: true }).waitFor({ state: 'hidden' })
+    const heading = page.getByRole('heading', { name: '文本实验室 · 新会话', exact: true })
+    const send = page.getByRole('button', { name: '发送', exact: true })
+    await heading.waitFor()
+    for (const [width, height] of sizes) {
+      await page.setViewportSize({ width, height })
+      const layout = await heading.evaluate(element => ({
+        fontSize: getComputedStyle(element).fontSize,
+        barHeight: element.parentElement.getBoundingClientRect().height,
+        hasOverflow: document.documentElement.scrollWidth > innerWidth,
+      }))
+      assert.equal(layout.fontSize, '16px')
+      assert.ok(layout.barHeight >= 52 && layout.barHeight <= 56)
+      assert.equal(layout.hasOverflow, false)
+      if (width < 1024) await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
+      else assert.equal(Math.round((await types.boundingBox()).width) + 24, 216)
+      await page.waitForFunction(({ button, controlHeight }) => {
+        const bounds = button.getBoundingClientRect()
+        return Math.abs(bounds.height - controlHeight) < 0.5 && bounds.bottom <= innerHeight
+      }, { button: await send.elementHandle(), controlHeight: width >= 1024 ? 32 : 36 })
+      await page.waitForFunction(expectedRows => {
+        const editor = document.querySelector('textarea[aria-label="文本提示词"]')
+        const rows = editor.clientHeight / parseFloat(getComputedStyle(editor).lineHeight)
+        return Math.abs(rows - expectedRows) < 0.2
+      }, height <= 540 ? 2 : 3)
+      const color = await page.getByRole('banner').evaluate(element => getComputedStyle(element.parentElement).backgroundImage)
+      assert.equal(color === 'none', theme === 'solid')
+      if (sizes.slice(0, 4).some(([w, h]) => w === width && h === height)) {
+        await page.screenshot({ path: output + '/' + theme + '-' + width + 'x' + height + '-lab.png', animations: 'disabled' })
+      }
+    }
   }
   assert.deepEqual(pageErrors, [])
   console.log('Lab navigation, existing history, first submission and mobile focus verified.')

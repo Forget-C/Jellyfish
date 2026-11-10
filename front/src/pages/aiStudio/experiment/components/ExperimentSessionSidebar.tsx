@@ -1,9 +1,10 @@
 /** 实验室左侧最近会话列表。 */
 import { DeleteOutlined, EditOutlined, MessageOutlined, MoreOutlined, PictureOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons'
-import { Alert, Button, Dropdown, Input, Modal, Tooltip, message } from 'antd'
+import { Alert, Button, Dropdown, Input, Modal, Tooltip } from 'antd'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import type { ExperimentSessionRead } from '../../../../services/generated'
+import { ExperimentSessionConfirmation } from './ExperimentSessionConfirmation'
 
 type ExperimentLabType = ExperimentSessionRead['lab_type']
 
@@ -29,6 +30,7 @@ export function ExperimentSessionSidebar({ value, sessions, labType, loading, fa
   const [renameOpen, setRenameOpen] = useState(false)
   const [targetSession, setTargetSession] = useState<ExperimentSessionRead | null>(null)
   const [title, setTitle] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<ExperimentSessionRead>()
 
   /** 打开指定会话的重命名弹窗。 */
   const openRename = (session: ExperimentSessionRead) => {
@@ -46,23 +48,13 @@ export function ExperimentSessionSidebar({ value, sessions, labType, loading, fa
 
   /** 生成每个会话自己的悬浮操作菜单。 */
   const getMenuItems = (session: ExperimentSessionRead) => [
-    onRename ? { key: 'rename', icon: <EditOutlined />, label: '重命名', onClick: () => openRename(session) } : null,
+    onRename ? { key: 'rename', icon: <EditOutlined aria-hidden="true" />, label: '重命名', onClick: () => openRename(session) } : null,
     onDelete ? {
       key: 'delete',
-      icon: <DeleteOutlined />,
-      label: '删除对话',
-      onClick: () => Modal.confirm({
-        title: '删除对话',
-        content: '删除后无法恢复。',
-        okButtonProps: { danger: true },
-        onOk: async () => {
-          try {
-            await onDelete(session.id)
-          } catch {
-            message.error('删除会话失败；运行中任务不可删除')
-          }
-        },
-      }),
+      icon: <DeleteOutlined aria-hidden="true" />,
+      label: '删除会话',
+      danger: true,
+      onClick: () => setDeleteTarget(session),
     } : null,
   ].filter(Boolean)
 
@@ -99,11 +91,18 @@ export function ExperimentSessionSidebar({ value, sessions, labType, loading, fa
             </Tooltip>
           </button>
           {menuItems.length ? <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight" overlayClassName="experiment-session-dropdown">
-            <Button type="text" size="small" icon={<MoreOutlined />} aria-label={`${session.title} 更多操作`} className="experiment-session-actions" />
+            <Button type="text" size="small" icon={<MoreOutlined />} aria-label={`${session.title} 更多操作`} className="experiment-session-actions experiment-icon-action" />
           </Dropdown> : null}
         </div>
       })}
     </nav>
+    <ExperimentSessionConfirmation
+      title="删除会话"
+      description={`将删除“${deleteTarget?.title}”及其历史消息。此操作无法撤销。`}
+      run={deleteTarget && onDelete ? () => onDelete(deleteTarget.id) : undefined}
+      failure="删除会话失败；运行中任务不可删除"
+      onClose={() => setDeleteTarget(undefined)}
+    />
     <Modal
       title="重命名会话"
       open={renameOpen}

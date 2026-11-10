@@ -14,7 +14,7 @@ function parseMode(mode: string | null): ExperimentLabType | undefined {
   return undefined
 }
 
-type LabSlots = { history: ReactNode; composer: ReactNode; extra: ReactNode; overlays?: ReactNode; disabled?: boolean }
+type LabSlots = { history: ReactNode; composer: ReactNode; clearContent?: () => Promise<void>; overlays?: ReactNode; disabled?: boolean }
 
 /** 将会话选择写入唯一实验室路由，同时使草稿态保持显式模态。 */
 export default function ExperimentLabPage() {
@@ -94,7 +94,8 @@ export default function ExperimentLabPage() {
   const renderLayout = (title: string) => (slots: LabSlots) => (
     <ExperimentLabLayout
       title={title}
-      extra={slots.extra}
+      sessionTitle={sessions.find(session => session.id === selectedSessionId)?.title}
+      clearContent={slots.clearContent}
       sidebarTrigger={sidebarTrigger}
       sidebar={(close) => <ExperimentSessionSidebar
         value={selectedSessionId}

@@ -1,3 +1,112 @@
+.experiment-workspace {
+  --experiment-control-height: 32px;
+  --experiment-section-gap: 16px;
+}
+
+.app-lab-layout { display: flex; flex: 1; min-height: 0; }
+.app-lab-main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.app-lab-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--experiment-section-gap);
+  min-height: 0;
+  padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
+}
+.app-lab-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.app-lab-history > * + * { margin-top: 16px; }
+.experiment-empty-state { display: grid; min-height: 100%; place-items: center; padding: 8px; }
+.experiment-empty-state .ant-empty { margin: 0; }
+
+.experiment-workspace .experiment-toolbar {
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 52px;
+  padding: 4px var(--app-page-gutter);
+}
+.app-shell .experiment-toolbar .app-page-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.experiment-session-title { color: var(--app-muted); font-size: 13px; font-weight: 400; }
+.experiment-toolbar .ant-btn { flex-shrink: 0; height: var(--experiment-control-height); font-size: 13px; }
+.experiment-toolbar .experiment-icon-action { width: 36px; }
+
+.experiment-composer {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 12px 16px;
+  color: var(--app-text);
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+}
+.experiment-composer:focus-within { border-color: var(--app-accent); }
+.experiment-composer-input { max-height: 45dvh; overflow-y: auto; }
+.experiment-composer-input .experiment-prompt-input {
+  padding: 0 2px;
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: none;
+}
+.experiment-composer-toolbar,
+.experiment-composer-options,
+.experiment-composer-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.experiment-composer-toolbar { margin-top: 8px; }
+.experiment-composer-options { flex: 1 1 200px; min-width: 0; }
+.experiment-composer-submit { justify-content: flex-end; margin-inline-start: auto; }
+.experiment-composer-toolbar :is(.ant-btn, .ant-select) { height: var(--experiment-control-height); font-size: 13px; }
+.experiment-composer-toolbar .ant-select .ant-select-selector { height: 100%; }
+.experiment-composer-toolbar .ant-btn-primary:not(:disabled) { background: var(--app-accent); }
+.experiment-composer-toolbar .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
+.experiment-option-button { max-width: min(180px, 44vw); }
+.experiment-option-button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.experiment-workspace :is(button, textarea):focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+.experiment-composer-input textarea:focus-visible { outline-offset: -2px; }
+
+@media (max-width: 1023px) {
+  .experiment-workspace { --experiment-control-height: 36px; }
+}
+
+@media (max-width: 767px) {
+  .experiment-composer { padding-inline: 12px; }
+  .experiment-toolbar .ant-btn:not(.experiment-icon-action) { padding-inline: 4px; }
+}
+
+@media (pointer: coarse) {
+  .experiment-toolbar .experiment-icon-action,
+  .experiment-navigation .experiment-icon-action.ant-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-height: 540px) {
+  .experiment-workspace { --experiment-section-gap: 8px; }
+  .experiment-composer { padding-block: 8px; }
+  .experiment-empty-state .ant-empty-image { height: 32px; margin-bottom: 4px; }
+}
+
+@media (max-height: 380px) {
+  .experiment-workspace { flex: 1 0 auto; }
+}
+
 .experiment-navigation {
   display: flex;
   flex: 0 0 216px;

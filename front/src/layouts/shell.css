@@ -93,11 +93,6 @@
 .app-settings-form { max-width: 640px; padding: 24px; background: #fff; border: 1px solid var(--app-border); border-radius: 6px; }
 .chapter-sequences-page > .ant-space-item:not(:first-child) { margin-inline: 16px; }
 .chapter-sequences-page > .ant-space-item:last-child { margin-bottom: 16px; }
-.app-lab-layout { display: flex; flex: 1; min-height: 0; }
-.app-lab-main { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
-.app-lab-content { display: flex; flex: 1; min-height: 0; flex-direction: column; padding: 16px; }
-.app-lab-history { flex: 1; min-height: 0; overflow-y: auto; padding: 0 4px 8px 0; }
-.app-lab-history > * + * { margin-top: 16px; }
 .app-editor-properties { width: var(--app-inspector-width); }
 @media (max-width: 767px) {
   .app-content-tabs > .ant-tabs-content-holder { padding: 12px; }
@@ -105,7 +100,6 @@
   .app-settings-form { padding: 16px; }
   .chapter-sequences-page > .ant-space-item:not(:first-child) { margin-inline: 12px; }
   .chapter-sequences-page .ant-space-horizontal { flex-wrap: wrap; }
-  .app-lab-content { padding: 12px; }
   .app-editor-split { flex-direction: column !important; overflow-y: auto !important; }
   .app-editor-split > div { flex-shrink: 0; overflow: visible; }
   .app-editor-properties { width: 100%; border-left: 0; border-top: 1px solid var(--app-border); }

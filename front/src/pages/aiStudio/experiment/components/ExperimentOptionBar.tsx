@@ -47,7 +47,7 @@ export function ExperimentOptionBar({
         trigger="click"
         onOpenChange={onModelOpenChange}
         content={
-          <div className="w-72">
+          <div className="w-72 max-w-[calc(100vw-64px)]">
             <Typography.Text strong>{modelLabel}</Typography.Text>
             <Select
               className="w-full mt-2"
@@ -60,15 +60,15 @@ export function ExperimentOptionBar({
           </div>
         }
       >
-        <Button icon={<ApiOutlined />} disabled={disabled}>
-          {selectedModel?.name ?? '选择模型'}
+        <Button icon={<ApiOutlined aria-hidden="true" />} disabled={disabled} title={selectedModel?.name} className="experiment-option-button">
+          <span>{selectedModel?.name ?? '选择模型'}</span>
         </Button>
       </Popover>
       <Popover
         trigger="click"
         onOpenChange={onTemplateOpenChange}
         content={
-          <div className="w-80">
+          <div className="w-80 max-w-[calc(100vw-64px)]">
             <Typography.Text strong>提示词来源</Typography.Text>
             <Select
               allowClear
@@ -95,8 +95,8 @@ export function ExperimentOptionBar({
           </div>
         }
       >
-        <Button icon={<FileTextOutlined />} disabled={disabled}>
-          {selectedTemplate ? `${selectedTemplate.name} · v${selectedTemplate.version}` : '自由输入'}
+        <Button icon={<FileTextOutlined aria-hidden="true" />} disabled={disabled} title={selectedTemplate ? `${selectedTemplate.name} · v${selectedTemplate.version}` : undefined} className="experiment-option-button">
+          <span>{selectedTemplate ? `${selectedTemplate.name} · v${selectedTemplate.version}` : '自由输入'}</span>
         </Button>
       </Popover>
     </Space>

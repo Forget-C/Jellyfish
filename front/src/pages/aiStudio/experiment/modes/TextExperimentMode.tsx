@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Spin, Tag, message } from 'antd'
-import { ClearOutlined, StopOutlined } from '@ant-design/icons'
+import { StopOutlined } from '@ant-design/icons'
 import {
   LlmService,
   StudioPromptsService,
@@ -56,7 +56,7 @@ type LocalMessage = {
 export type TextExperimentModeRenderProps = {
   history: ReactNode
   composer: ReactNode
-  extra: ReactNode
+  clearContent?: () => Promise<void>
   disabled: boolean
 }
 
@@ -282,13 +282,9 @@ export function TextExperimentMode({
   /** 清空服务端与浏览器内的当前会话消息，草稿态无需执行该操作。 */
   const handleClearSession = async () => {
     if (!sessionId) return
-    try {
-      await onClearSession(sessionId)
-      historyState.clearLocalHistory()
-      setLocalMessages([])
-    } catch {
-      message.error('清空会话失败；含生成任务的会话不可清空')
-    }
+    await onClearSession(sessionId)
+    historyState.clearLocalHistory()
+    setLocalMessages([])
   }
 
   /** Restores a prior user message as editable free text without spending another model call. */
@@ -304,18 +300,7 @@ export function TextExperimentMode({
   }
 
   return render({
-    extra: (
-      <div className="flex gap-2">
-        {submitting ? <Button icon={<StopOutlined />} danger onClick={() => void handleStop()}>停止生成</Button> : null}
-        <Button
-          icon={<ClearOutlined />}
-          disabled={!sessionId || !localMessages.length || submitting}
-          onClick={() => void handleClearSession()}
-        >
-          清空会话
-        </Button>
-      </div>
-    ),
+    clearContent: sessionId && localMessages.length && !submitting ? handleClearSession : undefined,
     history: (
       <>
         {historyState.loading ? <div className="flex h-72 items-center justify-center"><Spin /></div> : null}
@@ -343,6 +328,7 @@ export function TextExperimentMode({
     ),
     composer: (
       <ExperimentComposer
+        secondaryAction={submitting ? <Button icon={<StopOutlined />} danger onClick={() => void handleStop()}>停止生成</Button> : null}
         submitting={submitting}
         submitDisabled={submitting || Boolean(sessionId && historyState.loading)}
         onSubmit={() => void handleSubmit()}
@@ -372,7 +358,7 @@ export function TextExperimentMode({
           templateValues={templateValues}
           draft={draft}
           placeholder="输入提示词；Shift + Enter 换行"
-          minRows={5}
+          label="文本提示词"
           disabled={submitting}
           submitOnEnter
           onDraftChange={setDraft}
