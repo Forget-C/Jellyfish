@@ -1,4 +1,4 @@
-import { WorkspaceSidebar } from '../../../components/layout/WorkspaceSidebar'
+import { WorkspaceFilter } from '../../../components/layout/WorkspaceFilter'
 import React, { useEffect, useState, useMemo } from 'react'
 import {
   Layout,
@@ -321,18 +321,7 @@ export default function AgentManagement() {
   ]
 
   return (
-    <Layout className="app-management-body h-full flex-row" style={{ minHeight: 0 }}>
-      <WorkspaceSidebar title="类型筛选">
-        <Tree
-          selectedKeys={typeFilter ? [typeFilter] : []}
-          treeData={treeData}
-          showLine
-          blockNode
-          expandAction="click"
-          onSelect={([key]) => setTypeFilter(key ? (key as AgentTypeKey) : null)}
-          className="py-2"
-        />
-      </WorkspaceSidebar>
+    <Layout className="h-full flex-row" style={{ minHeight: 0 }}>
       <section className="flex flex-1 min-w-0 min-h-0 flex-col">
         {/* 顶部区域 */}
         <div className="app-page-toolbar app-management-toolbar">
@@ -342,6 +331,17 @@ export default function AgentManagement() {
               <span className="text-gray-500 text-sm">· 总计 {agents.length} 个 Agent</span>
             </div>
             <Space wrap>
+              <WorkspaceFilter title="类型筛选">
+                <Tree
+                  selectedKeys={typeFilter ? [typeFilter] : []}
+                  treeData={treeData}
+                  showLine
+                  blockNode
+                  expandAction="click"
+                  onSelect={([key]) => setTypeFilter(key ? (key as AgentTypeKey) : null)}
+                  className="py-2"
+                />
+              </WorkspaceFilter>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
                 创建新 Agent
               </Button>
