@@ -17,4 +17,5 @@ export type StoryboardDiff = {
     automatic_stacks?: Array<StoryboardDiffStack>;
     manual_stacks?: Array<StoryboardDiffStack>;
     continuity_review?: (StoryboardContinuityDiff | null);
+    visual_continuity_impacts?: Array<string>;
 };

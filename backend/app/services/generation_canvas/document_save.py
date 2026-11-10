@@ -21,7 +21,8 @@ class PreparedDocument:
     detached_proofs: dict[str, dict[str, Any]]
 
 
-async def prepare_document(db, project_id: str, canvas, raw_document: dict, *, scene_sources: dict | None = None) -> PreparedDocument:
+async def prepare_document(db, project_id: str, canvas, raw_document: dict, *,
+                           scene_sources: dict | None = None, restored_continuity: frozenset[str] = frozenset()) -> PreparedDocument:
     """调用方已锁画布并核对回执及 revision；保持首个诊断顺序，不写文档或替换保护。"""
     canvas_id = canvas.id
     try:
@@ -205,7 +206,7 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict, *, s
         await validate_media_file(db, project_id, media_references[''][0])
     if document.storyboard and document.storyboard.visual_continuity:
         from app.services.directing.storyboard_visual_continuity import validate_visual_continuity
-        await validate_visual_continuity(db, canvas, document, previous_document, context)
+        await validate_visual_continuity(db, canvas, document, previous_document, context, restored=restored_continuity)
     return PreparedDocument(document, previous_document, identities, media_references, detached_proofs)
 
 

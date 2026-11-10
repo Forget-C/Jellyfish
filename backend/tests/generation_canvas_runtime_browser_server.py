@@ -145,6 +145,14 @@ class ControlledModel:
                 {'id': 'back', 'excerpt': '后门的阿同等待。', 'object_ids': [objects['后门的阿同']]},
                 *extra,
             ]}
+            revision = control.get('visual_continuity_revision') if storyboard_video_fixture else None
+            if revision in ('source', 'target'):
+                result['shots'].pop(0 if revision == 'source' else 1)
+            if revision == 'design':
+                result['shots'][1]['designs'] = [{'id': 'wait', 'card_type': 'direction.performance',
+                    'object_id': objects['后门的阿同'], 'fields': {
+                        'physical_action': {'state': 'fact', 'text': '等待', 'excerpt': '等待'},
+                    }}]
             if storyboard_design_stacks:
                 result['designs'] = [{'id': 'light', 'card_type': 'direction.lighting', 'fields': {
                     'light_direction': {'state': 'proposal', 'text': '保持柔和侧光', 'excerpt': '前门的阿同拿着信封。',
@@ -243,7 +251,7 @@ async def set_control(body: dict = Body(...)):
         if key in body:
             control[key] = body[key]
     if storyboard_video_fixture:
-        for key in ('media_fail_next', 'media_hold'):
+        for key in ('media_fail_next', 'media_hold', 'visual_continuity_revision'):
             if key in body:
                 control[key] = body[key]
     if storyboard_design_stacks and 'add_storyboard_content' in body:

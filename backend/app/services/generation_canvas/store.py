@@ -134,22 +134,26 @@ class CanvasStore:
 
     async def save_scene_application(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                                      *, chapter_version: str, scene_sources: dict, source_history: dict | None = None,
-                                     accepted_risks: 'list[dict] | None' = None) -> CanvasRead:
+                                     accepted_risks: 'list[dict] | None' = None,
+                                     restored_continuity: frozenset[str] = frozenset()) -> CanvasRead:
         """Write the checked workbench plan using the ordinary save transaction."""
         result = await self._write(canvas, command, digest, chapter_version=chapter_version,
-                                   scene_sources=scene_sources, source_history=source_history, accepted_risks=accepted_risks)
+                                   scene_sources=scene_sources, source_history=source_history,
+                                   accepted_risks=accepted_risks, restored_continuity=restored_continuity)
         return CanvasRead.model_validate(result['scene_canvas'])
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                      *, chapter_version: str | None = None, scene_sources: dict | None = None,
-                     source_history: dict | None = None, accepted_risks: 'list[dict] | None' = None) -> dict:
+                     source_history: dict | None = None, accepted_risks: 'list[dict] | None' = None,
+                     restored_continuity: frozenset[str] = frozenset()) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         from app.services.generation_canvas.checks import CanvasChecks, changed_check_connections
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
-        prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources)
+        prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources,
+                                          restored_continuity=restored_continuity)
         storyboard = prepared.document.storyboard
         previous = prepared.previous_document.storyboard
         if chapter_version is None and canvas.sequence_id and storyboard and (not previous or storyboard.task_id != previous.task_id):

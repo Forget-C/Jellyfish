@@ -5,6 +5,7 @@
     "storyboard-recovery": { "file": "storyboardRecovery.browser.mjs", "ports": [4330, 8330], "timeoutMs": 180000 },
     "storyboard-scope": { "file": "storyboardScope.browser.mjs", "ports": [4319, 8319], "timeoutMs": 180000 },
     "storyboard-reextract": { "file": "storyboardReextract.browser.mjs", "ports": [4329, 8329], "timeoutMs": 180000 },
+    "storyboard-reference-switch": { "file": "storyboardReferenceSwitch.browser.mjs", "ports": [4733, 8733], "timeoutMs": 180000 },
     "storyboard-visual-continuity": { "file": "storyboardVisualContinuity.browser.mjs", "ports": [4732, 8732], "timeoutMs": 180000 },
     "storyboard-video-first-layout": { "file": "storyboardVideoFirstLayout.browser.mjs", "ports": [4724, 8724], "timeoutMs": 180000 },
     "storyboard-video-defaults": { "file": "sceneStoryboardVideoDefaults.browser.mjs", "ports": [4352, 8352], "timeoutMs": 180000 },

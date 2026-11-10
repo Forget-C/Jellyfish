@@ -23,6 +23,7 @@ from app.services.directing.scene_canvas import SCENE_TASK_ORDER
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.storyboard_application import plan_application
+from app.services.directing.storyboard_continuity_choices import visual_continuity_state
 from app.services.directing.storyboard_stack_review import review_stack_changes
 from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
@@ -508,9 +509,8 @@ class SceneStoryboardService(SceneObjectService):
         prior = None
         if previous and previous.kind == STORYBOARD_KIND and previous.target_id == sequence_id and previous.project_id == self.project_id and previous.status == TaskStatus.succeeded:
             prior = StoryboardCandidate.from_task_result(previous.result).document
-        capability = task.input_snapshot['run_args'].get('production_capability') or {}
-        document, diff = plan_application(current, candidate.document, body, prior=prior,
-                                          production_ports=capability.get('input_ports'))
+        capability = task.input_snapshot['run_args'].get('production_capability')
+        document, diff = plan_application(current, candidate.document, body, prior=prior, production_capability=capability)
         diff.automatic_stacks, diff.manual_stacks = review_stack_changes(current, document)
         continuity = await self._continuity_diff(task, current, document)
         diff.continuity_review = continuity
@@ -588,7 +588,10 @@ class SceneStoryboardService(SceneObjectService):
 
     @staticmethod
     def _history_state(document: CanvasDocument) -> dict:
-        return {'sources': fixed_source_state(document), 'task_id': document.storyboard.task_id if document.storyboard else None}
+        state = {'sources': fixed_source_state(document), 'task_id': document.storyboard.task_id if document.storyboard else None}
+        if continuity := visual_continuity_state(document):
+            state['visual_continuity'] = continuity
+        return state
 
     async def restore_storyboard(self, chapter_id: str, sequence_id: str, task_id: str,
                                  body: StoryboardRestore) -> CanvasRead:
@@ -617,7 +620,8 @@ class SceneStoryboardService(SceneObjectService):
             raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对原风险确认对应的设计内容', {'canvas_id': canvas.id})
         return await store.save_scene_application(canvas,
             CanvasSave(request_id=body.request_id, expected_revision=body.expected_revision, document=document.model_dump()),
-            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'])
+            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'],
+            restored_continuity=frozenset(history[to_side].get('visual_continuity', {})))
 
     async def _storyboard_read(self, task: Task) -> StoryboardTaskRead:
         canvas_id = task.input_snapshot['canvas_id']

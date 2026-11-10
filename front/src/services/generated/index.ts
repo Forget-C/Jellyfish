@@ -217,6 +217,7 @@ export type { CanvasCheckVideoRange } from './models/CanvasCheckVideoRange';
 export type { CanvasCompiledInput } from './models/CanvasCompiledInput';
 export type { CanvasConnectionPolicy } from './models/CanvasConnectionPolicy';
 export type { CanvasContentOrigin } from './models/CanvasContentOrigin';
+export type { CanvasContinuitySuspension } from './models/CanvasContinuitySuspension';
 export type { CanvasCreate } from './models/CanvasCreate';
 export type { CanvasDesignFieldDefinition } from './models/CanvasDesignFieldDefinition';
 export type { CanvasDetachedResult } from './models/CanvasDetachedResult';
