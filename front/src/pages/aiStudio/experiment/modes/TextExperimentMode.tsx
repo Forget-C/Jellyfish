@@ -4,17 +4,15 @@
  * 模态只处理文本历史的呈现、文本生成和输入配置；会话选择、URL 与页面布局
  * 仍由统一实验室页面负责，从而避免文本实验室重新成为独立页面。
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Spin, Tag, message } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
 import {
   LlmService,
-  StudioPromptsService,
   StudioTextLabService,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
   type ModelRead,
-  type PromptTemplateRead,
 } from '../../../../services/generated'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentEmptyState } from '../components/ExperimentEmptyState'
@@ -22,8 +20,9 @@ import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryR
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
-import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
+import { renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import { streamTextLab } from '../../../../services/textLabStream'
 
@@ -99,25 +98,20 @@ export function TextExperimentMode({
   render,
 }: TextExperimentModeProps) {
   const [models, setModels] = useState<ModelRead[]>([])
-  const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
   const [modelId, setModelId] = useState<string>()
-  const [templateId, setTemplateId] = useState<string>()
-  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
   const [draft, setDraft] = useState('')
+  const {
+    templates, selectedTemplate, templateValues, setTemplateValues, templatesLoading, templatesFailed,
+    loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
+  } = useExperimentTemplates(textPromptCategories, draft, setDraft)
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
-  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const historyState = useExperimentHistory(sessionId)
   const previousSessionIdRef = useRef(sessionId)
   const streamAbortRef = useRef<AbortController | null>(null)
   const streamTaskIdRef = useRef<string | undefined>(undefined)
   const streamSessionIdRef = useRef<string | undefined>(undefined)
-
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.id === templateId) ?? null,
-    [templateId, templates],
-  )
 
   /**
    * 将共享 Hook 取得的持久化历史投影为文本聊天气泡。
@@ -159,32 +153,6 @@ export function TextExperimentMode({
     } finally {
       setModelsLoading(false)
     }
-  }
-
-  /** 首次打开提示词选择器时读取所有适用于文本生成的模板。 */
-  const loadTemplates = async () => {
-    if (templates.length || templatesLoading) return
-    setTemplatesLoading(true)
-    try {
-      const responses = await Promise.all(textPromptCategories.map((category) => (
-        StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({
-          category, page: 1, pageSize: 100, order: 'updated_at', isDesc: true,
-        })
-      )))
-      setTemplates(responses.flatMap((response) => response.data?.items ?? []))
-    } catch {
-      message.error('加载文本提示词失败')
-    } finally {
-      setTemplatesLoading(false)
-    }
-  }
-
-  /** 切换模板时初始化变量表单，并清除不再适用的自由输入草稿。 */
-  const handleSelectTemplate = (nextTemplateId?: string) => {
-    setTemplateId(nextTemplateId)
-    const template = templates.find((item) => item.id === nextTemplateId)
-    setTemplateValues(template ? createPromptTemplateValues(template) : {})
-    if (template) setDraft('')
   }
 
   const currentPrompt = selectedTemplate
@@ -290,13 +258,14 @@ export function TextExperimentMode({
   /** Restores a prior user message as editable free text without spending another model call. */
   const restoreUserMessage = (item: LocalMessage) => {
     if (submitting) return
-    const snapshot = item.inputSnapshot
-    setTemplateId(undefined)
-    setTemplateValues({})
-    setDraft(snapshot?.prompt ?? item.content)
-    if (snapshot?.model_id) setModelId(snapshot.model_id)
-    focusExperimentPromptEditor()
-    message.success('已回填历史输入，可修改后重新发送')
+    confirmReplacement(() => {
+      const snapshot = item.inputSnapshot
+      applyFreeInput(snapshot?.prompt ?? item.content)
+      setModelId(snapshot?.model_id)
+      focusExperimentPromptEditor()
+      if (snapshot?.model_id) message.success('已回填历史输入，可修改后重新发送')
+      else message.info('已回填提示词；请重新选择模型后发送')
+    })
   }
 
   return render({
@@ -340,19 +309,22 @@ export function TextExperimentMode({
               preview: template.preview, category: textPromptCategoryLabels[template.category],
             }))}
             modelId={modelId}
-            templateId={templateId}
+            selectedTemplate={selectedTemplate ?? undefined}
             modelsLoading={modelsLoading}
             templatesLoading={templatesLoading}
+            templatesFailed={templatesFailed}
+            onRefreshTemplates={() => void loadTemplates(true)}
             disabled={submitting}
             modelLabel="文本模型"
             modelPlaceholder="选择已登记的文本模型"
             onModelChange={setModelId}
-            onTemplateChange={handleSelectTemplate}
+            onTemplateChange={selectTemplate}
             onModelOpenChange={(open) => { if (open) void loadModels() }}
             onTemplateOpenChange={(open) => { if (open) void loadTemplates() }}
           />
         )}
       >
+        {replacementDialog}
         <ExperimentPromptEditor
           template={selectedTemplate}
           templateValues={templateValues}
@@ -363,11 +335,7 @@ export function TextExperimentMode({
           submitOnEnter
           onDraftChange={setDraft}
           onTemplateValuesChange={setTemplateValues}
-          onUseFreeInput={(renderedPrompt) => {
-            setTemplateId(undefined)
-            setTemplateValues({})
-            setDraft(renderedPrompt)
-          }}
+          onUseFreeInput={applyFreeInput}
           onSubmit={() => void handleSubmit()}
         />
       </ExperimentComposer>

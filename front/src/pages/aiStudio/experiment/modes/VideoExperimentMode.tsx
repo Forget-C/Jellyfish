@@ -12,12 +12,10 @@ import {
   FilmService,
   LlmService,
   StudioFilesService,
-  StudioPromptsService,
   StudioGenerationTasksService,
   type ExperimentMessageRead,
   type FileRead,
   type ModelRead,
-  type PromptTemplateRead,
 } from '../../../../services/generated'
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentComposer } from '../components/ExperimentComposer'
@@ -27,8 +25,9 @@ import { ExperimentHistoryReferences } from '../components/ExperimentHistoryRefe
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
-import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
+import { renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
@@ -153,12 +152,13 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const history = useExperimentHistory(sessionId)
   const { refresh: refreshHistory } = history
   const [models, setModels] = useState<ModelRead[]>([])
-  const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
   const [files, setFiles] = useState<FileRead[]>([])
   const [modelId, setModelId] = useState<string>()
-  const [templateId, setTemplateId] = useState<string>()
-  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
   const [draft, setDraft] = useState('')
+  const {
+    templates, selectedTemplate, templateValues, setTemplateValues, templatesLoading, templatesFailed,
+    loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
+  } = useExperimentTemplates(['video_prompt'], draft, setDraft)
   const [ratio, setRatio] = useState<VideoRatio>('16:9')
   const [frameFileIds, setFrameFileIds] = useState<Partial<Record<FrameSlot, string>>>({})
   const [subjectReferences, setSubjectReferences] = useState<SubjectReferenceDraft[]>([])
@@ -166,7 +166,6 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [uploadingSubjectMedia, setUploadingSubjectMedia] = useState<{ subjectId: string; kind: SubjectMediaKind } | null>(null)
   const [capability, setCapability] = useState<VideoCapability>()
   const [modelsLoading, setModelsLoading] = useState(false)
-  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [uploadingSlot, setUploadingSlot] = useState<FrameSlot | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [libraryTarget, setLibraryTarget] = useState<FrameSlot | null>(null)
@@ -181,7 +180,6 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       .catch(() => message.error('加载视频资料库失败'))
   }, [])
 
-  const selectedTemplate = useMemo(() => templates.find((item) => item.id === templateId) ?? null, [templateId, templates])
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const messages = useMemo(() => {
     // 正式消息保持服务端 sequence 顺序，轮询只以 task_id 覆盖瞬时任务字段。
@@ -233,12 +231,6 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   }
 
   /** 首次展开时加载视频提示词模板。 */
-  const loadTemplates = async () => {
-    if (templates.length || templatesLoading) return
-    setTemplatesLoading(true)
-    try { const response = await StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ category: 'video_prompt', page: 1, pageSize: 100, order: 'updated_at', isDesc: true }); setTemplates(response.data?.items ?? []) } catch { message.error('加载视频提示词失败') } finally { setTemplatesLoading(false) }
-  }
-
   useEffect(() => {
     if (!runningTask?.taskId) return
     let cancelled = false; const taskId = runningTask.taskId
@@ -367,22 +359,16 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     } catch { message.error('创建视频生成任务失败，请检查模型、关键帧和服务配置') } finally { setSubmitting(false) }
   }
 
-  /** 模板变更时初始化变量，并避免和自由输入混用。 */
-  const selectTemplate = (nextId?: string) => {
-    setTemplateId(nextId); const template = templates.find((item) => item.id === nextId)
-    setTemplateValues(template ? createPromptTemplateValues(template) : {}); if (template) setDraft('')
-  }
-
   /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
   const restoreUserMessage = (item: VideoMessage) => {
     if (disabled) return
-    setTemplateId(undefined)
-    setTemplateValues({})
-    setDraft(item.content)
-    setFrameFileIds({})
-    setSubjectReferences([])
-    focusExperimentPromptEditor()
-    message.info('已回填提示词；请重新选择模型、画幅和参考素材后生成')
+    confirmReplacement(() => {
+      applyFreeInput(item.content)
+      setFrameFileIds({})
+      setSubjectReferences([])
+      focusExperimentPromptEditor()
+      message.info('已回填提示词；请重新选择模型、画幅和参考素材后生成')
+    }, hasFrameReferences || hasSubjectReferences)
   }
 
   const historyNode = <>
@@ -457,7 +443,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       ]}
     />
   </Modal>
-  const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} templateId={templateId} modelsLoading={modelsLoading} templatesLoading={templatesLoading} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{(['first', 'last', 'key'] as FrameSlot[]).map((slot) => <FrameControl key={slot} slot={slot} file={selectedFrames[slot]} disabled={disabled || hasSubjectReferences} uploading={uploadingSlot === slot} onUpload={uploadFrame} onOpenLibrary={setLibraryTarget} onRemove={(target) => setFrameFileIds((current) => ({ ...current, [target]: undefined }))} />)}{hasSubjectReferences ? <span className="text-xs text-slate-500">主体参考已启用，不能添加关键帧</span> : null}<Select size="small" value={ratio} onChange={setRatio} disabled={disabled} options={(capability?.allowed_ratios?.length ? capability.allowed_ratios : ratioOptions).map((value) => ({ value, label: value }))} aria-label="视频比例" />{subjectActions}</div>}><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" label="视频提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(prompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(prompt) }} /></ExperimentComposer>
+  const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{(['first', 'last', 'key'] as FrameSlot[]).map((slot) => <FrameControl key={slot} slot={slot} file={selectedFrames[slot]} disabled={disabled || hasSubjectReferences} uploading={uploadingSlot === slot} onUpload={uploadFrame} onOpenLibrary={setLibraryTarget} onRemove={(target) => setFrameFileIds((current) => ({ ...current, [target]: undefined }))} />)}{hasSubjectReferences ? <span className="text-xs text-slate-500">主体参考已启用，不能添加关键帧</span> : null}<Select size="small" value={ratio} onChange={setRatio} disabled={disabled} options={(capability?.allowed_ratios?.length ? capability.allowed_ratios : ratioOptions).map((value) => ({ value, label: value }))} aria-label="视频比例" />{subjectActions}</div>}>{replacementDialog}<ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" label="视频提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>
   const overlays = <><Modal title={libraryTarget ? `从资料库选择${frameLabels[libraryTarget]}` : '从资料库选择关键帧'} open={Boolean(libraryTarget)} onCancel={() => setLibraryTarget(null)} footer={<Button type="primary" onClick={() => setLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{imageFiles.map((file) => <button key={file.id} type="button" onClick={() => { if (libraryTarget) setFrameFileIds((current) => ({ ...current, [libraryTarget]: file.id })) }} className={`overflow-hidden rounded border text-left ${libraryTarget && frameFileIds[libraryTarget] === file.id ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!imageFiles.length ? <Empty description="资料库中暂无图片" /> : null}</Modal><Modal title={subjectLibraryTarget ? `从资料库选择主体${subjectLibraryTarget.kind === 'image' ? '图片' : '视频'}` : '选择主体素材'} open={Boolean(subjectLibraryTarget)} onCancel={() => setSubjectLibraryTarget(null)} footer={<Button type="primary" onClick={() => setSubjectLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).map((file) => <button key={file.id} type="button" onClick={() => { if (!subjectLibraryTarget) return; const target = subjectLibraryTarget; const selectedSubject = subjectReferences.find((subject) => subject.id === target.subjectId); const selectedIds = target.kind === 'image' ? selectedSubject?.imageFileIds : selectedSubject?.videoFileIds; if (selectedIds?.includes(file.id)) return message.info('该素材已添加'); if (!canAppendSubjectMedia(target.subjectId, target.kind)) return message.warning('已达到当前模型的主体参考上限'); setSubjectReferences((current) => current.map((subject) => subject.id !== target.subjectId ? subject : target.kind === 'image' ? { ...subject, imageFileIds: [...subject.imageFileIds, file.id] } : { ...subject, videoFileIds: [...subject.videoFileIds, file.id] })) }} className="overflow-hidden rounded border border-gray-200 text-left"><div className="flex h-28 items-center justify-center bg-slate-100">{subjectLibraryTarget?.kind === 'image' ? <img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /> : <VideoCameraOutlined className="text-2xl text-slate-500" />}</div><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).length ? <Empty description={`资料库中暂无主体${subjectLibraryTarget?.kind === 'video' ? '视频' : '图片'}`} /> : null}</Modal><Modal title="视频预览" open={Boolean(previewVideoUrl)} onCancel={() => setPreviewVideoUrl(null)} footer={null} destroyOnClose width={900}>{previewVideoUrl ? <video controls autoPlay preload="metadata" className="w-full rounded-lg bg-black" src={previewVideoUrl}>你的浏览器不支持视频预览。</video> : null}</Modal></>
   const clearHistory = async () => {
     if (!sessionId || !clearSessionMessages) return

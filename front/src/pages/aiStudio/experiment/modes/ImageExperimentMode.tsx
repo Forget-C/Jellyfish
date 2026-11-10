@@ -13,12 +13,10 @@ import {
   LlmService,
   StudioFilesService,
   StudioGenerationTasksService,
-  StudioPromptsService,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
   type FileRead,
   type ModelRead,
-  type PromptTemplateRead,
 } from '../../../../services/generated'
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentComposer } from '../components/ExperimentComposer'
@@ -28,8 +26,9 @@ import { ExperimentHistoryReferences } from '../components/ExperimentHistoryRefe
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
-import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
+import { renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
@@ -102,15 +101,15 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
 export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: ImageExperimentModeProps) {
   const [activeSessionId, setActiveSessionId] = useState(sessionId)
   const [models, setModels] = useState<ModelRead[]>([])
-  const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
   const [files, setFiles] = useState<FileRead[]>([])
   const [modelId, setModelId] = useState<string>()
-  const [templateId, setTemplateId] = useState<string>()
-  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
   const [draft, setDraft] = useState('')
+  const {
+    templates, selectedTemplate, templateValues, setTemplateValues, templatesLoading, templatesFailed,
+    loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
+  } = useExperimentTemplates(imagePromptCategories, draft, setDraft)
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
-  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -124,7 +123,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       : messageItem
   })
   const messages = persistedMessages
-  const selectedTemplate = useMemo(() => templates.find((item) => item.id === templateId) ?? null, [templateId, templates])
   const selectedReferences = useMemo(() => referenceFileIds.map((id) => files.find((file) => file.id === id)).filter((file): file is FileRead => Boolean(file)), [files, referenceFileIds])
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
@@ -149,15 +147,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   }
 
   /** 首次打开提示词选择器时并行读取图片提示词分类。 */
-  const loadTemplates = async () => {
-    if (templates.length || templatesLoading) return
-    setTemplatesLoading(true)
-    try {
-      const responses = await Promise.all(imagePromptCategories.map((category) => StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ category, page: 1, pageSize: 100, order: 'updated_at', isDesc: true })))
-      setTemplates(responses.flatMap((response) => response.data?.items ?? []))
-    } catch { message.error('加载图片提示词失败') } finally { setTemplatesLoading(false) }
-  }
-
   useEffect(() => {
     if (!runningTask?.taskId) return
     let cancelled = false
@@ -187,13 +176,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   }, [refreshHistory, runningTask?.taskId])
 
   /** 选择模板时初始化变量，保证模板输入与自由输入不会混用。 */
-  const handleSelectTemplate = (nextTemplateId?: string) => {
-    setTemplateId(nextTemplateId)
-    const template = templates.find((item) => item.id === nextTemplateId)
-    setTemplateValues(template ? createPromptTemplateValues(template) : {})
-    if (template) setDraft('')
-  }
-
   /** 上传图片并立即加入本轮参考图及资料库缓存。 */
   const handleUploadReference = async (file: UploadFile) => {
     if (!file.type?.startsWith('image/')) { message.warning('只能上传图片作为参考图'); return false }
@@ -250,12 +232,12 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
   const restoreUserMessage = (item: ImageLabMessage) => {
     if (disabled) return
-    setTemplateId(undefined)
-    setTemplateValues({})
-    setDraft(item.content)
-    setReferenceFileIds([])
-    focusExperimentPromptEditor()
-    message.info('已回填提示词；请重新选择模型和参考图后生成')
+    confirmReplacement(() => {
+      applyFreeInput(item.content)
+      setReferenceFileIds([])
+      focusExperimentPromptEditor()
+      message.info('已回填提示词；请重新选择模型和参考图后生成')
+    }, referenceFileIds.length > 0)
   }
 
   const disabled = submitting || Boolean(runningTask)
@@ -287,9 +269,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   </>
   const composer = <ExperimentComposer
       submitting={disabled} submitDisabled={disabled} submitLabel="生成图片" onSubmit={() => void handleSubmit()}
-      options={<ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} templateId={templateId} modelsLoading={modelsLoading} templatesLoading={templatesLoading} disabled={disabled} modelLabel="图片模型" modelPlaceholder="选择已登记的图片模型" onModelChange={setModelId} onTemplateChange={handleSelectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />}
+      options={<ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="图片模型" modelPlaceholder="选择已登记的图片模型" onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />}
       contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2"><Dropdown trigger={['click']} disabled={uploading || disabled} dropdownRender={() => <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><Upload className="block w-full" accept="image/*" showUploadList={false} beforeUpload={handleUploadReference} disabled={uploading || disabled}><Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传图片</Button></Upload><Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => setLibraryOpen(true)}>从资料库选择</Button></div>}><Button size="small" icon={<PictureOutlined />} loading={uploading}>参考图</Button></Dropdown>{selectedReferences.map((file) => <div key={file.id} className="group relative h-9 w-9 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" title={file.name}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /><button type="button" aria-label={`移除参考图：${file.name}`} className="absolute inset-0 hidden items-center justify-center bg-slate-900/50 text-white group-hover:flex focus:flex" onClick={() => setReferenceFileIds((current) => current.filter((id) => id !== file.id))}><CloseOutlined /></button></div>)}{referenceFileIds.length ? <Button size="small" type="text" onClick={() => setReferenceFileIds([])} disabled={disabled}>清空</Button> : null}</div>}
-    ><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(renderedPrompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(renderedPrompt) }} /></ExperimentComposer>
+    >{replacementDialog}<ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>
   const overlays = <Modal title="从资料库选择参考图" open={libraryOpen} onCancel={() => setLibraryOpen(false)} footer={<Button type="primary" onClick={() => setLibraryOpen(false)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{files.map((file) => { const selected = referenceFileIds.includes(file.id); return <button key={file.id} type="button" onClick={() => setReferenceFileIds((current) => selected ? current.filter((id) => id !== file.id) : [...current, file.id])} className={`overflow-hidden rounded border text-left ${selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button> })}</div>{!files.length ? <Empty description="资料库中暂无图片" /> : null}</Modal>
   return render({ history: historyContent, composer, clearContent, overlays, disabled })
 }
