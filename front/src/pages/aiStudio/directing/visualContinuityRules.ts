@@ -129,7 +129,8 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
   if (suspension && (!plan || JSON.stringify(suspension) !== JSON.stringify(plan.suspension)))
     throw new Error('主体参考已变化，请重新核对后确认切换')
   const next = plan?.card ?? target
-  const operations = createCanvasOperations(createGraphRules(catalog))
+  const rules = createGraphRules(catalog)
+  const operations = createCanvasOperations(rules)
   const withFrame = { ...document, cards: [...(document.cards || []), frame] }
   const sourceFrame = { canvas_id: document.id, card_id: frame.id, port_id: 'image', position: 0 }
   const bindings = next.input_bindings || []
@@ -139,7 +140,12 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
       subject_name: port === 'subject_image' ? subjectName : null, prompt_owned: false }]
   const result = operations.update(withFrame, { ...next, input_bindings: inputs }, capability)
   if (!result.document) throw new Error(result.reason)
-  return { ...result.document, storyboard: { ...document.storyboard, visual_continuity: {
+  const uses = [...inputs, ...(next.design_media_uses || [])]
+  const previousCandidates = (result.document.edges || []).filter(edge => edge.target_card === targetId
+    && edge.source_card === existing?.frame.id && !uses.some(use => use.input_port === edge.target_port
+      && use.source.card_id === edge.source_card && use.source.port_id === edge.source_port))
+  const updated = previousCandidates.reduce((current, edge) => rules.disconnect(current, edge.id), result.document)
+  return { ...updated, storyboard: { ...document.storyboard, visual_continuity: {
     ...document.storyboard.visual_continuity, [targetId]: {
       ...(suspension ? { suspended: suspension } : document.storyboard.visual_continuity?.[targetId]),
       binding_id: existing?.binding.id ?? bindingId,
