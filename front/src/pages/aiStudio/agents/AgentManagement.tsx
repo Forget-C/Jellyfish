@@ -24,7 +24,7 @@ export default function AgentManagement() {
   const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
-  const loadingRef = useRef(false)
+  const listEpoch = useRef(0)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<AgentTypeKey | null>(null)
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated')
@@ -42,24 +42,26 @@ export default function AgentManagement() {
   const createRef = useRef(false)
 
   const load = async () => {
-    if (loadingRef.current) return
-    loadingRef.current = true
+    const epoch = ++listEpoch.current
     setLoading(true)
     try {
       const list = await api.agents.list()
+      if (epoch !== listEpoch.current) return
       if (!Array.isArray(list)) throw new Error('Invalid Agent list response')
       setAgents(list)
       setLoaded(true)
       setLoadError(false)
       setSelectedIds(ids => ids.filter(id => list.some(agent => agent.id === id)))
     } catch {
-      setLoadError(true)
+      if (epoch === listEpoch.current) setLoadError(true)
     } finally {
-      loadingRef.current = false
-      setLoading(false)
+      if (epoch === listEpoch.current) setLoading(false)
     }
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+    return () => { listEpoch.current += 1 }
+  }, [])
 
   const filteredList = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -87,6 +89,8 @@ export default function AgentManagement() {
         setMutating(true)
         try {
           await api.agents.update(agent.id, { isDefault: true })
+          listEpoch.current += 1
+          setAgents(list => list.map(item => item.type === agent.type ? { ...item, isDefault: item.id === agent.id } : item))
           message.success('已设为默认')
           await load()
         } catch (error) {
@@ -119,6 +123,8 @@ export default function AgentManagement() {
         try {
           for (const id of remaining) {
             await api.agents.delete(id)
+            listEpoch.current += 1
+            setLoading(false)
             remaining.delete(id)
             setAgents(list => list.filter(agent => agent.id !== id))
             setSelectedIds(ids => ids.filter(selected => selected !== id))

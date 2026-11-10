@@ -33,7 +33,7 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (pathname === '/api/agents') return route.fulfill({ json: [agent] })
     if (pathname === '/api/agents/agent1') return route.fulfill({ json: agent })
-    if (pathname === '/api/files') return route.fulfill({ json: [] })
+    if (pathname === '/api/v1/studio/files') return respond(list([]))
     if (pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     if (pathname.endsWith('/models')) return respond(list(new URL(route.request().url()).searchParams.get('category') === 'image' ? [] : [model]))
     if (pathname.endsWith('/providers')) return respond(list([{ id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid', status: 'active' }]))

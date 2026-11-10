@@ -42,6 +42,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [revision, setRevision] = useState(0)
+  const listEpoch = useRef(0)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated')
   const [page, setPage] = useState(1)
@@ -65,6 +66,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
 
   useEffect(() => {
     let active = true
+    const epoch = ++listEpoch.current
     setLoading(true)
     setLoadFailed(false)
     const request = LlmService.listProvidersApiV1LlmProvidersGet({
@@ -75,7 +77,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       pageSize: PAGE_SIZE,
     })
     void request.then(response => {
-      if (!active) return
+      if (!active || epoch !== listEpoch.current) return
       const data = response.data
       if (!data || !Array.isArray(data.items)) {
         setLoadFailed(true)
@@ -86,9 +88,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         total: typeof data.pagination?.total === 'number' ? data.pagination.total : undefined,
       })
     }).catch(() => {
-      if (active) setLoadFailed(true)
+      if (active && epoch === listEpoch.current) setLoadFailed(true)
     }).finally(() => {
-      if (active) setLoading(false)
+      if (active && epoch === listEpoch.current) setLoading(false)
     })
     return () => {
       active = false
@@ -210,6 +212,14 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         onOk: async () => {
           try {
             await LlmService.deleteProviderApiV1LlmProvidersProviderIdDelete({ providerId: provider.id })
+            listEpoch.current += 1
+            setResult(previous => {
+              if (!previous?.providers.some(item => item.id === provider.id)) return previous
+              return {
+                providers: previous.providers.filter(item => item.id !== provider.id),
+                total: previous.total === undefined ? undefined : Math.max(0, previous.total - 1),
+              }
+            })
             message.success('供应商已删除')
             if (result?.providers.length === 1 && page > 1) setPage(page - 1)
             else reload()

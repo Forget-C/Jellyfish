@@ -2,6 +2,7 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../com
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FC } from 'react'
 import { Alert, Skeleton, Input, Tag, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
+import { searchManagementList } from '../managementListSearch'
 import './prompt-manager.css'
 import { StudioPromptsService } from '../../../services/generated'
 import type { PromptCategory, PromptTemplateRead } from '../../../services/generated'
@@ -140,15 +141,24 @@ const PromptTemplateManager: FC = () => {
     setLoading(true)
     setLoadError(false)
     try {
-      const res = await StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({
-        q: nextQuery.trim() || null,
-        page: nextPage,
-        pageSize: PAGE_SIZE,
-      })
-      if (requestId !== requestIdRef.current) return
-
-      const items = res.data?.items ?? []
-      const totalCount = res.data?.pagination?.total
+      const isCurrent = () => requestId === requestIdRef.current
+      const readPage = async (requestedPage: number, pageSize: number) => {
+        const { data } = await StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ page: requestedPage, pageSize })
+        if (!data || !Array.isArray(data.items)) throw new Error('模板列表响应无效')
+        return { items: data.items, total: data.pagination?.total }
+      }
+      const keyword = nextQuery.trim().toLocaleLowerCase()
+      const filtered = keyword ? await searchManagementList(
+        requestedPage => readPage(requestedPage, 100), 100,
+        item => item.name.toLocaleLowerCase().includes(keyword) || (item.preview ?? '').toLocaleLowerCase().includes(keyword),
+        isCurrent,
+      ) : undefined
+      if (!isCurrent()) return
+      const result = filtered
+        ? { items: filtered.slice((nextPage - 1) * PAGE_SIZE, nextPage * PAGE_SIZE), total: filtered.length }
+        : await readPage(nextPage, PAGE_SIZE)
+      if (!isCurrent()) return
+      const { items, total: totalCount } = result
 
       // 空页时自动回退上一页，避免用户停留在无数据页。
       if (nextPage > 1 && items.length === 0 && totalCount !== undefined && totalCount > 0) {
@@ -197,6 +207,7 @@ const PromptTemplateManager: FC = () => {
 
   useEffect(() => {
     void loadTemplates(page, query)
+    return () => { requestIdRef.current += 1 }
   }, [page, query])
 
   const templateGroups = useMemo(() => {
@@ -355,6 +366,11 @@ const PromptTemplateManager: FC = () => {
           await StudioPromptsService.deletePromptTemplateApiV1StudioPromptsTemplateIdDelete({
             templateId: template.id,
           })
+          requestIdRef.current += 1
+          if (templates.some(item => item.id === template.id)) {
+            setTemplates(previous => previous.filter(item => item.id !== template.id))
+            setTotal(previous => previous === undefined ? undefined : Math.max(0, previous - 1))
+          }
           message.success('提示词已删除')
           if (selected?.id === template.id) {
             setSelected(null)

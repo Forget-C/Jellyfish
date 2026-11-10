@@ -124,7 +124,5 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
 @media (max-width: 767px) {
   .asset-library-tabs .management-heading .ant-tabs-nav { flex-basis: 100%; }
   .asset-library-tabs .management-tools { flex-basis: 160px; }
-}
-@media (max-width: 480px) {
   .asset-library-grid { grid-template-columns: minmax(0, 1fr); }
 }

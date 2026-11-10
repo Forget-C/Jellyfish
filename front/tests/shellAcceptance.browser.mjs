@@ -38,7 +38,7 @@ try {
     if (path.includes('/test-image/')) return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="192" height="288"><rect width="192" height="288" fill="#eaf3ff"/><rect x="32" y="64" width="128" height="160" rx="6" fill="white" stroke="#1677ff"/><path d="M48 96h96M48 120h96M48 144h64" stroke="#1677ff" stroke-width="4"/></svg>' })
     if (path === '/api/agents') return route.fulfill({ json: [agent] })
     if (path === '/api/agents/agent1') return route.fulfill({ json: agent })
-    if (path === '/api/files') return route.fulfill({ json: [] })
+    if (path === '/api/v1/studio/files') return respond(list([]))
     if (path.endsWith('/film/tasks')) return respond({ items: taskRows, next_cursor: null })
     if (path.endsWith('/film/tasks/task1/cancel')) { taskRows[0].cancel_requested = true; return respond({ task_id: 'task1', cancel_requested: true }) }
     if (path.endsWith('/providers')) return respond(list([provider]))

@@ -146,7 +146,12 @@ try {
   assert.equal(deleteRequests, 0)
   await page.getByRole('button', { name: `${provider.name}的更多操作` }).click()
   await page.getByRole('menuitem', { name: /删除/ }).click()
+  listFails = true
   await confirmation.getByRole('button', { name: /删\s*除/ }).click()
+  await page.getByText('刷新供应商失败，仍显示上次结果').waitFor()
+  assert.equal(await name.count(), 0, '已确认删除的供应商不能因刷新失败恢复到可操作列表')
+  listFails = false
+  await page.getByRole('button', { name: /重\s*试/ }).click()
   await page.getByText('暂无供应商').waitFor()
   assert.equal(deleteRequests, 1)
 

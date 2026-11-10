@@ -31,10 +31,14 @@ export type TaskPageContext = {
   relationEntityId: string
 }
 
+type AssetGeneration = { status: 'submitting' } | { status: 'submitted'; taskId: string }
+
 type TaskUiState = {
   serverItems: Record<string, TaskListItemRead>
   optimisticItems: Record<string, TaskUiItem>
   contextScopes: Record<string, TaskPageContext[]>
+  assetGenerations: Record<string, AssetGeneration>
+  setAssetGeneration: (key: string, generation?: AssetGeneration) => void
   open: boolean
   setServerTasks: (tasks: TaskListItemRead[]) => void
   upsertTask: (task: TaskUiItem) => void
@@ -102,6 +106,13 @@ export const useTaskUiStore = create<TaskUiState>((set, get) => ({
   serverItems: {},
   optimisticItems: {},
   contextScopes: {},
+  assetGenerations: {},
+  setAssetGeneration: (key, generation) => set(state => {
+    const assetGenerations = { ...state.assetGenerations }
+    if (generation) assetGenerations[key] = generation
+    else delete assetGenerations[key]
+    return { assetGenerations }
+  }),
   open: false,
   setServerTasks: (tasks) =>
     set(() => ({

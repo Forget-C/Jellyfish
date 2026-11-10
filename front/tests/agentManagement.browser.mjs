@@ -16,6 +16,8 @@ let updateFails = true
 let deleteFails = true
 let createRequests = 0
 const deletedIds = []
+let nextListGate
+let releaseStale
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
@@ -23,11 +25,20 @@ try {
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(6000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
-  await page.route('**/api/**', route => {
+  await page.route('**/api/**', async route => {
     const { pathname } = new URL(route.request().url())
     const method = route.request().method()
     const fail = () => route.fulfill({ status: 500, json: { message: '隔离请求失败' } })
-    if (pathname === '/api/agents' && method === 'GET') return listFails ? fail() : route.fulfill({ json: agents })
+    if (pathname === '/api/agents' && method === 'GET') {
+      if (nextListGate) {
+        const snapshot = structuredClone(agents)
+        const gate = nextListGate
+        nextListGate = undefined
+        await gate
+        return route.fulfill({ json: snapshot })
+      }
+      return listFails ? fail() : route.fulfill({ json: agents })
+    }
     if (pathname === '/api/agents' && method === 'POST') {
       createRequests += 1
       const body = route.request().postDataJSON()
@@ -104,9 +115,22 @@ try {
   await defaultDialog.getByRole('button', { name: '设为默认', exact: true }).click()
   await page.getByText('设置失败，请重试').waitFor()
   updateFails = false
+  await defaultDialog.getByRole('button', { name: /取\s*消/ }).click()
+  await defaultDialog.waitFor({ state: 'hidden' })
+  nextListGate = new Promise(resolve => { releaseStale = resolve })
+  await page.getByRole('button', { name: '刷新 Agent' }).click()
+  await row.getByRole('button', { name: '更多操作：验收 Agent' }).press('Enter')
+  await page.getByRole('menuitem', { name: '设为默认', exact: true }).click()
+  listFails = true
   await defaultDialog.getByRole('button', { name: '设为默认', exact: true }).click()
   await defaultDialog.waitFor({ state: 'hidden' })
   await row.getByText('默认', { exact: true }).waitFor()
+  const stale = page.waitForResponse(response => response.url().endsWith('/api/agents') && response.ok())
+  releaseStale()
+  await stale
+  await page.getByRole('alert').filter({ hasText: '刷新 Agent 列表失败' }).waitFor()
+  await row.getByText('默认', { exact: true }).waitFor()
+  listFails = false
 
   await page.getByRole('button', { name: '创建新 Agent', exact: true }).click()
   const create = page.getByRole('dialog', { name: '创建新 Agent', exact: true })
@@ -164,6 +188,8 @@ try {
   await page.getByRole('checkbox', { name: '选择 验收 Agent', exact: true }).check()
   await page.getByRole('checkbox', { name: '选择 新角色 Agent', exact: true }).check()
   await page.getByText('已选 2 项', { exact: true }).waitFor()
+  nextListGate = new Promise(resolve => { releaseStale = resolve })
+  await page.getByRole('button', { name: '刷新 Agent' }).click()
   await page.getByRole('button', { name: '批量删除', exact: true }).click()
   const deletion = page.getByRole('dialog').filter({ hasText: '批量删除 Agent' })
   await deletion.getByText('验收 Agent', { exact: true }).waitFor()
@@ -173,6 +199,11 @@ try {
   await page.getByText('已选 1 项', { exact: true }).waitFor()
   await deletion.getByText('确定删除以下 1 个 Agent？此操作无法撤销。', { exact: true }).waitFor()
   assert.equal(await deletion.getByText('验收 Agent', { exact: true }).count(), 0)
+  const staleDelete = page.waitForResponse(response => response.url().endsWith('/api/agents') && response.ok())
+  releaseStale()
+  await staleDelete
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  assert.equal(await row.count(), 0, '旧列表响应不能恢复已确认删除的对象')
   deleteFails = false
   await deletion.getByRole('button', { name: /删\s*除/, exact: true }).click()
   await deletion.waitFor({ state: 'hidden' })
@@ -181,5 +212,6 @@ try {
   await page.getByText('已加载 0 项', { exact: true }).waitFor()
   console.log(`Agent management checks passed: ${output}`)
 } finally {
+  releaseStale?.()
   await cleanup()
 }

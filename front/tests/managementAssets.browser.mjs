@@ -23,6 +23,8 @@ const records = Object.fromEntries(types.map(([type, label]) => [type, [
 records.costume.push(...Array.from({ length: 9 }, (_, index) => ({ id: `costume-page-${index + 1}`, name: `服装分页 ${index + 1}` })))
 let failRead, failDelete = true, generationStatus = 'running', generationCount = 0, deleteCount = 0
 const promptRequests = []
+let releaseGeneration
+const holdGeneration = new Promise(resolve => { releaseGeneration = resolve })
 const box = async locator => {
   const bounds = await locator.boundingBox()
   assert.ok(bounds)
@@ -76,6 +78,7 @@ try {
     }
     if (path.endsWith('/generation-tasks/actors/actor-missing/slots/19/tasks')) {
       generationCount++
+      await holdGeneration
       assert.equal(request.postDataJSON().execution_prompt, '画一个演员')
       return respond({ task_id: 'task-asset' })
     }
@@ -129,10 +132,19 @@ try {
 
   await page.getByRole('tab', { name: '演员', exact: true }).click()
   const missingActor = card('演员缺图')
+  const generationRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/generation-tasks/actors/actor-missing/slots/19/tasks'))
   await missingActor.getByRole('button', { name: '生成', exact: true }).click()
+  await generationRequest
   const busy = missingActor.getByRole('button', { name: '生成中', exact: true })
   await busy.waitFor()
   assert.equal(await busy.isDisabled(), true)
+  await page.getByRole('tab', { name: '场景', exact: true }).click()
+  await card('场景竖图').waitFor()
+  await page.getByRole('tab', { name: '演员', exact: true }).click()
+  await busy.waitFor()
+  assert.equal(await busy.isDisabled(), true, '请求还在等待时切回资产分类，生成入口仍锁定')
+  releaseGeneration()
   await page.getByText('已创建演员图片生成任务', { exact: true }).waitFor()
   assert.equal(generationCount, 1)
   assert.equal(promptRequests.length, 1)
@@ -190,7 +202,7 @@ try {
   await page.getByText('暂无道具资产', { exact: true }).waitFor()
   await page.goto(origin + '/assets?tab=actor')
 
-  for (const [width, height, theme] of [[1440, 900, '雾蓝微渐变'], [1366, 768, '雾蓝纯色'], [1024, 768, '雾蓝纯色'], [1023, 768, '雾蓝纯色'], [375, 812, '雾蓝微渐变']]) {
+  for (const [width, height, theme] of [[1440, 900, '雾蓝微渐变'], [1366, 768, '雾蓝纯色'], [1024, 768, '雾蓝纯色'], [1023, 768, '雾蓝纯色'], [600, 812, '雾蓝纯色'], [375, 812, '雾蓝微渐变']]) {
     await page.setViewportSize({ width, height })
     const account = page.getByRole('button', { name: '用户与语言设置' })
     await account.click()
@@ -207,7 +219,7 @@ try {
       assert.ok(createBounds.x > searchBounds.x + searchBounds.width)
       assert.ok(Math.abs(createBounds.y + createBounds.height / 2 - searchBounds.y - searchBounds.height / 2) < 2)
     }
-    if (width === 375) assert.equal((await box(card('演员竖图'))).x, (await box(card('演员宽图'))).x)
+    if (width <= 767) assert.equal((await box(card('演员竖图'))).x, (await box(card('演员宽图'))).x)
     await page.screenshot({ path: join(output, `assets-${width}.png`), animations: 'disabled' })
   }
   assert.deepEqual(errors, [])
@@ -217,5 +229,6 @@ try {
   console.log('Browser evidence:', output)
   throw error
 } finally {
+  releaseGeneration()
   await cleanup()
 }

@@ -51,10 +51,10 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
   const [imagesFailed, setImagesFailed] = useState(false)
   const [selectedImageId, setSelectedImageId] = useState<number>()
   const [failedPreview, setFailedPreview] = useState<string>()
-  const [submitting, setSubmitting] = useState(false)
-  const [taskId, setTaskId] = useState<string>()
+  const generationKey = `${assetType}:${asset.id}`
+  const generation = useTaskUiStore(state => state.assetGenerations[generationKey])
+  const taskId = generation?.status === 'submitted' ? generation.taskId : undefined
   const [taskReadFailed, setTaskReadFailed] = useState(false)
-  const generationLocked = useRef(false)
   const hasActiveTask = useTaskUiStore(state => Object.values(state.serverItems).some(task =>
     (task.status === 'queued' || task.status === 'running') && task.target_type === `${assetType}_image_slot`
     && task.source?.kind === assetType && task.source.id === asset.id,
@@ -63,7 +63,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
   const generatedImages = images.filter(image => Boolean(image.file_id))
   const selectedImage = generatedImages.find(image => image.id === selectedImageId) ?? preferredImage(generatedImages)
   const previewUrl = buildFileDownloadUrl(selectedImage?.file_id)
-  const generating = submitting || Boolean(taskId) || hasActiveTask
+  const generating = Boolean(generation) || hasActiveTask
 
   const loadImages = useCallback(async () => {
     setImagesLoading(true)
@@ -99,8 +99,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
           timer = window.setTimeout(poll, 2000)
           return
         }
-        generationLocked.current = false
-        setTaskId(undefined)
+        useTaskUiStore.getState().setAssetGeneration(generationKey)
         if (status === 'succeeded') {
           message.success(`${label}图片已生成`)
           onGenerated()
@@ -117,12 +116,12 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
       active = false
       window.clearTimeout(timer)
     }
-  }, [label, onGenerated, taskId])
+  }, [generationKey, label, onGenerated, taskId])
 
   const generate = async () => {
-    if (generationLocked.current || hasActiveTask) return
-    generationLocked.current = true
-    setSubmitting(true)
+    const { assetGenerations, setAssetGeneration } = useTaskUiStore.getState()
+    if (assetGenerations[generationKey] || hasActiveTask) return
+    setAssetGeneration(generationKey, { status: 'submitting' })
     try {
       let slots: AssetImage[] = await adapter.listImages(asset.id)
       let target = slots.find(image => image.view_angle === 'FRONT') ?? slots[0]
@@ -135,13 +134,11 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
       const draft = await adapter.renderPrompt(asset.id, target.id)
       const id = await adapter.createGenerationTask(asset.id, target.id, draft)
       if (!id) throw new Error('未创建生成任务')
-      setTaskId(id)
+      setAssetGeneration(generationKey, { status: 'submitted', taskId: id })
       message.success(`已创建${label}图片生成任务`)
     } catch {
-      generationLocked.current = false
+      setAssetGeneration(generationKey)
       message.error(`创建${label}图片生成任务失败`)
-    } finally {
-      setSubmitting(false)
     }
   }
 

@@ -132,3 +132,51 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.management-tools .file-search.ant-input-search {
+  width: min(240px, 100%);
+}
+
+.management-tools .file-search .ant-input-affix-wrapper {
+  width: 100%;
+}
+
+.file-preview-trigger {
+  display: block;
+  position: relative;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  border-radius: 12px 12px 0 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.file-preview-trigger:focus-visible {
+  outline-offset: -3px;
+}
+
+.file-preview-label {
+  position: absolute;
+  inset: auto 8px 8px auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--app-accent);
+  font-size: 12px;
+}
+
+.file-preview-media {
+  display: grid;
+  place-items: center;
+}
+
+.file-preview-media :is(img, video, audio) {
+  max-width: 100%;
+  max-height: 65vh;
+}
+
+.file-pagination {
+  margin-top: 16px;
+  justify-content: flex-end;
+}

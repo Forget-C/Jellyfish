@@ -22,8 +22,10 @@ let restoreFails = true
 let patches = 0
 let deletes = 0
 let lastPage = 1
+const listRequests = []
 const system = { ...template, id: 'system', name: '系统模板', is_system: true }
-const allTemplates = [template, system, ...Array.from({ length: 10 }, (_, i) => ({ ...template, id: `extra-${i}`, name: i === 9 ? '长模板名称'.repeat(18) : `其他模板 ${i}`, category: 'bgm' }))]
+const lateMatch = { ...template, id: 'late-match', name: '后续页模板', preview: '只在后续页简介出现的关键字' }
+const allTemplates = [template, system, ...Array.from({ length: 10 }, (_, i) => ({ ...template, id: `extra-${i}`, name: i === 9 ? '长模板名称'.repeat(18) : `其他模板 ${i}`, category: 'bgm' })), ...Array.from({ length: 88 }, (_, i) => ({ ...template, id: `more-${i}`, name: `补充模板 ${i}` })), lateMatch]
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
@@ -39,8 +41,10 @@ try {
       lastQuery = searchParams.get('q') ?? ''
       lastPage = Number(searchParams.get('page') || 1)
       if (listFails) return route.fulfill({ status: 500, json: { message: '读取失败' } })
-      const matches = allTemplates.filter(item => !lastQuery || item.name.includes(lastQuery) || item.preview.includes(lastQuery))
-      return respond({ items: matches.slice((lastPage - 1) * 10, lastPage * 10), pagination: { total: matches.length } })
+      const size = Number(searchParams.get('page_size') || 10)
+      listRequests.push({ page: lastPage, size, q: lastQuery })
+      const matches = allTemplates.filter(item => !lastQuery || item.name.includes(lastQuery))
+      return respond({ items: matches.slice((lastPage - 1) * size, lastPage * size), pagination: { total: matches.length, page: lastPage, page_size: size, max_page: Math.ceil(matches.length / size) } })
     }
     if (pathname.endsWith('/prompts/custom') && route.request().method() === 'PATCH') {
       patches += 1
@@ -89,6 +93,12 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
   await page.setViewportSize({ width: 1440, height: 900 })
   const search = page.getByRole('textbox', { name: '搜索模板名称或简介' })
+  assert.ok(listRequests.every(request => request.page === 1 && request.size === 10), '普通浏览只读取当前页')
+  await search.fill('后续页简介')
+  await search.press('Enter')
+  await page.getByRole('button', { name: lateMatch.name, exact: true }).waitFor()
+  await page.getByText('共 1 项', { exact: true }).waitFor()
+  assert.ok(listRequests.some(request => request.page === 2 && request.size === 100 && !request.q))
   await search.fill('简短')
   await search.press('Enter')
   await name.waitFor()
@@ -100,7 +110,7 @@ try {
   listFails = false
   await page.getByRole('button', { name: /重\s*试/ }).click()
   await page.getByText('刷新模板失败，已保留当前内容', { exact: true }).waitFor({ state: 'hidden' })
-  assert.equal(lastQuery, '简短')
+  assert.equal(lastQuery, '', '不能把简介查询发送给只匹配名称的后端 q')
   await search.fill('正文不会参与搜索')
   await search.press('Enter')
   await page.getByText('没有匹配的模板', { exact: true }).waitFor()
@@ -176,6 +186,14 @@ try {
   await mobileReader.getByRole('button', { name: /Close|关闭/ }).click()
   await mobileReader.waitFor({ state: 'hidden' })
   await name.and(page.locator(':focus')).waitFor()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await name.click()
+  await reader.getByRole('button', { name: /删\s*除/ }).click()
+  listFails = true
+  await remove.getByRole('button', { name: /删\s*除/ }).click()
+  await page.getByText('刷新模板失败，已保留当前内容', { exact: true }).waitFor()
+  assert.equal(await name.count(), 0, '已确认删除的模板不能因刷新失败恢复到可操作列表')
+  listFails = false
   allTemplates.length = 0
   await page.getByRole('button', { name: '刷新模板', exact: true }).click()
   await page.getByText('暂无提示词模板', { exact: true }).waitFor()

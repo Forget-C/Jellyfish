@@ -13,8 +13,10 @@ const server = await createServer({
   server: { host: '127.0.0.1', port: 4796, strictPort: true, open: false },
 })
 const files = [
-  { id: 'file1', name: '雨中对白', type: 'image', thumbnail: '/file-thumb.svg', tags: ['首帧', '城市夜景'], createdAt: '2026-03-01 14:35' },
+  { id: 'file1', name: '雨中对白', type: 'image', thumbnail: '/file-thumb.svg', tags: ['首帧', '城市夜景'] },
   { id: 'file2', name: '街道成片', type: 'video', thumbnail: '/missing-file.svg', tags: ['成片'] },
+  ...Array.from({ length: 22 }, (_, i) => ({ id: `file-${i}`, name: `其他文件 ${i + 1}`, type: 'image', tags: [] })),
+  { id: 'file-last', name: '后续页文件', type: 'audio', tags: ['后续页标签'] },
 ]
 let browser
 let listFails = true
@@ -27,11 +29,23 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(5000)
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   await page.route('**/api/**', async route => {
-    if (new URL(route.request().url()).pathname === '/api/files') {
-      fileRequests.push(route.request().method())
+    const url = new URL(route.request().url())
+    if (url.pathname === '/api/v1/studio/files') {
+      const page = Number(url.searchParams.get('page') || 1)
+      const pageSize = Number(url.searchParams.get('page_size') || 10)
+      const query = url.searchParams.get('q')
+      fileRequests.push({ method: route.request().method(), page })
       if (listFails) return route.fulfill({ status: 500, json: { message: '测试读取失败' } })
-      return route.fulfill({ json: listResult })
+      const matches = listResult.filter(file => !query || file.name.includes(query))
+      return route.fulfill({ json: { code: 200, data: {
+        items: matches.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { page, page_size: pageSize, total: matches.length, max_page: Math.ceil(matches.length / pageSize) },
+      } } })
+    }
+    if (url.pathname === '/api/v1/studio/files/file1/download') {
+      return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="blue"/></svg>' })
     }
     return route.fulfill({ json: { code: 200, data: { items: [], next_cursor: null } } })
   })
@@ -47,7 +61,12 @@ try {
   listFails = false
   await page.getByRole('button', { name: /重\s*试/ }).click()
   await page.getByRole('heading', { name: '雨中对白' }).waitFor()
-  assert.equal(await page.getByText('已加载 2 个文件').count(), 1)
+  assert.equal(await page.getByText('共 25 个文件').count(), 1)
+  assert.ok(fileRequests.every(request => request.page === 1), '普通浏览仅请求当前页')
+  await page.getByTitle('下一页', { exact: true }).click()
+  await page.getByRole('heading', { name: '后续页文件' }).waitFor()
+  await page.getByTitle('上一页', { exact: true }).click()
+  await page.getByRole('heading', { name: '雨中对白' }).waitFor()
   const imageCard = page.getByRole('article', { name: '雨中对白' })
   const videoCard = page.getByRole('article', { name: '街道成片' })
   await imageCard.getByRole('img', { name: '雨中对白缩略图' }).waitFor()
@@ -56,7 +75,11 @@ try {
   await videoCard.getByText('时间未知').waitFor()
   assert.equal(await page.getByRole('checkbox').count(), 0)
   assert.equal(await page.getByRole('button', { name: /批量导出/ }).count(), 0)
-  await imageCard.getByRole('heading').click()
+  await imageCard.getByRole('button', { name: '预览雨中对白' }).press('Enter')
+  const preview = page.getByRole('dialog', { name: '雨中对白 · 预览' })
+  await preview.getByRole('img', { name: '雨中对白' }).waitFor()
+  await preview.getByRole('button', { name: /Close|关闭/ }).click()
+  await preview.waitFor({ state: 'hidden' })
   assert.equal(await page.getByRole('checkbox').count(), 0)
 
   const filter = page.getByRole('combobox', { name: '按标签筛选' })
@@ -64,13 +87,21 @@ try {
   await page.getByText('成片', { exact: true }).last().click()
   await imageCard.waitFor({ state: 'hidden' })
   await videoCard.waitFor()
-  const search = page.getByRole('textbox', { name: '搜索文件' })
+  const search = page.getByRole('textbox', { name: '搜索文件名或标签' })
   await search.fill('雨中')
+  await search.press('Enter')
   await page.getByText('无匹配文件').waitFor()
   await page.getByRole('button', { name: '清除筛选' }).click()
   await imageCard.waitFor()
   await videoCard.waitFor()
   assert.equal(await search.inputValue(), '')
+
+  await search.fill('后续页标签')
+  await search.press('Enter')
+  await page.getByRole('heading', { name: '后续页文件' }).waitFor()
+  await page.getByText('共 1 个文件', { exact: true }).waitFor()
+  await search.fill('')
+  await imageCard.waitFor()
 
   const batch = page.getByRole('button', { name: '批量管理', exact: true })
   await batch.press('Enter')
@@ -81,6 +112,7 @@ try {
   assert.equal(await page.getByRole('button', { name: /批量标记.*暂未接入/ }).isDisabled(), true)
   assert.equal(await page.getByRole('button', { name: /批量导出.*暂未接入/ }).isDisabled(), true)
   await search.fill('成片')
+  await search.press('Enter')
   await imageCard.waitFor({ state: 'hidden' })
   await page.getByText(/已选 1 项.*1 项不在当前筛选/).waitFor()
   await page.getByRole('button', { name: '退出批量管理' }).click()
@@ -127,7 +159,7 @@ try {
   listResult = []
   await page.getByRole('button', { name: /刷\s*新/ }).click()
   await page.getByText('暂无文件', { exact: true }).waitFor()
-  assert.ok(fileRequests.length > 0 && fileRequests.every(method => method === 'GET'))
+  assert.ok(fileRequests.length > 0 && fileRequests.every(request => request.method === 'GET'))
   console.log('文件管理：读取重试、筛选、独立批量选择、缺图、主题及视口通过。')
 } finally {
   await cleanup()
