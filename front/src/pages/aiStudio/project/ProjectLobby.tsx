@@ -5,13 +5,12 @@ import {
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
-  ArrowRightOutlined, BookOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined,
-  FileTextOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, QuestionCircleOutlined,
-  RedoOutlined, ScissorOutlined, SearchOutlined, VideoCameraOutlined,
+  ArrowRightOutlined, BookOutlined, DeleteOutlined, FileTextOutlined, MoreOutlined,
+  PlusOutlined, SearchOutlined, VideoCameraOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
-import { chapters as mockChapters, type Project } from '../../../mocks/data'
+import { chapters as mockChapters } from '../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
 import type { ProjectRead, ProjectStyle, ProjectVisualStyle } from '../../../services/generated'
 import { directingError } from '../directing/common'
@@ -28,9 +27,13 @@ import './project-lobby.css'
 type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'chapters'
 const desktopToolbar = '(min-width: 1024px)'
-type ProjectView = Omit<Project, 'stats'>
+type ProjectView = Pick<ProjectRead, 'id' | 'name'> & {
+  description: string
+  style?: string
+  updatedAt: string
+}
 type ProjectCardStage = ProjectStageSummary & { chapterCount?: number }
-const stageIcons = { gold: EditOutlined, blue: ScissorOutlined, green: VideoCameraOutlined }
+type ProjectStageState = ProjectCardStage | 'error' | 'retrying'
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: 'updatedAt', label: '最近更新' },
@@ -48,10 +51,7 @@ const toUIProject = (p: ProjectRead): ProjectView => {
     id: p.id,
     name: p.name,
     description: p.description ?? '',
-    style: (p.style as Project['style']) ?? '现实主义',
-    seed: p.seed ?? 0,
-    unifyStyle: p.unify_style ?? true,
-    progress: p.progress ?? 0,
+    style: p.style?.trim() || undefined,
     updatedAt,
   }
 }
@@ -84,7 +84,7 @@ function ProjectLobby() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [projectStageMap, setProjectStageMap] = useState<Record<string, ProjectCardStage | 'error'>>({})
+  const [projectStageMap, setProjectStageMap] = useState<Partial<Record<string, ProjectStageState>>>({})
   const {
     options: projectStyleOptions,
     videoRatioOptions,
@@ -143,9 +143,11 @@ function ProjectLobby() {
       if (!data?.items || data.items.some(chapter => chapter.project_id !== projectId)) return 'error'
       const total = data.pagination?.total
       if (!data.items.length && total > 0) return 'error'
+      const chapterCount = !data.items.length ? 0
+        : Number.isSafeInteger(total) && total >= data.items.length ? total : undefined
       return {
         ...summarizeProjectChapters(projectId, data.items),
-        chapterCount: Number.isSafeInteger(total) && total >= data.items.length ? total : undefined,
+        chapterCount,
       }
     } catch {
       return 'error'
@@ -162,13 +164,13 @@ function ProjectLobby() {
     return () => { active = false }
   }, [projects, readProjectStage])
 
-  const retryProjectStage = async (projectId: string) => {
-    setProjectStageMap(previous => {
-      const next = { ...previous }
-      delete next[projectId]
-      return next
-    })
+  const retryProjectStage = async (projectId: string, trigger?: HTMLButtonElement) => {
+    if (projectStageMap[projectId] !== 'error') return
+    setProjectStageMap(previous => ({ ...previous, [projectId]: 'retrying' }))
     const summary = await readProjectStage(projectId)
+    if (summary !== 'error' && trigger && trigger === document.activeElement) {
+      trigger.closest('article')?.querySelector<HTMLAnchorElement>('.project-lobby-identity')?.focus()
+    }
     setProjectStageMap(previous => ({ ...previous, [projectId]: summary }))
   }
 
@@ -186,7 +188,7 @@ function ProjectLobby() {
 
       if (filterTab === 'all') return true
       const stage = projectStageMap[p.id]
-      return stage !== 'error' && (stage?.key === 'edit_raw' || stage?.key === 'create_first_chapter')
+      return typeof stage === 'object' && (stage.key === 'edit_raw' || stage.key === 'create_first_chapter')
     })
 
     // 更新时间不一定出现在列表 DTO 中，真实项目按服务端返回的顺序显示。
@@ -195,8 +197,8 @@ function ProjectLobby() {
       if (sortKey === 'chapters') {
         const aStage = projectStageMap[a.id]
         const bStage = projectStageMap[b.id]
-        const aCount = aStage === 'error' ? undefined : aStage?.chapterCount
-        const bCount = bStage === 'error' ? undefined : bStage?.chapterCount
+        const aCount = typeof aStage === 'object' ? aStage.chapterCount : undefined
+        const bCount = typeof bStage === 'object' ? bStage.chapterCount : undefined
         if (aCount === undefined || bCount === undefined) {
           return Number(bCount !== undefined) - Number(aCount !== undefined)
         }
@@ -307,7 +309,7 @@ function ProjectLobby() {
     }
   }
 
-  const filterLoading = filterTab !== 'all' && projects.some(project => !projectStageMap[project.id])
+  const filterLoading = filterTab !== 'all' && projects.some(project => !projectStageMap[project.id] || projectStageMap[project.id] === 'retrying')
   const filterIncomplete = filterTab !== 'all' && projects.some(project => projectStageMap[project.id] === 'error')
   const optionsMenu: MenuProps = {
     selectable: true,
@@ -400,25 +402,54 @@ function ProjectLobby() {
             <div className="project-lobby-grid">
               {filteredSorted.map(project => {
                 const summary = projectStageMap[project.id]
-                const stage = summary === 'error' ? undefined : summary
+                const stage = typeof summary === 'object' ? summary : undefined
                 const noChapter = stage?.key === 'create_first_chapter'
-                const StatusIcon = stage
-                  ? noChapter ? PlusOutlined : stage.tone ? stageIcons[stage.tone] : QuestionCircleOutlined
-                  : summary === 'error' ? ExclamationCircleOutlined : LoadingOutlined
-                const identity = <>
-                  <ProjectCover projectId={project.id} demo={useMock} />
-                  <header className="project-lobby-card-heading">
-                    <h2 title={project.name}>{project.name}</h2>
-                    <span className="project-lobby-style">{project.style}</span>
-                  </header>
-                </>
+                const statusText = summary === 'error' ? '读取失败' : '读取中'
+                const chapterText = stage ? stage.chapterLabel ?? '未创建章节' : statusText
+                const sequenceText = !stage ? statusText
+                  : noChapter || stage.sequenceCount === 0 ? '未创建场次'
+                    : stage.sequenceCount === undefined ? '场次数未知' : `本章 ${stage.sequenceCount} 场`
+                const countText = !stage ? statusText
+                  : stage.chapterCount === undefined ? '章节数未知' : `共 ${stage.chapterCount} 章`
                 return (
                   <article className="project-lobby-card" key={project.id}>
-                    {multiSelectMode ? identity : (
-                      <Link className="project-lobby-identity" aria-label={project.name} to={`/projects/${encodeURIComponent(project.id)}`}>
-                        {identity}
-                      </Link>
-                    )}
+                    <ProjectCover projectId={project.id} demo={useMock} />
+                    <div className="project-lobby-card-body">
+                      <h2 className="project-lobby-card-title" title={project.name}>
+                        {multiSelectMode ? <span className="project-lobby-truncate">{project.name}</span> : (
+                          <Link className="project-lobby-identity" to={`/projects/${encodeURIComponent(project.id)}`}>
+                            <span>{project.name}</span><ArrowRightOutlined aria-hidden />
+                          </Link>
+                        )}
+                      </h2>
+                      <div className="project-lobby-card-row">
+                        <span className="project-lobby-style" title={project.style}>{project.style ?? '未设置类型'}</span>
+                      </div>
+                      <div className="project-lobby-card-row">
+                        <FileTextOutlined aria-hidden />
+                        <span className="project-lobby-truncate" title={chapterText}>{chapterText}</span>
+                        {!multiSelectMode && (summary === 'error' || summary === 'retrying') && (
+                          <button type="button" className="project-lobby-retry" aria-label="重试读取章节"
+                            aria-disabled={summary === 'retrying'} onClick={event => void retryProjectStage(project.id, event.currentTarget)}>
+                            重试
+                          </button>
+                        )}
+                      </div>
+                      <div className="project-lobby-card-row">
+                        <VideoCameraOutlined aria-hidden />
+                        <span>{sequenceText}</span>
+                        {stage?.key === 'edit_raw' && <Tag bordered={false} className="project-lobby-status">待补原文</Tag>}
+                      </div>
+                      <div className="project-lobby-card-row project-lobby-meta-row">
+                        <BookOutlined aria-hidden />
+                        <span>{countText}</span>
+                        {project.updatedAt && (
+                          <span className="project-lobby-meta project-lobby-truncate" title={`更新于 ${project.updatedAt}`}>
+                            更新于 {project.updatedAt}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <div className="project-lobby-card-control">
                       {multiSelectMode ? (
                         <Checkbox
@@ -439,34 +470,6 @@ function ProjectLobby() {
                           }}
                         />
                       )}
-                    </div>
-                    <div className="project-lobby-card-body">
-                      <div className="project-lobby-stage">
-                        {stage?.chapterLabel && <p className="project-lobby-chapter">
-                          <FileTextOutlined aria-hidden />
-                          <span title={stage.chapterLabel}>{stage.chapterLabel}</span>
-                        </p>}
-                        <Tag bordered={false} icon={<StatusIcon aria-hidden />} className="project-lobby-status" data-tone={stage?.tone}>
-                          {noChapter ? '尚未创建章节' : stage?.status ?? (summary === 'error' ? '章节状态读取失败' : '正在读取章节状态')}
-                        </Tag>
-                      </div>
-                      {(stage?.chapterCount !== undefined || stage?.sequenceCount !== undefined) && (
-                        <div className="project-lobby-counts">
-                          {stage.chapterCount !== undefined && <span><BookOutlined aria-hidden />共 {stage.chapterCount} 章</span>}
-                          {stage.sequenceCount !== undefined && <span><VideoCameraOutlined aria-hidden />本章 {stage.sequenceCount} 场</span>}
-                        </div>
-                      )}
-                      <footer className="project-lobby-card-footer">
-                        {project.updatedAt && <span className="project-lobby-meta" title={`更新于 ${project.updatedAt}`}>更新于 {project.updatedAt}</span>}
-                        {!multiSelectMode && stage && (
-                          <Link className="project-lobby-next" to={stage.href}>{stage.action}<ArrowRightOutlined aria-hidden /></Link>
-                        )}
-                        {!multiSelectMode && summary === 'error' && (
-                          <button type="button" className="project-lobby-next" onClick={() => void retryProjectStage(project.id)}>
-                            重试读取章节<RedoOutlined aria-hidden />
-                          </button>
-                        )}
-                      </footer>
                     </div>
                   </article>
                 )
