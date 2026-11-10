@@ -13,7 +13,8 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-storyboard-visual-continuity-')
 const fixture = join(output, 'clip.mp4')
-execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=1',
+execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=160x90:d=0.5',
+  '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=0.5', '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0',
   '-c:v', 'libx264', '-y', fixture])
 const api = 'http://127.0.0.1:8732', studio = api + '/api/v1/studio'
 const project = 'canvas-project', chapter = 'storyboard-visual-continuity-chapter', text = '前门的阿同拿着信封。后门的阿同等待。'
@@ -91,13 +92,13 @@ try {
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
   assert.equal(await preview.getByRole('button', { name: '确认执行' }).isEnabled(), true)
   await closePrecheck(page)
-  const run = async (id, targetCanvas = canvas) => {
+  const run = async (id, targetCanvas = canvas, expectedStatus = 'succeeded') => {
     const checked = await request(targetCanvas + '/precheck', 'POST', { card_id: id })
     assert.ok(checked.can_run, JSON.stringify(checked.diagnostics))
     const result = await request(targetCanvas + '/runs', 'POST', { request_id: randomUUID(), preview_token: checked.preview_token })
     const runtime = await poll(() => request(targetCanvas + '/runtime'), item => item.runs.find(r => r.id === result.run_id)?.lifecycle === 'finished', 'video did not finish')
     const node = runtime.runs.find(r => r.id === result.run_id).nodes[0]
-    assert.equal(node.status, 'succeeded')
+    assert.equal(node.status, expectedStatus)
     return node
   }
   const predecessor = await run(first)
@@ -111,7 +112,7 @@ try {
   await dialog.getByRole('checkbox', { name: '同机位接续连续动作' }).check()
   await dialog.getByRole('button', { name: '定位尾帧并用作首帧' }).click()
   assert.equal(await purpose.inputValue(), 'first_frame')
-  assert.equal(await slider.inputValue(), '999')
+  assert.equal(await slider.inputValue(), await slider.getAttribute('max'))
   await slider.fill('600')
   const adopt = dialog.getByRole('button', { name: '确认采用', exact: true })
   const savePath = new URL(canvas).pathname
@@ -155,6 +156,59 @@ try {
   await page.reload()
   await model.getByRole('button', { name: '引用', exact: true }).click()
   await page.getByRole('dialog', { name: '卡片引用' }).getByRole('button', { name: /来源视频.*0.600/ }).waitFor()
+  const updateNotice = model.getByText('来源镜头有新结果', { exact: true })
+  const originalRuntime = await request(canvas + '/runtime')
+  const originalVideo = originalRuntime.current_outputs[later][0].file_id
+  await request(controls, 'POST', { media_fail_next: true })
+  await run(first, canvas, 'failed')
+  assert.equal(await updateNotice.count(), 0, 'a failed upstream run is not a new successful result')
+  const beforeUpdate = await request(canvas)
+  const replacement = await run(first)
+  await updateNotice.waitFor()
+  assert.deepEqual(await request(canvas), beforeUpdate, 'new source results never change the saved adoption')
+  await page.reload()
+  await updateNotice.waitFor()
+  await open()
+  const sourceChoice = dialog.getByRole('combobox', { name: '视频来源' })
+  const compare = async (node) => {
+    await sourceChoice.selectOption({ value: `${node.id}:0` })
+    await dialog.getByLabel('待选帧视频').evaluate((element, file) => {
+      if (!element.getAttribute('src')?.includes(file)) throw new Error('wrong comparison video')
+    }, node.outputs[0].file_id)
+  }
+  await compare(predecessor)
+  await compare(replacement)
+  await dialog.getByRole('button', { name: '保留当前采用', exact: true }).click()
+  assert.deepEqual(await request(canvas), beforeUpdate)
+  assert.equal((await request(canvas + '/cards/' + later + '/compile')).video_media.frames.first.file_id, frame.file_id)
+  await open()
+  await compare(replacement)
+  await page.waitForFunction(() => !document.querySelector('[aria-label="视频时间位置"]')?.disabled)
+  await slider.fill('100')
+  const callsBeforeReplacement = (await request(controls)).media_calls.length
+  await dialog.getByRole('button', { name: '确认重新采用', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  const replaced = await request(canvas)
+  const selectedBinding = replaced.document.cards.find(card => card.id === later).input_bindings.find(item => item.id === relation.binding_id)
+  const newFrame = replaced.document.cards.find(card => card.id === selectedBinding.source.card_id)
+  assert.equal(replaced.revision, beforeUpdate.revision + 1)
+  assert.equal(newFrame.frame_origin.result_set_id, replacement.result_set_id)
+  assert.equal(newFrame.frame_origin.at_ms, 100)
+  assert.ok(replaced.document.cards.some(card => card.id === frame.id), 'the old still remains available')
+  assert.equal((await request(controls)).media_calls.length, callsBeforeReplacement, 'replacement starts no runs')
+  const stale = (await request(canvas + '/runtime')).current_outputs[later][0]
+  assert.equal(stale.file_id, originalVideo)
+  assert.equal(stale.basis_current, false)
+  await run(later)
+  const newBytes = Buffer.from(await (await fetch(studio + '/files/' + newFrame.file_id + '/download')).arrayBuffer())
+  assert.notDeepEqual(newBytes, fixedBytes)
+  assert.equal((await request(controls)).media_calls.at(-1).body.images[0], 'data:image/png;base64,' + newBytes.toString('base64'))
+  await updateNotice.waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  await poll(() => request(canvas), item => item.document.cards.find(card => card.id === later)?.input_bindings.some(input =>
+    input.id === relation.binding_id && input.source.card_id === frame.id), 'undo did not restore the old fixed frame')
+  await page.reload()
+  await updateNotice.waitFor()
   const openReextract = async (revision) => {
     await request(controls, 'POST', { visual_continuity_revision: revision })
     await page.getByRole('button', { name: '重新提取', exact: true }).click()
@@ -236,6 +290,21 @@ try {
   await dialog.waitFor({ state: 'hidden' })
   const switched = (await request(secondCanvas)).document.storyboard.visual_continuity[afterId]
   assert.equal(Object.values(switched.suspended.input_bindings).length, 1)
+  const freshSource = await run(beforeId, secondCanvas)
+  await afterCard.getByText('来源镜头有新结果', { exact: true }).waitFor()
+  await afterCard.getByRole('button', { name: '卡片操作' }).click()
+  await afterCard.getByRole('button', { name: '视觉承接', exact: true }).click()
+  await compare(freshSource)
+  await page.waitForFunction(() => !document.querySelector('[aria-label="视频时间位置"]')?.disabled)
+  await slider.fill('100')
+  await dialog.getByRole('button', { name: '确认重新采用', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  const reselected = await request(secondCanvas)
+  assert.deepEqual(reselected.document.storyboard.visual_continuity[afterId], switched,
+    'reselection keeps the same binding and suspended subject inputs')
+  const newAdoption = reselected.document.cards.find(card => card.id === afterId).input_bindings.find(input => input.id === switched.binding_id)
+  assert.equal(reselected.document.cards.find(card => card.id === newAdoption.source.card_id).frame_origin.result_set_id, freshSource.result_set_id)
+
   const updated = await applyReextract(await openReextract('design'), secondCanvas)
   assert.deepEqual(updated.document.storyboard.visual_continuity[afterId], switched)
   const actual = await request(secondCanvas + '/cards/' + afterId + '/compile')
