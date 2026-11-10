@@ -11,7 +11,7 @@ import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
 import { CheckArchive } from './CheckArchive'
-import { SceneStoryboardReview } from '../directing/SceneStoryboardReview'
+import { SceneStoryboardReview, StoryboardReviewFindings } from '../directing/SceneStoryboardReview'
 import { directingError } from '../directing/common'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -199,12 +199,16 @@ export function GenerationCanvasWorkspace({
       action={<Button onClick={() => setCandidateRefresh(value => value + 1)}>重试读取分镜</Button>} />}
     {candidateTask && candidateTask === reviewTask && chapterId && sequenceId && current?.document.storyboard?.task_id !== candidateTask &&
       <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
+        report={discovered?.result?.review} candidate={candidate}
         prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
         apply={async choice => {
           const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: candidateTask }, choice)
           if (applied) { runtime.invalidate(); setReviewTask(undefined) }
           return applied
         }} />}
+    {!requiresReview && discovered?.result?.review_state === 'warning' && discovered.result.review &&
+      <Alert type="warning" showIcon message="部分连续性依据不足"
+        description={<StoryboardReviewFindings report={discovered.result.review} candidate={candidate} />} />}
     {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}

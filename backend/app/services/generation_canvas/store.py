@@ -149,6 +149,30 @@ class CanvasStore:
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
         prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources)
+        storyboard = prepared.document.storyboard
+        previous = prepared.previous_document.storyboard
+        if chapter_version is None and canvas.sequence_id and storyboard and (not previous or storyboard.task_id != previous.task_id):
+            from app.services.directing.storyboard_assembly import STORYBOARD_KIND
+            from app.services.directing.storyboard_review import require_storyboard_review
+            task = await self.db.get(Task, storyboard.task_id)
+            if (not task or task.kind != STORYBOARD_KIND or task.project_id != self.project_id
+                    or task.target_id != canvas.sequence_id or task.input_snapshot.get('canvas_id') != canvas_id):
+                raise diagnostic('INVALID_STORYBOARD_TASK', '分镜任务不属于此画布', {'canvas_id': canvas_id}, status=409)
+            require_storyboard_review(task, canvas_id)
+            result = task.result or {}
+            if result.get('review_state'):
+                baseline = {'expected_revision': result['base_revision'], 'document': result['document']}
+                initial = (baseline['expected_revision'] == canvas.revision and not task.input_snapshot.get('reextract_canvas_id')
+                           and not task.input_snapshot.get('review_retry_from')
+                           and prepared.document.model_dump(mode='json') == baseline['document'])
+                if not initial:
+                    applied = await self.db.get(CanvasSaveReceipt, (canvas_id, 'storyboard:' + task.id))
+                    history = applied.response.get('source_history', {}) if applied else {}
+                    restored = applied and (applied.request_hash == self.command_digest(baseline)
+                                            or history.get('after', {}).get('task_id') == task.id)
+                    if not restored:
+                        raise diagnostic('STORYBOARD_APPLICATION_REVIEW_REQUIRED', '请核对分镜差异后应用',
+                                         {'canvas_id': canvas_id}, status=409)
         if canvas.sequence_id and prepared.document.name != prepared.previous_document.name and not prepared.document.name.strip():
             raise diagnostic('INVALID_CANVAS_NAME', '场次画布名称不能为空白', {'canvas_id': canvas_id, 'path': ['name']})
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)

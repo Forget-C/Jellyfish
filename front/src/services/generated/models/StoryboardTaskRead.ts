@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { StoryboardCandidate } from './StoryboardCandidate';
+import type { StoryboardReviewReport } from './StoryboardReviewReport';
 import type { TaskStatus } from './TaskStatus';
 /**
  * 真实任务状态及成功后可读取的候选。
@@ -15,6 +16,8 @@ export type StoryboardTaskRead = {
     canvas_id: string;
     candidate_available?: boolean;
     retry_of_task_id?: (string | null);
+    review_state?: ('pending' | 'incomplete' | 'passed' | 'warning' | 'conflict' | null);
     pending_application?: boolean;
     candidate?: (StoryboardCandidate | null);
+    review?: (StoryboardReviewReport | null);
 };

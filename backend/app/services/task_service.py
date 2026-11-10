@@ -168,6 +168,16 @@ class TaskService:
         if row is not None and row.status == TaskStatus.running:
             await self._sync_canvas(row)
 
+    async def checkpoint_storyboard_review(self, task_id: str, draft: dict) -> bool:
+        """Persist the validated draft before the external review request begins."""
+        row = await self._lock(task_id)
+        if row is None or row.kind != 'directing_storyboard' or row.status != TaskStatus.running or row.cancel_requested_at:
+            return False
+        row.result = deepcopy(draft)
+        row.stage = 'reviewing_storyboard'
+        await self.db.flush()
+        return True
+
     async def request_cancel(self, task_id: str, *, reason: str | None = None) -> Task | None:
         """排队任务立即取消，执行任务只登记意图，由统一终结规则裁决。"""
         row = await self._lock(task_id)

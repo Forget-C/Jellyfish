@@ -22,6 +22,7 @@ from sqlalchemy import func, or_, select
 from app.core.db import async_session_maker, close_db
 from app.core.dev_runtime import process_identity
 from app.core.integrations.media_provider import MediaProvider, ProviderDataError
+from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization
 from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
@@ -30,6 +31,7 @@ from app.services.directing.ai import DirectingOutputError
 from app.services.directing.scene_export_execution import execute_scene_export
 from app.services.directing.scene_export_render import render_scene_cut
 from app.services.directing.review_revision import ReviewRevisionService
+from app.services.directing.storyboard_review import review_storyboard
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -347,9 +349,14 @@ class TaskWorker:
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
             llm = ChatOpenAI(**params)
             stage = {"directing_storyboard": "extracting_storyboard", "directing_object_extract": "extracting_objects"}.get(task.kind)
+            if task.input_snapshot.get('review_retry_from'):
+                stage = 'reviewing_storyboard'
             if stage:
                 await TaskService(db).report_progress(task.id, progress=None, stage=stage)
                 await db.commit()
+        if task.kind == 'directing_storyboard':
+            await self._storyboard_task(task, llm, stopped)
+            return
         if task.kind == "text_chat":
             roles = {"system": SystemMessage, "user": HumanMessage, "assistant": AIMessage}
             messages = task.input_snapshot["operation_input"]["messages"]
@@ -382,23 +389,6 @@ class TaskWorker:
                     result.clear()
                     result.update(candidate.model_dump(mode="json"))
 
-            elif task.kind == "directing_storyboard":
-                from app.services.directing.scene_storyboard import SceneStoryboardService
-                async with self.sessions() as db:
-                    await TaskService(db).report_progress(task.id, progress=None, stage="assembling_storyboard")
-                    await db.commit()
-
-                async def deliver(db, current):
-                    """真实候选校验成功后才发布任务成功，不在后台改写文档。"""
-                    try:
-                        candidate = await SceneStoryboardService(db, current.project_id).complete_storyboard(current, generated)
-                    except (HTTPException, ValueError) as error:
-                        detail = getattr(error, 'detail', None)
-                        message = detail.get('message') if isinstance(detail, dict) else detail
-                        raise DirectingOutputError(message or '分镜结果无法建立有效画布') from error
-                    result.clear()
-                    result.update(candidate.model_dump(mode='json'))
-
             elif task.kind == "directing_review_revision":
                 async def deliver(db, current):
                     """候选和服务端预览同时完成，展示历史无需重读模型配置。"""
@@ -407,6 +397,50 @@ class TaskWorker:
                     result.update(candidate.model_dump(mode="json"))
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
+            await db.commit()
+
+    async def _storyboard_task(self, task: Task, llm, stopped: Event) -> None:
+        """Verify and checkpoint before reviewing; an interrupted review leaves a retryable draft."""
+        from app.services.directing.scene_storyboard import SceneStoryboardService
+
+        args = task.input_snapshot['run_args']
+        if source_id := task.input_snapshot.get('review_retry_from'):
+            async with self.sessions() as db:
+                source = await db.get(Task, source_id)
+                saved = source.result
+            generated = SceneStoryboard.model_validate(saved['review_draft'])
+            if saved['review_production']:
+                generated.attach_production(StoryboardOrganization.model_validate({'shots': saved['review_production']}))
+        else:
+            generated = await self._run_script(task, llm, args, stopped)
+            async with self.sessions() as db:
+                await TaskService(db).report_progress(task.id, progress=None, stage='assembling_storyboard')
+                await db.commit()
+        draft = generated.model_dump(mode='json')
+        production = [{'id': shot.id, 'segments': [row.model_dump(mode='json') for row in segments]}
+                      for shot in generated.shots if (segments := generated.production_segments(shot.id))]
+        async with self.sessions() as db:
+            try:
+                candidate = await SceneStoryboardService(db, task.project_id).complete_storyboard(task, generated)
+            except (HTTPException, ValueError) as error:
+                detail = getattr(error, 'detail', None)
+                message = detail.get('message') if isinstance(detail, dict) else detail
+                raise DirectingOutputError(message or '分镜结果无法建立有效画布') from error
+            checkpoint = {**candidate.model_dump(mode='json'), 'review_state': 'pending',
+                          'review_draft': draft, 'review_production': production}
+            if not await TaskService(db).checkpoint_storyboard_review(task.id, checkpoint):
+                await TaskService(db).finish(task.id, cancelled=True)
+                await db.commit()
+                return
+            await db.commit()
+        stopped.clear()
+        review = await self._run_script(task, llm, {'script_text': args['script_text'],
+            'mode': args['mode'], 'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')}
+                                             for item in args['objects']],
+            'storyboard_draft': draft}, stopped, execute=review_storyboard)
+        async with self.sessions() as db:
+            await TaskService(db).finish(task.id, result={**candidate.model_dump(mode='json'),
+                'review_state': review.state, 'review': review.model_dump(mode='json')})
             await db.commit()
 
     def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> ChatOpenAI:
@@ -594,9 +628,10 @@ class TaskWorker:
         future.add_done_callback(done)
         return await asyncio.shield(future)
 
-    async def _run_script(self, task: Task, llm, args: dict, stopped: Event):
+    async def _run_script(self, task: Task, llm, args: dict, stopped: Event, *, execute=None):
         """等待超时不代表线程退出；线程实际结束前继续占用文本名额。"""
-        future = asyncio.wrap_future(self.text_pool.submit(generate_script_result, task.kind, llm, args))
+        future = asyncio.wrap_future(self.text_pool.submit(execute, llm, args) if execute else
+                                     self.text_pool.submit(generate_script_result, task.kind, llm, args))
         self.text_threads[task.id] = future
 
         def done(completed):

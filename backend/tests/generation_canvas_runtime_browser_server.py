@@ -40,6 +40,8 @@ if object_candidate_fixture:
 storyboard_recovery_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_RECOVERY') == '1'
 if storyboard_recovery_fixture:
     control.update(storyboard_calls=0, storyboard_release=0, storyboard_fail_on=0)
+    control.update(storyboard_review_calls=0, storyboard_review_release=100, storyboard_review_fail_on=0,
+                   storyboard_review_conflict_on=0)
 
 
 class ControlledModel:
@@ -52,6 +54,21 @@ class ControlledModel:
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)
+        if 'storyboard_draft' in args:
+            if storyboard_recovery_fixture:
+                from httpx import ReadTimeout
+                control['storyboard_review_calls'] += 1
+                call = control['storyboard_review_calls']
+                deadline = monotonic() + 45
+                while control['storyboard_review_release'] < call and monotonic() < deadline:
+                    sleep(.03)
+                if control['storyboard_review_fail_on'] == call or control['storyboard_review_release'] < call:
+                    raise ReadTimeout('controlled review failure')
+                if control['storyboard_review_conflict_on'] == call:
+                    return SimpleNamespace(content=json.dumps({'issues': [{'kind': 'conflict',
+                        'shot_ids': [args['storyboard_draft']['shots'][0]['id']],
+                        'requirements': '静止与入场要求冲突', 'suggestion': '保留站位，仅切换景别'}]}, ensure_ascii=False))
+            return SimpleNamespace(content='{"issues": []}')
         if os.environ.get('CANVAS_BROWSER_STORYBOARD_SCOPE') == '1':
             from tests.directing.storyboard_scope_fixture import START, END, complex_design
             if 'organization_inputs' in args:
@@ -214,7 +231,8 @@ async def set_control(body: dict = Body(...)):
     if storyboard_design_stacks and 'add_storyboard_content' in body:
         control['add_storyboard_content'] = body['add_storyboard_content']
     if storyboard_recovery_fixture:
-        for key in ('storyboard_release', 'storyboard_fail_on'):
+        for key in ('storyboard_release', 'storyboard_fail_on', 'storyboard_review_release',
+                    'storyboard_review_fail_on', 'storyboard_review_conflict_on'):
             if key in body:
                 control[key] = body[key]
     return control

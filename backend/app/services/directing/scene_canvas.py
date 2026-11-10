@@ -14,6 +14,7 @@ from app.models.studio import Chapter
 from app.models.task import Task
 from app.schemas.generation_canvas import CanvasFixedSource, CanvasRead, CreativeBasisCard
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND
+from app.services.directing.storyboard_review import review_state
 from app.services.directing.workspace import WorkspaceService
 from app.services.generation_canvas.store import CanvasStore, SceneCanvasSeed
 
@@ -78,10 +79,12 @@ class SceneCanvasService(WorkspaceService):
                 latest_storyboard=StoryboardTaskSummary(
                     canvas_id=row.id, task_id=task.id, status=TaskStatus(task.status), stage=task.stage, error=task.error_message,
                     candidate_available=bool(candidate and candidate.id == task.id), retry_of_task_id=task.retry_of_task_id,
+                    review_state=review_state(task.status, task.review_state or ('pending' if task.review_retry_from else None)),
                 ) if task else None,
                 candidate_storyboard_task_id=candidate.id if candidate else None,
                 storyboard_review_required=bool(candidate and (
-                    candidate.reextract_target == row.id or candidate.base_revision != row.revision)),
+                    candidate.reextract_target == row.id or candidate.base_revision != row.revision
+                    or candidate.review_retry_from or candidate.review_state == 'conflict')),
             ))
         return SceneCanvasesRead(sequence=self.sequence_read(sequence, chapter), canvases=canvases)
 
@@ -105,6 +108,8 @@ class SceneCanvasService(WorkspaceService):
             canvas_id.label('canvas_id'), priority.label('priority'), SCENE_TASK_ORDER.label('admission_order'),
             Task.input_snapshot['reextract_canvas_id'].as_string().label('reextract_target'),
             Task.result['base_revision'].as_integer().label('base_revision'),
+            Task.result['review_state'].as_string().label('review_state'),
+            Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from'),
             func.row_number().over(
                 partition_by=(canvas_id, Task.status == TaskStatus.succeeded),
                 order_by=(priority, SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()),

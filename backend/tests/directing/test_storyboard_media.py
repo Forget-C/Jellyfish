@@ -33,6 +33,8 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
             pass
 
         def invoke(self, _messages):
+            if 'storyboard_draft' in json.loads(_messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps(semantic, ensure_ascii=False))
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledText)

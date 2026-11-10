@@ -54,8 +54,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
     }
   }, [projectId, chapterId, sequenceId])
   const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试读取场次</Button>
-  const management = (step: 'division' | 'storyboard' = 'storyboard') => navigate(workbenchManagementLocation(
-    projectId, chapterId, sequenceId, step, step === 'storyboard' ? { canvas: canvasId, storyboardTask: selectedTaskId } : undefined),
+  const management = (step: 'division' | 'storyboard' = 'storyboard', taskId = selectedTaskId) => navigate(workbenchManagementLocation(
+    projectId, chapterId, sequenceId, step, step === 'storyboard' ? { canvas: canvasId, storyboardTask: taskId } : undefined),
   { state: location.state })
   if (scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
@@ -84,6 +84,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const model = models?.find(card => card.model_id) ?? models?.[0]
         return <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
           navigationKey={location.key} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current}
+          onReviewRetry={taskId => void requestLeave().then(allowed => { if (allowed) management('storyboard', taskId) })}
           target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
             sourceChanged: !!current.source_changed ||
               !!basis && 'text' in basis && basis.text !== scene.sequence.source_text ||

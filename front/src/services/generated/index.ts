@@ -755,6 +755,8 @@ export type { StoryboardRequest } from './models/StoryboardRequest';
 export type { StoryboardRestore } from './models/StoryboardRestore';
 export type { StoryboardRetry } from './models/StoryboardRetry';
 export type { StoryboardRetryBasis } from './models/StoryboardRetryBasis';
+export type { StoryboardReviewIssue } from './models/StoryboardReviewIssue';
+export type { StoryboardReviewReport } from './models/StoryboardReviewReport';
 export type { StoryboardTaskRead } from './models/StoryboardTaskRead';
 export type { StoryboardTaskSummary } from './models/StoryboardTaskSummary';
 export type { StyleDesignFields } from './models/StyleDesignFields';
