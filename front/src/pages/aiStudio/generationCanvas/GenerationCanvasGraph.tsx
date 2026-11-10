@@ -38,7 +38,7 @@ import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../compon
 import { createSurfaceGesture } from './surfaceGesture'
 import { createConnectionSession, type ConnectionState } from './connectionSession'
 import { createMoveTransaction } from './moveTransaction'
-import { arrangeGenerationCards, generationVisibleFrames, placeStoryboardCards } from './generationLayout'
+import { arrangeGenerationCards, generationVisibleFrames, placeStoryboardCards, type GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { readStoredGraphView, useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange } from '../directing/graphLayout'
@@ -89,7 +89,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument }: { history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy }: { layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
@@ -304,14 +304,17 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   })
   const isCardVisible = (id: string) => !hidden.has(id)
   const visibleCardIds = cards.map(({ id }) => id).filter(isCardVisible)
+  const initialLayout = layoutPolicy?.initial
   const arrangeCards: GraphArrange = (items, sizes, width, anchorId, retained) => {
     const cards = items.filter(item => !resultsById.has(item.id))
     const arranged = retained
       ? arrange(cards, sizes, width, anchorId, { ...historicalPositions.current, ...retained })
       : arrangeGenerationCards(cards.map(card => card.id), groups, retainedPositions.current, sizes)
-    const base = document.storyboard && retained
-      ? placeStoryboardCards(arranged, retained, groups, document.storyboard.origins, sizes)
-      : arranged
+    const base = initialLayout && retained && !retained[initialLayout.anchorId]
+      ? initialLayout.arrange(cards, sizes, width, anchorId, retained)
+      : document.storyboard && retained
+        ? placeStoryboardCards(arranged, retained, groups, document.storyboard.origins, sizes)
+        : arranged
     const basePoint = (id: string) => base[id] || { x: 0, y: 0 }
     const { cardFrames, groupFrames } = generationVisibleFrames(visibleCardIds, viewGroups, basePoint, sizes)
     const positions = placeLinkedResults(linkedResults, base, sizes, [...cardFrames, ...groupFrames.values()], retained && { ...historicalPositions.current, ...retained })
@@ -329,10 +332,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     ...linkedResults.map(result => ({ id: result.id, size: generationCardSize(`result.${result.output.modality}`) })),
   ]
   const cardSizes = Object.fromEntries(nodes.map(({ id, size }) => [id, size]))
+  const viewportWidth = container.current?.clientWidth || (initialLayout ? window.innerWidth : 1200)
   const layout = useGraphLayout({ storageKey: layoutKey, viewId: 'canvas',
-    initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '',
+    initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80,
+    anchorId: initialLayout?.anchorId ?? (cards[0]?.id || ''),
+    focusUnplacedAnchor: initialLayout && (() => initialLayout.focus(cardSizes, viewportWidth, container.current?.clientHeight || window.innerHeight)),
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
-    onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, container.current?.clientWidth || 1200)
+    onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, viewportWidth)
   const arrangeLayout = () => { if (!arrangementBlocked) layout.rearrange() }
   const layoutAction = <WorkbenchIconButton label="整理布局" variant="quiet" icon={<AppstoreOutlined />} disabled={arrangementBlocked} onClick={arrangeLayout} />
   const movementHost = useRef({ layout, history })

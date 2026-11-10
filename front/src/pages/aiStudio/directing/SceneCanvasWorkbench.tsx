@@ -10,6 +10,7 @@ import { saveChapterBrowse, sceneCanvasLocation, workbenchManagementLocation } f
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
+import { storyboardCanvasLayout } from './storyboardCanvasLayout'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 
@@ -54,6 +55,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
   { state: location.state })
   if (scene?.canvases.some(canvas => canvas.id === canvasId)) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
+      layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
