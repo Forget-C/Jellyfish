@@ -1,69 +1,44 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Tabs } from 'antd'
 import { PageToolbar, WorkspaceLayout } from '../../../components'
 import { useSearchParams } from 'react-router-dom'
-import { ActorsTab } from './tabs/ActorsTab'
-import { ScenesTab } from './tabs/ScenesTab'
-import { PropsTab } from './tabs/PropsTab'
-import { CostumesTab } from './tabs/CostumesTab'
+import { AssetLibraryTab, assetLibraryTypes } from './AssetLibraryTab'
+import type { LibraryAssetType } from './components/AssetImageCard'
+import './asset-library.css'
 
 const TAB_PARAM = 'tab'
-type AssetTabKey = 'actor' | 'scene' | 'prop' | 'costume'
 
-function isValidTab(tab: string | null): tab is AssetTabKey {
+function isValidTab(tab: string | null): tab is LibraryAssetType {
   return tab === 'actor' || tab === 'scene' || tab === 'prop' || tab === 'costume'
 }
 
-const AssetManager = () => {
+export default function AssetManager() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
-
-  const [activeTab, setActiveTab] = useState<AssetTabKey>(() => (isValidTab(tabFromUrl) ? tabFromUrl : 'actor'))
+  const activeTab = isValidTab(tabFromUrl) ? tabFromUrl : 'actor'
 
   useEffect(() => {
-    if (isValidTab(tabFromUrl)) {
-      setActiveTab(tabFromUrl)
-    } else if (tabFromUrl === null || tabFromUrl === '') {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          next.set(TAB_PARAM, 'actor')
-          return next
-        },
-        { replace: true },
-      )
+    if (tabFromUrl === null || tabFromUrl === '') {
+      const next = new URLSearchParams(searchParams)
+      next.set(TAB_PARAM, 'actor')
+      setSearchParams(next, { replace: true })
     }
-  }, [tabFromUrl, setSearchParams])
+  }, [searchParams, setSearchParams, tabFromUrl])
 
-  const setTabInUrl = (tab: AssetTabKey) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
+  return <WorkspaceLayout className="management-page">
+    <Tabs className="management-tabs asset-library-tabs" activeKey={activeTab} size="small"
+      onChange={tab => {
+        if (!isValidTab(tab)) return
+        const next = new URLSearchParams(searchParams)
         next.set(TAB_PARAM, tab)
-        return next
-      },
-      { replace: true },
-    )
-  }
-
-  return (
-    <WorkspaceLayout>
-      <PageToolbar title="资产管理" />
-        <Tabs
-          className="app-page-tabs app-content-tabs"
-          activeKey={activeTab}
-          onChange={(k) => {
-            if (isValidTab(k)) setTabInUrl(k)
-          }}
-          items={[
-            { key: 'actor', label: '演员', children: <ActorsTab /> },
-            { key: 'scene', label: '场景', children: <ScenesTab /> },
-            { key: 'prop', label: '道具', children: <PropsTab /> },
-            { key: 'costume', label: '服装', children: <CostumesTab /> },
-          ]}
-        />
-    </WorkspaceLayout>
-  )
+        setSearchParams(next, { replace: true })
+      }}
+      renderTabBar={(props, TabBar) => <PageToolbar title="资产库" className="management-heading">
+        <TabBar {...props} />
+      </PageToolbar>}
+      items={(Object.keys(assetLibraryTypes) as LibraryAssetType[]).map(key => ({
+        key, label: assetLibraryTypes[key].label, children: <AssetLibraryTab assetType={key} />,
+      }))}
+    />
+  </WorkspaceLayout>
 }
-
-export default AssetManager

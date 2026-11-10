@@ -1,14 +1,11 @@
-/**
- * 资产列表中的统一展示卡片。
- *
- * 将演员、场景、道具、服装的封面、快速生成与多视角预览收敛到同一交互，
- * 详情页仍负责编辑完整的资产和图片信息。
- */
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Image, Modal, Space, Tag, message } from 'antd'
-import { DeleteOutlined, EditOutlined, EyeOutlined, LoadingOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, Button, Dropdown, Modal, Spin, Tag, message } from 'antd'
+import { ArrowRightOutlined, MoreOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Link } from 'react-router-dom'
+import { FilmService } from '../../../../services/generated'
+import { useTaskUiStore } from '../../components/taskUiStore'
+import { assetAdapters } from '../assetAdapters'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../utils'
-import { DisplayImageCard } from './DisplayImageCard'
 
 type AssetImage = {
   id: number
@@ -16,180 +13,190 @@ type AssetImage = {
   file_id?: string | null
 }
 
-export type AssetCardAsset = {
+export type LibraryAsset = {
   id: string
   name: string
   description?: string | null
-  tags?: string[]
-  thumbnail?: string
-  view_count?: number | null
+  tags?: string[] | null
+  thumbnail?: string | null
 }
 
-type AssetImageCardProps = {
-  asset: AssetCardAsset
-  assetLabel: string
-  listImages: (assetId: string) => Promise<AssetImage[]>
-  createImageSlot: (assetId: string, angle: string) => Promise<void>
-  renderPrompt: (assetId: string, imageId: number) => Promise<{ prompt: string; images: string[] }>
-  createGenerationTask: (assetId: string, imageId: number, payload: { prompt: string; images: string[] }) => Promise<string | null>
-  onEdit: () => void
-  onDelete: () => void
-  onDetails?: () => void
-}
+export type LibraryAssetType = 'actor' | 'scene' | 'prop' | 'costume'
 
 const ANGLE_LABELS: Record<string, string> = {
-  FRONT: '正面',
-  LEFT: '左侧',
-  RIGHT: '右侧',
-  BACK: '背面',
-  THREE_QUARTER: '3/4侧面',
-  TOP: '俯视',
-  DETAIL: '细节',
+  FRONT: '正面', LEFT: '左侧', RIGHT: '右侧', BACK: '背面',
+  THREE_QUARTER: '3/4侧面', TOP: '俯视', DETAIL: '细节',
 }
 
-/** Returns the image that should represent an asset, preferring its front view. */
-function preferredImage(images: AssetImage[]): AssetImage | null {
-  return images.find((image) => image.view_angle === 'FRONT' && image.file_id) ?? images.find((image) => image.file_id) ?? null
+function preferredImage(images: AssetImage[]) {
+  return images.find(image => image.view_angle === 'FRONT' && image.file_id) ?? images.find(image => image.file_id)
 }
 
-export function AssetImageCard({
-  asset,
-  assetLabel,
-  listImages,
-  createImageSlot,
-  renderPrompt,
-  createGenerationTask,
-  onEdit,
-  onDelete,
-  onDetails,
-}: AssetImageCardProps) {
+/** 资产库卡片将预览、编辑和生成分别绑定到明确入口，档案和项目卡片由各自组件负责。 */
+export function AssetImageCard({ asset, assetType, label, editPath, onDelete, onGenerated }: {
+  asset: LibraryAsset
+  assetType: LibraryAssetType
+  label: string
+  editPath: string
+  onDelete: () => void
+  onGenerated: () => void
+}) {
+  const adapter = assetAdapters[assetType]
+  const thumbnailUrl = resolveAssetUrl(asset.thumbnail)
+  const [brokenCover, setBrokenCover] = useState<string>()
   const [previewOpen, setPreviewOpen] = useState(false)
+  const coverTrigger = useRef<HTMLButtonElement>(null)
   const [images, setImages] = useState<AssetImage[]>([])
   const [imagesLoading, setImagesLoading] = useState(false)
-  const [selectedImageId, setSelectedImageId] = useState<number | null>(null)
-  const [generating, setGenerating] = useState(false)
+  const [imagesFailed, setImagesFailed] = useState(false)
+  const [selectedImageId, setSelectedImageId] = useState<number>()
+  const [failedPreview, setFailedPreview] = useState<string>()
+  const [submitting, setSubmitting] = useState(false)
+  const [taskId, setTaskId] = useState<string>()
+  const [taskReadFailed, setTaskReadFailed] = useState(false)
+  const generationLocked = useRef(false)
+  const hasActiveTask = useTaskUiStore(state => Object.values(state.serverItems).some(task =>
+    (task.status === 'queued' || task.status === 'running') && task.target_type === `${assetType}_image_slot`
+    && task.source?.kind === assetType && task.source.id === asset.id,
+  ))
 
-  const generatedImages = useMemo(() => images.filter((image) => Boolean(image.file_id)), [images])
-  const selectedImage = generatedImages.find((image) => image.id === selectedImageId) ?? preferredImage(generatedImages)
+  const generatedImages = images.filter(image => Boolean(image.file_id))
+  const selectedImage = generatedImages.find(image => image.id === selectedImageId) ?? preferredImage(generatedImages)
+  const previewUrl = buildFileDownloadUrl(selectedImage?.file_id)
+  const generating = submitting || Boolean(taskId) || hasActiveTask
 
   const loadImages = useCallback(async () => {
     setImagesLoading(true)
+    setImagesFailed(false)
     try {
-      const nextImages = await listImages(asset.id)
-      setImages(nextImages)
-      const nextSelected = preferredImage(nextImages)
-      setSelectedImageId(nextSelected?.id ?? null)
-      return nextImages
+      setImages(await adapter.listImages(asset.id))
+      setFailedPreview(undefined)
     } catch {
-      message.error(`加载${assetLabel}图片失败`)
-      return []
+      setImagesFailed(true)
     } finally {
       setImagesLoading(false)
     }
-  }, [asset.id, assetLabel, listImages])
-
-  useEffect(() => {
-    if (previewOpen) void loadImages()
-  }, [loadImages, previewOpen])
+  }, [adapter, asset.id])
 
   const openPreview = () => {
+    setSelectedImageId(undefined)
     setPreviewOpen(true)
+    void loadImages()
   }
 
-  const handleQuickGenerate = async () => {
-    setGenerating(true)
+  useEffect(() => {
+    if (!taskId) return
+    let active = true
+    let timer: number
+    const poll = async () => {
+      try {
+        const response = await FilmService.getTaskStatusApiV1FilmTasksTaskIdStatusGet({ taskId })
+        if (!active) return
+        const status = response.data?.status
+        if (!status) throw new Error('生成状态缺失')
+        setTaskReadFailed(false)
+        if (status === 'queued' || status === 'running') {
+          timer = window.setTimeout(poll, 2000)
+          return
+        }
+        generationLocked.current = false
+        setTaskId(undefined)
+        if (status === 'succeeded') {
+          message.success(`${label}图片已生成`)
+          onGenerated()
+        } else if (status === 'failed') message.error(`${label}图片生成失败`)
+        else if (status === 'cancelled') message.info(`${label}图片生成已取消`)
+      } catch {
+        if (!active) return
+        setTaskReadFailed(true)
+        timer = window.setTimeout(poll, 2000)
+      }
+    }
+    timer = window.setTimeout(poll, 2000)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [label, onGenerated, taskId])
+
+  const generate = async () => {
+    if (generationLocked.current || hasActiveTask) return
+    generationLocked.current = true
+    setSubmitting(true)
     try {
-      let imageRows = await listImages(asset.id)
-      let target = imageRows.find((image) => image.view_angle === 'FRONT') ?? imageRows[0]
+      let slots: AssetImage[] = await adapter.listImages(asset.id)
+      let target = slots.find(image => image.view_angle === 'FRONT') ?? slots[0]
       if (!target) {
-        await createImageSlot(asset.id, 'FRONT')
-        imageRows = await listImages(asset.id)
-        target = imageRows.find((image) => image.view_angle === 'FRONT') ?? imageRows[0]
+        await adapter.createImageSlot(asset.id, 'FRONT')
+        slots = await adapter.listImages(asset.id)
+        target = slots.find(image => image.view_angle === 'FRONT') ?? slots[0]
       }
       if (!target) throw new Error('无法创建正面图片槽位')
-
-      const draft = await renderPrompt(asset.id, target.id)
-      const taskId = await createGenerationTask(asset.id, target.id, draft)
-      if (!taskId) throw new Error('未创建生成任务')
-      message.success(`已创建${assetLabel}图片生成任务`)
-      if (previewOpen) await loadImages()
+      const draft = await adapter.renderPrompt(asset.id, target.id)
+      const id = await adapter.createGenerationTask(asset.id, target.id, draft)
+      if (!id) throw new Error('未创建生成任务')
+      setTaskId(id)
+      message.success(`已创建${label}图片生成任务`)
     } catch {
-      message.error(`创建${assetLabel}图片生成任务失败`)
+      generationLocked.current = false
+      message.error(`创建${label}图片生成任务失败`)
     } finally {
-      setGenerating(false)
+      setSubmitting(false)
     }
   }
 
-  const thumbnailUrl = resolveAssetUrl(asset.thumbnail)
+  const coverAvailable = Boolean(thumbnailUrl && thumbnailUrl !== brokenCover)
+  const generateLabel = generating ? '生成中' : thumbnailUrl ? '重新生成' : '生成'
+  const description = asset.description?.trim()
+  const tags = [...new Set(asset.tags?.filter(Boolean) ?? [])].slice(0, 3)
+  const coverPlaceholder = <span className="asset-library-cover-placeholder">
+    <PictureOutlined aria-hidden="true" />{thumbnailUrl ? '封面加载失败' : '暂无封面'}
+  </span>
 
-  return (
-    <>
-      <DisplayImageCard
-        title={<span className="truncate">{asset.name}</span>}
-        imageUrl={thumbnailUrl}
-        imageAlt={asset.name}
-        placeholder={
-          <div className="flex flex-col items-center gap-2">
-            <span>未生成图片</span>
-            <Button
-              type="primary"
-              size="small"
-              icon={generating ? <LoadingOutlined /> : <ThunderboltOutlined />}
-              loading={generating}
-              onClick={(event) => {
-                event.stopPropagation()
-                void handleQuickGenerate()
-              }}
-            >
-              快速生成
-            </Button>
-          </div>
-        }
-        onImageClick={openPreview}
-        extra={<Tag color="blue">{assetLabel}</Tag>}
-        actions={[
-          <Button key="generate" type="text" size="small" icon={<ThunderboltOutlined />} loading={generating} onClick={() => void handleQuickGenerate()}>
-            {thumbnailUrl ? '重新生成' : '快速生成'}
-          </Button>,
-          <Button key="edit" type="text" size="small" icon={<EditOutlined />} onClick={onEdit}>
-            编辑
-          </Button>,
-          ...(onDetails ? [<Button key="detail" type="text" size="small" icon={<EyeOutlined />} onClick={onDetails}>详情</Button>] : []),
-          <Button key="delete" type="text" danger size="small" icon={<DeleteOutlined />} onClick={onDelete} />,
-        ]}
-        meta={
-          <>
-            <div className="text-xs text-gray-500 mb-2 line-clamp-2">{asset.description || '暂无描述'}</div>
-            <div className="flex flex-wrap gap-1">
-              {(asset.tags ?? []).slice(0, 3).map((tag) => <Tag key={tag}>{tag}</Tag>)}
-            </div>
-          </>
-        }
-      />
+  return <>
+    <article className="asset-library-card">
+      {thumbnailUrl ? <button type="button" className="asset-library-cover" ref={coverTrigger}
+        aria-label={`预览${asset.name}`} onClick={openPreview}>
+        {coverAvailable ? <img src={thumbnailUrl} alt={asset.name} loading="lazy" onError={() => setBrokenCover(thumbnailUrl)} /> : coverPlaceholder}
+      </button> : <div className="asset-library-cover">{coverPlaceholder}</div>}
+      <div className="asset-library-card-content">
+        <h2>
+          <Link to={editPath} className="asset-library-name">
+            <span title={asset.name}>{asset.name}</span><ArrowRightOutlined aria-hidden="true" />
+          </Link>
+        </h2>
+        <p className="asset-library-description" title={description}>{description || '暂无描述'}</p>
+        <div className="asset-library-tags">{tags.length ? tags.map(tag => <Tag key={tag} title={tag}>{tag}</Tag>) : '暂无标签'}</div>
+        <div className="asset-library-card-actions">
+          <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
+            aria-label={generateLabel} loading={generating} disabled={generating} onClick={() => void generate()}>
+            {generateLabel}
+          </Button>
+          {taskReadFailed && <span role="status">状态读取失败，正在重试</span>}
+          <Dropdown menu={{ items: [{ key: 'delete', label: '删除', danger: true, onClick: onDelete }] }} trigger={['click']}>
+            <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
+          </Dropdown>
+        </div>
+      </div>
+    </article>
 
-      <Modal title={`${asset.name} · 图片预览`} open={previewOpen} onCancel={() => setPreviewOpen(false)} footer={null} width={960}>
-        {imagesLoading ? (
-          <div className="h-80 flex items-center justify-center"><LoadingOutlined /></div>
-        ) : generatedImages.length === 0 ? (
-          <div className="h-80 flex flex-col items-center justify-center gap-3 text-gray-500">
-            <span>暂未生成任何视角图片</span>
-            <Button type="primary" icon={<ThunderboltOutlined />} loading={generating} onClick={() => void handleQuickGenerate()}>快速生成正面图</Button>
+    <Modal title={`${asset.name} · 图片预览`} open={previewOpen} footer={null}
+      width="min(960px, calc(100vw - 24px))" className="asset-library-preview"
+      onCancel={() => setPreviewOpen(false)} afterClose={() => coverTrigger.current?.focus({ preventScroll: true })}>
+      {imagesLoading ? <div className="asset-library-preview-image"><Spin /></div> : imagesFailed
+        ? <Alert type="error" message={`加载${label}图片失败`} action={<Button onClick={() => void loadImages()}>重试</Button>} />
+        : <>
+          <div className="asset-library-preview-image">
+            {previewUrl && previewUrl !== failedPreview ? <img src={previewUrl} alt={asset.name} onError={() => setFailedPreview(previewUrl)} />
+              : <span>{previewUrl ? '图片加载失败' : '暂未生成任何视角图片'}</span>}
           </div>
-        ) : (
-          <Space direction="vertical" size="middle" className="w-full">
-            <div className="min-h-80 flex items-center justify-center rounded-md bg-gray-50 overflow-hidden">
-              {selectedImage?.file_id ? <Image preview={false} src={buildFileDownloadUrl(selectedImage.file_id)} alt={asset.name} className="max-h-[65vh] object-contain" /> : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {generatedImages.map((image) => (
-                <Button key={image.id} type={selectedImage?.id === image.id ? 'primary' : 'default'} onClick={() => setSelectedImageId(image.id)}>
-                  {ANGLE_LABELS[image.view_angle ?? ''] ?? image.view_angle ?? '图片'}
-                </Button>
-              ))}
-            </div>
-          </Space>
-        )}
-      </Modal>
-    </>
-  )
+          {generatedImages.length > 0 && <div className="asset-library-preview-angles">
+            {generatedImages.map(image => <Button key={image.id} type={selectedImage?.id === image.id ? 'primary' : 'default'}
+              aria-pressed={selectedImage?.id === image.id} onClick={() => setSelectedImageId(image.id)}>
+              {ANGLE_LABELS[image.view_angle ?? ''] ?? image.view_angle ?? '图片'}
+            </Button>)}
+          </div>}
+        </>}
+    </Modal>
+  </>
 }

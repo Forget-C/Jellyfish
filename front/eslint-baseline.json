@@ -1444,13 +1444,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/files/FileManager.tsx",
-      "rule": "@typescript-eslint/consistent-type-imports",
-      "severity": 1,
-      "fingerprint": "00ab03dcdca1df0ed7dc51ba07e04351dd8f89c0224e71a9000ad2874072a534",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/hooks/useGenerationDraft.ts",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
