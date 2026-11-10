@@ -2,8 +2,6 @@
   "title": "System Settings",
   "nickname": "Nickname",
   "role": "Role",
-  "darkMode": "Dark Mode",
-  "darkModeTooltip": "Example switch, you can plug real theme toggle here.",
   "save": "Save",
   "updated": "Basic info updated (demo).",
   "roleOptions": {

@@ -3,10 +3,17 @@
   --app-border: #e5eaf0;
 }
 
+:is(.app-shell, .app-appearance-swatch) {
+  --app-page-background: linear-gradient(125deg, #f0f5fc, #f7f8fb);
+}
+
+:is(.app-shell, .app-appearance-swatch)[data-appearance='solid'] {
+  --app-page-background: #f7f8fb;
+}
+
 .app-shell {
   --app-header-height: 56px;
   --app-page-gutter: 20px;
-  --app-page-background: linear-gradient(125deg, #f0f5fc, #f7f8fb);
   --app-text: #263244;
   --app-muted: #536174;
   --app-accent: #245fc5;
@@ -43,6 +50,11 @@
 .app-global-actions { display: flex; align-items: center; justify-self: end; gap: 12px; }
 .app-account.ant-btn { padding: 0; width: 36px; height: 36px; }
 .app-account .ant-avatar { background: var(--app-selected); color: var(--app-accent); }
+.app-appearance-preview { display: inline-flex; align-items: center; gap: 8px; }
+.app-appearance-swatch { display: inline-block; flex-shrink: 0; width: 24px; height: 16px; border: 1px solid #becde2; border-radius: 4px; background: var(--app-page-background); }
+.app-appearance-menu-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.app-appearance-options.ant-radio-group { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.app-context-menu [role='menuitemradio']:focus-visible { outline: 2px solid #245fc5; outline-offset: -2px; }
 .app-page-toolbar { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-height: 64px; padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--app-border); }
 .app-shell .app-page-toolbar { background: transparent; border-bottom: 0; }
 .app-page-title { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }

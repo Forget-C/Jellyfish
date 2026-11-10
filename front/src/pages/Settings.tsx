@@ -1,16 +1,19 @@
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../components'
-import { Form, Input, Select, Switch, Button, message } from 'antd'
-import { useAppStore } from '../store/useAppStore'
+import { Form, Input, Select, Radio, Button, message } from 'antd'
+import { appearances, useAppStore } from '../store/useAppStore'
+import { AppearancePreview } from '../layouts/AppearancePreview'
 import { useTranslation } from 'react-i18next'
 
 const Settings: React.FC = () => {
-  const { t } = useTranslation(['settings', 'common'])
+  const { t } = useTranslation(['settings', 'common', 'layout'])
   const user = useAppStore((state) => state.user)
   const setUser = useAppStore((state) => state.setUser)
+  const appearance = useAppStore((state) => state.appearance)
+  const setAppearance = useAppStore((state) => state.setAppearance)
 
   const [form] = Form.useForm()
 
-  const handleFinish = (values: { name: string; role: string; darkMode: boolean }) => {
+  const handleFinish = (values: { name: string; role: string }) => {
     setUser({ name: values.name, role: values.role })
     message.success(t('settings:updated'))
   }
@@ -26,7 +29,6 @@ const Settings: React.FC = () => {
         initialValues={{
           name: user.name,
           role: user.role,
-          darkMode: false,
         }}
         onFinish={handleFinish}
       >
@@ -55,13 +57,13 @@ const Settings: React.FC = () => {
           />
         </Form.Item>
 
-        <Form.Item
-          label={t('settings:darkMode')}
-          name="darkMode"
-          valuePropName="checked"
-          tooltip={t('settings:darkModeTooltip')}
-        >
-          <Switch />
+        <Form.Item label={t('layout:appearance.label')}>
+          <div role="radiogroup" aria-label={t('layout:appearance.label')}>
+            <Radio.Group className="app-appearance-options" name="appearance" value={appearance}
+              onChange={event => setAppearance(event.target.value)}>
+              {appearances.map(value => <Radio key={value} value={value}><AppearancePreview appearance={value} /></Radio>)}
+            </Radio.Group>
+          </div>
         </Form.Item>
 
         <Form.Item>
