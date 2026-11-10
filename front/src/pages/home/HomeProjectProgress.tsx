@@ -51,7 +51,7 @@ export function HomeProjectProgress() {
     <header className="home-section-heading">
       <h2 id="home-project-progress">项目进展</h2>
     </header>
-    <div className="home-project-surface">
+    <div className="home-activity-surface">
       {activity.status === 'loading' && <p className="home-feedback" role="status">正在读取项目…</p>}
       {activity.status === 'error' && <div className="home-feedback home-feedback-error" role="alert">
         <span>读取项目失败</span>
@@ -75,7 +75,7 @@ export function HomeProjectProgress() {
           </li>)}
         </ul> : <p className="home-feedback" role="status">暂无项目</p>
       )}
-      <div className="home-project-footer">
+      <div className="home-activity-footer">
         {hasChapterFailure && <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>重试</button>}
         <Link className="home-text-action" to="/projects">查看全部项目<ArrowRightOutlined aria-hidden="true" /></Link>
       </div>

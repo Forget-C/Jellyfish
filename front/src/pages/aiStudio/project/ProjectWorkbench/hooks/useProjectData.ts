@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { projects as mockProjects, chapters as mockChapters, type Project, type Chapter as MockChapter } from '../../../../../mocks/data'
+import { chapters as mockChapters, type Project, type Chapter as MockChapter } from '../../../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../../../services/generated'
-import type { ChapterRead, ProjectRead } from '../../../../../services/generated'
+import type { ChapterRead, ProjectRead, ProjectUpdate } from '../../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true'
@@ -11,34 +11,6 @@ function newId(prefix: string): string {
     return crypto.randomUUID()
   }
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
-}
-
-function toUIProject(p: ProjectRead): Project {
-  const stats = (p.stats ?? {}) as Record<string, unknown>
-  const getNum = (key: string) => {
-    const v = stats[key]
-    return typeof v === 'number' && Number.isFinite(v) ? v : 0
-  }
-  const updatedAt =
-    (typeof stats.updated_at === 'string' && stats.updated_at) ||
-    (typeof stats.updatedAt === 'string' && stats.updatedAt) ||
-    new Date().toISOString()
-  return {
-    id: p.id,
-    name: p.name,
-    description: p.description ?? '',
-    style: (p.style as Project['style']) ?? '现实主义',
-    seed: p.seed ?? 0,
-    unifyStyle: p.unify_style ?? true,
-    progress: p.progress ?? 0,
-    stats: {
-      chapters: getNum('chapters'),
-      roles: getNum('roles'),
-      scenes: getNum('scenes'),
-      props: getNum('props'),
-    },
-    updatedAt,
-  }
 }
 
 export type Chapter = Omit<MockChapter, 'sequenceCount'> & {
@@ -61,36 +33,51 @@ function toUIChapter(c: ChapterRead): Chapter {
 }
 
 export function useProject(projectId: string | undefined) {
-  const [project, setProject] = useState<Project | null>(null)
+  const [project, setProject] = useState<ProjectRead | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    if (!projectId) {
-      setProject(null)
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    try {
-      if (useMock) {
-        setProject(mockProjects.find((p) => p.id === projectId) ?? null)
-      } else {
-        const res = await StudioProjectsService.getProjectApiV1StudioProjectsProjectIdGet({ projectId })
-        const p = res.data ?? null
-        setProject(p ? toUIProject(p) : null)
-      }
-    } catch {
-      setProject(useMock ? mockProjects.find((p) => p.id === projectId) ?? null : null)
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId])
+  const [saving, setSaving] = useState(false)
+  const pendingSave = useRef(false)
 
   useEffect(() => {
+    let active = true
+    setProject(null)
+    setLoading(true)
+    async function load() {
+      try {
+        if (!projectId) return
+        const response = await StudioProjectsService.getProjectApiV1StudioProjectsProjectIdGet({ projectId })
+        if (active) setProject(response.data ?? null)
+      } catch {
+        if (active) setProject(null)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
     void load()
-  }, [load])
+    return () => { active = false }
+  }, [projectId])
 
-  return { project, loading, refresh: load }
+  // 持有设置页的保存锁，切换项目内页签时仍由同一个工作台处理返回结果。
+  async function saveProject(values: ProjectUpdate) {
+    if (!projectId || pendingSave.current) return false
+    pendingSave.current = true
+    setSaving(true)
+    try {
+      const response = await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({
+        projectId,
+        requestBody: values,
+      })
+      const updated = response.data
+      if (updated?.id !== projectId) throw new Error('未能确认保存结果，请重试')
+      setProject(current => current?.id === updated.id ? updated : current)
+      return true
+    } finally {
+      pendingSave.current = false
+      setSaving(false)
+    }
+  }
+
+  return { project, loading, saving, saveProject }
 }
 
 /** 按服务端分页读取章节；迟到响应不覆盖新查询，读取失败与空列表分别表达。 */

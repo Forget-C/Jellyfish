@@ -14,7 +14,6 @@
 .project-lobby-controls {
   display: flex;
   flex: 1;
-  justify-content: center;
   gap: 10px;
   min-width: 0;
 }
@@ -87,71 +86,107 @@
   gap: 20px;
 }
 
-.project-lobby-grid--compact {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
-  gap: 12px;
-}
-
-.project-lobby-grid--large {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-}
-
 .project-lobby-card {
+  position: relative;
   display: flex;
-  align-items: flex-start;
   flex-direction: column;
   min-width: 0;
-  gap: 10px;
-  padding: 20px;
   border-radius: 12px;
   background: #fff;
   overflow-wrap: anywhere;
 }
 
-.project-lobby-grid--compact .project-lobby-card {
-  padding: 14px;
+.project-lobby-identity {
+  display: block;
+  border-radius: 12px 12px 0 0;
+  color: var(--app-text);
+  text-decoration: none;
 }
 
-.project-lobby-card-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+.project-lobby-identity:hover {
+  color: var(--app-accent);
+}
+
+.project-lobby-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(140deg, #e7eff9, #d6e4f5);
+  color: #496b9c;
+  font-size: 36px;
+}
+
+.project-lobby-cover img {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  margin-bottom: 4px;
+  height: 100%;
+  object-fit: cover;
 }
 
-.project-lobby-card-heading > div {
-  min-width: 0;
-}
-
-.project-lobby-card-heading p {
-  margin: 0 0 4px;
+.project-lobby-cover-label {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #fff;
   color: var(--app-muted);
   font-size: 12px;
 }
 
-.project-lobby-card-heading h2,
-.project-lobby-detail h2 {
+.project-lobby-card-control {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 6px #1f345426;
+}
+
+.project-lobby-card-control .ant-btn {
+  width: 100%;
+  height: 100%;
+  color: var(--app-muted);
+}
+
+.project-lobby-card-control .ant-btn:hover,
+.project-lobby-card-control .ant-btn:focus-visible {
+  color: #a93434;
+  background: #fff1f0;
+}
+
+.project-lobby-card-heading {
+  padding: 14px 16px 0;
+}
+
+.project-lobby-card-heading h2 {
   margin: 0;
   font-size: 16px;
   line-height: 1.4;
   font-weight: 650;
 }
 
-.project-lobby-card-heading a {
-  color: var(--app-text);
-  text-decoration: none;
-}
-
-.project-lobby-card-heading a:hover {
-  color: var(--app-accent);
-}
-
-.project-lobby-description {
-  margin: 0;
+.project-lobby-card-heading p {
+  margin: 4px 0 0;
   color: var(--app-muted);
+  font-size: 12px;
+}
+
+.project-lobby-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px 16px;
 }
 
 .project-lobby-stage p {
@@ -202,20 +237,6 @@
   font-size: 12px;
 }
 
-.project-lobby-detail {
-  display: grid;
-  gap: 24px;
-  overflow-wrap: anywhere;
-}
-
-.project-lobby-detail h2 {
-  margin-bottom: 10px;
-}
-
-.project-lobby-detail-actions {
-  margin-top: 10px;
-}
-
 @media (width < 1024px) {
   .app-shell .project-lobby > .app-page-toolbar {
     flex-wrap: wrap;
@@ -245,6 +266,7 @@
   }
 
   .project-lobby-grid {
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 }

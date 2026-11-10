@@ -33,7 +33,7 @@ const ProjectWorkbench: FC = () => {
   const activeTab = resolveProjectTab(tabFromUrl)
   const productionPage = activeTab === 'dashboard' || activeTab === 'chapters'
 
-  const { project, loading: projectLoading } = useProject(projectId)
+  const { project, loading: projectLoading, saving, saveProject } = useProject(projectId)
   usePageTitle(project?.id === projectId ? project?.name : undefined)
   const { chapters } = useChapters(projectId)
 
@@ -127,7 +127,9 @@ const ProjectWorkbench: FC = () => {
         {activeTab === 'props' && <PropsTab />}
         {activeTab === 'costumes' && <CostumesTab />}
         {activeTab === 'files' && <FilesTab />}
-        {activeTab === 'settings' && <SettingsTab />}
+        {activeTab === 'settings' && project && project.id === projectId && (
+          <SettingsTab key={project.id} project={project} saving={saving} onSave={saveProject} />
+        )}
       </WorkspaceScrollPanel>
     </WorkspaceLayout>
   )

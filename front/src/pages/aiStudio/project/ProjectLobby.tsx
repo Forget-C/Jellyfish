@@ -4,13 +4,14 @@ import {
   Modal, Popconfirm, Select, Space, Spin, Switch, Tag, message,
 } from 'antd'
 import type { MenuProps } from 'antd'
-import { ArrowRightOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, DeleteOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
-import { chapters as mockChapters, projects as mockProjects, type Project } from '../../../mocks/data'
+import { chapters as mockChapters, type Project } from '../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
 import type { ProjectRead, ProjectStyle, ProjectVisualStyle } from '../../../services/generated'
-import { chapterLocation } from '../directing/chapterNavigation'
+import { directingError } from '../directing/common'
+import { ProjectCover } from './ProjectCover'
 import { summarizeProjectChapters, type ProjectStageSummary } from './projectStageSummary'
 import {
   ProjectVisualStyleAndStyleFields,
@@ -20,14 +21,11 @@ import { useProjectStyleOptions } from './useProjectStyleOptions'
 
 import './project-lobby.css'
 
-type ViewMode = 'grid' | 'compact' | 'large'
 type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'chapters'
 const desktopToolbar = '(min-width: 1024px)'
 type ProjectView = Omit<Project, 'stats'> & {
   stats: Partial<Project['stats']>
-  visualStyle?: ProjectVisualStyleChoice
-  defaultVideoRatio?: string | null
 }
 
 const sortOptions: { key: SortKey; label: string }[] = [
@@ -35,12 +33,6 @@ const sortOptions: { key: SortKey; label: string }[] = [
   { key: 'name', label: '名称' },
   { key: 'chapters', label: '章节数量' },
 ]
-const viewOptions: { key: ViewMode; label: string }[] = [
-  { key: 'grid', label: '卡片视图' },
-  { key: 'compact', label: '紧凑视图' },
-  { key: 'large', label: '大卡视图' },
-]
-
 const toUIProject = (p: ProjectRead): ProjectView => {
   const stats = (p.stats ?? {}) as Record<string, unknown>
   const getNum = (key: string) => {
@@ -68,8 +60,6 @@ const toUIProject = (p: ProjectRead): ProjectView => {
       props: getNum('props'),
     },
     updatedAt,
-    visualStyle: (p.visual_style as ProjectVisualStyleChoice | undefined) ?? '现实',
-    defaultVideoRatio: p.default_video_ratio ?? null,
   }
 }
 
@@ -88,17 +78,19 @@ function ProjectLobby() {
   const [loadError, setLoadError] = useState(false)
   const loadRevision = useRef(0)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
   const [sortKey, setSortKey] = useState<SortKey>('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [detailProjectId, setDetailProjectId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Pick<ProjectView, 'id' | 'name'> | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const deletePending = useRef(false)
+  const deleteTrigger = useRef<HTMLElement | null>(null)
+  const createButton = useRef<HTMLButtonElement>(null)
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [editModalOpen, setEditModalOpen] = useState(false)
-  const [editingProject, setEditingProject] = useState<ProjectView | null>(null)
   const [projectStageMap, setProjectStageMap] = useState<Record<string, ProjectStageSummary | 'error'>>({})
   const {
     options: projectStyleOptions,
@@ -106,7 +98,6 @@ function ProjectLobby() {
     defaultVideoRatio,
   } = useProjectStyleOptions()
   const [form] = Form.useForm()
-  const [editForm] = Form.useForm()
 
   const useMock = import.meta.env.VITE_USE_MOCK === 'true'
   const newestFirst = sortKey !== 'updatedAt' || sortOrder === 'desc'
@@ -123,24 +114,20 @@ function ProjectLobby() {
     setLoading(true)
     setLoadError(false)
     try {
-      if (useMock) {
-        setProjects(mockProjects)
-      } else {
-        const res = await StudioProjectsService.listProjectsApiV1StudioProjectsGet({
-          page: 1,
-          pageSize: 10,
-          order: 'updated_at',
-          isDesc: newestFirst,
-        })
-        if (!res.data?.items) throw new Error('项目列表不可用')
-        if (revision === loadRevision.current) setProjects(res.data.items.map(toUIProject))
-      }
+      const res = await StudioProjectsService.listProjectsApiV1StudioProjectsGet({
+        page: 1,
+        pageSize: 10,
+        order: 'updated_at',
+        isDesc: newestFirst,
+      })
+      if (!res.data?.items) throw new Error('项目列表不可用')
+      if (revision === loadRevision.current) setProjects(res.data.items.map(toUIProject))
     } catch {
       if (revision === loadRevision.current) setLoadError(true)
     } finally {
       if (revision === loadRevision.current) setLoading(false)
     }
-  }, [newestFirst, useMock])
+  }, [newestFirst])
 
   useEffect(() => {
     void load()
@@ -309,77 +296,30 @@ function ProjectLobby() {
     }
   }
 
-  const handleOpenEdit = (p: ProjectView) => {
-    setEditingProject(p)
-    editForm.setFieldsValue({
-      name: p.name,
-      description: p.description,
-      style: p.style,
-      visual_style: p.visualStyle ?? '现实',
-      seed: p.seed,
-      unifyStyle: p.unifyStyle,
-      default_video_ratio: p.defaultVideoRatio ?? undefined,
-    })
-    setEditModalOpen(true)
-  }
-
-  const handleEditSubmit = async (values: {
-    name: string
-    description?: string
-    style: string
-    visual_style: ProjectVisualStyleChoice
-    seed: number
-    unifyStyle: boolean
-    default_video_ratio?: string
-  }) => {
-    if (!editingProject) return
+  const handleDelete = async () => {
+    if (!deleteTarget || deletePending.current) return
+    deletePending.current = true
+    setDeleting(true)
+    setDeleteError('')
     try {
-      const res = await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({
-        projectId: editingProject.id,
-        requestBody: {
-          name: values.name,
-          description: values.description ?? '',
-          style: values.style as ProjectStyle,
-          visual_style: values.visual_style as ProjectVisualStyle,
-          seed: values.seed,
-          unify_style: values.unifyStyle,
-          default_video_ratio: values.default_video_ratio || null,
-        },
-      })
-      const updated = res.data
-      if (!updated) throw new Error('empty project')
-      const ui = toUIProject(updated)
-      message.success('项目已更新')
-      setEditModalOpen(false)
-      setEditingProject(null)
-      setProjects((prev) =>
-        Array.isArray(prev) ? prev.map((x) => (x.id === ui.id ? ui : x)) : prev
-      )
-      if (sortKey === 'updatedAt' && !useMock) void load()
-    } catch {
-      message.error('更新失败')
-    }
-  }
-
-  const handleDelete = async (projectId: string) => {
-    try {
-      await StudioProjectsService.deleteProjectApiV1StudioProjectsProjectIdDelete({ projectId })
+      await StudioProjectsService.deleteProjectApiV1StudioProjectsProjectIdDelete({ projectId: deleteTarget.id })
+      setProjects(previous => previous.filter(project => project.id !== deleteTarget.id))
+      setDeleteTarget(null)
       message.success('已删除')
-      setDetailProjectId(null)
-      setProjects((prev) => (Array.isArray(prev) ? prev.filter((p) => p.id !== projectId) : []))
-    } catch {
-      message.error('删除失败')
+    } catch (cause) {
+      setDeleteError(directingError(cause))
+    } finally {
+      deletePending.current = false
+      setDeleting(false)
     }
   }
 
-  const detailProject = projects.find(project => project.id === detailProjectId)
-  const detailStage = detailProject ? projectStageMap[detailProject.id] : undefined
   const filterLoading = filterTab !== 'all' && projects.some(project => !projectStageMap[project.id])
   const filterIncomplete = filterTab !== 'all' && projects.some(project => projectStageMap[project.id] === 'error')
   const optionsMenu: MenuProps = {
     selectable: true,
     multiple: true,
-    selectedKeys: [sortKey, sortOrder, viewMode],
+    selectedKeys: [sortKey, sortOrder],
     items: [
       { key: 'sorting', type: 'group', label: '排序', children: sortOptions.map(option => ({
         ...option, onClick: () => setSortKey(option.key),
@@ -388,9 +328,6 @@ function ProjectLobby() {
         { key: 'asc', label: '升序', onClick: () => setSortOrder('asc') },
         { key: 'desc', label: '降序', onClick: () => setSortOrder('desc') },
       ] },
-      { key: 'views', type: 'group', label: '视图', children: viewOptions.map(option => ({
-        ...option, onClick: () => setViewMode(option.key),
-      })) },
       { type: 'divider' },
       { key: 'batch', label: '批量管理', disabled: multiSelectMode, onClick: () => setMultiSelectMode(true) },
     ],
@@ -415,12 +352,12 @@ function ProjectLobby() {
         onChange={setFilterTab}
       />
       <Dropdown menu={optionsMenu} overlayClassName="project-lobby-options" trigger={['click']} autoFocus>
-        <Button icon={<MoreOutlined />}>显示与管理</Button>
+        <Button icon={<MoreOutlined />}>排序与批量</Button>
       </Dropdown>
     </div>
   )
   const createProject = (
-    <Button key="create" className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>新建项目</Button>
+    <Button key="create" ref={createButton} className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>新建项目</Button>
   )
 
   return (
@@ -467,17 +404,25 @@ function ProjectLobby() {
             {!loadError && !filterLoading && !filterIncomplete && !filteredSorted.length && (
               <Empty description={search || filterTab !== 'all' ? '没有匹配的项目' : '暂无项目，点击「新建项目」开始'} />
             )}
-            <div className={`project-lobby-grid project-lobby-grid--${viewMode}`}>
+            <div className="project-lobby-grid">
               {filteredSorted.map(project => {
                 const summary = projectStageMap[project.id]
                 const stage = summary === 'error' ? undefined : summary
+                const identity = <>
+                  <ProjectCover projectId={project.id} demo={useMock} />
+                  <header className="project-lobby-card-heading">
+                    <h2>{project.name}</h2>
+                    <p>{project.style}</p>
+                  </header>
+                </>
                 return (
                   <article className="project-lobby-card" key={project.id}>
-                    <header className="project-lobby-card-heading">
-                      <div>
-                        <p>{project.style}</p>
-                        <h2>{multiSelectMode ? project.name : <Link to={`/projects/${encodeURIComponent(project.id)}`}>{project.name}</Link>}</h2>
-                      </div>
+                    {multiSelectMode ? identity : (
+                      <Link className="project-lobby-identity" aria-label={project.name} to={`/projects/${encodeURIComponent(project.id)}`}>
+                        {identity}
+                      </Link>
+                    )}
+                    <div className="project-lobby-card-control">
                       {multiSelectMode ? (
                         <Checkbox
                           aria-label={`选择 ${project.name}`}
@@ -485,22 +430,34 @@ function ProjectLobby() {
                           disabled={batchDeleting}
                           onChange={event => handleToggleSelect(project.id, event.target.checked)}
                         />
-                      ) : <Button type="text" onClick={() => setDetailProjectId(project.id)}>详情</Button>}
-                    </header>
-                    {viewMode === 'large' && project.description && <p className="project-lobby-description">{project.description}</p>}
-                    <div className="project-lobby-stage">
-                      {stage?.chapterLabel && <p>{stage.chapterLabel}</p>}
-                      <Tag bordered={false} className="project-lobby-status" data-tone={stage?.tone}>
-                        {stage?.status ?? (summary === 'error' ? '章节状态读取失败' : '正在读取章节状态')}
-                      </Tag>
+                      ) : (
+                        <Button
+                          type="text"
+                          aria-label={`删除 ${project.name}`}
+                          icon={<DeleteOutlined />}
+                          onClick={event => {
+                            deleteTrigger.current = event.currentTarget
+                            setDeleteError('')
+                            setDeleteTarget(project)
+                          }}
+                        />
+                      )}
                     </div>
-                    {stage && !multiSelectMode && (
-                      <Link className="project-lobby-next" to={stage.href}>{stage.action}<ArrowRightOutlined aria-hidden /></Link>
-                    )}
-                    <footer className="project-lobby-meta">
-                      {project.stats.chapters !== undefined && <span>{project.stats.chapters} 章</span>}
-                      {project.updatedAt && <span>更新于 {project.updatedAt}</span>}
-                    </footer>
+                    <div className="project-lobby-card-body">
+                      <div className="project-lobby-stage">
+                        {stage?.chapterLabel && <p>{stage.chapterLabel}</p>}
+                        <Tag bordered={false} className="project-lobby-status" data-tone={stage?.tone}>
+                          {stage?.status ?? (summary === 'error' ? '章节状态读取失败' : '正在读取章节状态')}
+                        </Tag>
+                      </div>
+                      {!multiSelectMode && stage && (
+                        <Link className="project-lobby-next" to={stage.href}>{stage.action}<ArrowRightOutlined aria-hidden /></Link>
+                      )}
+                      {!multiSelectMode && summary === 'error' && (
+                        <Button onClick={() => void retryProjectStage(project.id)}>重试读取章节</Button>
+                      )}
+                      {project.updatedAt && <footer className="project-lobby-meta">更新于 {project.updatedAt}</footer>}
+                    </div>
                   </article>
                 )
               })}
@@ -509,53 +466,28 @@ function ProjectLobby() {
         )}
       </WorkspaceScrollPanel>
       <Modal
-        title={detailProject ? `${detailProject.name} · 详情` : '项目详情'}
-        open={Boolean(detailProject)}
-        onCancel={() => setDetailProjectId(null)}
-        footer={null}
-        width={440}
+        title="删除项目"
+        open={Boolean(deleteTarget)}
+        onOk={() => void handleDelete()}
+        onCancel={() => { if (!deletePending.current) setDeleteTarget(null) }}
+        afterClose={() => {
+          const target = deleteTrigger.current
+          const focusTarget = target?.isConnected ? target : createButton.current
+          focusTarget?.focus()
+        }}
+        focusTriggerAfterClose={false}
+        confirmLoading={deleting}
+        cancelButtonProps={{ disabled: deleting, autoFocus: true }}
+        okButtonProps={{ danger: true }}
+        okText="删除"
+        cancelText="取消"
+        keyboard={!deleting}
+        maskClosable={false}
+        closable={!deleting}
+        destroyOnClose
       >
-        {detailProject && (
-          <div className="project-lobby-detail">
-            <section>
-              <h2>制作提示</h2>
-              {detailStage === 'error' ? (
-                <Alert showIcon type="error" message="章节状态读取失败" action={
-                  <Button onClick={() => void retryProjectStage(detailProject.id)}>重试</Button>
-                } />
-              ) : detailStage ? (
-                <>
-                  {detailStage.chapterLabel && <p>{detailStage.chapterLabel}</p>}
-                  <Tag bordered={false} className="project-lobby-status" data-tone={detailStage.tone}>{detailStage.status}</Tag>
-                </>
-              ) : <Spin />}
-              <div className="project-lobby-detail-actions">
-                <Link to={chapterLocation(detailProject.id)}>查看章节列表</Link>
-              </div>
-            </section>
-            <section>
-              <h2>项目资料</h2>
-              {detailProject.description && <p>{detailProject.description}</p>}
-              <p>角色 {detailProject.stats.roles ?? '—'} · 场景 {detailProject.stats.scenes ?? '—'} · 道具 {detailProject.stats.props ?? '—'}</p>
-            </section>
-            <section>
-              <h2>项目操作</h2>
-              <Space wrap>
-                <Button onClick={() => handleOpenEdit(detailProject)}>编辑项目</Button>
-                <Popconfirm
-                  title="确定删除该项目？"
-                  description="删除后无法恢复，相关章节与素材将不再关联。"
-                  onConfirm={() => handleDelete(detailProject.id)}
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                >
-                  <Button danger>删除项目</Button>
-                </Popconfirm>
-              </Space>
-            </section>
-          </div>
-        )}
+        <p>确定删除「{deleteTarget?.name}」？此操作不可恢复。</p>
+        {deleteError && <Alert type="error" showIcon message={deleteError} />}
       </Modal>
 
       <Modal
@@ -620,43 +552,6 @@ function ProjectLobby() {
         </Form>
       </Modal>
 
-      <Modal
-        title="编辑项目"
-        open={editModalOpen}
-        onCancel={() => { setEditModalOpen(false); setEditingProject(null) }}
-        footer={null}
-        width={520}
-      >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleEditSubmit}
-          initialValues={{ style: '真人都市', visual_style: '现实', unifyStyle: true }}
-        >
-          <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
-            <Input placeholder="项目名称" />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} placeholder="项目简介与风格说明" />
-          </Form.Item>
-          <ProjectVisualStyleAndStyleFields form={editForm} options={projectStyleOptions} />
-          <Form.Item name="seed" label="全局种子值" tooltip="固定种子可确保整部短剧视觉调性一致">
-            <InputNumber min={0} className="w-full" />
-          </Form.Item>
-          <Form.Item name="default_video_ratio" label="默认视频比例">
-            <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
-          </Form.Item>
-          <Form.Item name="unifyStyle" label="风格统一" valuePropName="checked" tooltip="开启后所有章节继承项目风格">
-            <Switch />
-          </Form.Item>
-          <Form.Item className="mb-0">
-            <Space>
-              <Button onClick={() => { setEditModalOpen(false); setEditingProject(null) }}>取消</Button>
-              <Button type="primary" htmlType="submit">保存</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
     </WorkspaceLayout>
   )
 }

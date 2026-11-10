@@ -10,11 +10,12 @@ const port = 4783
 const origin = `http://127.0.0.1:${port}`
 process.chdir(root)
 
+const longProjectName = '失联的项目' + '超长名称'.repeat(12)
 const projects = [
   { id: 'p1', name: '长安夜行', description: '夜市调查', style: '真人古装', progress: 25, stats: { chapters: 1, updated_at: '2026-09-15 10:00' } },
   { id: 'p2', name: '雨停以前', description: '雨夜街景', style: '真人都市', progress: 50, stats: { chapters: 1, updated_at: '2026-09-14 11:00' } },
   { id: 'p3', name: '轨道尽头', style: '真人科幻', progress: 75, stats: { chapters: 1 } },
-  { id: 'p4', name: '失联的项目', style: '真人都市', stats: { chapters: 0 } },
+  { id: 'p4', name: longProjectName, style: '真人都市', stats: { chapters: 0 } },
 ]
 const chapters = {
   p1: { id: 'ch1', project_id: 'p1', index: 2, title: '夜入长安', raw_text: '', sequence_count: 0 },
@@ -32,11 +33,14 @@ try {
   page.setDefaultTimeout(8000)
   const errors = []
   const deletes = []
+  const saves = []
+  let releaseSave
+  let holdSave = false
   const orderRequests = []
-  let failProjects = false, failChapter = true, failDelete = true
+  let failProjects = false, failChapter = true, failDelete = true, failSave = true
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
-  await page.route('**/api/**', route => {
+  await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
     const { pathname } = url
@@ -58,6 +62,13 @@ try {
     const projectId = pathname.match(/\/studio\/projects\/([^/]+)$/)?.[1]
     if (projectId) {
       const index = projects.findIndex(project => project.id === projectId)
+      if (request.method() === 'PATCH') {
+        saves.push(request.postDataJSON())
+        if (holdSave) await new Promise(resolve => { releaseSave = resolve })
+        if (failSave) return route.fulfill({ status: 503, json: { detail: '暂时无法保存项目' } })
+        projects[index] = { ...projects[index], ...request.postDataJSON() }
+        return respond(projects[index])
+      }
       if (request.method() === 'DELETE') {
         deletes.push(projectId)
         if (projectId === 'p2' && failDelete) return route.fulfill({ status: 503, json: { detail: 'fixture unavailable' } })
@@ -82,16 +93,55 @@ try {
   const projectCard = name => page.getByRole('article').filter({ has: page.getByRole('heading', { name, exact: true }) })
   await visitProjects()
   const card = projectCard('长安夜行')
-  const detail = card.getByRole('button', { name: '详情', exact: true })
-  await detail.hover()
-  assert.equal(await page.getByRole('dialog').count(), 0)
-  await detail.press('Enter')
-  const dialog = page.getByRole('dialog', { name: /长安夜行/ })
-  await dialog.getByText(/夜入长安/).waitFor()
-  await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]'))
-  await page.keyboard.press('Escape')
-  await dialog.waitFor({ state: 'hidden' })
-  assert.equal(await detail.evaluate(element => element === document.activeElement), true)
+  await page.goto(`${origin}/projects/p1?tab=settings`)
+  const name = page.getByRole('textbox', { name: '项目名称' })
+  await name.waitFor()
+  const save = page.getByRole('button', { name: /保\s*存$/ })
+  assert.equal(await save.isDisabled(), true)
+  const seed = page.getByRole('spinbutton', { name: '全局种子值' })
+  await seed.clear()
+  await save.click()
+  await page.getByText('请输入非负整数').waitFor()
+  assert.equal(saves.length, 0)
+  await page.getByRole('button', { name: /^取\s*消$/ }).click()
+  await name.fill('长安夜行改名')
+  await save.click()
+  await page.getByText(/暂时无法保存项目/).waitFor()
+  assert.equal(await name.inputValue(), '长安夜行改名')
+  failSave = false
+  holdSave = true
+  await save.click()
+  const projectNav = page.getByRole('navigation', { name: '项目导航' })
+  await projectNav.getByRole('link', { name: '项目概览' }).click()
+  await projectNav.getByRole('link', { name: '项目设置' }).click()
+  await name.waitFor()
+  assert.equal(await name.isDisabled(), true)
+  assert.equal(await save.isDisabled(), true)
+  holdSave = false
+  releaseSave()
+  await projectNav.getByText('长安夜行改名', { exact: true }).waitFor()
+  await name.fill('放弃这个改名')
+  await page.getByRole('button', { name: /^取\s*消$/ }).click()
+  assert.equal(await name.inputValue(), '长安夜行改名')
+  await name.fill('离开时不保存')
+  await projectNav.getByRole('link', { name: '返回项目列表' }).click()
+  await projectCard('长安夜行改名').waitFor()
+  await page.goto(`${origin}/projects/p1?tab=settings`)
+  await name.fill('长安夜行')
+  await save.click()
+  await projectNav.getByText('长安夜行', { exact: true }).waitFor()
+  await projectNav.getByRole('link', { name: '返回项目列表' }).click()
+  await card.getByRole('link', { name: '长安夜行', exact: true }).waitFor()
+  assert.equal(await card.getByText('示例封面').count(), 0)
+  assert.equal(await card.getByRole('button', { name: '详情' }).count(), 0)
+  const deleteTrigger = card.getByRole('button', { name: '删除 长安夜行', exact: true })
+  await deleteTrigger.press('Enter')
+  const deleteDialog = page.getByRole('dialog', { name: '删除项目' })
+  await deleteDialog.getByText(/长安夜行/).waitFor()
+  await deleteDialog.getByRole('button', { name: /^取\s*消$/ }).click()
+  await deleteDialog.waitFor({ state: 'hidden' })
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '删除 长安夜行')
+  assert.deepEqual(deletes, [])
 
   await page.getByText('章节状态读取失败', { exact: true }).waitFor()
   const filterStage = async name => {
@@ -104,7 +154,7 @@ try {
   assert.equal(await page.getByText(/^显示 \d+ 个$/).count(), 0)
   failChapter = false
   await chapterFailure.getByRole('button', { name: /^重\s*试$/ }).click()
-  await projectCard('失联的项目').getByRole('link', { name: '创建第一章' }).waitFor()
+  await projectCard(longProjectName).getByRole('link', { name: '创建第一章' }).waitFor()
   await chapterFailure.waitFor({ state: 'hidden' })
   await page.getByText('显示 2 个', { exact: true }).waitFor()
   await filterStage('全部状态')
@@ -119,7 +169,7 @@ try {
   await search.clear()
   await page.getByText('显示 4 个', { exact: true }).waitFor()
 
-  const displayOptions = page.getByRole('button', { name: /显示与管理/ })
+  const displayOptions = page.getByRole('button', { name: /排序与批量/ })
   const menu = page.getByRole('menu')
   const chooseDisplay = async name => {
     await displayOptions.click()
@@ -131,10 +181,10 @@ try {
   assert.deepEqual(orderRequests[0], { order: 'updated_at', descending: true })
   assert.deepEqual(orderRequests.at(-1), { order: 'updated_at', descending: false })
   assert.equal(await projectCard('轨道尽头').getByText(/更新于/).count(), 0)
-  await chooseDisplay('大卡视图')
-  await card.getByText('夜市调查', { exact: true }).waitFor()
-  await chooseDisplay('卡片视图')
-  await card.getByText('夜市调查', { exact: true }).waitFor({ state: 'hidden' })
+  await displayOptions.click()
+  assert.equal(await menu.getByRole('menuitem', { name: /视图/ }).count(), 0)
+  await page.keyboard.press('Escape')
+  await menu.waitFor({ state: 'hidden' })
   await chooseDisplay('降序')
 
   for (const width of [1440, 1024, 375]) {
@@ -162,6 +212,10 @@ try {
       assert.ok(title.height <= 30)
     } else {
       assert.ok(searchBox.y >= create.y + create.height)
+      const firstCard = await card.boundingBox()
+      const longCard = await projectCard(longProjectName).boundingBox()
+      assert.equal(firstCard.x, longCard.x)
+      assert.equal(firstCard.width, longCard.width)
       await createButton.focus()
       await page.keyboard.press('Tab')
       assert.equal(await search.evaluate(element => element === document.activeElement), true)
@@ -201,6 +255,15 @@ try {
   await projectFailure.waitFor({ state: 'hidden' })
   await card.waitFor()
 
+  const rain = projectCard('雨停以前')
+  await rain.getByRole('button', { name: '删除 雨停以前', exact: true }).click()
+  await deleteDialog.getByRole('button', { name: /^删\s*除$/ }).click()
+  await deleteDialog.getByText(/fixture unavailable/).waitFor()
+  await rain.waitFor()
+  await deleteDialog.getByRole('button', { name: /^取\s*消$/ }).click()
+  await deleteDialog.waitFor({ state: 'hidden' })
+  deletes.length = 0
+
   await chooseDisplay('批量管理')
   await card.getByRole('checkbox', { name: '选择 长安夜行' }).check()
   await projectCard('雨停以前').getByRole('checkbox', { name: '选择 雨停以前' }).check()
@@ -223,6 +286,16 @@ try {
   await projectCard('雨停以前').waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: '退出批量管理' }).click()
   assert.deepEqual(deletes.sort(), ['p1', 'p2', 'p2'])
+
+  await page.setViewportSize({ width: 375, height: 812 })
+  await projectCard('轨道尽头').getByRole('button', { name: '删除 轨道尽头', exact: true }).click()
+  await deleteDialog.getByText(/轨道尽头/).waitFor()
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 375)
+  await deleteDialog.getByRole('button', { name: /^删\s*除$/ }).click()
+  await deleteDialog.waitFor({ state: 'hidden' })
+  await projectCard('轨道尽头').waitFor({ state: 'hidden' })
+  await page.getByText('显示 1 个', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 1440, height: 900 })
 
   await page.getByRole('button', { name: /新建项目/ }).click()
   const createDialog = page.getByRole('dialog', { name: '新建短剧项目' })

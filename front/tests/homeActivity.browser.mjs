@@ -15,6 +15,9 @@ const partialProject = { id: 'p2', name: '缺少场次信息的项目', style: '
 const chapter = { id: 'ch1', index: 2, project_id: 'p1', title: '第二章验收', raw_text: '', sequence_count: 0 }
 const partialChapter = { id: 'ch2', index: 1, project_id: 'p2', title: '待确认章节' }
 const session = { id: 'image1', lab_type: 'image', title: '真实图片会话', last_message_preview: '最后一条消息摘要', updated_at: '2026-11-10T10:30:00Z', created_at: '2026-11-09T10:00:00Z' }
+const olderSessions = Array.from({ length: 5 }, (_, index) => ({
+  ...session, id: 'older' + index, title: '更早会话 ' + index, updated_at: '2026-11-09T10:00:00Z',
+}))
 let state = 'loaded'
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -45,13 +48,17 @@ try {
       if (state === 'error') return fail()
       const type = url.searchParams.get('lab_type')
       if (state === 'partial-error' && type === 'text') return fail()
-      return respond(state !== 'empty' && type === 'image' ? [session] : [])
+      return respond(state !== 'empty' && type === 'image' ? [session, ...olderSessions] : [])
     }
     if (pathname.endsWith('/messages')) return respond([])
     return respond(list([]))
   })
 
   await page.goto(origin)
+  const quickStart = page.getByRole('region', { name: '快捷开始', exact: true })
+  for (const [label, mode] of [['文本实验', 'text'], ['图片实验', 'image'], ['视频实验', 'video']]) {
+    assert.equal(await quickStart.getByRole('link', { name: label }).getAttribute('href'), '/lab?mode=' + mode)
+  }
   const progress = page.getByRole('region', { name: '项目进展', exact: true })
   const sessions = page.getByRole('region', { name: '最近实验室会话', exact: true })
   const canvases = page.getByRole('region', { name: '最近更新的画布', exact: true })
@@ -68,7 +75,9 @@ try {
   assert.equal(await example.getByRole('link').count(), 0)
   assert.equal(await example.getByRole('button').count(), 0)
   await sessions.getByRole('link', { name: new RegExp(session.title) }).waitFor()
-  await sessions.getByText(session.last_message_preview, { exact: false }).waitFor()
+  await sessions.getByText(session.last_message_preview, { exact: false }).first().waitFor()
+  assert.equal(await sessions.getByRole('listitem').count(), 5)
+  await sessions.getByRole('link', { name: '打开实验室' }).waitFor()
   assert.ok((await canvases.boundingBox()).y < (await progress.boundingBox()).y)
   assert.equal((await progress.boundingBox()).y, (await sessions.boundingBox()).y)
   const actionBounds = await progress.getByRole('link', { name: '编辑原文', exact: true }).boundingBox()

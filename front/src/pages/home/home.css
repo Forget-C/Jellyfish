@@ -43,7 +43,7 @@
 }
 
 .home-activity-grid > section { min-width: 0; }
-.home-project-surface { padding: 4px 14px; border-radius: 12px; background: #fff; }
+.home-activity-surface { padding: 4px 14px; border-radius: 12px; background: #fff; }
 .home-activity-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 
 .home-project-row, .home-session-row {
@@ -55,7 +55,7 @@
   padding: 10px 4px;
 }
 
-.home-session-row { padding-inline: 8px; border-radius: 8px; color: var(--app-text); text-decoration: none; }
+.home-session-row { border-radius: 8px; color: var(--app-text); text-decoration: none; }
 .home-session-row:hover { background: var(--app-selected); color: var(--app-accent); }
 .home-activity-icon {
   display: grid;
@@ -93,7 +93,7 @@
   cursor: pointer;
 }
 .home-text-action:hover { background: var(--app-selected); color: var(--app-accent); }
-.home-project-footer { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 0; }
+.home-activity-footer { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 0; }
 .home-project-example { margin-top: 16px; padding: 12px; border-radius: 8px; background: #edf1f7; }
 .home-project-example .home-section-heading { margin-bottom: 2px; }
 .home-project-example h3 { margin: 0; font-size: 13px; font-weight: 600; }
@@ -115,7 +115,26 @@
 
 @media (max-width: 479px) {
   .home-project-row, .home-session-row { gap: 8px; }
-  .home-project-surface { padding-inline: 8px; }
+  .home-activity-surface { padding-inline: 8px; }
   .home-session-row { grid-template-columns: auto minmax(0, 1fr); }
   .home-session-time { grid-column: 2; }
 }
+
+.home-quick-start { margin-top: 24px; }
+.home-quick-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+.home-quick-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  color: var(--app-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.home-quick-link > .anticon { margin-left: auto; color: var(--app-accent); }
+.home-quick-link:hover { color: var(--app-accent); background: var(--app-selected); }
