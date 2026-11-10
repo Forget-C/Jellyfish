@@ -101,21 +101,23 @@ try {
   await filterStage('待补原文')
   const chapterFailure = page.getByRole('alert').filter({ hasText: '部分项目的章节状态读取失败，未纳入此筛选' })
   await chapterFailure.waitFor()
-  await page.getByText('1 个项目', { exact: true }).waitFor()
+  assert.equal(await page.getByText(/^显示 \d+ 个$/).count(), 0)
   failChapter = false
   await chapterFailure.getByRole('button', { name: /^重\s*试$/ }).click()
   await projectCard('失联的项目').getByRole('link', { name: '创建第一章' }).waitFor()
   await chapterFailure.waitFor({ state: 'hidden' })
+  await page.getByText('显示 2 个', { exact: true }).waitFor()
   await filterStage('全部状态')
 
   const search = page.getByRole('textbox', { name: '搜索项目' })
   await search.fill('夜市调查')
-  await page.getByText('1 个项目', { exact: true }).waitFor()
+  await page.getByText('显示 1 个', { exact: true }).waitFor()
   await card.waitFor()
   await search.fill('不存在的项目')
   await page.getByText('没有匹配的项目', { exact: true }).waitFor()
+  await page.getByText('显示 0 个', { exact: true }).waitFor()
   await search.clear()
-  await page.getByText('4 个项目', { exact: true }).waitFor()
+  await page.getByText('显示 4 个', { exact: true }).waitFor()
 
   const displayOptions = page.getByRole('button', { name: /显示与管理/ })
   const menu = page.getByRole('menu')
@@ -138,14 +140,38 @@ try {
   for (const width of [1440, 1024, 375]) {
     await page.setViewportSize({ width, height: 900 })
     await card.getByRole('link', { name: '编辑原文', exact: true }).waitFor()
+    await page.waitForFunction(wide => {
+      const search = document.querySelector('[aria-label="搜索项目"]')
+      const create = document.querySelector('.project-lobby-create')
+      return Boolean(search.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING) === wide
+    }, width >= 1024)
     assert.equal(await page.getByText(/更新于 2026-09-15/).count(), 1)
     const title = await page.getByRole('heading', { name: '项目', exact: true }).boundingBox()
-    const create = await page.getByRole('button', { name: /新建项目/ }).boundingBox()
+    const createButton = page.getByRole('button', { name: /新建项目/ })
+    const create = await createButton.boundingBox()
     const searchBox = await search.boundingBox()
+    const count = await page.getByText('显示 4 个', { exact: true }).boundingBox()
+    const center = box => box.y + box.height / 2
+    assert.ok(Math.abs(center(title) - center(count)) < 3, `${width}px 的标题和数量应在同一行`)
+    assert.ok(Math.abs(center(title) - center(create)) < 3, `${width}px 的标题和新建应在同一行`)
+    assert.equal(await createButton.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(36, 95, 197)')
+    const filter = page.getByRole('combobox', { name: '制作阶段筛选' })
     if (width >= 1024) {
-      assert.ok(Math.abs(create.y + create.height / 2 - searchBox.y - searchBox.height / 2) < 2)
+      assert.ok(Math.abs(center(create) - center(searchBox)) < 2)
+      assert.ok(create.x > searchBox.x + searchBox.width)
       assert.ok(title.height <= 30)
+    } else {
+      assert.ok(searchBox.y >= create.y + create.height)
+      await createButton.focus()
+      await page.keyboard.press('Tab')
+      assert.equal(await search.evaluate(element => element === document.activeElement), true)
     }
+    await search.focus()
+    for (const control of width >= 1024 ? [filter, displayOptions, createButton] : [filter, displayOptions]) {
+      await page.keyboard.press('Tab')
+      assert.equal(await control.evaluate(element => element === document.activeElement), true)
+    }
+    await page.getByRole('heading', { name: '项目', exact: true }).click()
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width)
     await page.screenshot({ path: `${output}/projects-${width}.png`, animations: 'disabled' })
   }
@@ -168,6 +194,7 @@ try {
   await visitProjects()
   const projectFailure = page.getByRole('alert').filter({ hasText: '无法读取项目列表' })
   await projectFailure.waitFor()
+  assert.equal(await page.getByText(/^显示 \d+ 个$/).count(), 0)
   assert.equal(await page.getByText(/暂无项目/).count(), 0)
   failProjects = false
   await projectFailure.getByRole('button', { name: /^重\s*试$/ }).click()

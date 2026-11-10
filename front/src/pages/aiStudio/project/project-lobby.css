@@ -1,15 +1,22 @@
 .app-shell .project-lobby > .app-page-toolbar {
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 18px;
-  padding: 20px var(--app-page-gutter) 16px;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 16px var(--app-page-gutter);
+}
+
+.project-lobby-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .project-lobby-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1;
+  justify-content: center;
   gap: 10px;
-  width: 100%;
+  min-width: 0;
 }
 
 .project-lobby-controls .ant-input-affix-wrapper {
@@ -20,8 +27,19 @@
   min-width: 136px;
 }
 
-.project-lobby-controls > :is(.ant-btn, .ant-select, .ant-input-affix-wrapper) {
+.project-lobby-controls > :is(.ant-btn, .ant-select, .ant-input-affix-wrapper),
+.project-lobby-create.ant-btn {
   min-height: 38px;
+}
+
+.app-shell .project-lobby-create.ant-btn-primary {
+  color: #fff;
+  background: var(--app-accent);
+}
+
+.app-shell .project-lobby-create.ant-btn-primary:is(:hover, :active) {
+  color: #fff;
+  background: #1d50aa;
 }
 
 .project-lobby-options .ant-dropdown-menu-item-selected,
@@ -41,7 +59,15 @@
 .project-lobby-count {
   color: var(--app-muted);
   font-size: 13px;
-  margin-block: 4px 12px;
+}
+
+.project-lobby-count:empty {
+  position: absolute;
+}
+
+.project-lobby-count:not(:empty)::before {
+  content: '·';
+  margin-inline-end: 8px;
 }
 
 .project-lobby-batch {
@@ -190,18 +216,32 @@
   margin-top: 10px;
 }
 
-@media (max-width: 767px) {
+@media (width < 1024px) {
   .app-shell .project-lobby > .app-page-toolbar {
-    gap: 12px;
-    padding-top: 12px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .project-lobby-controls {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .project-lobby-controls .ant-input-affix-wrapper {
-    width: 100%;
+    flex: 1 1 160px;
+    width: auto;
+    max-width: 300px;
   }
 
   .project-lobby-controls .ant-select {
     min-width: 112px;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell .project-lobby > .app-page-toolbar {
+    padding-top: 12px;
   }
 
   .project-lobby-grid {

@@ -23,6 +23,7 @@ import './project-lobby.css'
 type ViewMode = 'grid' | 'compact' | 'large'
 type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'chapters'
+const desktopToolbar = '(min-width: 1024px)'
 type ProjectView = Omit<Project, 'stats'> & {
   stats: Partial<Project['stats']>
   visualStyle?: ProjectVisualStyleChoice
@@ -74,6 +75,14 @@ const toUIProject = (p: ProjectRead): ProjectView => {
 
 function ProjectLobby() {
   const navigate = useNavigate()
+  const [wideToolbar, setWideToolbar] = useState(() => window.matchMedia(desktopToolbar).matches)
+  useEffect(() => {
+    const media = window.matchMedia(desktopToolbar)
+    const update = () => setWideToolbar(media.matches)
+    media.addEventListener('change', update)
+    update()
+    return () => media.removeEventListener('change', update)
+  }, [])
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -387,31 +396,44 @@ function ProjectLobby() {
     ],
   }
 
+  const controls = (
+    <div key="controls" className="project-lobby-controls">
+      <Input
+        aria-label="搜索项目"
+        placeholder="搜索项目名称或描述"
+        prefix={<SearchOutlined />}
+        allowClear
+        value={search}
+        onChange={event => setSearch(event.target.value)}
+      />
+      <Select
+        aria-label="制作阶段筛选"
+        popupClassName="project-lobby-options"
+        virtual={false}
+        value={filterTab}
+        options={[{ value: 'all', label: '全部状态' }, { value: 'editRaw', label: '待补原文' }]}
+        onChange={setFilterTab}
+      />
+      <Dropdown menu={optionsMenu} overlayClassName="project-lobby-options" trigger={['click']} autoFocus>
+        <Button icon={<MoreOutlined />}>显示与管理</Button>
+      </Dropdown>
+    </div>
+  )
+  const createProject = (
+    <Button key="create" className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>新建项目</Button>
+  )
+
   return (
     <WorkspaceLayout className="project-lobby">
-      <PageToolbar title="项目">
-        <div className="project-lobby-controls">
-          <Input
-            aria-label="搜索项目"
-            placeholder="搜索项目名称或描述"
-            prefix={<SearchOutlined />}
-            allowClear
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-          />
-          <Select
-            aria-label="制作阶段筛选"
-            popupClassName="project-lobby-options"
-            virtual={false}
-            value={filterTab}
-            options={[{ value: 'all', label: '全部状态' }, { value: 'editRaw', label: '待补原文' }]}
-            onChange={setFilterTab}
-          />
-          <Dropdown menu={optionsMenu} overlayClassName="project-lobby-options" trigger={['click']} autoFocus>
-            <Button icon={<MoreOutlined />}>显示与管理</Button>
-          </Dropdown>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>新建项目</Button>
+      <PageToolbar>
+        <div className="project-lobby-heading">
+          <h1 className="app-page-title">项目</h1>
+          <span className="project-lobby-count" role="status">
+            {!loading && !loadError && !filterLoading && !filterIncomplete && `显示 ${filteredSorted.length} 个`}
+          </span>
+          {useMock && <span className="project-lobby-count">模拟环境</span>}
         </div>
+        {wideToolbar ? [controls, createProject] : [createProject, controls]}
       </PageToolbar>
       <WorkspaceScrollPanel className="project-lobby-scroll">
         {multiSelectMode && (
@@ -442,9 +464,6 @@ function ProjectLobby() {
         {filterLoading && <p role="status">正在读取项目章节状态…</p>}
         {loading ? <Spin /> : (
           <>
-            {(!loadError || projects.length > 0) && (
-              <div className="project-lobby-count">{filteredSorted.length} 个项目{useMock ? ' · 模拟环境' : ''}</div>
-            )}
             {!loadError && !filterLoading && !filterIncomplete && !filteredSorted.length && (
               <Empty description={search || filterTab !== 'all' ? '没有匹配的项目' : '暂无项目，点击「新建项目」开始'} />
             )}
