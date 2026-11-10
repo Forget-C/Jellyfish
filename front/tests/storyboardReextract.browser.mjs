@@ -256,11 +256,16 @@ try {
   await manualStack.getByRole('button', { name: '解除堆叠', exact: true }).click()
   const beforeApplication = await poll(state => !state.document.groups.some(group => group.id === manual.id), readVideo)
   const positionBeforeApplication = await autoStack.boundingBox()
+  const removedVideoId = beforeApplication.document.storyboard.shots[1].model_card_ids[0]
+  const removedVideo = page.locator(`[data-card-id="${removedVideoId}"]`)
+  const removedVideoPosition = await removedVideo.boundingBox()
+  assert.ok(removedVideoPosition)
   await page.getByRole('button', { name: '核对差异', exact: true }).click()
   await confirmUnstack.click()
   const videoApplied = await poll(state => state.revision > beforeApplication.revision, readVideo)
   assert.ok(!videoApplied.document.groups.some(group => group.id === automatic.id))
   await autoStack.waitFor({ state: 'hidden' })
+  await removedVideo.waitFor({ state: 'hidden' })
   const anchor = page.locator(`[data-card-id="${automatic.card_ids[0]}"]`)
   const freed = await anchor.boundingBox()
   assert.ok(freed && Math.abs(freed.x - positionBeforeApplication.x) < 2 && Math.abs(freed.y - positionBeforeApplication.y) < 2,
@@ -272,6 +277,10 @@ try {
   const restored = await autoStack.boundingBox()
   assert.ok(restored && Math.abs(restored.x - positionBeforeApplication.x) < 2 && Math.abs(restored.y - positionBeforeApplication.y) < 2,
     'undo restores the automatic stack at its moved position')
+  await removedVideo.waitFor()
+  const restoredVideo = await removedVideo.boundingBox()
+  assert.ok(restoredVideo && Math.abs(restoredVideo.x - removedVideoPosition.x) < 2 && Math.abs(restoredVideo.y - removedVideoPosition.y) < 2,
+    'undo restores a removed video card to its original position')
   console.log(JSON.stringify({ output, passed: true }))
 } catch (reason) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true })
