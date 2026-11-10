@@ -125,6 +125,9 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
     typeof source !== 'number' || source < 0 || source >= index) throw new Error('当前镜头或模型已变化，请重新选择来源')
   const existing = activeVisualContinuity(document, targetId)
   if (existing && (existing.binding.input_port !== port || suspension)) throw new Error('重新采用时须保留当前参考用途')
+  const previous = document.storyboard.visual_continuity?.[targetId]
+  if (suspension && previous?.suspended && !previous.restored)
+    throw new Error('请先核对当前已停用的主体参考')
   const plan = suspension ? planSubjectSuspension(target) : undefined
   if (suspension && (!plan || JSON.stringify(suspension) !== JSON.stringify(plan.suspension)))
     throw new Error('主体参考已变化，请重新核对后确认切换')
@@ -147,7 +150,7 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
   const updated = previousCandidates.reduce((current, edge) => rules.disconnect(current, edge.id), result.document)
   return { ...updated, storyboard: { ...document.storyboard, visual_continuity: {
     ...document.storyboard.visual_continuity, [targetId]: {
-      ...(suspension ? { suspended: suspension } : document.storyboard.visual_continuity?.[targetId]),
+      ...(suspension ? { suspended: suspension } : previous),
       binding_id: existing?.binding.id ?? bindingId,
     },
   } } }

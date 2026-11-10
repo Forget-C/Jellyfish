@@ -5,6 +5,7 @@ import type { CanvasContinuitySuspension, CanvasModelCapability, CanvasRead, Ima
 import { VideoFramePicker } from '../generationCanvas/VideoFramePicker'
 import { buildFileDownloadUrl } from '../assets/utils'
 import type { WorkbenchModelMenuContext } from '../generationCanvas/GenerationCanvasWorkspace'
+import { StoryboardContinuityRemoval } from './StoryboardContinuityRemoval'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
@@ -14,7 +15,7 @@ import type { ContinuityPort } from './visualContinuityRules'
 export function StoryboardVisualContinuity(context: WorkbenchModelMenuContext) {
   const [open, setOpen] = useState(false)
   const { card, document, disabled, closeMenu } = context
-  if (card.type !== 'model.video' || (storyboardShotIndex(document, card.id) <= 0 && !activeVisualContinuity(document, card.id))) return null
+  if (card.type !== 'model.video' || (storyboardShotIndex(document, card.id) <= 0 && !document.storyboard?.visual_continuity?.[card.id])) return null
   return <>
     <Button disabled={disabled} onClick={() => setOpen(true)}>视觉承接</Button>
     {open && <ContinuityPicker {...context} target={card as VideoModelCard} onClose={() => { setOpen(false); closeMenu() }} />}
@@ -23,10 +24,11 @@ export function StoryboardVisualContinuity(context: WorkbenchModelMenuContext) {
 
 type SwitchOffer = { key: string; revision: number; capability: string; suspension: CanvasContinuitySuspension; labels: string[] }
 
-function ContinuityPicker({ target, document, runs, disabled, prepare, commit, onClose }: WorkbenchModelMenuContext & {
+function ContinuityPicker(context: WorkbenchModelMenuContext & {
   target: VideoModelCard
   onClose: () => void
 }) {
+  const { target, document, runs, disabled, prepare, commit, onClose } = context
   const projectId = document.project_id, canvasId = document.id
   const results = continuityResults(document, target.id, runs)
   const adopted = activeVisualContinuity(document, target.id)
@@ -47,6 +49,7 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
   const [error, setError] = useState('')
   const [capability, setCapability] = useState<CanvasModelCapability>()
   const [busy, setBusy] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const submitting = useRef(false)
   const prepared = useRef<{ key: string; id: string; before: CanvasRead; frame?: ImageContentCard }>()
   useEffect(() => {
@@ -63,7 +66,7 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
   const valid = result && atMs !== undefined && purpose && ports.includes(purpose) && !sameFrame
     && (purpose !== 'subject_image' || subject.trim())
   const submit = async (approval?: SwitchOffer) => {
-    if (!result || atMs === undefined || !purpose || !valid || !capability || submitting.current || disabled) return
+    if (!result || atMs === undefined || !purpose || !valid || !capability || submitting.current || disabled || removing) return
     const key = JSON.stringify([result.id, atMs, purpose, subject.trim(), capability.model_id])
     submitting.current = true
     setBusy(true); setError('')
@@ -98,6 +101,8 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
         throw new Error('此用途已有输入，请先解除后再采用')
       const plan = !replacing && !currentCapability.supports_subject_reference_with_frame_reference && purpose === 'first_frame'
         ? planSubjectSuspension(current) : undefined
+      const previous = before.document.storyboard?.visual_continuity?.[target.id]
+      if (plan && previous?.suspended && !previous.restored) throw new Error('请先核对当前已停用的主体参考')
       if (plan) {
         const nextOffer = { key, revision: before.revision, capability: JSON.stringify(currentCapability),
           suspension: plan.suspension, labels: subjectSuspensionLabels(before.document, current, plan.suspension) }
@@ -137,9 +142,9 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
       setBusy(false)
     }
   }
-  return <WorkbenchModal title="视觉承接" open width={640} closable={!busy} maskClosable={!busy} keyboard={!busy} onCancel={onClose}
-    footer={<WorkbenchDialogActions secondary={<Button disabled={busy} onClick={onClose}>{switchOffer ? '保留主体参考并取消采用' : adopted ? '保留当前采用' : '取消'}</Button>}>
-      <Button variant="primary" disabled={disabled || !valid} loading={busy} onClick={() => void submit(switchOffer)}>
+  return <WorkbenchModal title="视觉承接" open width={640} closable={!busy && !removing} maskClosable={!busy && !removing} keyboard={!busy && !removing} onCancel={onClose}
+    footer={<WorkbenchDialogActions secondary={<Button disabled={busy || removing} onClick={onClose}>{switchOffer ? '保留主体参考并取消采用' : adopted ? '保留当前采用' : '取消'}</Button>}>
+      <Button variant="primary" disabled={disabled || removing || !valid} loading={busy} onClick={() => void submit(switchOffer)}>
         {switchOffer ? '切换为首帧并停用主体参考' : adopted ? '确认重新采用' : '确认采用'}
       </Button>
     </WorkbenchDialogActions>}>
@@ -149,6 +154,7 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
         <p>切换只停用此视频卡中的以下采用及相关引用，原卡片和素材保留。</p>
         <ul>{switchOffer.labels.map((label, index) => <li key={index}>{label}</li>)}</ul>
       </section>}
+      <StoryboardContinuityRemoval {...context} disabled={disabled || busy} onComplete={onClose} onBusy={setRemoving} />
       {adopted && <section aria-label="当前采用画面">
         <p>已采用 {adoptedPort && continuityPorts[adoptedPort]} · {(adopted.origin.at_ms / 1000).toFixed(3)} 秒</p>
         {adopted.frame.file_id && <img src={buildFileDownloadUrl(adopted.frame.file_id)} alt="当前固定画面"
@@ -156,26 +162,26 @@ function ContinuityPicker({ target, document, runs, disabled, prepare, commit, o
       </section>}
       {update && <Alert type="info" showIcon message="来源镜头有新结果" description="可切换查看已采用的成果和新成果，确认后沿用当前参考用途并替换固定画面。" />}
       {!results.length ? <p>前镜尚无成功视频，可先生成当前镜头。</p> : <>
-        <label>视频来源 <select aria-label="视频来源" value={result?.id ?? ''} disabled={busy || !!switchOffer} onChange={event => {
+        <label>视频来源 <select aria-label="视频来源" value={result?.id ?? ''} disabled={busy || removing || !!switchOffer} onChange={event => {
           setResultId(event.currentTarget.value); setAtMs(undefined); setPurpose(adoptedPort ?? ''); setSameMotion(false); setError('')
         }}>
           <option value="" disabled>请选择完整视频结果</option>
           {results.map(item => <option key={item.id} value={item.id}>{adopted && isAdoptedContinuityResult(item, adopted.origin) ? '已采用的成果 · ' : item.id === update?.id ? '新成果 · ' : item.recommended ? '推荐前镜 · ' : ''}{item.label}</option>)}
         </select></label>
         {result && <>
-          {(!adopted || adoptedPort === 'first_frame') && ports.includes('first_frame') && <Checkbox checked={sameMotion} disabled={busy || !!switchOffer} onChange={event => setSameMotion(event.target.checked)}>
+          {(!adopted || adoptedPort === 'first_frame') && ports.includes('first_frame') && <Checkbox checked={sameMotion} disabled={busy || removing || !!switchOffer} onChange={event => setSameMotion(event.target.checked)}>
             同机位接续连续动作
           </Checkbox>}
-          <VideoFramePicker key={result.id} fileId={result.source.source_file_id} disabled={busy || !!switchOffer} onPosition={at => { if (!busy && !switchOffer) setAtMs(at) }}
+          <VideoFramePicker key={result.id} fileId={result.source.source_file_id} disabled={busy || removing || !!switchOffer} onPosition={at => { if (!busy && !removing && !switchOffer) setAtMs(at) }}
             onUseTail={sameMotion ? () => setPurpose('first_frame') : undefined} />
         </>}
         {!target.model_id ? <p>请先在当前视频卡选择模型。</p> : capability && !ports.length ? <p>当前模型不支持采用图片画面。</p> : null}
-        <label>参考用途 <select aria-label="参考用途" value={purpose} disabled={busy || !!switchOffer || !ports.length || !!adopted}
+        <label>参考用途 <select aria-label="参考用途" value={purpose} disabled={busy || removing || !!switchOffer || !ports.length || !!adopted}
           onChange={event => { setPurpose(event.currentTarget.value as ContinuityPort | ''); setError('') }}>
           <option value="">请选择用途</option>
           {ports.map(port => <option key={port} value={port}>{continuityPorts[port]}</option>)}
         </select></label>
-        {purpose === 'subject_image' && <label>主体名称 <input aria-label="主体名称" value={subject} disabled={busy || !!adopted}
+        {purpose === 'subject_image' && <label>主体名称 <input aria-label="主体名称" value={subject} disabled={busy || removing || !!adopted}
           onChange={event => setSubject(event.currentTarget.value)} /></label>}
       </>}
       {error && <Alert type="error" message={error} />}

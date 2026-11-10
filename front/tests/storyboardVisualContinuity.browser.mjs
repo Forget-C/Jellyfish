@@ -331,6 +331,25 @@ try {
   const restored = await poll(() => request(secondCanvas), item => item.document.storyboard.visual_continuity?.[afterId],
     'undo did not restore switched continuity')
   assert.deepEqual(restored.document.storyboard.visual_continuity[afterId], switched)
+  await afterCard.getByRole('button', { name: '卡片操作' }).click()
+  await afterCard.getByRole('button', { name: '视觉承接', exact: true }).click()
+  await dialog.getByRole('button', { name: '移除承接', exact: true }).click()
+  await dialog.getByRole('button', { name: '仅移除承接', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  const paused = (await request(secondCanvas)).document.storyboard.visual_continuity[afterId]
+  assert.equal(paused.binding_id, null)
+  const pausedAfterReextract = await applyReextract(await openReextract('design'), secondCanvas)
+  assert.deepEqual(pausedAfterReextract.document.storyboard.visual_continuity[afterId], paused)
+  const afterPause = await request(secondCanvas + '/cards/' + afterId + '/compile')
+  assert.equal(afterPause.video_media.frames.first, null)
+  assert.equal(afterPause.video_media.subjects.length, 0)
+  const deletePausedTarget = await openReextract('target')
+  await deletePausedTarget.getByText(/接收镜头已移除.*暂停参考/).waitFor()
+  await applyReextract(deletePausedTarget, secondCanvas)
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  const restoredPause = await poll(() => request(secondCanvas), item => item.document.storyboard.visual_continuity?.[afterId]?.binding_id === null,
+    'undo did not restore the exact inactive suspension')
+  assert.deepEqual(restoredPause.document.storyboard.visual_continuity[afterId], paused)
 
   console.log('Storyboard visual continuity: later-shot adoption, actual provider input, one save, undo, and reopen')
 } finally {
