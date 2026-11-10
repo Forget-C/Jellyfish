@@ -4,6 +4,11 @@
   "welcome": "欢迎使用 Jellyfish",
   "brandHome": "Jellyfish 首页",
   "primaryNavigation": "主导航",
+  "appearance": {
+    "label": "外观",
+    "mist": "雾蓝微渐变",
+    "solid": "雾蓝纯色"
+  },
   "menu": {
     "home": "首页",
     "projects": "项目",

@@ -1,14 +1,15 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Avatar, Breadcrumb, Button, ConfigProvider, Dropdown, Grid } from 'antd'
-import { MoreOutlined, UserOutlined } from '@ant-design/icons'
+import { CheckOutlined, MoreOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useAppStore } from '../store/useAppStore'
+import { appearances, useAppStore } from '../store/useAppStore'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
 import { ProjectNavigation } from '../pages/aiStudio/project/ProjectWorkbench/ProjectNavigation'
 import { projectTabLabel, projectTabLocation, resolveProjectTab } from '../pages/aiStudio/project/ProjectWorkbench/constants'
 import { useLastManagementPage } from './useLastManagementPage'
+import { AppearancePreview } from './AppearancePreview'
 import { activeMainNavigation, mainNavigation, pageBreadcrumbs } from './navigation'
 import { useNavigationTitles } from './pageTitle'
 import './shell.css'
@@ -30,6 +31,10 @@ function OrdinaryLayout() {
   const user = useAppStore(state => state.user)
   const language = useAppStore(state => state.language)
   const setLanguage = useAppStore(state => state.setLanguage)
+  const appearance = useAppStore(state => state.appearance)
+  const setAppearance = useAppStore(state => state.setAppearance)
+  const accountButton = useRef<HTMLButtonElement>(null)
+  const [accountOpen, setAccountOpen] = useState(false)
   const titles = useNavigationTitles()
   const projectIndex = !!projectId && pathname.split('/').filter(Boolean).length === 2
   const projectTab = projectIndex ? resolveProjectTab(new URLSearchParams(search).get('tab')) : undefined
@@ -62,7 +67,7 @@ function OrdinaryLayout() {
   </main>
 
   return <ConfigProvider theme={ordinaryPageTheme}>
-    <div className="app-shell">
+    <div className="app-shell" data-appearance={appearance}>
       <header className="app-topbar">
         <Link to="/" className="app-brand" aria-label={t('brandHome')}><img src="/logo.svg" alt="" /><span>Jellyfish</span></Link>
         <nav aria-label={t('primaryNavigation')} className="app-primary-navigation">
@@ -70,15 +75,30 @@ function OrdinaryLayout() {
         </nav>
         <div className="app-global-actions">
           <TaskCenter />
-          <Dropdown overlayClassName="app-context-menu" trigger={['click']} placement="bottomRight" menu={{ selectable: true, selectedKeys: [language], items: [
+          <Dropdown overlayClassName="app-context-menu" trigger={['click']} placement="bottomRight" autoFocus open={accountOpen} onOpenChange={setAccountOpen} menu={{ selectable: true, selectedKeys: [language, appearance], onClick: () => setAccountOpen(false), items: [
             { key: 'user', label: `${user.name} · ${user.role}`, disabled: true },
             { key: 'settings', label: t('user.profile'), onClick: () => navigate('/settings') },
+            { type: 'divider' },
+            { type: 'group', key: 'appearance', label: t('appearance.label'), children: appearances.map(value => ({
+              key: value,
+              role: 'menuitemradio',
+              'aria-checked': value === appearance,
+              label: <span className="app-appearance-menu-option">
+                <AppearancePreview appearance={value} />
+                {appearance === value && <CheckOutlined aria-hidden />}
+              </span>,
+              onClick: () => {
+                setAppearance(value)
+                // 等菜单关闭后再交还焦点，避免同一次 Enter 重新打开菜单。
+                requestAnimationFrame(() => accountButton.current?.focus())
+              },
+            })) },
             { type: 'divider' },
             { type: 'group', key: 'language', label: language === 'zh-CN' ? '语言' : 'Language', children: [
               { key: 'zh-CN', label: '简体中文', onClick: () => { setLanguage('zh-CN'); void i18n.changeLanguage('zh-CN'); window.localStorage.setItem('jellyfish_language', 'zh-CN'); document.documentElement.lang = 'zh-CN' } },
               { key: 'en-US', label: 'English', onClick: () => { setLanguage('en-US'); void i18n.changeLanguage('en-US'); window.localStorage.setItem('jellyfish_language', 'en-US'); document.documentElement.lang = 'en' } },
             ] },
-          ] }}><Button type="text" className="app-account" aria-label="用户与语言设置"><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
+          ] }}><Button ref={accountButton} type="text" className="app-account" aria-label="用户与语言设置" aria-haspopup="menu" aria-expanded={accountOpen}><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
         </div>
       </header>
       {projectId && !legacyGeneration ? <div className="app-project-frame">
