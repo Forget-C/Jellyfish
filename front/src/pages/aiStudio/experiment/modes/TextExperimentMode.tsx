@@ -5,7 +5,7 @@
  * 仍由统一实验室页面负责，从而避免文本实验室重新成为独立页面。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Button, Spin, Tag, message } from 'antd'
+import { Button, message } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
 import {
   LlmService,
@@ -17,9 +17,10 @@ import {
   type PromptTemplateRead,
 } from '../../../../services/generated'
 import { ExperimentComposer } from '../components/ExperimentComposer'
-import { ExperimentEmptyState } from '../components/ExperimentEmptyState'
+import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
+import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
@@ -50,6 +51,9 @@ type LocalMessage = {
   role: 'user' | 'assistant'
   content: string
   inputSnapshot?: ExperimentInputSnapshot
+  status?: 'running' | 'succeeded' | 'failed' | 'cancelled'
+  progress?: number
+  error?: string
 }
 
 /** 统一页面通过 render-prop 将模态内容填充进共享布局的各个区域。 */
@@ -77,6 +81,7 @@ function toLocalMessages(messages: ExperimentMessageRead[]): LocalMessage[] {
       id: item.id,
       role: item.role === 'assistant' ? 'assistant' : 'user',
       content: item.content ?? '',
+      status: item.role === 'assistant' ? 'succeeded' : undefined,
       inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
     }))
 }
@@ -226,23 +231,32 @@ export function TextExperimentMode({
           setLocalMessages((current) => [
             ...current,
             { id: event.data.user_message.id, role: 'user', content: event.data.user_message.content },
-            { id: activeTemporaryAssistantId, role: 'assistant', content: '' },
+            { id: activeTemporaryAssistantId, role: 'assistant', content: '', status: 'running' },
           ])
         } else if (event.event === 'delta') {
           setLocalMessages((current) => current.map((item) => (
             item.id === activeTemporaryAssistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
           )))
+        } else if (event.event === 'progress') {
+          setLocalMessages((current) => current.map((item) => (
+            item.id === activeTemporaryAssistantId ? { ...item, progress: event.data.progress } : item
+          )))
         } else if (event.event === 'completed') {
           setLocalMessages((current) => current.map((item) => (
             item.id === activeTemporaryAssistantId
-              ? { id: event.data.assistant_message.id, role: 'assistant', content: event.data.assistant_message.content }
+              ? { id: event.data.assistant_message.id, role: 'assistant', content: event.data.assistant_message.content, status: 'succeeded' }
               : item
           )))
           void historyState.refresh()
         } else if (event.event === 'error') {
-          throw new Error(event.data.error.message)
+          setLocalMessages((current) => current.map((item) => (
+            item.id === activeTemporaryAssistantId ? { ...item, status: 'failed', error: event.data.error.message } : item
+          )))
+          if (!selectedTemplate) setDraft(currentPrompt)
         } else if (event.event === 'cancelled') {
-          setLocalMessages((current) => current.filter((item) => item.id !== activeTemporaryAssistantId))
+          setLocalMessages((current) => current.map((item) => (
+            item.id === activeTemporaryAssistantId ? { ...item, status: 'cancelled' } : item
+          )))
         }
       }
     } catch {
@@ -302,29 +316,20 @@ export function TextExperimentMode({
   return render({
     clearContent: sessionId && localMessages.length && !submitting ? handleClearSession : undefined,
     history: (
-      <>
-        {historyState.loading ? <div className="flex h-72 items-center justify-center"><Spin /></div> : null}
-        {historyState.hasMoreHistory ? (
-          <Button size="small" loading={historyState.loadingMore} onClick={() => void historyState.loadMore()}>
-            加载更早消息
-          </Button>
-        ) : null}
-        {!historyState.loading && localMessages.length === 0 ? (
-          <ExperimentEmptyState description="选择模型并输入提示词，开始一轮文本实验" />
-        ) : null}
+      <ExperimentHistory key={sessionId ?? 'draft'} history={historyState} messageCount={localMessages.length || Number(submitting)} emptyDescription="选择模型并输入提示词，开始一轮文本实验">
         {localMessages.map((item) => (
           <ExperimentMessageBubble
             key={item.id}
-            align={item.role === 'user' ? 'right' : 'left'}
             footer={item.role === 'user' ? <ExperimentHistoryRestoreButton disabled={submitting} onRestore={() => restoreUserMessage(item)} /> : undefined}
-            header={<Tag color={item.role === 'user' ? 'blue' : 'green'}>{item.role === 'user' ? '你' : '模型'}</Tag>}
+            identity={item.role === 'user' ? '你' : '模型'}
+            status={item.status ? <ExperimentTaskStatus status={item.status} progress={item.progress} /> : null}
             tone={item.role === 'user' ? 'user' : 'assistant'}
           >
-            {item.content}
+            {item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
           </ExperimentMessageBubble>
         ))}
-        {submitting ? <div className="mr-auto max-w-[85%]"><Tag color="green">模型</Tag><div className="mt-1 rounded-lg bg-gray-50 px-3 py-2"><Spin size="small" /> 正在生成…</div></div> : null}
-      </>
+        {submitting && !streamTaskIdRef.current ? <p className="experiment-history-loading" role="status">正在发送…</p> : null}
+      </ExperimentHistory>
     ),
     composer: (
       <ExperimentComposer

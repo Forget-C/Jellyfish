@@ -63,7 +63,7 @@ export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar
             </Dropdown>
           </PageToolbar>
           <div className="app-lab-content">
-            <div className="app-lab-history">{history}</div>
+            {history}
             {composer}
           </div>
         </section>

@@ -13,8 +13,13 @@
   min-height: 0;
   padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
 }
-.app-lab-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.app-lab-history > * + * { margin-top: 16px; }
+.app-lab-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; container-type: inline-size; }
+.experiment-history-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.experiment-history-list { min-height: 100%; }
+.experiment-history-list > * + * { margin-top: 16px; }
+.app-lab-history:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.experiment-history-jump { position: absolute; right: 12px; bottom: 8px; box-shadow: 0 2px 8px rgb(38 50 68 / 12%); }
+
 .experiment-empty-state { display: grid; min-height: 100%; place-items: center; padding: 8px; }
 .experiment-empty-state .ant-empty { margin: 0; }
 
@@ -222,3 +227,41 @@
     opacity: 1;
   }
 }
+
+.experiment-history-loading { padding: 12px; color: var(--app-muted); font-size: 13px; }
+.experiment-message {
+  width: fit-content;
+  max-width: min(100%, 80ch);
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.experiment-message-user { margin-inline-start: auto; }
+.experiment-message-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-block-end: 4px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.experiment-message-user .experiment-message-header { justify-content: flex-end; }
+.experiment-message-body {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: white;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.experiment-message-body:empty { display: none; }
+.experiment-message-user .experiment-message-body { background: var(--app-selected); }
+.experiment-message-footer { display: flex; justify-content: flex-end; margin-block-start: 4px; }
+.experiment-task-status,
+.experiment-task-read-state { display: inline-flex; align-items: center; gap: 4px; }
+.experiment-task-status { padding: 2px 6px; border-radius: 6px; background: #eef1f5; }
+.experiment-task-status-active { color: var(--app-accent); background: var(--app-selected); }
+.experiment-task-status-success { color: #18734f; background: #e8f6ee; }
+.experiment-task-status-error { color: #ad2838; background: #ffedf0; }
+.experiment-task-read-state .ant-btn { height: auto; padding: 0 4px; font-size: 12px; }
+.experiment-result-error { color: #ad2838; }
