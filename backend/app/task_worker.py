@@ -22,7 +22,7 @@ from sqlalchemy import func, or_, select
 from app.core.db import async_session_maker, close_db
 from app.core.dev_runtime import process_identity
 from app.core.integrations.media_provider import MediaProvider, ProviderDataError
-from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization, StoryboardReviewReport
+from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardOrganization, StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
@@ -34,6 +34,7 @@ from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
 from app.services.directing.storyboard_repair import apply_repair, merge_recheck, repair_fields, repair_storyboard
 from app.services.directing.storyboard_review import review_storyboard
+from app.services.directing.storyboard_review_basis import canvas_review_evidence, canvas_review_fingerprint
 from app.services.directing.existing_storyboard_check import (
     STORYBOARD_CHECK_KIND, patch_saved_design, saved_repair_fields, saved_review_inputs,
 )
@@ -434,15 +435,18 @@ class TaskWorker:
                 return
         review = (StoryboardReviewReport.model_validate(targeted['report']) if targeted and not repair
                   else await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint))
-        if not repair and review.state == 'conflict' and args['mode'] == 'complete':
+        if (not repair and review.state == 'conflict' and args['mode'] == 'complete'
+                and (targeted or not task.input_snapshot.get('review_exact_plan'))):
             selected = StoryboardReviewReport.model_validate({'issues': [targeted['issue']]}) if targeted else review
             checkpoint, review = await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review, selected)
             if checkpoint is None:
                 return
         async with self.sessions() as db:
             candidate = {key: checkpoint[key] for key in ('base_revision', 'document')}
-            if review.state == 'conflict':
+            if review.state == 'conflict' or task.input_snapshot.get('reextract_canvas_id'):
                 candidate.update({key: checkpoint[key] for key in ('review_draft', 'review_production')})
+            if 'reviewed_plan_fingerprint' in checkpoint:
+                candidate['reviewed_plan_fingerprint'] = checkpoint['reviewed_plan_fingerprint']
             await TaskService(db).finish(task.id, result={**candidate, 'review_state': review.state,
                 'review': review.model_dump(mode='json')})
             await db.commit()
@@ -520,8 +524,15 @@ class TaskWorker:
         """Verify the exact draft against shared canvas rules before its next model call."""
         from app.services.directing.scene_storyboard import SceneStoryboardService
 
+        service = SceneStoryboardService(db, task.project_id)
         try:
-            candidate = await SceneStoryboardService(db, task.project_id).complete_storyboard(task, generated)
+            candidate = await service.complete_storyboard(task, generated)
+            saved = task.input_snapshot.get('review_current_document')
+            planned = None
+            if saved:
+                planned, _ = await service.plan_extraction(task, CanvasDocument.model_validate(saved), candidate.document,
+                    StoryboardApplication(expected_revision=candidate.base_revision,
+                        overwrite_card_ids=task.input_snapshot.get('review_overwrite_card_ids', [])))
         except (HTTPException, ValueError) as error:
             detail = getattr(error, 'detail', None)
             message = detail.get('message') if isinstance(detail, dict) else detail
@@ -529,6 +540,8 @@ class TaskWorker:
         production = [{'id': shot.id, 'segments': [row.model_dump(mode='json') for row in segments]}
                       for shot in generated.shots if (segments := generated.production_segments(shot.id))]
         return {**candidate.model_dump(mode='json'), 'review_state': 'pending',
+                **({'effective_canvas': canvas_review_evidence(planned),
+                    'reviewed_plan_fingerprint': canvas_review_fingerprint(planned)} if planned else {}),
                 'review_draft': generated.model_dump(mode='json'), 'review_production': production, 'review_repair': repair}
 
     @staticmethod
@@ -545,20 +558,25 @@ class TaskWorker:
     def _storyboard_review_inputs(task, checkpoint):
         args = task.input_snapshot['run_args']
         return {'script_text': args['script_text'], 'mode': args['mode'],
-            'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
-            'storyboard_draft': checkpoint['review_draft']}
+                'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
+                **({'effective_canvas': checkpoint['effective_canvas']} if 'effective_canvas' in checkpoint else {}),
+                'storyboard_draft': checkpoint['review_draft']}
 
     async def _review_storyboard_checkpoint(self, task, llm, stopped, checkpoint):
         """Review a draft or resume rechecking without reopening its repair budget."""
         inputs = self._storyboard_review_inputs(task, checkpoint)
         repair = checkpoint.get('review_repair')
         if repair:
-            inputs['recheck_shot_ids'] = repair['recheck_shot_ids']
+            scope = repair['recheck_shot_ids']
+            if scope and 'effective_canvas' in inputs:
+                # Kept manual dependencies can carry a change across the raw draft's shot scopes.
+                scope = [shot['id'] for shot in inputs['effective_canvas']['shots']]
+            inputs['recheck_shot_ids'] = scope
         stopped.clear()
         review = await self._run_script(task, llm, inputs, stopped, execute=review_storyboard)
         if repair:
             previous = StoryboardReviewReport.model_validate(repair['report'])
-            review = merge_recheck(previous, review, repair['recheck_shot_ids'])
+            review = merge_recheck(previous, review, inputs['recheck_shot_ids'])
         return review
 
     @staticmethod

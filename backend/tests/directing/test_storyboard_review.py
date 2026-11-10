@@ -161,7 +161,10 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                     raise httpx.ReadTimeout('controlled recheck failure')
                 result = conflicts if outcome == 'still_conflict' and len(repairs) == 1 else {'issues': []}
             elif 'storyboard_draft' in args:
-                result = conflicts if review_enabled else {'issues': []}
+                effective = args.get('effective_canvas', {}).get('cards', [])
+                manual_conflict = any(card['type'] == 'direction.continuity' and card['change']['text'] == manual
+                                      for card in effective)
+                result = conflicts if review_enabled and (outcome != 'manual_protected' or manual_conflict) else {'issues': []}
             else:
                 result = draft
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
@@ -250,6 +253,21 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 card = next(item for item in repaired['candidate']['document']['cards'] if item['type'] == 'direction.continuity')
                 assert card['change']['text'] == '保留车旁站位，镜头停稳'
                 assert await read_data(client, 'GET', canvas_path) == before
+            if outcome == 'manual_protected':
+                task_path = path + '/' + task['task_id']
+                choice = {'expected_revision': before['revision'], 'overwrite_card_ids': [continuity['id']]}
+                preview = await read_data(client, 'POST', task_path + '/diff', choice)
+                assert preview['continuity_review']['stale']
+                rejected = await client.post(task_path + '/apply', json=choice)
+                assert rejected.status_code == 409 and rejected.json()['data']['code'] == 'STORYBOARD_REVIEW_STALE'
+                recheck = await read_data(client, 'POST', task_path + '/retry',
+                                          {'request_id': 'review-overwrite', 'review_plan': choice})
+                checked = await complete(recheck)
+                assert checked['review_state'] == 'passed' and checked['pending_application']
+                checked_path = path + '/' + checked['task_id']
+                preserved = await read_data(client, 'POST', checked_path + '/diff', {'expected_revision': before['revision']})
+                assert preserved['continuity_review']['stale']
+                assert not (await read_data(client, 'POST', checked_path + '/diff', choice))['continuity_review']['stale']
         finally:
             worker.text_pool.shutdown(wait=False)
 

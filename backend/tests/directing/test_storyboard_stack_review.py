@@ -100,6 +100,10 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
         diff = await data(await client.post(application + '/diff', json=choice))
         assert diff['automatic_stacks'] == [{'id': automatic['id'], 'name': automatic['name']}]
         assert diff['manual_stacks'] == [{'id': manual['id'], 'name': manual['name']}]
+        assert diff['continuity_review']['stale']
+        reviewed = await complete(path, await data(await client.post(application + '/retry',
+            json={'request_id': 'review-overwrite', 'review_plan': choice})))
+        application = f"{path}/{reviewed['task_id']}"
         confirmed = {'confirmed_auto_stack_ids': [automatic['id']]}
         blocked = await client.post(application + '/apply', json={**choice, **confirmed})
         assert blocked.status_code == 422 and blocked.json()['data']['code'] == 'STACK_READ_ONLY', blocked.text

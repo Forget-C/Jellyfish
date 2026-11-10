@@ -1,10 +1,68 @@
 """Real video frames prepared and saved through the public canvas API."""
+import asyncio
 import subprocess
 
 import pytest
 
 from app.core import storage
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['tail', 'retry', 'replace_source'])
+async def test_fractional_tail_and_publication_after_storage_io(canvas_client, tmp_path, monkeypatch, action):
+    uploading, resume = asyncio.Event(), asyncio.Event()
+    frame_uploads = []
+
+    async def upload(*, key, data, **_kwargs):
+        if key.endswith('.png'):
+            frame_uploads.append(key)
+            if len(frame_uploads) == 1 and action != 'tail':
+                uploading.set()
+                await resume.wait()
+        (tmp_path / key.rsplit('/', 1)[-1]).write_bytes(data.read())
+
+    async def download(*, key):
+        return (tmp_path / key.rsplit('/', 1)[-1]).read_bytes()
+
+    monkeypatch.setattr(storage, 'upload_file', upload)
+    monkeypatch.setattr(storage, 'download_file', download)
+    video = tmp_path / 'fractional.mp4'
+    subprocess.run(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=red:s=32x24:r=23',
+        '-frames:v', '1', '-c:v', 'libx264', '-movie_timescale', '23000', '-movflags', '+faststart', str(video)], check=True)
+    client = canvas_client
+    uploaded = await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
+        files={'file': ('clip.mp4', video.read_bytes(), 'video/mp4')})
+    assert uploaded.status_code == 201, uploaded.text
+    file_id = uploaded.json()['data']['id']
+    canvas = (await client.post('/canvases/p', json={'name': '选帧'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = {**canvas['document'], 'cards': [{'id': 'clip', 'type': 'content.video', 'file_id': file_id}]}
+    assert (await client.put(url, json={'request_id': 'clip', 'expected_revision': 0, 'document': document})).status_code == 200
+    request = {'request_id': 'select-frame', 'source_card_id': 'clip', 'source_file_id': file_id, 'at_ms': 43 if action == 'tail' else 0}
+    operation = asyncio.create_task(client.post(url + '/video-frames', json=request))
+    try:
+        if action == 'retry':
+            await asyncio.wait_for(uploading.wait(), 5)
+            replay = await asyncio.wait_for(client.post(url + '/video-frames', json=request), 3)
+            assert replay.status_code == 200, replay.text
+        elif action == 'replace_source':
+            await asyncio.wait_for(uploading.wait(), 5)
+            removed = await asyncio.wait_for(client.put(url, json={'request_id': 'remove-source',
+                'expected_revision': 1, 'document': {**document, 'cards': []}}), 3)
+            assert removed.status_code == 200, removed.text
+    finally:
+        resume.set()
+        result = await operation
+    if action == 'replace_source':
+        assert result.status_code == 422 and result.json()['detail']['code'] == 'INVALID_FRAME_SOURCE'
+    else:
+        assert result.status_code == 200, result.text
+        if action == 'retry':
+            assert result.json()['data'] == replay.json()['data'] and len(set(frame_uploads)) == 1
+        else:
+            invalid = await client.post(url + '/video-frames', json={**request, 'at_ms': 44})
+            assert invalid.status_code == 422, invalid.text
 
 
 @pytest.mark.asyncio

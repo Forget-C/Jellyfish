@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { StoryboardPlanReview } from './StoryboardPlanReview';
 import type { StoryboardTargetedRepair } from './StoryboardTargetedRepair';
 /**
  * 使用失败任务的原配置，在同一目标上提交新的文本任务。
@@ -11,4 +12,5 @@ export type StoryboardRetry = {
     basis_token?: (string | null);
     use_saved_objects?: boolean;
     targeted_repair?: (StoryboardTargetedRepair | null);
+    review_plan?: (StoryboardPlanReview | null);
 };

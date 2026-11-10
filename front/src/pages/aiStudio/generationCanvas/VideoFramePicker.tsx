@@ -3,6 +3,9 @@ import { Alert } from 'antd'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { buildFileDownloadUrl } from '../assets/utils'
 
+// The duration is an exclusive upper bound. Match the video's microsecond timestamp precision.
+const durationBoundMs = (seconds: number) => Math.ceil(Math.round(seconds * 1_000_000) / 1000)
+
 /** 仅预览并选定时间，调用方决定何时提取及如何采用。按文件身份重建。 */
 export function VideoFramePicker({ fileId, disabled, onPosition, onUseTail }: {
   fileId: string
@@ -16,7 +19,7 @@ export function VideoFramePicker({ fileId, disabled, onPosition, onUseTail }: {
   const [error, setError] = useState(false)
   useEffect(() => { if (disabled) video.current?.pause() }, [disabled])
   const update = (element: HTMLVideoElement) => {
-    const atMs = Math.min(Math.max(0, Math.ceil(element.duration * 1000) - 1), Math.round(element.currentTime * 1000))
+    const atMs = Math.min(Math.max(0, durationBoundMs(element.duration) - 1), Math.round(element.currentTime * 1000))
     if (Number.isFinite(atMs)) { setPosition(atMs); onPosition(atMs) }
   }
   const seek = (atMs: number) => {
@@ -27,7 +30,7 @@ export function VideoFramePicker({ fileId, disabled, onPosition, onUseTail }: {
     <video ref={video} aria-label="待选帧视频" controls={!disabled} playsInline preload="auto" src={buildFileDownloadUrl(fileId)}
       onLoadedMetadata={event => {
         const seconds = event.currentTarget.duration
-        if (Number.isFinite(seconds) && seconds > 0) { setDuration(Math.ceil(seconds * 1000)); update(event.currentTarget) }
+        if (Number.isFinite(seconds) && seconds > 0) { setDuration(durationBoundMs(seconds)); update(event.currentTarget) }
       }} onTimeUpdate={event => { if (!event.currentTarget.seeking) update(event.currentTarget) }}
       onSeeked={event => update(event.currentTarget)}
       onError={() => { setError(true); onPosition(undefined) }} style={{ display: 'block', width: '100%', maxHeight: 320 }} />

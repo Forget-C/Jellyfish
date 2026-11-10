@@ -246,6 +246,7 @@ export function GenerationCanvasWorkspace({
     {candidateTask && candidateTask === reviewTask && chapterId && sequenceId && current?.document.storyboard?.task_id !== candidateTask &&
       <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
         report={discovered?.result?.review} candidate={candidate} onRepaired={receiveRepair}
+        reviewedOverwrite={discovered?.result?.reviewed_overwrite_card_ids}
         prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
         apply={async choice => {
           const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: candidateTask }, choice)

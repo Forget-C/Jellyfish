@@ -163,6 +163,10 @@ class SceneStoryboardService(SceneObjectService):
         """保留原配置与画布身份，仍按当前画布基线组织差异。"""
         await self._scene(chapter_id, sequence_id)
         failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        if body.review_plan:
+            if body.targeted_repair or body.use_saved_objects or body.basis_token:
+                raise ValueError('请单独提交本次画布方案的审查选择')
+            return await self._review_changed_plan(chapter_id, sequence_id, failed, body)
         if body.targeted_repair:
             return await self._targeted_repair(chapter_id, sequence_id, failed, body)
         if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
@@ -279,18 +283,40 @@ class SceneStoryboardService(SceneObjectService):
         return await self._submit_review_resume(sequence_id, task, body, task.id, 'repairing_storyboard',
             {'issue': selected.issue.model_dump(mode='json'), 'report': task.result['review']})
 
+    async def _review_changed_plan(self, chapter_id: str, sequence_id: str, task: Task, body: StoryboardRetry) -> StoryboardTaskRead:
+        """Review a different merge of the retained draft without running extraction again."""
+        sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
+        existing = await self.db.scalar(self._scene_tasks(sequence_id, task.kind).where(
+            Task.input_snapshot['storyboard_request']['request_id'].as_string() == body.request_id))
+        if existing:
+            if existing.retry_of_task_id != task.id or existing.input_snapshot.get('review_retry_request') != body.model_dump(mode='json'):
+                raise RevisionConflict('分镜请求身份已用于另一份内容')
+            return await self._storyboard_read(existing)
+        if not (sequence.is_current and task.status == TaskStatus.succeeded and task.input_snapshot.get('reextract_canvas_id')
+                and (task.result or {}).get('review_draft')):
+            raise RevisionConflict('此分镜草案不能重新审查合并方案，请重新提取分镜')
+        canvas = await CanvasStore(self.db, self.project_id).get(task.input_snapshot['canvas_id'], lock=True)
+        await self._ensure_no_active_storyboard(sequence_id, canvas.id)
+        diff = await self.apply_storyboard(chapter_id, sequence_id, task.id,
+            StoryboardApplication(**body.review_plan.model_dump()), preview=True)
+        if not diff.continuity_review or not diff.continuity_review.can_review_plan:
+            raise RevisionConflict('当前分镜方案已审查，请核对已有结果')
+        return await self._submit_review_resume(sequence_id, task, body, task.id, 'reviewing_storyboard',
+            review_plan={'review_current_document': canvas.document, 'review_overwrite_card_ids': body.review_plan.overwrite_card_ids,
+                         'review_exact_plan': True})
+
     async def _submit_review_resume(self, sequence_id: str, source: Task, body: StoryboardRetry, source_id: str,
-                                    stage: str, repair: dict | None = None) -> StoryboardTaskRead:
+                                    stage: str, repair: dict | None = None, *, review_plan: dict | None = None) -> StoryboardTaskRead:
         snapshot = source.input_snapshot
         files = sorted({item['image_file_id'] for item in snapshot['run_args']['objects'] if item.get('image_file_id')})
         task = await TaskService(self.db).submit(kind=source.kind, title='重试分镜审查',
             target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id,
             provider_id=source.provider_id, retry_of_task_id=source.id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
-            snapshot={**snapshot, 'scene_admission_order': await self._next_scene_task_order(sequence_id),
+            snapshot={**snapshot, **(review_plan or {}), 'scene_admission_order': await self._next_scene_task_order(sequence_id),
                 'storyboard_request': {**snapshot['storyboard_request'], 'request_id': body.request_id},
                 'review_retry_request': body.model_dump(mode='json'), 'review_retry_from': source_id, 'review_retry_stage': stage,
-                'review_targeted_repair': repair or snapshot.get('review_targeted_repair')})
+                'review_targeted_repair': None if review_plan else repair or snapshot.get('review_targeted_repair')})
         return await self._storyboard_read(task)
 
     async def _ensure_no_active_storyboard(self, sequence_id: str, canvas_id: str) -> None:
@@ -394,7 +420,8 @@ class SceneStoryboardService(SceneObjectService):
             snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
                       'provider_key': config.provider_key, 'run_args': args,
-                      'review_protected_designs': sorted(protected), 'review_basis': review_basis})
+                      'review_protected_designs': sorted(protected), 'review_basis': review_basis,
+                      **({'review_current_document': current} if canvas_id else {})})
         return await self._storyboard_read(task)
 
     @staticmethod
@@ -559,15 +586,10 @@ class SceneStoryboardService(SceneObjectService):
                 raise RevisionConflict('提取后原文范围再次变动，请重新提取')
         elif current.fixed_source != candidate.document.fixed_source:
             raise RevisionConflict('固定原文已更新，请重新提取')
-        previous = await self.db.get(Task, current.storyboard.task_id) if current.storyboard else None
-        prior = None
-        if previous and previous.kind == STORYBOARD_KIND and previous.target_id == sequence_id and previous.project_id == self.project_id and previous.status == TaskStatus.succeeded:
-            prior = StoryboardCandidate.from_task_result(previous.result).document
-        capability = task.input_snapshot['run_args'].get('production_capability')
         if task.kind == STORYBOARD_CHECK_KIND:
             document, diff = self._plan_saved_check(task, current, body)
         else:
-            document, diff = plan_application(current, candidate.document, body, prior=prior, production_capability=capability)
+            document, diff = await self.plan_extraction(task, current, candidate.document, body)
         diff.automatic_stacks, diff.manual_stacks = review_stack_changes(current, document)
         continuity = await self._continuity_diff(task, current, document)
         diff.continuity_review = continuity
@@ -592,6 +614,16 @@ class SceneStoryboardService(SceneObjectService):
             scene_sources=fixed_source_state(document),
             source_history={'before': self._history_state(current), 'after': self._history_state(document)},
             accepted_risks=risks if task.kind == STORYBOARD_CHECK_KIND else risks or None)
+
+    async def plan_extraction(self, task: Task, current: CanvasDocument, candidate: CanvasDocument,
+                              body: StoryboardApplication) -> tuple[CanvasDocument, StoryboardDiff]:
+        """Use identical preservation and adoption rules for review and application."""
+        previous = await self.db.get(Task, current.storyboard.task_id) if current.storyboard else None
+        prior = None
+        if previous and previous.kind == STORYBOARD_KIND and previous.target_id == task.target_id and previous.project_id == self.project_id and previous.status == TaskStatus.succeeded:
+            prior = StoryboardCandidate.from_task_result(previous.result).document
+        return plan_application(current, candidate, body, prior=prior,
+                                production_capability=task.input_snapshot['run_args'].get('production_capability'))
 
     @staticmethod
     def _plan_saved_check(task: Task, current: CanvasDocument, body: StoryboardApplication) -> tuple[CanvasDocument, StoryboardDiff]:
@@ -623,6 +655,10 @@ class SceneStoryboardService(SceneObjectService):
         stale = bool(basis and (
             any(basis['shots'].get(shot, basis['shared']) != latest['shots'].get(shot, latest['shared']) for shot in relevant)
             if relevant and task.kind != STORYBOARD_CHECK_KIND else basis['all'] != latest['all']))
+        planned_fingerprint = canvas_review_fingerprint(planned)
+        reextract = task.kind == STORYBOARD_KIND and bool(task.input_snapshot.get('reextract_canvas_id'))
+        if reextract:
+            stale = result.get('reviewed_plan_fingerprint') != planned_fingerprint
         active, _ = await self._applied_risks(current)
         draft = SceneStoryboard.model_validate(result['review_draft']) if result.get('review_draft') else None
         protected = {origin.semantic_key for origin in current.storyboard.origins.values()
@@ -638,9 +674,10 @@ class SceneStoryboardService(SceneObjectService):
                         else draft and task.input_snapshot['run_args']['mode'] == 'complete' and repair_fields(
                             draft, issue_report, protected))
             choices[key] = StoryboardConflictChoice(id=key, issue=issue, previously_accepted=key in active, can_repair=bool(eligible))
-        token = evidence_digest({'task': task.id, 'current': latest['all'], 'planned': canvas_review_fingerprint(planned),
+        token = evidence_digest({'task': task.id, 'current': latest['all'], 'planned': planned_fingerprint,
                                  'choices': sorted(choices)})
-        return StoryboardContinuityDiff(token=token, stale=stale, conflicts=list(choices.values()))
+        return StoryboardContinuityDiff(token=token, stale=stale, conflicts=list(choices.values()),
+                                       can_review_plan=reextract and stale and bool(draft))
 
     async def _applied_risks(self, document: CanvasDocument) -> tuple[set[str], bool]:
         """Read trusted application evidence, never client-supplied acceptance flags."""
@@ -745,7 +782,8 @@ class SceneStoryboardService(SceneObjectService):
             elif summary['review_state'] is None:
                 summary['review_state'] = review_state(task.status, 'pending')
         return StoryboardTaskRead(**summary, candidate=candidate, pending_application=pending,
-            review=(task.result or {}).get('review'), accepted_conflict_ids=sorted(accepted), saved_check=saved_check)
+            review=(task.result or {}).get('review'), accepted_conflict_ids=sorted(accepted), saved_check=saved_check,
+            reviewed_overwrite_card_ids=task.input_snapshot.get('review_overwrite_card_ids', []))
 
     async def complete_storyboard(self, task: Task, result: SceneStoryboard) -> StoryboardCandidate:
         """在冻结基线上校验真实共同文档，迟到结果仍可作为待应用候选。"""

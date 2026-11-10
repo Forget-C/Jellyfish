@@ -6,8 +6,8 @@
  * Explicitly request a new attempt for one reviewed conflict.
  */
 export type StoryboardTargetedRepair = {
-    conflict_id: string;
     expected_revision: number;
-    review_token: string;
     overwrite_card_ids?: Array<string>;
+    conflict_id: string;
+    review_token: string;
 };

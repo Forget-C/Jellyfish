@@ -759,6 +759,7 @@ export type { StoryboardContinuityDiff } from './models/StoryboardContinuityDiff
 export type { StoryboardDiff } from './models/StoryboardDiff';
 export type { StoryboardDiffCard } from './models/StoryboardDiffCard';
 export type { StoryboardDiffStack } from './models/StoryboardDiffStack';
+export type { StoryboardPlanReview } from './models/StoryboardPlanReview';
 export type { StoryboardReextractRequest } from './models/StoryboardReextractRequest';
 export type { StoryboardRepairTarget } from './models/StoryboardRepairTarget';
 export type { StoryboardRequest } from './models/StoryboardRequest';

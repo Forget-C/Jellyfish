@@ -47,6 +47,10 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         instruction += ('本次检查已保存画布，repair_targets.design_id 必须是 cards 中的实际卡片 ID，'
                         '包括镜头卡自身。shot_id 使用 shots 中的逻辑 id，共享设计留空。'
                         '核对当前已采用关系和已编辑字段，不得按原提取假设覆盖。')
+    if inputs.get('effective_canvas'):
+        instruction += ('本次是重新提取。以 effective_canvas 的合并结果及实际采用关系为审查依据，'
+                        '其中包含保留的人工设计。storyboard_draft 只用于镜头、设计和字段的逻辑身份索引。'
+                        '若合并内容与草案不同，以合并内容为准，禁止将保留的人工设计列为定向修正目标。')
     report = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction, '分镜审查返回无效，请重试审查')
     known = {shot['id'] for shot in inputs['storyboard_draft']['shots']}
     if any(len(set(issue.shot_ids)) != len(issue.shot_ids) or not set(issue.shot_ids) <= known for issue in report.issues):

@@ -40,12 +40,13 @@ export function StoryboardReviewFindings({ report, candidate, action }: {
 }
 
 /** Compare the saved revision and exact overwrite selection before applying. */
-export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, savedCheck }: {
+export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, savedCheck, reviewedOverwrite }: {
   scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<StoryboardReviewPreparation | undefined>;
   reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
   report?: StoryboardReviewReport | null; candidate?: StoryboardCandidate | null;
   onRepaired: (result: StoryboardTaskRead) => void;
   savedCheck?: boolean;
+  reviewedOverwrite?: string[];
 }) {
   const [baseline, setBaseline] = useState<number>()
   const [opening, setOpening] = useState(false)
@@ -77,7 +78,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       close()
     } else if (prepared && (!refresh || await reload())) {
       if (refresh) setReview(undefined)
-      setBaseline(refresh ? (await prepare())?.revision : prepared.revision); setSelected([]); setAccepted([])
+      setBaseline(refresh ? (await prepare())?.revision : prepared.revision); setSelected(reviewedOverwrite ?? []); setAccepted([])
     } else setError('请先解决画布保存问题，再核对提取差异。')
     setOpening(false)
   }
@@ -107,7 +108,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
           onRepaired(result)
         } else if (result.status === 'failed' || result.status === 'cancelled') {
           setRepairTask(undefined)
-          setError(result.error || '定向修正未完成，请在工作台管理中查看任务。')
+          setError(result.error || '分镜审查未完成，请在工作台管理中查看任务。')
         } else if (result.stage !== repairTask.stage) {
           setRepairTask(result)
         }
@@ -117,17 +118,11 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [repairTask, projectId, chapterId, sequenceId, onRepaired])
 
-  const repair = async (conflict: StoryboardConflictChoice) => {
-    if (busy || !ready || !review || !continuity || continuity.stale) return
-    const intent = repairIntent ?? { request_id: crypto.randomUUID(), targeted_repair: {
-      conflict_id: conflict.id, review_token: continuity.token, expected_revision: review.choice.expected_revision,
-      overwrite_card_ids: review.choice.overwrite_card_ids,
-    } }
-    if (intent.targeted_repair?.conflict_id !== conflict.id) return
+  const submitReview = async (intent: StoryboardRetry) => {
     setRepairing(true); setRepairIntent(intent); setError('')
     try {
       const response = await Directing.directingStoryboardRetry({ projectId, chapterId, sequenceId, taskId, requestBody: intent })
-      if (!response.data) throw new Error('定向修正提交待核实')
+      if (!response.data) throw new Error('审查提交待核实')
       setRepairTask(response.data); setRepairIntent(undefined)
     } catch (cause) {
       setError(directingError(cause))
@@ -135,6 +130,19 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
         setRepairIntent(undefined)
       }
     } finally { setRepairing(false) }
+  }
+  const repair = (conflict: StoryboardConflictChoice) => {
+    if (busy || !ready || !review || !continuity || continuity.stale) return
+    const intent = repairIntent ?? { request_id: crypto.randomUUID(), targeted_repair: {
+      conflict_id: conflict.id, review_token: continuity.token, expected_revision: review.choice.expected_revision,
+      overwrite_card_ids: review.choice.overwrite_card_ids,
+    } }
+    if (intent.targeted_repair?.conflict_id === conflict.id) void submitReview(intent)
+  }
+  const recheckPlan = () => {
+    if (busy || !ready || !review || !continuity?.can_review_plan) return
+    const intent = repairIntent ?? { request_id: crypto.randomUUID(), review_plan: review.choice }
+    if (intent.review_plan) void submitReview(intent)
   }
   const applyReview = async () => {
     if (!review || busy || repairIntent || !ready || manualStacks.length || blocked) return
@@ -167,9 +175,11 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       {error && <Alert type="warning" showIcon message={saveError || error} action={<Button disabled={applying} loading={opening}
         onClick={() => void open(true)}>核对最新画布</Button>} />}
       {!diff && !error && <Spin aria-label="正在核对差异" />}
-      {continuity?.stale && <Alert type="warning" showIcon message="相关分镜内容已变化，请重新审查。" />}
-      {repairTask && <p role="status">{repairTask.stage === 'rechecking_storyboard'
-        ? '正在复核分镜连续性' : '正在定向修正分镜'}</p>}
+      {continuity?.stale && <Alert type="warning" showIcon message="相关分镜内容已变化，请重新审查。"
+        action={continuity.can_review_plan && <Button disabled={!editable || !ready || busy || !!repairIntent?.targeted_repair}
+          onClick={recheckPlan}>{repairIntent?.review_plan ? '核实方案审查' : '审查当前方案'}</Button>} />}
+      {repairTask && <p role="status">{repairTask.stage === 'repairing_storyboard'
+        ? '正在定向修正分镜' : '正在复核分镜连续性'}</p>}
       {!!report?.issues.length && <Alert type={hasConflicts ? 'error' : 'warning'} showIcon
         message={hasConflicts ? '设计冲突待处理' : '部分连续性依据不足'}
         description={<StoryboardReviewFindings report={report} candidate={candidate} action={issue => {

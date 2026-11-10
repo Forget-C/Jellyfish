@@ -2,19 +2,25 @@
 
 import json
 import subprocess
+from decimal import Decimal, InvalidOperation
+from math import ceil
 
 
-def probe_duration(file) -> int:
-    """ffprobe 只读取本地临时文件，禁用外部协议并限制执行时间。"""
+def probe_duration(file, *, exclusive_end: bool = False) -> int:
+    """测量本地视频时长，选帧使用向上取整的毫秒排他上界。"""
     file.seek(0)
     result = subprocess.run(["ffprobe", "-v", "error", "-protocol_whitelist", "pipe,file",
                              "-show_entries", "format=duration", "-of", "json", "pipe:0"],
                             stdin=file, capture_output=True, timeout=30, check=True)
-    duration = float(json.loads(result.stdout)["format"]["duration"])
-    if not 0 < duration < 86400:
+    try:
+        duration = Decimal(json.loads(result.stdout)["format"]["duration"])
+    except InvalidOperation as error:
+        raise ValueError("视频时长无效") from error
+    if not duration.is_finite() or not 0 < duration < 86400:
         raise ValueError("视频时长无效")
     file.seek(0)
-    return round(duration * 1000)
+    milliseconds = duration * 1000
+    return ceil(milliseconds) if exclusive_end else round(milliseconds)
 
 
 def extract_frame(content: bytes, at_ms: int, *, thumbnail: bool = False) -> bytes:
@@ -41,7 +47,6 @@ def extract_frame(content: bytes, at_ms: int, *, thumbnail: bool = False) -> byt
 def extract_boundary_frame(content: bytes, source_in_ms: int, source_out_ms: int, edge: str) -> tuple[bytes, int]:
     """按实际解码帧时间选择区间内第一/最后一帧，避免落幅越界或视频末尾取不到帧。"""
     import tempfile
-    from decimal import Decimal
 
     try:
         with tempfile.NamedTemporaryFile(suffix='.video') as file:

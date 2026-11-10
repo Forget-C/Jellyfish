@@ -22,4 +22,5 @@ export type StoryboardTaskRead = {
     review?: (StoryboardReviewReport | null);
     accepted_conflict_ids?: Array<string>;
     saved_check?: boolean;
+    reviewed_overwrite_card_ids?: Array<string>;
 };

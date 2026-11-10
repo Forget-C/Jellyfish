@@ -9,5 +9,6 @@ import type { StoryboardConflictChoice } from './StoryboardConflictChoice';
 export type StoryboardContinuityDiff = {
     token: string;
     stale?: boolean;
+    can_review_plan?: boolean;
     conflicts?: Array<StoryboardConflictChoice>;
 };

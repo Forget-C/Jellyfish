@@ -257,6 +257,7 @@ class StoryboardTaskRead(StoryboardTaskSummary):
     review: StoryboardReviewReport | None = None
     accepted_conflict_ids: list[Identity] = Field(default_factory=list)
     saved_check: bool = False
+    reviewed_overwrite_card_ids: list[Identity] = Field(default_factory=list)
 
 
 class StoryboardCheckRequest(Contract):
@@ -266,13 +267,18 @@ class StoryboardCheckRequest(Contract):
     expected_revision: int = Field(ge=0)
 
 
-class StoryboardTargetedRepair(Contract):
+class StoryboardPlanReview(Contract):
+    """Select the exact saved canvas and overwrite choice to review."""
+
+    expected_revision: int = Field(ge=0)
+    overwrite_card_ids: list[Identity] = Field(default_factory=list, max_length=2000)
+
+
+class StoryboardTargetedRepair(StoryboardPlanReview):
     """Explicitly request a new attempt for one reviewed conflict."""
 
     conflict_id: Identity
-    expected_revision: int = Field(ge=0)
     review_token: str = Field(min_length=64, max_length=64)
-    overwrite_card_ids: list[Identity] = Field(default_factory=list, max_length=2000)
 
 
 class StoryboardRetry(Contract):
@@ -282,6 +288,7 @@ class StoryboardRetry(Contract):
     basis_token: str | None = Field(default=None, min_length=64, max_length=64)
     use_saved_objects: bool = False
     targeted_repair: StoryboardTargetedRepair | None = Field(default=None, exclude_if=lambda value: value is None)
+    review_plan: StoryboardPlanReview | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class StoryboardRetryBasis(Contract):
@@ -340,6 +347,7 @@ class StoryboardContinuityDiff(Contract):
 
     token: str
     stale: bool = False
+    can_review_plan: bool = False
     conflicts: list[StoryboardConflictChoice] = Field(default_factory=list)
 
 
