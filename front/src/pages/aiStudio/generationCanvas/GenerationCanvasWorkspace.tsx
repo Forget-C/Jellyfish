@@ -5,7 +5,7 @@ import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
-import { GenerationCanvasGraph } from './GenerationCanvasGraph'
+import { GenerationCanvasGraph, type CanvasModelCardActionContext } from './GenerationCanvasGraph'
 import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
@@ -57,6 +57,7 @@ interface GenerationCanvasWorkspaceProps {
   back: { label: string; onClick: () => void }
   renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
   renderSceneActions?: (context: CanvasManagementContext & { document?: CanvasDocument }) => ReactNode
+  renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode
   storyboardTaskId?: string | null
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
@@ -70,7 +71,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, storyboardTaskId, onCanvasRead, hostError, hostErrorAction,
+  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, storyboardTaskId, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
@@ -231,6 +232,7 @@ export function GenerationCanvasWorkspace({
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
+        renderModelCardAction={renderModelCardAction}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </div>}

@@ -88,8 +88,17 @@ const connectionPointAt = (x: number, y: number) => window.document.elementFromP
 const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) => Object.fromEntries(nodes.map((node, index) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
+/** 宿主可为模型卡提供卡面操作，运行继续由共同预检处理。 */
+export interface CanvasModelCardActionContext {
+  card: GenerationCard
+  document: CanvasDocument
+  disabled: boolean
+  checking: boolean
+  precheck: () => void
+}
+
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy }: { layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction }: { layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
@@ -1573,6 +1582,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
+          const precheckDisabled = readonly || !runtime || runtime.disabled || runtime.busyCards.has(card.id)
           const visualDesign = isReferenceDesign(card)
           const issues = (diagnostics || []).filter(issue => issue.target.card_id === card.id)
           const hasNameIssue = issues.some(issue => Array.isArray(issue.target.path) && issue.target.path.length === 1 && issue.target.path[0] === 'name')
@@ -1608,7 +1618,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
             {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
-            {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly} />}
+            {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly}
+              action={renderModelCardAction?.({ card, document, disabled: precheckDisabled, checking: runtime?.checking === card.id,
+                precheck: () => { if (!precheckDisabled) runtime?.precheck(card.id) } })} />}
           </CardShell>
           if (card.type !== 'review.check') return cardNode
           const observedTarget = edges.find(edge => edge.target_card === card.id && edge.target_port === 'check_basis')?.source_card

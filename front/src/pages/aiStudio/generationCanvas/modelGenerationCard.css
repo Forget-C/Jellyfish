@@ -17,3 +17,7 @@
 .generation-workbench .generation-card[data-card-type="model.image"]:is(:hover, :focus-within, [data-selected="true"]) { z-index: 3; }
 
 .generation-model-image-action { display: flex; align-items: center; flex: none; margin-left: auto; }
+
+.generation-model-card-action { display: flex; align-items: center; gap: 8px; min-width: 0; margin-inline-start: auto; white-space: nowrap; }
+.generation-model-card-action > span { overflow: hidden; text-overflow: ellipsis; }
+.generation-model-card-action > button { flex: none; }

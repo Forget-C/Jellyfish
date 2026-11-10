@@ -59,6 +59,16 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
+      renderModelCardAction={({ card, document, disabled, checking, precheck }) => {
+        if (card.type !== 'model.video') return null
+        const shot = document.storyboard?.shots.find(item => item.model_card_ids.includes(card.id))
+        if (!shot) return null
+        const shotCard = document.cards?.find(item => item.id === shot.card_id)
+        const name = shotCard && 'name' in shotCard && shotCard.name || '镜头'
+        const label = shot.model_card_ids.length > 1 ? `${name} · 片段 ${shot.model_card_ids.indexOf(card.id) + 1}` : name
+        return <><span title={label}>{label}</span>{'model_id' in card && card.model_id &&
+          <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={precheck}>生成视频</Button>}</>
+      }}
       renderSceneActions={({ current, document, editable, requestLeave }) => {
         if (!current || !document?.fixed_source) return null
         const basis = document.cards?.find(card => card.id === document.fixed_source?.card_id)
