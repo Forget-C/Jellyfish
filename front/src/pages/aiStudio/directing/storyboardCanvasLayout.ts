@@ -5,6 +5,16 @@ import type { GraphSize } from './graphLayout'
 
 const gap = 64
 const narrowWidth = 700
+type Frame = CanvasPoint & GraphSize
+
+function availableY(frame: Frame, occupied: Frame[], clearance = gap) {
+  let y = frame.y
+  for (const other of [...occupied].sort((a, b) => a.y - b.y)) {
+    if (frame.x < other.x + other.width + clearance && frame.x + frame.width + clearance > other.x &&
+        y < other.y + other.height + clearance && y + frame.height + clearance > other.y) y = other.y + other.height + gap
+  }
+  return y
+}
 
 const rowWidth = (row: string[], sizes: Record<string, GraphSize>) =>
   row.reduce((width, id) => width + sizes[id].width + gap, 0) - gap
@@ -30,7 +40,8 @@ function videoRows(shots: string[][], sizes: Record<string, GraphSize>, width: n
 function placeStoryboardAdditions(document: CanvasDocument, before: CanvasDocument): NonNullable<GenerationCanvasLayoutPolicy['placeAdditions']> {
   const previousIds = new Set(before.cards?.map(card => card.id))
   const storyboard = document.storyboard!
-  const videos = new Set(document.cards?.filter(card => card.type === 'model.video').map(card => card.id))
+  const modelIds = new Set(document.cards?.filter(card => card.type === 'model.video').map(card => card.id))
+  const videos = storyboard.shots.flatMap(shot => shot.model_card_ids).filter(id => modelIds.has(id))
   return (positions, retained, sizes, width) => {
     const added = new Set(Object.keys(storyboard.origins).filter(id => sizes[id] && !retained[id] && !previousIds.has(id)))
     if (!added.size) return positions
@@ -45,11 +56,7 @@ function placeStoryboardAdditions(document: CanvasDocument, before: CanvasDocume
       const height = Math.max(cover?.height || 0, ...ids.map(id => sizes[id].height))
       const firstWidth = Math.max(cover?.width || 0, sizes[ids[0]].width)
       const right = left + rowWidth(ids, sizes) + firstWidth - sizes[ids[0]].width
-      let y = top
-      for (const other of [...occupied].sort((a, b) => a.y - b.y)) {
-        if (left < other.x + other.width + gap && right + gap > other.x &&
-            y < other.y + other.height + gap && y + height + gap > other.y) y = other.y + other.height + gap
-      }
+      const y = availableY({ x: left, y: top, width: right - left, height }, occupied)
       let x = left
       ids.forEach((id, index) => {
         next[id] = { x, y }
@@ -60,19 +67,19 @@ function placeStoryboardAdditions(document: CanvasDocument, before: CanvasDocume
       return y + height + gap
     }
 
-    const knownVideos = [...videos].filter(id => retained[id])
+    const knownVideos = videos.filter(id => retained[id])
     const left = knownVideos.length ? retained[knownVideos[0]].x : 0
     let top = knownVideos.length ? Math.max(...knownVideos.map(id => retained[id].y + sizes[id].height)) + gap : 0
-    const appended = storyboard.shots.map(shot => shot.model_card_ids.filter(id => videos.has(id) && added.has(id))).filter(ids => ids.length)
+    const appended = storyboard.shots.map(shot => shot.model_card_ids.filter(id => modelIds.has(id) && added.has(id))).filter(ids => ids.length)
     for (const row of videoRows(appended, sizes, width)) top = placeRow(row, left, top)
-    const right = Math.max(left, ...[...videos].filter(id => next[id]).map(id => next[id].x + sizes[id].width))
+    const beside = (id?: string) => id && next[id] && { x: next[id].x + sizes[id].width + gap, y: next[id].y }
     for (const group of groups) {
       const ids = group.card_ids || []
       if (group.kind !== 'stack' || !ids.length || !ids.every(id => added.has(id))) continue
       const owner = storyboard.shots.find(shot => ids.includes(shot.card_id))
-      const anchor = owner && next[owner.model_card_ids[0]]
+      const anchor = beside(owner?.model_card_ids[0])
       const cover = generationGroupBounds(group, ids, () => ({ x: 0, y: 0 }), sizes)
-      placeRow(ids, right + gap, anchor?.y || 0, cover)
+      placeRow(ids, anchor ? anchor.x : left - cover.width - gap, anchor ? anchor.y : 0, cover)
     }
     for (const id of added) {
       const origin = storyboard.origins[id]
@@ -82,8 +89,8 @@ function placeStoryboardAdditions(document: CanvasDocument, before: CanvasDocume
         const key = storyboard.origins[shot.card_id]?.semantic_key
         return key && origin.semantic_key.startsWith(key + ':')
       })
-      const anchor = owner && next[owner.model_card_ids[0]]
-      placeRow([id], anchor ? right + gap : left - sizes[id].width - gap, anchor?.y || 0)
+      const anchor = beside(owner?.model_card_ids[0])
+      placeRow([id], anchor ? anchor.x : left - sizes[id].width - gap, anchor ? anchor.y : 0)
     }
     return next
   }
@@ -171,29 +178,57 @@ export function storyboardCanvasLayout(document: CanvasDocument, beforeApplicati
     anchorId,
     focus,
     arrange: (nodes, sizes, width, _anchor, previous = {}) => {
-      const { positions, mainWidth } = placeVideoRows(shots, sizes, width)
+      const { positions: preferred, mainWidth } = placeVideoRows(shots, sizes, width)
+      const positions: Record<string, CanvasPoint> = {}
       const live = new Set(nodes.map(node => node.id))
+      const groups = document.groups || []
+      const groupFor = new Map(groups.flatMap(group => (group.card_ids || []).map(id => [id, group] as const)))
       const shotGroups = new Set(document.storyboard?.shots.map(shot => shot.group_id))
       const shotCards = new Set(document.storyboard?.shots.map(shot => shot.card_id))
-      const point = (id: string) => previous[id] ?? { x: 0, y: 0 }
-      let leftTop = 0, rightTop = 0
-      // 侧区按整个组织移动辅助成员，解除堆叠时保留原相对位置。
-      const place = (members: string[], right: boolean, group?: GenerationCanvasGroup) => {
+      const point = (id: string) => previous[id] ?? preferred[id] ?? { x: 0, y: 0 }
+      const liveMembers = (group: GenerationCanvasGroup) => (group.card_ids || []).filter(id => live.has(id))
+      const bounds = (members: string[], group?: GenerationCanvasGroup): Frame => {
         const frames = members.map(id => ({ ...point(id), ...sizes[id] }))
         if (group) frames.push(generationGroupBounds(group, members, point, sizes))
-        const minX = Math.min(...frames.map(frame => frame.x))
-        const minY = Math.min(...frames.map(frame => frame.y))
-        const maxX = Math.max(...frames.map(frame => frame.x + frame.width))
-        const maxY = Math.max(...frames.map(frame => frame.y + frame.height))
-        const x = right ? mainWidth + gap : minX - maxX - gap
-        const y = right ? rightTop : leftTop
-        for (const id of members) positions[id] = { x: x + point(id).x - minX, y: y + point(id).y - minY }
-        if (right) rightTop += maxY - minY + gap
-        else leftTop += maxY - minY + gap
+        const x = Math.min(...frames.map(frame => frame.x))
+        const y = Math.min(...frames.map(frame => frame.y))
+        return {
+          x, y, width: Math.max(...frames.map(frame => frame.x + frame.width)) - x,
+          height: Math.max(...frames.map(frame => frame.y + frame.height)) - y,
+        }
       }
-      for (const group of document.groups || []) {
-        const members = (group.card_ids || []).filter(id => live.has(id) && !positions[id])
-        if (members.length) place(members, shotGroups.has(group.id) || members.some(id => shotCards.has(id)), group)
+      const translate = (members: string[], dx: number, dy: number) => {
+        for (const id of members) positions[id] = { x: point(id).x + dx, y: point(id).y + dy }
+      }
+      // 视频仍是主区锚点，含视频的编组按原成员相对位置整体移动。
+      const main: Frame[] = []
+      for (const id of shots.flat()) {
+        if (positions[id]) continue
+        const group = groupFor.get(id)
+        const members = group ? liveMembers(group) : [id]
+        const frame = bounds(members, group)
+        const dx = preferred[id].x - point(id).x
+        const target = { ...frame, x: frame.x + dx, y: frame.y + preferred[id].y - point(id).y }
+        const y = availableY(target, main, 0)
+        translate(members, dx, y - frame.y)
+        main.push({ ...target, y })
+      }
+      const leftEdge = Math.min(0, ...main.map(frame => frame.x))
+      const rightEdge = Math.max(mainWidth, ...main.map(frame => frame.x + frame.width))
+      let leftTop = 0, rightTop = 0
+      const place = (members: string[], right: boolean, group?: GenerationCanvasGroup) => {
+        const frame = bounds(members, group)
+        const x = right ? rightEdge + gap : leftEdge - frame.width - gap
+        const y = right ? rightTop : leftTop
+        translate(members, x - frame.x, y - frame.y)
+        if (right) rightTop += frame.height + gap
+        else leftTop += frame.height + gap
+      }
+      for (const group of groups) {
+        const members = liveMembers(group)
+        if (members.length && !members.some(id => positions[id])) {
+          place(members, shotGroups.has(group.id) || members.some(id => shotCards.has(id)), group)
+        }
       }
       for (const { id } of nodes) if (!positions[id]) place([id], false)
       return positions

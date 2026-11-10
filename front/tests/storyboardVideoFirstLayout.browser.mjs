@@ -39,6 +39,8 @@ async function poll(read, done) {
   assert.fail('Expected storyboard or canvas position was not ready')
 }
 const cards = (page, ids) => Promise.all(ids.map(id => page.locator(`[data-card-id="${id}"]`).boundingBox()))
+const moveCard = (page, id) => page.locator(`[data-card-id="${id}"]`).getByRole('button', { name: /^移动布局：/ })
+const cardPoint = (page, id) => page.locator(`[data-card-id="${id}"]`).evaluate(card => [parseFloat(card.style.left), parseFloat(card.style.top)])
 const fullyVisible = (box, viewport) => box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height
 
 try {
@@ -131,6 +133,36 @@ try {
   await manualStackCard.waitFor()
   assert.deepEqual(await cards(desktop, ids), beforeArrange)
 
+  // 人工编组中的视频与普通卡在整理时保持相对位置。
+  const manualNote = 'manual-mixed-arrange-note'
+  const manualVideo = 'manual-unmapped-video'
+  const mixedGroup = 'manual-video-mixed-group'
+  const sceneCanvas = () => request(`${canvases}/${task.canvas_id}`)
+  const saveDocument = row => request(`${canvases}/${task.canvas_id}`, 'PUT', {
+    request_id: randomUUID(), expected_revision: row.revision, document: row.document,
+  })
+  const mixed = await sceneCanvas()
+  const originalVideoGroup = mixed.document.groups.find(group => group.card_ids.includes(ids[0]))
+  mixed.document.cards.push({ id: manualNote, type: 'content.text', text: '人工编组说明' }, { id: manualVideo, type: 'model.video' })
+  mixed.document.groups = mixed.document.groups.filter(group => group.id !== originalVideoGroup.id)
+  mixed.document.groups.push({ id: mixedGroup, name: '人工视频编组', card_ids: [ids[0], manualNote] })
+  await saveDocument(mixed)
+  await desktop.reload()
+  const offset = async () => {
+    const firstPoint = await cardPoint(desktop, ids[0])
+    return (await cardPoint(desktop, manualNote)).map((value, index) => value - firstPoint[index])
+  }
+  const originalOffset = await offset()
+  await desktop.getByRole('button', { name: '布局', exact: true }).click()
+  await desktop.getByRole('button', { name: '整理布局', exact: true }).click()
+  assert.deepEqual(await offset(), originalOffset, 'arrange translates every member of a manual video group together')
+  await desktop.getByRole('button', { name: '撤销布局整理', exact: true }).click()
+  await desktop.keyboard.press('Escape')
+  const ungrouped = await sceneCanvas()
+  ungrouped.document.groups = ungrouped.document.groups.filter(group => group.id !== mixedGroup)
+  ungrouped.document.groups.push(originalVideoGroup)
+  await saveDocument(ungrouped)
+  await desktop.reload()
   const narrow = await newPage({ width: 390, height: 844 })
   const mobile = await open(narrow, await generate('窄屏分镜'))
   const [mobileFirst] = await cards(narrow, mobile.ids)
@@ -164,7 +196,10 @@ try {
   const empty = standalone.find(card => card.type.startsWith('reference.') && !card.image_binding)
   await desktop.locator(`[data-card-id="${empty.id}"]`).waitFor()
   await openCanvasCard(desktop, ids[0])
-  await poll(savedCanvas, row => row.document.cards.find(card => card.id === ids[0])?.model_id === 'story-video-model')
+  await poll(savedCanvas, row => {
+    const card = row.document.cards.find(item => item.id === ids[0])
+    return card?.model_id === 'story-video-model' && card.config?.ratio
+  })
   await closeCanvasDetails(desktop)
   const preview = await request(`${canvases}/${task.canvas_id}/precheck`, 'POST', { card_id: ids[0] })
   assert.ok(preview.can_run, JSON.stringify(preview.diagnostics))
@@ -189,7 +224,11 @@ try {
   const edited = await poll(savedCanvas, row => row.document.cards.find(card => card.id === shot.card_id)?.visible_result.text === '镜头说明仍可编辑')
   assert.ok(!edited.document.groups.some(group => group.id === own.id))
   assert.ok(edited.document.edges.some(edge => edge.source_card === sharedDesign.id && edge.target_card === ids[0]))
-  const retainedIds = [...ids, shot.card_id, original]
+  for (let i = 0; i < 30; i++) {
+    await moveCard(desktop, ids[2]).press('Shift+ArrowRight')
+    await moveCard(desktop, manualVideo).press('Shift+ArrowDown')
+  }
+  const retainedIds = [...ids, shot.card_id, original, manualVideo]
   const positions = () => cards(desktop, retainedIds)
   const previousPositions = await positions()
   const untouched = edited.document.groups.find(group => group.kind === 'stack' && group.card_ids.includes(document.storyboard.shots[1].card_id))
@@ -211,10 +250,17 @@ try {
   await desktop.goto(url.replace(task.task_id, rerun.task_id))
   await desktop.getByRole('button', { name: '核对差异', exact: true }).click()
   const review = desktop.getByRole('dialog', { name: '核对分镜差异', exact: true })
-  const appliedResponse = desktop.waitForResponse(response => response.url().endsWith('/apply') && response.request().method() === 'POST')
+  const applyRequests = []
+  await desktop.route('**/apply', async route => {
+    applyRequests.push(route.request().postDataJSON())
+    const response = await route.fetch()
+    if (applyRequests.length === 1) {
+      assert.ok(response.ok(), await response.text())
+      await route.abort('failed')
+    } else await route.fulfill({ response })
+  })
   await review.getByRole('button', { name: '应用分镜', exact: true }).click()
-  const receipt = await appliedResponse
-  assert.ok(receipt.ok(), await receipt.text())
+  await review.getByRole('button', { name: '核对最新画布', exact: true }).click()
   const applied = await poll(savedCanvas, row => row.document.storyboard.task_id === rerun.task_id)
   assert.ok(!applied.document.groups.some(group => group.id === own.id), 'the released design stack stays released')
   assert.deepEqual(applied.document.groups.find(group => group.id === untouched.id).card_ids, untouched.card_ids)
@@ -227,7 +273,16 @@ try {
   assert.deepEqual(await untouchedStack.boundingBox(), previousStack)
   const [newVideo, ...newCards] = await cards(desktop, [...newShot.model_card_ids, ...newDesigns.map(card => card.id)])
   assert.ok(newVideo.y >= Math.max(...previousPositions.slice(0, ids.length).map(box => box.y + box.height)))
-  assert.ok(newCards.every(box => box && box.y < newVideo.y), 'new designs stay near their existing shots')
+  assert.ok(newCards.every(box => box && box.x < previousPositions[2].x), 'new designs stay by their owners when another shot has moved far to the right')
+  assert.ok(newVideo.y < previousPositions.at(-1).y, 'unmapped video cards do not set the production lane tail')
+  assert.ok(Math.abs(newVideo.x - previousPositions[0].x) < 1, 'a recovered application uses the existing production lane')
+  assert.equal(applyRequests.length, 2)
+  assert.deepEqual(applyRequests[0], applyRequests[1], 'recovery replays the same saved command')
+  await desktop.getByRole('button', { name: '撤销操作', exact: true }).click()
+  await poll(savedCanvas, row => row.document.storyboard.task_id === task.task_id)
+  assert.deepEqual(await positions(), previousPositions)
+  await desktop.getByRole('button', { name: '重做操作', exact: true }).click()
+  await poll(savedCanvas, row => row.document.storyboard.task_id === rerun.task_id)
   await desktop.reload()
   await desktop.locator(`[data-card-id="${newShot.model_card_ids[0]}"]`).waitFor()
   assert.deepEqual(await cards(desktop, [...newShot.model_card_ids, ...newDesigns.map(card => card.id)]), [newVideo, ...newCards])

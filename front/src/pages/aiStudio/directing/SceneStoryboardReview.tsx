@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Checkbox, Spin } from 'antd'
 import { StudioDirectingService as Directing } from '../../../services/generated'
 import type { StoryboardApplication, StoryboardDiff, StoryboardDiffCard } from '../../../services/generated'
-import type { StoryboardScope } from '../generationCanvas/useGenerationCanvasEditor'
+import type { StoryboardReviewPreparation, StoryboardScope } from '../generationCanvas/useGenerationCanvasEditor'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
@@ -26,7 +26,7 @@ function Changes({ title, cards, selected, choose }: {
 
 /** Compare the saved revision and exact overwrite selection before applying. */
 export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError }: {
-  scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<number | undefined>;
+  scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<StoryboardReviewPreparation | undefined>;
   reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
 }) {
   const [baseline, setBaseline] = useState<number>()
@@ -49,10 +49,13 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
   }, [baseline, selected, projectId, chapterId, sequenceId, taskId])
   const open = async (refresh = false) => {
     setOpening(true); setError('')
-    const revision = await prepare()
-    if (revision !== undefined && (!refresh || await reload())) {
+    const prepared = await prepare()
+    if (prepared?.appliedTaskId === taskId) {
+      // 可能刚重放了结果未知的应用。保留该回执建立的撤销记录。
+      close()
+    } else if (prepared && (!refresh || await reload())) {
       if (refresh) setReview(undefined)
-      setBaseline(refresh ? await prepare() : revision); setSelected([])
+      setBaseline(refresh ? (await prepare())?.revision : prepared.revision); setSelected([])
     } else setError('请先解决画布保存问题，再核对提取差异。')
     setOpening(false)
   }
