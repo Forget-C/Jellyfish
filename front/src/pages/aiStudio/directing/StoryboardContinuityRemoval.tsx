@@ -21,8 +21,19 @@ async function previewRemoval(before: CanvasRead, target: string) {
       .catch(() => undefined) : Promise.resolve(undefined),
   ])
   if (latest.data?.revision !== before.revision) throw new Error('画布已有新修订，请重新打开后核对')
-  const plan = planVisualContinuityRemoval(before.document, target, capability)
-  return plan && { revision: before.revision, capability, plan }
+  const relation = document.storyboard?.visual_continuity?.[target]
+  const suspension = !relation?.restored ? relation?.suspended : undefined
+  const inputs = [...Object.values(suspension?.input_bindings || {}), ...Object.values(suspension?.design_media_uses || {})]
+  const ids = [...new Set(inputs.map(item => item.source.card_id))]
+  const outputs = await Promise.all(ids.map(cardId => Canvases.canvasCardOutputs({ projectId, canvasId, cardId })
+    .then(response => response.data?.outputs ?? []).catch(() => [])))
+  const sourceFiles = inputs.map(item => {
+    const { source } = item
+    return outputs[ids.indexOf(source.card_id)]?.find(output => output.available !== false && output.source.port_id === source.port_id &&
+      (output.source.object_id || output.source.position) === (source.object_id || source.position))?.file_id || null
+  })
+  const plan = planVisualContinuityRemoval(document, target, capability, sourceFiles.includes(null))
+  return plan && { revision: before.revision, capability, sourceFiles, plan }
 }
 
 export function StoryboardContinuityRemoval({ document, card, disabled, prepare, commit, onComplete, onBusy }: WorkbenchModelMenuContext & {
@@ -52,7 +63,8 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
       const next = await read()
       setOffer(next)
       if (restore === undefined) return
-      if (!offer || offer.revision !== next.revision || JSON.stringify(offer.capability) !== JSON.stringify(next.capability)) {
+      if (!offer || offer.revision !== next.revision || JSON.stringify([offer.capability, offer.sourceFiles]) !==
+        JSON.stringify([next.capability, next.sourceFiles])) {
         setError('模型或输入已变化，请重新确认')
         return
       }
@@ -62,7 +74,7 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
       const id = pending?.restore === restore && pending.revision === next.revision ? pending.id : crypto.randomUUID()
       requestId.current = { restore, revision: next.revision, id }
       if (await commit(next.revision, id, (saved) => {
-        const current = planVisualContinuityRemoval(saved, card.id, next.capability)
+        const current = planVisualContinuityRemoval(saved, card.id, next.capability, next.sourceFiles.includes(null))
         const candidate = restore ? current?.restored : current?.without
         if (!candidate) throw new Error('视觉承接已变化，请重新核对')
         return candidate

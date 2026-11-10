@@ -28,7 +28,7 @@ function restorePrompt(model: VideoModelCard, saved: CanvasContinuitySuspension)
 }
 
 /** 恢复只补回明确暂停的内容；当前素材、其他用途和已编辑正文保持原样。 */
-export function planVisualContinuityRemoval(document: CanvasDocument, targetId: string, capability?: CanvasModelCapability) {
+export function planVisualContinuityRemoval(document: CanvasDocument, targetId: string, capability?: CanvasModelCapability, unavailableSource = false) {
   const storyboard = document.storyboard
   const record = storyboard?.visual_continuity?.[targetId]
   const card = document.cards?.find(item => item.id === targetId) as VideoModelCard | undefined
@@ -62,6 +62,7 @@ export function planVisualContinuityRemoval(document: CanvasDocument, targetId: 
     restoreIssues.push('当前仍有其他帧参考，不能同时恢复主体参考。')
   if (items.some(item => !document.cards?.some(source => source.id === item.source.card_id)))
     restoreIssues.push('部分来源卡片已移除。')
+  else if (unavailableSource) restoreIssues.push('部分来源的当前素材不可用。')
   if (bindings.some(item => !document.edges?.some(edge => edge.source_card === item.source.card_id &&
     edge.source_port === item.source.port_id && edge.target_card === targetId && edge.target_port === item.input_port &&
     (!edge.result_scope || edge.result_scope.positions.includes(item.source.position) === (edge.result_scope.mode === 'only')))))

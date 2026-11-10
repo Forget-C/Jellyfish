@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardDiffCard
 from app.schemas.generation_canvas import CanvasDocument, NamedImageReferenceCard, ObjectDescriptionCard
 from app.services.directing.storyboard_assembly import storyboard_design_stack_id
+from app.services.directing.storyboard_continuity_choices import adopted_frames, carry_visual_continuity, non_continuity_edits
 from app.services.directing.storyboard_reference_choices import carry_reference_choices, expired_reference_uses
 from app.services.directing.storyboard_reference_cleanup import card_name, clean_lost_references
 from app.services.generation_canvas.catalog import CARD_TITLES
@@ -82,7 +83,7 @@ def _retain_edge_ids(current: CanvasDocument, candidate: CanvasDocument) -> Canv
 
 def plan_application(current: CanvasDocument, candidate: CanvasDocument,
                      command: StoryboardApplication, *, prior: CanvasDocument | None = None,
-                     production_ports: list[str] | None = None) -> tuple[CanvasDocument, StoryboardDiff]:
+                     production_capability: dict | None = None) -> tuple[CanvasDocument, StoryboardDiff]:
     """Resolve stable identities and preserve the actual document outside extraction ownership."""
     candidate = _retain_edge_ids(current, candidate)
     previous = {card.id: card for card in current.cards}
@@ -92,6 +93,8 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
     current_connections, prior_connections, proposed_connections = map(_connections, (current, prior, candidate))
     manual = {key for key, value in previous_origins.items() if key in previous and (
         value.manually_edited or prior is not None and current_connections.get(key) != prior_connections.get(key))}
+    adoption = adopted_frames(current, previous)
+    manual.difference_update(set(adoption) - non_continuity_edits(current, prior, adoption))
     changed = {key for key in previous_origins if key in previous and (
         key not in new_origins or previous[key] != incoming[key] or
         previous_origins[key].model_dump(exclude={'manually_edited'}) != new_origins[key].model_dump(exclude={'manually_edited'}) or
@@ -157,15 +160,17 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
             groups[group.id] = (existing or group).model_copy(update={
                 'card_ids': [*(existing.card_ids if existing else []), *new_members],
             })
-    shots = carry_reference_choices(current, candidate, final, keep, edges, order, production_ports or [], invalidated)
+    capability = production_capability or {}
+    shots = carry_reference_choices(current, candidate, final, keep, edges, order, capability.get('input_ports', []), invalidated)
+    continuity, impacts = carry_visual_continuity(current, shots, previous, final, edges, order, adoption, capability)
     document = current.model_copy(update={'cards': list(final.values()), 'edges': edges,
         'input_order': order, 'groups': [group for group in groups.values() if group.card_ids],
-        'storyboard': candidate.storyboard.model_copy(update={'origins': origins, 'shots': shots}),
+        'storyboard': candidate.storyboard.model_copy(update={'origins': origins, 'shots': shots, 'visual_continuity': continuity}),
         'fixed_source': candidate.fixed_source, 'archived_sources': archives})
     diff = StoryboardDiff(added=[_display(final[key]) for key in incoming if key not in previous],
         modified=[_display(card, manual=key in manual) for key, card in previous.items() if key in changed and key in incoming],
         removed=[_display(card, manual=key in manual) for key, card in previous.items() if key in changed and key not in incoming or key in fixed_ids and key not in final],
         orphaned=[_display(final[key], lost=[card_name(previous[target]) for target in sorted(targets) if target in previous])
                   for key, targets in lost.items() if targets],
-        source_changed=current.fixed_source != candidate.fixed_source)
+        source_changed=current.fixed_source != candidate.fixed_source, visual_continuity_impacts=impacts)
     return document, diff

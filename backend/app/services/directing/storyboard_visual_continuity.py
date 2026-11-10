@@ -127,7 +127,7 @@ async def _validate_inactive(db, canvas, document, card, before, relation, prior
         raise diagnostic('INVALID_VISUAL_CONTINUITY', '仅移除承接不能更改其他参考采用或正文', target)
 
 
-async def validate_visual_continuity(db, canvas, document, previous, context):
+async def validate_visual_continuity(db, canvas, document, previous, context, *, restored=frozenset()):
     """仅核实新采用；固定素材独立使用，旧来源失效不改写已保存关系。"""
     storyboard = document.storyboard
     prior = previous.storyboard.visual_continuity if previous.storyboard else {}
@@ -135,6 +135,8 @@ async def validate_visual_continuity(db, canvas, document, previous, context):
     shot_index = {card_id: index for index, shot in enumerate(storyboard.shots) for card_id in shot.model_card_ids}
     published = None
     for target_id, relation in storyboard.visual_continuity.items():
+        if target_id in restored:
+            continue
         target = {'card_id': target_id, 'path': ['input_bindings', relation.binding_id]}
         card = context.cards.get(target_id)
         binding = _binding(card, relation.binding_id)
