@@ -409,8 +409,7 @@ function ProjectLobby() {
                 const sequenceText = !stage ? statusText
                   : noChapter || stage.sequenceCount === 0 ? '未创建场次'
                     : stage.sequenceCount === undefined ? '场次数未知' : `本章 ${stage.sequenceCount} 场`
-                const countText = !stage ? statusText
-                  : stage.chapterCount === undefined ? '章节数未知' : `共 ${stage.chapterCount} 章`
+                const countText = stage?.chapterCount === undefined ? '章节数未知' : `共 ${stage.chapterCount} 章`
                 return (
                   <article className="project-lobby-card" key={project.id}>
                     <ProjectCover projectId={project.id} demo={useMock} />
@@ -424,6 +423,11 @@ function ProjectLobby() {
                       </h2>
                       <div className="project-lobby-card-row">
                         <span className="project-lobby-style" title={project.style}>{project.style ?? '未设置类型'}</span>
+                        {project.updatedAt && (
+                          <span className="project-lobby-meta project-lobby-truncate" title={`更新于 ${project.updatedAt}`}>
+                            更新于 {project.updatedAt}
+                          </span>
+                        )}
                       </div>
                       <div className="project-lobby-card-row">
                         <FileTextOutlined aria-hidden />
@@ -435,19 +439,18 @@ function ProjectLobby() {
                           </button>
                         )}
                       </div>
-                      <div className="project-lobby-card-row">
-                        <VideoCameraOutlined aria-hidden />
-                        <span>{sequenceText}</span>
-                        {stage?.key === 'edit_raw' && <Tag bordered={false} className="project-lobby-status">待补原文</Tag>}
-                      </div>
-                      <div className="project-lobby-card-row project-lobby-meta-row">
-                        <BookOutlined aria-hidden />
-                        <span>{countText}</span>
-                        {project.updatedAt && (
-                          <span className="project-lobby-meta project-lobby-truncate" title={`更新于 ${project.updatedAt}`}>
-                            更新于 {project.updatedAt}
+                      <div className="project-lobby-card-row project-lobby-counts">
+                        <span className="project-lobby-count-item">
+                          <VideoCameraOutlined aria-hidden />
+                          <span className="project-lobby-truncate">{sequenceText}</span>
+                        </span>
+                        {stage && (
+                          <span className="project-lobby-count-item">
+                            <BookOutlined aria-hidden />
+                            <span className="project-lobby-truncate">{countText}</span>
                           </span>
                         )}
+                        {stage?.key === 'edit_raw' && <Tag bordered={false} className="project-lobby-status">待补原文</Tag>}
                       </div>
                     </div>
                     <div className="project-lobby-card-control">

@@ -208,11 +208,14 @@ try {
   for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 900], [375, 812]]) {
     await page.setViewportSize({ width, height })
     await card.getByText('待补原文', { exact: true }).waitFor()
+    const scenes = await card.getByText('未创建场次', { exact: true }).boundingBox()
+    const chapters = await card.getByText('共 1 章', { exact: true }).boundingBox()
+    assert.equal(scenes.y, chapters.y, '场次和章节总数应同排')
     if (width >= 1366) {
       const rows = await page.getByRole('article').evaluateAll(cards => cards.map(article =>
         Array.from(article.querySelector('.project-lobby-card-body').children, row => row.getBoundingClientRect().top),
       ))
-      assert.ok(rows.every(row => row.length === 5 && row.every((top, index) => Math.abs(top - rows[0][index]) <= 1)), '四张卡片的五行应对齐')
+      assert.ok(rows.every(row => row.length === 4 && row.every((top, index) => Math.abs(top - rows[0][index]) <= 1)), '四张卡片的四行应对齐')
       assert.equal(await emptyCard.getByRole('link').count(), 1)
       assert.equal(await card.getByRole('link').count(), 1)
     }
