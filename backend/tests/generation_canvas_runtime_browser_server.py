@@ -42,6 +42,8 @@ if storyboard_recovery_fixture:
     control.update(storyboard_calls=0, storyboard_release=0, storyboard_fail_on=0)
     control.update(storyboard_review_calls=0, storyboard_review_release=100, storyboard_review_fail_on=0,
                    storyboard_review_conflict_on=0)
+    control.update(storyboard_repair_on=0, storyboard_repair_calls=0, storyboard_repair_release=False,
+                   storyboard_recheck_release=False)
 
 
 class ControlledModel:
@@ -54,9 +56,21 @@ class ControlledModel:
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)
+        if 'repair_targets' in args and storyboard_recovery_fixture:
+            control['storyboard_repair_calls'] += 1
+            deadline = monotonic() + 45
+            while not control['storyboard_repair_release'] and monotonic() < deadline:
+                sleep(.03)
+            [target] = args['repair_targets']
+            return SimpleNamespace(content=json.dumps({'edits': [{**target, 'text': '保持原地，固定机位切近'}]}, ensure_ascii=False))
         if 'storyboard_draft' in args:
             if storyboard_recovery_fixture:
                 from httpx import ReadTimeout
+                if 'recheck_shot_ids' in args:
+                    deadline = monotonic() + 45
+                    while not control['storyboard_recheck_release'] and monotonic() < deadline:
+                        sleep(.03)
+                    return SimpleNamespace(content='{"issues": []}')
                 control['storyboard_review_calls'] += 1
                 call = control['storyboard_review_calls']
                 deadline = monotonic() + 45
@@ -68,6 +82,10 @@ class ControlledModel:
                     return SimpleNamespace(content=json.dumps({'issues': [{'kind': 'conflict',
                         'shot_ids': [args['storyboard_draft']['shots'][0]['id']],
                         'requirements': '静止与入场要求冲突', 'suggestion': '保留站位，仅切换景别'}]}, ensure_ascii=False))
+                if control['storyboard_repair_on'] == call:
+                    return SimpleNamespace(content=json.dumps({'issues': [{'kind': 'conflict', 'shot_ids': ['front'],
+                        'requirements': '运镜与保持站位矛盾', 'suggestion': '固定机位',
+                        'repair_targets': [{'shot_id': 'front', 'design_id': 'camera', 'field_id': 'viewpoint'}]}]}, ensure_ascii=False))
             return SimpleNamespace(content='{"issues": []}')
         if os.environ.get('CANVAS_BROWSER_STORYBOARD_SCOPE') == '1':
             from tests.directing.storyboard_scope_fixture import START, END, complex_design
@@ -240,7 +258,8 @@ async def set_control(body: dict = Body(...)):
         control['add_storyboard_content'] = body['add_storyboard_content']
     if storyboard_recovery_fixture:
         for key in ('storyboard_release', 'storyboard_fail_on', 'storyboard_review_release',
-                    'storyboard_review_fail_on', 'storyboard_review_conflict_on'):
+                    'storyboard_review_fail_on', 'storyboard_review_conflict_on', 'storyboard_repair_on',
+                    'storyboard_repair_release', 'storyboard_recheck_release'):
             if key in body:
                 control[key] = body[key]
     return control

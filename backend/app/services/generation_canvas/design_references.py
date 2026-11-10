@@ -38,7 +38,7 @@ def design_field_references(card, *, effective=False):
                 yield segment, key, path + ['document', 'segments', segment.id]
 
 
-def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=False, reference_tokens=None, field_ids=None):
+def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=False, reference_tokens=None, field_ids=None, paused_media=None):
     """Render each active field once; missing sources remain attributable placeholders."""
     candidates = context.resolve_outputs(card.id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
     by_source = {identity_key(item.source): item for item in candidates}
@@ -56,6 +56,8 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                 if effective and not segment.literal and re.search(r'(?<!\\)@(?:文本|图片|视频|音频)\d*', segment.text):
                     issues.append(DesignReferenceIssue(field_id=key, reference_id=segment.id, code='UNCONFIRMED_REFERENCE', message='参数代号尚未确认或不存在，请选择实际候选'))
                 text += re.sub(r'\\(?=[@/])', '', segment.text)
+                continue
+            if paused_media and identity_key(segment.source) in paused_media:
                 continue
             item = by_source.get(identity_key(segment.source))
             if effective and item and not item.basis_current:

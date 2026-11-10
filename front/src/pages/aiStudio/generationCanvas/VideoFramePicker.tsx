@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert } from 'antd'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -14,6 +14,7 @@ export function VideoFramePicker({ fileId, disabled, onPosition, onUseTail }: {
   const [duration, setDuration] = useState(0)
   const [position, setPosition] = useState(0)
   const [error, setError] = useState(false)
+  useEffect(() => { if (disabled) video.current?.pause() }, [disabled])
   const update = (element: HTMLVideoElement) => {
     const atMs = Math.min(Math.max(0, Math.ceil(element.duration * 1000) - 1), Math.round(element.currentTime * 1000))
     if (Number.isFinite(atMs)) { setPosition(atMs); onPosition(atMs) }
@@ -23,7 +24,7 @@ export function VideoFramePicker({ fileId, disabled, onPosition, onUseTail }: {
     setPosition(atMs); onPosition(atMs)
   }
   return <section aria-label="视频选帧">
-    <video ref={video} aria-label="待选帧视频" controls playsInline preload="auto" src={buildFileDownloadUrl(fileId)}
+    <video ref={video} aria-label="待选帧视频" controls={!disabled} playsInline preload="auto" src={buildFileDownloadUrl(fileId)}
       onLoadedMetadata={event => {
         const seconds = event.currentTarget.duration
         if (Number.isFinite(seconds) && seconds > 0) { setDuration(Math.ceil(seconds * 1000)); update(event.currentTarget) }

@@ -111,3 +111,128 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
                 assert applied['document']['storyboard']['task_id'] == retry['task_id']
         finally:
             worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', [
+    'repaired', 'still_conflict', 'recheck_timeout', 'repair_timeout', 'out_of_scope', 'manual_protected',
+])
+async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, monkeypatch, outcome):
+    first, second, third = '张三站在车旁。', '他低头看手。', '街角灯亮了。'
+    original = first + second + third
+    repairs, rechecks = [], []
+    review_enabled = outcome != 'manual_protected'
+    conflicts = {'issues': [{'kind': 'conflict', 'shot_ids': ['first'], 'requirements': '入场与静止冲突',
+        'suggestion': '保持原地', 'repair_targets': [
+            {'shot_id': 'first', 'design_id': 'continuity', 'field_id': 'change'}]}]}
+    proposed = '张三从画外入场'
+    corrected = '张三留在车旁，镜头切近'
+    manual = '按人工设计保持车旁站位'
+    draft = {'shots': [
+        {'id': 'first', 'excerpt': first, 'designs': [{'id': 'continuity', 'card_type': 'direction.continuity', 'fields': {
+            'before': {'state': 'fact', 'text': '站在车旁', 'excerpt': first},
+            'change': {'state': 'proposal', 'text': proposed, 'excerpt': first}}}]},
+        {'id': 'second', 'excerpt': second},
+        {'id': 'third', 'excerpt': third, 'designs': [{'id': 'light', 'card_type': 'direction.lighting', 'fields': {
+            'light_direction': {'state': 'proposal', 'text': '保留街角原有侧光'}}}]},
+    ]}
+    if outcome == 'out_of_scope':
+        conflicts['issues'][0]['repair_targets'].append({'shot_id': 'first', 'design_id': 'continuity', 'field_id': 'before'})
+
+    class ControlledModel:
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, messages):
+            args = json.loads(messages[1].content)
+            if 'repair_targets' in args:
+                repairs.append(args)
+                if outcome == 'repair_timeout':
+                    raise httpx.ReadTimeout('controlled repair failure')
+                target = conflicts['issues'][0]['repair_targets'][0]
+                result = {'edits': [{**target, 'text': corrected}]}
+                if outcome == 'out_of_scope':
+                    assert all(item['field_id'] != 'before' for item in args['repair_targets'])
+                    result['edits'].append({**target, 'field_id': 'before', 'text': '不在车旁'})
+                    result['edits'].append({'shot_id': 'third', 'design_id': 'light', 'field_id': 'light_direction', 'text': '改成顶光'})
+            elif 'recheck_shot_ids' in args:
+                rechecks.append(args)
+                if outcome == 'recheck_timeout' and len(rechecks) == 1:
+                    raise httpx.ReadTimeout('controlled recheck failure')
+                result = conflicts if outcome == 'still_conflict' else {'issues': []}
+            elif 'storyboard_draft' in args:
+                result = conflicts if review_enabled else {'issues': []}
+            else:
+                result = draft
+            return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = original
+            db.add(Provider(id='repair-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            await db.flush()
+            db.add(Model(id='repair-text', name='text', category='text', provider_id='repair-provider'))
+        chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        source = await read_data(client, 'GET', chapter)
+        scene = await read_data(client, 'POST', chapter + '/sequences', {'title': '定向修正', 'position': 0,
+            'source_version': source['source_version'], 'span': {'start': 0, 'end': len(original)}})
+        path = chapter + '/sequences/' + scene['id'] + '/storyboards'
+        task = await read_data(client, 'POST', path, {'request_id': 'repair', 'text_model_id': 'repair-text'})
+        canvas_path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+        before = await read_data(client, 'GET', canvas_path)
+        worker = TaskWorker(sessions)
+        try:
+            async def complete(item):
+                await worker.tick()
+                await asyncio.gather(*worker.jobs.values())
+                return await read_data(client, 'GET', path + '/' + item['task_id'])
+
+            if outcome == 'manual_protected':
+                initial = (await complete(task))['candidate']
+                applied = await read_data(client, 'PUT', canvas_path, {'request_id': 'storyboard:' + task['task_id'],
+                    'expected_revision': initial['base_revision'], 'document': initial['document']})
+                current = (await read_data(client, 'GET', canvas_path))['document']
+                card = next(card for card in current['cards'] if card['type'] == 'direction.continuity')
+                card['change'].update(text=manual, authorship='user')
+                await read_data(client, 'PUT', canvas_path, {'request_id': 'manual-design',
+                    'expected_revision': applied['revision'], 'document': current})
+                before = await read_data(client, 'GET', canvas_path)
+                assert before['document']['storyboard']['origins'][card['id']]['manually_edited']
+                review_enabled = True
+                target = path.removesuffix('/storyboards') + '/canvases/' + task['canvas_id'] + '/storyboards'
+                task = await read_data(client, 'POST', target, {'request_id': 'repair-reextract', 'text_model_id': 'repair-text'})
+            result = await complete(task)
+            assert len(repairs) == (0 if outcome == 'manual_protected' else 1)
+            if outcome in ('recheck_timeout', 'repair_timeout'):
+                assert result['status'] == 'failed' and result['review_state'] == 'incomplete'
+                assert (await read_data(client, 'GET', canvas_path)) == before
+                task = await read_data(client, 'POST', path + '/' + task['task_id'] + '/retry', {'request_id': 'recheck-only'})
+                result = await complete(task)
+                assert len(repairs) == 1
+                if outcome == 'recheck_timeout':
+                    assert rechecks[0] == rechecks[1]
+                else:
+                    assert len(rechecks) == 1 and not rechecks[0]['recheck_shot_ids']
+            assert result['status'] == 'succeeded', result
+            applied_repair = outcome in ('repaired', 'still_conflict', 'recheck_timeout')
+            if applied_repair:
+                assert rechecks[0]['recheck_shot_ids'] == ['first', 'second']
+            assert result['review_state'] == ('passed' if outcome in ('repaired', 'recheck_timeout') else 'conflict')
+            cards = result['candidate']['document']['cards']
+            continuity = next(card for card in cards if card['type'] == 'direction.continuity')
+            assert continuity['before']['text'] == '站在车旁' and continuity['before']['source_locator'] == first
+            assert continuity['change']['text'] == (corrected if applied_repair else proposed)
+            assert continuity['change']['source_locator'] == first
+            lighting = next(card for card in cards if card['type'] == 'direction.lighting')
+            assert lighting['fields']['light_direction']['text'] == '保留街角原有侧光'
+            assert await read_data(client, 'GET', canvas_path) == before
+            if outcome == 'repaired':
+                candidate = result['candidate']
+                await read_data(client, 'PUT', canvas_path, {'request_id': 'storyboard:' + task['task_id'],
+                    'expected_revision': candidate['base_revision'], 'document': candidate['document']})
+                first_model = candidate['document']['storyboard']['shots'][0]['model_card_ids'][0]
+                compiled = await read_data(client, 'GET', f'{canvas_path}/cards/{first_model}/compile')
+                assert corrected in compiled['text'] and proposed not in compiled['text']
+        finally:
+            worker.text_pool.shutdown(wait=False)
