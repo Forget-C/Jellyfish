@@ -1,0 +1,24 @@
+.prompt-manager .management-tools .ant-input-search { width: min(240px, 100%); }
+.prompt-manager .management-tools .ant-input-affix-wrapper { height: var(--management-control-height); font-size: 13px; }
+.prompt-columns { display: flex; flex: 1; gap: 20px; min-height: 0; min-width: 0; }
+.prompt-list { display: flex; flex: 0 0 300px; flex-direction: column; gap: 12px; min-height: 0; }
+.prompt-list .ant-pagination { flex: none; }
+.prompt-group + .prompt-group { margin-top: 16px; }
+.prompt-group h2 { margin: 0 0 8px; color: var(--app-muted, #536174); font-size: 12px; font-weight: 600; }
+.prompt-group button { display: block; width: 100%; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--app-text); text-align: start; font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.prompt-group button:hover, .prompt-group button[aria-pressed='true'] { background: var(--app-selected); color: var(--app-accent); }
+.prompt-group button:focus-visible { outline-offset: -2px; }
+.management-prompt-reader { min-width: 0; padding: 16px; font-size: 14px; overflow-wrap: anywhere; }
+.management-prompt-reader-heading { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.management-prompt-reader h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 650; }
+.management-prompt-reader h3 { margin: 20px 0 8px; font-size: 13px; font-weight: 600; }
+.management-prompt-reader-actions, .management-prompt-reader-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.management-prompt-reader-tags { margin-top: 12px; }
+.management-prompt-reader-summary, .management-prompt-reader-empty { color: var(--app-muted, #536174); }
+.management-prompt-reader-content { margin: 0; font: inherit; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.management-prompt-reader-defaults { padding: 12px; border-radius: 8px; background: #f5f7fa; font-size: 13px; overflow-x: auto; }
+.management-prompt-reader-drawer .ant-drawer-body { padding: 0; }
+@media (width < 1024px) {
+  .prompt-list { flex: 1; }
+  .prompt-columns { gap: 0; }
+}
