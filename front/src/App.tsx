@@ -40,7 +40,7 @@ function ProjectEntry() {
   const { projectId } = useParams()
   return projectId && new URLSearchParams(location.search).get('tab') === 'generation'
     ? <Navigate replace to={generationCanvasLocation(projectId, new URLSearchParams(location.search))} />
-    : <ProjectWorkbench />
+    : <ProjectWorkbench key={projectId} />
 }
 
 const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStudio/directing/ui/WorkbenchExamples')) : undefined
@@ -50,10 +50,12 @@ const router = createBrowserRouter(createRoutesFromElements(
         <Route path="/" element={<MainLayout />}>
           <Route index element={<HomePage />} />
           <Route path="projects" element={<ProjectLobby />} />
-          <Route path="projects/:projectId" element={<ProjectEntry />} />
+          <Route path="projects/:projectId" id="project-navigation">
+            <Route index element={<ProjectEntry />} />
+            <Route path="roles/:characterId/edit" element={<RoleDetailPage />} />
+            <Route path="chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
+          </Route>
           <Route path="projects/:projectId/generation-canvas" element={<GenerationCanvasRoute />} />
-          <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
           <Route element={<ManagementLayout />}>
             <Route path="assets" element={<AssetManager />} />
