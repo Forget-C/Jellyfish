@@ -12,10 +12,10 @@ import {
   StudioGenerationTasksService,
   type ExperimentMessageRead,
   type FileRead,
-  type ModelRead,
   type VideoGenerationOptionsRead,
 } from '../../../../services/generated'
-import { defaultTaskActionErrorMessage } from '../../components/taskActionHelpers'
+import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
+import { useExperimentSubmission } from '../hooks/useExperimentSubmission'
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentHistory } from '../components/ExperimentHistory'
@@ -30,6 +30,7 @@ import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { renderPromptTemplate } from '../components/PromptTemplateForm'
 import { VideoExperimentReferences, frameLabels, videoReferenceIssues, type FrameSlot, type VideoSubjectDraft } from '../components/VideoExperimentReferences'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
@@ -100,7 +101,6 @@ type VideoExperimentModeProps = {
 /** 组合视频模态的输入、历史和任务轮询，并交给统一实验室页面壳渲染。 */
 export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: VideoExperimentModeProps) {
   const history = useExperimentHistory(sessionId)
-  const [models, setModels] = useState<ModelRead[]>([])
   const [files, setFiles] = useState<FileRead[]>([])
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
@@ -115,8 +115,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [capabilityState, setCapabilityState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const capabilityRequest = useRef(0)
   const [libraryState, setLibraryState] = useState<'loading' | 'ready' | 'failed'>('loading')
-  const [modelsLoading, setModelsLoading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, ratio, frameFileIds, subjectReferences])
+  const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
+  const { submitting } = submission
 
   const loadLibrary = useCallback(async () => {
     setLibraryState('loading')
@@ -159,16 +160,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   )
   const disabled = submitting || Boolean(runningTaskId)
 
-  /** 首次展开时加载视频模型，并在唯一候选时自动选中。 */
-  const loadModels = async () => {
-    if (models.length || modelsLoading) return
-    setModelsLoading(true)
-    try {
-      const response = await LlmService.listModelsApiV1LlmModelsGet({ category: 'video', page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
-      const items = response.data?.items ?? []; setModels(items)
-      if (items.length === 1) { setModelId(items[0].id); void loadCapability(items[0].id) }
-    } catch { message.error('加载视频模型失败') } finally { setModelsLoading(false) }
-  }
+  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('video', id => {
+    if (!modelId) selectModel(id)
+  })
 
   /** 以请求代次关联当前模型，晚到的能力响应不能覆盖新选择。 */
   const loadCapability = async (nextModelId?: string) => {
@@ -199,38 +193,38 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const submit = async () => {
     if (!modelId) return message.warning('请选择视频模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入视频提示词')
-    if (capabilityBlocked || ratioConflict || referenceIssues.length) return
-    if (!selectedTemplate) setDraft('')
-    setSubmitting(true)
-    try {
-      const session = await ensureSession('video')
-      const response = await StudioGenerationTasksService.submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
-        sessionId: session.id,
-        requestBody: {
-          model_id: modelId,
-          execution_prompt: currentPrompt,
-          media: {
-            frames: {
-              first: frameFileIds.first ? { file_id: frameFileIds.first, media_kind: 'image', ordinal: 0 } : null,
-              last: frameFileIds.last ? { file_id: frameFileIds.last, media_kind: 'image', ordinal: 0 } : null,
-              keys: frameFileIds.key ? [{ file_id: frameFileIds.key, media_kind: 'image', ordinal: 0 }] : [],
+    if (disabled || capabilityBlocked || ratioConflict || referenceIssues.length) return
+    await submission.submitTask({
+      ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
+      request: async targetSessionId => {
+        const response = await StudioGenerationTasksService.submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
+          sessionId: targetSessionId,
+          requestBody: {
+            model_id: modelId,
+            execution_prompt: currentPrompt,
+            media: {
+              frames: {
+                first: frameFileIds.first ? { file_id: frameFileIds.first, media_kind: 'image', ordinal: 0 } : null,
+                last: frameFileIds.last ? { file_id: frameFileIds.last, media_kind: 'image', ordinal: 0 } : null,
+                keys: frameFileIds.key ? [{ file_id: frameFileIds.key, media_kind: 'image', ordinal: 0 }] : [],
+              },
+              subjects: subjectReferences.map((subject) => ({
+                name: subject.name.trim(),
+                media: subject.media.map(({ id, kind }, ordinal) => ({ file_id: id, media_kind: kind, ordinal })),
+              })),
             },
-            subjects: subjectReferences.map((subject) => ({
-              name: subject.name.trim(),
-              media: subject.media.map(({ id, kind }, ordinal) => ({ file_id: id, media_kind: kind, ordinal })),
-            })),
+            operation_input: { kind: 'video_generation', ratio },
           },
-          operation_input: { kind: 'video_generation', ratio },
-        },
-      })
-      const created = response.data
-      if (!created?.task_id || !created.messages?.length) throw new Error('创建视频任务未返回正式消息')
-      // 创建接口直接返回正式 user/task 消息，共享 Hook 负责跨首提重挂载接管。
-      history.adoptCanonicalMessages(session.id, created.messages)
-      message.success('视频生成任务已创建')
-    } catch (error) {
-      message.error(defaultTaskActionErrorMessage(error, '创建视频生成任务失败，请检查模型和参考素材'))
-    } finally { setSubmitting(false) }
+        })
+        return response.data
+      },
+      onAccept: (attempt, targetSessionId) => {
+        const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))
+        if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
+        message.success('视频生成任务已创建')
+      },
+      failureMessage: '创建视频生成任务失败，请检查模型和参考素材',
+    })
   }
 
   /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
@@ -262,7 +256,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       </ExperimentMessageBubble>
     })}
   </ExperimentHistory>
-  const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled || capabilityBlocked || ratioConflict || referenceIssues.length > 0} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<>
+  const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || referenceIssues.length > 0} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<>
     <Select
       value={ratio}
       onChange={setRatio}
@@ -291,7 +285,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     {capabilityIncomplete && <span className="experiment-video-reference-summary">模型未提供完整参考限制，提交时由服务端校验</span>}
     {ratioConflict && <span role="alert" className="experiment-video-reference-issue">当前模型不支持比例 {ratio}，请重新选择</span>}
     {referenceIssues.length > 0 && <span role="alert" className="experiment-video-reference-issue">{referenceIssues.join('；')}</span>}
-  </>}>{replacementDialog}<ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" label="视频提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>
+  </>}>{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" label="视频提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>
   const clearHistory = async () => {
     if (!sessionId || !clearSessionMessages) return
     await clearSessionMessages(sessionId)

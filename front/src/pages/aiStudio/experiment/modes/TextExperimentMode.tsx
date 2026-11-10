@@ -8,12 +8,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, message } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
 import {
-  LlmService,
   StudioTextLabService,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
-  type ModelRead,
 } from '../../../../services/generated'
+import { defaultTaskActionErrorMessage } from '../../components/taskActionHelpers'
+import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
+import { isRejectedSubmission, useExperimentSubmission } from '../hooks/useExperimentSubmission'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
@@ -23,6 +24,7 @@ import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import { streamTextLab } from '../../../../services/textLabStream'
@@ -102,7 +104,6 @@ export function TextExperimentMode({
   onSubmittingChange,
   render,
 }: TextExperimentModeProps) {
-  const [models, setModels] = useState<ModelRead[]>([])
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
   const {
@@ -110,13 +111,19 @@ export function TextExperimentMode({
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(textPromptCategories, draft, setDraft)
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([])
-  const [modelsLoading, setModelsLoading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const historyState = useExperimentHistory(sessionId)
+  const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues])
+  const submission = useExperimentSubmission(sessionId, historyState, inputSignature(draft))
+  const { submitting } = submission
   const previousSessionIdRef = useRef(sessionId)
   const streamAbortRef = useRef<AbortController | null>(null)
   const streamTaskIdRef = useRef<string | undefined>(undefined)
   const streamSessionIdRef = useRef<string | undefined>(undefined)
+
+  useEffect(() => () => streamAbortRef.current?.abort(), [])
+  useEffect(() => {
+    if (streamSessionIdRef.current && streamSessionIdRef.current !== sessionId) streamAbortRef.current?.abort()
+  }, [sessionId])
 
   /**
    * 将共享 Hook 取得的持久化历史投影为文本聊天气泡。
@@ -142,23 +149,9 @@ export function TextExperimentMode({
     onSubmittingChange?.(submitting)
   }, [onSubmittingChange, submitting])
 
-  /** 首次打开模型选择器时读取模型，并在当前模态生命周期内缓存。 */
-  const loadModels = async () => {
-    if (models.length || modelsLoading) return
-    setModelsLoading(true)
-    try {
-      const response = await LlmService.listModelsApiV1LlmModelsGet({
-        category: 'text', page: 1, pageSize: 100, order: 'updated_at', isDesc: true,
-      })
-      const items = response.data?.items ?? []
-      setModels(items)
-      if (items.length === 1) setModelId(items[0].id)
-    } catch {
-      message.error('加载文本模型失败')
-    } finally {
-      setModelsLoading(false)
-    }
-  }
+  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('text', id => {
+    setModelId(current => current ?? id)
+  })
 
   const currentPrompt = selectedTemplate
     ? renderPromptTemplate(selectedTemplate.content, templateValues).trim()
@@ -179,14 +172,23 @@ export function TextExperimentMode({
       return
     }
 
-    setSubmitting(true)
-    let temporaryAssistantId: string | undefined
+    const attempt = submission.begin()
+    if (!attempt) return
+    let targetSessionId: string | undefined
+    let controller: AbortController | undefined
+    let terminal = false
+    let acceptedTaskId: string | undefined
+    const assistantId = `stream-${createMessageId()}`
+    const restoreInput = () => {
+      submission.restoreUnsent(attempt)
+      if (acceptedTaskId && !selectedTemplate) setDraft(current => current === '' ? draft : current)
+    }
     try {
-      const session = await ensureSession('text')
-      if (!selectedTemplate) setDraft('')
-      const controller = new AbortController()
-      const activeTemporaryAssistantId = `stream-${createMessageId()}`
-      temporaryAssistantId = activeTemporaryAssistantId
+      const session = sessionId ? { id: sessionId } : await ensureSession('text')
+      if (!submission.isCurrent(attempt)) return
+      targetSessionId = session.id
+      attempt.sessionId = session.id
+      controller = new AbortController()
       streamAbortRef.current = controller
       streamSessionIdRef.current = session.id
       for await (const event of streamTextLab({
@@ -194,53 +196,69 @@ export function TextExperimentMode({
         body: { model_id: modelId, content: currentPrompt },
         signal: controller.signal,
       })) {
+        if (!submission.isCurrent(attempt)) {
+          controller.abort()
+          break
+        }
         if (event.event === 'accepted') {
-          streamTaskIdRef.current = event.data.task_id
-          setLocalMessages((current) => [
-            ...current,
-            { id: event.data.user_message.id, role: 'user', content: event.data.user_message.content },
-            { id: activeTemporaryAssistantId, role: 'assistant', content: '', status: 'running' },
-          ])
-        } else if (event.event === 'delta') {
-          setLocalMessages((current) => current.map((item) => (
-            item.id === activeTemporaryAssistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
+          if (acceptedTaskId || event.data.user_message.session_id !== session.id) {
+            throw new Error('文本接收回执与本轮会话不符')
+          }
+          acceptedTaskId = event.data.task_id
+          streamTaskIdRef.current = acceptedTaskId
+          const unchanged = submission.acceptInput(attempt, session.id, inputSignature(''))
+          if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
+          historyState.adoptCanonicalMessages(session.id, [event.data.user_message])
+          setLocalMessages(current => [...current, { id: assistantId, role: 'assistant', content: '', status: 'running' }])
+          continue
+        }
+        if (!acceptedTaskId || event.data.task_id !== acceptedTaskId) {
+          throw new Error('文本流未返回可核对的任务身份')
+        }
+        if (event.event === 'delta') {
+          setLocalMessages(current => current.map(item => (
+            item.id === assistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
           )))
         } else if (event.event === 'progress') {
-          setLocalMessages((current) => current.map((item) => (
-            item.id === activeTemporaryAssistantId ? { ...item, progress: event.data.progress } : item
+          setLocalMessages(current => current.map(item => (
+            item.id === assistantId ? { ...item, progress: event.data.progress } : item
           )))
         } else if (event.event === 'completed') {
-          setLocalMessages((current) => current.map((item) => (
-            item.id === activeTemporaryAssistantId
-              ? { id: event.data.assistant_message.id, role: 'assistant', content: event.data.assistant_message.content, status: 'succeeded' }
-              : item
-          )))
+          if (event.data.assistant_message.session_id !== session.id) throw new Error('文本结果与本轮会话不符')
+          terminal = true
+          historyState.adoptCanonicalMessages(session.id, [event.data.assistant_message])
+          setLocalMessages(current => current.filter(item => item.id !== assistantId))
           void historyState.refresh()
         } else if (event.event === 'error') {
-          setLocalMessages((current) => current.map((item) => (
-            item.id === activeTemporaryAssistantId ? { ...item, status: 'failed', error: event.data.error.message } : item
+          terminal = true
+          setLocalMessages(current => current.map(item => (
+            item.id === assistantId ? { ...item, status: 'failed', error: event.data.error.message } : item
           )))
-          if (!selectedTemplate) setDraft(currentPrompt)
+          restoreInput()
         } else if (event.event === 'cancelled') {
-          setLocalMessages((current) => current.map((item) => (
-            item.id === activeTemporaryAssistantId ? { ...item, status: 'cancelled' } : item
+          terminal = true
+          setLocalMessages(current => current.map(item => (
+            item.id === assistantId ? { ...item, status: 'cancelled' } : item
           )))
         }
       }
-    } catch {
-      if (temporaryAssistantId) {
-        const messageId = temporaryAssistantId
-        setLocalMessages((current) => current.filter((item) => item.id !== messageId))
-      }
-      if (!selectedTemplate) setDraft(currentPrompt)
-      if (!(streamAbortRef.current?.signal.aborted)) {
-        message.error('文本模型调用失败，请检查模型、供应商配置和服务日志')
+    } catch (error) {
+      if (!submission.isCurrent(attempt) || terminal) return
+      setLocalMessages(current => current.filter(item => item.id !== assistantId))
+      restoreInput()
+      if (controller?.signal.aborted) return
+      if (targetSessionId && !isRejectedSubmission(error)) {
+        await submission.checkOutcome(attempt, targetSessionId, () => {})
+      } else {
+        submission.reject(attempt, defaultTaskActionErrorMessage(error, '文本请求提交失败，请检查模型配置'))
       }
     } finally {
-      streamAbortRef.current = null
-      streamTaskIdRef.current = undefined
-      streamSessionIdRef.current = undefined
-      setSubmitting(false)
+      if (controller && streamAbortRef.current === controller) {
+        streamAbortRef.current = null
+        streamTaskIdRef.current = undefined
+        streamSessionIdRef.current = undefined
+      }
+      submission.finish(attempt)
     }
   }
 
@@ -304,7 +322,7 @@ export function TextExperimentMode({
       <ExperimentComposer
         secondaryAction={submitting ? <Button icon={<StopOutlined />} danger onClick={() => void handleStop()}>停止生成</Button> : null}
         submitting={submitting}
-        submitDisabled={submitting || Boolean(sessionId && historyState.loading)}
+        submitDisabled={submitting || submission.outcomePending || Boolean(sessionId && historyState.loading)}
         onSubmit={() => void handleSubmit()}
         options={(
           <ExperimentOptionBar
@@ -316,6 +334,8 @@ export function TextExperimentMode({
             modelId={modelId}
             selectedTemplate={selectedTemplate ?? undefined}
             modelsLoading={modelsLoading}
+            modelsFailed={modelsFailed}
+            onRefreshModels={() => void loadModels(true)}
             templatesLoading={templatesLoading}
             templatesFailed={templatesFailed}
             onRefreshTemplates={() => void loadTemplates(true)}
@@ -330,6 +350,7 @@ export function TextExperimentMode({
         )}
       >
         {replacementDialog}
+        <ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} />
         <ExperimentPromptEditor
           template={selectedTemplate}
           templateValues={templateValues}

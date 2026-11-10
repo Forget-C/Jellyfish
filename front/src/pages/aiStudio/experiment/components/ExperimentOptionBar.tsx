@@ -12,6 +12,8 @@ type ExperimentOptionBarProps = {
   modelId?: string
   selectedTemplate?: ExperimentTemplateOption
   modelsLoading?: boolean
+  modelsFailed?: boolean
+  onRefreshModels?: () => void
   templatesLoading?: boolean
   templatesFailed?: boolean
   disabled?: boolean
@@ -31,6 +33,8 @@ export function ExperimentOptionBar({
   modelId,
   selectedTemplate,
   modelsLoading = false,
+  modelsFailed = false,
+  onRefreshModels,
   templatesLoading = false,
   templatesFailed = false,
   disabled = false,
@@ -62,12 +66,26 @@ export function ExperimentOptionBar({
         onOpenChange={onModelOpenChange}
         content={
           <div className="w-72 max-w-[calc(100vw-64px)]">
-            <Typography.Text strong>{modelLabel}</Typography.Text>
+            <div className="flex items-center justify-between gap-2">
+              <Typography.Text strong>{modelLabel}</Typography.Text>
+              {onRefreshModels && !modelsFailed && (
+                <Button type="text" size="small" loading={modelsLoading} onClick={onRefreshModels}>刷新模型</Button>
+              )}
+            </div>
+            {modelsFailed && (
+              <div className="mt-2 flex items-center justify-between gap-2" role="alert">
+                <Typography.Text type="danger">加载模型失败</Typography.Text>
+                <Button size="small" onClick={onRefreshModels}>重试读取模型</Button>
+              </div>
+            )}
+            {modelsLoading ? <Typography.Text type="secondary" role="status">正在加载模型…</Typography.Text> :
+              !modelsFailed && models.length === 0 ? <Typography.Text type="secondary" role="status">暂无可选模型</Typography.Text> : null}
             <Select
               className="w-full mt-2"
               placeholder={modelPlaceholder}
               aria-label={modelLabel}
               loading={modelsLoading}
+              notFoundContent={modelsLoading ? '正在加载模型…' : modelsFailed ? '模型列表暂不可用' : '暂无可选模型'}
               value={modelId}
               onChange={onModelChange}
               options={models.map((model) => ({ value: model.id, label: model.name }))}
@@ -76,7 +94,7 @@ export function ExperimentOptionBar({
         }
       >
         <Button icon={<ApiOutlined aria-hidden="true" />} disabled={disabled} title={selectedModel?.name} className="experiment-option-button">
-          <span>{selectedModel?.name ?? '选择模型'}</span>
+          <span>{selectedModel?.name ?? (modelId ? '已选模型' : '选择模型')}</span>
         </Button>
       </Popover>
       <Popover

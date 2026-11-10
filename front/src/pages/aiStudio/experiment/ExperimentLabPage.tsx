@@ -1,5 +1,5 @@
 /** 统一实验室页面：负责会话与路由，模态组件仅负责各自的生成能力。 */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { ExperimentLabLayout } from './components/ExperimentLabLayout'
@@ -25,6 +25,7 @@ export default function ExperimentLabPage() {
   const requestedMode = parseMode(searchParams.get('mode'))
   const initialLabType = useRef(initialSessionId ? undefined : requestedMode).current
   const sidebarTrigger = useRef<HTMLButtonElement>(null)
+  const [draftRevision, setDraftRevision] = useState(0)
   const {
     sessions, selectedSessionId, selectedLabType, loading, failedTypes, reloadSessions,
     selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages,
@@ -41,8 +42,10 @@ export default function ExperimentLabPage() {
       return
     }
     skipSessionWriteRef.current = true
-    if (requestedMode) selectDraft(requestedMode)
-    else void reloadSessions({})
+    if (requestedMode) {
+      setDraftRevision(revision => revision + 1)
+      selectDraft(requestedMode)
+    } else void reloadSessions({})
   }, [reloadSessions, requestedMode, searchParams, selectDraft])
 
   /** 草稿首提创建会话后补写 URL；已有会话切换均由显式操作写入。 */
@@ -71,6 +74,8 @@ export default function ExperimentLabPage() {
 
   /** 进入草稿态时同步 URL，确保刷新后仍保留所选模态。 */
   const handleStartDraft = (labType: ExperimentLabType) => {
+    // 显式新建草稿使上一份未落库草稿的异步回执失效；首提回写会话 ID 沿用原上下文。
+    setDraftRevision(revision => revision + 1)
     selectDraft(labType)
     const next = new URLSearchParams(searchParams)
     next.delete('session')
@@ -119,7 +124,7 @@ export default function ExperimentLabPage() {
     />
   )
 
-  if (selectedLabType === 'image') return <ImageExperimentMode sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
-  if (selectedLabType === 'video') return <VideoExperimentMode sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
-  return <TextExperimentMode sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />
+  if (selectedLabType === 'image') return <ImageExperimentMode key={draftRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
+  if (selectedLabType === 'video') return <VideoExperimentMode key={draftRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
+  return <TextExperimentMode key={draftRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />
 }
