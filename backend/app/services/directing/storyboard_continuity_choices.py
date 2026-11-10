@@ -27,6 +27,14 @@ def adopted_frames(document, cards):
     return adopted
 
 
+def visual_continuity_state(document):
+    """Record exact fixed inputs authorized by a reversible storyboard application."""
+    cards = {card.id: card for card in document.cards}
+    return {key: {'relation': relation.model_dump(mode='json'), 'binding': binding.model_dump(mode='json'),
+                  'frame': frame.model_dump(mode='json'), 'model_id': cards[key].model_id}
+            for key, (relation, binding, frame, _) in adopted_frames(document, cards).items()}
+
+
 def non_continuity_edits(current, prior, adopted):
     """A frame choice alone does not pin the whole previous model or its design inputs."""
     if not prior:
@@ -34,9 +42,18 @@ def non_continuity_edits(current, prior, adopted):
     originals = {card.id: card for card in prior.cards}
     existing = {card.id: card for card in current.cards}
     edits = set()
-    for key, (_, binding, frame, _) in adopted.items():
+    for key, (relation, binding, frame, _) in adopted.items():
         card = existing[key]
-        comparable = card.model_copy(update={'input_bindings': [item for item in card.input_bindings if item.id != binding.id]})
+        suspended = relation.suspended
+        # The extracted model has no manual prompt or carried media instructions.
+        if suspended and (suspended.prompt_segments or suspended.design_media_uses):
+            edits.add(key)
+            continue
+        inputs = [item for item in card.input_bindings if item.id != binding.id]
+        if suspended:
+            for index, item in sorted(suspended.input_bindings.items()):
+                inputs.insert(index, item)
+        comparable = card.model_copy(update={'input_bindings': inputs})
         if comparable != originals.get(key) or _ordered_connections(current, key, frame.id) != _ordered_connections(prior, key):
             edits.add(key)
     return edits
@@ -67,24 +84,20 @@ def _remove_edge(edges, order, edge):
             ids.remove(edge.id)
 
 
-def _keep_frame_port(target, binding, shots, edges, order, capability):
+def _keep_frame_port(target, binding, shots, capability):
     """Do not reactivate generated subject inputs that would displace a chosen frame."""
     if (binding.input_port not in _FRAME_PORTS or target.model_id != capability.get('model_id')
             or capability.get('supports_subject_reference_with_frame_reference')):
-        return
-    managed = [use for shot in shots for use in shot.reference_uses if use.model_card_id == target.id and use.active]
-    ids = {use.binding_id for use in managed}
-    muted = {item.id: item for item in target.input_bindings if item.id in ids and item.input_port in _SUBJECT_PORTS}
-    if not muted:
-        return
+        return False
+    managed = {use.binding_id for shot in shots for use in shot.reference_uses if use.model_card_id == target.id and use.active}
+    muted = {item.id for item in target.input_bindings if item.id in managed and item.input_port in _SUBJECT_PORTS}
     target.input_bindings = [item for item in target.input_bindings if item.id not in muted]
-    sources = {(item.source.card_id, item.source.port_id, item.input_port) for item in muted.values()}
-    for edge in list(edges):
-        if edge.target_card == target.id and (edge.source_card, edge.source_port, edge.target_port) in sources:
-            _remove_edge(edges, order, edge)
-    for use in managed:
-        if use.binding_id in muted:
-            use.active = False
+    live = {item.id for item in target.input_bindings}
+    for index, shot in enumerate(shots):
+        uses = [use.model_copy(update={'active': False}) if use.binding_id in managed and use.binding_id not in live else use
+                for use in shot.reference_uses]
+        shots[index] = shot.model_copy(update={'reference_uses': uses})
+    return bool(muted)
 
 
 def carry_visual_continuity(current, shots, previous, cards, edges, order, adopted, capability):
@@ -103,7 +116,8 @@ def carry_visual_continuity(current, shots, previous, cards, edges, order, adopt
                 _remove_edge(edges, order, edge)
             impacts.append(f'{label}：接收镜头已移除，将解除人工承接，保留固定图片。')
             continue
-        _keep_frame_port(target, binding, shots, edges, order, capability)
+        if _keep_frame_port(target, binding, shots, capability):
+            impacts.append(f'{label}：新提取的主体参考与固定帧不兼容，将保留人工承接。')
         if not any(item.id == binding.id for item in target.input_bindings):
             target.input_bindings.append(binding)
         if not any(item.id == edge.id for item in edges):

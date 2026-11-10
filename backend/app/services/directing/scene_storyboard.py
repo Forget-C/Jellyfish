@@ -22,6 +22,7 @@ from app.services.directing.scene_canvas import SCENE_TASK_ORDER
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.storyboard_application import plan_application
+from app.services.directing.storyboard_continuity_choices import visual_continuity_state
 from app.services.directing.storyboard_stack_review import review_stack_changes
 from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
@@ -486,7 +487,10 @@ class SceneStoryboardService(SceneObjectService):
 
     @staticmethod
     def _history_state(document: CanvasDocument) -> dict:
-        return {'sources': fixed_source_state(document), 'task_id': document.storyboard.task_id if document.storyboard else None}
+        state = {'sources': fixed_source_state(document), 'task_id': document.storyboard.task_id if document.storyboard else None}
+        if continuity := visual_continuity_state(document):
+            state['visual_continuity'] = continuity
+        return state
 
     async def restore_storyboard(self, chapter_id: str, sequence_id: str, task_id: str,
                                  body: StoryboardRestore) -> CanvasRead:
@@ -511,7 +515,8 @@ class SceneStoryboardService(SceneObjectService):
             raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对整批操作的原文与提取依据', {'canvas_id': canvas.id})
         return await store.save_scene_application(canvas,
             CanvasSave(request_id=body.request_id, expected_revision=body.expected_revision, document=document.model_dump()),
-            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'])
+            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'],
+            restored_continuity=frozenset(history[to_side].get('visual_continuity', {})))
 
     async def _storyboard_read(self, task: Task) -> StoryboardTaskRead:
         canvas_id = task.input_snapshot['canvas_id']

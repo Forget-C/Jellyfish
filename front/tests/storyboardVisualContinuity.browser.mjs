@@ -91,11 +91,11 @@ try {
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
   assert.equal(await preview.getByRole('button', { name: '确认执行' }).isEnabled(), true)
   await closePrecheck(page)
-  const run = async (id) => {
-    const checked = await request(canvas + '/precheck', 'POST', { card_id: id })
+  const run = async (id, targetCanvas = canvas) => {
+    const checked = await request(targetCanvas + '/precheck', 'POST', { card_id: id })
     assert.ok(checked.can_run, JSON.stringify(checked.diagnostics))
-    const result = await request(canvas + '/runs', 'POST', { request_id: randomUUID(), preview_token: checked.preview_token })
-    const runtime = await poll(() => request(canvas + '/runtime'), item => item.runs.find(r => r.id === result.run_id)?.lifecycle === 'finished', 'video did not finish')
+    const result = await request(targetCanvas + '/runs', 'POST', { request_id: randomUUID(), preview_token: checked.preview_token })
+    const runtime = await poll(() => request(targetCanvas + '/runtime'), item => item.runs.find(r => r.id === result.run_id)?.lifecycle === 'finished', 'video did not finish')
     const node = runtime.runs.find(r => r.id === result.run_id).nodes[0]
     assert.equal(node.status, 'succeeded')
     return node
@@ -165,11 +165,11 @@ try {
     await diff.getByText('人工新增的卡片会保留。', { exact: false }).waitFor()
     return diff
   }
-  const applyReextract = async (diff) => {
-    const before = await request(canvas)
+  const applyReextract = async (diff, targetCanvas = canvas) => {
+    const before = await request(targetCanvas)
     await diff.getByRole('button', { name: /^(应用分镜|应用并解除受影响的堆叠)$/ }).click()
     await diff.waitFor({ state: 'hidden' })
-    return poll(() => request(canvas), item => item.revision > before.revision, 're-extraction was not saved')
+    return poll(() => request(targetCanvas), item => item.revision > before.revision, 're-extraction was not saved')
   }
   const checkAdoption = async () => {
     const current = await request(canvas)
@@ -186,10 +186,10 @@ try {
   assert.deepEqual(await request(canvas), unchanged, 'cancelling the review leaves the saved adoption unchanged')
   await page.getByRole('button', { name: '核对差异', exact: true }).click()
   const redesigned = await applyReextract(changed)
-  assert.ok(redesigned.document.cards.find(card => card.id === later).input_bindings.some(input =>
-    redesigned.document.cards.some(card => card.id === input.source.card_id && card.type === 'direction.performance' &&
-      card.input_bindings.some(item => item.source.object_id === redesigned.document.storyboard.shots[1].object_ids[0]))),
-  'the target model takes the newly extracted design rather than keeping its old card wholesale')
+  const usesRearPerformance = ({ document }, target) => document.cards.find(card => card.id === target).input_bindings.some(input =>
+    document.cards.some(card => card.id === input.source.card_id && card.type === 'direction.performance' &&
+      card.input_bindings.some(item => item.source.object_id === document.storyboard.shots[1].object_ids[0])))
+  assert.ok(usesRearPerformance(redesigned, later), 'the target model takes the newly extracted design')
   await checkAdoption()
   const removedSource = await openReextract('source')
   await removedSource.getByText(/来源镜头已移除/).waitFor()
@@ -212,6 +212,57 @@ try {
   await page.goto(`${projectUrl}/generation-canvas?canvas=${task.canvas_id}`)
   await model.getByRole('button', { name: '卡片操作' }).click()
   assert.equal(await model.getByRole('button', { name: '视觉承接' }).count(), 0)
+  await request(controls, 'POST', { visual_continuity_revision: null })
+  const objects = await request(scene + '/objects')
+  const rear = objects.objects.find(item => item.excerpt === '后门的阿同')
+  await request(`${scene}/objects/${rear.id}`, 'PUT', { expected_revision: objects.revision,
+    asset_id: 'object-browser-character', image_file_id: 'object-browser-image' })
+  const second = await request(scene + '/storyboards', 'POST', { request_id: randomUUID(), name: '带主体参考的视觉承接',
+    mode: 'faithful', production_model_id: 'story-video-model', pending_modality: 'video' })
+  const secondCanvas = base + '/' + second.canvas_id
+  await page.goto(`${projectUrl}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${second.canvas_id}&storyboardTask=${second.task_id}`)
+  const prepared = await poll(() => request(secondCanvas), item => item.document.storyboard, 'second storyboard was not saved')
+  const [beforeId, afterId] = prepared.document.storyboard.shots.map(item => item.model_card_ids[0])
+  assert.equal((await request(secondCanvas + '/cards/' + afterId + '/compile')).video_media.subjects.length, 1)
+  await run(beforeId, secondCanvas)
+  await page.reload()
+  const afterCard = page.locator(`[data-card-id="${afterId}"]`)
+  await afterCard.getByRole('button', { name: '卡片操作' }).click()
+  await afterCard.getByRole('button', { name: '视觉承接', exact: true }).click()
+  await dialog.getByRole('checkbox', { name: '同机位接续连续动作' }).check()
+  await dialog.getByRole('button', { name: '定位尾帧并用作首帧' }).click()
+  await adopt.click()
+  await dialog.getByRole('button', { name: '切换为首帧并停用主体参考' }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  const switched = (await request(secondCanvas)).document.storyboard.visual_continuity[afterId]
+  assert.equal(Object.values(switched.suspended.input_bindings).length, 1)
+  const updated = await applyReextract(await openReextract('design'), secondCanvas)
+  assert.deepEqual(updated.document.storyboard.visual_continuity[afterId], switched)
+  const actual = await request(secondCanvas + '/cards/' + afterId + '/compile')
+  assert.equal(actual.video_media.subjects.length, 0)
+  assert.ok(actual.video_media.frames.first.file_id)
+  assert.ok(usesRearPerformance(updated, afterId), 'switching generated subject references does not freeze the extracted design')
+  const removal = await openReextract('target')
+  await removal.getByText(/接收镜头已移除/).waitFor()
+  const noSwitchedTarget = await applyReextract(removal, secondCanvas)
+  assert.ok(!noSwitchedTarget.document.storyboard.visual_continuity?.[afterId])
+  const tampered = structuredClone(updated.document)
+  Object.values(tampered.storyboard.visual_continuity[afterId].suspended.input_bindings)[0].subject_name = '与回执不一致'
+  const rejectedRestore = await fetch(`${scene}/storyboards/${noSwitchedTarget.document.storyboard.task_id}/restore`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      request_id: randomUUID(), expected_revision: noSwitchedTarget.revision, direction: 'undo', document: tampered,
+    }),
+  })
+  assert.equal(rejectedRestore.status, 422)
+  assert.equal((await rejectedRestore.json()).detail.code, 'INVALID_STORYBOARD_RESTORE')
+  const restoreResponse = page.waitForResponse(response => response.url().endsWith('/restore') && response.request().method() === 'POST')
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  const response = await restoreResponse
+  assert.ok(response.ok(), await response.text())
+  const restored = await poll(() => request(secondCanvas), item => item.document.storyboard.visual_continuity?.[afterId],
+    'undo did not restore switched continuity')
+  assert.deepEqual(restored.document.storyboard.visual_continuity[afterId], switched)
+
   console.log('Storyboard visual continuity: later-shot adoption, actual provider input, one save, undo, and reopen')
 } finally {
   await cleanup()
