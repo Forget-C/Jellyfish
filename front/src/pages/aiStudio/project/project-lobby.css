@@ -1,0 +1,210 @@
+.app-shell .project-lobby > .app-page-toolbar {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px var(--app-page-gutter) 16px;
+}
+
+.project-lobby-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+
+.project-lobby-controls .ant-input-affix-wrapper {
+  width: min(100%, 300px);
+}
+
+.project-lobby-controls .ant-select {
+  min-width: 136px;
+}
+
+.project-lobby-controls > :is(.ant-btn, .ant-select, .ant-input-affix-wrapper) {
+  min-height: 38px;
+}
+
+.project-lobby-options .ant-dropdown-menu-item-selected,
+.project-lobby-options .ant-select-item-option-selected {
+  background: #e4edfb;
+  color: #245fc5;
+}
+
+.project-lobby-scroll {
+  padding: 0 var(--app-page-gutter) 24px;
+}
+
+.project-lobby-scroll > .ant-alert {
+  margin-bottom: 12px;
+}
+
+.project-lobby-count {
+  color: var(--app-muted);
+  font-size: 13px;
+  margin-block: 4px 12px;
+}
+
+.project-lobby-batch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--app-selected);
+}
+
+.project-lobby-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 20px;
+}
+
+.project-lobby-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 12px;
+}
+
+.project-lobby-grid--large {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.project-lobby-card {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+.project-lobby-grid--compact .project-lobby-card {
+  padding: 14px;
+}
+
+.project-lobby-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.project-lobby-card-heading > div {
+  min-width: 0;
+}
+
+.project-lobby-card-heading p {
+  margin: 0 0 4px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.project-lobby-card-heading h2,
+.project-lobby-detail h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+
+.project-lobby-card-heading a {
+  color: var(--app-text);
+  text-decoration: none;
+}
+
+.project-lobby-card-heading a:hover {
+  color: var(--app-accent);
+}
+
+.project-lobby-description {
+  margin: 0;
+  color: var(--app-muted);
+}
+
+.project-lobby-stage p {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.project-lobby-status.ant-tag[data-tone='gold'] {
+  background: #fbf0d8;
+  color: #754800;
+}
+
+.project-lobby-status.ant-tag[data-tone='blue'] {
+  background: #e9eff9;
+  color: #24518f;
+}
+
+.project-lobby-status.ant-tag[data-tone='green'] {
+  background: #e4f2eb;
+  color: #256045;
+}
+
+.project-lobby-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding-inline: 12px;
+  border-radius: 8px;
+  background: #edf2fb;
+  color: var(--app-accent);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.project-lobby-next:hover {
+  background: var(--app-selected);
+  color: var(--app-accent);
+}
+
+.project-lobby-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: auto;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.project-lobby-detail {
+  display: grid;
+  gap: 24px;
+  overflow-wrap: anywhere;
+}
+
+.project-lobby-detail h2 {
+  margin-bottom: 10px;
+}
+
+.project-lobby-detail-actions {
+  margin-top: 10px;
+}
+
+@media (max-width: 767px) {
+  .app-shell .project-lobby > .app-page-toolbar {
+    gap: 12px;
+    padding-top: 12px;
+  }
+
+  .project-lobby-controls .ant-input-affix-wrapper {
+    width: 100%;
+  }
+
+  .project-lobby-controls .ant-select {
+    min-width: 112px;
+  }
+
+  .project-lobby-grid {
+    gap: 12px;
+  }
+}
