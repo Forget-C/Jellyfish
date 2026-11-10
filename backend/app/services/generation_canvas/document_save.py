@@ -70,9 +70,12 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict, *, s
                 raise diagnostic('DUPLICATE_OBJECT_NAME', '同一画布内同类型描述名称必须唯一', {'card_id': card.id, 'path': ['name']})
             object_names[(card.type, name)] = card.id
     from app.services.generation_canvas.historical_content import CanvasHistoricalContent
+    from app.services.generation_canvas.video_frames import validate_video_frame_origin
     history = CanvasHistoricalContent(db, project_id)
     for card in document.cards:
-        await history.validate_origin(canvas_id, card, previous_cards.get(card.id), (canvas.detached_proofs or {}).get(card.id))
+        previous = previous_cards.get(card.id)
+        await history.validate_origin(canvas_id, card, previous, (canvas.detached_proofs or {}).get(card.id))
+        validate_video_frame_origin(canvas_id, card, previous)
     for card in document.cards:
         target = getattr(card, 'frame_target', None)
         if target and target.card_id in previous_cards and (not any(source.id == target.card_id for source in document.cards) or any(edge['source_card'] == target.card_id and edge['target_card'] == card.id for edge in canvas.document.get('edges', [])) and not any(edge.source_card == target.card_id and edge.target_card == card.id for edge in document.edges)):

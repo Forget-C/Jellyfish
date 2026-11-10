@@ -27,7 +27,7 @@ export function CanvasSourcePopover({ items, onLocate }: {
         event.preventDefault(); event.stopPropagation(); setOpen(false); button.current?.focus({ preventScroll: true })
       }}>
       <ul>{items.map(({ source, label, position, issue, missing }, index) => <li key={index}>
-        {missing ? <span>{label}</span> : <button type="button" onClick={() => {
+        {missing ? <span>{label}{position && <small>{position}</small>}</span> : <button type="button" onClick={() => {
           setOpen(false)
           if (button.current) onLocate(source, button.current)
         }}>{label}{position && <small>{position}</small>}</button>}

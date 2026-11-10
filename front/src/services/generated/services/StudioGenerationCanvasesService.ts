@@ -16,6 +16,7 @@ import type { ApiResponse_CanvasRunRead_ } from '../models/ApiResponse_CanvasRun
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
+import type { ApiResponse_ImageContentCard_ } from '../models/ApiResponse_ImageContentCard_';
 import type { ApiResponse_list_CanvasCheckProduct__ } from '../models/ApiResponse_list_CanvasCheckProduct__';
 import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
@@ -29,6 +30,7 @@ import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
 import type { CanvasRuntimeEvent } from '../models/CanvasRuntimeEvent';
 import type { CanvasSave } from '../models/CanvasSave';
+import type { CanvasVideoFrameRequest } from '../models/CanvasVideoFrameRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -449,6 +451,35 @@ export class StudioGenerationCanvasesService {
                 'node_id': nodeId,
                 'position': position,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prepare Video Frame
+     * 准备视频选帧素材，调用方可和采用关系一起保存。
+     * @returns ApiResponse_ImageContentCard_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasPrepareVideoFrame({
+        projectId,
+        canvasId,
+        requestBody,
+    }: {
+        projectId: string,
+        canvasId: string,
+        requestBody: CanvasVideoFrameRequest,
+    }): CancelablePromise<ApiResponse_ImageContentCard_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/video-frames',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

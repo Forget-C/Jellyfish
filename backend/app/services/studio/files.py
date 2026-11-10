@@ -154,6 +154,7 @@ async def upload_file(
 
     usage_kind: str | None = None,
     source_ref: str | None = None,
+    file_id: str | None = None,
 ) -> FileItem:
     """上传文件到对象存储，并创建 FileItem 记录。"""
     if not file.filename:
@@ -163,7 +164,7 @@ async def upload_file(
         await get_or_404(db, Project, project_id, detail="Project not found")
     file_type = _detect_file_type(file.filename)
     display_name = _build_display_name(file.filename, name)
-    file_id = uuid.uuid4().hex
+    file_id = file_id or uuid.uuid4().hex
     key = f"files/{file_id}{Path(file.filename).suffix.lower()}"
     await storage.upload_file(
         key=key,

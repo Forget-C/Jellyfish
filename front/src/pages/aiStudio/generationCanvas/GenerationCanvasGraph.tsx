@@ -76,7 +76,8 @@ import type { GenerationCard, GenerationEdge } from './graphRules'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 import { CanvasCardEditor } from './CanvasCardEditor'
-import { CanvasSourcePopover } from './CanvasSourcePopover'
+import type { VideoFrameSource } from './SaveVideoFrameDialog'
+import { CanvasSourcePopover, type CanvasSourceItem } from './CanvasSourcePopover'
 import { sourceDestination, type CanvasSourceFocus } from './canvasSourceNavigation'
 import type { CanvasSourceIndex } from '../../../services/generated'
 import './generationCanvas.css'
@@ -102,7 +103,7 @@ export interface CanvasModelCardActionContext {
 }
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction }: { layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, onSelectVideoFrame }: { onSelectVideoFrame?: (source: VideoFrameSource) => void; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
@@ -134,7 +135,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const sourceItems = useMemo(() => {
     const byId = new Map(document.cards?.map(card => [card.id, card]))
-    return Object.fromEntries(Object.entries(document.storyboard?.origins || {}).map(([id, origin]) => [id,
+    const items: Record<string, CanvasSourceItem[]> = Object.fromEntries(Object.entries(document.storyboard?.origins || {}).map(([id, origin]) => [id,
       (origin.sources || []).map(source => {
         const target = byId.get(source.card_id)
         const { issue } = sourceDestination(document, source)
@@ -146,6 +147,20 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           position: field || (typeof source.start === 'number' && typeof source.end === 'number' ? `正文 ${source.start + 1}–${source.end}` : undefined), issue, missing: !target }
       }),
     ]))
+    for (const card of document.cards || []) {
+      if (!('frame_origin' in card) || !card.frame_origin) continue
+      const origin = card.frame_origin
+      const target = byId.get(origin.source_card_id)
+      const available = target && (origin.result || 'file_id' in target && target.file_id === origin.source_file_id)
+      items[card.id] = [...(items[card.id] || []), {
+        source: { card_id: origin.source_card_id },
+        label: '来源视频',
+        position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
+        missing: !available,
+        issue: !available ? '来源卡片已删除或不可用' : undefined,
+      }]
+    }
+    return items
   }, [document, cardDefinitions, cardTitles])
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
@@ -1666,6 +1681,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const isTextContent = card.type === 'content.text' || card.type === 'content.basis'
           const playbackType = card.type === 'content.audio' ? 'audio' : card.type === 'content.video' ? 'video' : undefined
           const playbackFile = playbackType && 'file_id' in card ? card.file_id ?? undefined : undefined
+          const frameSource = onSelectVideoFrame && !readonly && playbackType === 'video' && playbackFile
+            && 'uploading' in card && !card.uploading && savedDocument?.cards?.some(saved =>
+              saved.id === card.id && 'file_id' in saved && saved.file_id === playbackFile && !saved.uploading)
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
@@ -1692,6 +1710,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else openCardEditor(card.id, trigger) }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}
             onConnect={card.type === 'review.check' ? undefined : trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
+            menuAction={frameSource && <Button onClick={() => {
+              setCardMenuId(undefined)
+              onSelectVideoFrame?.({ source_card_id: card.id, source_file_id: playbackFile! })
+            }}>选帧为图片</Button>}
             sourceControl={sourceItems[card.id]?.length ? <CanvasSourcePopover items={sourceItems[card.id]} onLocate={locateSource} /> : undefined}
             footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && (!readonly || designSizing) || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasContentOrigin } from './CanvasContentOrigin';
+import type { CanvasVideoFrameOrigin } from './CanvasVideoFrameOrigin';
 /**
  * 图片内容卡只有一个图片输出位置。
  */
@@ -13,4 +14,5 @@ export type ImageContentCard = {
     uploading?: boolean;
     origin?: (CanvasContentOrigin | null);
     type?: string;
+    frame_origin?: (CanvasVideoFrameOrigin | null);
 };
