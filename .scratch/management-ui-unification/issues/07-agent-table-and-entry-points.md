@@ -5,6 +5,7 @@
 Blocked by: 01（统一管理布局，完成供应商管理）.
 
 Status: ready-for-agent
+Resolution: completed
 
 - [x] 仅保留表格，取消卡片／表格切换和重复常驻详情面板；类型只保留一个筛选入口，不再同时使用重复分类页签。
 - [x] 默认字段为名称、类型、默认标记、简介、更新时间、操作；简介单行并可查看全文，未知更新时间显示“—”，不伪造字段。
@@ -24,3 +25,5 @@ Status: ready-for-agent
 - 按已确认的浏览器页面与隔离 HTTP 边界执行红绿验证：原实现不能呈现区域加载失败；追加的部分删除失败断言定位并修复确认框名单未同步问题。
 - 验证通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/agentManagement.browser.mjs`（4636）、原 `managementNavigation.browser.mjs`、前端 typecheck 和本页 ESLint。Agent 用例覆盖编辑／测试路线、筛选、排序、分页、新建失败保留及保存、默认失败重试、单项删除取消、批量部分失败恢复、两种主题与约定视口。截图核对 1440px／375px。
 - Agent 编辑页既有测试是本地演示输出；此次只验证测试入口沿用原路由，不宣称真实供应商执行已验收。统一测试清单登记由票据 08 处理。
+
+- 集成分支 `codex-management-ui-unification`。`68bd23f3`，评审修复 `8a98cae1`。Agent 浏览器回归通过，覆盖隔离数据下的操作与陈旧响应。真实预览的现有 Agent 接口返回 404，页面显示读取失败和重试。

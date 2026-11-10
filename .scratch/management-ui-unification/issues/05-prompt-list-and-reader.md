@@ -5,6 +5,7 @@
 Blocked by: 01（统一管理布局，完成供应商管理）.
 
 Status: ready-for-agent
+Resolution: completed
 
 - [x] 顶部采用共用工具栏，搜索明确为模板名称或简介；保留现有添加能力，不声称支持正文全文搜索。
 - [x] 桌面左栏约 300px，展示分类及模板名称，移除树连接线并以浅底标记选中；右栏弹性占满，去掉外层套详情卡的装饰性容器。
@@ -22,3 +23,5 @@ Status: ready-for-agent
 已实现紧凑工具栏、300px 分类列表、自然高度正文、窄屏阅读抽屉及焦点恢复。保留原有创建和编辑弹窗、系统模板权限与默认选择语义；恢复默认增加对象及影响确认，失败保留对话框；列表首次失败与刷新失败独立呈现。
 
 验证入口：`PLAYWRIGHT_CHANNEL=chrome node front/tests/promptManagement.browser.mjs`（4634 端口，HTTP 隔离数据），覆盖查找、分页、编辑失败恢复、预置保护、恢复默认、删除确认、首次/刷新失败、空态、两种主题及 375/767/768/1023/1024/1366/1440 视口。`pnpm --dir front run typecheck`、`pnpm --dir front run lint:check`、`git diff --check` 通过。该证据验证前端行为，不表示真实后端或生产部署验收。
+
+- 集成分支 `codex-management-ui-unification`。`433f6460`，评审修复 `8a98cae1`。提示词浏览器回归通过，覆盖跨页简介搜索、阅读抽屉、编辑保护、恢复默认与删除后刷新失败。
