@@ -198,6 +198,7 @@
 }
 
 .management-details .ant-descriptions-item-content {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
