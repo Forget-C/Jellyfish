@@ -1,8 +1,9 @@
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { Alert, Button, Checkbox, Empty, Modal, Spin, Tabs } from 'antd'
 import { CloseOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
-import { StudioFilesService, type FileRead } from '../../../../services/generated'
+import type { FileRead } from '../../../../services/generated'
+import { useExperimentReferenceUpload } from '../hooks/useExperimentReferenceUpload'
 import { ExperimentReferenceImage } from './ExperimentReferenceImage'
 import { ExperimentReferencePanel } from './ExperimentReferencePanel'
 
@@ -24,32 +25,17 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
   useExperimentLeaveStatus(draft !== null && (draft.length !== value.length || draft.some((id, index) => id !== value[index])))
   const [tab, setTab] = useState('selected')
   const [preview, setPreview] = useState<{ id: string; name: string }>()
-  const [uploading, setUploading] = useState(false)
-  const [uploaded, setUploaded] = useState<string>()
-  const [uploadError, setUploadError] = useState<{ file: File; message: string; retryable: boolean }>()
+  const { uploading, uploaded, uploadError, resetUpload, uploadFile, isUploadPending } =
+    useExperimentReferenceUpload<undefined>(onUploaded, '参考图上传失败')
   const inputRef = useRef<HTMLInputElement>(null)
-  const panelEpoch = useRef(0)
-  const uploadPending = useRef(false)
-
-  // 模态按会话身份挂载；跨会话或退出后，旧上传只能更新资料库。
-  useEffect(() => () => { panelEpoch.current += 1 }, [])
-
-  const resetUpload = () => {
-    uploadPending.current = false
-    setUploading(false)
-    setUploaded(undefined)
-    setUploadError(undefined)
-  }
 
   const open = () => {
-    panelEpoch.current += 1
     setDraft([...value])
     setTab('selected')
     resetUpload()
   }
 
   const close = () => {
-    panelEpoch.current += 1
     setDraft(null)
     setPreview(undefined)
     resetUpload()
@@ -60,34 +46,12 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
     return selected ? current.includes(id) ? current : [...current, id] : current.filter(item => item !== id)
   })
 
-  const upload = async (file: File) => {
-    if (uploadPending.current || draft === null) return
-    setUploaded(undefined)
-    if (!file.type.startsWith('image/')) {
-      setUploadError({ file, message: '只能上传图片作为参考图', retryable: false })
-      return
-    }
-    const epoch = panelEpoch.current
-    uploadPending.current = true
-    setUploading(true)
-    setUploadError(undefined)
-    try {
-      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string } })
-      const saved = response.data
-      if (!saved) throw new Error('上传未返回文件信息')
-      onUploaded(saved)
-      if (panelEpoch.current !== epoch) return
+  const upload = (file: File) => {
+    if (draft === null) return
+    return uploadFile(file, undefined, (saved) => {
       toggle(saved.id, true)
-      setUploaded(saved.name)
       setTab('selected')
-    } catch {
-      if (panelEpoch.current === epoch) setUploadError({ file, message: '参考图上传失败', retryable: true })
-    } finally {
-      if (panelEpoch.current === epoch) {
-        uploadPending.current = false
-        setUploading(false)
-      }
-    }
+    }, file.type.startsWith('image/') ? undefined : '只能上传图片作为参考图')
   }
 
   const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +105,7 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
       previewOpen={Boolean(preview)}
       onCancel={close}
       onApply={() => {
-        if (draft === null || disabled || uploadPending.current) return
+        if (draft === null || disabled || isUploadPending()) return
         onChange(draft)
         close()
       }}

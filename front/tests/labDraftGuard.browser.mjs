@@ -20,6 +20,7 @@ sessions.push(
 const histories = new Map()
 const generationRequests = []
 const stopRequests = []
+const deleteRequests = []
 const streams = new Set()
 let live
 let holdAcceptance = false
@@ -116,6 +117,10 @@ try {
         return respond(session)
       }
       return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
+    }
+    if (url.pathname.includes('/experiment-sessions/') && request.method() === 'DELETE') {
+      deleteRequests.push(url.pathname)
+      return respond(null)
     }
     if (url.pathname.endsWith('/messages')) return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/models')) {
@@ -224,6 +229,15 @@ try {
   holdAcceptance = false
   accept(live)
   await page.getByRole('button', { name: '停止生成', exact: true }).waitFor()
+  const currentActions = page.getByRole('button', { name: '新文本会话 更多操作', exact: true })
+  await currentActions.focus()
+  await currentActions.press('Enter')
+  const removeCurrent = page.getByRole('menuitem', { name: /^删除会话/ })
+  await removeCurrent.waitFor()
+  assert.equal(await removeCurrent.getAttribute('aria-disabled'), 'true')
+  assert.deepEqual(deleteRequests, [])
+  assert.equal(streams.has(live.response), true)
+  await page.keyboard.press('Escape')
   await page.getByRole('link', { name: '首页', exact: true }).click()
   await activeLeave.getByRole('button', { name: '继续等待' }).click()
   assert.equal(stopRequests.length, 0)

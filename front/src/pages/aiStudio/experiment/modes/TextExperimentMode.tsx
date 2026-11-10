@@ -55,6 +55,7 @@ type LocalMessage = {
   inputSnapshot?: ExperimentInputSnapshot
   status?: 'running' | 'succeeded' | 'failed' | 'cancelled'
   progress?: number
+  partial?: boolean
   error?: string
 }
 
@@ -116,6 +117,7 @@ export function TextExperimentMode({
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues])
   const submission = useExperimentSubmission(sessionId, historyState, inputSignature(draft))
   const { submitting } = submission
+  const liveRun = submitting && !submission.outcomePending
   const previousSessionIdRef = useRef(sessionId)
   const streamAbortRef = useRef<AbortController | null>(null)
   const streamTaskIdRef = useRef<string | undefined>(undefined)
@@ -254,6 +256,16 @@ export function TextExperimentMode({
       }
     } catch (error) {
       if (!submission.isCurrent(attempt) || terminal) return
+      if (acceptedTaskId && targetSessionId && !controller?.signal.aborted) {
+        setLocalMessages(current => current.flatMap(item => {
+          if (item.id !== assistantId) return [item]
+          return item.content ? [{ ...item, status: undefined, partial: true }] : []
+        }))
+        await submission.checkOutcome(attempt, targetSessionId, () => {
+          setLocalMessages(current => current.filter(item => item.id !== assistantId))
+        }, { taskId: acceptedTaskId, accepted: true })
+        return
+      }
       setLocalMessages(current => current.filter(item => item.id !== assistantId))
       restoreInput()
       if (controller?.signal.aborted) return
@@ -301,7 +313,7 @@ export function TextExperimentMode({
     }
   }
 
-  useExperimentLeaveStatus(submission.dirty, submitting ? {
+  useExperimentLeaveStatus(submission.dirty, liveRun ? {
     ready: Boolean(streamTaskIdRef.current),
     stopping: stopState === 'requesting',
     stop: handleStop,
@@ -340,15 +352,15 @@ export function TextExperimentMode({
             status={item.status ? <ExperimentTaskStatus status={item.status} progress={item.progress} /> : null}
             tone={item.role === 'user' ? 'user' : 'assistant'}
           >
-            {item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
+            {item.partial ? <><div>{item.content}</div><p className="experiment-result-note">流连接中断前收到的部分回复</p></> : item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
           </ExperimentMessageBubble>
         ))}
-        {submitting && !streamTaskIdRef.current ? <p className="experiment-history-loading" role="status">正在发送…</p> : null}
+        {liveRun && !streamTaskIdRef.current ? <p className="experiment-history-loading" role="status">正在发送…</p> : null}
       </ExperimentHistory>
     ),
     composer: (
       <ExperimentComposer
-        secondaryAction={submitting ? <Button icon={<StopOutlined aria-hidden="true" />} danger
+        secondaryAction={liveRun ? <Button icon={<StopOutlined aria-hidden="true" />} danger
           loading={stopState === 'requesting'}
           disabled={!streamTaskIdRef.current || stopState === 'requested'}
           onClick={() => { void handleStop().catch(() => {}) }}>停止生成</Button> : null}
@@ -381,8 +393,8 @@ export function TextExperimentMode({
         )}
       >
         {replacementDialog}
-        {submitting && stopState === 'requested' && <p role="status">已请求停止，等待本轮结束。</p>}
-        {submitting && stopState === 'failed' && <p role="alert">停止生成请求失败，请重试。</p>}
+        {liveRun && stopState === 'requested' && <p role="status">已请求停止，等待本轮结束。</p>}
+        {liveRun && stopState === 'failed' && <p role="alert">停止生成请求失败，请重试。</p>}
         <ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} />
         <ExperimentPromptEditor
           template={selectedTemplate}

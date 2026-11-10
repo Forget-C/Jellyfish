@@ -53,7 +53,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
 
   /** 保留全局最近会话的既有恢复规则，显式选择优先于迟到的读取结果。 */
   const reloadSessions = useCallback(async (
-    target: { sessionId?: string; labType?: ExperimentLabType } = { sessionId: initialSessionId, labType: initialLabType },
+    target: { sessionId?: string; labType?: ExperimentLabType; currentSession?: ExperimentSessionRead } = { sessionId: initialSessionId, labType: initialLabType },
   ) => {
     const request = ++loadRevision.current
     const selection = selectionRevision.current
@@ -75,11 +75,16 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
         failures.push(labType)
         return []
       }))
-      setSessions(nextSessions)
+      setSessions(current => sortSessions([
+        ...nextSessions,
+        ...current.filter(session => failures.includes(session.lab_type)),
+      ]))
       setFailedTypes(failures)
       if (selection !== selectionRevision.current) return
 
+      const retained = target.currentSession
       const targetSession = nextSessions.find((session) => session.id === target.sessionId)
+        ?? (retained && retained.id === target.sessionId && failures.includes(retained.lab_type) ? retained : undefined)
       // 有类型未读到时，显式地址仍待核实，不能改用别的会话。
       const canRestoreLatest = !target.labType && (!target.sessionId || failures.length === 0)
       const restored = targetSession ?? (canRestoreLatest ? nextSessions[0] : undefined)

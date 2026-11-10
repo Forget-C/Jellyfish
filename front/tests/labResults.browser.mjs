@@ -10,7 +10,7 @@ const output = await browserOutput('jellyfish-lab-results-')
 const origin = 'http://127.0.0.1:4805'
 const timestamp = '2026-09-15T00:00:00Z'
 const session = (id, lab_type, title) => ({ id, lab_type, title, updated_at: timestamp, created_at: timestamp })
-const sessions = [session('text-history', 'text', '文本历史'), session('text-long', 'text', '长会话'), session('image-history', 'image', '图片历史'), session('video-history', 'video', '视频历史'), session('portrait-history', 'video', '竖视频历史')]
+const sessions = [session('text-history', 'text', '文本历史'), session('text-long', 'text', '长会话'), session('image-history', 'image', '图片历史'), session('image-stale-poll', 'image', '轮询过期会话'), session('video-history', 'video', '视频历史'), session('portrait-history', 'video', '竖视频历史')]
 const item = (id, session_id, role, content, sequence, extra = {}) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp, ...extra,
 })
@@ -40,6 +40,12 @@ let imageStatus = 'unavailable'
 const imagePrompt = item('image-prompt', 'image-history', 'user', '图片实验原始提示词', 1)
 const imageTask = item('image-task', 'image-history', 'task', '图片生成任务已提交，正在等待生成结果。', 2, {
   task_id: 'image-run', status: 'queued',
+})
+let staleHistoryAvailable = false
+let staleStatusAvailable = true
+const stalePrompt = item('stale-prompt', 'image-stale-poll', 'user', '轮询故障后读取历史', 1)
+const staleTask = item('stale-task', 'image-stale-poll', 'task', '图片生成任务已提交，正在等待生成结果。', 2, {
+  task_id: 'stale-run', status: 'queued',
 })
 const writes = []
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -80,6 +86,16 @@ try {
     if (url.pathname.endsWith('/image-history/messages')) {
       if (imageReadsFail) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
       return respond([imageTask, imagePrompt])
+    }
+    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'image-model', name: '验收图片模型', category: 'image' }] })
+    if (url.pathname.endsWith('/image-stale-poll/tasks')) return respond({ task_id: 'stale-run', messages: [staleTask, stalePrompt] })
+    if (url.pathname.endsWith('/image-stale-poll/messages')) {
+      if (!staleHistoryAvailable) return route.fulfill({ status: 503 })
+      return respond([{ ...staleTask, status: 'succeeded', payload: { result: { images: [{ url: imageUrls[0] }] } } }, stalePrompt])
+    }
+    if (url.pathname.endsWith('/film/tasks/stale-run/result')) {
+      if (!staleStatusAvailable) return route.fulfill({ status: 503 })
+      return respond({ task_id: 'stale-run', stage: 'running', status: 'running', progress: 29 })
     }
     if (url.pathname.endsWith('/portrait-history/messages')) {
       return respond([item('portrait-result', 'portrait-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
@@ -196,6 +212,25 @@ try {
     await page.screenshot({ path: output + '/solid-video-' + width + 'x' + height + '.png', animations: 'disabled' })
   }
   assert.deepEqual(writes, [])
+
+  await page.goto(origin + '/lab?session=image-stale-poll')
+  const retryHistory = history.getByRole('button', { name: '重试读取消息', exact: true })
+  await retryHistory.waitFor()
+  await page.getByRole('button', { name: '选择模型', exact: true }).click()
+  await page.getByRole('button', { name: '验收图片模型', exact: true }).waitFor()
+  await page.getByRole('textbox', { name: '图片提示词' }).fill(stalePrompt.content)
+  const generate = page.getByRole('button', { name: '生成图片', exact: true })
+  await generate.click()
+  await history.getByText('生成中 29%', { exact: true }).waitFor()
+  staleStatusAvailable = false
+  await history.getByText('状态暂不可用', { exact: true }).waitFor()
+  staleHistoryAvailable = true
+  await retryHistory.click()
+  await history.getByText('已完成', { exact: true }).waitFor()
+  await history.getByRole('button', { name: '查看图片 1' }).waitFor()
+  assert.equal(await history.getByText('状态暂不可用', { exact: true }).count(), 0)
+  assert.equal(await generate.isEnabled(), true)
+  assert.deepEqual(writes, ['/api/v1/studio/generation-tasks/labs/image/sessions/image-stale-poll/tasks'])
   console.log(`Experiment result browser acceptance passed. Evidence: ${output}`)
 } finally {
   await cleanup()

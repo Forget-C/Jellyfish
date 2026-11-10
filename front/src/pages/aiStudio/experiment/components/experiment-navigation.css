@@ -13,7 +13,7 @@
   min-height: 0;
   padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
 }
-.app-lab-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; container-type: inline-size; }
+.app-lab-history { container-type: inline-size; }
 .experiment-history-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .experiment-history-list { min-height: 100%; }
 .experiment-history-list > * + * { margin-top: 16px; }
@@ -264,4 +264,5 @@
 .experiment-task-status-success { color: #18734f; background: #e8f6ee; }
 .experiment-task-status-error { color: #ad2838; background: #ffedf0; }
 .experiment-task-read-state .ant-btn { height: auto; padding: 0 4px; font-size: 12px; }
+.experiment-result-note { color: var(--app-muted); font-size: 12px; margin: 4px 0 0; }
 .experiment-result-error { color: #ad2838; }

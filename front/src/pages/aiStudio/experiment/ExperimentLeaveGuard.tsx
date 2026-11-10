@@ -114,5 +114,5 @@ export function useExperimentLeaveGuard() {
     {run && failed && <Alert type="error" message="停止生成请求失败，已保留当前会话。请重试或继续等待。" showIcon />}
   </Modal>
 
-  return { register, request, allowNavigation, dialog, dirty, pendingNavigation: Boolean(transition) }
+  return { register, request, allowNavigation, dialog, dirty, textRunActive: Boolean(run), isTextRunActive: () => Boolean(readStatus().run), pendingNavigation: Boolean(transition) }
 }

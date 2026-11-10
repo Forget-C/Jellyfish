@@ -11,6 +11,7 @@ type ExperimentLabType = ExperimentSessionRead['lab_type']
 type ExperimentSessionSidebarProps = {
   value?: string
   currentSessionDirty?: boolean
+  currentSessionGenerating?: boolean
   sessions: ExperimentSessionRead[]
   labType: ExperimentLabType
   loading: boolean
@@ -27,7 +28,7 @@ type ExperimentSessionSidebarProps = {
  *
  * 新建入口只选择实验模态并进入草稿态；首条有效提交由页面创建持久化会话。
  */
-export function ExperimentSessionSidebar({ value, currentSessionDirty, sessions, labType, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
+export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSessionGenerating, sessions, labType, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
   const [renameOpen, setRenameOpen] = useState(false)
   const [targetSession, setTargetSession] = useState<ExperimentSessionRead | null>(null)
   const [title, setTitle] = useState('')
@@ -53,7 +54,8 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, sessions,
     onDelete ? {
       key: 'delete',
       icon: <DeleteOutlined aria-hidden="true" />,
-      label: '删除会话',
+      label: session.id === value && currentSessionGenerating ? '删除会话（文本生成中）' : '删除会话',
+      disabled: session.id === value && currentSessionGenerating,
       danger: true,
       onClick: () => setDeleteTarget(session),
     } : null,

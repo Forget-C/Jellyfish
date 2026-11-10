@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Button, Spin } from 'antd'
 import { ArrowDownOutlined } from '@ant-design/icons'
+import { WorkspaceScrollPanel } from '../../../../components/layout/PageLayout'
 import { ExperimentEmptyState } from './ExperimentEmptyState'
 import type { ExperimentHistoryState } from '../hooks/useExperimentHistory'
 
@@ -14,7 +15,7 @@ type ExperimentHistoryProps = {
 /** 管理历史读取状态及滚动。向前分页时保持首条可见消息的屏幕位置。 */
 export function ExperimentHistory({ history, messageCount, emptyDescription, children }: ExperimentHistoryProps) {
   const { error, errorOnLoadMore, hasLoadedHistory, hasMoreHistory, loading, loadingMore, refresh, loadMore } = history
-  const viewportRef = useRef<HTMLElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const followingLatest = useRef(true)
   const anchor = useRef<{ element: HTMLElement; top: number; count: number }>()
@@ -68,7 +69,7 @@ export function ExperimentHistory({ history, messageCount, emptyDescription, chi
   }
 
   return <div className="experiment-history-panel">
-    <section ref={viewportRef} className="app-lab-history" aria-label="会话消息" tabIndex={0}
+    <WorkspaceScrollPanel ref={viewportRef} className="app-lab-history" role="region" aria-label="会话消息" tabIndex={0}
       onScroll={(event) => {
         const viewport = event.currentTarget
         const away = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > 24
@@ -89,7 +90,7 @@ export function ExperimentHistory({ history, messageCount, emptyDescription, chi
         {!messageCount && !loading && !error ? <ExperimentEmptyState description={emptyDescription} /> : null}
         {children}
       </div>
-    </section>
+    </WorkspaceScrollPanel>
     {showLatest ? <Button className="experiment-history-jump" icon={<ArrowDownOutlined aria-hidden="true" />} onClick={jumpToLatest}>回到最新</Button> : null}
   </div>
 }

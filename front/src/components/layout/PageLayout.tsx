@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type HTMLAttributes, type ReactNode } from 'react'
 
 type LayoutSlotProps = HTMLAttributes<HTMLElement> & {
   children: ReactNode
@@ -29,10 +29,12 @@ export function WorkspaceLayout({ children, className = '', ...props }: LayoutSl
  * Defines the default vertical scroll surface inside a WorkspaceLayout.
  * Use this for natural-height content such as dashboards and lists.
  */
-export function WorkspaceScrollPanel({ children, className = '', ...props }: LayoutSlotProps) {
+export const WorkspaceScrollPanel = forwardRef<HTMLDivElement, LayoutSlotProps>(function WorkspaceScrollPanel(
+  { children, className = '', ...props }, ref,
+) {
   return (
-    <div className={`app-workspace-scroll ${className}`.trim()} {...props}>
+    <div ref={ref} className={`app-workspace-scroll ${className}`.trim()} {...props}>
       {children}
     </div>
   )
-}
+})

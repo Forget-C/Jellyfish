@@ -287,6 +287,29 @@ try {
   assert.deepEqual(writes.at(-1), writes.at(-2))
   await page.screenshot({ path: join(output, 'configured-retry.png'), animations: 'disabled' })
 
+  await openLab('text')
+  await textInput.fill('已接收但流意外断开')
+  const disconnectUser = historyMessage('text-session', 'disconnect-user', 'user', '已接收但流意外断开', 3)
+  const writesBeforeDisconnect = writes.length
+  const readsBeforeDisconnect = historyReads
+  submission = route => {
+    histories.set('text-session', [...(histories.get('text-session') ?? []), disconnectUser])
+    return route.fulfill({ contentType: 'text/event-stream', body:
+      frame('accepted', 1, { task_id: 'disconnect-run', user_message: disconnectUser }) +
+      frame('delta', 2, { task_id: 'disconnect-run', text_delta: '断流前收到的部分回复' }),
+    })
+  }
+  await textSubmit.click()
+  await page.getByText('状态暂不可用', { exact: true }).waitFor()
+  await page.getByText('断流前收到的部分回复', { exact: true }).waitFor()
+  await page.getByText('已接收但流意外断开', { exact: true }).waitFor()
+  assert.equal(await page.getByText('提交结果未知', { exact: true }).count(), 0)
+  assert.equal(await textSubmit.isDisabled(), true)
+  await page.getByRole('button', { name: '重试读取历史', exact: true }).click()
+  await page.getByText('状态暂不可用', { exact: true }).waitFor()
+  assert.ok(historyReads >= readsBeforeDisconnect + 2)
+  assert.equal(writes.length, writesBeforeDisconnect + 1)
+
   console.log('Lab submission recovery browser checks passed', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' })

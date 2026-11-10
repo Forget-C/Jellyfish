@@ -4,12 +4,16 @@ import { FilmService, type TaskResultRead } from '../../../../services/generated
 type TaskMessage = { taskId?: string; status?: string }
 type TaskRead = { result?: TaskResultRead; unavailable: boolean }
 
+function isTerminal(status?: string) {
+  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+}
+
 /** 仅轮询已知仍在执行的任务，读取错误保留最后一次可靠状态。 */
 export function useExperimentTaskResults(messages: TaskMessage[], refreshHistory: () => Promise<void>) {
   const [reads, setReads] = useState<Record<string, TaskRead>>({})
   const [retry, setRetry] = useState(0)
   const runningTaskId = messages.find((message) => {
-    if (!message.taskId) return false
+    if (!message.taskId || isTerminal(message.status)) return false
     const status = reads[message.taskId]?.result?.status ?? message.status
     return status === 'queued' || status === 'running' || status === 'pending'
   })?.taskId
@@ -28,7 +32,7 @@ export function useExperimentTaskResults(messages: TaskMessage[], refreshHistory
         if (cancelled) return
         if (!data || data.task_id !== taskId) throw new Error('任务状态不可用')
         setReads((current) => ({ ...current, [taskId]: { result: data, unavailable: false } }))
-        if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'cancelled') {
+        if (isTerminal(data.status)) {
           void refreshHistory()
           return
         }
@@ -47,5 +51,14 @@ export function useExperimentTaskResults(messages: TaskMessage[], refreshHistory
     }
   }, [refreshHistory, retry, runningTaskId])
 
-  return { reads, runningTaskId, retryStatus: () => setRetry((current) => current + 1) }
+  // 历史已确认终态时，旧的轮询进度和读取失败不再代表当前状态。
+  const currentReads = { ...reads }
+  for (const { taskId, status } of messages) {
+    if (!taskId || !isTerminal(status)) continue
+    const result = reads[taskId]?.result
+    if (result?.status === status) currentReads[taskId] = { result, unavailable: false }
+    else delete currentReads[taskId]
+  }
+
+  return { reads: currentReads, runningTaskId, retryStatus: () => setRetry((current) => current + 1) }
 }

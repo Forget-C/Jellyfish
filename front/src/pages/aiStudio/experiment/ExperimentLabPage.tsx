@@ -27,9 +27,9 @@ export default function ExperimentLabPage() {
   const initialLabType = useRef(initialSessionId ? undefined : requestedMode).current
   const sidebarTrigger = useRef<HTMLButtonElement>(null)
   const [contextRevision, setContextRevision] = useState(0)
-  const { register, request, allowNavigation, dialog, dirty, pendingNavigation } = useExperimentLeaveGuard()
+  const { register, request, allowNavigation, dialog, dirty, textRunActive, isTextRunActive, pendingNavigation } = useExperimentLeaveGuard()
   const {
-    sessions, selectedSessionId, selectedLabType, loading, failedTypes, reloadSessions,
+    sessions, selectedSession, selectedSessionId, selectedLabType, loading, failedTypes, reloadSessions,
     selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages,
   } = useExperimentSessions({ initialSessionId, initialLabType })
 
@@ -91,6 +91,7 @@ export default function ExperimentLabPage() {
   /** 删除后恢复全局最新会话；没有历史时回到文本草稿。 */
   const handleDeleteSession = async (sessionId: string) => {
     const deletingCurrent = sessionId === selectedSessionId
+    if (deletingCurrent && isTextRunActive()) throw new Error('文本生成中，不能删除当前会话')
     const next = await deleteSession(sessionId)
     if (!deletingCurrent) return
     if (next) handleSelectSession(next)
@@ -103,7 +104,7 @@ export default function ExperimentLabPage() {
   const renderLayout = (title: string) => (slots: LabSlots) => (
     <ExperimentLabLayout
       title={title}
-      sessionTitle={sessions.find(session => session.id === selectedSessionId)?.title}
+      sessionTitle={selectedSession?.title}
       clearContent={slots.clearContent}
       sidebarTrigger={sidebarTrigger}
       sidebar={(close) => <ExperimentSessionSidebar
@@ -113,10 +114,12 @@ export default function ExperimentLabPage() {
         loading={loading}
         failedTypes={failedTypes}
         onRetry={() => void reloadSessions({
-          sessionId: searchParams.get('session') ?? undefined,
+          sessionId: searchParams.get('session') ?? selectedSessionId,
           labType: requestedMode,
+          currentSession: selectedSession,
         })}
         currentSessionDirty={dirty}
+        currentSessionGenerating={textRunActive}
         onChange={session => {
           if (session.id === selectedSessionId) { close(); return }
           request(() => { handleSelectSession(session); close() })

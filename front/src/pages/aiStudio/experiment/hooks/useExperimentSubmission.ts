@@ -19,13 +19,14 @@ type UncertainSubmission = {
   attempt: Attempt
   sessionId: string
   taskId?: string
+  accepted?: boolean
   accept: () => void
 }
 
 export type ExperimentSubmissionNotice =
   | { kind: 'rejected'; message: string }
-  | { kind: 'checking' }
-  | { kind: 'unknown'; historyUnavailable: boolean }
+  | { kind: 'checking'; accepted?: boolean }
+  | { kind: 'unknown' | 'run-unavailable'; historyUnavailable: boolean }
 
 export function isRejectedSubmission(error: unknown) {
   const status = error instanceof ApiError || error instanceof TextLabStreamTransportError ? error.status : undefined
@@ -105,7 +106,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
     const uncertain = uncertainRef.current
     if (!uncertain || checkingRef.current === uncertain) return
     checkingRef.current = uncertain
-    setNotice({ kind: 'checking' })
+    setNotice({ kind: 'checking', accepted: uncertain.accepted })
     try {
       const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
         sessionId: uncertain.sessionId, page: 1, pageSize: 50,
@@ -115,25 +116,29 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
       const messages: ExperimentMessageRead[] = response.data.filter(item => item.session_id === uncertain.sessionId)
       history.adoptCanonicalMessages(uncertain.sessionId, messages)
       // History alone cannot correlate identical prompts from separate submissions.
-      if (uncertain.taskId && messages.some(item => item.role !== 'user' && item.task_id === uncertain.taskId)) {
+      const matched = uncertain.taskId && messages.find(item => item.role !== 'user' && item.task_id === uncertain.taskId)
+      const terminal = matched && ['succeeded', 'failed', 'cancelled'].includes(matched.status ?? '')
+      if (matched && (!uncertain.accepted || terminal)) {
         uncertainRef.current = undefined
         setNotice(undefined)
         uncertain.accept()
       } else {
-        setNotice({ kind: 'unknown', historyUnavailable: false })
+        setNotice({ kind: uncertain.accepted ? 'run-unavailable' : 'unknown', historyUnavailable: false })
       }
     } catch {
       if (uncertainRef.current === uncertain && isCurrent(uncertain.attempt)) {
-        setNotice({ kind: 'unknown', historyUnavailable: true })
+        setNotice({ kind: uncertain.accepted ? 'run-unavailable' : 'unknown', historyUnavailable: true })
       }
     } finally {
       if (checkingRef.current === uncertain) checkingRef.current = undefined
     }
   }
 
-  const checkOutcome = async (attempt: Attempt, targetSessionId: string, accept: () => void, taskId?: string) => {
+  const checkOutcome = async (
+    attempt: Attempt, targetSessionId: string, accept: () => void, result?: { taskId?: string; accepted?: boolean },
+  ) => {
     if (!isCurrent(attempt)) return
-    uncertainRef.current = { attempt, sessionId: targetSessionId, accept, taskId }
+    uncertainRef.current = { attempt, sessionId: targetSessionId, accept, ...result }
     await checkHistory()
   }
 
@@ -159,7 +164,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
         history.adoptCanonicalMessages(session.id, created.messages.filter(item => item.session_id === session.id))
         accept()
       } else {
-        await checkOutcome(attempt, session.id, accept, created?.task_id)
+        await checkOutcome(attempt, session.id, accept, { taskId: created?.task_id })
       }
     } catch (error) {
       if (targetSessionId && !isRejectedSubmission(error)) {
@@ -181,7 +186,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
     submitting, notice, begin, finish, isCurrent, acceptInput, reject,
     dirty: input !== (receipt && receipt.sessionId === sessionId ? receipt.cleanInput : initialInput.current),
     submitTask, checkOutcome, checkHistory, acknowledgeUnknown,
-    outcomePending: notice?.kind === 'checking' || notice?.kind === 'unknown',
+    outcomePending: notice?.kind === 'checking' || notice?.kind === 'unknown' || notice?.kind === 'run-unavailable',
     restoreUnsent: (attempt: Attempt) => { if (isCurrent(attempt)) setReceipt(undefined) },
   }
 }

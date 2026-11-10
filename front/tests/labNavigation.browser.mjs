@@ -31,7 +31,7 @@ const message = (id, session_id, role, content, sequence) => ({ id, session_id, 
 const frame = (event, sequence, data) =>
   'id: ' + sequence + '\nevent: ' + event + '\ndata: ' + JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data }) + '\n\n'
 
-const server = await createServer({ root, server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false } })
+const server = await createServer({ root, cacheDir: output + '/vite-cache', server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false } })
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
@@ -212,6 +212,18 @@ try {
   await imageInput.waitFor()
   await page.getByRole('alert').getByText('部分会话读取失败', { exact: true }).waitFor()
   assert.deepEqual(prematureImageMessages, [])
+  await imageInput.fill('刷新时保留的图片草稿')
+  failedType = 'image'
+  const retry = page.getByRole('button', { name: '重试', exact: true })
+  await Promise.all([
+    page.waitForResponse(response => response.url().includes('lab_type=image') && response.status() === 503),
+    retry.click(),
+  ])
+  await retry.waitFor()
+  await page.getByRole('heading', { name: '图片实验室 · 图片历史 1', exact: true }).waitFor()
+  assert.equal(await imageInput.inputValue(), '刷新时保留的图片草稿')
+  await history.getByRole('button', { name: '图片历史 2', exact: true }).waitFor()
+  await imageInput.fill('')
   failedType = undefined
   await page.getByRole('button', { name: '重试' }).click()
   await page.getByText('部分会话读取失败', { exact: true }).waitFor({ state: 'hidden' })

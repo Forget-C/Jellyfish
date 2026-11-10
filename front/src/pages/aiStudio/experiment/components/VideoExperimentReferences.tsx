@@ -2,7 +2,8 @@ import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefCallback } from 'react'
 import { Alert, Button, Empty, Input, Modal, Spin } from 'antd'
 import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
-import { StudioFilesService, type FileRead, type VideoGenerationOptionsRead } from '../../../../services/generated'
+import type { FileRead, VideoGenerationOptionsRead } from '../../../../services/generated'
+import { useExperimentReferenceUpload } from '../hooks/useExperimentReferenceUpload'
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentReferenceImage } from './ExperimentReferenceImage'
 import { ExperimentReferencePanel } from './ExperimentReferencePanel'
@@ -81,16 +82,12 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
     if (!element) previewPlayer.current?.pause()
     previewPlayer.current = element
   }, [])
-  const [uploading, setUploading] = useState(false)
-  const [uploaded, setUploaded] = useState<string>()
-  const [uploadError, setUploadError] = useState<{ target: Target; file: File; retryable: boolean }>()
-  const panelEpoch = useRef(0)
-  const uploadPending = useRef(false)
+  const { uploading, uploaded, uploadError, clearFeedback, resetUpload, uploadFile, isUploadPending } =
+    useExperimentReferenceUpload<Target>(onUploaded, '参考素材上传失败')
   const inputRef = useRef<HTMLInputElement>(null)
   const libraryHeadingRef = useRef<HTMLHeadingElement>(null)
   const libraryTriggerRef = useRef<HTMLElement | null>(null)
 
-  useEffect(() => () => { panelEpoch.current += 1 }, [])
   useEffect(() => {
     if (target) libraryHeadingRef.current?.focus()
   }, [target])
@@ -101,13 +98,9 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
   }
 
   const reset = () => {
-    panelEpoch.current += 1
-    uploadPending.current = false
-    setUploading(false)
+    resetUpload()
     setTarget(undefined)
     closePreview()
-    setUploadError(undefined)
-    setUploaded(undefined)
   }
 
   const updateSubject = (id: string, update: (subject: VideoSubjectDraft) => VideoSubjectDraft) => {
@@ -127,33 +120,10 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
     }))
   }
 
-  const upload = async (destination: Target, file: File) => {
-    if (uploadPending.current || draft === null) return
-    setUploaded(undefined)
-    if (!file.type.startsWith(`${destination.kind}/`)) {
-      setUploadError({ target: destination, file, retryable: false })
-      return
-    }
-    const epoch = panelEpoch.current
-    uploadPending.current = true
-    setUploading(true)
-    setUploadError(undefined)
-    try {
-      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string } })
-      const saved = response.data
-      if (!saved) throw new Error('上传未返回文件信息')
-      onUploaded(saved)
-      if (panelEpoch.current !== epoch) return
-      toggle(destination, saved.id, true)
-      setUploaded(saved.name)
-    } catch {
-      if (panelEpoch.current === epoch) setUploadError({ target: destination, file, retryable: true })
-    } finally {
-      if (panelEpoch.current === epoch) {
-        uploadPending.current = false
-        setUploading(false)
-      }
-    }
+  const upload = (destination: Target, file: File) => {
+    if (draft === null) return
+    return uploadFile(file, destination, saved => toggle(destination, saved.id, true),
+      file.type.startsWith(`${destination.kind}/`) ? undefined : `请选择${kindLabel[destination.kind]}文件`)
   }
 
   const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -180,8 +150,7 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
 
   const openLibrary = (destination: Target, trigger: HTMLElement) => {
     libraryTriggerRef.current = trigger
-    setUploadError(undefined)
-    setUploaded(undefined)
+    clearFeedback()
     setTarget(destination)
   }
 
@@ -228,7 +197,7 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
       previewOpen={Boolean(preview)}
       onCancel={close}
       onApply={() => {
-        if (!draft || disabled || uploadPending.current || draftIssues.length) return
+        if (!draft || disabled || isUploadPending() || draftIssues.length) return
         onChange(draft)
         close()
       }}
@@ -243,7 +212,7 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
           {uploading && <p role="status">正在上传参考素材</p>}
           {uploaded && <p role="status">{uploaded} 已上传，尚未应用</p>}
           {uploadError && <Alert type="error"
-            message={uploadError.retryable ? '参考素材上传失败' : `请选择${kindLabel[uploadError.target.kind]}文件`}
+            message={uploadError.message}
             action={uploadError.retryable && <Button size="small" onClick={() => void upload(uploadError.target, uploadError.file)}>重试上传</Button>}
           />}
           {libraryState === 'loading' && <p role="status"><Spin size="small" /> 正在读取资料库</p>}
