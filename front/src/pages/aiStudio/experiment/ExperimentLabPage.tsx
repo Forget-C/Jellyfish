@@ -9,6 +9,11 @@ import { TextExperimentMode } from './modes/TextExperimentMode'
 import { ImageExperimentMode } from './modes/ImageExperimentMode'
 import { VideoExperimentMode } from './modes/VideoExperimentMode'
 
+function parseMode(mode: string | null): ExperimentLabType | undefined {
+  if (mode === 'text' || mode === 'image' || mode === 'video') return mode
+  return undefined
+}
+
 type LabSlots = { history: ReactNode; composer: ReactNode; extra: ReactNode; overlays?: ReactNode; disabled?: boolean }
 
 /** 将会话选择写入唯一实验室路由，同时使草稿态保持显式模态。 */
@@ -16,11 +21,14 @@ export default function ExperimentLabPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialSessionId = useRef(searchParams.get('session') ?? undefined).current
   const lastRouteKeyRef = useRef(searchParams.toString())
-  const initialModeAppliedRef = useRef(false)
   const skipSessionWriteRef = useRef(false)
-  const requestedMode = searchParams.get('mode') as ExperimentLabType | null
-  const sessionState = useExperimentSessions({ initialSessionId })
-  const { sessions, selectedSessionId, selectedLabType, loading, selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages } = sessionState
+  const requestedMode = parseMode(searchParams.get('mode'))
+  const initialLabType = useRef(initialSessionId ? undefined : requestedMode).current
+  const sidebarTrigger = useRef<HTMLButtonElement>(null)
+  const {
+    sessions, selectedSessionId, selectedLabType, loading, loadFailed, reloadSessions,
+    selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages,
+  } = useExperimentSessions({ initialSessionId, initialLabType })
 
   /** 响应浏览器前进/后退及同路由导航，避免内部 URL 回写覆盖外部选择。 */
   useEffect(() => {
@@ -29,21 +37,14 @@ export default function ExperimentLabPage() {
     lastRouteKeyRef.current = routeKey
     const routeSessionId = searchParams.get('session')
     if (routeSessionId) {
-      void sessionState.reloadSessions(routeSessionId)
+      void reloadSessions({ sessionId: routeSessionId })
       return
     }
-    if (requestedMode && ['text', 'image', 'video'].includes(requestedMode)) selectDraft(requestedMode)
-  }, [requestedMode, searchParams, selectDraft, sessionState])
-
-  /** 初次以 mode 参数进入时，mode 明确优先于默认的最近会话恢复。 */
-  useEffect(() => {
-    if (!loading && !initialSessionId && !initialModeAppliedRef.current && requestedMode && ['text', 'image', 'video'].includes(requestedMode)) {
-      initialModeAppliedRef.current = true
-      // 同一次 effect 提交中仍能读到刚恢复的历史会话，等草稿选择生效后再允许回写。
+    if (requestedMode) {
       skipSessionWriteRef.current = true
       selectDraft(requestedMode)
     }
-  }, [initialSessionId, loading, requestedMode, selectDraft])
+  }, [reloadSessions, requestedMode, searchParams, selectDraft])
 
   /** 草稿首提创建会话后补写 URL；已有会话切换均由显式操作写入。 */
   useEffect(() => {
@@ -51,14 +52,13 @@ export default function ExperimentLabPage() {
       skipSessionWriteRef.current = false
       return
     }
-    if (!initialSessionId && requestedMode && !initialModeAppliedRef.current) return
     if (loading || searchParams.get('session') || !selectedSessionId) return
     const next = new URLSearchParams(searchParams)
     next.delete('mode')
     next.set('session', selectedSessionId)
     lastRouteKeyRef.current = next.toString()
     setSearchParams(next, { replace: true })
-  }, [initialSessionId, loading, requestedMode, searchParams, selectedSessionId, setSearchParams])
+  }, [loading, searchParams, selectedSessionId, setSearchParams])
 
   /** 切换历史会话；模态由服务端会话的 lab_type 决定。 */
   const handleSelectSession = (session: typeof sessions[number]) => {
@@ -96,13 +96,20 @@ export default function ExperimentLabPage() {
     <ExperimentLabLayout
       title={title}
       extra={slots.extra}
-      sidebar={<ExperimentSessionSidebar
+      sidebarTrigger={sidebarTrigger}
+      sidebar={(close) => <ExperimentSessionSidebar
         value={selectedSessionId}
+        labType={selectedLabType}
         sessions={sessions}
-        // 运行中的任务只锁定当前模态输入，不阻断会话恢复或切换；返回该会话后会重新轮询任务状态。
-        disabled={false}
-        onChange={handleSelectSession}
-        onStartDraft={handleStartDraft}
+        loading={loading}
+        loadFailed={loadFailed}
+        onRetry={() => void reloadSessions({
+          sessionId: searchParams.get('session') ?? undefined,
+          labType: requestedMode,
+        })}
+        // 运行中的任务只锁定当前模态输入，不阻断会话恢复或切换。
+        onChange={session => { handleSelectSession(session); close() }}
+        onStartDraft={labType => { handleStartDraft(labType); close() }}
         onRename={async (sessionId, title) => { await renameSession(sessionId, title) }}
         onDelete={handleDeleteSession}
       />}

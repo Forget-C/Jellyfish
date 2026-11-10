@@ -1,5 +1,4 @@
 :root {
-  --app-sidebar-width: 208px;
   --app-inspector-width: 344px;
   --app-border: #e5eaf0;
 }
@@ -84,12 +83,10 @@
 .chapter-sequences-page > .ant-space-item:not(:first-child) { margin-inline: 16px; }
 .chapter-sequences-page > .ant-space-item:last-child { margin-bottom: 16px; }
 .app-lab-layout { display: flex; flex: 1; min-height: 0; }
-.app-context-sidebar { display: flex; flex: 0 0 var(--app-sidebar-width); width: var(--app-sidebar-width); min-height: 0; flex-direction: column; overflow: hidden; border-right: 1px solid var(--app-border); background: #fff; padding: 16px 12px; }
 .app-lab-main { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
 .app-lab-content { display: flex; flex: 1; min-height: 0; flex-direction: column; padding: 16px; }
 .app-lab-history { flex: 1; min-height: 0; overflow-y: auto; padding: 0 4px 8px 0; }
 .app-lab-history > * + * { margin-top: 16px; }
-.ant-drawer-body > .app-context-sidebar { width: 100%; height: 100%; padding: 0; border: 0; }
 .app-editor-properties { width: var(--app-inspector-width); }
 @media (max-width: 767px) {
   .app-content-tabs > .ant-tabs-content-holder { padding: 12px; }

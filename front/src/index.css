@@ -98,16 +98,6 @@ body {
   font-size: 17px;
 }
 
-/* 生成模态选择只承担入口选择，避免默认弹窗样式抢占三张卡片的视觉重心。 */
-.experiment-create-modal .ant-modal-content {
-  border-radius: 18px;
-  padding: 22px 24px 24px;
-}
-
-.experiment-create-modal .ant-modal-title {
-  font-size: 18px;
-}
-
 /* * {
   @apply border-border;
 } */

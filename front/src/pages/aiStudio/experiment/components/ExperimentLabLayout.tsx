@@ -1,31 +1,52 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Button, Drawer, Grid } from 'antd'
+import { useEffect, useState, type ReactNode, type RefObject } from 'react'
+import { Button, Drawer } from 'antd'
 import { MenuOutlined } from '@ant-design/icons'
 import { useLocation } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout } from '../../../../components'
+import './experiment-navigation.css'
 
 type ExperimentLabLayoutProps = {
   title: string
   extra?: ReactNode
-  sidebar?: ReactNode
+  sidebar: (close: () => void) => ReactNode
+  sidebarTrigger: RefObject<HTMLButtonElement>
   history: ReactNode
   composer: ReactNode
   overlays?: ReactNode
 }
 
-/** 会话侧栏与生成区共享全站边界；窄屏打开同一个会话导航，输入区独立于历史滚动。 */
-export function ExperimentLabLayout({ title, extra, sidebar, history, composer, overlays }: ExperimentLabLayoutProps) {
-  const { xl } = Grid.useBreakpoint()
-  const { search } = useLocation()
+/** 实验室类型与会话共用同一侧栏，输入区独立于会话和消息滚动。 */
+export function ExperimentLabLayout({ title, extra, sidebar, sidebarTrigger, history, composer, overlays }: ExperimentLabLayoutProps) {
+  const { key } = useLocation()
   const [sessionsOpen, setSessionsOpen] = useState(false)
-  useEffect(() => { setSessionsOpen(false) }, [search])
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)')
+    const update = () => {
+      setWide(query.matches)
+      if (query.matches) setSessionsOpen(false)
+    }
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  useEffect(() => { setSessionsOpen(false) }, [key])
+
+  const closeNavigation = () => {
+    if (!sessionsOpen) return
+    setSessionsOpen(false)
+    // 跨模态时布局重新挂载，返回页面持有的同一个入口引用。
+    requestAnimationFrame(() => sidebarTrigger.current?.focus({ preventScroll: true }))
+  }
+
   return (
     <WorkspaceLayout>
       <div className="app-lab-layout">
-        {xl && sidebar}
+        {wide && sidebar(closeNavigation)}
         <section className="app-lab-main" aria-label={title}>
           <PageToolbar title={title}>
-            {!xl && <Button icon={<MenuOutlined />} onClick={() => setSessionsOpen(true)}>会话导航</Button>}
+            {!wide && <Button ref={sidebarTrigger} type="text" icon={<MenuOutlined />}
+              aria-label="会话导航" aria-expanded={sessionsOpen} onClick={() => setSessionsOpen(true)}>会话导航</Button>}
             <div className="app-page-actions">{extra}</div>
           </PageToolbar>
           <div className="app-lab-content">
@@ -34,7 +55,8 @@ export function ExperimentLabLayout({ title, extra, sidebar, history, composer, 
           </div>
         </section>
       </div>
-      {!xl && <Drawer title="会话导航" placement="left" width={272} open={sessionsOpen} onClose={() => setSessionsOpen(false)}>{sidebar}</Drawer>}
+      {!wide && <Drawer title="会话导航" placement="left" width="min(272px, 100vw)"
+        open={sessionsOpen} onClose={closeNavigation}>{sidebar(closeNavigation)}</Drawer>}
       {overlays}
     </WorkspaceLayout>
   )

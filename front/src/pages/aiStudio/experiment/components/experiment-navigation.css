@@ -1,0 +1,115 @@
+.experiment-navigation {
+  display: flex;
+  flex: 0 0 216px;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+}
+
+.ant-drawer-body > .experiment-navigation {
+  height: 100%;
+  padding: 2px;
+}
+
+.experiment-types,
+.experiment-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.experiment-types {
+  flex-shrink: 0;
+}
+
+.experiment-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 12px;
+  color: var(--app-muted, #536174);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.experiment-nav-item:hover,
+.experiment-nav-item[aria-pressed="true"],
+.experiment-session-row:has([aria-current="page"]) {
+  color: var(--app-accent, #245fc5);
+  background: var(--app-selected, #e4edfb);
+}
+
+.experiment-navigation :is(button, a):focus-visible {
+  outline: 2px solid var(--app-accent, #245fc5);
+  outline-offset: 2px;
+}
+
+.experiment-session-heading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding-inline: 8px;
+}
+
+.experiment-session-heading h2 {
+  margin: 0;
+  color: var(--app-muted, #536174);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.experiment-session-list {
+  flex: 1;
+  min-height: 0;
+  padding: 3px;
+  overflow-y: auto;
+}
+
+.experiment-session-list > p {
+  padding-inline: 8px;
+  color: var(--app-muted, #536174);
+  font-size: 13px;
+}
+
+.experiment-session-row {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.experiment-session-link {
+  flex: 1;
+  min-height: 36px;
+  color: inherit;
+  padding-inline: 8px;
+}
+
+.experiment-session-link > span {
+  min-width: 0;
+}
+
+.experiment-session-actions {
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .experiment-session-actions {
+    opacity: 0;
+  }
+
+  .experiment-session-row:is(:hover, :focus-within) .experiment-session-actions {
+    opacity: 1;
+  }
+}
