@@ -10,7 +10,8 @@ from sqlalchemy import select
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate
 from app.core.contracts.directing.scene_objects import SceneObjectsRead
 from app.core.contracts.directing.scene_storyboard import (SceneStoryboard, StoryboardApplication, StoryboardBasis,
-    StoryboardBasisObject, StoryboardCandidate, StoryboardReextractRequest, StoryboardRequest, StoryboardRestore,
+    StoryboardBasisObject, StoryboardCandidate, StoryboardConflictChoice, StoryboardContinuityDiff,
+    StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardReviewReport,
     StoryboardRetry, StoryboardRetryBasis, StoryboardTaskRead, StoryboardTaskSummary)
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
@@ -26,6 +27,10 @@ from app.services.directing.storyboard_stack_review import review_stack_changes
 from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
 from app.services.directing.storyboard_review import require_storyboard_review, review_state
+from app.services.directing.storyboard_review_basis import (
+    active_risks, canvas_review_fingerprint, capture_review_basis, evidence_digest, risk_basis,
+)
+from app.services.directing.storyboard_repair import repair_fields
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.document_save import fixed_source_state, prepare_document
 from app.services.generation_canvas.store import CanvasStore
@@ -105,6 +110,8 @@ class SceneStoryboardService(SceneObjectService):
         """保留原配置与画布身份，仍按当前画布基线组织差异。"""
         await self._scene(chapter_id, sequence_id)
         failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        if body.targeted_repair:
+            return await self._targeted_repair(chapter_id, sequence_id, failed, body)
         if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
             raise RevisionConflict('只有失败或取消的分镜任务可以重试')
         if self._review_source(failed):
@@ -189,18 +196,48 @@ class SceneStoryboardService(SceneObjectService):
         await self._ensure_no_active_storyboard(sequence_id, basis.canvas_id)
         if body.use_saved_objects or (body.basis_token and body.basis_token != basis.basis.token):
             raise RevisionConflict('审查须沿用原分镜草案，请重新核对重试依据')
-        snapshot = failed.input_snapshot
-        files = sorted({item['image_file_id'] for item in snapshot['run_args']['objects'] if item.get('image_file_id')})
         source_id = self._review_source(failed)
         source = failed if source_id == failed.id else await self.db.get(Task, source_id)
         resume_stage = 'rechecking_storyboard' if (source.result or {}).get('review_repair') else 'reviewing_storyboard'
+        return await self._submit_review_resume(sequence_id, failed, body, source_id, resume_stage)
+
+    async def _targeted_repair(self, chapter_id: str, sequence_id: str, task: Task, body: StoryboardRetry) -> StoryboardTaskRead:
+        """Authorize one conflict-specific attempt from the currently reviewed candidate."""
+        sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
+        existing = await self.db.scalar(self._storyboards(sequence_id).where(
+            Task.input_snapshot['storyboard_request']['request_id'].as_string() == body.request_id))
+        if existing:
+            if existing.retry_of_task_id != task.id or existing.input_snapshot.get('review_retry_request') != body.model_dump(mode='json'):
+                raise RevisionConflict('分镜请求身份已用于另一份内容')
+            return await self._storyboard_read(existing)
+        if not sequence.is_current:
+            raise RevisionConflict('历史场次不能修正分镜')
+        canvas = await CanvasStore(self.db, self.project_id).get(task.input_snapshot['canvas_id'], lock=True)
+        await self._ensure_no_active_storyboard(sequence_id, canvas.id)
+        choice = body.targeted_repair
+        diff = await self.apply_storyboard(chapter_id, sequence_id, task.id, StoryboardApplication(
+            expected_revision=choice.expected_revision, overwrite_card_ids=choice.overwrite_card_ids), preview=True)
+        review = diff.continuity_review
+        if not review or review.stale or review.token != choice.review_token:
+            raise diagnostic('STORYBOARD_REVIEW_STALE', '分镜审查依据已变化，请重新核对', {'canvas_id': canvas.id}, status=409)
+        selected = next((item for item in review.conflicts if item.id == choice.conflict_id and item.can_repair), None)
+        if not selected:
+            raise diagnostic('STORYBOARD_REPAIR_REQUIRED_TARGET', '此冲突没有可定向修正的提议', {'canvas_id': canvas.id}, status=409)
+        return await self._submit_review_resume(sequence_id, task, body, task.id, 'repairing_storyboard',
+            {'issue': selected.issue.model_dump(mode='json'), 'report': task.result['review']})
+
+    async def _submit_review_resume(self, sequence_id: str, source: Task, body: StoryboardRetry, source_id: str,
+                                    stage: str, repair: dict | None = None) -> StoryboardTaskRead:
+        snapshot = source.input_snapshot
+        files = sorted({item['image_file_id'] for item in snapshot['run_args']['objects'] if item.get('image_file_id')})
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND, title='重试分镜审查',
             target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id,
-            provider_id=failed.provider_id, retry_of_task_id=failed.id,
+            provider_id=source.provider_id, retry_of_task_id=source.id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={**snapshot, 'scene_admission_order': await self._next_scene_task_order(sequence_id),
                 'storyboard_request': {**snapshot['storyboard_request'], 'request_id': body.request_id},
-                'review_retry_request': request, 'review_retry_from': source_id, 'review_retry_stage': resume_stage})
+                'review_retry_request': body.model_dump(mode='json'), 'review_retry_from': source_id, 'review_retry_stage': stage,
+                'review_targeted_repair': repair or snapshot.get('review_targeted_repair')})
         return await self._storyboard_read(task)
 
     async def _ensure_no_active_storyboard(self, sequence_id: str, canvas_id: str) -> None:
@@ -295,6 +332,8 @@ class SceneStoryboardService(SceneObjectService):
                 'objects': model_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         protected = await self.storyboard_repair_protections(canvas.id, sequence_id) if canvas_id else set()
+        current = (await CanvasStore(self.db, self.project_id).get(canvas.id)).document if canvas_id else canvas.document
+        review_basis = capture_review_basis(CanvasDocument.model_validate(current))
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
             title='生成完整分镜' if body.mode == 'complete' else '忠实提取分镜', target_type='directing_sequence',
             target_id=sequence_id, project_id=self.project_id, provider_id=provider.id, retry_of_task_id=retry_of_task_id,
@@ -302,7 +341,7 @@ class SceneStoryboardService(SceneObjectService):
             snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
                       'provider_key': config.provider_key, 'run_args': args,
-                      'review_protected_designs': sorted(protected)})
+                      'review_protected_designs': sorted(protected), 'review_basis': review_basis})
         return await self._storyboard_read(task)
 
     @staticmethod
@@ -440,6 +479,10 @@ class SceneStoryboardService(SceneObjectService):
         confirmation = {'expected_revision': body.expected_revision, 'overwrite_card_ids': sorted(body.overwrite_card_ids)}
         if body.confirmed_auto_stack_ids:
             confirmation['confirmed_auto_stack_ids'] = sorted(body.confirmed_auto_stack_ids)
+        if body.review_token:
+            confirmation['review_token'] = body.review_token
+        if body.accepted_conflict_ids:
+            confirmation['accepted_conflict_ids'] = sorted(body.accepted_conflict_ids)
         digest = store.command_digest(confirmation)
         if not preview:
             receipt = await store.save_receipt(canvas.id, request_id, digest)
@@ -469,9 +512,11 @@ class SceneStoryboardService(SceneObjectService):
         document, diff = plan_application(current, candidate.document, body, prior=prior,
                                           production_ports=capability.get('input_ports'))
         diff.automatic_stacks, diff.manual_stacks = review_stack_changes(current, document)
+        continuity = await self._continuity_diff(task, current, document)
+        diff.continuity_review = continuity
         if preview:
             return diff
-        require_storyboard_review(task, canvas.id)
+        risks = self._confirmed_risks(task, canvas.id, body, continuity)
         if diff.manual_stacks:
             stack = diff.manual_stacks[0]
             raise diagnostic('STACK_READ_ONLY', f'请先手动解除堆叠「{stack.name}」，再核对提取差异', {'group_id': stack.id})
@@ -483,7 +528,63 @@ class SceneStoryboardService(SceneObjectService):
             CanvasSave(request_id=request_id, expected_revision=body.expected_revision, document=document.model_dump()),
             digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(),
             scene_sources=fixed_source_state(document),
-            source_history={'before': self._history_state(current), 'after': self._history_state(document)})
+            source_history={'before': self._history_state(current), 'after': self._history_state(document)},
+            accepted_risks=risks)
+
+    async def _continuity_diff(self, task: Task, current: CanvasDocument, planned: CanvasDocument) -> StoryboardContinuityDiff | None:
+        """Bind findings and prior decisions to the exact preview of adopted design."""
+        result = task.result or {}
+        if result.get('review') is None:
+            return None
+        report = StoryboardReviewReport.model_validate(result['review'])
+        basis = task.input_snapshot.get('review_basis')
+        latest = capture_review_basis(current)
+        relevant = {shot for issue in report.issues for shot in issue.shot_ids}
+        stale = bool(basis and (
+            any(basis['shots'].get(shot, basis['shared']) != latest['shots'].get(shot, latest['shared']) for shot in relevant)
+            if relevant else basis['all'] != latest['all']))
+        active, _ = await self._applied_risks(current)
+        draft = SceneStoryboard.model_validate(result['review_draft']) if result.get('review_draft') else None
+        protected = {origin.semantic_key for origin in current.storyboard.origins.values()
+                     if origin.manually_edited} if current.storyboard else set()
+        choices = {}
+        for issue in report.issues:
+            if issue.kind != 'conflict':
+                continue
+            key = evidence_digest({'requirements': issue.requirements, 'shots': sorted(issue.shot_ids),
+                                   'basis': risk_basis(planned, issue.shot_ids)})
+            eligible = draft and task.input_snapshot['run_args']['mode'] == 'complete' and repair_fields(
+                draft, StoryboardReviewReport(issues=[issue]), protected)
+            choices[key] = StoryboardConflictChoice(id=key, issue=issue, previously_accepted=key in active, can_repair=bool(eligible))
+        token = evidence_digest({'task': task.id, 'current': latest['all'], 'planned': canvas_review_fingerprint(planned),
+                                 'choices': sorted(choices)})
+        return StoryboardContinuityDiff(token=token, stale=stale, conflicts=list(choices.values()))
+
+    async def _applied_risks(self, document: CanvasDocument) -> tuple[set[str], bool]:
+        """Read trusted application evidence, never client-supplied acceptance flags."""
+        if not document.storyboard:
+            return set(), False
+        receipt = await self.db.get(CanvasSaveReceipt, (document.id, 'storyboard:' + document.storyboard.task_id))
+        risks = receipt.response.get('review_history', {}).get('risks', []) if receipt else []
+        active = active_risks(document, risks)
+        return active, bool(risks and len(active) != len(risks))
+
+    @staticmethod
+    def _confirmed_risks(task: Task, canvas_id: str, body: StoryboardApplication,
+                         review: StoryboardContinuityDiff | None) -> list[dict]:
+        """Only the compared findings and their exact semantic basis can be accepted."""
+        if review and review.stale:
+            raise diagnostic('STORYBOARD_REVIEW_STALE', '相关分镜内容已变化，请重新审查', {'canvas_id': canvas_id}, status=409)
+        if not review or not review.conflicts:
+            require_storyboard_review(task, canvas_id)
+            return []
+        ids = {choice.id for choice in review.conflicts}
+        explicit = set(body.accepted_conflict_ids)
+        carried = {choice.id for choice in review.conflicts if choice.previously_accepted}
+        if (body.review_token != review.token or len(explicit) != len(body.accepted_conflict_ids)
+                or explicit | carried != ids):
+            raise diagnostic('STORYBOARD_REVIEW_REQUIRED', '请逐项确认本次分镜的设计冲突', {'canvas_id': canvas_id}, status=409)
+        return [{'id': choice.id, 'shot_ids': choice.issue.shot_ids} for choice in review.conflicts]
 
     @staticmethod
     def _history_state(document: CanvasDocument) -> dict:
@@ -510,6 +611,10 @@ class SceneStoryboardService(SceneObjectService):
         if canvas.sequence_id != sequence_id or not history or self._history_state(current) != history[from_side] or (
                 self._history_state(document) != history[to_side]):
             raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对整批操作的原文与提取依据', {'canvas_id': canvas.id})
+        evidence = receipt.response.get('review_history')
+        if evidence and (canvas_review_fingerprint(current, full=True) != evidence[from_side]
+                         or canvas_review_fingerprint(document, full=True) != evidence[to_side]):
+            raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对原风险确认对应的设计内容', {'canvas_id': canvas.id})
         return await store.save_scene_application(canvas,
             CanvasSave(request_id=body.request_id, expected_revision=body.expected_revision, document=document.model_dump()),
             digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'])
@@ -531,9 +636,15 @@ class SceneStoryboardService(SceneObjectService):
             else:
                 pending = (bool(task.input_snapshot.get('reextract_canvas_id') or task.input_snapshot.get('review_retry_from'))
                            or canvas.revision != candidate.base_revision or task.result.get('review_state') == 'conflict')
-        return StoryboardTaskRead(**self._storyboard_summary(task, canvas_id, candidate is not None).model_dump(),
-                                  candidate=candidate, pending_application=pending,
-                                  review=(task.result or {}).get('review'))
+        summary = self._storyboard_summary(task, canvas_id, candidate is not None).model_dump()
+        applied = CanvasDocument.model_validate(canvas.document)
+        accepted = set()
+        if applied.storyboard and applied.storyboard.task_id == task.id:
+            accepted, stale = await self._applied_risks(applied)
+            if stale or accepted:
+                summary['review_state'] = 'stale' if stale else 'accepted'
+        return StoryboardTaskRead(**summary, candidate=candidate, pending_application=pending,
+            review=(task.result or {}).get('review'), accepted_conflict_ids=sorted(accepted))
 
     async def complete_storyboard(self, task: Task, result: SceneStoryboard) -> StoryboardCandidate:
         """在冻结基线上校验真实共同文档，迟到结果仍可作为待应用候选。"""
