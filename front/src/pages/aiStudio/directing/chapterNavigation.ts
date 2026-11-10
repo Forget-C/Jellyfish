@@ -85,7 +85,3 @@ export function sceneCanvasLocation(projectId: string, chapterId: string, sequen
 export function sequenceLocation(projectId: string, chapterId: string, sequenceId: string, view: Stage): string {
   return `${sequencePath(projectId, chapterId, sequenceId)}?view=${view}`
 }
-
-export function legacySceneCanvasLocation(projectId: string, chapterId: string, sequenceId: string, canvas: 'director' | 'units' | 'edit'): string {
-  return `${sequencePath(projectId, chapterId, sequenceId)}?canvas=${canvas}`
-}

@@ -72,10 +72,7 @@ try {
   assert.equal(await reader.locator('.source-selection').textContent(), '前厅点灯。')
   const list = page.getByRole('complementary', { name: '本章场次' })
   const draftList = page.getByRole('complementary', { name: '划场场次列表' })
-  const openDivision = async () => {
-    await page.getByRole('button', { name: '场次制作', exact: true }).click()
-    await page.getByRole('menuitem', { name: '场次划分', exact: true }).click()
-  }
+  const openDivision = page.getByRole('button', { name: '场次划分', exact: true })
   const enterProduction = page.getByRole('button', { name: '进入场次制作', exact: true })
   assert.equal(await list.count(), 0)
   await draftList.getByRole('button', { name: /后院/ }).click()
@@ -113,7 +110,7 @@ try {
   const previousVersion = (await request(chapterApi)).current_version.number
   assert.equal((await request(chapterApi)).sequences[1].position, 2)
 
-  await openDivision()
+  await openDivision.click()
   await draftList.getByRole('button', { name: /后院雨夜/ }).click()
   await page.getByRole('button', { name: '移出本章草稿' }).click()
   await page.getByRole('button', { name: '保存新版本' }).click()
@@ -122,7 +119,7 @@ try {
   await page.getByText('原场次“后院雨夜”已转入历史').waitFor()
   await page.getByRole('button', { name: '查看该历史场次' }).click()
   await page.getByRole('heading', { name: '后院雨夜', exact: true }).waitFor()
-  await openDivision()
+  await openDivision.click()
   await page.getByRole('button', { name: '历史版本', exact: true }).click()
   const history = page.getByRole('dialog', { name: '历史版本' })
   await history.getByRole('row').filter({ has: page.getByText('v' + previousVersion, { exact: true }) })

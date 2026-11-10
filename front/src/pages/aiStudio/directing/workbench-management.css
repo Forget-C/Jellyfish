@@ -34,26 +34,21 @@
 .management-history-toggle { margin-top: 8px; }
 .management-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .management-content > .app-page-toolbar {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  min-height: 0;
-  padding: 12px 16px 0;
-  background: transparent;
-}
-.management-header {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 8px 16px;
+  min-height: 0;
+  padding: 8px 16px;
+  background: transparent;
 }
 .management-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .management-panel { padding: 16px; }
-.management-scene-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.management-scene-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .management-scene-heading h2 { margin: 0; overflow-wrap: anywhere; }
 .management-mobile-navigation { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 991px) {
+  .management-content > .app-page-toolbar { justify-content: flex-start; }
+  .management-content > .app-page-toolbar .management-scene-heading { flex-basis: 100%; }
+}
 .management-panel .ant-alert { flex-wrap: wrap; row-gap: 8px; }
 .management-panel h3 { margin: 12px 0 8px; }
 .management-panel .ant-alert { margin-top: 8px; }

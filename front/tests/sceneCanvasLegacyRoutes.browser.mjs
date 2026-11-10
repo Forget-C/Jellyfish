@@ -81,15 +81,13 @@ try {
   await page.goto(prep)
   await page.waitForURL(url => url.pathname === managementPath && url.searchParams.get('sequence') === sequence.id)
   await newHost.getByRole('heading', { name: '本场画布', exact: true }).waitFor()
+  assert.equal(await newHost.getByRole('button', { name: '场次更多操作', exact: true }).count(), 0)
   assert.deepEqual(versionReads, [])
   await page.goto(`${prep}?version=${first.id}&canvas=edit`)
   await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
 
-  await page.goto(chapterPage)
-  await newHost.getByRole('button', { name: '场次更多操作' }).click()
-  await page.getByRole('link', { name: '旧版审片与剪辑', exact: true }).click()
-  await page.waitForURL(old + '?canvas=edit')
+  await page.goto(old + '?canvas=edit')
   await legacy.getByRole('button', { name: '打开剪辑工作区', exact: true }).waitFor()
   await page.goto(`${old}?canvas=edit&version=${first.id}`)
   await legacy.getByText('旧版交付甲', { exact: true }).first().waitFor()
@@ -114,10 +112,8 @@ try {
   await page.waitForURL(url => url.pathname === managementPath.replace(project, 'wrong-project'))
   await management.getByText('章节不属于当前项目', { exact: true }).waitFor()
   assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
-  for (const [name, canvas] of [['旧版导演', 'director'], ['旧版试拍', 'units'], ['旧版审片与剪辑', 'edit']]) {
-    await page.goto(origin + managementPath + '?sequence=' + sequence.id)
-    await management.getByRole('button', { name: '场次更多操作' }).click()
-    await page.getByRole('link', { name, exact: true }).click()
+  for (const canvas of ['director', 'units', 'edit']) {
+    await page.goto(`${old}?canvas=${canvas}`)
     await page.waitForURL(url => url.pathname === new URL(old).pathname && url.searchParams.get('canvas') === canvas)
     await legacy.waitFor()
   }

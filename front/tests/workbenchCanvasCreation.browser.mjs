@@ -64,11 +64,8 @@ try {
   const start = page.getByRole('button', { name: '生成新分镜画布', exact: true })
   const form = page.getByRole('region', { name: '生成新分镜画布配置' })
   const name = form.getByRole('textbox', { name: '画布名称' })
-  const openDivision = async () => {
-    await page.getByRole('button', { name: '场次制作', exact: true }).click()
-    await page.getByRole('menuitem', { name: '场次划分', exact: true }).click()
-  }
-  const enterProduction = page.getByRole('button', { name: '进入场次制作', exact: true })
+  const openDivision = page.getByRole('button', { name: '场次划分', exact: true })
+  const returnToProduction = page.getByRole('button', { name: '返回该场次制作', exact: true })
   const list = page.getByRole('list', { name: '本场画布' })
 
   await page.goto(location)
@@ -78,18 +75,18 @@ try {
   assert.ok(await form.getByRole('radio', { name: '自动产出完整分镜' }).isChecked())
   assert.equal(await form.getByRole('radio', { name: /^(图片|视频)模型卡$/ }).count(), 0)
   assert.equal(await form.getByRole('combobox', { name: '生产模型' }).count(), 0)
-  await openDivision()
+  await openDivision.click()
   await page.waitForURL(url => url.searchParams.get('step') === 'division')
-  await enterProduction.click()
+  await returnToProduction.click()
   await start.click()
   await name.fill('更改后可保留')
-  await openDivision()
+  await openDivision.click()
   const discard = page.getByRole('dialog', { name: '有未提交的配置' })
   await discard.getByRole('button', { name: '继续填写' }).click()
   assert.equal(await name.inputValue(), '更改后可保留')
-  await openDivision()
+  await openDivision.click()
   await discard.getByRole('button', { name: '放弃配置' }).click()
-  await enterProduction.click()
+  await returnToProduction.click()
   await start.click()
   const defaultName = await name.inputValue()
   const productionLocation = page.url()
@@ -155,7 +152,7 @@ try {
   const document = (await data(studio + '/generation-canvases/' + project + '/' + row.id)).document
   assert.deepEqual(document.cards.map(card => card.type), ['content.basis'])
   assert.equal(page.url(), productionLocation)
-  await openDivision()
+  await openDivision.click()
   await page.waitForURL(url => url.searchParams.get('step') === 'division')
 } finally {
   if (backend.exitCode === null) {
