@@ -3,6 +3,7 @@ import { Alert, Checkbox, Space } from 'antd'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasContinuitySuspension, CanvasModelCapability, CanvasRead, ImageContentCard, VideoModelCard } from '../../../services/generated'
 import { VideoFramePicker } from '../generationCanvas/VideoFramePicker'
+import { useVideoSourceStatus } from '../generationCanvas/videoSourceStatus'
 import type { WorkbenchModelMenuContext } from '../generationCanvas/GenerationCanvasWorkspace'
 import { StoryboardContinuityRemoval } from './StoryboardContinuityRemoval'
 import { directingError } from './common'
@@ -14,7 +15,10 @@ import type { ContinuityPort } from './visualContinuityRules'
 export function StoryboardVisualContinuity(context: WorkbenchModelMenuContext) {
   const [open, setOpen] = useState(false)
   const { card, document, disabled, closeMenu } = context
-  if (card.type !== 'model.video' || storyboardShotIndex(document, card.id) <= 0) return null
+  const choice = document.storyboard?.visual_continuity?.[card.id]
+  const shotIndex = storyboardShotIndex(document, card.id)
+  if (card.type !== 'model.video' || shotIndex < 0 ||
+    (shotIndex === 0 && !activeVisualContinuity(document, card.id) && (!choice?.suspended || choice.restored))) return null
   return <>
     <Button disabled={disabled} onClick={() => setOpen(true)}>视觉承接</Button>
     {open && <ContinuityPicker {...context} target={card as VideoModelCard} onClose={() => { setOpen(false); closeMenu() }} />}
@@ -32,6 +36,7 @@ function ContinuityPicker(context: WorkbenchModelMenuContext & {
   const results = continuityResults(document, target.id, runs)
   const [resultId, setResultId] = useState(results[0]?.id ?? '')
   const result = results.find(item => item.id === resultId)
+  const resultStatus = useVideoSourceStatus(result?.source.source_file_id)
   const recommendation = results[0]?.id
   useEffect(() => {
     if (recommendation) setResultId(previous => previous || recommendation)
@@ -58,7 +63,7 @@ function ContinuityPicker(context: WorkbenchModelMenuContext & {
     return () => { active = false; request.cancel() }
   }, [projectId, canvasId, target.model_id])
   const ports = (Object.keys(continuityPorts) as ContinuityPort[]).filter(port => capability?.input_ports.includes(port))
-  const valid = result && atMs !== undefined && purpose && ports.includes(purpose) && (purpose !== 'subject_image' || subject.trim())
+  const valid = result && resultStatus === 'available' && atMs !== undefined && purpose && ports.includes(purpose) && (purpose !== 'subject_image' || subject.trim())
   const submit = async (approval?: SwitchOffer) => {
     if (!result || atMs === undefined || !purpose || !valid || !capability || submitting.current || disabled || removing) return
     const key = JSON.stringify([result.id, atMs, purpose, subject.trim(), capability.model_id])
@@ -150,7 +155,9 @@ function ContinuityPicker(context: WorkbenchModelMenuContext & {
           <option value="" disabled>请选择完整视频结果</option>
           {results.map(item => <option key={item.id} value={item.id}>{item.recommended ? '推荐前镜 · ' : ''}{item.label}</option>)}
         </select></label>
-        {result && <>
+        {result && resultStatus === 'unavailable' && <Alert type="warning" message="视频暂不可播放，无法选帧" />}
+        {result && resultStatus === 'pending' && <p>正在核对来源视频。</p>}
+        {result && resultStatus === 'available' && <>
           {ports.includes('first_frame') && <Checkbox checked={sameMotion} disabled={busy || removing || !!switchOffer} onChange={event => setSameMotion(event.target.checked)}>
             同机位接续连续动作
           </Checkbox>}

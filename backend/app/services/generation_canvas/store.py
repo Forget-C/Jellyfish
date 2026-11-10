@@ -180,6 +180,9 @@ class CanvasStore:
                                          {'canvas_id': canvas_id}, status=409)
         if canvas.sequence_id and prepared.document.name != prepared.previous_document.name and not prepared.document.name.strip():
             raise diagnostic('INVALID_CANVAS_NAME', '场次画布名称不能为空白', {'canvas_id': canvas_id, 'path': ['name']})
+        if canvas.sequence_id and chapter_version is None and previous and previous.visual_continuity:
+            from app.services.directing.storyboard_visual_continuity import retain_removed_visual_continuity
+            await retain_removed_visual_continuity(self.db, prepared.previous_document, prepared.document, command.request_id)
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
         changed = changed_check_connections(prepared.previous_document, prepared.document)
         check_edge_revisions = canvas.check_edge_revisions

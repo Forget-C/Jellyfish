@@ -251,7 +251,7 @@ async def set_control(body: dict = Body(...)):
         if key in body:
             control[key] = body[key]
     if storyboard_video_fixture:
-        for key in ('media_fail_next', 'media_hold', 'visual_continuity_revision'):
+        for key in ('media_fail_next', 'media_hold', 'visual_continuity_revision', 'unavailable_media_key'):
             if key in body:
                 control[key] = body[key]
     if storyboard_design_stacks and 'add_storyboard_content' in body:
@@ -386,22 +386,25 @@ if __name__ == '__main__':
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data.read())
 
+        def readable_path(key, operation):
+            path = object_path(key)
+            if key == control.get('unavailable_media_key') or not path.exists():
+                raise ClientError({'Error': {'Code': 'NoSuchKey'}}, operation)
+            return path
+
         async def download_file(*, key):
-            return object_path(key).read_bytes()
+            return readable_path(key, 'GetObject').read_bytes()
 
         storage.upload_file = upload_file
         storage.download_file = download_file
-        if storyboard_video_fixture or os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
-            from botocore.exceptions import ClientError
+        from botocore.exceptions import ClientError
 
-            async def get_file_info(*, key):
-                path = object_path(key)
-                if not path.exists():
-                    raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
-                return storage.StoredFileInfo(key=key, url='', size=path.stat().st_size,
-                    content_type='video/mp4' if path.suffix == '.mp4' else 'image/png')
+        async def get_file_info(*, key):
+            path = readable_path(key, 'HeadObject')
+            return storage.StoredFileInfo(key=key, url='', size=path.stat().st_size,
+                content_type='video/mp4' if path.suffix == '.mp4' else 'image/png')
 
-            storage.get_file_info = get_file_info
+        storage.get_file_info = get_file_info
     asyncio.run(prepare())
     app.router.lifespan_context = lifespan
     app.dependency_overrides[get_db] = database

@@ -1,6 +1,7 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -78,7 +79,38 @@ try {
   await image.getByRole('button', { name: '引用', exact: true }).click()
   await page.getByRole('dialog', { name: '卡片引用' }).getByRole('button', { name: /来源视频.*1.300/ }).click()
   await page.waitForFunction(() => window.document.activeElement?.closest('[data-card-id]')?.dataset.cardId === 'clip')
-  console.log('Video frame picker, actual pixels, persisted card and source navigation verified')
+  const files = `${api}/api/v1/studio/files`
+  const deleteFile = id => fetch(`${files}/${id}`, { method: 'DELETE' })
+  const release = id => fetch(`${files}/${id}/upload-retention?project_id=canvas-project`, { method: 'DELETE' })
+  const save = (revision, document) => fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: randomUUID(), expected_revision: revision, document }) })
+  const prepare = await fetch(url + '/video-frames', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_card_id: 'clip', source_file_id: fileId, request_id: randomUUID(), at_ms: 100 }) })
+  assert.ok(prepare.ok, await prepare.clone().text())
+  const unused = (await prepare.json()).data
+  assert.equal((await deleteFile(frame.file_id)).status, 409, 'the saved still remains protected')
+  assert.equal((await deleteFile(fileId)).status, 409, 'the source remains protected while a source card uses it')
+  assert.ok((await release(unused.file_id)).ok, 'an unused prepared frame can be released')
+  assert.ok((await deleteFile(unused.file_id)).ok, 'an unused prepared frame can be deleted')
+  const missing = await save(state.revision, { ...state.document, cards: [...state.document.cards, unused] })
+  assert.equal(missing.status, 422)
+  assert.match(await missing.text(), /INVALID_MEDIA_FILE/)
+  assert.deepEqual(await read(), state, 'saving a missing still must not change the canvas')
+  const removedSource = await save(state.revision, { ...state.document, cards: [frame] })
+  assert.ok(removedSource.ok, await removedSource.clone().text())
+  assert.ok((await release(fileId)).ok, 'the removed source can be explicitly released')
+  assert.ok((await deleteFile(fileId)).ok, 'the original video has no remaining consumers')
+  await page.reload()
+  await image.getByRole('button', { name: '引用', exact: true }).click()
+  const provenance = page.getByRole('dialog', { name: '卡片引用' })
+  await provenance.getByText('来源卡片已删除或不可用', { exact: true }).waitFor()
+  await provenance.getByText('1.300 秒', { exact: true }).waitFor()
+  assert.equal(await provenance.getByRole('button', { name: /来源视频/ }).count(), 0)
+  const kept = await fetch(`${files}/${frame.file_id}/download`)
+  assert.ok(kept.ok)
+  assert.ok((await kept.arrayBuffer()).byteLength > 0)
+  assert.equal((await deleteFile(frame.file_id)).status, 409, 'deleting the original video never releases the still')
+  console.log('Frame pixels, persisted provenance, missing-input validation and independent file protection verified')
 } finally {
   await cleanup()
 }

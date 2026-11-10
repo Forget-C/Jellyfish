@@ -163,6 +163,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       items[card.id] = [...(items[card.id] || []), {
         source: { card_id: origin.source_card_id },
         label: '来源视频',
+        fileId: origin.source_file_id,
         position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
         missing: !available,
         issue: !available ? '来源卡片已删除或不可用' : undefined,

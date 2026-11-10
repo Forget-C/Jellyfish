@@ -79,8 +79,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const laterShot = storyboardShotIndex(document, card.id) > 0
         const adopted = activeVisualContinuity(document, card.id)
         return <><span title={label}>{label}</span>
-          {laterShot && (adopted ? <span>已采用前镜画面</span>
-            : <span title="未采用前镜画面，直接生成可能出现画面不连续">未采用前镜画面</span>)}
+          {adopted ? <span>已采用前镜画面</span>
+            : laterShot && <span title="未采用前镜画面，直接生成可能出现画面不连续">未采用前镜画面</span>}
           <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>
             {videoActionLabels[runStatus ?? ''] || '生成视频'}
           </Button></>

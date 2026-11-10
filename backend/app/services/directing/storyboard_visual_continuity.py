@@ -1,4 +1,5 @@
 """工作台固定帧采用的来源与实际生成用途检查。"""
+from app.models.generation_canvas import CanvasSaveReceipt
 from app.schemas.generation_canvas import (
     CanvasContinuitySuspension, ImageContentCard, ModelCard, PromptDocument, PromptInstruction, PromptReference, VideoModelCard,
 )
@@ -7,10 +8,41 @@ from app.services.generation_canvas.compiler import compile_card
 from app.services.generation_canvas.current_state import CanvasCurrentState
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.output_resolution import identity_key
+from app.services.generation_canvas.store import CanvasStore
 
 
 def _binding(card, binding_id):
     return next((item for item in card.input_bindings if item.id == binding_id), None) if isinstance(card, VideoModelCard) else None
+
+
+def _release_identity(card, relation, binding, frame):
+    digest = CanvasStore.command_digest({
+        'target': card.id, 'model': card.model_id, 'relation': relation.model_dump(mode='json'),
+        'binding': binding.model_dump(mode='json'), 'frame': frame.id, 'file': frame.file_id,
+        'origin': frame.frame_origin.model_dump(mode='json'),
+    })
+    return 'continuity:' + digest[:48], digest
+
+
+async def retain_removed_visual_continuity(db, previous, current, save_request_id):
+    """Retain evidence only for exact inputs already accepted on this storyboard."""
+    from app.services.directing.storyboard_continuity_choices import adopted_frames
+    before = adopted_frames(previous, {card.id: card for card in previous.cards})
+    after = adopted_frames(current, {card.id: card for card in current.cards})
+    cards = {card.id: card for card in previous.cards}
+    for target, (relation, binding, frame, _) in before.items():
+        if not binding or (target in after and after[target][:3] == (relation, binding, frame)):
+            continue
+        request_id, digest = _release_identity(cards[target], relation, binding, frame)
+        if request_id != save_request_id and await db.get(CanvasSaveReceipt, (previous.id, request_id)) is None:
+            db.add(CanvasSaveReceipt(canvas_id=previous.id, request_id=request_id, request_hash=digest,
+                                     response={'released_visual_continuity': digest}))
+
+
+async def _was_released(db, canvas_id, card, relation, binding, frame):
+    request_id, digest = _release_identity(card, relation, binding, frame)
+    receipt = await db.get(CanvasSaveReceipt, (canvas_id, request_id))
+    return bool(receipt and receipt.request_hash == digest and receipt.response.get('released_visual_continuity') == digest)
 
 
 def suspended_subject_sources(storyboard, card):
@@ -155,7 +187,10 @@ async def validate_visual_continuity(db, canvas, document, previous, context, *,
             raise diagnostic('INVALID_VISUAL_CONTINUITY', '请选择工作台中完整视频成果的画面', target)
         source_index, target_index = shot_index.get(origin.source_card_id), shot_index.get(target_id)
         source_card = context.cards.get(origin.source_card_id)
-        if source_index is None or target_index is None or source_index >= target_index or not isinstance(source_card, VideoModelCard):
+        source_is_earlier = (target_index is not None and source_index is not None and source_index < target_index
+                             and isinstance(source_card, VideoModelCard))
+        if target_index is None or (not source_is_earlier
+                                    and not await _was_released(db, document.id, card, relation, binding, frame)):
             raise diagnostic('INVALID_VISUAL_CONTINUITY', '请选择当前画布前序镜头的完整视频帧', target)
         source = binding.source
         if (source.canvas_id, source.port_id, source.position) != (document.id, 'image', 0):

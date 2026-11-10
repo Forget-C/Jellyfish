@@ -48,8 +48,10 @@ export function visualContinuitySources(card: GenerationCard, document: CanvasDo
   const adopted = activeVisualContinuity(document, card.id)
   if (!adopted) return []
   const { origin } = adopted
-  const missing = !document.cards?.some(item => item.id === origin.source_card_id)
-  return [{ source: { card_id: origin.source_card_id }, label: '来源视频', position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
+  const sourceIndex = storyboardShotIndex(document, origin.source_card_id)
+  const missing = sourceIndex < 0 || sourceIndex >= storyboardShotIndex(document, card.id) ||
+    !document.cards?.some(item => item.id === origin.source_card_id)
+  return [{ source: { card_id: origin.source_card_id }, label: '来源视频', fileId: origin.source_file_id, position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
     missing, issue: missing ? '来源卡片已删除或不可用' : undefined }]
 }
 
