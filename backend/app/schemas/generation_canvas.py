@@ -860,10 +860,21 @@ class CanvasStoryboardShot(BaseModel):
     reference_overrides: dict[str, str] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 
+class CanvasContinuitySuspension(BaseModel):
+    """确认改用首帧时暂停的原始采用和结构化正文，按原顺序位置保留。"""
+    model_config = ConfigDict(extra='forbid')
+    model_id: str
+    input_bindings: dict[int, InputBinding] = Field(default_factory=dict)
+    design_media_uses: dict[int, DesignMediaUse] = Field(default_factory=dict)
+    prompt_segments: dict[int, PromptReference | PromptInstruction] = Field(default_factory=dict)
+    prompt_order: list[str] = Field(default_factory=list)
+
+
 class CanvasVisualContinuity(BaseModel):
     """工作台选帧采用的实际绑定；素材及视频结果身份保留在来源图片中。"""
     model_config = ConfigDict(extra='forbid')
     binding_id: str = Field(min_length=1, max_length=64)
+    suspended: CanvasContinuitySuspension | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasStoryboard(BaseModel):
