@@ -749,6 +749,7 @@ export type { StoryboardBasisObject } from './models/StoryboardBasisObject';
 export type { StoryboardCandidate } from './models/StoryboardCandidate';
 export type { StoryboardDiff } from './models/StoryboardDiff';
 export type { StoryboardDiffCard } from './models/StoryboardDiffCard';
+export type { StoryboardDiffStack } from './models/StoryboardDiffStack';
 export type { StoryboardReextractRequest } from './models/StoryboardReextractRequest';
 export type { StoryboardRequest } from './models/StoryboardRequest';
 export type { StoryboardRestore } from './models/StoryboardRestore';

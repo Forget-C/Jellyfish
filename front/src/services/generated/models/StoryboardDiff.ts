@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { StoryboardDiffCard } from './StoryboardDiffCard';
+import type { StoryboardDiffStack } from './StoryboardDiffStack';
 /**
  * The effect of applying the task to one saved canvas revision.
  */
@@ -12,4 +13,6 @@ export type StoryboardDiff = {
     removed: Array<StoryboardDiffCard>;
     orphaned: Array<StoryboardDiffCard>;
     source_changed: boolean;
+    automatic_stacks?: Array<StoryboardDiffStack>;
+    manual_stacks?: Array<StoryboardDiffStack>;
 };

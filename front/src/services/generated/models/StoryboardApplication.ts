@@ -8,4 +8,5 @@
 export type StoryboardApplication = {
     expected_revision: number;
     overwrite_card_ids?: Array<string>;
+    confirmed_auto_stack_ids?: Array<string>;
 };

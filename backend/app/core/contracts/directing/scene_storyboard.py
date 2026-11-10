@@ -228,6 +228,7 @@ class StoryboardApplication(Contract):
 
     expected_revision: int = Field(ge=0)
     overwrite_card_ids: list[Identity] = Field(default_factory=list, max_length=2000)
+    confirmed_auto_stack_ids: list[Identity] = Field(default_factory=list, max_length=2000)
 
 
 class StoryboardDiffCard(Contract):
@@ -241,6 +242,13 @@ class StoryboardDiffCard(Contract):
     lost_targets: list[str] = Field(default_factory=list)
 
 
+class StoryboardDiffStack(Contract):
+    """A saved stack that is affected by the exact storyboard application."""
+
+    id: Identity
+    name: str
+
+
 class StoryboardDiff(Contract):
     """The effect of applying the task to one saved canvas revision."""
 
@@ -249,7 +257,8 @@ class StoryboardDiff(Contract):
     removed: list[StoryboardDiffCard]
     orphaned: list[StoryboardDiffCard]
     source_changed: bool
-
+    automatic_stacks: list[StoryboardDiffStack] = Field(default_factory=list)
+    manual_stacks: list[StoryboardDiffStack] = Field(default_factory=list)
 
 
 class StoryboardReextractRequest(StoryboardRequest):

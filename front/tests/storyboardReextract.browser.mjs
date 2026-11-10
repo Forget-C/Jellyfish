@@ -59,14 +59,25 @@ try {
   await request(`${scenes}/${sequence.id}/storyboards`, 'POST', {
     request_id: 'existing-image-storyboard', name: storyboardName, mode: 'faithful', pending_modality: 'image',
   })
+  const videoName = '自动设计堆叠分镜'
+  await request(`${scenes}/${sequence.id}/storyboards`, 'POST', {
+    request_id: 'automatic-stack-storyboard', name: videoName, mode: 'faithful', pending_modality: 'video',
+  })
+  await page.goto(prep)
+  await openReadyStoryboard(page, videoName)
+  const videoLocation = page.url()
+  const videoId = new URL(videoLocation).searchParams.get('canvas')
+  const videoCanvas = `${studio}/generation-canvases/${project}/${videoId}`
+  const readVideo = () => request(videoCanvas)
+  await page.waitForFunction(() => document.querySelectorAll('[data-stack-id]').length === 2)
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
   const canvas = `${studio}/generation-canvases/${project}/${id}`
   const read = () => request(canvas)
-  const poll = async predicate => {
+  const poll = async (predicate, readState = read) => {
     for (let attempt = 0; attempt < 130; attempt++) {
-      const state = await read()
+      const state = await readState()
       if (predicate(state)) return state
       await delay(100)
     }
@@ -208,6 +219,59 @@ try {
   await page.reload()
   await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
   assert.deepEqual((await read()).document, undone.document)
+  // A video storyboard keeps its old stacks until the user reviews the new source.
+  const videoBefore = await readVideo()
+  const automatic = videoBefore.document.groups.find(group => group.kind === 'stack' && group.name.includes('镜头 01'))
+  const regrouped = videoBefore.document.groups.find(group => group.kind === 'stack' && group.name.includes('镜头 02'))
+  const manual = { ...regrouped, id: 'manually-regrouped', name: '手工堆叠' }
+  await request(videoCanvas, 'PUT', { request_id: 'manually-regrouped', expected_revision: videoBefore.revision,
+    document: { ...videoBefore.document, groups: videoBefore.document.groups.map(group => group.id === regrouped.id ? manual : group) } })
+  await page.goto(videoLocation)
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  const autoStack = page.locator(`[data-stack-id="${automatic.id}"]`)
+  const autoBox = await autoStack.boundingBox()
+  assert.ok(autoBox)
+  await page.mouse.move(autoBox.x + autoBox.width / 2, autoBox.y + autoBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(autoBox.x + autoBox.width / 2 + 27, autoBox.y + autoBox.height / 2 + 19, { steps: 5 })
+  await page.mouse.up()
+  const moved = await autoStack.boundingBox()
+  assert.ok(moved && Math.abs(moved.x - autoBox.x) > 10, 'the automatic stack was moved')
+  await page.getByRole('button', { name: '重新提取', exact: true }).click()
+  const videoSettings = page.getByRole('dialog', { name: '重新提取', exact: true })
+  await videoSettings.getByText('采用章节最新已确认原文', { exact: true }).click()
+  await videoSettings.getByRole('button', { name: '开始提取', exact: true }).click()
+  await page.getByRole('button', { name: '核对差异', exact: true }).click()
+  const videoDiff = page.getByRole('dialog', { name: '核对分镜差异', exact: true })
+  await videoDiff.getByText(manual.name, { exact: true }).waitFor()
+  await videoDiff.getByText(automatic.name, { exact: true }).waitFor()
+  const confirmUnstack = videoDiff.getByRole('button', { name: '应用并解除受影响的堆叠', exact: true })
+  assert.ok(await confirmUnstack.isDisabled())
+  const pendingVideo = await readVideo()
+  await videoDiff.getByRole('button', { name: '暂不应用', exact: true }).click()
+  await videoDiff.waitFor({ state: 'hidden' })
+  assert.deepEqual(await readVideo(), pendingVideo)
+  const manualStack = page.locator(`[data-stack-id="${manual.id}"]`)
+  await manualStack.focus()
+  await manualStack.getByRole('button', { name: '解除堆叠', exact: true }).click()
+  const beforeApplication = await poll(state => !state.document.groups.some(group => group.id === manual.id), readVideo)
+  const positionBeforeApplication = await autoStack.boundingBox()
+  await page.getByRole('button', { name: '核对差异', exact: true }).click()
+  await confirmUnstack.click()
+  const videoApplied = await poll(state => state.revision > beforeApplication.revision, readVideo)
+  assert.ok(!videoApplied.document.groups.some(group => group.id === automatic.id))
+  await autoStack.waitFor({ state: 'hidden' })
+  const anchor = page.locator(`[data-card-id="${automatic.card_ids[0]}"]`)
+  const freed = await anchor.boundingBox()
+  assert.ok(freed && Math.abs(freed.x - positionBeforeApplication.x) < 2 && Math.abs(freed.y - positionBeforeApplication.y) < 2,
+    'the surviving stack anchor stays at its moved position')
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  const videoRestored = await poll(state => state.revision > videoApplied.revision, readVideo)
+  assert.deepEqual(videoRestored.document, beforeApplication.document)
+  await autoStack.waitFor()
+  const restored = await autoStack.boundingBox()
+  assert.ok(restored && Math.abs(restored.x - positionBeforeApplication.x) < 2 && Math.abs(restored.y - positionBeforeApplication.y) < 2,
+    'undo restores the automatic stack at its moved position')
   console.log(JSON.stringify({ output, passed: true }))
 } catch (reason) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true })

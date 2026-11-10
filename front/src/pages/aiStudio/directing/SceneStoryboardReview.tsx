@@ -57,24 +57,28 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     setOpening(false)
   }
   const close = () => { if (!applying) { setBaseline(undefined); setReview(undefined); setError('') } }
+  const diff = review?.diff
+  const ready = review?.choice.expected_revision === baseline && review?.choice.overwrite_card_ids === selected
+  const automaticStacks = diff?.automatic_stacks || []
+  const manualStacks = diff?.manual_stacks || []
   const applyReview = async () => {
-    if (!review || applying) return
-    if (await apply(review.choice)) close()
+    if (!review || applying || !ready || manualStacks.length) return
+    const confirmedStacks = automaticStacks.map(stack => stack.id)
+    const choice = confirmedStacks.length ? { ...review.choice, confirmed_auto_stack_ids: confirmedStacks } : review.choice
+    if (await apply(choice)) close()
     else setError('应用尚未完成。请核对画布提示；结果未知时使用原选择再次核实。')
   }
   const choose = (id: string, overwrite: boolean) => {
     setSelected(values => overwrite ? [...values, id] : values.filter(value => value !== id))
   }
-  const diff = review?.diff
-  const ready = review?.choice.expected_revision === baseline && review?.choice.overwrite_card_ids === selected
   return <>
     <Alert type="warning" showIcon message={baseline === undefined && error ? error : '分镜结果待应用，现有画布内容已保留。'}
       action={<Button disabled={!editable} loading={opening} onClick={() => void open()}>核对差异</Button>} />
     <WorkbenchModal title="核对分镜差异" open={baseline !== undefined} width={640}
       closable={!applying} keyboard={!applying} maskClosable={!applying} onCancel={close}
       footer={<WorkbenchDialogActions secondary={<Button variant="quiet" disabled={applying} onClick={close}>暂不应用</Button>}>
-        <Button variant="primary" loading={applying} disabled={!review || !ready || !editable}
-          onClick={() => void applyReview()}>应用分镜</Button>
+        <Button variant="primary" loading={applying} disabled={!review || !ready || !editable || !!manualStacks.length}
+          onClick={() => void applyReview()}>{automaticStacks.length ? '应用并解除受影响的堆叠' : '应用分镜'}</Button>
       </WorkbenchDialogActions>}>
       {error && <Alert type="warning" showIcon message={saveError || error} action={<Button disabled={applying} loading={opening}
         onClick={() => void open(true)}>核对最新画布</Button>} />}
@@ -82,6 +86,13 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       {diff && <>
         {diff.source_changed && <p>应用时将采用本次已确认的原文。仍被引用的旧原文依据会保留。</p>}
         <p>人工新增的卡片会保留。勾选后才会覆盖相应的人工修改或移除这些卡片。</p>
+        {!!manualStacks.length && <section>
+          <Alert type="warning" showIcon message="请先返回画布手动解除这些堆叠，再重新核对差异。"
+            description={<ul>{manualStacks.map(stack => <li key={stack.id}>{stack.name}</li>)}</ul>} />
+        </section>}
+        {!!automaticStacks.length && <section><h3>应用后解除的自动堆叠</h3>
+          <ul>{automaticStacks.map(stack => <li key={stack.id}>{stack.name}</li>)}</ul>
+        </section>}
         {!!diff.orphaned.length && <section><h3>失去引用的保留卡片</h3>
           <ul>{diff.orphaned.map(card => <li key={card.id}>{card.name} 将失去 {card.lost_targets?.join('、')}</li>)}</ul>
         </section>}

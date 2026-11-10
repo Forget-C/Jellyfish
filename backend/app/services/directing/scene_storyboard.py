@@ -22,6 +22,7 @@ from app.services.directing.scene_canvas import SCENE_TASK_ORDER
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.storyboard_application import plan_application
+from app.services.directing.storyboard_stack_review import review_stack_changes
 from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
 from app.services.generation_canvas.capabilities import model_capability
@@ -368,8 +369,10 @@ class SceneStoryboardService(SceneObjectService):
         store = CanvasStore(self.db, self.project_id)
         canvas = await store.get(task.input_snapshot['canvas_id'], lock=not preview)
         request_id = 'storyboard:' + task.id
-        digest = store.command_digest({'expected_revision': body.expected_revision,
-                                       'overwrite_card_ids': sorted(body.overwrite_card_ids)})
+        confirmation = {'expected_revision': body.expected_revision, 'overwrite_card_ids': sorted(body.overwrite_card_ids)}
+        if body.confirmed_auto_stack_ids:
+            confirmation['confirmed_auto_stack_ids'] = sorted(body.confirmed_auto_stack_ids)
+        digest = store.command_digest(confirmation)
         if not preview:
             receipt = await store.save_receipt(canvas.id, request_id, digest)
             if receipt:
@@ -397,8 +400,16 @@ class SceneStoryboardService(SceneObjectService):
         capability = task.input_snapshot['run_args'].get('production_capability') or {}
         document, diff = plan_application(current, candidate.document, body, prior=prior,
                                           production_ports=capability.get('input_ports'))
+        diff.automatic_stacks, diff.manual_stacks = review_stack_changes(current, document)
         if preview:
             return diff
+        if diff.manual_stacks:
+            stack = diff.manual_stacks[0]
+            raise diagnostic('STACK_READ_ONLY', f'请先手动解除堆叠「{stack.name}」，再核对提取差异', {'group_id': stack.id})
+        affected = {stack.id for stack in diff.automatic_stacks}
+        if sorted(affected) != sorted(body.confirmed_auto_stack_ids):
+            raise diagnostic('STORYBOARD_STACK_CONFIRMATION_REQUIRED', '请重新核对并确认本次应用将解除的自动堆叠', {'canvas_id': canvas.id})
+        document.groups = [group for group in document.groups if group.id not in affected]
         return await store.save_scene_application(canvas,
             CanvasSave(request_id=request_id, expected_revision=body.expected_revision, document=document.model_dump()),
             digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(),
