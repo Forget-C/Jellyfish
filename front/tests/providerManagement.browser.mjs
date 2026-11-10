@@ -116,6 +116,7 @@ try {
   await page.getByText('无匹配结果').waitFor()
   await page.getByRole('button', { name: '清除搜索' }).click()
   await name.waitFor()
+  await page.getByText('供应商已更新').waitFor({ state: 'hidden' })
 
   for (const appearance of ['gradient', 'solid']) {
     for (const [width, height] of [[1440, 900], [1366, 768], [1024, 768], [1023, 768], [375, 812]]) {

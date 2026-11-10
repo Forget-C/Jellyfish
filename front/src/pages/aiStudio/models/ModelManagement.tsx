@@ -8,16 +8,17 @@ import { PageToolbar, WorkspaceLayout } from '../../../components'
 export default function ModelManagement() {
   const [activeTab, setActiveTab] = useState<string>('providers')
   const headerRef = useRef<HTMLDivElement>(null)
+  const selectTab = (key: string) => {
+    setActiveTab(key)
+    // 页签在各分栏内容右侧重新挂载后，继续保留用户的键盘位置。
+    requestAnimationFrame(() => headerRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus())
+  }
   const header = <div ref={headerRef} className="management-model-header">
     <PageToolbar title="模型管理" className="management-heading">
       <Tabs
         className="management-tabs"
         activeKey={activeTab}
-        onChange={key => {
-          setActiveTab(key)
-          // 页签在各分栏内容右侧重新挂载后，继续保留用户的键盘位置。
-          requestAnimationFrame(() => headerRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus())
-        }}
+        onChange={selectTab}
         size="small"
         items={[
           { key: 'providers', label: '供应商' },
@@ -32,7 +33,7 @@ export default function ModelManagement() {
     <WorkspaceLayout className="management-page">
       {activeTab === 'providers' && <ProvidersTab header={header} />}
       {activeTab === 'models' && <ModelsTab header={header} />}
-      {activeTab === 'settings' && <>{header}<div className="flex-1 flex flex-col min-h-0 overflow-hidden"><SettingsTab /></div></>}
+      {activeTab === 'settings' && <>{header}<SettingsTab onOpenModels={() => selectTab('models')} /></>}
     </WorkspaceLayout>
   )
 }

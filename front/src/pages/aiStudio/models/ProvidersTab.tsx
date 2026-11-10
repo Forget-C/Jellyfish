@@ -288,7 +288,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         : '未知',
     },
     {
-      title: '操作', key: 'action', width: 208,
+      title: '操作', key: 'action', width: 224,
       render: (_, record) => (
         <Space size={4}>
           <Button type="text" size="small" aria-label={`编辑 ${record.name}`} onClick={() => void openProviderModal(record)}>编辑</Button>
@@ -360,7 +360,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             columns={providerColumns}
             dataSource={result.providers}
             scroll={{ x: 790 }}
-            pagination={result.total === undefined ? false : { current: page, pageSize: PAGE_SIZE, total: result.total, showSizeChanger: false, onChange: setPage }}
+            pagination={result.total === undefined ? false : { current: page, pageSize: PAGE_SIZE, total: result.total, showSizeChanger: false, hideOnSinglePage: true, onChange: setPage }}
             locale={{
               emptyText: loadFailed || loading ? null : (
                 <Empty description={search.trim() ? '无匹配结果' : '暂无供应商'}>
