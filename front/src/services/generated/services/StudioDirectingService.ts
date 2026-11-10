@@ -130,6 +130,7 @@ import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
 import type { SourceResolveRequest } from '../models/SourceResolveRequest';
 import type { StoryboardApplication } from '../models/StoryboardApplication';
+import type { StoryboardCheckRequest } from '../models/StoryboardCheckRequest';
 import type { StoryboardReextractRequest } from '../models/StoryboardReextractRequest';
 import type { StoryboardRequest } from '../models/StoryboardRequest';
 import type { StoryboardRestore } from '../models/StoryboardRestore';
@@ -605,6 +606,72 @@ export class StudioDirectingService {
                 'chapter_id': chapterId,
                 'sequence_id': sequenceId,
                 'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Read Saved Storyboard Check
+     * Read the latest explicit check without starting work.
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSavedStoryboardCheckGet({
+        projectId,
+        chapterId,
+        sequenceId,
+        canvasId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        canvasId: string,
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/continuity-check',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Submit Saved Storyboard Check
+     * Review the saved design only after explicit admission.
+     * @returns ApiResponse_StoryboardTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSavedStoryboardCheckSubmit({
+        projectId,
+        chapterId,
+        sequenceId,
+        canvasId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        canvasId: string,
+        requestBody: StoryboardCheckRequest,
+    }): CancelablePromise<ApiResponse_StoryboardTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/continuity-check',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'canvas_id': canvasId,
             },
             body: requestBody,
             mediaType: 'application/json',

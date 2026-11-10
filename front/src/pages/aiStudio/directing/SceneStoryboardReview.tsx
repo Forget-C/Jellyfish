@@ -40,11 +40,12 @@ export function StoryboardReviewFindings({ report, candidate, action }: {
 }
 
 /** Compare the saved revision and exact overwrite selection before applying. */
-export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired }: {
+export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, savedCheck }: {
   scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<StoryboardReviewPreparation | undefined>;
   reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
   report?: StoryboardReviewReport | null; candidate?: StoryboardCandidate | null;
   onRepaired: (result: StoryboardTaskRead) => void;
+  savedCheck?: boolean;
 }) {
   const [baseline, setBaseline] = useState<number>()
   const [opening, setOpening] = useState(false)
@@ -140,7 +141,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     const confirmedStacks = automaticStacks.map(stack => stack.id)
     const choice: StoryboardApplication = { ...review.choice }
     if (confirmedStacks.length) choice.confirmed_auto_stack_ids = confirmedStacks
-    if (continuity && conflicts.length) {
+    if (continuity && (conflicts.length || savedCheck)) {
       choice.review_token = continuity.token
       choice.accepted_conflict_ids = accepted.filter(id => conflicts.some(conflict => conflict.id === id))
     }
@@ -153,9 +154,10 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     setSelected(values => overwrite ? [...values, id] : values.filter(value => value !== id))
   }
   return <>
+    {savedCheck ? <Button disabled={!editable} loading={opening} onClick={() => void open()}>核对检查差异</Button> :
     <Alert type="warning" showIcon message={baseline === undefined && error ? error :
       hasConflicts ? '分镜存在设计冲突，现有画布内容已保留。' : '分镜结果待应用，现有画布内容已保留。'}
-      action={<Button disabled={!editable} loading={opening} onClick={() => void open()}>核对差异</Button>} />
+      action={<Button disabled={!editable} loading={opening} onClick={() => void open()}>核对差异</Button>} />}
     <WorkbenchModal title="核对分镜差异" open={baseline !== undefined} width={640}
       closable={!busy} keyboard={!busy} maskClosable={!busy} onCancel={close}
       footer={<WorkbenchDialogActions secondary={<Button variant="quiet" disabled={busy} onClick={close}>暂不应用</Button>}>

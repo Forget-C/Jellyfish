@@ -331,7 +331,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const prepareReview = async (): Promise<StoryboardReviewPreparation | undefined> => {
     const s = state.current
     if (!await save() || s !== state.current || !s.current || s.initialBefore) return undefined
-    return { revision: s.current.revision, appliedTaskId: s.current.document.storyboard?.task_id }
+    return { revision: s.current.revision, appliedTaskId: s.current.document.storyboard?.continuity_check_task_id
+      ?? s.current.document.storyboard?.task_id }
   }
   const applyReviewedCandidate = (scene: StoryboardScope, choices: StoryboardApplication) => {
     const s = state.current

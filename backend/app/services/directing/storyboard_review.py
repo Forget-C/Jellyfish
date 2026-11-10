@@ -43,6 +43,10 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         '若有 recheck_shot_ids，重点复核这些镜头及连续性边界，同时如实报告发现的问题。'
         '没有问题返回空 issues。只返回符合以下结构的 JSON：'
     )
+    if inputs.get('saved_canvas_check'):
+        instruction += ('本次检查已保存画布，repair_targets.design_id 必须是 cards 中的实际卡片 ID，'
+                        '包括镜头卡自身。shot_id 使用 shots 中的逻辑 id，共享设计留空。'
+                        '核对当前已采用关系和已编辑字段，不得按原提取假设覆盖。')
     report = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction, '分镜审查返回无效，请重试审查')
     known = {shot['id'] for shot in inputs['storyboard_draft']['shots']}
     if any(len(set(issue.shot_ids)) != len(issue.shot_ids) or not set(issue.shot_ids) <= known for issue in report.issues):

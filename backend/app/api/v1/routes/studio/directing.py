@@ -14,7 +14,7 @@ from app.core.contracts.directing.workbench_management import ChapterWorkbenchMa
 from app.services.directing.workbench_management import WorkbenchManagementService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
 from app.schemas.generation_canvas import CanvasRead
-from app.core.contracts.directing.scene_storyboard import (StoryboardApplication, StoryboardBasis, StoryboardDiff,
+from app.core.contracts.directing.scene_storyboard import (StoryboardApplication, StoryboardBasis, StoryboardCheckRequest, StoryboardDiff,
     StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardRetryBasis,
     StoryboardTaskRead, StoryboardTaskSummary)
 from app.services.directing.scene_storyboard import SceneStoryboardService
@@ -204,6 +204,22 @@ async def retry_storyboard(project_id: str, chapter_id: str, sequence_id: str, t
                            db: AsyncSession = Depends(get_db, scope="function")):
     """在同一画布恢复失败任务，原任务及已保存内容保持可查。"""
     return created_response(await _call(SceneStoryboardService(db, project_id).retry_storyboard(chapter_id, sequence_id, task_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/continuity-check",
+            response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_saved_storyboard_check_get")
+async def read_saved_storyboard_check(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,
+                                      db: AsyncSession = Depends(get_db, scope="function")):
+    """Read the latest explicit check without starting work."""
+    return success_response(await _call(SceneStoryboardService(db, project_id).saved_check(chapter_id, sequence_id, canvas_id)))
+
+
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/continuity-check",
+             response_model=ApiResponse[StoryboardTaskRead], operation_id="directing_saved_storyboard_check_submit")
+async def submit_saved_storyboard_check(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str, body: StoryboardCheckRequest,
+                                        db: AsyncSession = Depends(get_db, scope="function")):
+    """Review the saved design only after explicit admission."""
+    return created_response(await _call(SceneStoryboardService(db, project_id).saved_check(chapter_id, sequence_id, canvas_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry/basis",

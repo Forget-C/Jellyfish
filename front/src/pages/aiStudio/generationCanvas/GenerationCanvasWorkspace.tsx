@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
 import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
-import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
+import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication, StoryboardTaskRead } from '../../../services/generated'
+import { useGenerationCanvasEditor, type StoryboardReviewPreparation, type StoryboardScope } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph, type CanvasModelCardActionContext, type CanvasModelCardMenuContext } from './GenerationCanvasGraph'
 import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -64,7 +64,11 @@ interface GenerationCanvasWorkspaceProps {
   canvasId: string | null
   back: { label: string; onClick: () => void }
   renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
-  renderSceneActions?: (context: CanvasManagementContext & { document?: CanvasDocument }) => ReactNode
+  renderSceneActions?: (context: CanvasManagementContext & { document?: CanvasDocument;
+    prepareReview: () => Promise<StoryboardReviewPreparation | undefined>;
+    applyReview: (scope: StoryboardScope, choice: StoryboardApplication) => Promise<boolean>;
+    reloadReview: () => Promise<boolean>;
+  }) => ReactNode
   renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode
   renderModelCardMenu?: (context: WorkbenchModelMenuContext) => ReactNode
   modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]
@@ -109,7 +113,8 @@ export function GenerationCanvasWorkspace({
   const candidate = discovered?.result?.candidate
   const candidateTask = discovered?.result?.task_id
   const requiresReview = discovered?.result?.pending_application
-  const appliedTask = current?.document.storyboard?.task_id
+  const appliedTask = current?.document.storyboard?.continuity_check_task_id
+    ? undefined : current?.document.storyboard?.task_id
   const appliedRevision = current?.revision
   const [appliedReview, setAppliedReview] = useState<{ task: string; revision: number; result: StoryboardTaskRead }>()
   const savedReview = appliedReview?.task === appliedTask && appliedReview?.revision === appliedRevision ? appliedReview?.result : undefined
@@ -222,7 +227,9 @@ export function GenerationCanvasWorkspace({
       <div className="generation-toolbar-center" />
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="generation-primary-host" />
-        {renderSceneActions?.({ ...management, document, editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
+        {renderSceneActions?.({ ...management, document, prepareReview: editor.prepareReview,
+          applyReview: editor.applyReviewedCandidate, reloadReview: editor.reload,
+          editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
         {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}

@@ -886,6 +886,7 @@ class CanvasStoryboard(BaseModel):
     origins: dict[str, CanvasStoryboardOrigin]
     objects: list[CanvasStoryboardObject]
     shots: list[CanvasStoryboardShot]
+    continuity_check_task_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     visual_continuity: dict[str, CanvasVisualContinuity] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 

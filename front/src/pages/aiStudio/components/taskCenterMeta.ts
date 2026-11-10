@@ -24,6 +24,9 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_storyboard') {
     navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'storyboard', { storyboardTask: task.taskId })
   }
+  else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_storyboard_check') {
+    navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'storyboard')
+  }
   else if (kind === 'sequence' && projectId && chapterId) {
     const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'
     const query = new URLSearchParams({ view, task: task.taskId, focus: 'tasks' })

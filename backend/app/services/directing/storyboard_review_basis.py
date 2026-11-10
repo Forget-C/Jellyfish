@@ -24,7 +24,7 @@ def affected_shots(document: CanvasDocument, shot_ids: list[str]) -> list[str]:
             if any(other in shot_ids for other in order[max(0, index - 1):index + 2])]
 
 
-def canvas_review_fingerprint(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False) -> str:
+def canvas_review_evidence(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False) -> dict:
     """Include relevant design cards, dependencies, fixed evidence and story order, excluding layout."""
     storyboard = document.storyboard
     selected = [(key, shot) for key, shot in _shots(document) if shot_ids is None or key in shot_ids]
@@ -58,9 +58,9 @@ def canvas_review_fingerprint(document: CanvasDocument, shot_ids: list[str] | No
             if edge.source_card not in relevant:
                 relevant.add(edge.source_card)
                 frontier.append(edge.source_card)
-    data = {
+    return {
         'fixed_source': document.fixed_source.model_dump(mode='json') if document.fixed_source else None,
-        'shots': [shot.model_dump(mode='json', exclude={'group_id'}) for _, shot in selected],
+        'shots': [{**shot.model_dump(mode='json', exclude={'group_id'}), 'id': key} for key, shot in selected],
         'cards': [cards[key].model_dump(mode='json') for key in sorted(relevant & cards.keys())],
         'origins': {key: origins[key].model_dump(mode='json', exclude={'manually_edited'})
                     for key in sorted(relevant & origins.keys())},
@@ -68,7 +68,15 @@ def canvas_review_fingerprint(document: CanvasDocument, shot_ids: list[str] | No
                   if edge.target_card in relevant],
         'input_order': {key: value for key, value in document.input_order.items() if key in relevant},
     }
-    return evidence_digest(data)
+
+
+def canvas_review_fingerprint(document: CanvasDocument, shot_ids: list[str] | None = None, *, full: bool = False) -> str:
+    """Identify the exact projection passed to review without embedding its contents."""
+    evidence = canvas_review_evidence(document, shot_ids, full=full)
+    # Keep existing extraction risk and application proofs compatible.
+    for shot in evidence['shots']:
+        shot.pop('id')
+    return evidence_digest(evidence)
 
 
 def capture_review_basis(document: CanvasDocument) -> dict:

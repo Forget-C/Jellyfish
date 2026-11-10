@@ -21,4 +21,5 @@ export type StoryboardTaskRead = {
     candidate?: (StoryboardCandidate | null);
     review?: (StoryboardReviewReport | null);
     accepted_conflict_ids?: Array<string>;
+    saved_check?: boolean;
 };
