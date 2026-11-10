@@ -222,7 +222,42 @@ try {
     const { reference_card_id: referenceId } = objects.find(item => item.object_id === shot.object_ids[0])
     assert.equal(state.document.cards.find(card => card.id === referenceId).image_binding, null)
     const readRuntime = () => request(canvas + '/runtime')
+    const videoAction = id => page.locator(`[data-card-id="${id}"]`).getByRole('button', { name: '生成视频', exact: true })
+    if (modality === 'video') {
+      const workbenchUrl = page.url()
+      const ordinary = projectUrl + '/generation-canvas?canvas='
+      const openOrdinary = async (id, modelId) => {
+        await page.goto(ordinary + id)
+        await page.locator(`[data-card-id="${modelId}"]`).waitFor()
+        assert.equal(await videoAction(modelId).count(), 0, 'ordinary entrance has no storyboard card-face action')
+        const detail = await openCanvasCard(page, modelId)
+        await detail.getByRole('button', { name: '预检运行', exact: true }).click()
+        await preview.waitFor()
+        await closePrecheck(page)
+        await closeCanvasDetails(page)
+      }
+      await openOrdinary(state.id, cardId)
+      const free = await request(base, 'POST', { name: '独立视频画布' })
+      free.document.cards = [{ id: 'free-video', type: 'model.video', model_id: 'story-video-model',
+        config: { ratio: '16:9', seconds: 5 }, prompt: { segments: [{ id: 'text', kind: 'text', text: '独立视频' }] } }]
+      await request(base + '/' + free.id, 'PUT', { request_id: 'configure-free-video',
+        expected_revision: free.revision, document: free.document })
+      await openOrdinary(free.id, 'free-video')
+      await page.goto(workbenchUrl)
+      await videoAction(cardId).press('Enter')
+      await warning.waitFor()
+      await closePrecheck(page)
+      assert.deepEqual((await readRuntime()).runs, [])
+      assert.equal((await request(controls)).media_calls.length, callCount)
+    }
     const precheck = async () => {
+      if (modality === 'video') {
+        await closeCanvasDetails(page)
+        await videoAction(cardId).press('Enter')
+        await warning.waitFor()
+        assert.equal(await page.locator('.wb-details:visible').count(), 0, 'the video action does not open the card editor')
+        return
+      }
       const detail = await openCanvasCard(page, cardId)
       await detail.getByRole('button', { name: '预检运行', exact: true }).click()
       await warning.waitFor()
@@ -270,7 +305,8 @@ try {
     const file = success.node.outputs[0].file_id
     assert.ok(file)
     assert.deepEqual(Object.keys(success.result.current_outputs).filter(key => success.result.current_outputs[key].some(output => output.result_set_id)), [cardId])
-    const formal = detail.getByRole('region', { name: '当前正式输出', exact: true })
+    const resultDetail = detail || await openCanvasCard(page, cardId)
+    const formal = resultDetail.getByRole('region', { name: '当前正式输出', exact: true })
     await formal.locator(outputTag).waitFor()
     if (modality === 'video') {
       await formal.locator('video').evaluate(async video => { video.muted = true; await video.play() })
