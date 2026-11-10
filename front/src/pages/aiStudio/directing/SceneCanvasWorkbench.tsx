@@ -64,8 +64,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const shotCard = document.cards?.find(item => item.id === shot.card_id)
         const name = shotCard && 'name' in shotCard && shotCard.name || '镜头'
         const label = shot.model_card_ids.length > 1 ? `${name} · 片段 ${shot.model_card_ids.indexOf(card.id) + 1}` : name
-        return <><span title={label}>{label}</span>{'model_id' in card && card.model_id &&
-          <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={precheck}>生成视频</Button>}</>
+        return <><span title={label}>{label}</span>
+          <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>生成视频</Button></>
       }}
       renderSceneActions={({ current, document, editable, requestLeave }) => {
         if (!current || !document?.fixed_source) return null

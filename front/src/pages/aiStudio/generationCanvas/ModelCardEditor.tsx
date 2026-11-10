@@ -24,6 +24,7 @@ import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CardComposer } from './CardComposer'
+import { availableDefaultModel, defaultVideoRatio } from './modelCardDefaults'
 import './materialComposer.css'
 
 function audioCapabilityStatus(capability?: AudioCapability) {
@@ -48,14 +49,15 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
       attemptedDefault.current = undefined
       return
     }
-    if (!card.model_id && defaultModelId && attemptedDefault.current !== defaultModelId
-      && models?.some(model => model.id === defaultModelId && model.category === category)) {
-      attemptedDefault.current = defaultModelId
-      onChange({ ...card, model_id: defaultModelId }, 'system-default')
+    const modelId = availableDefaultModel(card, defaultModelId, models)
+    if (modelId && attemptedDefault.current !== modelId) {
+      attemptedDefault.current = modelId
+      onChange({ ...card, model_id: modelId }, 'system-default')
       return
     }
-    if (card.type === 'model.video' && !(card as VideoModelCard).config?.ratio && capability?.ratios?.length) onChange({ ...card, config: { ...card.config, ratio: capability.ratios.includes('16:9') ? '16:9' : capability.ratios[0] } })
-  }, [capability, card, category, defaultModelId, disabled, models, onChange, suppressAutomaticDefaults])
+    const ratio = defaultVideoRatio(capability)
+    if (card.type === 'model.video' && !(card as VideoModelCard).config?.ratio && ratio) onChange({ ...card, config: { ...card.config, ratio } })
+  }, [capability, card, defaultModelId, disabled, models, onChange, suppressAutomaticDefaults])
   let parameters: ReactNode = null
   if (card.type === 'model.image') parameters = <ImageModelParameters card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
   if (card.type === 'model.video') parameters = <VideoModelParameters card={card as VideoModelCard} capability={capability} disabled={disabled} onChange={onChange} />
