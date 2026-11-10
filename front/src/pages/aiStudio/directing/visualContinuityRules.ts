@@ -107,6 +107,9 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
   if (!document.storyboard || target?.type !== 'model.video' || target.model_id !== capability.model_id ||
     typeof source !== 'number' || source < 0 || source >= index) throw new Error('当前镜头或模型已变化，请重新选择来源')
   if (activeVisualContinuity(document, targetId)) throw new Error('当前镜头已有视觉承接')
+  const previous = document.storyboard.visual_continuity?.[targetId]
+  if (suspension && previous?.suspended && !previous.restored)
+    throw new Error('请先核对当前已停用的主体参考')
   const plan = suspension ? planSubjectSuspension(target) : undefined
   if (suspension && (!plan || JSON.stringify(suspension) !== JSON.stringify(plan.suspension)))
     throw new Error('主体参考已变化，请重新核对后确认切换')
@@ -119,6 +122,6 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
   }, capability)
   if (!result.document) throw new Error(result.reason)
   return { ...result.document, storyboard: { ...document.storyboard, visual_continuity: {
-    ...document.storyboard.visual_continuity, [targetId]: { binding_id: bindingId, ...(suspension ? { suspended: suspension } : {}) },
+    ...document.storyboard.visual_continuity, [targetId]: suspension ? { binding_id: bindingId, suspended: suspension } : { ...previous, binding_id: bindingId },
   } } }
 }

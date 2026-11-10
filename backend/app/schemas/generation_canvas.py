@@ -873,8 +873,9 @@ class CanvasContinuitySuspension(BaseModel):
 class CanvasVisualContinuity(BaseModel):
     """工作台选帧采用的实际绑定；素材及视频结果身份保留在来源图片中。"""
     model_config = ConfigDict(extra='forbid')
-    binding_id: str = Field(min_length=1, max_length=64)
+    binding_id: str | None = Field(min_length=1, max_length=64)
     suspended: CanvasContinuitySuspension | None = Field(default=None, exclude_if=lambda value: value is None)
+    restored: bool = Field(default=False, exclude_if=lambda value: not value)
 
 
 class CanvasStoryboard(BaseModel):
