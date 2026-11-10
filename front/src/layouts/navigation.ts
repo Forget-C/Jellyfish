@@ -5,15 +5,23 @@ export const mainNavigation = [
   { key: 'lab', to: '/lab' },
 ] as const
 
-const managementTitles: Record<string, string> = {
-  models: '模型管理', assets: '资产管理', prompts: '提示词模板', files: '文件管理', agents: 'Agent 管理',
+export const managementNavigation = [
+  { to: '/models', label: '模型管理' },
+  { to: '/assets', label: '资产库' },
+  { to: '/prompts', label: '提示词模板' },
+  { to: '/files', label: '文件管理' },
+  { to: '/agents', label: 'Agent 管理' },
+] as const
+
+export function managementPageForPath(pathname: string) {
+  return managementNavigation.find(({ to }) => pathname === to || pathname.startsWith(`${to}/`))
 }
 
 export function activeMainNavigation(pathname: string): typeof mainNavigation[number]['key'] | undefined {
   const section = pathname.split('/')[1]
   if (!section) return 'home'
   if (section === 'projects') return 'projects'
-  if (Object.prototype.hasOwnProperty.call(managementTitles, section)) return 'management'
+  if (managementPageForPath(pathname)) return 'management'
   if (section === 'lab') return 'lab'
   return undefined
 }
@@ -47,6 +55,7 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
     return [{ label: '资产', to: '/assets' }, { label: category.label, to: `/assets?tab=${category.tab}` }, { label: titles.page || `${category.label}档案` }]
   }
   if (path.length === 3 && path[0] === 'agents' && path[1] && path[2] === 'edit') return [{ label: 'Agent 管理', to: '/agents' }, { label: titles.page || 'Agent 编辑' }]
-  const pageLabels: Record<string, string> = { ...managementTitles, projects: '项目列表', lab: '实验室', settings: '设置' }
-  return [{ label: path.length === 0 ? '首页' : (path.length === 1 && Object.prototype.hasOwnProperty.call(pageLabels, path[0]) ? pageLabels[path[0]] : '页面未找到') }]
+  const pageLabels: Record<string, string> = { projects: '项目列表', lab: '实验室', settings: '设置' }
+  const label = managementPageForPath(pathname)?.label ?? pageLabels[path[0]]
+  return [{ label: path.length === 0 ? '首页' : (path.length === 1 && typeof label === 'string' ? label : '页面未找到') }]
 }

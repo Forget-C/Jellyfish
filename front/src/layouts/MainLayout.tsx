@@ -8,6 +8,7 @@ import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
 import { ProjectNavigation } from '../pages/aiStudio/project/ProjectWorkbench/ProjectNavigation'
 import { projectTabLabel, projectTabLocation, resolveProjectTab } from '../pages/aiStudio/project/ProjectWorkbench/constants'
+import { useLastManagementPage } from './useLastManagementPage'
 import { activeMainNavigation, mainNavigation, pageBreadcrumbs } from './navigation'
 import { useNavigationTitles } from './pageTitle'
 import './shell.css'
@@ -54,6 +55,7 @@ function OrdinaryLayout() {
     : breadcrumbItems
 
   const activeNavigation = activeMainNavigation(pathname)
+  const lastManagementPage = useLastManagementPage(pathname)
   const routeContent = <main className="app-route-viewport" id="main-content">
     {crumbs.length > 1 && <Breadcrumb aria-label="当前位置" className="app-breadcrumb" items={compactCrumbs} />}
     <Outlet />
@@ -64,7 +66,7 @@ function OrdinaryLayout() {
       <header className="app-topbar">
         <Link to="/" className="app-brand" aria-label={t('brandHome')}><img src="/logo.svg" alt="" /><span>Jellyfish</span></Link>
         <nav aria-label={t('primaryNavigation')} className="app-primary-navigation">
-          {mainNavigation.map(item => <Link key={item.key} to={item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
+          {mainNavigation.map(item => <Link key={item.key} to={item.key === 'management' ? lastManagementPage : item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
         </nav>
         <div className="app-global-actions">
           <TaskCenter />
