@@ -156,6 +156,11 @@ class CanvasStore:
                                           restored_continuity=restored_continuity)
         storyboard = prepared.document.storyboard
         previous = prepared.previous_document.storyboard
+        if chapter_version is None and canvas.sequence_id and (
+                (storyboard.continuity_check_task_id if storyboard else None) !=
+                (previous.continuity_check_task_id if previous else None)):
+            raise diagnostic('STORYBOARD_REVIEW_REQUIRED', '分镜检查只能通过确认应用或撤销恢复',
+                             {'canvas_id': canvas_id}, status=409)
         if chapter_version is None and canvas.sequence_id and storyboard and (not previous or storyboard.task_id != previous.task_id):
             from app.services.directing.storyboard_assembly import STORYBOARD_KIND
             from app.services.directing.storyboard_review import require_storyboard_review
@@ -203,7 +208,7 @@ class CanvasStore:
                 scene=await self._scene_association(canvas)).model_dump(mode='json')
         if source_history is not None:
             response['source_history'] = source_history
-        if accepted_risks:
+        if accepted_risks is not None:
             from app.services.directing.storyboard_review_basis import canvas_review_fingerprint, risk_basis
             response['review_history'] = {
                 'before': canvas_review_fingerprint(prepared.previous_document, full=True),
@@ -266,10 +271,11 @@ class CanvasStore:
                              {'canvas_id': canvas_id}, status=409, blocks=['delete'])
         if canvas.sequence_id:
             from app.services.directing.storyboard_assembly import STORYBOARD_KIND
+            from app.services.directing.existing_storyboard_check import STORYBOARD_CHECK_KIND
             # New admissions hold this canvas lock. Never lock an existing Task
             # here: worker completion can acquire Task before the canvas.
             active_task = await self.db.scalar(select(Task.id).where(
-                Task.project_id == self.project_id, Task.kind == STORYBOARD_KIND,
+                Task.project_id == self.project_id, Task.kind.in_((STORYBOARD_KIND, STORYBOARD_CHECK_KIND)),
                 Task.target_type == 'directing_sequence', Task.target_id == canvas.sequence_id,
                 Task.input_snapshot['canvas_id'].as_string() == canvas_id,
                 Task.status.not_in(TERMINAL_TASK_STATUSES)).limit(1))

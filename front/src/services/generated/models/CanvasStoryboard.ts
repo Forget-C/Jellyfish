@@ -16,5 +16,6 @@ export type CanvasStoryboard = {
     origins: Record<string, CanvasStoryboardOrigin>;
     objects: Array<CanvasStoryboardObject>;
     shots: Array<CanvasStoryboardShot>;
+    continuity_check_task_id?: (string | null);
     visual_continuity?: Record<string, CanvasVisualContinuity>;
 };

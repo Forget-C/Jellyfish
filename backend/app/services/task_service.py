@@ -23,7 +23,7 @@ TASK_KINDS = frozenset({
     "script_consistency",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
-    "directing_storyboard", "directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check",
+    "directing_storyboard", "directing_storyboard_check", "directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check",
 })
 MEDIA_KINDS = frozenset({"image_generation", "video_generation"})
 Delivery = Callable[[AsyncSession, Task], Awaitable[None]]
@@ -171,7 +171,8 @@ class TaskService:
     async def checkpoint_storyboard_review(self, task_id: str, draft: dict, *, stage: str) -> bool:
         """Persist the validated draft and repair progress before calling the model."""
         row = await self._lock(task_id)
-        if row is None or row.kind != 'directing_storyboard' or row.status != TaskStatus.running or row.cancel_requested_at:
+        if (row is None or row.kind not in ('directing_storyboard', 'directing_storyboard_check')
+                or row.status != TaskStatus.running or row.cancel_requested_at):
             return False
         row.result = deepcopy(draft)
         row.stage = stage

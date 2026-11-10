@@ -6,6 +6,7 @@ import { ApiError, StudioDirectingService, type CanvasRead, type ImageModelCard,
 import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
+import { SceneStoryboardCheck } from './SceneStoryboardCheck'
 import { saveChapterBrowse, sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
@@ -87,14 +88,14 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
             {videoActionLabels[runStatus ?? ''] || '生成视频'}
           </Button></>
       }}
-      renderSceneActions={({ current, document, editable, requestLeave }) => {
+      renderSceneActions={({ current, document, editable, requestLeave, saving, prepareReview, applyReview, reloadReview }) => {
         if (!current || !document?.fixed_source) return null
         const basis = document.cards?.find(card => card.id === document.fixed_source?.card_id)
         const modelIds = new Set(document.storyboard?.shots.flatMap(shot => shot.model_card_ids))
         const models = document.cards?.filter((card): card is ImageModelCard | VideoModelCard =>
           modelIds.has(card.id) && (card.type === 'model.image' || card.type === 'model.video'))
         const model = models?.find(card => card.model_id) ?? models?.[0]
-        return <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
+        return <><SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
           navigationKey={location.key} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current}
           onReviewRetry={taskId => void requestLeave().then(allowed => { if (allowed) management('storyboard', taskId) })}
           target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,
@@ -110,6 +111,10 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
             if (result.canvas_id === current.id) navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, current.id, result.task_id),
               { replace: true, state: location.state })
           }} />
+          {!!current.document.storyboard?.shots.length && <SceneStoryboardCheck current={current}
+            scope={{ projectId, chapterId, sequenceId }} editable={editable && !!scene.sequence.is_current} saving={saving}
+            prepare={prepareReview} apply={applyReview} reload={reloadReview} />}
+        </>
       }} />
   }
   return <WorkbenchTheme>

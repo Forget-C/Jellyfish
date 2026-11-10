@@ -256,6 +256,14 @@ class StoryboardTaskRead(StoryboardTaskSummary):
     candidate: StoryboardCandidate | None = None
     review: StoryboardReviewReport | None = None
     accepted_conflict_ids: list[Identity] = Field(default_factory=list)
+    saved_check: bool = False
+
+
+class StoryboardCheckRequest(Contract):
+    """Inspect the exact saved revision selected by the workbench user."""
+
+    request_id: Identity
+    expected_revision: int = Field(ge=0)
 
 
 class StoryboardTargetedRepair(Contract):

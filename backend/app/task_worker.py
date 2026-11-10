@@ -34,6 +34,10 @@ from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
 from app.services.directing.storyboard_repair import apply_repair, merge_recheck, repair_fields, repair_storyboard
 from app.services.directing.storyboard_review import review_storyboard
+from app.services.directing.existing_storyboard_check import (
+    STORYBOARD_CHECK_KIND, patch_saved_design, saved_repair_fields, saved_review_inputs,
+)
+from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -343,14 +347,15 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            directing = task.kind in {"directing_storyboard", "directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
+            directing = task.kind in {"directing_storyboard", STORYBOARD_CHECK_KIND, "directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
             if directing or task.kind == "text_chat":
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
             llm = ChatOpenAI(**params)
-            stage = {"directing_storyboard": "extracting_storyboard", "directing_object_extract": "extracting_objects"}.get(task.kind)
+            stage = {"directing_storyboard": "extracting_storyboard", STORYBOARD_CHECK_KIND: 'reviewing_storyboard',
+                     "directing_object_extract": "extracting_objects"}.get(task.kind)
             if task.input_snapshot.get('review_retry_from'):
                 stage = task.input_snapshot.get('review_retry_stage', 'reviewing_storyboard')
             if stage:
@@ -358,6 +363,9 @@ class TaskWorker:
                 await db.commit()
         if task.kind == 'directing_storyboard':
             await self._storyboard_task(task, llm, stopped)
+            return
+        if task.kind == STORYBOARD_CHECK_KIND:
+            await self._saved_storyboard_check(task, llm, stopped)
             return
         if task.kind == "text_chat":
             roles = {"system": SystemMessage, "user": HumanMessage, "assistant": AIMessage}
@@ -438,6 +446,74 @@ class TaskWorker:
             await TaskService(db).finish(task.id, result={**candidate, 'review_state': review.state,
                 'review': review.model_dump(mode='json')})
             await db.commit()
+
+    async def _saved_storyboard_check(self, task: Task, llm, stopped: Event) -> None:
+        """Inspect a frozen saved design, optionally applying one requested patch to its candidate only."""
+        snapshot = task.input_snapshot
+        targeted = snapshot.get('review_targeted_repair')
+        prior = {}
+        fresh_repair = False
+        if source_id := snapshot.get('review_retry_from'):
+            async with self.sessions() as db:
+                source = await db.get(Task, source_id)
+                prior = source.result or {}
+                fresh_repair = bool(targeted and source.status == TaskStatus.succeeded)
+        document = CanvasDocument.model_validate(prior.get('document', snapshot['check_document']))
+        checkpoint = {'base_revision': snapshot['check_revision'], 'document': document.model_dump(mode='json'),
+                      'review_state': 'pending', 'check_patches': prior.get('check_patches', []),
+                      'review_repair': None if fresh_repair else prior.get('review_repair')}
+        stage = 'rechecking_storyboard' if checkpoint['review_repair'] else 'repairing_storyboard' if targeted else 'reviewing_storyboard'
+        async with self.sessions() as db:
+            if not await self._save_storyboard_checkpoint(db, task, checkpoint, stage):
+                return
+        if targeted and not checkpoint['review_repair']:
+            checkpoint, review = await self._repair_saved_storyboard(task, llm, stopped, document, checkpoint, targeted)
+            if checkpoint is None:
+                return
+        else:
+            review = await self._recheck_saved_storyboard(task, llm, stopped, document, checkpoint.get('review_repair'))
+        async with self.sessions() as db:
+            await TaskService(db).finish(task.id, result={**checkpoint, 'review_state': review.state,
+                'review': review.model_dump(mode='json')})
+            await db.commit()
+
+    async def _recheck_saved_storyboard(self, task, llm, stopped, document, repair):
+        """Check all saved evidence or merge results for the affected neighboring shots."""
+        inputs = saved_review_inputs(document)
+        if repair:
+            inputs['recheck_shot_ids'] = repair['recheck_shot_ids']
+        stopped.clear()
+        report = await self._run_script(task, llm, inputs, stopped, execute=review_storyboard)
+        return merge_recheck(StoryboardReviewReport.model_validate(repair['report']), report,
+                             repair['recheck_shot_ids']) if repair else report
+
+    async def _repair_saved_storyboard(self, task, llm, stopped, document, checkpoint, targeted):
+        """Consume the requested correction before calling the external model."""
+        previous = StoryboardReviewReport.model_validate(targeted['report'])
+        selected = StoryboardReviewReport.model_validate({'issues': [targeted['issue']]})
+        eligible = saved_repair_fields(document, selected)
+        if not eligible:
+            return checkpoint, previous
+        repair = {'report': targeted['report'], 'recheck_shot_ids': []}
+        checkpoint = {**checkpoint, 'review_repair': repair}
+        async with self.sessions() as db:
+            if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'repairing_storyboard'):
+                return None, previous
+        inputs = {**saved_review_inputs(document), 'review': selected.model_dump(mode='json'),
+                  'repair_targets': [target.model_dump(mode='json') for target, _, _ in eligible.values()]}
+        stopped.clear()
+        edits = await self._run_script(task, llm, inputs, stopped, execute=repair_storyboard)
+        scope, changed = patch_saved_design(document, selected, edits)
+        if not changed:
+            return checkpoint, previous
+        repair = {**repair, 'recheck_shot_ids': scope}
+        checkpoint = {**checkpoint, 'review_repair': repair, 'document': document.model_dump(mode='json'),
+                      'check_patches': [*checkpoint['check_patches'],
+                                        {'issue': targeted['issue'], 'edits': edits.model_dump(mode='json')}]}
+        async with self.sessions() as db:
+            if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'rechecking_storyboard'):
+                return None, previous
+        return checkpoint, await self._recheck_saved_storyboard(task, llm, stopped, document, repair)
 
     @staticmethod
     async def _prepare_storyboard_checkpoint(db, task, generated, repair):

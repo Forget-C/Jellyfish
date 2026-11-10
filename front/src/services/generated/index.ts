@@ -753,6 +753,7 @@ export type { StoryboardApplication } from './models/StoryboardApplication';
 export type { StoryboardBasis } from './models/StoryboardBasis';
 export type { StoryboardBasisObject } from './models/StoryboardBasisObject';
 export type { StoryboardCandidate } from './models/StoryboardCandidate';
+export type { StoryboardCheckRequest } from './models/StoryboardCheckRequest';
 export type { StoryboardConflictChoice } from './models/StoryboardConflictChoice';
 export type { StoryboardContinuityDiff } from './models/StoryboardContinuityDiff';
 export type { StoryboardDiff } from './models/StoryboardDiff';

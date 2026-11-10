@@ -43,7 +43,7 @@ if storyboard_recovery_fixture:
     control.update(storyboard_review_calls=0, storyboard_review_release=100, storyboard_review_fail_on=0,
                    storyboard_review_conflict_on=0)
     control.update(storyboard_repair_on=0, storyboard_repair_calls=0, storyboard_repair_release=False,
-                   storyboard_recheck_release=False)
+                   storyboard_recheck_release=False, saved_storyboard_check_calls=0)
 
 
 class ControlledModel:
@@ -62,7 +62,16 @@ class ControlledModel:
             while not control['storyboard_repair_release'] and monotonic() < deadline:
                 sleep(.03)
             [target] = args['repair_targets']
-            return SimpleNamespace(content=json.dumps({'edits': [{**target, 'text': '保持原地，固定机位切近'}]}, ensure_ascii=False))
+            text = '沿原轴线保持机位' if args.get('saved_canvas_check') else '保持原地，固定机位切近'
+            return SimpleNamespace(content=json.dumps({'edits': [{**target, 'text': text}]}, ensure_ascii=False))
+        if args.get('saved_canvas_check') and storyboard_recovery_fixture:
+            control['saved_storyboard_check_calls'] += 1
+            if 'recheck_shot_ids' in args:
+                return SimpleNamespace(content='{"issues": []}')
+            camera = next(card for card in args['storyboard_draft']['cards'] if card['type'] == 'direction.camera')
+            return SimpleNamespace(content=json.dumps({'issues': [{'kind': 'conflict', 'shot_ids': ['front'],
+                'requirements': '切近后要保持原轴线', 'suggestion': '沿原轴线保持机位',
+                'repair_targets': [{'shot_id': 'front', 'design_id': camera['id'], 'field_id': 'viewpoint'}]}]}, ensure_ascii=False))
         if 'storyboard_draft' in args:
             if storyboard_recovery_fixture:
                 from httpx import ReadTimeout
