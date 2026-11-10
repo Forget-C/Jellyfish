@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
-import { EditOutlined, MenuOutlined, MoreOutlined } from '@ant-design/icons'
+import { DownOutlined, EditOutlined, MenuOutlined, MoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Drawer, Dropdown, Empty, Grid, Input, Spin } from 'antd'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
@@ -84,9 +84,13 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [sceneQuery, setSceneQuery] = useState('')
   const sceneScroll = useRef(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [productionMenuOpen, setProductionMenuOpen] = useState(false)
   const [storyboardActions, setStoryboardActions] = useState<HTMLDivElement | null>(null)
   const [objectActions, setObjectActions] = useState<HTMLDivElement | null>(null)
   const sceneToggle = useRef<HTMLButtonElement>(null)
+  const productionMenuButton = useRef<HTMLButtonElement>(null)
+  const regionHeading = useRef<HTMLHeadingElement>(null)
+  const previousDivision = useRef<boolean>()
   const [savedDivision, setSavedDivision] = useState<{ id: string; count: number }>()
   const [updatingDivision, setUpdatingDivision] = useState(false)
   const [retiredSelection, setRetiredSelection] = useState<string>()
@@ -183,6 +187,14 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   }
   useEffect(() => { setDrawerOpen(false) }, [params])
   useEffect(() => { if (historical) setHistoryOpen(true) }, [historical, explicitId])
+  useEffect(() => { setProductionMenuOpen(false) }, [desktop, division])
+  useEffect(() => {
+    if (!overview) return
+    if (previousDivision.current !== undefined && previousDivision.current !== division && document.activeElement === document.body) {
+      (regionHeading.current ?? productionMenuButton.current)?.focus({ preventScroll: true })
+    }
+    previousDivision.current = division
+  }, [overview, division])
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? (historical || !current.length)}
     query={sceneQuery} setQuery={setSceneQuery} scrollTop={sceneScroll}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
@@ -203,16 +215,13 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     setError('')
     setRevision(value => value + 1)
   }}>重试</Button>} />
+  const productionMenu = <Dropdown autoFocus trigger={['click']} onOpenChange={setProductionMenuOpen} menu={{ items: [
+    { key: 'division', label: '场次划分', onClick: () => { setProductionMenuOpen(false); select(undefined, 'division') } },
+  ] }}>
+    <Button ref={productionMenuButton} aria-haspopup="menu" aria-expanded={productionMenuOpen}>场次制作 <DownOutlined aria-hidden="true" /></Button>
+  </Dropdown>
 
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
-    {overview && <PageToolbar>
-      <nav className="management-steps" aria-label="工作台区域">
-        <Button aria-current={division ? 'page' : undefined} type={division ? 'default' : 'text'}
-          onClick={() => { if (!division) select(undefined, 'division') }}>场次划分</Button>
-        <Button aria-current={!division ? 'page' : undefined} type={!division ? 'default' : 'text'}
-          disabled={updatingDivision || (!current.length && !history.length)} onClick={() => { if (division) startProduction() }}>场次制作</Button>
-      </nav>
-    </PageToolbar>}
     {state?.chapterCompositionRetired === true && <Alert type="info" showIcon
       message="章节组合已停用，可在工作台管理中继续准备场次。" />}
     {!overview && loadError}
@@ -220,16 +229,17 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     {overview && division && <WorkspaceScrollPanel className="management-panel">
       {loadError}
       <div className="management-scene-heading">
-        <h2>本章场次划分</h2>
-        {returnScene && <Button disabled={updatingDivision} onClick={() => navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })}>返回该场次制作</Button>}
+        <h2 ref={regionHeading} tabIndex={-1}>本章场次划分</h2>
+        {returnScene
+          ? <Button disabled={updatingDivision} onClick={() => navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })}>返回该场次制作</Button>
+          : <Button disabled={updatingDivision || (!current.length && !history.length)} onClick={startProduction}>进入场次制作</Button>}
       </div>
       {retiredNotice}
       {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
       {current.some(scene => scene.source_changed) && <Alert type="warning" showIcon message="章节原文已变化，请核对场次范围。" />}
       {!current.length && <p>保存场次划分后即可进入场次制作。</p>}
       {!current.length && !!history.length && <Button onClick={() => select(undefined, 'storyboard')}>查看历史场次</Button>}
-      {savedDivision && <Alert type="success" showIcon message={`已保存，共 ${savedDivision.count} 个场次`}
-        action={!!savedDivision.count && <Button size="small" disabled={updatingDivision || !!drafts.names.length} onClick={startProduction}>进入场次制作</Button>} />}
+      {savedDivision && <Alert type="success" showIcon message={`已保存，共 ${savedDivision.count} 个场次`} />}
       <WorkbenchDivisionStep {...{ projectId, chapterId }} sequenceId={divisionTarget} refreshKey={divisionRevision}
         mobileView={divisionView} onMobileView={setDivisionView}
         targetTask={params.get('divisionTask')}
@@ -248,21 +258,27 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     </WorkspaceScrollPanel>}
     {overview && !division && <div className="management-body">
       {desktop && <aside className="management-sidebar" aria-label="本章场次">
-        <h2>本章场次</h2>
+        <div className="management-sidebar-heading">
+          <h2>本章场次</h2>
+          {productionMenu}
+        </div>
         {list}
       </aside>}
       <div className="management-content">
-        <div className="management-production-toolbar">
+        <PageToolbar>
           <div className="management-scene-heading">
-            {selected && <h2 id="management-current-scene">{selected.title}</h2>}
+            {selected && <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>}
             {historical && <span className="management-scene-meta">历史场次</span>}
-            {!desktop && <Button ref={sceneToggle} icon={<MenuOutlined />} aria-expanded={drawerOpen}
-              onClick={() => setDrawerOpen(true)}>切换场次</Button>}
             {selected && !historical && <Button type="text" icon={<EditOutlined />} aria-label="编辑场次名称与顺序"
               onClick={() => drafts.transition(() => setEditingMetadata(true))} />}
             {selected && <Dropdown menu={{ items: legacy }} trigger={['click']}>
               <Button type="text" icon={<MoreOutlined />} aria-label="场次更多操作" />
             </Dropdown>}
+            {!desktop && <div className="management-mobile-navigation">
+              <Button ref={sceneToggle} icon={<MenuOutlined />} aria-expanded={drawerOpen}
+                onClick={() => setDrawerOpen(true)}>切换场次</Button>
+              {productionMenu}
+            </div>}
           </div>
           {selected && <div className="management-header">
             <nav className="management-steps" aria-label="工作台步骤">
@@ -272,7 +288,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
             {step === 'objects' && <div className="management-object-actions" ref={setObjectActions} />}
             {step === 'storyboard' && <div ref={setStoryboardActions} />}
           </div>}
-        </div>
+        </PageToolbar>
         <WorkspaceScrollPanel className="management-panel">
           {loadError}
           {retiredNotice}

@@ -67,6 +67,20 @@ try {
   const location = 'http://127.0.0.1:4384/projects/' + project + '/chapters/' + chapter + '/workbench-management'
   const list = page.getByRole('complementary', { name: '本章场次' })
   const regions = page.getByRole('navigation', { name: '工作台区域' })
+  const productionMenu = page.getByRole('button', { name: '场次制作', exact: true })
+  const openDivision = async (trigger = productionMenu) => {
+    await trigger.press('Enter')
+    await page.getByRole('menuitem', { name: '场次划分', exact: true }).and(page.locator(':focus')).waitFor()
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'true')
+    await page.keyboard.press('Escape')
+    await trigger.and(page.locator(':focus')).waitFor()
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false')
+    await page.keyboard.press('Enter')
+    await page.getByRole('menuitem', { name: '场次划分', exact: true }).and(page.locator(':focus')).waitFor()
+    await page.keyboard.press('Enter')
+    await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
+  }
+  const enterProduction = page.getByRole('button', { name: '进入场次制作', exact: true })
   const steps = page.getByRole('navigation', { name: '工作台步骤' })
   const taskWrites = []
   const heavyReads = []
@@ -76,7 +90,9 @@ try {
     if (req.method() === 'GET' && /\/directing\/.*\/(?:objects|canvases)$/.test(path)) heavyReads.push(path)
   })
   await page.goto(location)
-  await regions.getByRole('button', { name: '场次制作', exact: true }).waitFor()
+  await openDivision(list.getByRole('button', { name: '场次制作', exact: true }))
+  assert.equal(await regions.count(), 0)
+  await enterProduction.click()
   assert.equal(await page.getByRole('link', { name: '返回章节', exact: true }).count(), 0)
   await page.getByRole('heading', { name: '前厅', exact: true }).waitFor()
   const labels = await list.getByRole('button', { name: /前厅|后院/ }).allTextContents()
@@ -118,7 +134,8 @@ try {
   await page.getByText('章节不属于当前项目', { exact: false }).waitFor()
   await page.goto(location.replace(chapter, 'management-empty') + '?step=objects')
   await page.getByText('本章尚未填写原文').waitFor()
-  assert.equal(await regions.getByRole('button', { name: '场次划分' }).getAttribute('aria-current'), 'page')
+  await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
+  assert.equal(await enterProduction.isDisabled(), true)
   assert.equal(await list.count(), 0)
 
   await page.goto(location)
@@ -141,6 +158,10 @@ try {
   await drawer.waitFor({ state: 'hidden' })
   await page.getByRole('heading', { name: '后院', exact: true }).waitFor()
   await openScenes.and(page.locator(':focus')).waitFor()
+  await openDivision()
+  assert.equal(await openScenes.count(), 0)
+  await enterProduction.click()
+  await page.getByRole('heading', { name: '后院', exact: true }).waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: join(output, 'mobile.png') })
 
