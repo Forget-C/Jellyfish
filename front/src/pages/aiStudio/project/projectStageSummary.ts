@@ -1,5 +1,5 @@
 import type { ChapterRead } from '../../../services/generated'
-import { chapterAction, chapterLocation } from '../directing/chapterNavigation'
+import { chapterAction, chapterActionLocation, chapterLocation } from '../directing/chapterNavigation'
 
 export type ProjectStageSummary = {
   key: 'edit_raw' | 'sequences' | 'create_first_chapter'
@@ -19,14 +19,15 @@ export function summarizeProjectChapters(projectId: string, chapters: ChapterPre
   if (!chapter) return { key: 'create_first_chapter', status: '待创建章节', tone: 'gold', action: '创建第一章', href: `${base}&create=1` }
 
   const action = chapterAction({ rawText: chapter.raw_text, sequenceCount: chapter.sequence_count })
+  const href = chapterActionLocation(projectId, chapter.id, action.target)
   const chapterLabel = `第 ${chapter.index} 章 · ${chapter.title}`
   if (action.target === 'edit') {
-    return { key: 'edit_raw', chapterLabel, status: '待补原文', tone: 'gold', action: '编辑原文', href: `${base}&edit=${encodeURIComponent(chapter.id)}` }
+    return { key: 'edit_raw', chapterLabel, status: '待补原文', tone: 'gold', action: '编辑原文', href }
   }
   if (action.target === 'source') {
     return {
       key: 'sequences', chapterLabel, status: '待划分场次', tone: 'blue', action: action.label,
-      href: `${chapterLocation(projectId, chapter.id)}&panel=source`,
+      href,
     }
   }
   return {
@@ -34,6 +35,6 @@ export function summarizeProjectChapters(projectId: string, chapters: ChapterPre
     status: chapter.sequence_count ? '已有场次' : '场次状态未确认',
     tone: chapter.sequence_count ? 'green' : undefined,
     action: action.label === '场次管理' ? '进入场次' : action.label,
-    href: chapterLocation(projectId, chapter.id),
+    href,
   }
 }
