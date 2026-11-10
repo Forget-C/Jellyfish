@@ -33,7 +33,7 @@ import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, StudioFilesService, LlmService } from '../../../services/generated'
-import type { CanvasCatalog, CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasRunRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, OutputIdentity, TextContentCard } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasRunRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, OutputIdentity, TextContentCard, VideoModelCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { createSurfaceGesture } from './surfaceGesture'
 import { createConnectionSession, type ConnectionState } from './connectionSession'
@@ -56,6 +56,7 @@ import { referenceNameError } from './referenceCardRules'
 import { ReferenceCard } from './ReferenceCard'
 import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
+import { availableDefaultModel, defaultVideoRatio } from './modelCardDefaults'
 import { designHeightBands, generationCardSize, useDesignCardSizes } from './cardGeometry'
 import { knownResultPositions, linkedResultCards, placeLinkedResults, retainedResultIds, type LinkedResult } from './linkedResults'
 import { resultScopeIncludes } from './resultConnections'
@@ -92,9 +93,10 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
 export interface CanvasModelCardActionContext {
   card: GenerationCard
   document: CanvasDocument
+  runStatus?: CanvasNodeRead['status']
   disabled: boolean
   checking: boolean
-  precheck: () => void
+  precheck: (trigger?: HTMLElement) => void
 }
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
@@ -226,6 +228,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [storageError, setStorageError] = useState('')
   const [modelDefaults, setModelDefaults] = useState<ModelSettingsRead>()
   const [models, setModels] = useState<ModelRead[]>([])
+  const modelOptions = useRef<Promise<{ settings?: ModelSettingsRead; models?: ModelRead[] }>>()
+  const preparingModelCard = useRef<string>()
+  const [preparingModel, setPreparingModel] = useState<string>()
   const [capabilities, setCapabilities] = useState<Record<string, CanvasModelCapability>>({})
   const pendingModelAssignments = useRef(new Map<string, symbol>())
   const [capabilityErrors, setCapabilityErrors] = useState<Record<string, string>>({})
@@ -537,8 +542,17 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const modelIds = cards.filter(card => 'model_id' in card).map(card => 'model_id' in card ? card.model_id : '').filter(Boolean).join('|')
   useEffect(() => {
     let active = true
-    LlmService.getModelSettingsApiV1LlmModelSettingsGet().then(response => { if (active) setModelDefaults(response.data || undefined) }).catch(() => { if (active) setReason('默认模型读取失败，请手动选择模型') })
-    LlmService.listModelsApiV1LlmModelsGet({ pageSize: 100 }).then(response => { if (active) setModels(response.data?.items || []) }).catch(() => { if (active) setReason('模型列表读取失败，请刷新后重试') })
+    const settings = LlmService.getModelSettingsApiV1LlmModelSettingsGet().then(response => {
+      const value = response.data || undefined
+      if (active) setModelDefaults(value)
+      return value
+    }).catch(() => { if (active) setReason('默认模型读取失败，请手动选择模型'); return undefined })
+    const listed = LlmService.listModelsApiV1LlmModelsGet({ pageSize: 100 }).then(response => {
+      const value = response.data?.items || []
+      if (active) setModels(value)
+      return value
+    }).catch(() => { if (active) setReason('模型列表读取失败，请刷新后重试'); return undefined })
+    modelOptions.current = Promise.all([settings, listed]).then(([settings, models]) => ({ settings, models }))
     return () => { active = false }
   }, [document.id])
   useEffect(() => {
@@ -556,7 +570,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return () => requests.clear()
   }, [document.id])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
-  const updateCard = (next: GenerationCard, source?: 'system-default') => {
+  const updateCard = (next: GenerationCard, source?: 'system-default', suppliedCapability?: CanvasModelCapability) => {
     const apply = (result: ReturnType<typeof updateStoryboardReference>) => {
       if (result.document) {
         edit(result.document)
@@ -567,9 +581,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }
     const current = latest.current
     if (!firstStoryboardModelAssignment(current, next) || !('model_id' in next) || !next.model_id) {
-      return apply(updateStoryboardReference(current, next, operations, capability))
+      return apply(updateStoryboardReference(current, next, operations, suppliedCapability ? () => suppliedCapability : capability))
     }
-    const choices = pendingModelAssignments.current, known = capability(next), modelId = next.model_id
+    const choices = pendingModelAssignments.current, known = suppliedCapability ?? capability(next), modelId = next.model_id
     if (source === 'system-default' && choices.has(next.id)) return false
     if (known) {
       choices.delete(next.id)
@@ -590,6 +604,48 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }).catch(() => { if (choices.get(next.id) === token) setReason('模型能力读取失败，请重新选择模型') })
       .finally(() => { if (choices.get(next.id) === token) choices.delete(next.id) })
     return true
+  }
+  const openCardEditor = (id: string, trigger?: HTMLElement) => {
+    setSourceFocus(undefined); setMultiSelectMode(false); setSelected([id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(id)
+  }
+  const precheckFromCard = async (id: string, trigger?: HTMLElement) => {
+    if (currentReadonly.current || !runtime || runtime.disabled || runtime.busyCards.has(id) || preparingModelCard.current) return
+    const findCard = () => latest.current.cards?.find(card => card.id === id)
+    const liveVideo = () => {
+      const card = findCard()
+      return card?.type === 'model.video' ? card as VideoModelCard : undefined
+    }
+    const initial = findCard()
+    if (!initial) return
+    const video = liveVideo()
+    if (!video || (video.model_id && video.config?.ratio)) { runtime.precheck(id); return }
+    const live = () => mounted.current && !currentReadonly.current && latest.current.id === document.id
+    const configure = () => { if (live() && liveVideo()) openCardEditor(id, trigger) }
+    preparingModelCard.current = id; setPreparingModel(id)
+    try {
+      const defaults = video.model_id ? undefined : await modelOptions.current
+      const card = liveVideo()
+      if (!live() || !card) return
+      const modelId = card.model_id || availableDefaultModel(card, defaults?.settings?.default_video_model_id, defaults?.models)
+      if (!modelId) { configure(); return }
+      const resolved = capabilities[modelId] || (await Canvases.canvasModelCapability({
+        projectId: document.project_id, canvasId: document.id, modelId,
+      })).data
+      const current = liveVideo()
+      if (!live() || !current) return
+      if (!resolved || resolved.modality !== 'video' || (current.model_id && current.model_id !== modelId)) { configure(); return }
+      const ratio = current.config?.ratio || defaultVideoRatio(resolved)
+      if (!ratio) { configure(); return }
+      if (!current.model_id || !current.config?.ratio) {
+        if (!updateCard({ ...current, model_id: modelId, config: { ...current.config, ratio } }, 'system-default', resolved)) {
+          configure(); return
+        }
+      }
+      // Configuration changes invalidate the current preview. Start precheck only
+      // after the common editor records the new document; runtime saves it first.
+      runtime.precheck(id)
+    } catch { configure() }
+    finally { preparingModelCard.current = undefined; if (mounted.current) setPreparingModel(undefined) }
   }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
     setReason(protection.message); setDetailId(protection.cardId)
@@ -1582,7 +1638,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
-          const precheckDisabled = readonly || !runtime || runtime.disabled || runtime.busyCards.has(card.id)
+          const precheckDisabled = readonly || !runtime || runtime.disabled || runtime.busyCards.has(card.id) || !!preparingModel
           const visualDesign = isReferenceDesign(card)
           const issues = (diagnostics || []).filter(issue => issue.target.card_id === card.id)
           const hasNameIssue = issues.some(issue => Array.isArray(issue.target.path) && issue.target.path.length === 1 && issue.target.path[0] === 'name')
@@ -1602,7 +1658,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
                 setDetailTrigger(trigger); navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic })
               }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={!!fixedCanvasSource(document, card.id) || runtime?.busyCards.has(card.id)}
             onExpand={trigger => { setSourceFocus(undefined); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
-            onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setSourceFocus(undefined); setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
+            onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else openCardEditor(card.id, trigger) }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}
             onConnect={card.type === 'review.check' ? undefined : trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             sourceControl={sourceItems[card.id]?.length ? <CanvasSourcePopover items={sourceItems[card.id]} onLocate={locateSource} /> : undefined}
@@ -1619,8 +1675,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
             {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly}
-              action={renderModelCardAction?.({ card, document, disabled: precheckDisabled, checking: runtime?.checking === card.id,
-                precheck: () => { if (!precheckDisabled) runtime?.precheck(card.id) } })} />}
+              action={renderModelCardAction?.({ card, document, runStatus: node?.status, disabled: precheckDisabled, checking: runtime?.checking === card.id || preparingModel === card.id,
+                precheck: trigger => void precheckFromCard(card.id, trigger) })} />}
           </CardShell>
           if (card.type !== 'review.check') return cardNode
           const observedTarget = edges.find(edge => edge.target_card === card.id && edge.target_port === 'check_basis')?.source_card

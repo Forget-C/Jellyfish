@@ -14,7 +14,7 @@ from app.dependencies import get_db
 from app.main import app
 from app.models.llm import Model, Provider
 from app.models.studio import Project
-from app.task_worker import TaskWorker
+from app.task_worker import TaskWorker, WorkerLimits
 import app.task_worker as worker_module
 
 database_url = os.environ.get('CANVAS_BROWSER_DATABASE_URL')
@@ -33,7 +33,7 @@ storyboard_video_fixture = os.environ.get('CANVAS_BROWSER_STORYBOARD_VIDEO_FIXTU
 storyboard_design_stacks = os.environ.get('CANVAS_BROWSER_STORYBOARD_DESIGN_STACKS') == '1'
 control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False, 'check_release': False, 'check_calls': []}
 if storyboard_video_fixture:
-    control.update(media_calls=[], media_fail_next=False)
+    control.update(media_calls=[], media_fail_next=False, media_hold=False)
 object_candidate_fixture = os.environ.get('CANVAS_BROWSER_OBJECT_CANDIDATE') == '1'
 if object_candidate_fixture:
     control['object_extraction_calls'] = 0
@@ -193,8 +193,10 @@ async def set_control(body: dict = Body(...)):
     for key in ('release', 'release_for', 'fail_next', 'duplicate_next', 'check_release'):
         if key in body:
             control[key] = body[key]
-    if storyboard_video_fixture and 'media_fail_next' in body:
-        control['media_fail_next'] = body['media_fail_next']
+    if storyboard_video_fixture:
+        for key in ('media_fail_next', 'media_hold'):
+            if key in body:
+                control[key] = body[key]
     if storyboard_recovery_fixture:
         for key in ('storyboard_release', 'storyboard_fail_on'):
             if key in body:
@@ -223,7 +225,7 @@ async def lifespan(_app):
     if storyboard_video_fixture or os.environ.get('CANVAS_BROWSER_STORYBOARD_REFERENCES') == '1':
         import httpx
 
-        def media_provider(request):
+        async def media_provider(request):
             if storyboard_video_fixture and request.method == 'POST':
                 control['media_calls'].append({'path': request.url.path, 'body': json.loads(request.content)})
                 if control['media_fail_next']:
@@ -231,6 +233,8 @@ async def lifespan(_app):
                     return httpx.Response(400, json={'message': 'controlled media failure'})
             if storyboard_video_fixture and request.url.host == 'video.test':
                 if request.method == 'POST':
+                    while control['media_hold']:
+                        await asyncio.sleep(.02)
                     return httpx.Response(200, json={'task_id': 'storyboard-video'})
                 return httpx.Response(200, json={'status': 'succeeded', 'creations': [{'url': 'https://media.test/storyboard.mp4'}]})
             if storyboard_video_fixture and request.url.host == 'media.test':
@@ -240,7 +244,8 @@ async def lifespan(_app):
             return httpx.Response(200, json={'data': [{'b64_json': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII='}]})
 
         client = httpx.AsyncClient(transport=httpx.MockTransport(media_provider))
-    worker = TaskWorker(sessions, client=client)
+    # A held provider request occupies the one real submit slot, leaving another task queued.
+    worker = TaskWorker(sessions, client=client, limits=WorkerLimits(submit=1) if storyboard_video_fixture else None)
     async def tick():
         while True:
             await worker.tick()
