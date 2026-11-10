@@ -222,7 +222,7 @@ try {
     const { reference_card_id: referenceId } = objects.find(item => item.object_id === shot.object_ids[0])
     assert.equal(state.document.cards.find(card => card.id === referenceId).image_binding, null)
     const readRuntime = () => request(canvas + '/runtime')
-    const videoAction = id => page.locator(`[data-card-id="${id}"]`).getByRole('button', { name: '生成视频', exact: true })
+    const videoAction = (id, name = '生成视频') => page.locator(`[data-card-id="${id}"]`).getByRole('button', { name, exact: true })
     if (modality === 'video') {
       const workbenchUrl = page.url()
       const ordinary = projectUrl + '/generation-canvas?canvas='
@@ -250,10 +250,10 @@ try {
       assert.deepEqual((await readRuntime()).runs, [])
       assert.equal((await request(controls)).media_calls.length, callCount)
     }
-    const precheck = async () => {
+    const precheck = async (actionName = '生成视频') => {
       if (modality === 'video') {
         await closeCanvasDetails(page)
-        await videoAction(cardId).press('Enter')
+        await videoAction(cardId, actionName).press('Enter')
         await warning.waitFor()
         assert.equal(await page.locator('.wb-details:visible').count(), 0, 'the video action does not open the card editor')
         return
@@ -278,12 +278,18 @@ try {
     assert.deepEqual((await readRuntime()).runs, [])
     assert.equal((await request(controls)).media_calls.length, callCount)
 
-    const run = async expected => {
+    const submit = async () => {
       const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
       await confirm.click()
       const response = await accepted
       assert.ok(response.ok(), await response.text())
       const { run_id: id } = (await response.json()).data
+      await closePrecheck(page)
+      return id
+    }
+    const run = async (expected, afterSubmit) => {
+      const id = await submit()
+      await afterSubmit?.()
       const result = await poll(readRuntime, data => data.runs.some(item => item.id === id && item.lifecycle === 'finished'), 'media run did not finish')
       const { nodes } = result.runs.find(item => item.id === id)
       assert.equal(nodes.length, 1)
@@ -297,14 +303,34 @@ try {
       assert.ok(call.path.endsWith(providerPath), call.path)
       assert.match(call.body.prompt, /后门的阿同等待/)
       assert.ok(!('images' in call.body) && !('subjects' in call.body))
-      await closePrecheck(page)
       return { id, result, node }
     }
 
-    const success = await run('succeeded')
+    const observeActiveVideoCards = async () => {
+      const running = videoAction(cardId, '运行中')
+      try {
+        await running.waitFor({ timeout: 4000 })
+        assert.equal(await running.isDisabled(), true)
+        assert.equal(await videoAction(preparedModel).isEnabled(), true, 'an active run does not disable another card')
+        await videoAction(preparedModel).press('Enter')
+        const queuedId = await submit()
+        const queued = videoAction(preparedModel, '排队中')
+        await queued.waitFor()
+        assert.equal(await queued.isDisabled(), true)
+        assert.equal(await running.isDisabled(), true, 'another queued run does not change this card')
+        const queuedRun = (await readRuntime()).runs.find(item => item.id === queuedId)
+        assert.equal(queuedRun.nodes[0].status, 'queued')
+        await request(`${canvas}/runs/${queuedId}/cancel`, 'POST')
+      } finally {
+        await request(controls, 'POST', { media_hold: false })
+      }
+    }
+    if (modality === 'video') await request(controls, 'POST', { media_hold: true })
+    const success = await run('succeeded', modality === 'video' ? observeActiveVideoCards : undefined)
     const file = success.node.outputs[0].file_id
     assert.ok(file)
     assert.deepEqual(Object.keys(success.result.current_outputs).filter(key => success.result.current_outputs[key].some(output => output.result_set_id)), [cardId])
+    if (modality === 'video') await videoAction(cardId, '再次生成').waitFor({ timeout: 4000 })
     const resultDetail = detail || await openCanvasCard(page, cardId)
     const formal = resultDetail.getByRole('region', { name: '当前正式输出', exact: true })
     await formal.locator(outputTag).waitFor()
@@ -312,9 +338,16 @@ try {
       await formal.locator('video').evaluate(async video => { video.muted = true; await video.play() })
     }
     await request(controls, 'POST', { media_fail_next: true })
-    await precheck()
+    await precheck('再次生成')
     const failure = await run('failed')
     assert.equal(failure.result.current_outputs[cardId][0].file_id, file)
+    if (modality === 'video') {
+      await videoAction(cardId, '重试生成').waitFor({ timeout: 4000 })
+      assert.equal(await page.locator(`[data-card-id="${cardId}"] video`).count(), 1, 'the last successful video stays on the card')
+      await precheck('重试生成')
+      assert.equal((await request(controls)).media_calls.length, callCount, 'retry waits for explicit confirmation')
+      await run('succeeded')
+    }
     await closeCanvasDetails(page)
     await page.getByRole('button', { name: '运行历史', exact: true }).click()
     const history = page.getByRole('region', { name: '画布运行历史', exact: true })
@@ -333,10 +366,10 @@ try {
       model.prompt.segments.push({ id: 'required-frame', kind: 'instruction', command: '首帧参考', references: [] })
       await request(canvas, 'PUT', { request_id: 'explicit-required-frame', expected_revision: current.revision, document: current.document })
       await page.reload()
-      await precheck()
+      await precheck('再次生成')
       await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).waitFor()
       assert.equal(await confirm.isDisabled(), true)
-      assert.equal((await readRuntime()).runs.length, 2)
+      assert.equal((await readRuntime()).runs.filter(item => item.nodes.some(node => node.card_id === cardId)).length, 3)
       assert.equal((await request(controls)).media_calls.length, callCount)
     }
   }

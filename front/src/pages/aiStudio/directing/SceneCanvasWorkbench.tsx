@@ -14,6 +14,10 @@ import { storyboardCanvasLayout } from './storyboardCanvasLayout'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 
+const videoActionLabels: Record<string, string> = {
+  queued: '排队中', running: '运行中', failed: '重试生成', succeeded: '再次生成',
+}
+
 /** 打开经过场次归属核对的共同画布，返回时带上当前画布和任务。 */
 function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope & { canvasId: string }) {
   const [query] = useSearchParams()
@@ -59,7 +63,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
-      renderModelCardAction={({ card, document, disabled, checking, precheck }) => {
+      renderModelCardAction={({ card, document, runStatus, disabled, checking, precheck }) => {
         if (card.type !== 'model.video') return null
         const shot = document.storyboard?.shots.find(item => item.model_card_ids.includes(card.id))
         if (!shot) return null
@@ -67,7 +71,9 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const name = shotCard && 'name' in shotCard && shotCard.name || '镜头'
         const label = shot.model_card_ids.length > 1 ? `${name} · 片段 ${shot.model_card_ids.indexOf(card.id) + 1}` : name
         return <><span title={label}>{label}</span>
-          <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>生成视频</Button></>
+          <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>
+            {videoActionLabels[runStatus ?? ''] || '生成视频'}
+          </Button></>
       }}
       renderSceneActions={({ current, document, editable, requestLeave }) => {
         if (!current || !document?.fixed_source) return null

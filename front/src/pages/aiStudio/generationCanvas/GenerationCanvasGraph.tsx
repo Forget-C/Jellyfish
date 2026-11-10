@@ -93,6 +93,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
 export interface CanvasModelCardActionContext {
   card: GenerationCard
   document: CanvasDocument
+  runStatus?: CanvasNodeRead['status']
   disabled: boolean
   checking: boolean
   precheck: (trigger?: HTMLElement) => void
@@ -1674,7 +1675,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
             {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly}
-              action={renderModelCardAction?.({ card, document, disabled: precheckDisabled, checking: runtime?.checking === card.id || preparingModel === card.id,
+              action={renderModelCardAction?.({ card, document, runStatus: node?.status, disabled: precheckDisabled, checking: runtime?.checking === card.id || preparingModel === card.id,
                 precheck: trigger => void precheckFromCard(card.id, trigger) })} />}
           </CardShell>
           if (card.type !== 'review.check') return cardNode
