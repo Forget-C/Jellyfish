@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { StoryboardContinuityDiff } from './StoryboardContinuityDiff';
 import type { StoryboardDiffCard } from './StoryboardDiffCard';
 import type { StoryboardDiffStack } from './StoryboardDiffStack';
 /**
@@ -15,5 +16,6 @@ export type StoryboardDiff = {
     source_changed: boolean;
     automatic_stacks?: Array<StoryboardDiffStack>;
     manual_stacks?: Array<StoryboardDiffStack>;
+    continuity_review?: (StoryboardContinuityDiff | null);
     visual_continuity_impacts?: Array<string>;
 };

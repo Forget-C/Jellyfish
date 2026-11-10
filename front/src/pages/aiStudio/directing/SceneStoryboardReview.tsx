@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Alert, Checkbox, Spin } from 'antd'
-import { StudioDirectingService as Directing } from '../../../services/generated'
-import type { StoryboardApplication, StoryboardCandidate, StoryboardDiff, StoryboardDiffCard, StoryboardReviewReport } from '../../../services/generated'
+import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
+import type { StoryboardApplication, StoryboardCandidate, StoryboardConflictChoice, StoryboardDiff, StoryboardDiffCard,
+  StoryboardReviewIssue, StoryboardReviewReport, StoryboardRetry, StoryboardTaskRead } from '../../../services/generated'
 import type { StoryboardReviewPreparation, StoryboardScope } from '../generationCanvas/useGenerationCanvasEditor'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
@@ -24,8 +26,8 @@ function Changes({ title, cards, selected, choose }: {
   </section>
 }
 
-export function StoryboardReviewFindings({ report, candidate }: {
-  report: StoryboardReviewReport; candidate?: StoryboardCandidate | null
+export function StoryboardReviewFindings({ report, candidate, action }: {
+  report: StoryboardReviewReport; candidate?: StoryboardCandidate | null; action?: (issue: StoryboardReviewIssue) => ReactNode
 }) {
   const storyboard = candidate?.document.storyboard
   const names = new Map(storyboard?.shots.map((shot, index) => [
@@ -33,21 +35,26 @@ export function StoryboardReviewFindings({ report, candidate }: {
   ]))
   return <ul>{report.issues.map((issue, index) => <li key={index}>
     <strong>{issue.kind === 'conflict' ? '设计冲突' : '依据不足'} · {issue.shot_ids.map(id => names.get(id) ?? id).join('、')}</strong>
-    <p>{issue.requirements}</p><p>{issue.suggestion}</p>
+    <p>{issue.requirements}</p><p>{issue.suggestion}</p>{action?.(issue)}
   </li>)}</ul>
 }
 
 /** Compare the saved revision and exact overwrite selection before applying. */
-export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate }: {
+export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired }: {
   scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<StoryboardReviewPreparation | undefined>;
   reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
   report?: StoryboardReviewReport | null; candidate?: StoryboardCandidate | null;
+  onRepaired: (result: StoryboardTaskRead) => void;
 }) {
   const [baseline, setBaseline] = useState<number>()
   const [opening, setOpening] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [review, setReview] = useState<{ choice: StoryboardApplication; diff: StoryboardDiff }>()
   const [error, setError] = useState('')
+  const [accepted, setAccepted] = useState<string[]>([])
+  const [repairing, setRepairing] = useState(false)
+  const [repairIntent, setRepairIntent] = useState<StoryboardRetry>()
+  const [repairTask, setRepairTask] = useState<StoryboardTaskRead>()
   const { projectId, chapterId, sequenceId, taskId } = scope
   useEffect(() => {
     if (baseline === undefined) return
@@ -69,42 +76,117 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       close()
     } else if (prepared && (!refresh || await reload())) {
       if (refresh) setReview(undefined)
-      setBaseline(refresh ? (await prepare())?.revision : prepared.revision); setSelected([])
+      setBaseline(refresh ? (await prepare())?.revision : prepared.revision); setSelected([]); setAccepted([])
     } else setError('请先解决画布保存问题，再核对提取差异。')
     setOpening(false)
   }
-  const close = () => { if (!applying) { setBaseline(undefined); setReview(undefined); setError('') } }
+  const close = () => {
+    if (!applying && !repairing && !repairTask) { setBaseline(undefined); setReview(undefined); setError(''); setAccepted([]) }
+  }
   const diff = review?.diff
   const ready = review?.choice.expected_revision === baseline && review?.choice.overwrite_card_ids === selected
   const automaticStacks = diff?.automatic_stacks || []
   const manualStacks = diff?.manual_stacks || []
-  const blocked = report?.issues.some(issue => issue.kind === 'conflict')
+  const continuity = diff?.continuity_review
+  const conflicts = continuity?.conflicts ?? []
+  const hasConflicts = report?.issues.some(issue => issue.kind === 'conflict')
+  const blocked = !!continuity?.stale || !!hasConflicts && (!conflicts.length ||
+    conflicts.some(conflict => !conflict.previously_accepted && !accepted.includes(conflict.id)))
+  const busy = applying || repairing || !!repairTask
+  useEffect(() => {
+    if (!repairTask) return
+    let cancelled = false
+    const read = async () => {
+      try {
+        const response = await Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: repairTask.task_id })
+        if (cancelled || !response.data) return
+        const result = response.data
+        if (result.status === 'succeeded' && result.candidate) {
+          setRepairTask(undefined)
+          onRepaired(result)
+        } else if (result.status === 'failed' || result.status === 'cancelled') {
+          setRepairTask(undefined)
+          setError(result.error || '定向修正未完成，请在工作台管理中查看任务。')
+        } else if (result.stage !== repairTask.stage) {
+          setRepairTask(result)
+        }
+      } catch (cause) { if (!cancelled) setError(directingError(cause)) }
+    }
+    const timer = window.setInterval(() => void read(), 700)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [repairTask, projectId, chapterId, sequenceId, onRepaired])
+
+  const repair = async (conflict: StoryboardConflictChoice) => {
+    if (busy || !ready || !review || !continuity || continuity.stale) return
+    const intent = repairIntent ?? { request_id: crypto.randomUUID(), targeted_repair: {
+      conflict_id: conflict.id, review_token: continuity.token, expected_revision: review.choice.expected_revision,
+      overwrite_card_ids: review.choice.overwrite_card_ids,
+    } }
+    if (intent.targeted_repair?.conflict_id !== conflict.id) return
+    setRepairing(true); setRepairIntent(intent); setError('')
+    try {
+      const response = await Directing.directingStoryboardRetry({ projectId, chapterId, sequenceId, taskId, requestBody: intent })
+      if (!response.data) throw new Error('定向修正提交待核实')
+      setRepairTask(response.data); setRepairIntent(undefined)
+    } catch (cause) {
+      setError(directingError(cause))
+      if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) {
+        setRepairIntent(undefined)
+      }
+    } finally { setRepairing(false) }
+  }
   const applyReview = async () => {
-    if (!review || applying || !ready || manualStacks.length || blocked) return
+    if (!review || busy || repairIntent || !ready || manualStacks.length || blocked) return
     const confirmedStacks = automaticStacks.map(stack => stack.id)
-    const choice = confirmedStacks.length ? { ...review.choice, confirmed_auto_stack_ids: confirmedStacks } : review.choice
+    const choice: StoryboardApplication = { ...review.choice }
+    if (confirmedStacks.length) choice.confirmed_auto_stack_ids = confirmedStacks
+    if (continuity && conflicts.length) {
+      choice.review_token = continuity.token
+      choice.accepted_conflict_ids = accepted.filter(id => conflicts.some(conflict => conflict.id === id))
+    }
     if (await apply(choice)) close()
     else setError('应用尚未完成。请核对画布提示；结果未知时使用原选择再次核实。')
   }
   const choose = (id: string, overwrite: boolean) => {
+    if (busy || repairIntent) return
+    setAccepted([])
     setSelected(values => overwrite ? [...values, id] : values.filter(value => value !== id))
   }
   return <>
     <Alert type="warning" showIcon message={baseline === undefined && error ? error :
-      blocked ? '分镜存在设计冲突，现有画布内容已保留。' : '分镜结果待应用，现有画布内容已保留。'}
+      hasConflicts ? '分镜存在设计冲突，现有画布内容已保留。' : '分镜结果待应用，现有画布内容已保留。'}
       action={<Button disabled={!editable} loading={opening} onClick={() => void open()}>核对差异</Button>} />
     <WorkbenchModal title="核对分镜差异" open={baseline !== undefined} width={640}
-      closable={!applying} keyboard={!applying} maskClosable={!applying} onCancel={close}
-      footer={<WorkbenchDialogActions secondary={<Button variant="quiet" disabled={applying} onClick={close}>暂不应用</Button>}>
-        <Button variant="primary" loading={applying} disabled={!review || !ready || !editable || !!manualStacks.length || blocked}
+      closable={!busy} keyboard={!busy} maskClosable={!busy} onCancel={close}
+      footer={<WorkbenchDialogActions secondary={<Button variant="quiet" disabled={busy} onClick={close}>暂不应用</Button>}>
+        <Button variant="primary" loading={applying} disabled={!review || !ready || !editable || busy || !!repairIntent || !!manualStacks.length || blocked}
           onClick={() => void applyReview()}>{automaticStacks.length ? '应用并解除受影响的堆叠' : '应用分镜'}</Button>
       </WorkbenchDialogActions>}>
       {error && <Alert type="warning" showIcon message={saveError || error} action={<Button disabled={applying} loading={opening}
         onClick={() => void open(true)}>核对最新画布</Button>} />}
       {!diff && !error && <Spin aria-label="正在核对差异" />}
-      {!!report?.issues.length && <Alert type={blocked ? 'error' : 'warning'} showIcon
-        message={blocked ? '设计冲突待处理' : '部分连续性依据不足'}
-        description={<StoryboardReviewFindings report={report} candidate={candidate} />} />}
+      {continuity?.stale && <Alert type="warning" showIcon message="相关分镜内容已变化，请重新审查。" />}
+      {repairTask && <p role="status">{repairTask.stage === 'rechecking_storyboard'
+        ? '正在复核分镜连续性' : '正在定向修正分镜'}</p>}
+      {!!report?.issues.length && <Alert type={hasConflicts ? 'error' : 'warning'} showIcon
+        message={hasConflicts ? '设计冲突待处理' : '部分连续性依据不足'}
+        description={<StoryboardReviewFindings report={report} candidate={candidate} action={issue => {
+          const conflict = conflicts.find(item => item.issue.requirements === issue.requirements &&
+            item.issue.shot_ids.join() === issue.shot_ids.join())
+          if (!conflict) return null
+          return <>
+            <Checkbox checked={conflict.previously_accepted || accepted.includes(conflict.id)}
+              disabled={!editable || busy || !!repairIntent || !!continuity?.stale || conflict.previously_accepted}
+              aria-label={`接受风险：${issue.requirements}`} onChange={event => setAccepted(values => event.target.checked
+                ? [...values, conflict.id] : values.filter(id => id !== conflict.id))}>
+              {conflict.previously_accepted ? '已接受此风险' : '保留当前设计并接受此风险'}
+            </Checkbox>
+            {conflict.can_repair && <Button variant="quiet" disabled={!editable || busy || !!continuity?.stale ||
+              !!repairIntent && repairIntent.targeted_repair?.conflict_id !== conflict.id} onClick={() => void repair(conflict)}>
+              {repairIntent?.targeted_repair?.conflict_id === conflict.id ? '核实定向修正' : '定向修正'}
+            </Button>}
+          </>
+        }} />} />}
       {diff && <>
         {diff.source_changed && <p>应用时将采用本次已确认的原文。仍被引用的旧原文依据会保留。</p>}
         <p>人工新增的卡片会保留。勾选后才会覆盖相应的人工修改或移除这些卡片。</p>

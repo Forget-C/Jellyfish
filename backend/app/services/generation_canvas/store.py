@@ -134,15 +134,18 @@ class CanvasStore:
 
     async def save_scene_application(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                                      *, chapter_version: str, scene_sources: dict, source_history: dict | None = None,
+                                     accepted_risks: 'list[dict] | None' = None,
                                      restored_continuity: frozenset[str] = frozenset()) -> CanvasRead:
         """Write the checked workbench plan using the ordinary save transaction."""
         result = await self._write(canvas, command, digest, chapter_version=chapter_version,
-                                   scene_sources=scene_sources, source_history=source_history, restored_continuity=restored_continuity)
+                                   scene_sources=scene_sources, source_history=source_history,
+                                   accepted_risks=accepted_risks, restored_continuity=restored_continuity)
         return CanvasRead.model_validate(result['scene_canvas'])
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                      *, chapter_version: str | None = None, scene_sources: dict | None = None,
-                     source_history: dict | None = None, restored_continuity: frozenset[str] = frozenset()) -> dict:
+                     source_history: dict | None = None, accepted_risks: 'list[dict] | None' = None,
+                     restored_continuity: frozenset[str] = frozenset()) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
@@ -197,6 +200,13 @@ class CanvasStore:
                 scene=await self._scene_association(canvas)).model_dump(mode='json')
         if source_history is not None:
             response['source_history'] = source_history
+        if accepted_risks:
+            from app.services.directing.storyboard_review_basis import canvas_review_fingerprint, risk_basis
+            response['review_history'] = {
+                'before': canvas_review_fingerprint(prepared.previous_document, full=True),
+                'after': canvas_review_fingerprint(prepared.document, full=True),
+                'risks': [{**risk, 'basis': risk_basis(prepared.document, risk['shot_ids'])} for risk in accepted_risks],
+            }
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()
         return response

@@ -404,6 +404,7 @@ class TaskWorker:
     async def _storyboard_task(self, task: Task, llm, stopped: Event) -> None:
         """Review the frozen draft, optionally repair once, then publish only the verified candidate."""
         args = task.input_snapshot['run_args']
+        targeted = task.input_snapshot.get('review_targeted_repair')
         repair = None
         if source_id := task.input_snapshot.get('review_retry_from'):
             async with self.sessions() as db:
@@ -420,16 +421,20 @@ class TaskWorker:
                 await db.commit()
         async with self.sessions() as db:
             checkpoint = await self._prepare_storyboard_checkpoint(db, task, generated, repair)
-            stage = 'rechecking_storyboard' if repair else 'reviewing_storyboard'
+            stage = 'rechecking_storyboard' if repair else 'repairing_storyboard' if targeted else 'reviewing_storyboard'
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, stage):
                 return
-        review = await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
+        review = (StoryboardReviewReport.model_validate(targeted['report']) if targeted and not repair
+                  else await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint))
         if not repair and review.state == 'conflict' and args['mode'] == 'complete':
-            checkpoint, review = await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review)
+            selected = StoryboardReviewReport.model_validate({'issues': [targeted['issue']]}) if targeted else review
+            checkpoint, review = await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review, selected)
             if checkpoint is None:
                 return
         async with self.sessions() as db:
             candidate = {key: checkpoint[key] for key in ('base_revision', 'document')}
+            if review.state == 'conflict':
+                candidate.update({key: checkpoint[key] for key in ('review_draft', 'review_production')})
             await TaskService(db).finish(task.id, result={**candidate, 'review_state': review.state,
                 'review': review.model_dump(mode='json')})
             await db.commit()
@@ -489,24 +494,24 @@ class TaskWorker:
             snapshot['canvas_id'], task.target_id, lock=lock)
         return latest | set(snapshot.get('review_protected_designs', ()))
 
-    async def _repair_storyboard_checkpoint(self, task, llm, stopped, generated, checkpoint, review):
+    async def _repair_storyboard_checkpoint(self, task, llm, stopped, generated, checkpoint, review, selected):
         """Spend the single automatic attempt before sending it, then recheck the valid change."""
         async with self.sessions() as db:
             protected = await self._storyboard_protected_designs(db, task)
-            allowed = repair_fields(generated, review, protected)
+            allowed = repair_fields(generated, selected, protected)
             if not allowed:
                 return checkpoint, review
             repair = {'report': review.model_dump(mode='json'), 'recheck_shot_ids': []}
             checkpoint = {**checkpoint, 'review_repair': repair}
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'repairing_storyboard'):
                 return None, review
-        inputs = {**self._storyboard_review_inputs(task, checkpoint), 'review': repair['report'],
+        inputs = {**self._storyboard_review_inputs(task, checkpoint), 'review': selected.model_dump(mode='json'),
                   'repair_targets': [field.target.model_dump(mode='json') for field in allowed.values()]}
         stopped.clear()
         edits = await self._run_script(task, llm, inputs, stopped, execute=repair_storyboard)
         repaired = generated.model_copy(deep=True)
         async with self.sessions() as db:
-            current = repair_fields(repaired, review, await self._storyboard_protected_designs(db, task, lock=True))
+            current = repair_fields(repaired, selected, await self._storyboard_protected_designs(db, task, lock=True))
             scope = apply_repair(repaired, edits, {key: field for key, field in current.items() if key in allowed})
             if not scope:
                 return checkpoint, review

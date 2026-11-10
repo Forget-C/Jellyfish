@@ -69,6 +69,7 @@ interface GenerationCanvasWorkspaceProps {
   renderModelCardMenu?: (context: WorkbenchModelMenuContext) => ReactNode
   modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]
   storyboardTaskId?: string | null
+  onStoryboardRepaired?: (taskId: string) => void
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
   hostErrorAction?: ReactNode
@@ -81,7 +82,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, storyboardTaskId, onCanvasRead, hostError, hostErrorAction,
+  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, storyboardTaskId, onStoryboardRepaired, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
@@ -108,6 +109,24 @@ export function GenerationCanvasWorkspace({
   const candidate = discovered?.result?.candidate
   const candidateTask = discovered?.result?.task_id
   const requiresReview = discovered?.result?.pending_application
+  const appliedTask = current?.document.storyboard?.task_id
+  const appliedRevision = current?.revision
+  const [appliedReview, setAppliedReview] = useState<{ task: string; revision: number; result: StoryboardTaskRead }>()
+  const savedReview = appliedReview?.task === appliedTask && appliedReview?.revision === appliedRevision ? appliedReview?.result : undefined
+  const receiveRepair = useCallback((result: StoryboardTaskRead) => {
+    if (result.canvas_id !== canvasId) return
+    if (onStoryboardRepaired) onStoryboardRepaired(result.task_id)
+    else setDiscovery({ key: candidateKey, result })
+  }, [canvasId, candidateKey, onStoryboardRepaired])
+  useEffect(() => {
+    if (!appliedTask || appliedRevision === undefined || !chapterId || !sequenceId) return
+    let active = true
+    const request = Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: appliedTask })
+    void request.then(({ data }) => {
+      if (active && data?.canvas_id === canvasId) setAppliedReview({ task: appliedTask, revision: appliedRevision, result: data })
+    }).catch(() => { if (active) setAppliedReview(undefined) })
+    return () => { active = false; request.cancel() }
+  }, [appliedTask, appliedRevision, projectId, chapterId, sequenceId, canvasId])
   useEffect(() => {
     if (!canvasId || !chapterId || !sequenceId) return
     let active = true
@@ -219,16 +238,20 @@ export function GenerationCanvasWorkspace({
       action={<Button onClick={() => setCandidateRefresh(value => value + 1)}>重试读取分镜</Button>} />}
     {candidateTask && candidateTask === reviewTask && chapterId && sequenceId && current?.document.storyboard?.task_id !== candidateTask &&
       <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
-        report={discovered?.result?.review} candidate={candidate}
+        report={discovered?.result?.review} candidate={candidate} onRepaired={receiveRepair}
         prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
         apply={async choice => {
           const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: candidateTask }, choice)
           if (applied) { runtime.invalidate(); setReviewTask(undefined) }
           return applied
         }} />}
-    {!requiresReview && discovered?.result?.review_state === 'warning' && discovered.result.review &&
-      <Alert type="warning" showIcon message="部分连续性依据不足"
-        description={<StoryboardReviewFindings report={discovered.result.review} candidate={candidate} />} />}
+    {savedReview?.review && (savedReview.review_state === 'warning' || savedReview.review_state === 'accepted' ||
+      savedReview.review_state === 'stale') && current &&
+      <Alert type="warning" showIcon message={savedReview.review_state === 'accepted' ? '已接受分镜设计风险' :
+        savedReview.review_state === 'stale' ? '分镜设计已变化，原风险确认已失效' : '部分连续性依据不足'}
+        description={<details><summary>查看连续性问题</summary>
+          <StoryboardReviewFindings report={savedReview.review} candidate={{ base_revision: current.revision, document: current.document }} />
+        </details>} />}
     {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}

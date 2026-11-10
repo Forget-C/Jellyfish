@@ -238,7 +238,11 @@ try {
   assert.equal(noFrame.diagnostics.some(item => item.code === 'DESIGN_MEDIA_PURPOSE_REQUIRED'), false)
 
   await open()
-  await dialog.getByRole('button', { name: '核对并恢复原参考', exact: true }).click()
+  const reviewRestore = dialog.getByRole('button', { name: '核对并恢复原参考', exact: true })
+  await reviewRestore.click()
+  await removal.getByRole('button', { name: '取消恢复', exact: true }).click()
+  assert.deepEqual(await request(canvas), inactive)
+  await reviewRestore.click()
   const restore = removal.getByRole('button', { name: '确认恢复原参考', exact: true })
   let invalidRestore = false
   const tamperRestore = async route => {
