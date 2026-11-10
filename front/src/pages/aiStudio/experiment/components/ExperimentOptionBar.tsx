@@ -66,6 +66,7 @@ export function ExperimentOptionBar({
             <Select
               className="w-full mt-2"
               placeholder={modelPlaceholder}
+              aria-label={modelLabel}
               loading={modelsLoading}
               value={modelId}
               onChange={onModelChange}

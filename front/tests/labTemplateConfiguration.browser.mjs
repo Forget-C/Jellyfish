@@ -49,7 +49,7 @@ try {
       const category = url.searchParams.get('category')
       return respond({ items: [{ id: category + '-model', name: labNames[category] + '测试模型', category }] })
     }
-    if (url.pathname.endsWith('/video-generation-options')) return respond({ allowed_ratios: ['16:9'], supports_subject_image_reference: true })
+    if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: url.searchParams.get('model_id'), allowed_ratios: ['16:9'], supports_subject_image_reference: true })
     if (url.pathname.endsWith('/prompts')) {
       if (failTemplates) return route.fulfill({ status: 503, json: { detail: '模板暂时不可用' } })
       const category = url.searchParams.get('category')

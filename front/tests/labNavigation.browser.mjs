@@ -64,7 +64,7 @@ try {
       const category = url.searchParams.get('category')
       return respond({ items: [{ id: 'model-1', name: modelNames[category], category }] })
     }
-    if (url.pathname.endsWith('/video-generation-options')) return respond({ allowed_ratios: ['16:9'] })
+    if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: url.searchParams.get('model_id'), allowed_ratios: ['16:9'] })
     if (url.pathname.endsWith('/new-text/messages') && request.method() === 'DELETE') {
       clearAttempts += 1
       if (clearAttempts === 1) return route.fulfill({ status: 409, json: { detail: '清空失败' } })
