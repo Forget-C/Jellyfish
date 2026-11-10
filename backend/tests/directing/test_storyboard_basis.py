@@ -23,6 +23,8 @@ async def test_confirmed_storyboard_basis_is_rechecked_then_frozen(tmp_path, mon
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
             if 'mode' not in args:
                 return SimpleNamespace(content='{"objects":[]}')

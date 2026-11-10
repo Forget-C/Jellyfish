@@ -14,4 +14,5 @@ export type StoryboardTaskSummary = {
     canvas_id: string;
     candidate_available?: boolean;
     retry_of_task_id?: (string | null);
+    review_state?: ('pending' | 'incomplete' | 'passed' | 'warning' | 'conflict' | null);
 };

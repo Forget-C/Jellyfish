@@ -67,6 +67,8 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
             if 'organization_inputs' in args:
                 calls.append('organization')
@@ -237,6 +239,8 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             pass
 
         def invoke(self, messages):
+            if 'storyboard_draft' in json.loads(messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
             if 'mode' not in args:
                 output = {'objects': [{'kind': 'prop', 'name': '白色面包车', 'description': '停在胡同的车',

@@ -15,4 +15,5 @@ export type StoryboardRetryBasis = {
     production_model_id?: (string | null);
     production_model_name?: (string | null);
     pending_modality: 'image' | 'video';
+    review_only?: boolean;
 };

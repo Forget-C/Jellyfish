@@ -28,6 +28,8 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
             pass
 
         def invoke(self, _messages):
+            if 'storyboard_draft' in json.loads(_messages[1].content):
+                return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps({'shots': shots}, ensure_ascii=False))
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
@@ -64,24 +66,27 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
         canvas_id = first['canvas_id']
         canvas = '/api/v1/studio/generation-canvases/p1/' + canvas_id
         initial_document = first['candidate']['document']
-        edited = next(card for card in initial_document['cards'] if card['type'] == 'direction.lighting')
-        edited['fields']['light_direction'].update(text='人工布光', authorship='user')
         await data(await client.put(canvas, json={'request_id': 'storyboard:' + first['task_id'],
             'expected_revision': 0, 'document': initial_document}))
         current = await data(await client.get(canvas))
         document = current['document']
+        edited = next(card for card in document['cards'] if card['type'] == 'direction.lighting')
+        edited['fields']['light_direction'].update(text='人工布光', authorship='user')
         first_shot, second_shot, third_shot = document['storyboard']['shots']
 
         def stack_for(shot):
             return next(group for group in document['groups'] if group['kind'] == 'stack' and shot['card_id'] in group['card_ids'])
 
         automatic, manual, unchanged = map(stack_for, (first_shot, second_shot, third_shot))
+        unstacked = await data(await client.put(canvas, json={'request_id': 'unstack-and-edit',
+            'expected_revision': current['revision'], 'document': {**document,
+                'groups': [group for group in document['groups'] if group['id'] != automatic['id']]}}))
         if reorganized:
             automatic['id'] += '-a1b2c3d4'
         manual['id'] = 'manually-regrouped'
         manual['name'] = '手工堆叠'
         before = await data(await client.put(canvas, json={'request_id': 'manual-group',
-            'expected_revision': current['revision'], 'document': document}))
+            'expected_revision': unstacked['revision'], 'document': document}))
 
         design['fields']['light_direction']['text'] = '顶光'
         # Replace the second shot without changing the third shot ordinal.

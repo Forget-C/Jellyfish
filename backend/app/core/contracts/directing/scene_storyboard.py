@@ -186,6 +186,33 @@ class StoryboardCandidate(Contract):
     base_revision: int
     document: CanvasDocument
 
+    @classmethod
+    def from_task_result(cls, result: dict) -> 'StoryboardCandidate':
+        """Expose the candidate without internal review checkpoint data."""
+        return cls.model_validate({key: result[key] for key in ('base_revision', 'document')})
+
+
+class StoryboardReviewIssue(Contract):
+    """Semantic findings cite existing draft shots and give a concrete remedy."""
+
+    kind: Literal['conflict', 'insufficient_basis']
+    shot_ids: list[Identity] = Field(min_length=1, max_length=30)
+    requirements: Text = Field(max_length=1200)
+    suggestion: Text = Field(max_length=1200)
+
+
+class StoryboardReviewReport(Contract):
+    """A successful semantic inspection may still report blocking conflicts."""
+
+    issues: list[StoryboardReviewIssue] = Field(max_length=100)
+
+    @property
+    def state(self) -> Literal['passed', 'warning', 'conflict']:
+        """Derive the verdict from findings rather than trusting an independent flag."""
+        if any(issue.kind == 'conflict' for issue in self.issues):
+            return 'conflict'
+        return 'warning' if self.issues else 'passed'
+
 
 class StoryboardTaskSummary(SceneObjectTaskRead):
     """轻量任务状态，用于离开后恢复查看。"""
@@ -193,6 +220,7 @@ class StoryboardTaskSummary(SceneObjectTaskRead):
     canvas_id: Identity
     candidate_available: bool = False
     retry_of_task_id: Identity | None = None
+    review_state: Literal['pending', 'incomplete', 'passed', 'warning', 'conflict'] | None = None
 
 
 class StoryboardTaskRead(StoryboardTaskSummary):
@@ -200,6 +228,7 @@ class StoryboardTaskRead(StoryboardTaskSummary):
 
     pending_application: bool = False
     candidate: StoryboardCandidate | None = None
+    review: StoryboardReviewReport | None = None
 
 
 class StoryboardRetry(Contract):
@@ -221,6 +250,7 @@ class StoryboardRetryBasis(Contract):
     production_model_id: Identity | None = None
     production_model_name: str | None = None
     pending_modality: Literal['image', 'video']
+    review_only: bool = False
 
 
 class StoryboardApplication(Contract):
