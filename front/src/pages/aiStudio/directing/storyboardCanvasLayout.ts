@@ -1,5 +1,5 @@
 import type { CanvasPoint } from '../../../components/canvas/geometry'
-import type { CanvasDocument } from '../../../services/generated'
+import type { CanvasDocument, GenerationCanvasGroup } from '../../../services/generated'
 import { generationGroupBounds, type GenerationCanvasLayoutPolicy } from '../generationCanvas/generationLayout'
 import type { GraphSize } from './graphLayout'
 
@@ -89,33 +89,48 @@ function placeStoryboardAdditions(document: CanvasDocument, before: CanvasDocume
   }
 }
 
+function placeVideoRows(shots: string[][], sizes: Record<string, GraphSize>, width: number) {
+  const positions: Record<string, CanvasPoint> = {}
+  const rows = videoRows(shots, sizes, width)
+  let top = 0
+  for (const row of rows) {
+    let left = 0
+    for (const id of row) {
+      positions[id] = { x: left, y: top }
+      left += sizes[id].width + gap
+    }
+    top += Math.max(...row.map(id => sizes[id].height)) + gap
+  }
+  return { positions, mainWidth: Math.max(...rows.map(row => rowWidth(row, sizes))) }
+}
+
 /** 工作台按镜头关系组织视频，普通入口不使用该策略。 */
 export function storyboardCanvasLayout(document: CanvasDocument, beforeApplication?: CanvasDocument): GenerationCanvasLayoutPolicy | undefined {
   if (!document.storyboard) return
-  const videos = new Set(document.cards?.filter(card => card.type === 'model.video').map(card => card.id))
+  const hidden = new Set(document.groups?.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || []))
+  const videos = new Set(document.cards?.filter(card => card.type === 'model.video' && !hidden.has(card.id)).map(card => card.id))
   const shots = document.storyboard.shots.map(shot => shot.model_card_ids.filter(id => videos.has(id))).filter(row => row.length)
   const anchorId = shots[0]?.[0]
   if (!anchorId) return
+  const focus = (sizes: Record<string, GraphSize>, width: number, height: number) => {
+    const card = sizes[anchorId]
+    if (width > narrowWidth) {
+      const first = videoRows(shots, sizes, width)[0]
+      return { left: Math.max(80, (width - rowWidth(first, sizes)) / 2), top: 180, scale: 1 }
+    }
+    // 窄屏为左侧添加栏、顶部工具栏和底部视图工具保留操作空间。
+    const scale = Math.max(.15, Math.min(1, (width - 96) / card.width, (height - 300) / card.height))
+    return { left: 80, top: Math.max(150, (height - card.height * scale) / 2), scale }
+  }
+  const firstApplication = beforeApplication && !beforeApplication.storyboard &&
+    !beforeApplication.cards?.some(card => card.id !== beforeApplication.fixed_source?.card_id)
   const placeAdditions = beforeApplication?.storyboard
     ? placeStoryboardAdditions(document, beforeApplication)
     : (positions: Record<string, CanvasPoint>) => positions
-  if (!beforeApplication || beforeApplication.storyboard ||
-      beforeApplication.cards?.some(card => card.id !== beforeApplication.fixed_source?.card_id)) return { placeAdditions }
-  return { placeAdditions, initial: {
+  return { placeAdditions, initial: firstApplication ? {
     anchorId,
     arrange: (nodes, sizes, width) => {
-      const positions: Record<string, CanvasPoint> = {}
-      const rows = videoRows(shots, sizes, width)
-      const mainWidth = Math.max(...rows.map(row => rowWidth(row, sizes)))
-      let top = 0
-      for (const row of rows) {
-        let left = 0
-        for (const id of row) {
-          positions[id] = { x: left, y: top }
-          left += sizes[id].width + gap
-        }
-        top += Math.max(...row.map(id => sizes[id].height)) + gap
-      }
+      const { positions, mainWidth } = placeVideoRows(shots, sizes, width)
       const stacks = document.groups?.filter(group => group.kind === 'stack') || []
       let leftTop = 0, rightTop = 0
       for (const stack of stacks) {
@@ -151,15 +166,37 @@ export function storyboardCanvasLayout(document: CanvasDocument, beforeApplicati
       }
       return positions
     },
-    focus: (sizes, width, height) => {
-      const card = sizes[anchorId]
-      if (width > narrowWidth) {
-        const first = videoRows(shots, sizes, width)[0]
-        return { left: Math.max(80, (width - rowWidth(first, sizes)) / 2), top: 180, scale: 1 }
+    focus,
+  } : undefined, explicit: {
+    anchorId,
+    focus,
+    arrange: (nodes, sizes, width, _anchor, previous = {}) => {
+      const { positions, mainWidth } = placeVideoRows(shots, sizes, width)
+      const live = new Set(nodes.map(node => node.id))
+      const shotGroups = new Set(document.storyboard?.shots.map(shot => shot.group_id))
+      const shotCards = new Set(document.storyboard?.shots.map(shot => shot.card_id))
+      const point = (id: string) => previous[id] ?? { x: 0, y: 0 }
+      let leftTop = 0, rightTop = 0
+      // 侧区按整个组织移动辅助成员，解除堆叠时保留原相对位置。
+      const place = (members: string[], right: boolean, group?: GenerationCanvasGroup) => {
+        const frames = members.map(id => ({ ...point(id), ...sizes[id] }))
+        if (group) frames.push(generationGroupBounds(group, members, point, sizes))
+        const minX = Math.min(...frames.map(frame => frame.x))
+        const minY = Math.min(...frames.map(frame => frame.y))
+        const maxX = Math.max(...frames.map(frame => frame.x + frame.width))
+        const maxY = Math.max(...frames.map(frame => frame.y + frame.height))
+        const x = right ? mainWidth + gap : minX - maxX - gap
+        const y = right ? rightTop : leftTop
+        for (const id of members) positions[id] = { x: x + point(id).x - minX, y: y + point(id).y - minY }
+        if (right) rightTop += maxY - minY + gap
+        else leftTop += maxY - minY + gap
       }
-      // 窄屏为左侧添加栏、顶部工具栏和底部视图工具保留操作空间。
-      const scale = Math.max(.15, Math.min(1, (width - 96) / card.width, (height - 300) / card.height))
-      return { left: 80, top: Math.max(150, (height - card.height * scale) / 2), scale }
+      for (const group of document.groups || []) {
+        const members = (group.card_ids || []).filter(id => live.has(id) && !positions[id])
+        if (members.length) place(members, shotGroups.has(group.id) || members.some(id => shotCards.has(id)), group)
+      }
+      for (const { id } of nodes) if (!positions[id]) place([id], false)
+      return positions
     },
   } }
 }
