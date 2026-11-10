@@ -6,6 +6,7 @@ import { StudioDirectingService as Directing, StudioGenerationCanvasesService as
 import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardTaskRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph, type CanvasModelCardActionContext } from './GenerationCanvasGraph'
+import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
@@ -47,7 +48,10 @@ interface CanvasManagementContext {
   nameEditor: ReactNode
 }
 
+type CanvasLayoutPolicy = (document: CanvasDocument, beforeApplication?: CanvasDocument) => GenerationCanvasLayoutPolicy | undefined
+
 interface GenerationCanvasWorkspaceProps {
+  layoutPolicy?: CanvasLayoutPolicy
   projectId: string
   canvasId: string | null
   back: { label: string; onClick: () => void }
@@ -68,7 +72,7 @@ interface GenerationCanvasWorkspaceProps {
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
   projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, storyboardTaskId, onCanvasRead, hostError, hostErrorAction,
-  targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory,
+  targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -85,6 +89,7 @@ export function GenerationCanvasWorkspace({
   const [discovery, setDiscovery] = useState<{ key: string; result?: StoryboardTaskRead; error?: string }>()
   const [candidateRefresh, setCandidateRefresh] = useState(0)
   const handledCandidate = useRef<string>()
+  const layoutApplication = useRef<{ taskId: string; before: CanvasDocument }>()
   const [reviewTask, setReviewTask] = useState<string>()
   const discovered = discovery?.key === candidateKey ? discovery : undefined
   const candidate = discovered?.result?.candidate
@@ -114,10 +119,16 @@ export function GenerationCanvasWorkspace({
     if (!ownership.editable && ownership.state === 'checking') return
     handledCandidate.current = candidateTask
     if (requiresReview) setReviewTask(candidateTask)
-    else void applyInitialCandidate(candidate).then(result => {
-      if (result === 'pending' && handledCandidate.current === candidateTask) setReviewTask(candidateTask)
-    })
-  }, [candidateTask, current, candidate, applyInitialCandidate, ownership.editable, ownership.state, requiresReview])
+    else {
+      if (layoutPolicy) layoutApplication.current = { taskId: candidateTask, before: current.document }
+      void applyInitialCandidate(candidate).then(result => {
+        if (result === 'pending' && handledCandidate.current === candidateTask) {
+          layoutApplication.current = undefined
+          setReviewTask(candidateTask)
+        }
+      })
+    }
+  }, [candidateTask, current, candidate, applyInitialCandidate, ownership.editable, ownership.state, requiresReview, layoutPolicy])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -193,8 +204,10 @@ export function GenerationCanvasWorkspace({
       <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
         prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
         apply={async choice => {
+          if (layoutPolicy && current) layoutApplication.current = { taskId: candidateTask, before: current.document }
           const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: candidateTask }, choice)
           if (applied) { runtime.invalidate(); setReviewTask(undefined) }
+          else if (layoutApplication.current?.taskId === candidateTask) layoutApplication.current = undefined
           return applied
         }} />}
     {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}
@@ -215,7 +228,7 @@ export function GenerationCanvasWorkspace({
         {runtime.preview && <RunPreview canvas={document || undefined} catalog={catalog.current} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), diagnostic: target, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <GenerationCanvasGraph onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
+      <GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, layoutApplication.current?.taskId === document.storyboard?.task_id ? layoutApplication.current?.before : undefined)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}

@@ -5,7 +5,7 @@ import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 export type GraphLayoutScope = {
   storageKey: string; viewId: string; anchorId: string; validIds: string[]; validViewIds?: string[]
-  initialTop?: number; initialLeft?: number; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
+  initialTop?: number; initialLeft?: number; focusUnplacedAnchor?: () => { left: number; top: number; scale: number }; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
   onStorageError?: (message: string) => void
   arrange: GraphArrange
   parseView?: (raw: string | null) => GraphView | undefined
@@ -54,7 +54,12 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
       const prepared = migration?.view || cleaned
       const positions = scope.arrange(nodes, sizes, viewportWidth, scope.anchorId, prepared.positions, cleaned.sizes)
       let transform = prepared.transform
-      if (!previous.ready || migration) {
+      // 首次加入宿主指定的主卡时，也允许从已显示的初始文档转到该卡。
+      const focus = !prepared.positions[scope.anchorId] ? scope.focusUnplacedAnchor?.() : undefined
+      if (focus) {
+        const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
+        transform = { x: focus.left - anchor.x * focus.scale, y: focus.top - anchor.y * focus.scale, scale: focus.scale }
+      } else if (!previous.ready || migration) {
         const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
         const screen = !migration && previous.anchorScreen || { x: scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16), y: scope.initialTop || 64 }
         transform = { ...transform, x: screen.x - anchor.x * transform.scale, y: screen.y - anchor.y * transform.scale }
