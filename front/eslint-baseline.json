@@ -1486,45 +1486,10 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/project/ProjectLobby.tsx",
-      "rule": "@typescript-eslint/consistent-type-imports",
-      "severity": 1,
-      "fingerprint": "8168adb28cdc1ff84d0da3ad0172328b4456bb91a158311ae9603a46130dc81b",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectLobby.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "6b98f7ca4f8be1ae24548e86026e7ed06f16700937775aee6bdcab6d30f6d781",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectLobby.tsx",
-      "rule": "prefer-const",
-      "severity": 2,
-      "fingerprint": "28853c3180d38da41fe74d967e025e7482770ced4483319ac039c81a0a1ddd59",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectLobby.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "13f3be5f2705cbdd9a42dd5439bfdeb393baf18a8dccae564b3f01a53f7bf512",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/project/ProjectVisualStyleAndStyleFields.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "f2cbf19bc261373a6216fb2096cb54c6e3f2fd46b8aabdc77b0d91505e7b5f1f",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/constants.tsx",
-      "rule": "@typescript-eslint/consistent-type-imports",
-      "severity": 1,
-      "fingerprint": "c947a4eb0ceeffb5b36fd2dc1973d2530df18de0a84a3c824a41e328b98a8f64",
       "count": 1
     },
     {
@@ -1539,13 +1504,6 @@
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "4dc99bc682a0933c9a10c841bedcf4b1e478ff3d5d3d7b9d2135b45ebfb16f05",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/index.tsx",
-      "rule": "@typescript-eslint/consistent-type-imports",
-      "severity": 1,
-      "fingerprint": "00ab03dcdca1df0ed7dc51ba07e04351dd8f89c0224e71a9000ad2874072a534",
       "count": 1
     },
     {
