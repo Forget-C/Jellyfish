@@ -9,8 +9,12 @@ export const mainNavigation = [
   { key: 'settings', label: '设置', to: '/settings' },
 ] as const
 
-export type BreadcrumbItem = { label: string; to?: string }
+export type BreadcrumbItem = { label: string; to?: string; state?: { chapterReturn: string } }
 type NavigationTitles = { page?: string; project?: string; chapter?: string }
+
+function chapterReturn(id: string): BreadcrumbItem['state'] {
+  try { return { chapterReturn: decodeURIComponent(id) } } catch { return undefined }
+}
 
 /** 只连接已存在的业务路由；实体名称由页面或上级读取提供，不显示路径中的 ID。 */
 export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {}): BreadcrumbItem[] {
@@ -24,7 +28,7 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
       return [...items, { label: '角色', to: `${project}?tab=roles` }, { label: titles.page || '角色档案' }]
     }
     if (path.length === 5 && path[2] === 'chapters' && path[4] === 'workbench-management') {
-      return [...items, { label: '章节', to: `${project}?tab=chapters` }, { label: titles.page || '工作台管理' }]
+      return [...items, { label: '章节', to: `${project}?tab=chapters`, state: chapterReturn(path[3]) }, { label: titles.page || '工作台管理' }]
     }
     if ((path.length === 5 || path.length === 6) && path[2] === 'chapters' && path[3] && path[4] === 'sequences') {
       if (!path[5]) return [...items, { label: titles.page || '章节场次' }]

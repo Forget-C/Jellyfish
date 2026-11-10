@@ -15,14 +15,15 @@ const changes = { added: '新增', title: '名称', position: '顺序', range: '
 const newKey = () => crypto.randomUUID()
 
 /** 单一草稿承接手动、AI 和历史方案；保存后才切换正式版本。 */
-export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, refreshKey, sequenceId, embedded = false }: {
-  projectId: string; chapterId: string; onChanged: (sequenceId: string) => void; onEdit: () => void; refreshKey: number; sequenceId?: string
+export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, refreshKey, sequenceId, embedded = false, targetTask, onCloseTask, mobileView, onMobileView }: {
+  projectId: string; chapterId: string; onChanged: (sequenceId: string, count: number) => void; onEdit: () => void; refreshKey: number; sequenceId?: string
+  targetTask?: string | null; onCloseTask?: () => void
+  mobileView: string; onMobileView: (view: string) => void
   embedded?: boolean
 }) {
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [editor, setEditor] = useState<Editor>()
   const [activeId, setActiveId] = useState(sequenceId)
-  const [mobileView, setMobileView] = useState('source')
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [notice, setNotice] = useState('')
@@ -67,8 +68,11 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     }
   }, [chapter, editor, sequenceId, embedded])
   useEffect(() => {
-    if (embedded) { setActiveId(sequenceId); setMobileView('source') }
-  }, [embedded, sequenceId])
+    if (embedded) {
+      setActiveId(sequenceId)
+      if (sequenceId) onMobileView('source')
+    }
+  }, [embedded, sequenceId, onMobileView])
   const draftDirty = !!editor && JSON.stringify(editor.draft) !== JSON.stringify(initialDivision(editor.chapter))
   useEffect(() => {
     let active = true
@@ -95,9 +99,9 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     flushSync(() => {
       setChapter(saved.chapter); setEditor({ chapter: saved.chapter, draft: initialDivision(saved.chapter) }); setActiveId(selected)
       setPendingSave(undefined); setRetryReady(false); setPreview(undefined); setBusy(false); setIdentityConfirmed(false); setViewing(undefined)
-      setHistoryRefresh(value => value + 1); setNotice(`已保存${saved.chapter.current_version ? `为 v${saved.chapter.current_version.number}` : '本章划分'}。`); setError('')
+      setHistoryRefresh(value => value + 1); setNotice(''); setError('')
     })
-    onChanged(selected || '')
+    onChanged(selected || '', saved.chapter.sequences.length)
     void reload().then(latest => {
       if (latest && latest.current_version?.id !== saved.chapter.current_version?.id) setNotice('本次保存已成功；当前划分随后已有新版本。已保留本次结果，请核对最新划分。')
     })
@@ -208,6 +212,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         const draft = version ? versionDivision(latest, version) : analysisDivision(latest, detail as DivisionAnalysisDetail)
         epoch.current++; setEditor({ chapter: latest, draft, history: version }); setActiveId(draft.members[0]?.key)
         setViewing(undefined); setHistoryOpen(false); setPreview(undefined); setError(''); setNotice('历史方案已载入草稿。请核对范围与身份，保存将形成新版本。')
+        if (targetTask) onCloseTask?.()
       } catch (cause) { setError(directingError(cause)) } finally { writing.current = false; setBusy(false) }
     }
     if (draftDirty) Modal.confirm({ title: '替换当前未保存草稿？', content: '载入历史方案会替换当前输入；正式版本保持不变。', okText: '替换草稿', cancelText: '取消', onOk: apply })
@@ -245,14 +250,15 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       <ChapterDivisionEditor key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
         chapter={viewing?.chapter || editor.chapter} draft={viewing ? initialDivision(viewing.chapter) : draft}
         activeId={viewing ? historyActiveId : activeId} onActive={viewing ? setHistoryActiveId : setActiveId}
-        mobileView={mobileView} onMobileView={setMobileView} onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />
+        mobileView={mobileView} onMobileView={onMobileView} onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />
       {!viewing && <Space wrap style={{ marginTop: 16 }}>
         <Button type="primary" disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存新版本</Button>
         <Button disabled={!draftDirty} onClick={() => setDiscardOpen(true)}>放弃修改</Button>
         <span>{draftDirty ? '整章草稿尚未保存' : '本章划分没有未保存变更'}</span>
       </Space>}
     </WorkspaceWriteBoundary>
-    <DivisionHistoryModal open={historyOpen} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh} onClose={() => setHistoryOpen(false)}
+    <DivisionHistoryModal open={historyOpen || !!targetTask} targetTask={targetTask} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh}
+      onClose={() => { setHistoryOpen(false); if (targetTask) onCloseTask?.() }}
       onView={detail => { if (busy || pendingSave) return; epoch.current++; setViewing(detail); setHistoryActiveId(detail.chapter.sequences[0]?.id); setHistoryOpen(false) }} onLoad={loadHistory} />
     <Modal title="划分变更预览" open={!!preview && !pendingSave} width={800} onCancel={() => setPreview(undefined)} footer={<Space wrap>
       <Button onClick={() => setPreview(undefined)}>继续编辑</Button><Button type="primary" disabled={!!preview?.value.blockers.length || (!!preview?.value.identity_confirmation_required && !identityConfirmed)} onClick={() => void save()}>保存本章划分</Button>

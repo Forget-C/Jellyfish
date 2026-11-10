@@ -66,6 +66,7 @@ try {
   page.setDefaultTimeout(9000)
   const location = 'http://127.0.0.1:4384/projects/' + project + '/chapters/' + chapter + '/workbench-management'
   const list = page.getByRole('complementary', { name: '本章场次' })
+  const regions = page.getByRole('navigation', { name: '工作台区域' })
   const steps = page.getByRole('navigation', { name: '工作台步骤' })
   const taskWrites = []
   const heavyReads = []
@@ -75,10 +76,12 @@ try {
     if (req.method() === 'GET' && /\/directing\/.*\/(?:objects|canvases)$/.test(path)) heavyReads.push(path)
   })
   await page.goto(location)
-  await page.getByRole('heading', { name: '工作台管理' }).waitFor()
+  await regions.getByRole('button', { name: '场次制作', exact: true }).waitFor()
+  assert.equal(await page.getByRole('link', { name: '返回章节', exact: true }).count(), 0)
   await page.getByRole('heading', { name: '前厅', exact: true }).waitFor()
   const labels = await list.getByRole('button', { name: /前厅|后院/ }).allTextContents()
-  assert.deepEqual(heavyReads, [])
+  assert.equal(await page.getByRole('complementary', { name: '划场场次列表' }).count(), 0)
+  assert.equal(await steps.getByRole('button', { name: '对象与参考〔本场〕' }).getAttribute('aria-current'), 'step')
   assert.deepEqual(labels.map(label => label.match(/前厅|后院/)[0]), ['前厅', '后院'])
   assert.equal(await list.getByRole('button', { name: /旧码头/ }).count(), 0)
   await list.getByRole('textbox', { name: '搜索场次' }).fill('雨')
@@ -98,7 +101,7 @@ try {
   await page.screenshot({ path: join(output, 'desktop.png') })
   assert.ok(heavyReads.some(path => path.endsWith(`/sequences/${second.id}/objects`)))
   assert.ok(heavyReads.some(path => path.endsWith(`/sequences/${first.id}/canvases`)))
-  assert.ok(heavyReads.every(path => path.endsWith(`/sequences/${second.id}/objects`) || path.endsWith(`/sequences/${first.id}/canvases`)))
+  assert.ok(heavyReads.every(path => [`/sequences/${first.id}/objects`, `/sequences/${second.id}/objects`, `/sequences/${first.id}/canvases`].some(target => path.endsWith(target))))
 
   await list.getByRole('button', { name: '查看历史场次' }).click()
   await list.getByRole('button', { name: /旧码头.*1 张画布/ }).click()
@@ -115,7 +118,18 @@ try {
   await page.getByText('章节不属于当前项目', { exact: false }).waitFor()
   await page.goto(location.replace(chapter, 'management-empty') + '?step=objects')
   await page.getByText('本章尚未填写原文').waitFor()
-  assert.equal(await steps.getByRole('button', { name: '场次划分〔本章〕' }).getAttribute('aria-current'), 'step')
+  assert.equal(await regions.getByRole('button', { name: '场次划分' }).getAttribute('aria-current'), 'page')
+  assert.equal(await list.count(), 0)
+
+  await page.goto(location)
+  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
+  await page.locator(`[data-chapter-workbench=${JSON.stringify(chapter)}]:focus`).waitFor()
+  await page.getByRole('textbox', { name: '搜索章节' }).fill('空章节')
+  await page.goto(location)
+  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
+  await page.getByText('返回章节：两个场景').waitFor()
+  await page.locator(`[data-chapter-workbench=${JSON.stringify(chapter)}]:focus`).waitFor()
+  assert.equal(await page.getByRole('textbox', { name: '搜索章节' }).inputValue(), '空章节')
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(location)
@@ -129,6 +143,23 @@ try {
   await openScenes.and(page.locator(':focus')).waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: join(output, 'mobile.png') })
+
+  const latest = await request(chapterApi)
+  const retireAll = { source_version: latest.source_version,
+    baseline: latest.sequences.map(row => ({ sequence_id: row.id, version: row.version })),
+    members: [], lineage: latest.sequences.map(row => ({ sequence_id: row.id, target_keys: [] })),
+    exited_sequence_ids: latest.sequences.map(row => row.id) }
+  const retirement = await request(chapterApi + '/division/preview', 'POST', retireAll)
+  await request(chapterApi + '/division', 'PUT', { request_id: 'management-all-history', draft: retireAll,
+    preview_token: retirement.preview_token, identity_changes_confirmed: true })
+  await page.goto(location)
+  await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
+  assert.equal(await openScenes.count(), 0)
+  await page.getByRole('button', { name: '查看历史场次', exact: true }).click()
+  await openScenes.press('Enter')
+  await drawer.getByRole('button', { name: /旧码头/ }).click()
+  await page.getByRole('heading', { name: '旧码头', exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: '生成新分镜画布' }).count(), 0)
 } finally {
   await cleanup()
 }

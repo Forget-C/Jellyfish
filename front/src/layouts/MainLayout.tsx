@@ -42,11 +42,11 @@ export default function MainLayout() {
 
   const breadcrumbItems = crumbs.map((item, index) => ({
     key: item.to || `${index}`,
-    title: item.to ? <Link to={item.to} title={item.label}>{item.label}</Link> : <span title={item.label}>{item.label}</span>,
+    title: item.to ? <Link to={item.to} state={item.state} title={item.label}>{item.label}</Link> : <span title={item.label}>{item.label}</span>,
   }))
   // 只折叠中间层；当前对象始终可见，完整上级路径通过菜单访问。
   const compactCrumbs = (mobile || screens.lg === false || crumbs.reduce((length, item) => length + item.label.length, 0) > 48) && crumbs.length > 2
-    ? [{ key: 'parents', title: <Dropdown overlayClassName="app-context-menu" trigger={['click']} menu={{ items: crumbs.slice(0, -1).map((item, index) => ({ key: String(index), label: item.label, onClick: () => { if (item.to) navigate(item.to) } })) }}><Button type="text" size="small" aria-label="查看上级页面" icon={<MoreOutlined />} /></Dropdown> }, breadcrumbItems[breadcrumbItems.length - 1]]
+    ? [{ key: 'parents', title: <Dropdown overlayClassName="app-context-menu" trigger={['click']} menu={{ items: crumbs.slice(0, -1).map((item, index) => ({ key: String(index), label: item.label, onClick: () => { if (item.to) navigate(item.to, { state: item.state }) } })) }}><Button type="text" size="small" aria-label="查看上级页面" icon={<MoreOutlined />} /></Dropdown> }, breadcrumbItems[breadcrumbItems.length - 1]]
     : breadcrumbItems
 
   if (/^\/projects\/[^/]+\/generation-canvas\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+(?:\/canvas-workbench)?\/?$/.test(pathname)) {

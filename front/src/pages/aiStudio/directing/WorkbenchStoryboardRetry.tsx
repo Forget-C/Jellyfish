@@ -23,9 +23,10 @@ function retryError(cause: unknown) {
 }
 
 /** 确认本次依据后重试原画布，未知结果只重放已保存的同一请求。 */
-export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted }: {
+export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted, onReviewSource }: {
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary
   historical: boolean; onAccepted: () => void
+  onReviewSource: () => void
 }) {
   const navigate = useNavigate()
   const canvasId = canvas.id
@@ -138,7 +139,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
         <StoryboardBasisPreview basis={preview.basis} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refresh}
           sourceLabel={preview.source_kind === 'fixed' ? '本次采用的画布固定原文' : '本次采用的场次摘录'}
           emptyText="本次重试未采用对象参考，可以继续核对。"
-          onOpenSource={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'division'))}
+          onOpenSource={onReviewSource}
           onOpenObjects={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'objects'))} />
       </>}
     </Modal>

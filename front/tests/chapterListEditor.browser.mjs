@@ -43,6 +43,9 @@ try {
       if (url.searchParams.get('is_desc') === 'true') matching = [...matching].reverse()
       return respond({ items: matching.slice((pageNumber - 1) * size, pageNumber * size), pagination: { page: pageNumber, page_size: size, total: matching.length, max_page: Math.ceil(matching.length / size) } })
     }
+    if (/\/directing\/chapters\/ch1\/sequences\/s[12]\/objects$/.test(path)) {
+      return respond({ revision: 0, source_changed: sourceChanged, objects: [], assets: [] })
+    }
     const directingChapter = path.match(/\/projects\/p1\/directing\/chapters\/([^/]+)(?:\/(workbench-management|division\/history))?$/)
     if (directingChapter) {
       const [, id, resource] = directingChapter
@@ -180,7 +183,7 @@ try {
   await firstChapter.getByRole('cell', { name: '2 场', exact: true }).waitFor()
   await firstChapter.getByRole('button', { name: '工作台管理', exact: true }).click()
   await page.getByText('章节原文已变化，仍使用本场已确认摘录。', { exact: true }).waitFor()
-  await page.getByRole('link', { name: '返回章节', exact: true }).click()
+  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
   await page.getByRole('button', { name: '2. 章节 2 · 编辑章节', exact: true }).click()
   await editor.getByRole('textbox', { name: '章节原文', exact: true }).fill('零场章节的新原文')
   await save()

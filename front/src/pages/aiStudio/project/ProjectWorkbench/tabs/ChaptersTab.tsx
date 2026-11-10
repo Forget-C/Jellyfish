@@ -20,7 +20,7 @@ export function ChaptersTab() {
 function ChaptersContent() {
   const { projectId = '' } = useParams()
   const navigate = useNavigate()
-  const { state } = useLocation()
+  const { state, key: locationKey } = useLocation()
   const [params, setParams] = useSearchParams()
   const [page, setPage] = useState(() => readChapterBrowse(projectId).page || 1)
   const [query, setQuery] = useState(() => readChapterBrowse(projectId).query || '')
@@ -49,11 +49,26 @@ function ChaptersContent() {
     return () => scroll.removeEventListener('scroll', save)
   }, [projectId, loading, page, query])
   const returnedChapter = typeof state?.chapterReturn === 'string' ? state.chapterReturn : undefined
+  const focusedReturn = useRef<string>()
+  const [offPageChapter, setOffPageChapter] = useState<{ id: string; title: string }>()
+  const returnIsListed = chapters.some(chapter => chapter.id === returnedChapter)
+  const showOffPageChapter = !loading && !returnIsListed && offPageChapter?.id === returnedChapter && offPageChapter
   useEffect(() => {
-    if (loading || !returnedChapter || !root.current) return
-    Array.from(root.current.querySelectorAll<HTMLButtonElement>('button[data-chapter-workbench]'))
-      .find(button => button.dataset.chapterWorkbench === returnedChapter)?.focus({ preventScroll: true })
-  }, [loading, returnedChapter])
+    if (loading || !returnedChapter || returnIsListed || focusedReturn.current === locationKey) return
+    const request = StudioChaptersService.getChapterApiV1StudioChaptersChapterIdGet({ chapterId: returnedChapter })
+    void request.then(({ data }) => {
+      if (data?.project_id === projectId) setOffPageChapter({ id: data.id, title: data.title })
+    }).catch(() => { /* The chapter list remains usable if the return target is unavailable. */ })
+    return () => request.cancel()
+  }, [loading, projectId, returnedChapter, returnIsListed, locationKey])
+  useEffect(() => {
+    if (loading || !returnedChapter || !root.current || focusedReturn.current === locationKey) return
+    const button = Array.from(root.current.querySelectorAll<HTMLButtonElement>('button[data-chapter-workbench]'))
+      .find(item => item.dataset.chapterWorkbench === returnedChapter)
+    if (!button) return
+    focusedReturn.current = locationKey
+    if (!root.current.contains(document.activeElement)) button.focus()
+  }, [loading, returnedChapter, returnIsListed, showOffPageChapter, locationKey])
   useEffect(() => {
     if (params.get('create') === '1') {
       setCreating(true)
@@ -104,6 +119,10 @@ function ChaptersContent() {
     <Card title="章节" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>}>
       <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
         onChange={event => changePage(1, event.target.value)} style={{ marginBottom: 16, maxWidth: 360 }} />
+      {showOffPageChapter && <Alert type="info" message={`返回章节：${showOffPageChapter.title}`} action={<Space wrap>
+        <Button onClick={() => openEditor(showOffPageChapter.id)}>编辑章节</Button>
+        <Button data-chapter-workbench={showOffPageChapter.id} onClick={() => openManagement(showOffPageChapter.id)}>工作台管理</Button>
+      </Space>} />}
       {error ? <Alert type="error" showIcon message={error} action={<Button onClick={() => void refresh()}>重试</Button>} />
         : <Table rowKey="id" className="chapter-table" dataSource={chapters} loading={loading}
           pagination={{ current: page, pageSize: 10, total, showSizeChanger: false, onChange: next => changePage(next) }}

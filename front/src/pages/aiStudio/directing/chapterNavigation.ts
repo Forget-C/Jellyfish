@@ -52,13 +52,14 @@ export function chapterLocation(projectId: string, chapterId?: string, sequenceI
 
 /** 工作台管理深链接使用显式场次和步骤，浏览记忆只作为缺省值。 */
 export function workbenchManagementLocation(projectId: string, chapterId: string, sequenceId?: string, step?: WorkbenchManagementStep,
-  target?: { canvas?: string | null; storyboardTask?: string | null; objectTask?: string | null }): string {
+  target?: { canvas?: string | null; storyboardTask?: string | null; objectTask?: string | null; divisionTask?: string | null }): string {
   const params = new URLSearchParams()
   if (sequenceId) params.set('sequence', sequenceId)
   if (step) params.set('step', step)
   if (target?.canvas) params.set('canvas', target.canvas)
   if (target?.storyboardTask) params.set('storyboardTask', target.storyboardTask)
   if (target?.objectTask) params.set('objectTask', target.objectTask)
+  if (target?.divisionTask) params.set('divisionTask', target.divisionTask)
   const path = `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/workbench-management`
   return params.size ? `${path}?${params}` : path
 }

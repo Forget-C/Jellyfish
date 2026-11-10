@@ -16,7 +16,8 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   if (!source) return {}
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
-  if (kind === 'chapter' && projectId) navigateTo = workbenchManagementLocation(projectId, id, undefined, 'division')
+  if (kind === 'chapter' && projectId) navigateTo = workbenchManagementLocation(projectId, id, undefined, 'division',
+    { divisionTask: task.taskKind === 'directing_divide' ? task.taskId : undefined })
   else if (kind === 'sequence' && projectId && chapterId && task.taskKind === 'directing_object_extract') {
     navigateTo = workbenchManagementLocation(projectId, chapterId, id, 'objects', { objectTask: task.taskId })
   }

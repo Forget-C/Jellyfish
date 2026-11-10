@@ -79,7 +79,7 @@ try {
   const sceneApi = `${chapterApi}/sequences/${sequence.id}`
   assert.equal(sequence.source_text, text)
   const management = `${projectUrl}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
-  await page.getByRole('button', { name: '对象与参考〔本场〕', exact: true }).click()
+  await page.getByRole('button', { name: '进入场次制作', exact: true }).click()
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
   const prepared = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
@@ -305,7 +305,7 @@ try {
     }
   }
   await page.getByRole('button', { name: '返回工作台管理', exact: true }).click()
-  await page.getByRole('link', { name: '返回章节', exact: true }).click()
+  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
   await page.waitForURL(chapters)
   assert.equal(await page.getByRole('textbox', { name: '搜索章节' }).inputValue(), '候车')
   await page.getByRole('button', { name: '工作台管理', exact: true }).and(page.locator(':focus')).waitFor()

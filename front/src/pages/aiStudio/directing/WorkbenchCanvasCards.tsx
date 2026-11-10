@@ -29,9 +29,10 @@ function taskLabel(task: StoryboardTaskSummary) {
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
 export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost,
-  targetCanvas, targetTask, onCloseTask, onChange }: Scope & {
+  targetCanvas, targetTask, onCloseTask, onChange, onReviewSource }: Scope & {
   historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
   targetCanvas?: string | null; targetTask?: string | null; onCloseTask: (canvasId?: string) => void
+  onReviewSource: (canvasId?: string) => void
 }) {
   const navigate = useNavigate()
   const { state } = useLocation()
@@ -157,7 +158,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const shown = canvases?.filter(canvas => canvas.name.toLocaleLowerCase().includes(keyword))
   return <section aria-labelledby="management-canvas-list-title" className="management-canvas-cards">
     {noticeContext}
-    <WorkbenchCanvasCreation {...{ projectId, chapterId, sequenceId, actionHost }} editable={canCreate} onAccepted={id => {
+    <WorkbenchCanvasCreation {...{ projectId, chapterId, sequenceId, actionHost, onReviewSource }} editable={canCreate} onAccepted={id => {
       setCreated(id)
       setQuery('')
       setRevision(value => value + 1)
@@ -221,7 +222,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               {candidateId && <Button type="link" onClick={() => openCanvas(canvas.id, candidateId)}>
                 {canvas.storyboard_review_required ? '核对分镜' : '查看分镜'}
               </Button>}
-              <WorkbenchStoryboardRetry {...{ projectId, chapterId, sequenceId, canvas, historical }} onAccepted={() => {
+              <WorkbenchStoryboardRetry {...{ projectId, chapterId, sequenceId, canvas, historical }} onReviewSource={() => onReviewSource(canvas.id)} onAccepted={() => {
                 setRevision(value => value + 1)
                 onChange()
               }} />

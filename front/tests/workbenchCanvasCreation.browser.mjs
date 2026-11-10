@@ -64,9 +64,9 @@ try {
   const start = page.getByRole('button', { name: '生成新分镜画布', exact: true })
   const form = page.getByRole('region', { name: '生成新分镜画布配置' })
   const name = form.getByRole('textbox', { name: '画布名称' })
-  const steps = page.getByRole('navigation', { name: '工作台步骤' })
-  const division = steps.getByRole('button', { name: '场次划分〔本章〕' })
-  const storyboard = steps.getByRole('button', { name: '分镜与画布〔本场〕' })
+  const regions = page.getByRole('navigation', { name: '工作台区域' })
+  const division = regions.getByRole('button', { name: '场次划分' })
+  const storyboard = regions.getByRole('button', { name: '场次制作' })
   const list = page.getByRole('list', { name: '本场画布' })
 
   await page.goto(location)
@@ -90,6 +90,7 @@ try {
   await storyboard.click()
   await start.click()
   const defaultName = await name.inputValue()
+  const productionLocation = page.url()
   await form.getByText('后门的阿同等待。', { exact: false }).waitFor()
   await page.screenshot({ path: join(output, 'configuration.png') })
   await page.setViewportSize({ width: 390, height: 844 })
@@ -116,7 +117,7 @@ try {
   assert.equal(original.mode, 'complete')
   assert.equal(original.production_model_id, undefined)
   assert.equal(original.pending_modality, 'video')
-  assert.equal(page.url(), location)
+  assert.equal(page.url(), productionLocation)
 
   await start.click()
   await name.fill('忠实方案')
@@ -151,7 +152,7 @@ try {
   const row = summaries.find(item => item.name === '空白方案')
   const document = (await data(studio + '/generation-canvases/' + project + '/' + row.id)).document
   assert.deepEqual(document.cards.map(card => card.type), ['content.basis'])
-  assert.equal(page.url(), location)
+  assert.equal(page.url(), productionLocation)
   await division.click()
   await page.waitForURL(url => url.searchParams.get('step') === 'division')
 } finally {

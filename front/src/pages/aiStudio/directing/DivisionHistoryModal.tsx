@@ -10,8 +10,9 @@ const statuses: Record<string, string> = { queued: '等待执行', running: '分
 const statusLabel = (row: DivisionHistoryEntry) => row.status === 'succeeded' ? (row.save_relation === 'unknown' ? '保存关系未知' : row.save_relation === 'saved' ? '已保存' : '待保存方案') : statuses[row.status] || row.status
 
 /** 摘要分页、展开才读正文；查看和载入均由父页面维护草稿保护。 */
-export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, onClose, onView, onLoad }: {
+export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, onClose, onView, onLoad, targetTask }: {
   open: boolean; projectId: string; chapterId: string; refreshKey: number; onClose: () => void
+  targetTask?: string | null
   onView: (detail: DivisionVersionDetail) => void; onLoad: (selection: DivisionHistorySelection) => void
 }) {
   const [page, setPage] = useState(1)
@@ -22,13 +23,13 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<React.Key[]>([])
   const [retry, setRetry] = useState(0)
-  const currentScope = `${projectId}:${chapterId}:${open}`
+  const currentScope = `${projectId}:${chapterId}:${open}:${targetTask || ''}`
   const scope = useRef({ key: currentScope })
   if (scope.current.key !== currentScope) scope.current = { key: currentScope }
   const requests = useRef(new Map<string, { status: string }>())
-  useEffect(() => { setPage(1); setData(undefined); setError(''); setDetails({}); setErrors({}); setExpanded([]) }, [projectId, chapterId, open])
+  useEffect(() => { setPage(1); setData(undefined); setError(''); setDetails({}); setErrors({}); setExpanded([]) }, [currentScope])
   useEffect(() => {
-    if (!open) return
+    if (!open || targetTask) return
     let active = true
     let timer: ReturnType<typeof setTimeout>
     const load = async () => {
@@ -44,8 +45,8 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
     }
     void load()
     return () => { active = false; clearTimeout(timer) }
-  }, [open, projectId, chapterId, page, refreshKey, retry])
-  const readDetail = useCallback(async (row: DivisionHistoryEntry) => {
+  }, [open, projectId, chapterId, page, refreshKey, retry, targetTask])
+  const readDetail = useCallback(async (row: Pick<DivisionHistoryEntry, 'kind' | 'id' | 'status'>) => {
     const key = `${row.kind}:${row.id}`, requestScope = scope.current
     const request = { status: row.status }
     requests.current.set(key, request)
@@ -66,9 +67,27 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
         if (!response.data) throw new Error('旧回执读取失败')
         selection = { kind: 'receipt', detail: response.data }
       }
-      if (isCurrent()) setDetails(value => ({ ...value, [key]: selection }))
+      if (isCurrent()) {
+        setDetails(value => ({ ...value, [key]: selection }))
+        return selection
+      }
     } catch (cause) { if (isCurrent()) setErrors(value => ({ ...value, [key]: directingError(cause) })) }
   }, [projectId, chapterId])
+  const targetKey = `analysis:${targetTask}`
+  const target = details[targetKey]
+  useEffect(() => {
+    if (!open || !targetTask) return
+    let active = true
+    let timer: ReturnType<typeof setTimeout>
+    const read = async () => {
+      const result = await readDetail({ kind: 'analysis', id: targetTask, status: '' })
+      if (active && result?.kind === 'analysis' && ['queued', 'running'].includes(result.detail.analysis.status)) {
+        timer = setTimeout(() => void read(), 2500)
+      }
+    }
+    void read()
+    return () => { active = false; clearTimeout(timer) }
+  }, [open, targetTask, retry, readDetail])
   useEffect(() => {
     for (const row of data?.items || []) {
       const key = `${row.kind}:${row.id}`, selection = details[key]
@@ -109,6 +128,12 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
       })()}
     </div>
   }
+  if (targetTask) return <Modal title="划分任务详情" open={open} width={800} onCancel={onClose}
+    footer={<Button aria-label="关闭" onClick={onClose}>关闭</Button>}>
+    {errors[targetKey] ? <Alert type="error" showIcon message={errors[targetKey]}
+      action={<Button onClick={() => setRetry(value => value + 1)}>重试详情</Button>} />
+      : target?.kind === 'analysis' ? renderDetail(target.detail.analysis) : <Spin aria-label="正在读取划分任务" />}
+  </Modal>
   return <Modal title="历史版本" open={open} width={1000} onCancel={onClose} footer={<Button aria-label="关闭" onClick={onClose}>关闭</Button>}>
     {error && <Alert type="error" message={error} action={<Button onClick={() => setRetry(value => value + 1)}>重试列表</Button>} />}
     <Table<DivisionHistoryEntry> className="division-history-table" size="small" loading={loading} dataSource={data?.items || []} rowKey={row => `${row.kind}:${row.id}`}

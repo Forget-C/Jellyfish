@@ -60,7 +60,7 @@ try {
   await metadata.getByRole('textbox', { name: '场次标题' }).fill('推开门与照明')
   await metadata.getByRole('button', { name: /^保\s*存$/ }).click()
   await page.getByRole('heading', { name: '推开门与照明', exact: true }).waitFor()
-  await page.getByRole('link', { name: '返回章节', exact: true }).click()
+  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
   await page.waitForURL(chapterPage)
   await page.goto(`${origin}/projects/${project}?tab=dashboard`)
   await page.getByRole('button', { name: '推开门与照明 · 打开工作台管理', exact: true }).click()

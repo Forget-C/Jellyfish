@@ -29,9 +29,10 @@ function savedIntent(key: string): Intent | undefined {
 }
 
 /** 固定请求身份后提交，确认只刷新列表，离开配置不取消后台任务。 */
-export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, editable, actionHost, onAccepted }: {
+export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, editable, actionHost, onAccepted, onReviewSource }: {
   projectId: string; chapterId: string; sequenceId: string; editable: boolean
   actionHost: HTMLDivElement | null; onAccepted: (canvasId: string) => void
+  onReviewSource: () => void
 }) {
   const scope = { projectId, chapterId, sequenceId }
   const navigate = useNavigate()
@@ -153,7 +154,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
             <p>生成分镜设计和视频模型卡。打开卡片后可使用系统默认模型，也可手动选择。</p>
             {basisLoading ? <Spin aria-label="正在读取分镜依据" /> : basis
               ? <StoryboardBasisPreview basis={basis} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refreshBasis}
-                onOpenSource={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'division'))}
+                onOpenSource={onReviewSource}
                 onOpenObjects={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'objects'))} />
               : <Alert type="warning" showIcon message={basisError || '请重新核对本次采用依据'}
                 action={<Button size="small" onClick={refreshBasis}>重新读取依据</Button>} />}
