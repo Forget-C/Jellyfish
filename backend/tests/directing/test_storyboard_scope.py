@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.models.llm import Model, Provider
-from app.models.studio import Chapter, Character, CharacterImage
+from app.models.studio import Chapter, Character, CharacterImage, ProjectPropLink, Prop, PropImage
 from app.task_worker import TaskWorker
 from tests.directing.storyboard_scope_fixture import START, END, SCRIPT, complex_design
 from tests.directing.test_api import client_for
@@ -219,5 +219,85 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
                  'document': before_reextract['document']})
             assert undo['document'] == before_reextract['document']
 
+        finally:
+            worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monkeypatch):
+    """The van remains a reference in the detail shot without becoming a visible participant."""
+    alley = '雨夜，白色面包车停在胡同里。'
+    wait = '张三站在车旁等候。'
+    detail = '他右手握着甩棍。'
+    original = alley + wait + detail
+    state = '张三保持在车旁，白色面包车留在画外'
+
+    class ControlledModel:
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, messages):
+            args = json.loads(messages[1].content)
+            if 'mode' not in args:
+                output = {'objects': [{'kind': 'prop', 'name': '白色面包车', 'description': '停在胡同的车',
+                                       'excerpt': '白色面包车停在胡同里', 'asset_id': 'parked-van'}]}
+            else:
+                van = args['objects'][0]['id']
+                output = {'missed_objects': [{'id': 'person', 'kind': 'character', 'name': '张三', 'excerpt': wait}],
+                          'shots': [{'id': 'alley', 'excerpt': alley, 'object_ids': [van]},
+                                    {'id': 'wait', 'excerpt': wait, 'object_ids': ['person', van]},
+                                    {'id': 'detail', 'excerpt': detail, 'object_ids': ['person']}],
+                          'designs': [{'id': 'parked-van', 'card_type': 'direction.continuity', 'object_id': van,
+                                       'fields': {'before': {'state': 'fact', 'text': '白色面包车停在胡同里',
+                                                             'excerpt': alley, 'scope': {'shot_ids': ['detail']}},
+                                                  'following_constraints': {'state': 'proposal', 'text': state,
+                                                                            'scope': {'shot_ids': ['detail']}}}}]}
+            return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = original
+            db.add_all([Provider(id='rain-text', name='openai', base_url='https://fixture.test/v1', api_key='test'),
+                        Provider(id='rain-video', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
+                        Prop(id='parked-van', name='白色面包车', style='真人都市')])
+            await db.flush()
+            db.add_all([Model(id='rain-text-model', name='text', category='text', provider_id='rain-text'),
+                        Model(id='rain-video-model', name='viduq2', category='video', provider_id='rain-video'),
+                        ProjectPropLink(project_id='p1', prop_id='parked-van'),
+                        PropImage(prop_id='parked-van', file_id='image1')])
+        chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        chapter = await read_data(client, 'GET', chapter_path)
+        scene = await read_data(client, 'POST', chapter_path + '/sequences', {'title': '车旁等候', 'position': 0,
+            'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
+        endpoint = chapter_path + '/sequences/' + scene['id']
+        worker = TaskWorker(sessions)
+        try:
+            await read_data(client, 'POST', endpoint + '/objects/extractions', {'request_id': 'rain-objects', 'model_id': 'rain-text-model'})
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            objects = await read_data(client, 'GET', endpoint + '/objects')
+            await read_data(client, 'PUT', endpoint + '/objects/' + objects['objects'][0]['id'],
+                            {'expected_revision': objects['revision'], 'asset_id': 'parked-van', 'image_file_id': 'image1'})
+            task = await read_data(client, 'POST', endpoint + '/storyboards', {'request_id': 'rain-storyboard',
+                'text_model_id': 'rain-text-model', 'production_model_id': 'rain-video-model'})
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            finished = await read_data(client, 'GET', endpoint + '/storyboards/' + task['task_id'])
+            assert finished['status'] == 'succeeded', finished
+            candidate = finished['candidate']
+            path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+            await read_data(client, 'PUT', path, {'request_id': 'storyboard:' + task['task_id'],
+                'expected_revision': candidate['base_revision'], 'document': candidate['document']})
+            document = (await read_data(client, 'GET', path))['document']
+            story = document['storyboard']
+            van = next(row for row in story['objects'] if row['origin'] == 'prepared')
+            for index, shot in enumerate(story['shots']):
+                check = await read_data(client, 'POST', path + '/precheck', {'card_id': shot['model_card_ids'][0]})
+                assert check['can_run'], check['diagnostics']
+                assert [item['file_id'] for item in check['input']['media']] == ['image1']
+                assert (state in check['input']['text']) == (index == 2)
+            assert not any(edge['source_card'] == van['description_card_id'] and edge['target_card'] == story['shots'][2]['card_id']
+                           for edge in document['edges'])
         finally:
             worker.text_pool.shutdown(wait=False)
