@@ -4,10 +4,8 @@
  * 该组件只处理图片生成特有的输入、异步任务和结果呈现；会话选择及页面布局由
  * ExperimentLabPage 统一维护，从而避免图片实验室继续作为独立页面存在。
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Dropdown, Empty, Modal, Spin, Tag, Upload, message } from 'antd'
-import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
-import type { UploadFile } from 'antd'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Button, Spin, Tag, message } from 'antd'
 import {
   FilmService,
   LlmService,
@@ -26,6 +24,7 @@ import { ExperimentHistoryReferences } from '../components/ExperimentHistoryRefe
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
+import { ImageExperimentReferences } from '../components/ImageExperimentReferences'
 import { renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
@@ -102,6 +101,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [activeSessionId, setActiveSessionId] = useState(sessionId)
   const [models, setModels] = useState<ModelRead[]>([])
   const [files, setFiles] = useState<FileRead[]>([])
+  const [libraryState, setLibraryState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
   const {
@@ -110,9 +110,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   } = useExperimentTemplates(imagePromptCategories, draft, setDraft)
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [libraryOpen, setLibraryOpen] = useState(false)
   const [taskUpdates, setTaskUpdates] = useState<Record<string, Pick<ImageLabMessage, 'status' | 'error' | 'resultUrls'>>>({})
   const history = useExperimentHistory(activeSessionId)
   const { refresh: refreshHistory } = history
@@ -123,16 +121,23 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       : messageItem
   })
   const messages = persistedMessages
-  const selectedReferences = useMemo(() => referenceFileIds.map((id) => files.find((file) => file.id === id)).filter((file): file is FileRead => Boolean(file)), [files, referenceFileIds])
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
 
   useEffect(() => { setActiveSessionId(sessionId) }, [sessionId])
-  useEffect(() => {
-    void StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
-      .then((response) => setFiles((response.data?.items ?? []).filter((file) => file.type === 'image')))
-      .catch(() => message.error('加载图片资料库失败'))
+  const loadLibrary = useCallback(async () => {
+    setLibraryState('loading')
+    try {
+      const response = await StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
+      const images = (response.data?.items ?? []).filter(file => file.type === 'image')
+      // 保留列表读取期间新上传的文件。
+      setFiles(current => [...new Map([...images, ...current].map(file => [file.id, file])).values()])
+      setLibraryState('ready')
+    } catch {
+      setLibraryState('failed')
+    }
   }, [])
+  useEffect(() => { void loadLibrary() }, [loadLibrary])
 
   /** 首次打开图片模型选择器时按需读取可用模型。 */
   const loadModels = async () => {
@@ -146,7 +151,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     } catch { message.error('加载图片模型失败') } finally { setModelsLoading(false) }
   }
 
-  /** 首次打开提示词选择器时并行读取图片提示词分类。 */
   useEffect(() => {
     if (!runningTask?.taskId) return
     let cancelled = false
@@ -174,22 +178,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     const timer = window.setInterval(() => void poll(), 1500)
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [refreshHistory, runningTask?.taskId])
-
-  /** 选择模板时初始化变量，保证模板输入与自由输入不会混用。 */
-  /** 上传图片并立即加入本轮参考图及资料库缓存。 */
-  const handleUploadReference = async (file: UploadFile) => {
-    if (!file.type?.startsWith('image/')) { message.warning('只能上传图片作为参考图'); return false }
-    setUploading(true)
-    try {
-      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string } })
-      const uploaded = response.data
-      if (!uploaded) throw new Error('上传未返回文件信息')
-      setFiles((current) => [uploaded, ...current.filter((item) => item.id !== uploaded.id)])
-      setReferenceFileIds((current) => current.includes(uploaded.id) ? current : [...current, uploaded.id])
-      message.success('参考图已上传')
-    } catch { message.error('参考图上传失败') } finally { setUploading(false) }
-    return false
-  }
 
   /** 在首条有效输入前创建会话，再经固定统一入口提交图片异步任务。 */
   const handleSubmit = async () => {
@@ -270,8 +258,16 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const composer = <ExperimentComposer
       submitting={disabled} submitDisabled={disabled} submitLabel="生成图片" onSubmit={() => void handleSubmit()}
       options={<ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="图片模型" modelPlaceholder="选择已登记的图片模型" onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />}
-      contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2"><Dropdown trigger={['click']} disabled={uploading || disabled} dropdownRender={() => <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><Upload className="block w-full" accept="image/*" showUploadList={false} beforeUpload={handleUploadReference} disabled={uploading || disabled}><Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传图片</Button></Upload><Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => setLibraryOpen(true)}>从资料库选择</Button></div>}><Button size="small" icon={<PictureOutlined />} loading={uploading}>参考图</Button></Dropdown>{selectedReferences.map((file) => <div key={file.id} className="group relative h-9 w-9 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" title={file.name}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /><button type="button" aria-label={`移除参考图：${file.name}`} className="absolute inset-0 hidden items-center justify-center bg-slate-900/50 text-white group-hover:flex focus:flex" onClick={() => setReferenceFileIds((current) => current.filter((id) => id !== file.id))}><CloseOutlined /></button></div>)}{referenceFileIds.length ? <Button size="small" type="text" onClick={() => setReferenceFileIds([])} disabled={disabled}>清空</Button> : null}</div>}
+      contextActions={<ImageExperimentReferences
+        key={sessionId ?? 'draft'}
+        value={referenceFileIds}
+        onChange={setReferenceFileIds}
+        files={files}
+        libraryState={libraryState}
+        onRetryLibrary={() => void loadLibrary()}
+        onUploaded={file => setFiles(current => [file, ...current.filter(item => item.id !== file.id)])}
+        disabled={disabled}
+      />}
     >{replacementDialog}<ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>
-  const overlays = <Modal title="从资料库选择参考图" open={libraryOpen} onCancel={() => setLibraryOpen(false)} footer={<Button type="primary" onClick={() => setLibraryOpen(false)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{files.map((file) => { const selected = referenceFileIds.includes(file.id); return <button key={file.id} type="button" onClick={() => setReferenceFileIds((current) => selected ? current.filter((id) => id !== file.id) : [...current, file.id])} className={`overflow-hidden rounded border text-left ${selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button> })}</div>{!files.length ? <Empty description="资料库中暂无图片" /> : null}</Modal>
-  return render({ history: historyContent, composer, clearContent, overlays, disabled })
+  return render({ history: historyContent, composer, clearContent, overlays: null, disabled })
 }
