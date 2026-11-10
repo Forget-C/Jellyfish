@@ -1,6 +1,8 @@
 import changanCover from './sample-covers/changan.svg'
 import rainCover from './sample-covers/rain.svg'
 import orbitCover from './sample-covers/orbit.svg'
+import { HomeProjectProgress } from './HomeProjectProgress'
+import { HomeRecentSessions } from './HomeRecentSessions'
 import './home.css'
 
 // 现有接口按项目读取完整画布文档。跨项目展示使用独立示例，不为示例绑定业务对象。
@@ -28,5 +30,9 @@ export default function HomePage() {
         </article>)}
       </div>
     </section>
+    <div className="home-activity-grid">
+      <HomeProjectProgress />
+      <HomeRecentSessions />
+    </div>
   </div>
 }
