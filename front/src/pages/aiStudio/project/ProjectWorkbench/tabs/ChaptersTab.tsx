@@ -13,7 +13,7 @@ import { SequenceDetails } from '../../../directing/SequenceDetails'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { ChapterSourcePanel } from '../../../directing/ChapterSourcePanel'
 import { ChapterDeliveryPanel } from '../../../directing/ChapterDeliveryPanel'
-import { chapterProduction } from '../chapterProduction'
+import { chapterProduction } from '../../chapterProduction'
 import '../../../directing/workspace.css'
 
 /** 章节表格负责总览；仅打开指定章节后加载场次管理内容。 */

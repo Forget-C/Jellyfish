@@ -12,6 +12,7 @@ import {
 
 /** 实验室支持的生成模态。 */
 export type ExperimentLabType = ExperimentSessionRead['lab_type']
+const labTypes: ExperimentLabType[] = ['text', 'image', 'video']
 
 /** Hook 初始化时可选地恢复一个已知会话。 */
 export type UseExperimentSessionsOptions = {
@@ -40,10 +41,10 @@ function sortSessions(sessions: ExperimentSessionRead[]): ExperimentSessionRead[
 export function useExperimentSessions(options: UseExperimentSessionsOptions = {}) {
   const { initialSessionId, initialLabType } = options
   const [sessions, setSessions] = useState<ExperimentSessionRead[]>([])
-  const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>(initialSessionId)
+  const [selectedSessionId, setSelectedSessionId] = useState<string>()
   const [selectedLabType, setSelectedLabType] = useState<ExperimentLabType>(initialLabType ?? 'text')
   const [loading, setLoading] = useState(true)
-  const [loadFailed, setLoadFailed] = useState(false)
+  const [failedTypes, setFailedTypes] = useState<ExperimentLabType[]>([])
   const loadRevision = useRef(0)
   const selectionRevision = useRef(0)
   const creatingSessionsRef = useRef<Partial<Record<ExperimentLabType, Promise<ExperimentSessionRead>>>>({})
@@ -57,24 +58,33 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
     const request = ++loadRevision.current
     const selection = selectionRevision.current
     setLoading(true)
-    setLoadFailed(false)
+    setFailedTypes([])
     try {
-      const responses = await Promise.all(
-        (['text', 'image', 'video'] as ExperimentLabType[]).map((labType) =>
+      const responses = await Promise.allSettled(
+        labTypes.map((labType) =>
           StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType }),
         ),
       )
       if (request !== loadRevision.current) return
-      const nextSessions = sortSessions(responses.flatMap((response) => response.data ?? []))
+      const failures: ExperimentLabType[] = []
+      const nextSessions = sortSessions(responses.flatMap((response, index) => {
+        const labType = labTypes[index]
+        if (response.status === 'fulfilled' && Array.isArray(response.value.data)) {
+          return response.value.data.filter(session => session.lab_type === labType)
+        }
+        failures.push(labType)
+        return []
+      }))
       setSessions(nextSessions)
+      setFailedTypes(failures)
       if (selection !== selectionRevision.current) return
 
       const targetSession = nextSessions.find((session) => session.id === target.sessionId)
-      const restored = targetSession ?? (target.labType ? undefined : nextSessions[0])
+      // 有类型未读到时，显式地址仍待核实，不能改用别的会话。
+      const canRestoreLatest = !target.labType && (!target.sessionId || failures.length === 0)
+      const restored = targetSession ?? (canRestoreLatest ? nextSessions[0] : undefined)
       setSelectedSessionId(restored?.id)
       setSelectedLabType(restored?.lab_type ?? target.labType ?? 'text')
-    } catch {
-      if (request === loadRevision.current) setLoadFailed(true)
     } finally {
       if (request === loadRevision.current) setLoading(false)
     }
@@ -180,7 +190,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
     selectedSessionId,
     selectedLabType,
     loading,
-    loadFailed,
+    failedTypes,
     reloadSessions,
     selectDraft,
     selectSession,

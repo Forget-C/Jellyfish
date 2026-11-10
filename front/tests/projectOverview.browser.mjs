@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
-import { browserOutput } from './browser-runtime.mjs'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -19,6 +19,7 @@ const chapters = [
 ]
 const sequence = { id: 's1', position: 0, title: '收到信号', source_excerpt: '他按下按钮。', confirmed_design_count: 0 }
 let browser
+const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -87,7 +88,7 @@ try {
   await current.getByText('已有场次', { exact: true }).waitFor()
   await current.getByRole('button', { name: '进入场次', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('chapter') === 'manage')
-  await page.getByRole('dialog').filter({ hasText: '场次管理 · 无人应答' }).getByText('收到信号').waitFor()
+  await page.getByRole('dialog').filter({ hasText: '场次管理 · 无人应答' }).getByRole('button', { name: /收到信号/ }).waitFor()
   await page.goto(`${origin}/projects/p-manage?tab=chapters`)
   const chapter = page.getByRole('row').filter({ hasText: '无人应答' })
   await chapter.getByText('已有场次', { exact: true }).waitFor()
@@ -111,6 +112,5 @@ try {
   assert.deepEqual(writes, [])
   console.log('PASS project overview, chapter destinations, canvas cover, and mobile layout')
 } finally {
-  await browser?.close()
-  await server.close()
+  await cleanup()
 }

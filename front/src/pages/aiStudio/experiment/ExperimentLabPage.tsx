@@ -26,7 +26,7 @@ export default function ExperimentLabPage() {
   const initialLabType = useRef(initialSessionId ? undefined : requestedMode).current
   const sidebarTrigger = useRef<HTMLButtonElement>(null)
   const {
-    sessions, selectedSessionId, selectedLabType, loading, loadFailed, reloadSessions,
+    sessions, selectedSessionId, selectedLabType, loading, failedTypes, reloadSessions,
     selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages,
   } = useExperimentSessions({ initialSessionId, initialLabType })
 
@@ -40,10 +40,9 @@ export default function ExperimentLabPage() {
       void reloadSessions({ sessionId: routeSessionId })
       return
     }
-    if (requestedMode) {
-      skipSessionWriteRef.current = true
-      selectDraft(requestedMode)
-    }
+    skipSessionWriteRef.current = true
+    if (requestedMode) selectDraft(requestedMode)
+    else void reloadSessions({})
   }, [reloadSessions, requestedMode, searchParams, selectDraft])
 
   /** 草稿首提创建会话后补写 URL；已有会话切换均由显式操作写入。 */
@@ -102,7 +101,7 @@ export default function ExperimentLabPage() {
         labType={selectedLabType}
         sessions={sessions}
         loading={loading}
-        loadFailed={loadFailed}
+        failedTypes={failedTypes}
         onRetry={() => void reloadSessions({
           sessionId: searchParams.get('session') ?? undefined,
           labType: requestedMode,

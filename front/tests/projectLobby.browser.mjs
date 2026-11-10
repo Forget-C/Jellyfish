@@ -13,7 +13,7 @@ process.chdir(root)
 const projects = [
   { id: 'p1', name: '长安夜行', description: '夜市调查', style: '真人古装', progress: 25, stats: { chapters: 1, updated_at: '2026-09-15 10:00' } },
   { id: 'p2', name: '雨停以前', description: '雨夜街景', style: '真人都市', progress: 50, stats: { chapters: 1, updated_at: '2026-09-14 11:00' } },
-  { id: 'p3', name: '轨道尽头', style: '真人科幻', progress: 75, stats: { chapters: 1, updated_at: '2026-09-13 12:00' } },
+  { id: 'p3', name: '轨道尽头', style: '真人科幻', progress: 75, stats: { chapters: 1 } },
   { id: 'p4', name: '失联的项目', style: '真人都市', stats: { chapters: 0 } },
 ]
 const chapters = {
@@ -32,6 +32,7 @@ try {
   page.setDefaultTimeout(8000)
   const errors = []
   const deletes = []
+  const orderRequests = []
   let failProjects = false, failChapter = true, failDelete = true
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
@@ -46,7 +47,13 @@ try {
         projects.push(created)
         return respond(created)
       }
-      return failProjects ? route.fulfill({ status: 503, json: { detail: 'fixture unavailable' } }) : respond(list(projects))
+      if (failProjects) return route.fulfill({ status: 503, json: { detail: 'fixture unavailable' } })
+      const order = url.searchParams.get('order'), descending = url.searchParams.get('is_desc') === 'true'
+      orderRequests.push({ order, descending })
+      if (order !== 'updated_at') return respond(list(projects))
+      const updateOrder = ['p3', 'p4', 'p2', 'p1']
+      const ordered = [...projects].sort((left, right) => updateOrder.indexOf(left.id) - updateOrder.indexOf(right.id))
+      return respond(list(descending ? ordered.reverse() : ordered))
     }
     const projectId = pathname.match(/\/studio\/projects\/([^/]+)$/)?.[1]
     if (projectId) {
@@ -119,6 +126,9 @@ try {
   }
   await chooseDisplay('升序')
   await page.getByRole('article').first().getByRole('link', { name: '轨道尽头', exact: true }).waitFor()
+  assert.deepEqual(orderRequests[0], { order: 'updated_at', descending: true })
+  assert.deepEqual(orderRequests.at(-1), { order: 'updated_at', descending: false })
+  assert.equal(await projectCard('轨道尽头').getByText(/更新于/).count(), 0)
   await chooseDisplay('大卡视图')
   await card.getByText('夜市调查', { exact: true }).waitFor()
   await chooseDisplay('卡片视图')

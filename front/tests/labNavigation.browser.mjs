@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 process.chdir(root)
-const output = process.env.JELLYFISH_BROWSER_OUTPUT || '/tmp/jellyfish-lab-navigation'
+const output = await browserOutput('jellyfish-lab-navigation-')
 const origin = 'http://127.0.0.1:4197'
 const timestamp = '2026-09-15T00:00:00Z'
 const session = (id, lab_type, title) => ({ id, lab_type, title, updated_at: timestamp, created_at: timestamp })
@@ -17,22 +17,27 @@ const sessions = [
 ]
 let created = 0
 let failHistory = false
+let failedType
+let hideHistory = false
+let lookupImage
+let imageLookupPending = false
+const prematureImageMessages = []
 const message = (id, session_id, role, content, sequence) => ({ id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp })
 const frame = (event, sequence, data) =>
   'id: ' + sequence + '\nevent: ' + event + '\ndata: ' + JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data }) + '\n\n'
 
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false } })
 let browser
+const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(5000)
-  await mkdir(output, { recursive: true })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   const pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
-  await page.route('**/api/**', route => {
+  await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
     const respond = data => route.fulfill({ json: { success: true, data } })
@@ -45,8 +50,10 @@ try {
         created += 1
         return respond(newSession)
       }
-      if (failHistory) return route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
-      return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
+      const labType = url.searchParams.get('lab_type')
+      if (failHistory || failedType === labType) return route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
+      if (labType === 'image' && lookupImage) await lookupImage
+      return respond(hideHistory ? [] : sessions.filter(item => item.lab_type === labType))
     }
     if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'model-1', name: '验收文本模型', category: 'text' }] })
     if (url.pathname.endsWith('/new-text/stream')) {
@@ -61,6 +68,7 @@ try {
           }),
       })
     }
+    if (url.pathname.endsWith('/image-1/messages') && imageLookupPending) prematureImageMessages.push(url.pathname)
     if (url.pathname.endsWith('/messages')) return respond([])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
@@ -103,6 +111,39 @@ try {
   await page.getByText('验收回复', { exact: true }).waitFor()
   assert.equal(created, 1)
 
+  failedType = 'video'
+  await page.goto(origin + '/')
+  const homeSession = page.getByRole('region', { name: '最近实验室会话' }).getByRole('link', { name: /图片历史 1/ })
+  await homeSession.waitFor()
+  let releaseImageLookup
+  lookupImage = new Promise(resolve => { releaseImageLookup = resolve })
+  imageLookupPending = true
+  await homeSession.click()
+  await page.waitForURL(url => url.searchParams.get('session') === 'image-1')
+  await history.getByText('正在读取会话…', { exact: true }).waitFor()
+  imageLookupPending = false
+  releaseImageLookup()
+  lookupImage = undefined
+  await history.getByRole('button', { name: '图片历史 1', exact: true }).waitFor()
+  assert.equal(await history.getByRole('button', { name: '图片历史 1', exact: true }).getAttribute('aria-current'), 'page')
+  await imageInput.waitFor()
+  await page.getByRole('alert').getByText('部分会话读取失败', { exact: true }).waitFor()
+  assert.deepEqual(prematureImageMessages, [])
+  failedType = undefined
+  await page.getByRole('button', { name: '重试' }).click()
+  await page.getByText('部分会话读取失败', { exact: true }).waitFor({ state: 'hidden' })
+  assert.equal(await history.getByRole('button', { name: '图片历史 1', exact: true }).getAttribute('aria-current'), 'page')
+
+  hideHistory = true
+  await page.goto(origin + '/lab')
+  await history.getByText('暂无会话', { exact: true }).waitFor()
+  await types.getByRole('button', { name: '图片', exact: true }).click()
+  await imageInput.waitFor()
+  await page.goBack()
+  await page.waitForURL(origin + '/lab')
+  await textInput.waitFor()
+  hideHistory = false
+
   failHistory = true
   await page.goto(origin + '/lab?mode=text')
   await page.getByRole('alert').getByText('读取会话失败').waitFor()
@@ -131,6 +172,5 @@ try {
   assert.deepEqual(pageErrors, [])
   console.log('Lab navigation, existing history, first submission and mobile focus verified.')
 } finally {
-  await browser?.close()
-  await server.close()
+  await cleanup()
 }

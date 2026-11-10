@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 process.chdir(root)
-const output = process.env.JELLYFISH_BROWSER_OUTPUT || '/tmp/jellyfish-home-activity'
+const output = await browserOutput('jellyfish-home-activity-')
 const origin = 'http://127.0.0.1:4798'
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 4798, strictPort: true, open: false } })
 const list = items => ({ items, pagination: { total: items.length, page: 1, page_size: 10, total_pages: 1 } })
@@ -17,12 +17,12 @@ const partialChapter = { id: 'ch2', index: 1, project_id: 'p2', title: '待确�
 const session = { id: 'image1', lab_type: 'image', title: '真实图片会话', last_message_preview: '最后一条消息摘要', updated_at: '2026-11-10T10:30:00Z', created_at: '2026-11-09T10:00:00Z' }
 let state = 'loaded'
 let browser
+const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(5000)
-  await mkdir(output, { recursive: true })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
@@ -109,6 +109,5 @@ try {
   await sessions.getByRole('link', { name: new RegExp(session.title) }).waitFor()
   console.log('Home activity layout, live links, samples, empty states and retry verified.')
 } finally {
-  await browser?.close()
-  await server.close()
+  await cleanup()
 }

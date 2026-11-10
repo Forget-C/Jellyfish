@@ -6,7 +6,7 @@ import { useChapters } from '../hooks/useProjectData'
 import { directingError } from '../../../directing/common'
 import { chapterActionLocation, chapterLocation, sequenceAction, sequenceLocation } from '../../../directing/chapterNavigation'
 import { readRecentWork, readWorkspaceContext } from '../../../directing/workspaceContext'
-import { chapterProduction } from '../chapterProduction'
+import { chapterProduction } from '../../chapterProduction'
 import { ProjectCanvasPreview } from '../ProjectCanvasPreview'
 import '../project-production.css'
 
@@ -44,7 +44,7 @@ export function DashboardTab() {
               <h3>第 {chapter.index} 章 · {chapter.title}</h3>
               <p>{chapter.sequenceCount === undefined ? '场次数量待核对' : `${chapter.sequenceCount} 个场次`}</p>
               <Space wrap>
-                <Button type="primary" onClick={() => navigate(chapterActionLocation(projectId, chapter.id, production.target))}>{production.overviewAction}</Button>
+                <Button type="primary" onClick={() => navigate(chapterActionLocation(projectId, chapter.id, production.target))}>{production.primaryAction}</Button>
                 <Link to={chapterLocation(projectId)}>查看章节列表 →</Link>
               </Space>
             </div> : <Empty description="创建第一章开始创作">

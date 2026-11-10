@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 process.chdir(root)
-const output = process.env.JELLYFISH_BROWSER_OUTPUT || '/tmp/jellyfish-management-navigation'
+const output = await browserOutput('jellyfish-management-navigation-')
 const origin = 'http://127.0.0.1:4196'
 const sections = [
   ['模型管理', '/models'], ['资产库', '/assets'], ['提示词模板', '/prompts'],
@@ -20,12 +20,12 @@ const agent = { id: 'agent1', name: '验收 Agent', type: 'plot', description: '
 const model = { id: 'model1', name: '验收文本模型', category: 'text', provider_id: 'provider1', params: {} }
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 4196, strictPort: true, open: false } })
 let browser
+const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(5000)
-  await mkdir(output, { recursive: true })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   await page.route('**/api/**', route => {
     const { pathname } = new URL(route.request().url())
@@ -117,6 +117,5 @@ try {
   }
   console.log('Management navigation verified at 1440px, 900px and 375px.')
 } finally {
-  await browser?.close()
-  await server.close()
+  await cleanup()
 }

@@ -12,7 +12,7 @@ type ExperimentSessionSidebarProps = {
   sessions: ExperimentSessionRead[]
   labType: ExperimentLabType
   loading: boolean
-  loadFailed: boolean
+  failedTypes: ExperimentLabType[]
   onRetry: () => void
   onChange: (session: ExperimentSessionRead) => void
   onStartDraft: (labType: ExperimentLabType) => void
@@ -25,7 +25,7 @@ type ExperimentSessionSidebarProps = {
  *
  * 新建入口只选择实验模态并进入草稿态；首条有效提交由页面创建持久化会话。
  */
-export function ExperimentSessionSidebar({ value, sessions, labType, loading, loadFailed, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
+export function ExperimentSessionSidebar({ value, sessions, labType, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
   const [renameOpen, setRenameOpen] = useState(false)
   const [targetSession, setTargetSession] = useState<ExperimentSessionRead | null>(null)
   const [title, setTitle] = useState('')
@@ -80,10 +80,10 @@ export function ExperimentSessionSidebar({ value, sessions, labType, loading, lo
       <h2>最近会话</h2>
       <Button type="text" size="small" icon={<PlusOutlined />} aria-label="新建对话" onClick={() => onStartDraft(labType)}>新建对话</Button>
     </div>
-    {loadFailed && <Alert type="error" message="读取会话失败"
+    {failedTypes.length > 0 && <Alert type="error" message={failedTypes.length === 3 ? '读取会话失败' : '部分会话读取失败'}
       action={<Button type="text" size="small" aria-label="重试" onClick={onRetry}>重试</Button>} />}
     <nav className="experiment-session-list" aria-label="当前类型会话" aria-busy={loading}>
-      {!visibleSessions.length && !loadFailed && <p role="status">{loading ? '正在读取会话…' : '暂无会话'}</p>}
+      {!visibleSessions.length && !failedTypes.includes(labType) && <p role="status">{loading ? '正在读取会话…' : '暂无会话'}</p>}
       {visibleSessions.map((session) => {
         const selected = session.id === value
         const menuItems = getMenuItems(session)

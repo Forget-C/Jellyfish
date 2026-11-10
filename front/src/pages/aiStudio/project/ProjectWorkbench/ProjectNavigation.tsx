@@ -15,6 +15,19 @@ export function ProjectNavigation({ projectId, projectName }: { projectId: strin
     : projectArea === 'chapters' ? 'chapters'
       : resolveProjectTab(new URLSearchParams(search).get('tab'))
 
+  const restoreTriggerFocus = () => {
+    requestAnimationFrame(() => {
+      const trigger = triggerRef.current
+      if (trigger?.getAttribute('aria-expanded') === 'false') trigger.focus({ preventScroll: true })
+    })
+  }
+  const closeDrawer = () => {
+    if (!open) return
+    setOpen(false)
+    // Escape 可打断展开动画，焦点恢复不依赖动画完成。
+    restoreTriggerFocus()
+  }
+
   useEffect(() => { setOpen(false) }, [pathname, search])
 
   useEffect(() => {
@@ -25,7 +38,7 @@ export function ProjectNavigation({ projectId, projectName }: { projectId: strin
   }, [])
 
   const menu = <nav className="app-project-navigation" aria-label="项目导航">
-    <Link to="/projects" className="app-project-back" onClick={() => setOpen(false)}>
+    <Link to="/projects" className="app-project-back" onClick={closeDrawer}>
       <ArrowLeftOutlined aria-hidden="true" /><span>返回项目列表</span>
     </Link>
     <strong className="app-project-name" title={projectName}>{projectName || '项目'}</strong>
@@ -36,7 +49,7 @@ export function ProjectNavigation({ projectId, projectName }: { projectId: strin
         className="app-project-nav-link"
         to={projectTabLocation(projectId, item.key)}
         aria-current={item.key === current ? 'page' : undefined}
-        onClick={() => setOpen(false)}
+        onClick={closeDrawer}
       ><span aria-hidden="true">{item.icon}</span><span>{item.label}</span></Link>)}
     </div>)}
   </nav>
@@ -53,8 +66,8 @@ export function ProjectNavigation({ projectId, projectName }: { projectId: strin
       placement="left"
       width={272}
       open={open}
-      onClose={() => setOpen(false)}
-      afterOpenChange={visible => { if (!visible) triggerRef.current?.focus() }}
+      onClose={closeDrawer}
+      afterOpenChange={visible => { if (!visible) restoreTriggerFocus() }}
     >{menu}</Drawer>
   </>
 }

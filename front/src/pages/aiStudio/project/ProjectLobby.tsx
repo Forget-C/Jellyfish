@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert, Button, Checkbox, Dropdown, Empty, Form, Input, InputNumber,
   Modal, Popconfirm, Select, Space, Spin, Switch, Tag, message,
@@ -77,6 +77,7 @@ function ProjectLobby() {
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const loadRevision = useRef(0)
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
@@ -99,6 +100,7 @@ function ProjectLobby() {
   const [editForm] = Form.useForm()
 
   const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+  const newestFirst = sortKey !== 'updatedAt' || sortOrder === 'desc'
 
   const newProjectId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -108,6 +110,7 @@ function ProjectLobby() {
   }
 
   const load = useCallback(async () => {
+    const revision = ++loadRevision.current
     setLoading(true)
     setLoadError(false)
     try {
@@ -117,19 +120,22 @@ function ProjectLobby() {
         const res = await StudioProjectsService.listProjectsApiV1StudioProjectsGet({
           page: 1,
           pageSize: 10,
+          order: 'updated_at',
+          isDesc: newestFirst,
         })
         if (!res.data?.items) throw new Error('项目列表不可用')
-        setProjects(res.data.items.map(toUIProject))
+        if (revision === loadRevision.current) setProjects(res.data.items.map(toUIProject))
       }
     } catch {
-      setLoadError(true)
+      if (revision === loadRevision.current) setLoadError(true)
     } finally {
-      setLoading(false)
+      if (revision === loadRevision.current) setLoading(false)
     }
-  }, [useMock])
+  }, [newestFirst, useMock])
 
   useEffect(() => {
     void load()
+    return () => { loadRevision.current += 1 }
   }, [load])
 
   const readProjectStage = useCallback(async (projectId: string): Promise<ProjectStageSummary | 'error'> => {
@@ -188,6 +194,8 @@ function ProjectLobby() {
       return stage !== 'error' && (stage?.key === 'edit_raw' || stage?.key === 'create_first_chapter')
     })
 
+    // 更新时间不一定出现在列表 DTO 中，真实项目按服务端返回的顺序显示。
+    if (sortKey === 'updatedAt' && !useMock) return next
     next.sort((a, b) => {
       let av: string | number = ''
       let bv: string | number = ''
@@ -215,7 +223,7 @@ function ProjectLobby() {
     })
 
     return next
-  }, [projects, search, filterTab, sortKey, sortOrder, projectStageMap])
+  }, [projects, search, filterTab, sortKey, sortOrder, projectStageMap, useMock])
 
   const handleToggleSelect = (id: string, checked: boolean) => {
     setSelectedIds((prev) =>
@@ -338,6 +346,7 @@ function ProjectLobby() {
       setProjects((prev) =>
         Array.isArray(prev) ? prev.map((x) => (x.id === ui.id ? ui : x)) : prev
       )
+      if (sortKey === 'updatedAt' && !useMock) void load()
     } catch {
       message.error('更新失败')
     }

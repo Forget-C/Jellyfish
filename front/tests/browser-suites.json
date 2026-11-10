@@ -143,6 +143,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
+    "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "management-navigation", "lab-navigation", "legacy-labs"],
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],
     "performance-design": ["generation-canvas-narrative-spatial-objects", "generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
     "canvas-design": ["generation-canvas-associations","generation-canvas-design-focus","generation-canvas-multipath-protection","generation-canvas-candidate-states","generation-canvas-design-names","generation-canvas-design-metadata","generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
