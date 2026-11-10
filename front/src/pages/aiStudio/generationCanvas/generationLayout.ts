@@ -2,13 +2,16 @@ import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { GenerationCanvasGroup } from '../../../services/generated'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 
-/** 宿主可为新布局提供首卡、位置和视口，公共画布继续保存实际坐标。 */
+type CanvasLayoutPlacement = {
+  anchorId: string
+  arrange: GraphArrange
+  focus: (sizes: Record<string, GraphSize>, width: number, height: number) => { left: number; top: number; scale: number }
+}
+
+/** 宿主可为首次布局和主动整理提供位置及视口，公共画布保存实际坐标。 */
 export type GenerationCanvasLayoutPolicy = {
-  initial?: {
-    anchorId: string
-    arrange: GraphArrange
-    focus: (sizes: Record<string, GraphSize>, width: number, height: number) => { left: number; top: number; scale: number }
-  }
+  initial?: CanvasLayoutPlacement
+  explicit?: CanvasLayoutPlacement
 }
 
 /** 编组和堆叠的可见外框同时用于绘制、连线和主动整理。 */

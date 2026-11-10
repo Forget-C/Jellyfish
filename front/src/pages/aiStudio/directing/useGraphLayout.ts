@@ -6,6 +6,7 @@ import type { CanvasPoint } from '../../../components/canvas/geometry'
 export type GraphLayoutScope = {
   storageKey: string; viewId: string; anchorId: string; validIds: string[]; validViewIds?: string[]
   initialTop?: number; initialLeft?: number; focusUnplacedAnchor?: () => { left: number; top: number; scale: number }; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
+  rearrangeTarget?: { anchorId: string; focus: (sizes: Record<string, GraphSize>) => { left: number; top: number; scale: number } }
   onStorageError?: (message: string) => void
   arrange: GraphArrange
   parseView?: (raw: string | null) => GraphView | undefined
@@ -109,9 +110,14 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
     if (!scope || nodes.some(node => !measured[node.id])) return
     setState(previous => {
       const sizes = Object.fromEntries(nodes.map(node => [node.id, node.size || measured[node.id]]))
-      const positions = scope.arrange(nodes, sizes, viewportWidth, scope.anchorId)
-      const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
-      const transform = { ...previous.view.transform, x: (scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16)) - anchor.x * previous.view.transform.scale, y: (scope.initialTop || 64) - anchor.y * previous.view.transform.scale }
+      const target = scope.rearrangeTarget
+      const anchorId = target?.anchorId ?? scope.anchorId
+      const positions = scope.arrange(nodes, sizes, viewportWidth, anchorId)
+      const anchor = positions[anchorId] || { x: 0, y: 0 }
+      const focus = target?.focus(sizes)
+      const scale = focus?.scale ?? previous.view.transform.scale
+      const transform = { scale, x: (focus?.left ?? scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16)) - anchor.x * scale,
+        y: (focus?.top ?? (scope.initialTop || 64)) - anchor.y * scale }
       return { ...previous, undo: previous.view, view: { ...previous.view, sizes, positions, transform, manuallyPlaced: [] }, ready: true }
     })
   }
