@@ -80,9 +80,9 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const adopted = activeVisualContinuity(document, card.id)
         const updated = adopted && newContinuityResult(continuityResults(document, card.id, runs), adopted.origin, runs)
         return <><span title={label}>{label}</span>
-          {adopted ? <span>已采用前镜画面</span> : laterShot &&
-            <span title="未采用前镜画面，直接生成可能出现画面不连续">未采用前镜画面</span>}
-          {updated && <span role="status">来源镜头有新结果</span>}
+          {updated ? <span role="status" title="来源镜头有新结果。当前仍使用原选帧。">来源镜头有新结果</span>
+            : adopted ? <span>已采用前镜画面</span> : laterShot &&
+              <span title="未采用前镜画面，直接生成可能出现画面不连续">未采用前镜画面</span>}
           <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>
             {videoActionLabels[runStatus ?? ''] || '生成视频'}
           </Button></>

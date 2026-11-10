@@ -178,6 +178,18 @@ try {
   }
   await compare(predecessor)
   await compare(replacement)
+  const waitForComparisonLayout = (width) => page.waitForFunction(viewport => {
+    const panel = document.querySelector('.ant-modal[role="dialog"]')
+    if (!panel || getComputedStyle(panel).opacity !== '1' || [...panel.classList].some(name => name.startsWith('ant-zoom-'))) return false
+    const box = panel.getBoundingClientRect()
+    return innerWidth === viewport && box.width > 0 && box.x >= -0.5 && box.right <= viewport + 0.5
+  }, width)
+  await waitForComparisonLayout(1440)
+  await page.screenshot({ path: join(output, 'continuity-update-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await waitForComparisonLayout(390)
+  await page.screenshot({ path: join(output, 'continuity-update-narrow.png') })
+  await page.setViewportSize({ width: 1440, height: 960 })
   await dialog.getByRole('button', { name: '保留当前采用', exact: true }).click()
   assert.deepEqual(await request(canvas), beforeUpdate)
   assert.equal((await request(canvas + '/cards/' + later + '/compile')).video_media.frames.first.file_id, frame.file_id)
@@ -350,6 +362,18 @@ try {
   const restoredPause = await poll(() => request(secondCanvas), item => item.document.storyboard.visual_continuity?.[afterId]?.binding_id === null,
     'undo did not restore the exact inactive suspension')
   assert.deepEqual(restoredPause.document.storyboard.visual_continuity[afterId], paused)
+  await afterCard.getByRole('button', { name: '卡片操作' }).click()
+  await afterCard.getByRole('button', { name: '视觉承接', exact: true }).click()
+  await compare(freshSource)
+  await page.waitForFunction(() => !document.querySelector('[aria-label="视频时间位置"]')?.disabled)
+  await slider.fill('200')
+  await purpose.selectOption('first_frame')
+  await adopt.click()
+  await dialog.waitFor({ state: 'hidden' })
+  const readopted = (await request(secondCanvas)).document.storyboard.visual_continuity[afterId]
+  assert.ok(readopted.binding_id)
+  assert.deepEqual(readopted.suspended, paused.suspended)
+  assert.equal((await request(secondCanvas + '/cards/' + afterId + '/compile')).video_media.subjects.length, 0)
 
   console.log('Storyboard visual continuity: later-shot adoption, actual provider input, one save, undo, and reopen')
 } finally {
