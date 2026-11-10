@@ -1,9 +1,10 @@
 """Merge a verified storyboard into the existing canvas by stable identity."""
 
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardDiffCard
 from app.schemas.generation_canvas import CanvasDocument, NamedImageReferenceCard, ObjectDescriptionCard
+from app.services.directing.storyboard_assembly import storyboard_design_stack_id
 from app.services.directing.storyboard_reference_choices import carry_reference_choices, expired_reference_uses
 from app.services.directing.storyboard_reference_cleanup import card_name, clean_lost_references
 from app.services.generation_canvas.catalog import CARD_TITLES
@@ -53,10 +54,37 @@ def _invalidated_reference_outputs(cards):
     return invalidated
 
 
+def _retain_edge_ids(current: CanvasDocument, candidate: CanvasDocument) -> CanvasDocument:
+    """沿用完全相同连线的身份，避免兼容连线重建误触堆叠保护。"""
+    incoming_ids = {edge.id for edge in candidate.edges}
+    previous_ids = {edge.id for edge in current.edges}
+    available = defaultdict(deque)
+    for edge in current.edges:
+        if edge.id not in incoming_ids:
+            available[edge.model_dump_json(exclude={'id'})].append(edge.id)
+    renamed = {}
+    for edge in candidate.edges:
+        matches = available.get(edge.model_dump_json(exclude={'id'}))
+        if edge.id not in previous_ids and matches:
+            renamed[edge.id] = matches.popleft()
+    if not renamed:
+        return candidate
+    edges = []
+    for edge in candidate.edges:
+        anchor = edge.order_anchor
+        if anchor and anchor.edge_id in renamed:
+            anchor = anchor.model_copy(update={'edge_id': renamed[anchor.edge_id]})
+        edges.append(edge.model_copy(update={'id': renamed.get(edge.id, edge.id), 'order_anchor': anchor}))
+    order = {key: {port: [renamed.get(edge_id, edge_id) for edge_id in ids] for port, ids in ports.items()}
+             for key, ports in candidate.input_order.items()}
+    return candidate.model_copy(update={'edges': edges, 'input_order': order})
+
+
 def plan_application(current: CanvasDocument, candidate: CanvasDocument,
                      command: StoryboardApplication, *, prior: CanvasDocument | None = None,
                      production_ports: list[str] | None = None) -> tuple[CanvasDocument, StoryboardDiff]:
     """Resolve stable identities and preserve the actual document outside extraction ownership."""
+    candidate = _retain_edge_ids(current, candidate)
     previous = {card.id: card for card in current.cards}
     incoming = {card.id: card for card in candidate.cards}
     previous_origins = current.storyboard.origins if current.storyboard else {}
@@ -116,7 +144,13 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
     # Existing cards keep their current groups or their deliberate absence from one.
     groups = {group.id: group.model_copy(update={'card_ids': [key for key in group.card_ids if key in final]})
               for group in current.groups}
+    existing_design_stacks = ({storyboard_design_stack_id(),
+                               *(storyboard_design_stack_id(shot.shot_id) for shot in current.storyboard.shots)}
+                              if current.storyboard else set())
     for group in candidate.groups:
+        # 既有镜头的新设计作为独立卡保留，即使原设计堆叠已经被解除。
+        if group.kind == 'stack' and group.id in existing_design_stacks:
+            continue
         new_members = [key for key in group.card_ids if key in final and key not in previous]
         existing = groups.get(group.id)
         if new_members and (not existing or existing.kind != 'stack'):

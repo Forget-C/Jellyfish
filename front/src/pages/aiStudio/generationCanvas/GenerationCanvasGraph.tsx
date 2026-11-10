@@ -319,16 +319,21 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const isCardVisible = (id: string) => !hidden.has(id)
   const visibleCardIds = cards.map(({ id }) => id).filter(isCardVisible)
   const initialLayout = layoutPolicy?.initial
+  const explicitLayout = layoutPolicy?.explicit
   const arrangeCards: GraphArrange = (items, sizes, width, anchorId, retained) => {
     const cards = items.filter(item => !resultsById.has(item.id))
     const arranged = retained
       ? arrange(cards, sizes, width, anchorId, { ...historicalPositions.current, ...retained })
-      : arrangeGenerationCards(cards.map(card => card.id), groups, retainedPositions.current, sizes)
-    const base = initialLayout && retained && !retained[initialLayout.anchorId]
+      : explicitLayout?.arrange(cards, sizes, width, anchorId, retainedPositions.current) ??
+        arrangeGenerationCards(cards.map(card => card.id), groups, retainedPositions.current, sizes)
+    const saved = retained && (layoutPolicy?.placeAdditions ? { ...historicalPositions.current, ...retained } : retained)
+    const initial = initialLayout && retained && !retained[initialLayout.anchorId]
+    const fallback = initial
       ? initialLayout.arrange(cards, sizes, width, anchorId, retained)
-      : document.storyboard && retained
-        ? placeStoryboardCards(arranged, retained, groups, document.storyboard.origins, sizes)
+      : document.storyboard && saved
+        ? placeStoryboardCards(arranged, saved, groups, document.storyboard.origins, sizes)
         : arranged
+    const base = !initial && saved && layoutPolicy?.placeAdditions ? layoutPolicy.placeAdditions(fallback, saved, sizes, width) : fallback
     const basePoint = (id: string) => base[id] || { x: 0, y: 0 }
     const { cardFrames, groupFrames } = generationVisibleFrames(visibleCardIds, viewGroups, basePoint, sizes)
     const positions = placeLinkedResults(linkedResults, base, sizes, [...cardFrames, ...groupFrames.values()], retained && { ...historicalPositions.current, ...retained })
@@ -351,6 +356,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80,
     anchorId: initialLayout?.anchorId ?? (cards[0]?.id || ''),
     focusUnplacedAnchor: initialLayout && (() => initialLayout.focus(cardSizes, viewportWidth, container.current?.clientHeight || window.innerHeight)),
+    rearrangeTarget: explicitLayout && { anchorId: explicitLayout.anchorId,
+      focus: sizes => explicitLayout.focus(sizes, viewportWidth, container.current?.clientHeight || window.innerHeight) },
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
     onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, viewportWidth)
   const arrangeLayout = () => { if (!arrangementBlocked) layout.rearrange() }
