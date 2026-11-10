@@ -17,7 +17,8 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
+  const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
+  page = await context.newPage()
   page.setDefaultTimeout(8000)
   const errors = []
   const workspace = makeWorkspace()
@@ -124,7 +125,7 @@ try {
   for (const [index, [path, label]] of canvases.entries()) {
     const colors = await canvasColors(path, label)
     assert.deepEqual(colors, originalCanvasColors[index])
-    assert.match(colors.canvas.backgroundImage, /radial-gradient/)
+    assert.equal(colors.canvas.backgroundColor, 'rgb(13, 13, 13)')
     assert.notEqual(colors.overlay.backgroundColor, 'rgb(255, 255, 255)')
   }
 
