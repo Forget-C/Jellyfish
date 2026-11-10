@@ -3,6 +3,7 @@ import { Avatar, Breadcrumb, Button, ConfigProvider, Dropdown, Grid } from 'antd
 import { CheckOutlined, MoreOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import brandLogo from '../../logo.svg'
 import { appearances, useAppStore } from '../store/useAppStore'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
@@ -69,7 +70,7 @@ function OrdinaryLayout() {
   return <ConfigProvider theme={ordinaryPageTheme}>
     <div className="app-shell" data-appearance={appearance}>
       <header className="app-topbar">
-        <Link to="/" className="app-brand" aria-label={t('brandHome')}><img src="/logo.svg" alt="" /><span>Jellyfish</span></Link>
+        <Link to="/" className="app-brand" aria-label={t('brandHome')}><img src={brandLogo} alt="" /><span>Jellyfish</span></Link>
         <nav aria-label={t('primaryNavigation')} className="app-primary-navigation">
           {mainNavigation.map(item => <Link key={item.key} to={item.key === 'management' ? lastManagementPage : item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
         </nav>
