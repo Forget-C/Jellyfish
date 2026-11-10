@@ -103,10 +103,12 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
     <WorkbenchButton icon={<UploadOutlined />} disabled={disabled || uploading} loading={uploading} onClick={() => input.current?.click()}>{empty ? '上传图片' : '替换图片'}</WorkbenchButton>
     <WorkbenchButton variant="quiet" icon={<PlusOutlined />} disabled={disabled || uploading} onClick={openLibrary}>{empty ? '从素材中选择' : '选择素材'}</WorkbenchButton>
   </div>
-  const imageReadonly = disabled && <small>只读，无法上传或替换图片</small>
+  const fixedFrame = 'frame_origin' in card && !!card.frame_origin
+  const imageReadonly = fixedFrame ? <small>视频选帧素材，可通过卡片引用查看来源</small>
+    : disabled && <small>只读，无法上传或替换图片</small>
   return <Space direction="vertical" style={{ width: '100%' }}>
     {type === 'image' ? (card.file_id ? <ImageContentReader key={card.file_id} fileId={card.file_id} origin={card.origin}>
-      {imageActions()}
+      {!fixedFrame && imageActions()}
       {imageReadonly}
     </ImageContentReader> : <section className="generation-image-content" data-empty={true} data-portrait={false} aria-label="图片内容编辑">
       <div className="generation-image-preview">

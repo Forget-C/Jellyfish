@@ -36,6 +36,7 @@ export function cloneCard(card: GenerationCard): GenerationCard {
     if (key in copy && copy[key as keyof typeof copy]) Object.assign(copy, { [key]: crypto.randomUUID() })
   }
   if ('origin' in copy) delete copy.origin
+  if ('frame_origin' in copy) delete copy.frame_origin
   if ('detached_results' in copy) delete copy.detached_results
   return copy
 }

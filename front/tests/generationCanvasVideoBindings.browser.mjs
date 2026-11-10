@@ -96,8 +96,23 @@ try {
   await history.getByRole('button', { name: '另存为视频内容卡', exact: true }).click()
   await history.getByText('已另存为独立内容卡，保留原运行来源', { exact: true }).waitFor()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
+  await history.getByRole('button', { name: '选帧为图片', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: '选帧为图片', exact: true })
+  const slider = picker.getByRole('slider', { name: '视频时间位置' })
+  await slider.waitFor()
+  await page.waitForFunction(() => !document.querySelector('[aria-label="视频时间位置"]')?.disabled)
+  await slider.fill('800')
+  await picker.getByRole('button', { name: '保存为图片' }).click()
+  await picker.waitFor({ state: 'hidden' })
   const result = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
   assert.equal(result.cards.filter(card => card.type === 'content.video' && card.origin?.run_id === run.run_id).length, 1)
+  const frame = result.cards.find(card => card.frame_origin?.result?.run_id === run.run_id)
+  const historyNode = (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data.runs
+    .find(item => item.id === run.run_id).nodes[0]
+  assert.equal(frame.frame_origin.result_set_id, historyNode.result_set_id)
+  assert.equal(frame.frame_origin.source_file_id, historyNode.outputs[0].file_id)
+  assert.equal(frame.frame_origin.at_ms, 800)
+
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   await page.locator('[data-card-id="m"]').press('Enter')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)

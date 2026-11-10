@@ -337,9 +337,37 @@ class MediaContentCard(CardDefinition):
     origin: CanvasContentOrigin | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
+class CanvasVideoFrameResult(BaseModel):
+    """用于定位某个已完成视频结果，不使用可能变化的当前输出。"""
+    model_config = ConfigDict(extra='forbid')
+    run_id: str = Field(min_length=1, max_length=64)
+    node_id: str = Field(min_length=1, max_length=64)
+    position: int = Field(ge=0)
+
+
+class CanvasVideoFrameSource(BaseModel):
+    """选帧来源绑定具体文件及视频时间，可来自素材卡或固定生成结果。"""
+    model_config = ConfigDict(extra='forbid')
+    source_card_id: str = Field(min_length=1, max_length=64)
+    source_file_id: str = Field(min_length=1, max_length=36)
+    at_ms: int = Field(ge=0, lt=86_400_000, strict=True)
+    result: CanvasVideoFrameResult | None = None
+
+
+class CanvasVideoFrameRequest(CanvasVideoFrameSource):
+    """准备选帧素材的可重试请求，不直接保存画布文档。"""
+    request_id: str = Field(min_length=1, max_length=64)
+
+
+class CanvasVideoFrameOrigin(CanvasVideoFrameSource):
+    """图片来源与提取时的视频结果集合身份；原视频不构成图片的运行依赖。"""
+    result_set_id: str | None = None
+
+
 class ImageContentCard(MediaContentCard):
     """图片内容卡只有一个图片输出位置。"""
     type: Literal['content.image'] = 'content.image'
+    frame_origin: CanvasVideoFrameOrigin | None = Field(default=None, exclude_if=lambda value: value is None)
     output_ports: ClassVar[tuple[str, ...]] = ('image',)
 
 

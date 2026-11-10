@@ -4,13 +4,15 @@ import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import type { CanvasNodeRead, CanvasRunRead } from '../../../services/generated'
 import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import type { VideoFrameSource } from './SaveVideoFrameDialog'
 import { MediaPreview } from './MediaContentEditor'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 
 /** Canvas-level records remain accessible even after the editable source card is removed. */
-export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCancel, cancelling, onClose }: {
+export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onSelectVideoFrame, onCancel, cancelling, onClose }: {
   runs: CanvasRunRead[]; targetRun?: string | null; targetNode?: string | null; disabled: boolean;
   onSave: (node: CanvasNodeRead, position: number) => Promise<boolean>;
+  onSelectVideoFrame: (source: VideoFrameSource) => void;
   onCancel: (runId: string, nodeId?: string) => Promise<void>; cancelling: Set<string>; onClose: () => void;
 }) {
   const [open, setOpen] = useState(false), [saving, setSaving] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState('')
@@ -64,7 +66,10 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
             <p>{node.status === 'succeeded' ? '完整成果' : '未完成成果'} · 输出 {position + 1}</p>
             {output.text && output.text !== node.text && <CanvasTextPreview text={output.text} label="成果正文" />}
             {output.file_id && <MediaPreview fileId={output.file_id} type={output.modality} />}
-            {['text', 'image', 'video'].includes(output.modality) && <Space><Button disabled={disabled || !!saving} loading={saving === `${node.id}:${position}`} onClick={() => void save(node, position)}>另存为{({ text: '文本', image: '图片', video: '视频' } as Record<string, string>)[output.modality]}内容卡</Button></Space>}
+            {['text', 'image', 'video'].includes(output.modality) && <Space><Button disabled={disabled || !!saving} loading={saving === `${node.id}:${position}`} onClick={() => void save(node, position)}>另存为{({ text: '文本', image: '图片', video: '视频' } as Record<string, string>)[output.modality]}内容卡</Button>
+              {node.status === 'succeeded' && node.result_set_id && output.modality === 'video' && output.file_id && <Button disabled={disabled || !!saving}
+                onClick={() => onSelectVideoFrame({ source_card_id: node.card_id, source_file_id: output.file_id!,
+                  result: { run_id: run.id, node_id: node.id, position } })}>选帧为图片</Button>}</Space>}
           </section>)}
           {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
         </section>)}

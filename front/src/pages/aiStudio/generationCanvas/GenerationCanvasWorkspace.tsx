@@ -10,6 +10,7 @@ import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
+import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
 import { CheckArchive } from './CheckArchive'
 import { SceneStoryboardReview } from '../directing/SceneStoryboardReview'
 import { directingError } from '../directing/common'
@@ -142,6 +143,16 @@ export function GenerationCanvasWorkspace({
   useEffect(() => { if (runtime.preview) setPreviewOpen(true) }, [runtime.preview])
   const change: typeof edit = (next, arrangement) => { runtime.invalidate(); edit(next, arrangement) }
   const scope = `${projectId}:${canvasId}`, latestScope = useRef(scope); latestScope.current = scope
+  const [frameSelection, setFrameSelection] = useState<{ scope: string; source: VideoFrameSource }>()
+  const frameDisabled = !ownership.editable || !!editor.recovery || editor.conflict || editor.initialApplying
+  const selectVideoFrame = (source: VideoFrameSource) => setFrameSelection({ scope, source })
+  const saveSelectedFrame = async (card: ImageContentCard) => {
+    if (latestScope.current !== scope || !ownership.canEdit()) return false
+    change(previous => ({ ...previous, cards: previous.cards?.some(item => item.id === card.id)
+      ? previous.cards : [...(previous.cards || []), card] }))
+    return save()
+  }
+
   const retainedCopies = useRef(new Map<string, TextContentCard | ImageContentCard | VideoContentCard>())
 
   const saveOutput = async (node: { id: string; run_id: string }, position: number) => {
@@ -185,7 +196,7 @@ export function GenerationCanvasWorkspace({
         <div ref={setPrimaryHost} className="generation-primary-host" />
         {renderSceneActions?.({ ...management, document, editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
         {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
-          disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
+          disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
@@ -222,12 +233,14 @@ export function GenerationCanvasWorkspace({
       }} open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
         {runtime.preview && <RunPreview canvas={document || undefined} catalog={catalog.current} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), diagnostic: target, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
+    {canvasId && frameSelection?.scope === scope && <SaveVideoFrameDialog key={scope} projectId={projectId} canvasId={canvasId}
+      source={frameSelection.source} disabled={frameDisabled} onSave={saveSelectedFrame} onClose={() => setFrameSelection(undefined)} />}
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
       <GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={change} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
-        renderModelCardAction={renderModelCardAction}
+        renderModelCardAction={renderModelCardAction} onSelectVideoFrame={frameDisabled ? undefined : selectVideoFrame}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </div>}

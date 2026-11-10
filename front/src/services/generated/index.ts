@@ -63,6 +63,7 @@ export type { ApiResponse_ExtractedFrame_ } from './models/ApiResponse_Extracted
 export type { ApiResponse_FeedbackRead_ } from './models/ApiResponse_FeedbackRead_';
 export type { ApiResponse_FileDetailRead_ } from './models/ApiResponse_FileDetailRead_';
 export type { ApiResponse_FileRead_ } from './models/ApiResponse_FileRead_';
+export type { ApiResponse_ImageContentCard_ } from './models/ApiResponse_ImageContentCard_';
 export type { ApiResponse_ImageGenerationOptionsRead_ } from './models/ApiResponse_ImageGenerationOptionsRead_';
 export type { ApiResponse_InstructionBasisRead_ } from './models/ApiResponse_InstructionBasisRead_';
 export type { ApiResponse_InstructionCheckComparison_ } from './models/ApiResponse_InstructionCheckComparison_';
@@ -263,6 +264,9 @@ export type { CanvasStoryboardShot } from './models/CanvasStoryboardShot';
 export type { CanvasStreamConnection } from './models/CanvasStreamConnection';
 export type { CanvasSummaryField } from './models/CanvasSummaryField';
 export type { CanvasTarget } from './models/CanvasTarget';
+export type { CanvasVideoFrameOrigin } from './models/CanvasVideoFrameOrigin';
+export type { CanvasVideoFrameRequest } from './models/CanvasVideoFrameRequest';
+export type { CanvasVideoFrameResult } from './models/CanvasVideoFrameResult';
 export type { CanvasView } from './models/CanvasView';
 export type { ChapterAssemblyRead } from './models/ChapterAssemblyRead';
 export type { ChapterCreate } from './models/ChapterCreate';
