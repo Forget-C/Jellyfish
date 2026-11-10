@@ -189,7 +189,7 @@ try {
 
   await page.getByRole('button', { name: /新建项目/ }).click()
   const createDialog = page.getByRole('dialog', { name: '新建短剧项目' })
-  await createDialog.getByRole('textbox', { name: '项目名称', exact: true }).fill('新的制作项目')
+  await createDialog.getByRole('textbox', { name: /项目名称/ }).fill('新的制作项目')
   await createDialog.getByRole('button', { name: '创建并进入' }).click()
   await page.waitForURL(url => url.pathname === `/projects/${projects.find(project => project.name === '新的制作项目')?.id}`)
   assert.deepEqual(errors, [])
