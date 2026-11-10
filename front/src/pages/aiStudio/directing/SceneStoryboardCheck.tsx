@@ -36,8 +36,9 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
   const { projectId, chapterId, sequenceId } = scope
   const canvasId = current.id
   const [task, setTask] = useState<StoryboardTaskRead>()
+  const [appliedCheck, setAppliedCheck] = useState<StoryboardTaskRead>()
   const [submitting, setSubmitting] = useState(false)
-  const [reportOpen, setReportOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState<'latest' | 'applied'>()
   const [error, setError] = useState('')
   const intent = useRef<{ requestId: string; taskId?: string; revision?: number }>()
   useEffect(() => {
@@ -50,6 +51,17 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
   }, [projectId, chapterId, sequenceId, canvasId, current.revision])
 
   const taskId = task?.task_id
+  const appliedId = current.document.storyboard?.continuity_check_task_id
+  useEffect(() => {
+    setAppliedCheck(undefined)
+    if (!appliedId || appliedId === taskId) return
+    let live = true
+    const request = Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: appliedId })
+    void request.then(({ data }) => {
+      if (live) setAppliedCheck(data ?? undefined)
+    }).catch(cause => { if (live) setError(directingError(cause)) })
+    return () => { live = false; request.cancel() }
+  }, [appliedId, taskId, projectId, chapterId, sequenceId, current.revision])
   const polling = active(task)
   useEffect(() => {
     if (!taskId || !polling) return
@@ -94,22 +106,27 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
   }
 
   const retryable = task?.status === 'failed' || task?.status === 'cancelled'
+  const appliedRisks = appliedCheck?.review?.issues.some(issue => issue.kind === 'conflict')
+  const visibleReport = reportOpen === 'applied' ? appliedCheck : task
   return <>
     <Button disabled={!editable || polling || saving} loading={submitting} onClick={() => void submit()}>
       {intent.current ? '核实检查提交' : '检查分镜连续性'}
     </Button>
     {task && <span role="status">{statusLabel(task)}</span>}
     {retryable && !intent.current && <Button disabled={!editable || submitting} onClick={() => void submit(task?.task_id)}>重试检查</Button>}
-    {(task?.review || task?.error || error) && <Button onClick={() => setReportOpen(true)}>查看检查报告</Button>}
+    {(task?.review || task?.error || error) && <Button onClick={() => setReportOpen('latest')}>查看检查报告</Button>}
+    {appliedRisks && <Button onClick={() => setReportOpen('applied')}>
+      {appliedCheck?.review_state === 'stale' ? '已接受的检查风险依据已变' : '查看已接受的检查风险'}
+    </Button>}
     {task?.pending_application && task.review_state !== 'stale' && <SceneStoryboardReview savedCheck
       key={task.task_id} scope={{ ...scope, taskId: task.task_id }} editable={editable} prepare={prepare} reload={reload}
       applying={saving} report={task.review} candidate={task.candidate} onRepaired={setTask}
       apply={choice => apply({ chapterId, sequenceId, taskId: task.task_id }, choice)} />}
-    <WorkbenchModal title="分镜连续性检查报告" open={reportOpen} onCancel={() => setReportOpen(false)} footer={null}>
-      {task && <p>{statusLabel(task)} · 检查已保存的分镜设计与依赖</p>}
-      {(error || task?.error) && <Alert type="warning" showIcon message={error || task?.error} />}
-      {!!task?.review?.issues.length && <StoryboardReviewFindings report={task.review}
-        candidate={task.candidate ?? { base_revision: current.revision, document: current.document }} />}
+    <WorkbenchModal title="分镜连续性检查报告" open={!!reportOpen} onCancel={() => setReportOpen(undefined)} footer={null}>
+      {visibleReport && <p>{statusLabel(visibleReport)} · 检查已保存的分镜设计与依赖</p>}
+      {(error || visibleReport?.error) && <Alert type="warning" showIcon message={error || visibleReport?.error} />}
+      {!!visibleReport?.review?.issues.length && <StoryboardReviewFindings report={visibleReport.review}
+        candidate={visibleReport.candidate ?? { base_revision: current.revision, document: current.document }} />}
     </WorkbenchModal>
   </>
 }

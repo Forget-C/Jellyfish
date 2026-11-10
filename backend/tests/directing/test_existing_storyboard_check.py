@@ -138,6 +138,18 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
                 'expected_revision': undone['revision'], 'document': manual})
             checked = await work(stale)
             assert checked['review_state'] == 'stale'
+            latest = await read_data(client, 'GET', canvas_path)
+            stale_path = storyboards + '/' + stale['task_id']
+            diff = await read_data(client, 'POST', stale_path + '/diff', {'expected_revision': latest['revision']})
+            proof = diff['continuity_review']
+            stale_apply = await client.post(stale_path + '/apply', json={'expected_revision': latest['revision'],
+                'review_token': proof['token'], 'accepted_conflict_ids': [choice['id'] for choice in proof['conflicts']]})
+            assert stale_apply.status_code == 409 and stale_apply.json()['data']['code'] == 'STORYBOARD_REVIEW_STALE'
+            forged = latest['document']
+            forged['storyboard']['continuity_check_task_id'] = stale['task_id']
+            ordinary_save = await client.put(canvas_path, json={'request_id': 'forged-check-application',
+                'expected_revision': latest['revision'], 'document': forged})
+            assert ordinary_save.status_code == 409
             assert len(extractions) == 1
         finally:
             worker.text_pool.shutdown(wait=False)
