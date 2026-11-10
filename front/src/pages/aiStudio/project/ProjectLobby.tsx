@@ -4,7 +4,11 @@ import {
   Modal, Popconfirm, Select, Space, Spin, Switch, Tag, message,
 } from 'antd'
 import type { MenuProps } from 'antd'
-import { ArrowRightOutlined, DeleteOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import {
+  ArrowRightOutlined, BookOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined,
+  FileTextOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, QuestionCircleOutlined,
+  RedoOutlined, ScissorOutlined, SearchOutlined, VideoCameraOutlined,
+} from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { chapters as mockChapters, type Project } from '../../../mocks/data'
@@ -24,9 +28,9 @@ import './project-lobby.css'
 type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'chapters'
 const desktopToolbar = '(min-width: 1024px)'
-type ProjectView = Omit<Project, 'stats'> & {
-  stats: Partial<Project['stats']>
-}
+type ProjectView = Omit<Project, 'stats'>
+type ProjectCardStage = ProjectStageSummary & { chapterCount?: number }
+const stageIcons = { gold: EditOutlined, blue: ScissorOutlined, green: VideoCameraOutlined }
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: 'updatedAt', label: '最近更新' },
@@ -35,11 +39,6 @@ const sortOptions: { key: SortKey; label: string }[] = [
 ]
 const toUIProject = (p: ProjectRead): ProjectView => {
   const stats = (p.stats ?? {}) as Record<string, unknown>
-  const getNum = (key: string) => {
-    const v = stats[key]
-    return typeof v === 'number' && Number.isFinite(v) ? v : undefined
-  }
-
   const updatedAt =
     (typeof stats.updated_at === 'string' && stats.updated_at) ||
     (typeof stats.updatedAt === 'string' && stats.updatedAt) ||
@@ -53,12 +52,6 @@ const toUIProject = (p: ProjectRead): ProjectView => {
     seed: p.seed ?? 0,
     unifyStyle: p.unify_style ?? true,
     progress: p.progress ?? 0,
-    stats: {
-      chapters: getNum('chapters'),
-      roles: getNum('roles'),
-      scenes: getNum('scenes'),
-      props: getNum('props'),
-    },
     updatedAt,
   }
 }
@@ -91,7 +84,7 @@ function ProjectLobby() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [projectStageMap, setProjectStageMap] = useState<Record<string, ProjectStageSummary | 'error'>>({})
+  const [projectStageMap, setProjectStageMap] = useState<Record<string, ProjectCardStage | 'error'>>({})
   const {
     options: projectStyleOptions,
     videoRatioOptions,
@@ -134,20 +127,26 @@ function ProjectLobby() {
     return () => { loadRevision.current += 1 }
   }, [load])
 
-  const readProjectStage = useCallback(async (projectId: string): Promise<ProjectStageSummary | 'error'> => {
+  const readProjectStage = useCallback(async (projectId: string): Promise<ProjectCardStage | 'error'> => {
     try {
       if (useMock) {
         const chapters = mockChapters.filter(chapter => chapter.projectId === projectId).map(chapter => ({
           id: chapter.id, index: chapter.index, title: chapter.title,
           raw_text: chapter.summary ?? '', sequence_count: chapter.sequenceCount,
         }))
-        return summarizeProjectChapters(projectId, chapters)
+        return { ...summarizeProjectChapters(projectId, chapters), chapterCount: chapters.length }
       }
       const response = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({
         projectId, page: 1, pageSize: 100,
       })
-      if (!response.data?.items) return 'error'
-      return summarizeProjectChapters(projectId, response.data.items.filter(chapter => chapter.project_id === projectId))
+      const data = response.data
+      if (!data?.items || data.items.some(chapter => chapter.project_id !== projectId)) return 'error'
+      const total = data.pagination?.total
+      if (!data.items.length && total > 0) return 'error'
+      return {
+        ...summarizeProjectChapters(projectId, data.items),
+        chapterCount: Number.isSafeInteger(total) && total >= data.items.length ? total : undefined,
+      }
     } catch {
       return 'error'
     }
@@ -193,28 +192,22 @@ function ProjectLobby() {
     // 更新时间不一定出现在列表 DTO 中，真实项目按服务端返回的顺序显示。
     if (sortKey === 'updatedAt' && !useMock) return next
     next.sort((a, b) => {
-      let av: string | number = ''
-      let bv: string | number = ''
-      if (sortKey === 'name') {
-        av = a.name
-        bv = b.name
-      } else if (sortKey === 'chapters') {
-        if (a.stats.chapters === undefined || b.stats.chapters === undefined) {
-          return Number(b.stats.chapters !== undefined) - Number(a.stats.chapters !== undefined)
+      if (sortKey === 'chapters') {
+        const aStage = projectStageMap[a.id]
+        const bStage = projectStageMap[b.id]
+        const aCount = aStage === 'error' ? undefined : aStage?.chapterCount
+        const bCount = bStage === 'error' ? undefined : bStage?.chapterCount
+        if (aCount === undefined || bCount === undefined) {
+          return Number(bCount !== undefined) - Number(aCount !== undefined)
         }
-        av = a.stats.chapters
-        bv = b.stats.chapters
-      } else {
-        // 没有更新时间的项目始终排在已知更新时间之后。
-        if (!a.updatedAt || !b.updatedAt) return Number(Boolean(b.updatedAt)) - Number(Boolean(a.updatedAt))
-        av = a.updatedAt
-        bv = b.updatedAt
+        return sortOrder === 'asc' ? aCount - bCount : bCount - aCount
       }
 
-      if (typeof av === 'number' && typeof bv === 'number') {
-        return sortOrder === 'asc' ? av - bv : bv - av
+      // 没有更新时间的项目始终排在已知更新时间之后。
+      if (sortKey === 'updatedAt' && (!a.updatedAt || !b.updatedAt)) {
+        return Number(Boolean(b.updatedAt)) - Number(Boolean(a.updatedAt))
       }
-      const res = String(av).localeCompare(String(bv))
+      const res = sortKey === 'name' ? a.name.localeCompare(b.name) : a.updatedAt.localeCompare(b.updatedAt)
       return sortOrder === 'asc' ? res : -res
     })
 
@@ -408,11 +401,15 @@ function ProjectLobby() {
               {filteredSorted.map(project => {
                 const summary = projectStageMap[project.id]
                 const stage = summary === 'error' ? undefined : summary
+                const noChapter = stage?.key === 'create_first_chapter'
+                const StatusIcon = stage
+                  ? noChapter ? PlusOutlined : stage.tone ? stageIcons[stage.tone] : QuestionCircleOutlined
+                  : summary === 'error' ? ExclamationCircleOutlined : LoadingOutlined
                 const identity = <>
                   <ProjectCover projectId={project.id} demo={useMock} />
                   <header className="project-lobby-card-heading">
-                    <h2>{project.name}</h2>
-                    <p>{project.style}</p>
+                    <h2 title={project.name}>{project.name}</h2>
+                    <span className="project-lobby-style">{project.style}</span>
                   </header>
                 </>
                 return (
@@ -445,18 +442,31 @@ function ProjectLobby() {
                     </div>
                     <div className="project-lobby-card-body">
                       <div className="project-lobby-stage">
-                        {stage?.chapterLabel && <p>{stage.chapterLabel}</p>}
-                        <Tag bordered={false} className="project-lobby-status" data-tone={stage?.tone}>
-                          {stage?.status ?? (summary === 'error' ? '章节状态读取失败' : '正在读取章节状态')}
+                        {stage?.chapterLabel && <p className="project-lobby-chapter">
+                          <FileTextOutlined aria-hidden />
+                          <span title={stage.chapterLabel}>{stage.chapterLabel}</span>
+                        </p>}
+                        <Tag bordered={false} icon={<StatusIcon aria-hidden />} className="project-lobby-status" data-tone={stage?.tone}>
+                          {noChapter ? '尚未创建章节' : stage?.status ?? (summary === 'error' ? '章节状态读取失败' : '正在读取章节状态')}
                         </Tag>
                       </div>
-                      {!multiSelectMode && stage && (
-                        <Link className="project-lobby-next" to={stage.href}>{stage.action}<ArrowRightOutlined aria-hidden /></Link>
+                      {(stage?.chapterCount !== undefined || stage?.sequenceCount !== undefined) && (
+                        <div className="project-lobby-counts">
+                          {stage.chapterCount !== undefined && <span><BookOutlined aria-hidden />共 {stage.chapterCount} 章</span>}
+                          {stage.sequenceCount !== undefined && <span><VideoCameraOutlined aria-hidden />本章 {stage.sequenceCount} 场</span>}
+                        </div>
                       )}
-                      {!multiSelectMode && summary === 'error' && (
-                        <Button onClick={() => void retryProjectStage(project.id)}>重试读取章节</Button>
-                      )}
-                      {project.updatedAt && <footer className="project-lobby-meta">更新于 {project.updatedAt}</footer>}
+                      <footer className="project-lobby-card-footer">
+                        {project.updatedAt && <span className="project-lobby-meta" title={`更新于 ${project.updatedAt}`}>更新于 {project.updatedAt}</span>}
+                        {!multiSelectMode && stage && (
+                          <Link className="project-lobby-next" to={stage.href}>{stage.action}<ArrowRightOutlined aria-hidden /></Link>
+                        )}
+                        {!multiSelectMode && summary === 'error' && (
+                          <button type="button" className="project-lobby-next" onClick={() => void retryProjectStage(project.id)}>
+                            重试读取章节<RedoOutlined aria-hidden />
+                          </button>
+                        )}
+                      </footer>
                     </div>
                   </article>
                 )

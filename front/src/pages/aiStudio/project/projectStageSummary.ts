@@ -5,6 +5,7 @@ import { chapterProduction } from './chapterProduction'
 export type ProjectStageSummary = {
   key: 'edit_raw' | 'sequences' | 'create_first_chapter'
   chapterLabel?: string
+  sequenceCount?: number
   status: string
   tone?: 'gold' | 'blue' | 'green'
   action: string
@@ -20,10 +21,13 @@ export function summarizeProjectChapters(projectId: string, chapters: ChapterPre
   const base = chapterLocation(projectId)
   if (!chapter) return { key: 'create_first_chapter', status: '待创建章节', tone: 'gold', action: '创建第一章', href: `${base}&create=1` }
 
-  const production = chapterProduction({ rawText: chapter.raw_text, sequenceCount: chapter.sequence_count })
+  const count = chapter.sequence_count
+  const sequenceCount = count !== undefined && Number.isSafeInteger(count) && count >= 0 ? count : undefined
+  const production = chapterProduction({ rawText: chapter.raw_text, sequenceCount })
   return {
     key: production.target === 'edit' ? 'edit_raw' : 'sequences',
     chapterLabel: `第 ${chapter.index} 章 · ${chapter.title}`,
+    sequenceCount,
     status: production.state,
     tone: cardTones[production.tone],
     action: production.primaryAction,

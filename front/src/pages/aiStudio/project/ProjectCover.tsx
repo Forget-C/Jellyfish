@@ -18,7 +18,15 @@ export function ProjectCover({ projectId, demo }: { projectId: string; demo: boo
           <img src={source} alt="" onError={() => setFailed(true)} />
           <span className="project-lobby-cover-label">示例封面</span>
         </>
-      ) : <VideoCameraOutlined aria-hidden />}
+      ) : (
+        <span
+          className="project-lobby-default-cover"
+          data-pattern={Array.from(projectId).reduce((index, character) => (index * 31 + character.charCodeAt(0)) % 3, 0)}
+          aria-hidden="true"
+        >
+          <VideoCameraOutlined />
+        </span>
+      )}
     </div>
   )
 }

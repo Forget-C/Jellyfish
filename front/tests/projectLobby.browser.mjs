@@ -22,7 +22,7 @@ const chapters = {
   p2: { id: 'ch2', project_id: 'p2', index: 3, title: '便利店的灯', raw_text: '门还开着。', sequence_count: 0 },
   p3: { id: 'ch3', project_id: 'p3', index: 1, title: '无人应答', raw_text: '天线停止转动。', sequence_count: 1 },
 }
-const list = items => ({ items, total: items.length, page: 1, page_size: 100, pagination: { total: items.length, page: 1, page_size: 100, total_pages: 1 } })
+const list = (items, total = items.length) => ({ items, total, page: 1, page_size: 100, pagination: { total, page: 1, page_size: 100, total_pages: 1 } })
 const server = await createServer({ root, server: { host: '127.0.0.1', port, strictPort: true, open: false } })
 let browser, page
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -80,7 +80,7 @@ try {
     if (pathname.endsWith('/studio/chapters')) {
       const projectId = url.searchParams.get('project_id')
       if (projectId === 'p4' && failChapter) return route.fulfill({ status: 503, json: { detail: 'fixture unavailable' } })
-      return respond(list(chapters[projectId] ? [chapters[projectId]] : []))
+      return respond(list(chapters[projectId] ? [chapters[projectId]] : [], projectId === 'p2' ? 4 : undefined))
     }
     const overview = Object.values(chapters).find(item => pathname.endsWith(`/directing/chapters/${item.id}/overview`))
     if (overview) return respond({ chapter_id: overview.id, title: overview.title, raw_text: overview.raw_text, sequences: [], task_ids: [] })
@@ -186,10 +186,22 @@ try {
   await page.keyboard.press('Escape')
   await menu.waitFor({ state: 'hidden' })
   await chooseDisplay('降序')
+  await chooseDisplay('章节数量')
+  await page.getByRole('article').first().getByText('共 4 章', { exact: true }).waitFor()
+  await chooseDisplay('最近更新')
 
-  for (const width of [1440, 1024, 375]) {
-    await page.setViewportSize({ width, height: 900 })
+  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 900], [375, 812]]) {
+    await page.setViewportSize({ width, height })
     await card.getByRole('link', { name: '编辑原文', exact: true }).waitFor()
+    if (width >= 1366) {
+      const links = [
+        card.getByRole('link', { name: '编辑原文', exact: true }),
+        projectCard('轨道尽头').getByRole('link', { name: '进入场次', exact: true }),
+        projectCard(longProjectName).getByRole('link', { name: '创建第一章', exact: true }),
+      ]
+      const boxes = await Promise.all(links.map(link => link.boundingBox()))
+      assert.ok(boxes.every(box => Math.abs(box.y - boxes[0].y) <= 1 && box.height === 32), '同一行的下一步按钮应等高并对齐')
+    }
     await page.waitForFunction(wide => {
       const search = document.querySelector('[aria-label="搜索项目"]')
       const create = document.querySelector('.project-lobby-create')

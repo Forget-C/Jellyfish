@@ -12,6 +12,7 @@ const server = await createServer({ root, server: { host: '127.0.0.1', port: 479
 const list = items => ({ items, pagination: { total: items.length, page: 1, page_size: 10, total_pages: 1 } })
 const project = { id: 'p1', name: '真实项目验收', style: '现实主义', progress: 85 }
 const partialProject = { id: 'p2', name: '缺少场次信息的项目', style: '现实主义' }
+const newProject = { id: 'p3', name: '尚未建章的项目', style: '现实主义' }
 const chapter = { id: 'ch1', index: 2, project_id: 'p1', title: '第二章验收', raw_text: '', sequence_count: 0 }
 const partialChapter = { id: 'ch2', index: 1, project_id: 'p2', title: '待确认章节' }
 const session = { id: 'image1', lab_type: 'image', title: '真实图片会话', last_message_preview: '最后一条消息摘要', updated_at: '2026-11-10T10:30:00Z', created_at: '2026-11-09T10:00:00Z' }
@@ -35,13 +36,13 @@ try {
     if (pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     if (pathname.endsWith('/projects')) {
       if (state === 'error') return fail()
-      return respond(list(state === 'empty' ? [] : [project, partialProject]))
+      return respond(list(state === 'empty' ? [] : [project, partialProject, newProject]))
     }
     if (pathname.endsWith('/projects/p1')) return respond(project)
     if (pathname.endsWith('/chapters')) {
       const id = url.searchParams.get('project_id')
       if (state === 'partial-error' && id === 'p2') return fail()
-      return respond(list(id === 'p1' ? [chapter] : [partialChapter]))
+      return respond(list(id === 'p1' ? [chapter] : id === 'p2' ? [partialChapter] : []))
     }
     if (pathname.endsWith('/chapters/ch1')) return respond(chapter)
     if (pathname.endsWith('/experiment-sessions')) {
@@ -55,10 +56,6 @@ try {
   })
 
   await page.goto(origin)
-  const quickStart = page.getByRole('region', { name: '快捷开始', exact: true })
-  for (const [label, mode] of [['文本实验', 'text'], ['图片实验', 'image'], ['视频实验', 'video']]) {
-    assert.equal(await quickStart.getByRole('link', { name: label }).getAttribute('href'), '/lab?mode=' + mode)
-  }
   const progress = page.getByRole('region', { name: '项目进展', exact: true })
   const sessions = page.getByRole('region', { name: '最近实验室会话', exact: true })
   const canvases = page.getByRole('region', { name: '最近更新的画布', exact: true })
@@ -68,6 +65,7 @@ try {
   assert.ok(canvasHeading.y - main.y <= 32, '首页首个可见区块应紧接页面顶栏')
   await progress.getByRole('link', { name: project.name, exact: true }).waitFor()
   await progress.getByText('第 2 章 · 第二章验收', { exact: true }).waitFor()
+  assert.equal(await progress.getByRole('listitem').count(), 3)
   await progress.getByText('待补原文', { exact: true }).first().waitFor()
   assert.equal(await progress.getByText('85%').count(), 0)
   const example = progress.getByRole('region', { name: '项目进展示例', exact: true })
@@ -76,14 +74,36 @@ try {
   assert.equal(await example.getByRole('button').count(), 0)
   await sessions.getByRole('link', { name: new RegExp(session.title) }).waitFor()
   await sessions.getByText(session.last_message_preview, { exact: false }).first().waitFor()
-  assert.equal(await sessions.getByRole('listitem').count(), 5)
+  assert.equal(await sessions.getByRole('listitem').count(), 3)
+  for (const [label, mode] of [['新建文本实验', 'text'], ['新建图片实验', 'image'], ['新建视频实验', 'video']]) {
+    assert.equal(await sessions.getByRole('link', { name: label }).getAttribute('href'), '/lab?mode=' + mode)
+  }
   await sessions.getByRole('link', { name: '打开实验室' }).waitFor()
   assert.ok((await canvases.boundingBox()).y < (await progress.boundingBox()).y)
   assert.equal((await progress.boundingBox()).y, (await sessions.boundingBox()).y)
-  const actionBounds = await progress.getByRole('link', { name: '编辑原文', exact: true }).boundingBox()
-  const stateBounds = await progress.getByText('待补原文', { exact: true }).first().boundingBox()
-  assert.ok(actionBounds.x - stateBounds.x - stateBounds.width < 120)
-  await page.screenshot({ path: output + '/1440-home.png', animations: 'disabled' })
+  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 440]]) {
+    await page.setViewportSize({ width, height })
+    const left = await progress.boundingBox()
+    const right = await sessions.boundingBox()
+    assert.ok(Math.abs(left.width - right.width) <= 1 && left.height === right.height)
+    assert.ok(await page.getByRole('main').evaluate(element => element.scrollHeight <= element.clientHeight + 1))
+    for (const link of [progress.getByRole('link', { name: '查看全部项目' }), sessions.getByRole('link', { name: '打开实验室' })]) {
+      const bounds = await link.boundingBox()
+      assert.ok(bounds.y + bounds.height <= height)
+    }
+    if (height === 440) {
+      const lastSession = sessions.getByRole('listitem').last()
+      const footer = sessions.getByRole('link', { name: '打开实验室' })
+      const footerBefore = await footer.boundingBox()
+      await lastSession.scrollIntoViewIfNeeded()
+      const last = await lastSession.boundingBox()
+      assert.ok(last.y + last.height <= footerBefore.y)
+      assert.deepEqual(await footer.boundingBox(), footerBefore)
+      assert.equal(await page.getByRole('main').evaluate(element => element.scrollTop), 0)
+    }
+    await page.screenshot({ path: output + '/' + width + 'x' + height + '-home.png', animations: 'disabled' })
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
 
   const edit = progress.getByRole('link', { name: '编辑原文', exact: true })
   await edit.focus()
