@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Spin } from 'antd'
+import { Alert, Button, Modal, Space, Spin } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneObjectCandidate, SceneObjectCandidateReview as CandidateReview } from '../../../services/generated'
 import { directingError } from './common'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
 
 function Changes({ label, objects, note }: {
   label: string; objects: SceneObjectCandidate[]; note?: (object: SceneObjectCandidate) => string;
@@ -81,12 +80,13 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
   }
   const adopted = typeof preview?.applied_revision === 'number'
   const hasCandidate = preview?.candidate_available
-  return <WorkbenchModal title={hasCandidate ? '核对对象差异' : '对象提取任务'} open width={660} closable={!applying} keyboard={!applying}
+  return <Modal title={hasCandidate ? '核对对象差异' : '对象提取任务'} open width={660} closable={!applying} keyboard={!applying}
     maskClosable={false} onCancel={onClose}
-    footer={<WorkbenchDialogActions secondary={<Button disabled={applying} onClick={onClose}>{adopted || !hasCandidate ? '关闭' : '暂不应用'}</Button>}>
+    styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
+    footer={<Space><Button disabled={applying} onClick={onClose}>{adopted || !hasCandidate ? '关闭' : '暂不应用'}</Button>
       {hasCandidate && !adopted && <Button type="primary" disabled={!editable || !preview?.preview_token} loading={applying}
         onClick={() => void apply()}>{unknown ? '核实应用结果' : '应用整批对象'}</Button>}
-    </WorkbenchDialogActions>}>
+    </Space>}>
     {loading && <Spin aria-label="正在核对对象差异" />}
     {readError && <Alert type="error" message={readError} action={<Button onClick={reread}>重新读取差异</Button>} />}
     {applyError && <Alert type="warning" showIcon message={applyError} />}
@@ -102,5 +102,5 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
       <Changes label="保留人工选择" objects={preview.retained_choices} note={object => `保留${choiceLabel(object)}`} />
       <p>确认后整批更新本场对象准备。项目资产仍可在资产库使用。</p>
     </>}
-  </WorkbenchModal>
+  </Modal>
 }

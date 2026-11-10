@@ -178,7 +178,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     {!error && canvases?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={historical ? '此历史场次没有画布' : '本场尚无画布，可生成新分镜画布开始设计'} />}
     {!error && !!canvases?.length && shown?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的画布" />}
-    {!!shown?.length && <ul className="management-canvas-list" aria-label="本场画布">
+    {!!shown?.length && <ul className="management-card-grid" aria-label="本场画布">
       {shown.map(canvas => {
         const task = canvas.latest_storyboard
         const candidateId = canvas.candidate_storyboard_task_id

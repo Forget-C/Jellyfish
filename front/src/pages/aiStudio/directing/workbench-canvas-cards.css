@@ -7,7 +7,7 @@
 .management-canvas-toolbar { flex-wrap: wrap; margin: 12px 0; }
 .management-canvas-toolbar h3, .management-canvas-card-heading h4 { margin: 0; }
 .management-canvas-toolbar .ant-input-affix-wrapper { width: min(100%, 240px); }
-.management-canvas-list {
+.management-card-grid {
   list-style: none;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
@@ -44,5 +44,5 @@
   overflow: hidden;
 }
 @media (max-width: 575px) {
-  .management-canvas-list { grid-template-columns: minmax(0, 1fr); }
+  .management-card-grid { grid-template-columns: minmax(0, 1fr); }
 }

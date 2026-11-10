@@ -85,13 +85,13 @@ try {
   const prepared = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
   await prepared.getByRole('combobox', { name: '关联资产' }).click()
   await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await prepared.getByRole('button', { name: '对象更多操作' }).click()
+  await prepared.getByRole('button', { name: '选择参考图' }).click()
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'),
     page.getByRole('menuitem', { name: '上传参考图', exact: true }).click()])
   await chooser.setFiles({ name: '前门备用参考.png', mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=', 'base64') })
   await prepared.getByText('已选参考图', { exact: true }).waitFor()
-  await prepared.getByRole('button', { name: '选择参考图' }).click()
+  await prepared.getByRole('button', { name: '更换参考图' }).click()
   await page.getByText('参考图 1', { exact: true }).click()
   await prepared.getByText('已选参考图', { exact: true }).waitFor()
   await poll(() => request(sceneApi + '/objects'), result => result.objects[0].image_file_id === 'object-browser-image', 'reference selection did not save')
