@@ -15,6 +15,7 @@ import {
 import { defaultTaskActionErrorMessage } from '../../components/taskActionHelpers'
 import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
 import { isRejectedSubmission, useExperimentSubmission } from '../hooks/useExperimentSubmission'
+import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
@@ -118,6 +119,9 @@ export function TextExperimentMode({
   const previousSessionIdRef = useRef(sessionId)
   const streamAbortRef = useRef<AbortController | null>(null)
   const streamTaskIdRef = useRef<string | undefined>(undefined)
+  const terminalRunRef = useRef<string>()
+  const stopPending = useRef(false)
+  const [stopState, setStopState] = useState<'idle' | 'requesting' | 'requested' | 'failed'>('idle')
   const streamSessionIdRef = useRef<string | undefined>(undefined)
 
   useEffect(() => () => streamAbortRef.current?.abort(), [])
@@ -159,6 +163,7 @@ export function TextExperimentMode({
 
   /** 提交固定 SSE 文本运行；服务端是 canonical user/assistant 消息的唯一写入者。 */
   const handleSubmit = async () => {
+    if (stopPending.current) return
     if (sessionId && historyState.loading) {
       message.info('正在加载会话历史，请稍后再发送')
       return
@@ -174,6 +179,8 @@ export function TextExperimentMode({
 
     const attempt = submission.begin()
     if (!attempt) return
+    setStopState('idle')
+    terminalRunRef.current = undefined
     let targetSessionId: string | undefined
     let controller: AbortController | undefined
     let terminal = false
@@ -226,17 +233,20 @@ export function TextExperimentMode({
         } else if (event.event === 'completed') {
           if (event.data.assistant_message.session_id !== session.id) throw new Error('文本结果与本轮会话不符')
           terminal = true
+          terminalRunRef.current = acceptedTaskId
           historyState.adoptCanonicalMessages(session.id, [event.data.assistant_message])
           setLocalMessages(current => current.filter(item => item.id !== assistantId))
           void historyState.refresh()
         } else if (event.event === 'error') {
           terminal = true
+          terminalRunRef.current = acceptedTaskId
           setLocalMessages(current => current.map(item => (
             item.id === assistantId ? { ...item, status: 'failed', error: event.data.error.message } : item
           )))
           restoreInput()
         } else if (event.event === 'cancelled') {
           terminal = true
+          terminalRunRef.current = acceptedTaskId
           setLocalMessages(current => current.map(item => (
             item.id === assistantId ? { ...item, status: 'cancelled' } : item
           )))
@@ -262,22 +272,40 @@ export function TextExperimentMode({
     }
   }
 
-  /** 先停止本地事件消费，再请求服务端取消已 accepted 的 hidden run。 */
+  /** Request cancellation on the live run, leaving its final state to the SSE terminal event. */
   const handleStop = async () => {
     const taskId = streamTaskIdRef.current
     const activeSessionId = streamSessionIdRef.current
-    streamAbortRef.current?.abort()
-    if (!taskId || !activeSessionId) return
+    if (!taskId || !activeSessionId || stopPending.current) throw new Error('当前还不能停止生成')
+    if (terminalRunRef.current === taskId || stopState === 'requested') return
+    stopPending.current = true
+    setStopState('requesting')
     try {
-      await StudioTextLabService.cancelTextLabStreamApiV1StudioLabsTextSessionsSessionIdRunsTaskIdCancelPost({
+      const response = await StudioTextLabService.cancelTextLabStreamApiV1StudioLabsTextSessionsSessionIdRunsTaskIdCancelPost({
         sessionId: activeSessionId,
         taskId,
         requestBody: { reason: 'user_cancelled' },
       })
-    } catch {
-      // 断流时服务端也会执行 best-effort 取消；这里不覆盖已停止的本地状态。
+      if (terminalRunRef.current === taskId) { setStopState('idle'); return }
+      const result = response.data
+      if (result?.task_id !== taskId || !['cancelled', 'succeeded'].includes(result.status)) {
+        throw new Error('停止请求未得到确认')
+      }
+      setStopState('requested')
+    } catch (error) {
+      if (terminalRunRef.current === taskId) { setStopState('idle'); return }
+      setStopState('failed')
+      throw error
+    } finally {
+      stopPending.current = false
     }
   }
+
+  useExperimentLeaveStatus(submission.dirty, submitting ? {
+    ready: Boolean(streamTaskIdRef.current),
+    stopping: stopState === 'requesting',
+    stop: handleStop,
+  } : undefined)
 
   /** 清空服务端与浏览器内的当前会话消息，草稿态无需执行该操作。 */
   const handleClearSession = async () => {
@@ -320,9 +348,12 @@ export function TextExperimentMode({
     ),
     composer: (
       <ExperimentComposer
-        secondaryAction={submitting ? <Button icon={<StopOutlined />} danger onClick={() => void handleStop()}>停止生成</Button> : null}
+        secondaryAction={submitting ? <Button icon={<StopOutlined aria-hidden="true" />} danger
+          loading={stopState === 'requesting'}
+          disabled={!streamTaskIdRef.current || stopState === 'requested'}
+          onClick={() => { void handleStop().catch(() => {}) }}>停止生成</Button> : null}
         submitting={submitting}
-        submitDisabled={submitting || submission.outcomePending || Boolean(sessionId && historyState.loading)}
+        submitDisabled={submitting || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
         onSubmit={() => void handleSubmit()}
         options={(
           <ExperimentOptionBar
@@ -350,6 +381,8 @@ export function TextExperimentMode({
         )}
       >
         {replacementDialog}
+        {submitting && stopState === 'requested' && <p role="status">已请求停止，等待本轮结束。</p>}
+        {submitting && stopState === 'failed' && <p role="alert">停止生成请求失败，请重试。</p>}
         <ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} />
         <ExperimentPromptEditor
           template={selectedTemplate}

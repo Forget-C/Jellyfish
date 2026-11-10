@@ -1,4 +1,5 @@
 /** Shared template-variable or free-text prompt editor for experiment laboratories. */
+import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { Button, Drawer, Input, Modal } from 'antd'
 import { useCallback, useId, useState, useSyncExternalStore } from 'react'
 import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
@@ -86,6 +87,7 @@ type TemplateVariableEditorProps = {
 function TemplateVariableEditor({ template, values, disabled, onApply, onUseFreeInput }: TemplateVariableEditorProps) {
   const [panelValues, setPanelValues] = useState<Record<string, string> | null>(null)
   const [converting, setConverting] = useState(false)
+  useExperimentLeaveStatus(panelValues !== null && getPromptTemplateVariables(template).some(variable => panelValues[variable] !== values[variable]))
   const titleId = useId()
   // The installed Drawer does not forward aria-labelledby to its dialog.
   const labelDialog = useCallback((title: HTMLSpanElement | null) => {

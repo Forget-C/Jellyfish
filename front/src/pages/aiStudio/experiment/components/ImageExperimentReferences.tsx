@@ -1,3 +1,4 @@
+import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Alert, Button, Checkbox, Empty, Modal, Spin, Tabs } from 'antd'
 import { CloseOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
@@ -20,6 +21,7 @@ const summaryLimit = 4
 /** 当前会话的应用值由图片模态持有，抽屉只编辑一次临时选择。 */
 export function ImageExperimentReferences({ value, onChange, files, libraryState, onRetryLibrary, onUploaded, disabled }: ImageExperimentReferencesProps) {
   const [draft, setDraft] = useState<string[] | null>(null)
+  useExperimentLeaveStatus(draft !== null && (draft.length !== value.length || draft.some((id, index) => id !== value[index])))
   const [tab, setTab] = useState('selected')
   const [preview, setPreview] = useState<{ id: string; name: string }>()
   const [uploading, setUploading] = useState(false)

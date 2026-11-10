@@ -10,6 +10,7 @@ type ExperimentLabType = ExperimentSessionRead['lab_type']
 
 type ExperimentSessionSidebarProps = {
   value?: string
+  currentSessionDirty?: boolean
   sessions: ExperimentSessionRead[]
   labType: ExperimentLabType
   loading: boolean
@@ -26,7 +27,7 @@ type ExperimentSessionSidebarProps = {
  *
  * 新建入口只选择实验模态并进入草稿态；首条有效提交由页面创建持久化会话。
  */
-export function ExperimentSessionSidebar({ value, sessions, labType, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
+export function ExperimentSessionSidebar({ value, currentSessionDirty, sessions, labType, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
   const [renameOpen, setRenameOpen] = useState(false)
   const [targetSession, setTargetSession] = useState<ExperimentSessionRead | null>(null)
   const [title, setTitle] = useState('')
@@ -98,7 +99,7 @@ export function ExperimentSessionSidebar({ value, sessions, labType, loading, fa
     </nav>
     <ExperimentSessionConfirmation
       title="删除会话"
-      description={`将删除“${deleteTarget?.title}”及其历史消息。此操作无法撤销。`}
+      description={`将删除“${deleteTarget?.title}”及其历史消息。此操作无法撤销。${deleteTarget?.id === value && currentSessionDirty ? ' 当前未发送内容也将被放弃。' : ''}`}
       run={deleteTarget && onDelete ? () => onDelete(deleteTarget.id) : undefined}
       failure="删除会话失败；运行中任务不可删除"
       onClose={() => setDeleteTarget(undefined)}

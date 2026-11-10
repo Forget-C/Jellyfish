@@ -47,6 +47,7 @@ function hasTaskReceipt(
  * The first draft may become its server session without invalidating its in-flight attempt.
  */
 export function useExperimentSubmission(sessionId: string | undefined, history: ExperimentHistoryState, input: string) {
+  const initialInput = useRef(input)
   const attemptRef = useRef<Attempt>()
   const currentInput = useRef(input)
   currentInput.current = input
@@ -177,7 +178,8 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   }
 
   return {
-    submitting, notice, receipt, begin, finish, isCurrent, acceptInput, reject,
+    submitting, notice, begin, finish, isCurrent, acceptInput, reject,
+    dirty: input !== (receipt && receipt.sessionId === sessionId ? receipt.cleanInput : initialInput.current),
     submitTask, checkOutcome, checkHistory, acknowledgeUnknown,
     outcomePending: notice?.kind === 'checking' || notice?.kind === 'unknown',
     restoreUnsent: (attempt: Attempt) => { if (isCurrent(attempt)) setReceipt(undefined) },

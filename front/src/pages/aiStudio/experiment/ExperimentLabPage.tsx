@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { ExperimentLeaveStatusContext, useExperimentLeaveGuard } from './ExperimentLeaveGuard'
 import { ExperimentLabLayout } from './components/ExperimentLabLayout'
 import { ExperimentSessionSidebar } from './components/ExperimentSessionSidebar'
 import { useExperimentSessions, type ExperimentLabType } from './hooks/useExperimentSessions'
@@ -25,7 +26,8 @@ export default function ExperimentLabPage() {
   const requestedMode = parseMode(searchParams.get('mode'))
   const initialLabType = useRef(initialSessionId ? undefined : requestedMode).current
   const sidebarTrigger = useRef<HTMLButtonElement>(null)
-  const [draftRevision, setDraftRevision] = useState(0)
+  const [contextRevision, setContextRevision] = useState(0)
+  const { register, request, allowNavigation, dialog, dirty, pendingNavigation } = useExperimentLeaveGuard()
   const {
     sessions, selectedSessionId, selectedLabType, loading, failedTypes, reloadSessions,
     selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages,
@@ -36,6 +38,7 @@ export default function ExperimentLabPage() {
     const routeKey = searchParams.toString()
     if (routeKey === lastRouteKeyRef.current) return
     lastRouteKeyRef.current = routeKey
+    setContextRevision(revision => revision + 1)
     const routeSessionId = searchParams.get('session')
     if (routeSessionId) {
       void reloadSessions({ sessionId: routeSessionId })
@@ -43,7 +46,6 @@ export default function ExperimentLabPage() {
     }
     skipSessionWriteRef.current = true
     if (requestedMode) {
-      setDraftRevision(revision => revision + 1)
       selectDraft(requestedMode)
     } else void reloadSessions({})
   }, [reloadSessions, requestedMode, searchParams, selectDraft])
@@ -54,34 +56,36 @@ export default function ExperimentLabPage() {
       skipSessionWriteRef.current = false
       return
     }
-    if (loading || searchParams.get('session') || !selectedSessionId) return
+    // A first receipt can arrive while a browser navigation is blocked; keep the user's choice open.
+    if (pendingNavigation || loading || searchParams.get('session') || !selectedSessionId) return
     const next = new URLSearchParams(searchParams)
     next.delete('mode')
     next.set('session', selectedSessionId)
     lastRouteKeyRef.current = next.toString()
-    setSearchParams(next, { replace: true })
-  }, [loading, searchParams, selectedSessionId, setSearchParams])
+    allowNavigation(() => setSearchParams(next, { replace: true }))
+  }, [allowNavigation, loading, pendingNavigation, searchParams, selectedSessionId, setSearchParams])
 
   /** 切换历史会话；模态由服务端会话的 lab_type 决定。 */
   const handleSelectSession = (session: typeof sessions[number]) => {
+    setContextRevision(revision => revision + 1)
     selectSession(session)
     const next = new URLSearchParams(searchParams)
     next.delete('mode')
     next.set('session', session.id)
     lastRouteKeyRef.current = next.toString()
-    setSearchParams(next)
+    if (next.toString() !== searchParams.toString()) allowNavigation(() => setSearchParams(next))
   }
 
   /** 进入草稿态时同步 URL，确保刷新后仍保留所选模态。 */
   const handleStartDraft = (labType: ExperimentLabType) => {
     // 显式新建草稿使上一份未落库草稿的异步回执失效；首提回写会话 ID 沿用原上下文。
-    setDraftRevision(revision => revision + 1)
+    setContextRevision(revision => revision + 1)
     selectDraft(labType)
     const next = new URLSearchParams(searchParams)
     next.delete('session')
     next.set('mode', labType)
     lastRouteKeyRef.current = next.toString()
-    setSearchParams(next)
+    if (next.toString() !== searchParams.toString()) allowNavigation(() => setSearchParams(next))
   }
 
   /** 删除后恢复全局最新会话；没有历史时回到文本草稿。 */
@@ -112,9 +116,12 @@ export default function ExperimentLabPage() {
           sessionId: searchParams.get('session') ?? undefined,
           labType: requestedMode,
         })}
-        // 运行中的任务只锁定当前模态输入，不阻断会话恢复或切换。
-        onChange={session => { handleSelectSession(session); close() }}
-        onStartDraft={labType => { handleStartDraft(labType); close() }}
+        currentSessionDirty={dirty}
+        onChange={session => {
+          if (session.id === selectedSessionId) { close(); return }
+          request(() => { handleSelectSession(session); close() })
+        }}
+        onStartDraft={labType => request(() => { handleStartDraft(labType); close() })}
         onRename={async (sessionId, title) => { await renameSession(sessionId, title) }}
         onDelete={handleDeleteSession}
       />}
@@ -124,7 +131,12 @@ export default function ExperimentLabPage() {
     />
   )
 
-  if (selectedLabType === 'image') return <ImageExperimentMode key={draftRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
-  if (selectedLabType === 'video') return <VideoExperimentMode key={draftRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
-  return <TextExperimentMode key={draftRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />
+  return <ExperimentLeaveStatusContext.Provider value={register}>
+    {selectedLabType === 'image'
+      ? <ImageExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
+      : selectedLabType === 'video'
+        ? <VideoExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
+        : <TextExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />}
+    {dialog}
+  </ExperimentLeaveStatusContext.Provider>
 }

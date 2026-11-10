@@ -1,3 +1,4 @@
+import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Alert, Button, Empty, Input, Modal, Spin } from 'antd'
 import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
@@ -72,6 +73,7 @@ function VideoReferencePreview({ file }: { file: FileRead }) {
 /** 参考素材按角色编辑，抽屉内的临时选择在应用前不会改变本轮生成。 */
 export function VideoExperimentReferences({ value, onChange, files, libraryState, onRetryLibrary, onUploaded, capability, disabled }: Props) {
   const [draft, setDraft] = useState<References | null>(null)
+  useExperimentLeaveStatus(draft !== null && JSON.stringify(draft) !== JSON.stringify(value))
   const [target, setTarget] = useState<Target>()
   const [preview, setPreview] = useState<FileRead>()
   const [uploading, setUploading] = useState(false)

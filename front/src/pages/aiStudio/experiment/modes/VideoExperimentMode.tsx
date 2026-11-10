@@ -17,6 +17,7 @@ import {
 import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
 import { useExperimentSubmission } from '../hooks/useExperimentSubmission'
 import { buildFileDownloadUrl } from '../../assets/utils'
+import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
@@ -118,6 +119,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, ratio, frameFileIds, subjectReferences])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
+  useExperimentLeaveStatus(submission.dirty)
 
   const loadLibrary = useCallback(async () => {
     setLibraryState('loading')

@@ -17,6 +17,7 @@ import {
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
 import { useExperimentSubmission } from '../hooks/useExperimentSubmission'
+import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
@@ -125,6 +126,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, referenceFileIds])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
+  useExperimentLeaveStatus(submission.dirty)
   const persistedMessages = history.messages.map(toImageLabMessage)
   const { reads, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh)
   const messages = persistedMessages.map((item) => {

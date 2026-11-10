@@ -175,6 +175,7 @@ try {
 
   // 浏览器返回切换会话时，迟到响应不会重开面板或污染当前选择。
   await page.getByRole('button', { name: '图片会话 2', exact: true }).click()
+  await page.getByRole('button', { name: '放弃未发送内容并离开', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-b')
   await trigger.click()
   uploadGate = new Promise(resolve => { releaseUpload = resolve })
@@ -184,12 +185,21 @@ try {
   await page.waitForURL(url => url.searchParams.get('session') === 'image-a')
   await panel.waitFor({ state: 'hidden' })
   await trigger.click()
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/files/upload')),
+    releaseUpload(),
+  ])
+  await panel.getByRole('tab', { name: '已选素材（0）', exact: true }).waitFor()
+  await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
+  await page.reload()
+  await trigger.click()
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
-  releaseUpload()
   const lateFromOtherSession = panel.getByRole('checkbox', { name: '上传图片 4', exact: true })
   await lateFromOtherSession.waitFor()
   assert.equal(await lateFromOtherSession.isChecked(), false)
 
+  await choose('参考图片 2')
+  await choose('参考图片 1')
   await choose('参考图片 3')
   await choose('参考图片 4')
   await choose(longName)
@@ -217,6 +227,9 @@ try {
   await panel.getByText('上传图片 5 已上传，尚未应用', { exact: true }).waitFor()
   await panel.getByRole('button', { name: '应用参考图', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: /选择模型/ }).click()
+  await page.getByRole('button', { name: /验收图片模型/ }).waitFor()
+  await page.keyboard.press('Escape')
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('应用已上传的参考图')
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/image-a/tasks')),

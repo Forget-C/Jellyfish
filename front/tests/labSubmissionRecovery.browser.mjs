@@ -241,6 +241,7 @@ try {
   assert.equal(writes.length, 7, '双击只提交一次')
   assert.deepEqual(writes.at(-1).media.references.map(item => item.file_id), ['reference-a'])
   await page.getByRole('button', { name: '另一张图片会话', exact: true }).click()
+  await page.getByRole('button', { name: '放弃未发送内容并离开', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-other')
   await imageInput.fill('新会话继续写作')
   await Promise.all([

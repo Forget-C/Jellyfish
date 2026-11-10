@@ -47,7 +47,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
   const [failedTypes, setFailedTypes] = useState<ExperimentLabType[]>([])
   const loadRevision = useRef(0)
   const selectionRevision = useRef(0)
-  const creatingSessionsRef = useRef<Partial<Record<ExperimentLabType, Promise<ExperimentSessionRead>>>>({})
+  const creatingSessionsRef = useRef<Partial<Record<ExperimentLabType, { selection: number; promise: Promise<ExperimentSessionRead> }>>>({})
 
   const selectedSession = sessions.find((session) => session.id === selectedSessionId)
 
@@ -111,15 +111,15 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
 
   /**
    * 确保指定模态已有持久化会话，供首条有效提交前调用。
-   * 同一模态并发提交会复用进行中的创建请求，避免产生重复空会话。
+   * 同一份草稿复用创建请求；切换或放弃后，新草稿不接管旧草稿的会话。
    */
   const ensureSession = useCallback(async (labType: ExperimentLabType): Promise<ExperimentSessionRead> => {
     if (selectedSession && selectedSession.lab_type === labType) return selectedSession
 
-    const pending = creatingSessionsRef.current[labType]
-    if (pending) return pending
-
     const selection = selectionRevision.current
+    const pending = creatingSessionsRef.current[labType]
+    if (pending?.selection === selection) return pending.promise
+
     const creation = StudioExperimentSessionsService
       .createExperimentSessionApiV1StudioExperimentSessionsPost({
         requestBody: { lab_type: labType, title: defaultSessionTitles[labType] },
@@ -136,10 +136,10 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
         return session
       })
       .finally(() => {
-        delete creatingSessionsRef.current[labType]
+        if (creatingSessionsRef.current[labType]?.promise === creation) delete creatingSessionsRef.current[labType]
       })
 
-    creatingSessionsRef.current[labType] = creation
+    creatingSessionsRef.current[labType] = { selection, promise: creation }
     return creation
   }, [selectedSession])
 

@@ -266,8 +266,15 @@ try {
   await page.waitForURL(url => url.searchParams.get('session') === 'video-a')
   await panel.waitFor({ state: 'hidden' })
   await trigger.click()
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/files/upload')),
+    releaseUpload(),
+  ])
+  assert.equal(await panel.getByRole('button', { name: '移除首帧', exact: true }).count(), 0)
+  await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
+  await page.reload()
+  await trigger.click()
   await first.click()
-  releaseUpload()
   await chooseFile('上传图片 4').waitFor()
   assert.equal(await chooseFile('上传图片 4').getAttribute('aria-pressed'), 'false')
   assert.equal(submissions.length, 2)
