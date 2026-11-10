@@ -188,6 +188,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             data['edges'] = [edge for edge in data['edges'] if edge['id'] not in detached]
             data['input_order'][card['id']]['text'] = [key for key in data['input_order'][card['id']]['text'] if key not in detached]
             ungrouped = first['model_card_ids'][0]
+            data['groups'] = [group for group in data['groups'] if group['kind'] != 'stack']
             for group in data['groups']:
                 group['card_ids'] = [key for key in group['card_ids'] if key not in (card['id'], ungrouped)]
             data['groups'].append({'id': 'manual-model-group', 'name': '人工制作组', 'card_ids': [card['id']]})

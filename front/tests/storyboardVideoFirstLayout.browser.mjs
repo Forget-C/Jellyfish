@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { browserCleanup, browserOutput, captureBackend } from './browser-runtime.mjs'
+import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -17,7 +18,7 @@ const raw = '前门的阿同拿着信封。后门的阿同等待。他绕过门�
 const canvases = api + '/generation-canvases/' + project
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
-    CANVAS_BROWSER_SCENE_OBJECTS: '1', CANVAS_BROWSER_SCENE_STORYBOARD: '1', CANVAS_BROWSER_STORYBOARD_REFERENCES: '1',
+    CANVAS_BROWSER_SCENE_OBJECTS: '1', CANVAS_BROWSER_SCENE_STORYBOARD: '1', CANVAS_BROWSER_STORYBOARD_REFERENCES: '1', CANVAS_BROWSER_STORYBOARD_DESIGN_STACKS: '1',
     CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'),
     CANVAS_BROWSER_PORT: '8724' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -62,10 +63,13 @@ try {
   await desktop.goto(`${projectUrl}/chapters/${chapter}/workbench-management?sequence=${scene.id}&step=objects`)
   await desktop.getByRole('button', { name: '提取对象', exact: true }).click()
   await desktop.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
+  const modelSettingsUrl = 'http://127.0.0.1:8724/api/v1/llm/model-settings'
+  await request(modelSettingsUrl, 'PUT', { ...await request(modelSettingsUrl), default_video_model_id: 'story-video-model' })
   const generate = async name => {
     const collection = `${scenes}/${scene.id}/storyboards`
-    const task = await request(collection, 'POST', { request_id: randomUUID(), name, mode: 'faithful', pending_modality: 'video' })
-    await poll(() => request(`${collection}/${task.task_id}`), result => result.status === 'succeeded')
+    const task = await request(collection, 'POST', { request_id: randomUUID(), name, mode: 'complete', pending_modality: 'video' })
+    const finished = await poll(() => request(`${collection}/${task.task_id}`), result => ['succeeded', 'failed'].includes(result.status))
+    assert.equal(finished.status, 'succeeded', JSON.stringify(finished))
     return task
   }
   const open = async (page, task) => {
@@ -75,10 +79,10 @@ try {
     const ids = document.storyboard.shots.flatMap(shot => shot.model_card_ids)
     assert.equal(ids.length, 3)
     await page.locator(`[data-card-id="${ids[0]}"]`).waitFor()
-    return { url, ids, original: document.fixed_source.card_id }
+    return { url, ids, original: document.fixed_source.card_id, document }
   }
   const task = await generate('桌面分镜')
-  const { url, ids, original } = await open(desktop, task)
+  const { url, ids, original, document } = await open(desktop, task)
   const [first, second, third] = await cards(desktop, ids)
   assert.ok(fullyVisible(first, desktop.viewportSize()) && fullyVisible(second, desktop.viewportSize()), JSON.stringify({ first, second }))
   assert.equal(first.y, second.y, 'two shots share the first production row')
@@ -144,6 +148,47 @@ try {
   await ordinary.goto(url)
   await ordinary.locator(`[data-card-id="${ids[0]}"]`).waitFor()
   assert.deepEqual((await cards(ordinary, [ids[0]]))[0], ordinaryVideo, 'opening an existing storyboard does not rearrange its layout')
+  // 共同堆叠收纳实际成员，但预检仍使用原设计和引用。
+  await desktop.setViewportSize({ width: 1440, height: 960 })
+  const savedCanvas = () => request(`${canvases}/${task.canvas_id}`)
+  const [shot] = document.storyboard.shots
+  const stacks = document.groups.filter(group => group.kind === 'stack')
+  assert.equal(stacks.length, 4)
+  const own = stacks.find(group => group.card_ids.includes(shot.card_id))
+  const shared = stacks.find(group => group.name === '共享设计')
+  const sharedDesign = document.cards.find(card => card.type === 'direction.lighting')
+  assert.deepEqual(shared.card_ids, [sharedDesign.id])
+  assert.ok(!stacks.some(group => group.card_ids.some(id => ids.includes(id))))
+  const standalone = document.cards.filter(card => card.type.startsWith('content.') || card.type.startsWith('reference.'))
+  assert.ok(standalone.every(card => !stacks.some(group => group.card_ids.includes(card.id))))
+  const empty = standalone.find(card => card.type.startsWith('reference.') && !card.image_binding)
+  await desktop.locator(`[data-card-id="${empty.id}"]`).waitFor()
+  await openCanvasCard(desktop, ids[0])
+  await poll(savedCanvas, row => row.document.cards.find(card => card.id === ids[0])?.model_id === 'story-video-model')
+  await closeCanvasDetails(desktop)
+  const preview = await request(`${canvases}/${task.canvas_id}/precheck`, 'POST', { card_id: ids[0] })
+  assert.ok(preview.can_run, JSON.stringify(preview.diagnostics))
+  assert.match(preview.input.text, /保持柔和侧光/)
+  assert.match(preview.input.text, /拿着信封/)
+  await desktop.getByRole('button', { name: '适应全部', exact: true }).click()
+  const stack = desktop.getByRole('button', { name: `查看堆叠 ${own.name}`, exact: true })
+  await stack.click()
+  const reading = desktop.getByRole('dialog', { name: '堆叠内容（只读）', exact: true })
+  await reading.waitFor()
+  assert.equal(await reading.getByRole('article', { name: /^只读成员/ }).count(), own.card_ids.length)
+  await reading.getByRole('button', { name: 'Close', exact: true }).click()
+  const [beforeVideo] = await cards(desktop, [ids[0]])
+  await stack.hover()
+  await stack.getByRole('button', { name: '解除堆叠', exact: true }).click()
+  const [afterVideo, exposedShot] = await cards(desktop, [ids[0], shot.card_id])
+  assert.deepEqual(afterVideo, beforeVideo)
+  assert.ok(exposedShot.x >= afterVideo.x + afterVideo.width, 'unstacking leaves the production lane clear')
+  await openCanvasCard(desktop, shot.card_id)
+  await desktop.getByRole('textbox', { name: '可见结果内容', exact: true }).fill('镜头说明仍可编辑')
+  await closeCanvasDetails(desktop)
+  const edited = await poll(savedCanvas, row => row.document.cards.find(card => card.id === shot.card_id)?.visible_result.text === '镜头说明仍可编辑')
+  assert.ok(!edited.document.groups.some(group => group.id === own.id))
+  assert.ok(edited.document.edges.some(edge => edge.source_card === sharedDesign.id && edge.target_card === ids[0]))
   console.log(output)
 } finally {
   await cleanup()

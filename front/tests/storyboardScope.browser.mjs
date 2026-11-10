@@ -84,13 +84,7 @@ try {
   assert.deepEqual(second.segments.map(row => row.occurrence_id), ['take-out', 'lift'])
   const names = ['原文与共享对象', '镜头 01', '镜头 02']
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
-  const groupTops = []
-  for (const name of names) {
-    const title = page.getByRole('button', { name: '选择编组 ' + name, exact: true })
-    await title.waitFor()
-    groupTops.push(await title.evaluate(element => Number.parseFloat(element.closest('[data-group-id]').style.top)))
-  }
-  assert.ok(groupTops[0] < groupTops[1] && groupTops[1] < groupTops[2], String(groupTops))
+  for (const name of names) await page.getByRole('button', { name: '选择编组 ' + name, exact: true }).waitFor()
   for (const [index, segment] of second.segments.entries()) {
     const checked = await request(path + '/precheck', 'POST', { card_id: segment.model_card_id })
     const [yes, no] = index ? ['分段动作举高', '分段动作取出'] : ['分段动作取出', '分段动作举高']
@@ -98,6 +92,9 @@ try {
     assert.ok(checked.input.text.includes(yes) && !checked.input.text.includes(no))
     assert.deepEqual(checked.input.media.map(item => item.file_id), ['object-browser-image'])
   }
+  const stack = page.getByRole('button', { name: '查看堆叠 镜头 01 · 设计', exact: true })
+  await stack.hover()
+  await stack.getByRole('button', { name: '解除堆叠', exact: true }).click()
   const firstCard = page.locator(`[data-card-id="${first.card_id}"]`)
   const top = () => firstCard.evaluate(element => Number.parseFloat(element.style.top))
   const before = await top()

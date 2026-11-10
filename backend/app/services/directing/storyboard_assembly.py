@@ -135,6 +135,11 @@ def _identity(canvas_id: str, key: str) -> str:
     return uuid5(NAMESPACE_URL, f'scene-storyboard:{canvas_id}:{key}').hex
 
 
+def storyboard_design_stack_id(shot_id: str | None = None) -> str:
+    """自动设计堆叠使用场次分镜身份，不给公共分组增加归属字段。"""
+    return f'storyboard-stack-{shot_id or "shared"}'
+
+
 class StoryboardAssembly:
     """把明确范围转换为真实卡片、采用及独立来源索引。"""
 
@@ -192,6 +197,11 @@ class StoryboardAssembly:
         group_id = self._id(key)
         self.document['groups'].append({'id': group_id, 'name': name, 'card_ids': cards})
         return group_id
+
+    def _stack_designs(self, name: str, members: list[str], shot_id: str | None = None) -> None:
+        if members:
+            self.document['groups'].append({'id': storyboard_design_stack_id(shot_id), 'name': name,
+                                            'kind': 'stack', 'card_ids': members})
 
     def _prepare_objects(self, missed_objects) -> None:
         rows = self.args['objects'] + [{
@@ -430,13 +440,23 @@ class StoryboardAssembly:
                       if any(note.state in ('fact', 'proposal', 'absent') for note in piece.notes.values())
                       and any(output.source.port_id == 'text' and output.available for output in
                               context.published_outputs(designs[piece.key]['id'], model_outputs={}))}
-        common.extend(designs[piece.key]['id'] for piece in plan.pieces if len(piece.scope.shots) > 1)
+        shared_designs = [designs[piece.key]['id'] for piece in plan.pieces if len(piece.scope.shots) > 1]
+        stack_designs = self.production_modality == 'video'
+        if stack_designs:
+            self._stack_designs('共享设计', shared_designs)
+        else:
+            common.extend(shared_designs)
         for ordinal, shot in enumerate(result.shots, 1):
             key = f'shot:{shot.id}'
             story = self._story_cards(key, shot, shot_ids[shot.id], ordinal)
             cards = story + [designs[piece.key] for piece in plan.pieces if piece.scope.shots == (shot.id,)]
             production, models, segments, uses = self._shot_production(key, result, shot, story, plan, designs, executable)
-            group_id = self._group(key + ':group', story[0]['name'], [item['id'] for item in cards + production])
+            members = [item['id'] for item in cards + production]
+            if stack_designs:
+                self._stack_designs(f"{story[0]['name']} · 设计", [item for item in members if item not in models],
+                                    shot_ids[shot.id])
+                members = models
+            group_id = self._group(key + ':group', story[0]['name'], members)
             self.index['shots'].append({'shot_id': shot_ids[shot.id], 'card_id': story[0]['id'], 'group_id': group_id,
                                         'object_ids': [self.objects[item][0]['object_id'] for item in shot.object_ids],
                                         'model_card_ids': models, 'segments': segments, 'reference_uses': uses})
