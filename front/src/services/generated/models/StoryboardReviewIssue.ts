@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { StoryboardRepairTarget } from './StoryboardRepairTarget';
 /**
  * Semantic findings cite existing draft shots and give a concrete remedy.
  */
@@ -10,4 +11,5 @@ export type StoryboardReviewIssue = {
     shot_ids: Array<string>;
     requirements: string;
     suggestion: string;
+    repair_targets?: Array<StoryboardRepairTarget>;
 };

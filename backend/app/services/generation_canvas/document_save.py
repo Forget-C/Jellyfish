@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 from pydantic import ValidationError
 from sqlalchemy import select
+from app.core.contracts.task import TaskStatus
 from app.schemas.generation_canvas import CanvasDocument, CanvasResultScope, CheckCard, ModelCard, SoundDirectionCard, PerformanceDirectionCard, MediaContentCard
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
@@ -243,7 +244,8 @@ async def _mark_storyboard_edits(db, document: CanvasDocument) -> None:
         return
     from app.models.task import Task
     task = await db.get(Task, storyboard.task_id)
-    if not task or task.kind != 'directing_storyboard' or task.project_id != document.project_id:
+    if (not task or task.kind != 'directing_storyboard' or task.status != TaskStatus.succeeded
+            or task.project_id != document.project_id):
         return
     baseline = (task.result or {}).get('document', {})
     if baseline.get('id') != document.id:

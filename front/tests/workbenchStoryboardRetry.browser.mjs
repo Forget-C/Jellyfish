@@ -173,7 +173,27 @@ try {
   await findings.getByText('静止与入场要求冲突', { exact: true }).waitFor()
   assert.equal(await findings.getByRole('button', { name: '应用分镜', exact: true }).isEnabled(), false)
   assert.deepEqual(await data(reviewCanvas), untouched)
+
+  await control({ storyboard_review_release: 100, storyboard_repair_on: reviewedControls.storyboard_review_calls + 1 })
+  const repairTask = await data(sceneApi + '/storyboards', 'POST', {
+    name: '定向修正画布', request_id: 'targeted-repair', mode: 'complete',
+  })
+  const repairCanvas = studio + '/generation-canvases/' + project + '/' + repairTask.canvas_id
+  await page.goto(management)
+  const repairCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '定向修正画布', exact: true }) })
+  await repairCard.getByText('正在定向修正分镜', { exact: true }).waitFor()
+  assert.equal((await data(repairCanvas)).revision, 0)
+  await control({ storyboard_repair_release: true })
+  await repairCard.getByText('正在复核分镜连续性', { exact: true }).waitFor()
+  assert.equal((await data(repairCanvas)).revision, 0)
+  await control({ storyboard_recheck_release: true })
+  await repairCard.getByRole('button', { name: '查看分镜', exact: true }).click()
+  const correctedCanvas = await poll(() => data(repairCanvas), value => value.document.storyboard?.task_id === repairTask.task_id)
+  const camera = correctedCanvas.document.cards.find(card => card.type === 'direction.camera')
+  assert.equal(camera.fields.viewpoint.text, '保持原地，固定机位切近')
+  assert.equal((await readControls()).storyboard_repair_calls, 1)
 } finally {
-  if (backend.exitCode === null) await control({ disconnect: true, storyboard_release: 100, storyboard_review_release: 100 }).catch(() => {})
+  if (backend.exitCode === null) await control({ disconnect: true, storyboard_release: 100, storyboard_review_release: 100,
+    storyboard_repair_release: true, storyboard_recheck_release: true }).catch(() => {})
   await cleanup()
 }

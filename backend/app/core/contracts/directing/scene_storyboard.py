@@ -192,6 +192,31 @@ class StoryboardCandidate(Contract):
         return cls.model_validate({key: result[key] for key in ('base_revision', 'document')})
 
 
+class StoryboardRepairTarget(Contract):
+    """Identify one field in a logical draft; the server determines edit eligibility."""
+
+    shot_id: Identity | None = None
+    design_id: Identity | None = None
+    field_id: Identity
+
+    @property
+    def key(self) -> tuple[str | None, str | None, str]:
+        """Use the complete field identity when validating the repair scope."""
+        return self.shot_id, self.design_id, self.field_id
+
+
+class StoryboardRepairEdit(StoryboardRepairTarget):
+    """Replace proposal text only, leaving its evidence and relations intact."""
+
+    text: Text = Field(max_length=4000)
+
+
+class StoryboardRepairResult(Contract):
+    """No patch may edit more than the declared fields or alter the draft shape."""
+
+    edits: list[StoryboardRepairEdit] = Field(max_length=60)
+
+
 class StoryboardReviewIssue(Contract):
     """Semantic findings cite existing draft shots and give a concrete remedy."""
 
@@ -199,6 +224,7 @@ class StoryboardReviewIssue(Contract):
     shot_ids: list[Identity] = Field(min_length=1, max_length=30)
     requirements: Text = Field(max_length=1200)
     suggestion: Text = Field(max_length=1200)
+    repair_targets: list[StoryboardRepairTarget] = Field(default_factory=list, max_length=60)
 
 
 class StoryboardReviewReport(Contract):

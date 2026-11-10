@@ -191,13 +191,16 @@ class SceneStoryboardService(SceneObjectService):
             raise RevisionConflict('审查须沿用原分镜草案，请重新核对重试依据')
         snapshot = failed.input_snapshot
         files = sorted({item['image_file_id'] for item in snapshot['run_args']['objects'] if item.get('image_file_id')})
+        source_id = self._review_source(failed)
+        source = failed if source_id == failed.id else await self.db.get(Task, source_id)
+        resume_stage = 'rechecking_storyboard' if (source.result or {}).get('review_repair') else 'reviewing_storyboard'
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND, title='重试分镜审查',
             target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id,
             provider_id=failed.provider_id, retry_of_task_id=failed.id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={**snapshot, 'scene_admission_order': await self._next_scene_task_order(sequence_id),
                 'storyboard_request': {**snapshot['storyboard_request'], 'request_id': body.request_id},
-                'review_retry_request': request, 'review_retry_from': self._review_source(failed)})
+                'review_retry_request': request, 'review_retry_from': source_id, 'review_retry_stage': resume_stage})
         return await self._storyboard_read(task)
 
     async def _ensure_no_active_storyboard(self, sequence_id: str, canvas_id: str) -> None:
@@ -291,13 +294,15 @@ class SceneStoryboardService(SceneObjectService):
         args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
                 'objects': model_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
+        protected = await self.storyboard_repair_protections(canvas.id, sequence_id) if canvas_id else set()
         task = await TaskService(self.db).submit(kind=STORYBOARD_KIND,
             title='生成完整分镜' if body.mode == 'complete' else '忠实提取分镜', target_type='directing_sequence',
             target_id=sequence_id, project_id=self.project_id, provider_id=provider.id, retry_of_task_id=retry_of_task_id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
-                      'provider_key': config.provider_key, 'run_args': args})
+                      'provider_key': config.provider_key, 'run_args': args,
+                      'review_protected_designs': sorted(protected)})
         return await self._storyboard_read(task)
 
     @staticmethod
@@ -542,3 +547,12 @@ class SceneStoryboardService(SceneObjectService):
                                         card_types={card.id: card.type for card in baseline.cards})
         prepared = await prepare_document(self.db, self.project_id, frozen_canvas, assembled.model_dump())
         return StoryboardCandidate(base_revision=snapshot['baseline']['revision'], document=prepared.document)
+
+    async def storyboard_repair_protections(self, canvas_id: str, sequence_id: str, *, lock: bool = False) -> set[str]:
+        """Track manually changed generated designs at admission and before applying any repair."""
+        canvas = await CanvasStore(self.db, self.project_id).get(canvas_id, lock=lock)
+        if canvas.sequence_id != sequence_id:
+            raise HTTPException(404, 'Canvas not found in scene')
+        storyboard = (canvas.document or {}).get('storyboard') or {}
+        return {origin['semantic_key'] for origin in storyboard.get('origins', {}).values()
+                if origin.get('manually_edited')}

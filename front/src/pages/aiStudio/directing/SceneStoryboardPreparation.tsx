@@ -21,6 +21,8 @@ function pendingSubmission(key: string): Submission | undefined {
 function taskLabel(task: StoryboardTaskSummary) {
   if (task.status === 'queued') return '分镜任务排队中'
   if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
+  if (task.stage === 'repairing_storyboard') return '正在定向修正分镜'
+  if (task.stage === 'rechecking_storyboard') return '正在复核分镜连续性'
   if (task.review_state === 'incomplete') return '分镜审查未完成，草案已保留'
   if (task.review_state === 'conflict') return '分镜存在设计冲突'
   if (task.review_state === 'warning') return '部分连续性依据不足'

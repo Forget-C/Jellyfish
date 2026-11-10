@@ -10,6 +10,24 @@ from app.core.contracts.task import TaskStatus
 from app.services.generation_canvas.errors import diagnostic
 
 
+def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str):
+    """One provider call, strict JSON and a stable failure message."""
+    from app.services.directing.ai import DirectingOutputError
+    response = llm.invoke([
+        SystemMessage(content=instruction + '\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
+        HumanMessage(content=json.dumps(inputs, ensure_ascii=False)),
+    ])
+    content = response.content
+    if isinstance(content, str):
+        content = content.strip()
+        if content.startswith('```') and '\n' in content:
+            content = content.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+    try:
+        return contract.model_validate_json(content)
+    except (ValidationError, TypeError) as error:
+        raise DirectingOutputError(error_message) from error
+
+
 def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
     """Make one semantic review request and reject unresolvable shot identities."""
     from app.services.directing.ai import DirectingOutputError
@@ -19,21 +37,13 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         '或没有剧情动作却换持物手、换位。只有依据不足而无法判断时标 insufficient_basis。'
         '正常切换景别或机位、对象出画不等于状态变化，不因此报冲突。'
         '每项列出涉及的现有 shot_ids、互相矛盾或缺失的具体要求 requirements，以及可执行 suggestion。'
-        '没有问题返回空 issues。只返回符合以下结构的 JSON：\n'
+        '仅为 conflict 指出能消除矛盾的最少 proposal 文本字段 repair_targets。'
+        '目标使用现有 shot_id、design_id 和 field_id；全场 designs 的 shot_id 为空，镜头自身字段的 design_id 为空。'
+        '同一全场字段适用多个镜头时须列全受影响镜头；不得将原文事实、待定、结构或无关设计作为修正目标。'
+        '若有 recheck_shot_ids，重点复核这些镜头及连续性边界，同时如实报告发现的问题。'
+        '没有问题返回空 issues。只返回符合以下结构的 JSON：'
     )
-    response = llm.invoke([
-        SystemMessage(content=instruction + json.dumps(StoryboardReviewReport.model_json_schema(), ensure_ascii=False)),
-        HumanMessage(content=json.dumps(inputs, ensure_ascii=False)),
-    ])
-    content = response.content
-    if isinstance(content, str):
-        content = content.strip()
-        if content.startswith('```') and '\n' in content:
-            content = content.split('\n', 1)[1].rsplit('```', 1)[0].strip()
-    try:
-        report = StoryboardReviewReport.model_validate_json(content)
-    except (ValidationError, TypeError) as error:
-        raise DirectingOutputError('分镜审查返回无效，请重试审查') from error
+    report = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction, '分镜审查返回无效，请重试审查')
     known = {shot['id'] for shot in inputs['storyboard_draft']['shots']}
     if any(len(set(issue.shot_ids)) != len(issue.shot_ids) or not set(issue.shot_ids) <= known for issue in report.issues):
         raise DirectingOutputError('分镜审查引用了无效镜头，请重试审查')
