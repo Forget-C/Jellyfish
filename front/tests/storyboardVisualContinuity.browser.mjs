@@ -254,7 +254,7 @@ try {
     }),
   })
   assert.equal(rejectedRestore.status, 422)
-  assert.equal((await rejectedRestore.json()).detail.code, 'INVALID_STORYBOARD_RESTORE')
+  assert.equal((await rejectedRestore.json()).data.code, 'INVALID_STORYBOARD_RESTORE')
   const restoreResponse = page.waitForResponse(response => response.url().endsWith('/restore') && response.request().method() === 'POST')
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
   const response = await restoreResponse
