@@ -78,12 +78,15 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
             return next(group for group in document['groups'] if group['kind'] == 'stack' and shot['card_id'] in group['card_ids'])
 
         automatic, manual, unchanged = map(stack_for, (first_shot, second_shot, third_shot))
+        unstacked = await data(await client.put(canvas, json={'request_id': 'unstack-and-edit',
+            'expected_revision': current['revision'], 'document': {**document,
+                'groups': [group for group in document['groups'] if group['id'] != automatic['id']]}}))
         if reorganized:
             automatic['id'] += '-a1b2c3d4'
         manual['id'] = 'manually-regrouped'
         manual['name'] = '手工堆叠'
         before = await data(await client.put(canvas, json={'request_id': 'manual-group',
-            'expected_revision': current['revision'], 'document': document}))
+            'expected_revision': unstacked['revision'], 'document': document}))
 
         design['fields']['light_direction']['text'] = '顶光'
         # Replace the second shot without changing the third shot ordinal.
