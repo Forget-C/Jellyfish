@@ -397,9 +397,8 @@ class SceneStoryboardService(SceneObjectService):
         prior = None
         if previous and previous.kind == STORYBOARD_KIND and previous.target_id == sequence_id and previous.project_id == self.project_id and previous.status == TaskStatus.succeeded:
             prior = StoryboardCandidate.model_validate(previous.result).document
-        capability = task.input_snapshot['run_args'].get('production_capability') or {}
-        document, diff = plan_application(current, candidate.document, body, prior=prior,
-                                          production_ports=capability.get('input_ports'))
+        capability = task.input_snapshot['run_args'].get('production_capability')
+        document, diff = plan_application(current, candidate.document, body, prior=prior, production_capability=capability)
         diff.automatic_stacks, diff.manual_stacks = review_stack_changes(current, document)
         if preview:
             return diff

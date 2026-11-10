@@ -15,4 +15,5 @@ export type StoryboardDiff = {
     source_changed: boolean;
     automatic_stacks?: Array<StoryboardDiffStack>;
     manual_stacks?: Array<StoryboardDiffStack>;
+    visual_continuity_impacts?: Array<string>;
 };

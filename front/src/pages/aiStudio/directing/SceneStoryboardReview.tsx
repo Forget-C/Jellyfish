@@ -96,6 +96,9 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
         {!!automaticStacks.length && <section><h3>应用后解除的自动堆叠</h3>
           <ul>{automaticStacks.map(stack => <li key={stack.id}>{stack.name}</li>)}</ul>
         </section>}
+        {!!diff.visual_continuity_impacts?.length && <section><h3>视觉承接影响</h3>
+          <ul>{diff.visual_continuity_impacts.map(message => <li key={message}>{message}</li>)}</ul>
+        </section>}
         {!!diff.orphaned.length && <section><h3>失去引用的保留卡片</h3>
           <ul>{diff.orphaned.map(card => <li key={card.id}>{card.name} 将失去 {card.lost_targets?.join('、')}</li>)}</ul>
         </section>}

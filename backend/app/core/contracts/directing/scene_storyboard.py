@@ -259,6 +259,7 @@ class StoryboardDiff(Contract):
     source_changed: bool
     automatic_stacks: list[StoryboardDiffStack] = Field(default_factory=list)
     manual_stacks: list[StoryboardDiffStack] = Field(default_factory=list)
+    visual_continuity_impacts: list[str] = Field(default_factory=list)
 
 
 class StoryboardReextractRequest(StoryboardRequest):
