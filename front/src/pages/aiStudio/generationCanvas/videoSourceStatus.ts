@@ -5,6 +5,7 @@ import { StudioFilesService } from '../../../services/generated'
 export function useVideoSourceStatus(fileId?: string) {
   const [check, setCheck] = useState<{ id: string; available: boolean }>()
   useEffect(() => {
+    setCheck(undefined)
     if (!fileId) return
     const request = StudioFilesService.getFileStorageInfoApiApiV1StudioFilesFileIdStorageInfoGet({ fileId })
     let active = true
