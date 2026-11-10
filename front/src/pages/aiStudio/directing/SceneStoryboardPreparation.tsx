@@ -25,6 +25,8 @@ function taskLabel(task: StoryboardTaskSummary) {
   if (task.stage === 'rechecking_storyboard') return '正在复核分镜连续性'
   if (task.review_state === 'incomplete') return '分镜审查未完成，草案已保留'
   if (task.review_state === 'conflict') return '分镜存在设计冲突'
+  if (task.review_state === 'accepted') return '已接受分镜设计风险'
+  if (task.review_state === 'stale') return '分镜风险确认已失效'
   if (task.review_state === 'warning') return '部分连续性依据不足'
   if (task.status === 'running') return task.stage === 'assembling_storyboard' ? '正在校验并组装画布' : '正在提取分镜'
   if (task.status === 'failed') return '分镜提取失败'
@@ -52,7 +54,8 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   const [error, setError] = useState('')
   const [reportedTask, setTask] = useState<StoryboardTaskSummary>()
   const task = reportedTask && reportedTask.task_id === target.appliedTaskId
-    ? { ...reportedTask, candidate_available: false } : reportedTask
+    ? { ...reportedTask, candidate_available: false,
+      review_state: reportedTask.review_state === 'conflict' ? undefined : reportedTask.review_state } : reportedTask
   const [models, setModels] = useState<ModelRead[]>([])
   const [modelError, setModelError] = useState('')
   const open = !!draft || waiting

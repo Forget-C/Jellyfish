@@ -64,6 +64,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
+      onStoryboardRepaired={taskId => navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, canvasId, taskId),
+        { replace: true, state: location.state })}
       back={{ label: '返回工作台管理', onClick: () => management() }}
       renderModelCardMenu={context => <StoryboardVisualContinuity {...context} />}
       modelCardSources={visualContinuitySources}

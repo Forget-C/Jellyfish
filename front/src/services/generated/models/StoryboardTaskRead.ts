@@ -16,8 +16,9 @@ export type StoryboardTaskRead = {
     canvas_id: string;
     candidate_available?: boolean;
     retry_of_task_id?: (string | null);
-    review_state?: ('pending' | 'incomplete' | 'passed' | 'warning' | 'conflict' | null);
+    review_state?: ('pending' | 'incomplete' | 'passed' | 'warning' | 'conflict' | 'accepted' | 'stale' | null);
     pending_application?: boolean;
     candidate?: (StoryboardCandidate | null);
     review?: (StoryboardReviewReport | null);
+    accepted_conflict_ids?: Array<string>;
 };

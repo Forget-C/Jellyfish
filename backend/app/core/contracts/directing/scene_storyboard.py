@@ -246,7 +246,7 @@ class StoryboardTaskSummary(SceneObjectTaskRead):
     canvas_id: Identity
     candidate_available: bool = False
     retry_of_task_id: Identity | None = None
-    review_state: Literal['pending', 'incomplete', 'passed', 'warning', 'conflict'] | None = None
+    review_state: Literal['pending', 'incomplete', 'passed', 'warning', 'conflict', 'accepted', 'stale'] | None = None
 
 
 class StoryboardTaskRead(StoryboardTaskSummary):
@@ -255,6 +255,16 @@ class StoryboardTaskRead(StoryboardTaskSummary):
     pending_application: bool = False
     candidate: StoryboardCandidate | None = None
     review: StoryboardReviewReport | None = None
+    accepted_conflict_ids: list[Identity] = Field(default_factory=list)
+
+
+class StoryboardTargetedRepair(Contract):
+    """Explicitly request a new attempt for one reviewed conflict."""
+
+    conflict_id: Identity
+    expected_revision: int = Field(ge=0)
+    review_token: str = Field(min_length=64, max_length=64)
+    overwrite_card_ids: list[Identity] = Field(default_factory=list, max_length=2000)
 
 
 class StoryboardRetry(Contract):
@@ -263,6 +273,7 @@ class StoryboardRetry(Contract):
     request_id: Identity
     basis_token: str | None = Field(default=None, min_length=64, max_length=64)
     use_saved_objects: bool = False
+    targeted_repair: StoryboardTargetedRepair | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class StoryboardRetryBasis(Contract):
@@ -285,6 +296,8 @@ class StoryboardApplication(Contract):
     expected_revision: int = Field(ge=0)
     overwrite_card_ids: list[Identity] = Field(default_factory=list, max_length=2000)
     confirmed_auto_stack_ids: list[Identity] = Field(default_factory=list, max_length=2000)
+    review_token: str | None = Field(default=None, min_length=64, max_length=64)
+    accepted_conflict_ids: list[Identity] = Field(default_factory=list, max_length=100)
 
 
 class StoryboardDiffCard(Contract):
@@ -305,6 +318,23 @@ class StoryboardDiffStack(Contract):
     name: str
 
 
+class StoryboardConflictChoice(Contract):
+    """A specific conflict and any applicable prior decision."""
+
+    id: Identity
+    issue: StoryboardReviewIssue
+    previously_accepted: bool = False
+    can_repair: bool = False
+
+
+class StoryboardContinuityDiff(Contract):
+    """Bind conflict selection to the compared design and adoption plan."""
+
+    token: str
+    stale: bool = False
+    conflicts: list[StoryboardConflictChoice] = Field(default_factory=list)
+
+
 class StoryboardDiff(Contract):
     """The effect of applying the task to one saved canvas revision."""
 
@@ -315,6 +345,7 @@ class StoryboardDiff(Contract):
     source_changed: bool
     automatic_stacks: list[StoryboardDiffStack] = Field(default_factory=list)
     manual_stacks: list[StoryboardDiffStack] = Field(default_factory=list)
+    continuity_review: StoryboardContinuityDiff | None = None
     visual_continuity_impacts: list[str] = Field(default_factory=list)
 
 
