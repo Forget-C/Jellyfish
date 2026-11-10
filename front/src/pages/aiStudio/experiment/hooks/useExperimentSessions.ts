@@ -16,6 +16,7 @@ export type ExperimentLabType = ExperimentSessionRead['lab_type']
 /** Hook 初始化时可选地恢复一个已知会话。 */
 export type UseExperimentSessionsOptions = {
   initialSessionId?: string
+  initialLabType?: ExperimentLabType
 }
 
 /** 新会话的默认标题，只有首次有效提交时才会真正写入服务端。 */
@@ -37,58 +38,63 @@ function sortSessions(sessions: ExperimentSessionRead[]): ExperimentSessionRead[
  * @returns 会话列表、当前选择，以及供页面壳和模态组件调用的操作。
  */
 export function useExperimentSessions(options: UseExperimentSessionsOptions = {}) {
-  const { initialSessionId } = options
+  const { initialSessionId, initialLabType } = options
   const [sessions, setSessions] = useState<ExperimentSessionRead[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>(initialSessionId)
-  const [selectedLabType, setSelectedLabType] = useState<ExperimentLabType>('text')
+  const [selectedLabType, setSelectedLabType] = useState<ExperimentLabType>(initialLabType ?? 'text')
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const loadRevision = useRef(0)
+  const selectionRevision = useRef(0)
   const creatingSessionsRef = useRef<Partial<Record<ExperimentLabType, Promise<ExperimentSessionRead>>>>({})
 
   const selectedSession = sessions.find((session) => session.id === selectedSessionId)
 
-  /** 拉取三种模态的会话，并按全局最近更新时间合并排序。 */
-  const reloadSessions = useCallback(async (targetSessionId = initialSessionId) => {
+  /** 保留全局最近会话的既有恢复规则，显式选择优先于迟到的读取结果。 */
+  const reloadSessions = useCallback(async (
+    target: { sessionId?: string; labType?: ExperimentLabType } = { sessionId: initialSessionId, labType: initialLabType },
+  ) => {
+    const request = ++loadRevision.current
+    const selection = selectionRevision.current
     setLoading(true)
+    setLoadFailed(false)
     try {
       const responses = await Promise.all(
         (['text', 'image', 'video'] as ExperimentLabType[]).map((labType) =>
           StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType }),
         ),
       )
+      if (request !== loadRevision.current) return
       const nextSessions = sortSessions(responses.flatMap((response) => response.data ?? []))
       setSessions(nextSessions)
+      if (selection !== selectionRevision.current) return
 
-      const restored = targetSessionId
-        ? nextSessions.find((session) => session.id === targetSessionId)
-        : undefined
-      if (restored) {
-        setSelectedSessionId(restored.id)
-        setSelectedLabType(restored.lab_type)
-      } else if (nextSessions[0]) {
-        setSelectedSessionId(nextSessions[0].id)
-        setSelectedLabType(nextSessions[0].lab_type)
-      } else {
-        setSelectedSessionId(undefined)
-        setSelectedLabType('text')
-      }
-      return nextSessions
+      const targetSession = nextSessions.find((session) => session.id === target.sessionId)
+      const restored = targetSession ?? (target.labType ? undefined : nextSessions[0])
+      setSelectedSessionId(restored?.id)
+      setSelectedLabType(restored?.lab_type ?? target.labType ?? 'text')
+    } catch {
+      if (request === loadRevision.current) setLoadFailed(true)
     } finally {
-      setLoading(false)
+      if (request === loadRevision.current) setLoading(false)
     }
-  }, [initialSessionId])
+  }, [initialLabType, initialSessionId])
 
   useEffect(() => {
     void reloadSessions()
+    return () => { loadRevision.current += 1 }
   }, [reloadSessions])
 
   /** 进入指定模态的未持久化草稿；不会触发创建接口。 */
   const selectDraft = useCallback((labType: ExperimentLabType) => {
+    selectionRevision.current += 1
     setSelectedSessionId(undefined)
     setSelectedLabType(labType)
   }, [])
 
   /** 选择已有会话，并使当前模态与会话实际类型保持一致。 */
   const selectSession = useCallback((session: ExperimentSessionRead) => {
+    selectionRevision.current += 1
     setSelectedSessionId(session.id)
     setSelectedLabType(session.lab_type)
   }, [])
@@ -103,6 +109,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
     const pending = creatingSessionsRef.current[labType]
     if (pending) return pending
 
+    const selection = selectionRevision.current
     const creation = StudioExperimentSessionsService
       .createExperimentSessionApiV1StudioExperimentSessionsPost({
         requestBody: { lab_type: labType, title: defaultSessionTitles[labType] },
@@ -111,8 +118,11 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
         const session = response.data
         if (!session) throw new Error('创建实验室会话失败')
         setSessions((current) => sortSessions([session, ...current.filter((item) => item.id !== session.id)]))
-        setSelectedSessionId(session.id)
-        setSelectedLabType(session.lab_type)
+        if (selection === selectionRevision.current) {
+          selectionRevision.current += 1
+          setSelectedSessionId(session.id)
+          setSelectedLabType(session.lab_type)
+        }
         return session
       })
       .finally(() => {
@@ -170,6 +180,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
     selectedSessionId,
     selectedLabType,
     loading,
+    loadFailed,
     reloadSessions,
     selectDraft,
     selectSession,
