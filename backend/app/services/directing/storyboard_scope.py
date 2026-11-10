@@ -58,6 +58,14 @@ class DesignPiece:
     scope: Applicability
     notes: dict[str, StoryboardField] = field(default_factory=dict)
 
+    @property
+    def carries_subject(self) -> bool:
+        """明确范围内的可执行连续性约束可采用镜外主体。"""
+        return bool(self.design.object_id and self.design.card_type == 'direction.continuity'
+                    and self.design.adoption == 'model' and (self.owner or self.scope.declared_shots or self.scope.occurrences)
+                    and any(note.state in ('fact', 'proposal') and note.purpose != 'background'
+                            for note in self.notes.values()))
+
 
 def _applicability(note, owner, design, shots, occurrences, conditions):
     explicit = note.scope
@@ -73,8 +81,6 @@ def _applicability(note, owner, design, shots, occurrences, conditions):
         raise ValueError('设计字段引用未知或超出镜头范围的出现项')
     if occurrence_ids:
         shot_ids = [key for key in shot_ids if key in {occurrences[occurrence] for occurrence in occurrence_ids}]
-    if design.object_id and any(design.object_id not in shots[key].object_ids for key in shot_ids):
-        raise ValueError('设计主体未参与其声明的镜头')
     declared = tuple(key for key in shots if explicit and key in explicit.shot_ids)
     return Applicability(tuple(key for key in shots if key in shot_ids), phase, condition, tuple(sorted(occurrence_ids)), declared)
 
@@ -110,6 +116,9 @@ class StoryboardDesignPlan:
                 else:
                     key = prefix
                 piece = DesignPiece(key, owner, design, scope, scoped_notes)
+                if (design.object_id and not piece.carries_subject
+                        and any(design.object_id not in shots[key].object_ids for key in scope.shots)):
+                    raise ValueError('设计主体未参与其声明的镜头')
                 self.pieces.append(piece)
                 self.fields.update({(prefix, name): piece for name in scoped_notes})
 

@@ -430,10 +430,13 @@ class StoryboardAssembly:
             targets = [self._frame_target(plan.frame(shot.id, target), target.phase_id, designs)
                        for target in shot.frame_targets] if phase == 'image' else []
             target_cards = {item['card_id'] for item in targets}
-            sources += [designs[piece.key] for piece in plan.pieces
-                        if piece.key in executable and (piece.design.adoption == 'model' or designs[piece.key]['id'] in target_cards)
-                        and piece.scope.applies(shot.id, phase, conditions, occurrence.id if occurrence else None)
-                        and (not piece.design.object_id or piece.design.object_id in objects)]
+            pieces = [piece for piece in plan.pieces
+                      if piece.key in executable and (piece.design.adoption == 'model' or designs[piece.key]['id'] in target_cards)
+                      and piece.scope.applies(shot.id, phase, conditions, occurrence.id if occurrence else None)
+                      and (not piece.design.object_id or piece.design.object_id in objects or piece.carries_subject)]
+            sources += [designs[piece.key] for piece in pieces]
+            continuity_subjects = [piece.design.object_id for piece in pieces if piece.carries_subject]
+            objects = list(dict.fromkeys([*objects, *continuity_subjects]))
             model = self._production(model_key, sources, evidence, objects,
                                      segment=segment, seconds=shot.estimated_seconds, targets=targets)
             cards.append(model)
@@ -476,7 +479,9 @@ class StoryboardAssembly:
                                     shot_ids[shot.id])
                 members = models
             group_id = self._group(key + ':group', story[0]['name'], members)
+            participants = [self.objects[item][0]['object_id'] for item in shot.object_ids]
+            production_objects = [use['object_id'] for use in uses]
             self.index['shots'].append({'shot_id': shot_ids[shot.id], 'card_id': story[0]['id'], 'group_id': group_id,
-                                        'object_ids': [self.objects[item][0]['object_id'] for item in shot.object_ids],
+                                        'object_ids': list(dict.fromkeys([*participants, *production_objects])),
                                         'model_card_ids': models, 'segments': segments, 'reference_uses': uses})
         return CanvasDocument.model_validate(self.document)

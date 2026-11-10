@@ -62,6 +62,13 @@ class ControlledModel:
             elif 'mode' in args:
                 result = complex_design(args['objects'][0]['id'])
                 result['designs'] = result['designs'][:6]
+                result['missed_objects'].append({'id': 'box', 'kind': 'prop', 'name': '铜匣', 'excerpt': '打开铜匣'})
+                result['shots'][0]['object_ids'].append('box')
+                result['designs'].append({'id': 'box-continuity', 'card_type': 'direction.continuity', 'object_id': 'box',
+                    'fields': {'before': {'state': 'fact', 'text': '打开铜匣', 'excerpt': '打开铜匣',
+                                          'scope': {'shot_ids': ['rear'], 'occurrence_ids': ['lift'], 'phase': 'video'}},
+                               'following_constraints': {'state': 'proposal', 'text': '铜匣出画后仍保持打开',
+                                                         'scope': {'shot_ids': ['rear'], 'occurrence_ids': ['lift'], 'phase': 'video'}}}})
             else:
                 result = {'objects': [{'kind': 'character', 'name': '林舟', 'description': '码头勘查者',
                                        'excerpt': '林舟在码头', 'asset_id': 'object-browser-character'}]}

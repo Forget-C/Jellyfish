@@ -58,10 +58,17 @@ try {
   await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
   // 使用已指定生产模型的任务验证历史/API 客户端的模型分段契约。
   const storyboardName = '分段分镜验收'
-  await request(`${sequences}/${sequence.id}/storyboards`, 'POST', {
+  const task = await request(`${sequences}/${sequence.id}/storyboards`, 'POST', {
     name: storyboardName, mode: 'complete', request_id: 'scope-with-production-model',
     production_model_id: 'scope-browser-video',
   })
+  let outcome
+  for (let attempt = 0; attempt < 150; attempt++) {
+    outcome = await request(`${sequences}/${sequence.id}/storyboards/${task.task_id}`)
+    if (['succeeded', 'failed'].includes(outcome.status)) break
+    await delay(100)
+  }
+  assert.equal(outcome.status, 'succeeded', outcome.error)
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
@@ -82,6 +89,12 @@ try {
   assert.equal(first.object_ids[0], second.object_ids[0])
   assert.equal(first.model_card_ids.length, 1)
   assert.deepEqual(second.segments.map(row => row.occurrence_id), ['take-out', 'lift'])
+  const boxCard = document.cards.find(card => card.type === 'content.prop' && card.name === '铜匣')
+  const box = story.objects.find(row => row.description_card_id === boxCard.id)
+  const inherited = second.reference_uses.filter(row => row.object_id === box.object_id)
+  assert.deepEqual(inherited.map(row => row.model_card_id), [second.segments[1].model_card_id])
+  assert.ok(!document.edges.some(edge => edge.source_card === box.description_card_id && edge.target_card === second.card_id),
+    'continuity adoption does not turn the off-screen prop into a visible participant')
   const names = ['原文与共享对象', '镜头 01', '镜头 02']
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   for (const name of names) await page.getByRole('button', { name: '选择编组 ' + name, exact: true }).waitFor()
@@ -90,6 +103,7 @@ try {
     const [yes, no] = index ? ['分段动作举高', '分段动作取出'] : ['分段动作取出', '分段动作举高']
     assert.ok(checked.can_run, JSON.stringify(checked.diagnostics))
     assert.ok(checked.input.text.includes(yes) && !checked.input.text.includes(no))
+    assert.equal(checked.input.text.includes('铜匣出画后仍保持打开'), index === 1)
     assert.deepEqual(checked.input.media.map(item => item.file_id), ['object-browser-image'])
   }
   const stack = page.getByRole('button', { name: '查看堆叠 镜头 01 · 设计', exact: true })
