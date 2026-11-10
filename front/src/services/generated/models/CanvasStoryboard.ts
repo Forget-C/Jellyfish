@@ -5,6 +5,7 @@
 import type { CanvasStoryboardObject } from './CanvasStoryboardObject';
 import type { CanvasStoryboardOrigin } from './CanvasStoryboardOrigin';
 import type { CanvasStoryboardShot } from './CanvasStoryboardShot';
+import type { CanvasVisualContinuity } from './CanvasVisualContinuity';
 /**
  * 由工作台建立的分镜采用范围和溯源索引。
  */
@@ -15,4 +16,5 @@ export type CanvasStoryboard = {
     origins: Record<string, CanvasStoryboardOrigin>;
     objects: Array<CanvasStoryboardObject>;
     shots: Array<CanvasStoryboardShot>;
+    visual_continuity?: Record<string, CanvasVisualContinuity>;
 };

@@ -93,6 +93,14 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 宿主可为模型卡提供卡面操作，运行继续由共同预检处理。 */
+export interface CanvasModelCardMenuContext {
+  card: GenerationCard
+  document: CanvasDocument
+  runs: CanvasRunRead[]
+  closeMenu: () => void
+  disabled: boolean
+}
+
 export interface CanvasModelCardActionContext {
   card: GenerationCard
   document: CanvasDocument
@@ -103,7 +111,7 @@ export interface CanvasModelCardActionContext {
 }
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, onSelectVideoFrame }: { onSelectVideoFrame?: (source: VideoFrameSource) => void; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, renderModelCardMenu, modelCardSources, onSelectVideoFrame }: { onSelectVideoFrame?: (source: VideoFrameSource) => void; renderModelCardMenu?: (context: CanvasModelCardMenuContext) => ReactNode; modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
@@ -1690,6 +1698,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const precheckDisabled = readonly || !runtime || runtime.disabled || runtime.busyCards.has(card.id) || !!preparingModel
           const visualDesign = isReferenceDesign(card)
           const issues = (diagnostics || []).filter(issue => issue.target.card_id === card.id)
+          const sources = [...(sourceItems[card.id] || []), ...(modelCardSources?.(card, document) || [])]
           const hasNameIssue = issues.some(issue => Array.isArray(issue.target.path) && issue.target.path.length === 1 && issue.target.path[0] === 'name')
           const requiresName = invalidRequirementNames.has(card.id) && card.type === 'direction.criterion' && (!('name' in card) || !card.name?.trim())
           if (!hasNameIssue && (requiresName || duplicateDesignName(card, cards))) {
@@ -1713,8 +1722,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             menuAction={frameSource && <Button onClick={() => {
               setCardMenuId(undefined)
               onSelectVideoFrame?.({ source_card_id: card.id, source_file_id: playbackFile! })
-            }}>选帧为图片</Button>}
-            sourceControl={sourceItems[card.id]?.length ? <CanvasSourcePopover items={sourceItems[card.id]} onLocate={locateSource} /> : undefined}
+            }}>选帧为图片</Button> || (cardMenuId === card.id && isModel && renderModelCardMenu?.({
+              card, document, runs: runtime?.runs || [], disabled: readonly || !!runtime?.busyCards.has(card.id),
+              closeMenu: () => {
+                setCardMenuId(undefined)
+                requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(
+                  `[data-card-id="${CSS.escape(card.id)}"] [aria-label="卡片操作"]`)?.focus({ preventScroll: true }))
+              },
+            }))}
+            sourceControl={sources.length ? <CanvasSourcePopover items={sources} onLocate={locateSource} /> : undefined}
             footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && (!readonly || designSizing) || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
             {card.type === 'review.check' && <CheckCardFace onOpen={openCheck} />}

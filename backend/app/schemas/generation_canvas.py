@@ -860,6 +860,12 @@ class CanvasStoryboardShot(BaseModel):
     reference_overrides: dict[str, str] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 
+class CanvasVisualContinuity(BaseModel):
+    """工作台选帧采用的实际绑定；素材及视频结果身份保留在来源图片中。"""
+    model_config = ConfigDict(extra='forbid')
+    binding_id: str = Field(min_length=1, max_length=64)
+
+
 class CanvasStoryboard(BaseModel):
     """由工作台建立的分镜采用范围和溯源索引。"""
     model_config = ConfigDict(extra='forbid')
@@ -869,6 +875,7 @@ class CanvasStoryboard(BaseModel):
     origins: dict[str, CanvasStoryboardOrigin]
     objects: list[CanvasStoryboardObject]
     shots: list[CanvasStoryboardShot]
+    visual_continuity: dict[str, CanvasVisualContinuity] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 
 class CanvasDocument(BaseModel):
