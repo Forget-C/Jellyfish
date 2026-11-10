@@ -13,11 +13,13 @@ def upgrade():
     """Increase only canvas creation precision on MySQL."""
     if op.get_context().dialect.name == 'mysql':
         op.alter_column('generation_canvases', 'created_at', existing_type=sa.DateTime(timezone=True),
-                        type_=DATETIME(fsp=6), existing_nullable=False, existing_server_default=sa.func.now())
+                        type_=DATETIME(fsp=6), existing_nullable=False,
+                        server_default=sa.text('CURRENT_TIMESTAMP(6)'))
 
 
 def downgrade():
     """Restore the old column precision."""
     if op.get_context().dialect.name == 'mysql':
         op.alter_column('generation_canvases', 'created_at', existing_type=DATETIME(fsp=6),
-                        type_=sa.DateTime(timezone=True), existing_nullable=False, existing_server_default=sa.func.now())
+                        type_=sa.DateTime(timezone=True), existing_nullable=False,
+                        server_default=sa.text('CURRENT_TIMESTAMP'))

@@ -22,6 +22,34 @@ def revision_module(filename="24c8e1a6b902_add_directing_foundation.py"):
     return module
 
 
+def test_mysql_scene_canvas_creation_precision_matches_server_default():
+    """MySQL 要求列类型和默认时间函数使用相同的小数秒精度。"""
+    from io import StringIO
+
+    from sqlalchemy.dialects import mysql, sqlite
+    from sqlalchemy.schema import CreateColumn
+
+    from app.models.generation_canvas import GenerationCanvas
+
+    migration = revision_module('f2a5d8e71c40_preserve_scene_canvas_creation_precision.py')
+    output = StringIO()
+    migration.op = Operations(MigrationContext.configure(dialect=mysql.dialect(), opts={
+        'as_sql': True, 'output_buffer': output,
+    }))
+    migration.upgrade()
+    assert 'DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)' in output.getvalue()
+
+    output.seek(0)
+    output.truncate()
+    migration.downgrade()
+    assert 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;' in output.getvalue()
+
+    column = CreateColumn(GenerationCanvas.__table__.c.created_at)
+    assert 'DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)' in str(column.compile(dialect=mysql.dialect()))
+    assert 'DEFAULT CURRENT_TIMESTAMP' in str(column.compile(dialect=sqlite.dialect()))
+    assert 'CURRENT_TIMESTAMP(6)' not in str(column.compile(dialect=sqlite.dialect()))
+
+
 def test_foundation_migration_and_next_upgrade():
     """在旧模型空库上执行新迁移，再带数据运行独立后继升级并校验约束。"""
     engine = sa.create_engine("sqlite://")

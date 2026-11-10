@@ -1,18 +1,33 @@
 """独立项目画布及同事务保存回执；运行和布局不属于编辑文档。"""
 from datetime import datetime
 from typing import Any
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.mysql import DATETIME
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.functions import FunctionElement
 from app.core.db import Base
 from app.models.base import TimestampMixin
+
+
+class _CanvasCreationTime(FunctionElement):
+    """与画布创建时间列精度一致的数据库默认值。"""
+
+    type = DateTime(timezone=True)
+    inherit_cache = True
+
+
+@compiles(_CanvasCreationTime)
+def _compile_canvas_creation_time(_element, compiler, **_kwargs):
+    """MySQL 的 DATETIME(6) 要求默认函数也指定六位小数秒。"""
+    return 'CURRENT_TIMESTAMP(6)' if compiler.dialect.name == 'mysql' else 'CURRENT_TIMESTAMP'
 
 
 class GenerationCanvas(Base, TimestampMixin):
     """当前文档，revision 只由完整文档 CAS 保存推进。"""
     __tablename__ = 'generation_canvases'
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'), server_default=func.now())
+        DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'), server_default=_CanvasCreationTime())
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
     sequence_id: Mapped[str | None] = mapped_column(
