@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { Avatar, Breadcrumb, Button, ConfigProvider, Dropdown, Grid } from 'antd'
 import { MoreOutlined, UserOutlined } from '@ant-design/icons'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../store/useAppStore'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
+import { ProjectNavigation } from '../pages/aiStudio/project/ProjectWorkbench/ProjectNavigation'
+import { projectTabLabel, projectTabLocation, resolveProjectTab } from '../pages/aiStudio/project/ProjectWorkbench/constants'
 import { activeMainNavigation, mainNavigation, pageBreadcrumbs } from './navigation'
 import { useNavigationTitles } from './pageTitle'
 import './shell.css'
@@ -20,14 +22,22 @@ const ordinaryPageTheme = {
 /** 普通路由的导航与主题在独立画布之外应用。 */
 function OrdinaryLayout() {
   const { t, i18n } = useTranslation('layout')
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const projectId = useMatches().find(match => match.id === 'project-navigation')?.params.projectId
   const navigate = useNavigate()
   const screens = Grid.useBreakpoint()
   const user = useAppStore(state => state.user)
   const language = useAppStore(state => state.language)
   const setLanguage = useAppStore(state => state.setLanguage)
   const titles = useNavigationTitles()
-  const crumbs = pageBreadcrumbs(pathname, titles)
+  const projectIndex = !!projectId && pathname.split('/').filter(Boolean).length === 2
+  const projectTab = projectIndex ? resolveProjectTab(new URLSearchParams(search).get('tab')) : undefined
+  const legacyGeneration = projectTab === 'generation'
+  const crumbs = projectId && projectTab && !legacyGeneration ? [
+    { label: '项目', to: '/projects' },
+    { label: titles.page || '项目', to: projectTabLocation(projectId, 'dashboard') },
+    { label: projectTabLabel(projectTab) || '项目概览' },
+  ] : pageBreadcrumbs(pathname, titles)
   useEffect(() => {
     const resolved = i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
     setLanguage(resolved)
@@ -44,6 +54,10 @@ function OrdinaryLayout() {
     : breadcrumbItems
 
   const activeNavigation = activeMainNavigation(pathname)
+  const routeContent = <main className="app-route-viewport" id="main-content">
+    {crumbs.length > 1 && <Breadcrumb aria-label="当前位置" className="app-breadcrumb" items={compactCrumbs} />}
+    <Outlet />
+  </main>
 
   return <ConfigProvider theme={ordinaryPageTheme}>
     <div className="app-shell">
@@ -65,10 +79,10 @@ function OrdinaryLayout() {
           ] }}><Button type="text" className="app-account" aria-label="用户与语言设置"><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
         </div>
       </header>
-      <main className="app-route-viewport" id="main-content">
-        {crumbs.length > 1 && <Breadcrumb aria-label="当前位置" className="app-breadcrumb" items={compactCrumbs} />}
-        <Outlet />
-      </main>
+      {projectId && !legacyGeneration ? <div className="app-project-frame">
+        <ProjectNavigation key={projectId} projectId={projectId} projectName={projectIndex ? titles.page : titles.project} />
+        {routeContent}
+      </div> : routeContent}
     </div>
   </ConfigProvider>
 }
