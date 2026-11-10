@@ -9,11 +9,14 @@ _SUBJECT_PORTS = {'subject_image', 'subject_video'}
 
 
 def adopted_frames(document, cards):
-    """Read only live manual adoptions backed by a fixed frame and graph edge."""
+    """Read live adoptions and inactive validated reference choices."""
     adopted = {}
     for target_id, relation in (document.storyboard.visual_continuity.items() if document.storyboard else ()):
         target = cards.get(target_id)
         if not isinstance(target, VideoModelCard):
+            continue
+        if relation.binding_id is None and relation.suspended:
+            adopted[target_id] = (relation, None, None, None)
             continue
         binding = next((item for item in target.input_bindings if item.id == relation.binding_id), None)
         frame = cards.get(binding.source.card_id) if binding else None
@@ -30,8 +33,8 @@ def adopted_frames(document, cards):
 def visual_continuity_state(document):
     """Record exact fixed inputs authorized by a reversible storyboard application."""
     cards = {card.id: card for card in document.cards}
-    return {key: {'relation': relation.model_dump(mode='json'), 'binding': binding.model_dump(mode='json'),
-                  'frame': frame.model_dump(mode='json'), 'model_id': cards[key].model_id}
+    return {key: {'relation': relation.model_dump(mode='json'), 'binding': binding.model_dump(mode='json') if binding else None,
+                  'frame': frame.model_dump(mode='json') if frame else None, 'model_id': cards[key].model_id}
             for key, (relation, binding, frame, _) in adopted_frames(document, cards).items()}
 
 
@@ -44,17 +47,17 @@ def non_continuity_edits(current, prior, adopted):
     edits = set()
     for key, (relation, binding, frame, _) in adopted.items():
         card = existing[key]
-        suspended = relation.suspended
+        suspended = relation.suspended if not relation.restored else None
         # The extracted model has no manual prompt or carried media instructions.
         if suspended and (suspended.prompt_segments or suspended.design_media_uses):
             edits.add(key)
             continue
-        inputs = [item for item in card.input_bindings if item.id != binding.id]
+        inputs = [item for item in card.input_bindings if not binding or item.id != binding.id]
         if suspended:
             for index, item in sorted(suspended.input_bindings.items()):
                 inputs.insert(index, item)
         comparable = card.model_copy(update={'input_bindings': inputs})
-        if comparable != originals.get(key) or _ordered_connections(current, key, frame.id) != _ordered_connections(prior, key):
+        if comparable != originals.get(key) or _ordered_connections(current, key, frame.id if frame else None) != _ordered_connections(prior, key):
             edits.add(key)
     return edits
 
@@ -91,13 +94,19 @@ def _keep_frame_port(target, binding, shots, capability):
         return False
     managed = {use.binding_id for shot in shots for use in shot.reference_uses if use.model_card_id == target.id and use.active}
     muted = {item.id for item in target.input_bindings if item.id in managed and item.input_port in _SUBJECT_PORTS}
+    _mute_references(target, shots, muted, declared=managed)
+    return bool(muted)
+
+
+def _mute_references(target, shots, muted, *, declared=None):
+    if not muted and not declared:
+        return
     target.input_bindings = [item for item in target.input_bindings if item.id not in muted]
-    live = {item.id for item in target.input_bindings}
+    inactive = (declared if declared is not None else muted) - {item.id for item in target.input_bindings}
     for index, shot in enumerate(shots):
-        uses = [use.model_copy(update={'active': False}) if use.binding_id in managed and use.binding_id not in live else use
+        uses = [use.model_copy(update={'active': False}) if use.model_card_id == target.id and use.binding_id in inactive else use
                 for use in shot.reference_uses]
         shots[index] = shot.model_copy(update={'reference_uses': uses})
-    return bool(muted)
 
 
 def carry_visual_continuity(current, shots, previous, cards, edges, order, adopted, capability):
@@ -110,6 +119,16 @@ def carry_visual_continuity(current, shots, previous, cards, edges, order, adopt
     for target_id, (relation, binding, frame, edge) in adopted.items():
         label = old_labels.get(target_id, card_name(previous[target_id]))
         target = cards.get(target_id)
+        if not binding:
+            if target_id in labels and isinstance(target, VideoModelCard):
+                if not relation.restored:
+                    original_ids = {item.id for item in relation.suspended.input_bindings.values()}
+                    _mute_references(target, shots, {item.id for item in target.input_bindings
+                                                     if item.id in original_ids and item.input_port in _SUBJECT_PORTS})
+                result[target_id] = relation
+            elif not relation.restored:
+                impacts.append(f'{label}：接收镜头已移除，暂停参考记录不再适用。')
+            continue
         if target_id not in labels or not isinstance(target, VideoModelCard):
             if isinstance(target, VideoModelCard):
                 clean_lost_references(target, previous, cards, current.id, {binding.id: binding}, set())

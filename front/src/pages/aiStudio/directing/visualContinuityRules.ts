@@ -26,7 +26,7 @@ export function continuityResults(document: CanvasDocument, targetId: string, ru
     const shotCard = document.cards?.find(card => card.id === shot.card_id)
     const shotName = shotCard && 'name' in shotCard && shotCard.name || `镜头 ${index + 1}`
     return node.outputs.flatMap((output, position) => output.modality === 'video' && output.file_id && output.available !== false ? [{
-      id: `${node.id}:${position}`, index, recommended: index === target - 1,
+      id: `${node.id}:${position}`, resultSetId: node.result_set_id, index, recommended: index === target - 1,
       label: `${shotName} · 运行 ${run.id.slice(0, 8)} · 成果 ${position + 1}`,
       source: { source_card_id: node.card_id, source_file_id: output.file_id,
         result: { run_id: run.id, node_id: node.id, position } } satisfies VideoFrameSource,
@@ -42,6 +42,23 @@ export function activeVisualContinuity(document: CanvasDocument, targetId: strin
   const frame = binding && document.cards?.find(item => item.id === binding.source.card_id)
   return binding && frame && 'frame_origin' in frame && frame.frame_origin
     ? { record, binding, frame: frame as ImageContentCard, origin: frame.frame_origin } : undefined
+}
+
+type ContinuityResult = ReturnType<typeof continuityResults>[number]
+type AdoptedOrigin = NonNullable<ReturnType<typeof activeVisualContinuity>>['origin']
+
+export function isAdoptedContinuityResult(result: ContinuityResult, origin: AdoptedOrigin) {
+  return result.resultSetId === origin.result_set_id && result.source.result?.position === origin.result?.position
+    && result.source.source_file_id === origin.source_file_id
+}
+
+/** 只比较原来源卡的最新可用成功成果，文件相同不代表同一次生成。 */
+export function newContinuityResult(results: ContinuityResult[], origin: AdoptedOrigin, runs: CanvasRunRead[]) {
+  const index = runs.findIndex(run => run.id === origin.result?.run_id)
+  if (index < 0) return undefined
+  const laterRuns = new Set(runs.slice(index + 1).map(run => run.id))
+  return results.find(item => item.source.source_card_id === origin.source_card_id && item.resultSetId !== origin.result_set_id
+    && !!item.source.result && laterRuns.has(item.source.result.run_id))
 }
 
 export function visualContinuitySources(card: GenerationCard, document: CanvasDocument): CanvasSourceItem[] {
@@ -106,19 +123,35 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
   const index = storyboardShotIndex(document, targetId)
   if (!document.storyboard || target?.type !== 'model.video' || target.model_id !== capability.model_id ||
     typeof source !== 'number' || source < 0 || source >= index) throw new Error('当前镜头或模型已变化，请重新选择来源')
-  if (activeVisualContinuity(document, targetId)) throw new Error('当前镜头已有视觉承接')
+  const existing = activeVisualContinuity(document, targetId)
+  if (existing && (existing.binding.input_port !== port || suspension)) throw new Error('重新采用时须保留当前参考用途')
+  const previous = document.storyboard.visual_continuity?.[targetId]
+  if (suspension && previous?.suspended && !previous.restored)
+    throw new Error('请先核对当前已停用的主体参考')
   const plan = suspension ? planSubjectSuspension(target) : undefined
   if (suspension && (!plan || JSON.stringify(suspension) !== JSON.stringify(plan.suspension)))
     throw new Error('主体参考已变化，请重新核对后确认切换')
   const next = plan?.card ?? target
-  const operations = createCanvasOperations(createGraphRules(catalog))
+  const rules = createGraphRules(catalog)
+  const operations = createCanvasOperations(rules)
   const withFrame = { ...document, cards: [...(document.cards || []), frame] }
-  const result = operations.update(withFrame, { ...next, input_bindings: [...(next.input_bindings || []),
-    { id: bindingId, source: { canvas_id: document.id, card_id: frame.id, port_id: 'image', position: 0 },
-      input_port: port, subject_name: port === 'subject_image' ? subjectName : null, prompt_owned: false }],
-  }, capability)
+  const sourceFrame = { canvas_id: document.id, card_id: frame.id, port_id: 'image', position: 0 }
+  const bindings = next.input_bindings || []
+  const inputs = existing
+    ? bindings.map(binding => binding.id === existing.binding.id ? { ...binding, source: sourceFrame } : binding)
+    : [...bindings, { id: bindingId, source: sourceFrame, input_port: port,
+      subject_name: port === 'subject_image' ? subjectName : null, prompt_owned: false }]
+  const result = operations.update(withFrame, { ...next, input_bindings: inputs }, capability)
   if (!result.document) throw new Error(result.reason)
-  return { ...result.document, storyboard: { ...document.storyboard, visual_continuity: {
-    ...document.storyboard.visual_continuity, [targetId]: { binding_id: bindingId, ...(suspension ? { suspended: suspension } : {}) },
+  const uses = [...inputs, ...(next.design_media_uses || [])]
+  const previousCandidates = (result.document.edges || []).filter(edge => edge.target_card === targetId
+    && edge.source_card === existing?.frame.id && !uses.some(use => use.input_port === edge.target_port
+      && use.source.card_id === edge.source_card && use.source.port_id === edge.source_port))
+  const updated = previousCandidates.reduce((current, edge) => rules.disconnect(current, edge.id), result.document)
+  return { ...updated, storyboard: { ...document.storyboard, visual_continuity: {
+    ...document.storyboard.visual_continuity, [targetId]: {
+      ...(suspension ? { suspended: suspension } : previous),
+      binding_id: existing?.binding.id ?? bindingId,
+    },
   } } }
 }

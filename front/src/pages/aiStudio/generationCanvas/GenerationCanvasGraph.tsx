@@ -104,6 +104,7 @@ export interface CanvasModelCardMenuContext {
 export interface CanvasModelCardActionContext {
   card: GenerationCard
   document: CanvasDocument
+  runs: CanvasRunRead[]
   runStatus?: CanvasNodeRead['status']
   disabled: boolean
   checking: boolean
@@ -1744,7 +1745,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
             {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly}
-              action={renderModelCardAction?.({ card, document, runStatus: node?.status, disabled: precheckDisabled, checking: runtime?.checking === card.id || preparingModel === card.id,
+              action={renderModelCardAction?.({ card, document, runs: runtime?.runs ?? [], runStatus: node?.status, disabled: precheckDisabled, checking: runtime?.checking === card.id || preparingModel === card.id,
                 precheck: trigger => void precheckFromCard(card.id, trigger) })} />}
           </CardShell>
           if (card.type !== 'review.check') return cardNode
