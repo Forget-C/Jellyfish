@@ -28,6 +28,7 @@ const preservesFixedSource = (server: CanvasDocument, draft: CanvasDocument) => 
     same(server.cards?.find(card => card.id === source.card_id), draft.cards?.find(card => card.id === source.card_id)))
 }
 const renameSave = (requestId?: string) => requestId?.startsWith('rename:') === true
+const visualContinuitySave = (requestId?: string) => requestId?.startsWith('visual-continuity:') === true
 const initialStoryboardSave = (requestId: string) => requestId.startsWith('storyboard:')
 /** 仅已核实的分镜应用回执可为布局提供应用前文档。 */
 const storyboardApplicationReceipt = (command: PendingSave, before: CanvasDocument, after: CanvasDocument): StoryboardApplicationReceipt | undefined => {
@@ -220,7 +221,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       // 先重放未明请求取得原回执，再读取最新服务端；恢复不产生新的保存意图。
       let baseline = saved.baseline
       let recovered = saved.document
-      const staged = !!saved.pending && (renameSave(saved.pending.request_id) || initialStoryboardSave(saved.pending.request_id) || !!saved.pending.scene)
+      const staged = !!saved.pending && (renameSave(saved.pending.request_id) || initialStoryboardSave(saved.pending.request_id) || visualContinuitySave(saved.pending.request_id) || !!saved.pending.scene)
       if (saved.pending) {
         baseline = await send(baseline, saved.pending)
         if (staged) recovered = baseline.document
@@ -344,6 +345,25 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setInitialApplying(true); persist()
     return save()
   }
+  const prepareCommittedEdit = async () => {
+    const s = state.current
+    if (!await save() || s !== state.current || !s.current || s.initialBefore) return undefined
+    return s.current
+  }
+  // 和场次应用使用同一回执及撤销链，已确认前保持原文档可见。
+  const commitVisualContinuity = (expectedRevision: number, requestId: string, transform: (before: CanvasDocument) => CanvasDocument) => {
+    const s = state.current
+    if (!ownership.canEdit() || !s.current || !s.document || s.scope !== key || s.recovery || s.conflict) return Promise.resolve(false)
+    const id = `visual-continuity:${requestId}`
+    if (s.pending?.request_id === id) return save()
+    if (inFlight.current || s.pending || !same(s.document, s.current.document) || s.current.revision !== expectedRevision) return Promise.resolve(false)
+    const next = markStoryboardEdits(s.document, cleanObjectSources(transform(s.document)))
+    if (same(next, s.document)) return Promise.resolve(true)
+    s.initialBefore = s.document
+    s.pending = { request_id: id, expected_revision: expectedRevision, document: next }
+    setInitialApplying(true); persist()
+    return save()
+  }
   const requestLeave = async () => {
     const s = state.current
     if (s.recovery) return false
@@ -370,6 +390,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const saveDiagnostic = failedDiagnostic?.scope === key && same(document, failedDiagnostic.document) ? failedDiagnostic.issue : undefined
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename,
+  return { canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

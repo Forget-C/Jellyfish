@@ -202,6 +202,9 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict, *, s
             await validate_media_file(db, project_id, media_references[card.id][0])
     if document.cover_file_id:
         await validate_media_file(db, project_id, media_references[''][0])
+    if document.storyboard and document.storyboard.visual_continuity:
+        from app.services.directing.storyboard_visual_continuity import validate_visual_continuity
+        await validate_visual_continuity(db, canvas, document, previous_document, context)
     return PreparedDocument(document, previous_document, identities, media_references, detached_proofs)
 
 

@@ -268,6 +268,7 @@ export type { CanvasVideoFrameOrigin } from './models/CanvasVideoFrameOrigin';
 export type { CanvasVideoFrameRequest } from './models/CanvasVideoFrameRequest';
 export type { CanvasVideoFrameResult } from './models/CanvasVideoFrameResult';
 export type { CanvasView } from './models/CanvasView';
+export type { CanvasVisualContinuity } from './models/CanvasVisualContinuity';
 export type { ChapterAssemblyRead } from './models/ChapterAssemblyRead';
 export type { ChapterCreate } from './models/ChapterCreate';
 export type { ChapterDeliveriesRead } from './models/ChapterDeliveriesRead';

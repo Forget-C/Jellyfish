@@ -11,6 +11,8 @@ import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { storyboardCanvasLayout } from './storyboardCanvasLayout'
+import { StoryboardVisualContinuity } from './StoryboardVisualContinuity'
+import { activeVisualContinuity, storyboardShotIndex, visualContinuitySources } from './visualContinuityRules'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 
@@ -63,6 +65,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
+      renderModelCardMenu={context => <StoryboardVisualContinuity {...context} />}
+      modelCardSources={visualContinuitySources}
       renderModelCardAction={({ card, document, runStatus, disabled, checking, precheck }) => {
         if (card.type !== 'model.video') return null
         const shot = document.storyboard?.shots.find(item => item.model_card_ids.includes(card.id))
@@ -70,7 +74,11 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const shotCard = document.cards?.find(item => item.id === shot.card_id)
         const name = shotCard && 'name' in shotCard && shotCard.name || '镜头'
         const label = shot.model_card_ids.length > 1 ? `${name} · 片段 ${shot.model_card_ids.indexOf(card.id) + 1}` : name
+        const laterShot = storyboardShotIndex(document, card.id) > 0
+        const adopted = activeVisualContinuity(document, card.id)
         return <><span title={label}>{label}</span>
+          {laterShot && (adopted ? <span>已采用前镜画面</span>
+            : <span title="未采用前镜画面，直接生成可能出现画面不连续">未采用前镜画面</span>)}
           <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>
             {videoActionLabels[runStatus ?? ''] || '生成视频'}
           </Button></>
