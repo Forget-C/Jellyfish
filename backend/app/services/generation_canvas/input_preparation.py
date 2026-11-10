@@ -11,6 +11,11 @@ def _design_inputs(context, card, candidates, model_outputs, used_keys, selected
     """Keep direct candidates separate; merge actual media by stable identity and re-render typed references."""
     if card.type not in ('model.image', 'model.video'):
         return candidates, [], card
+    paused = set()
+    storyboard = context.document.storyboard
+    if card.type == 'model.video' and storyboard and storyboard.visual_continuity.get(card.id):
+        from app.services.directing.storyboard_visual_continuity import suspended_subject_sources
+        paused = suspended_subject_sources(storyboard, card)
     selected = list(selected)
     order = list(dict.fromkeys(identity_key(binding.source) for binding in card.input_bindings))
     selected.sort(key=lambda item: order.index(identity_key(item.source)) if identity_key(item.source) in order else len(order))
@@ -23,6 +28,8 @@ def _design_inputs(context, card, candidates, model_outputs, used_keys, selected
             continue
         for ref in design.payload.material_references:
             key = identity_key(ref.source)
+            if key in paused:
+                continue
             if key not in media:
                 if key not in known:
                     counts[ref.modality] += 1
@@ -48,8 +55,9 @@ def _design_inputs(context, card, candidates, model_outputs, used_keys, selected
     rendered = []
     for candidate in candidates:
         key = identity_key(candidate.source)
-        if key in used_keys and isinstance(candidate.payload, DesignTextPayload) and candidate.payload.material_references:
-            outputs = context.published_outputs(candidate.source.card_id, model_outputs=model_outputs, reference_tokens=tokens)
+        if key in used_keys and isinstance(candidate.payload, DesignTextPayload) and (candidate.payload.material_references or paused):
+            outputs = context.published_outputs(candidate.source.card_id, model_outputs=model_outputs,
+                reference_tokens=tokens, paused_media=paused)
             updated = next((item for item in outputs if identity_key(item.source) == key), candidate)
             candidate = updated.model_copy(update={'token': candidate.token})
         elif key in media:
