@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Drawer } from 'antd'
 import { MenuOutlined } from '@ant-design/icons'
 import { Link, Outlet, useLocation } from 'react-router-dom'
@@ -10,6 +10,7 @@ import './management-layout.css'
 export default function ManagementLayout() {
   const { key, pathname } = useLocation()
   const [open, setOpen] = useState(false)
+  const navigationTrigger = useRef<HTMLButtonElement>(null)
   const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   const currentPage = managementPageForPath(pathname)?.to
 
@@ -39,11 +40,12 @@ export default function ManagementLayout() {
     <WorkspaceLayout className="management-layout">
       {wide ? links : <>
         <div className="management-navigation-trigger">
-          <Button type="text" icon={<MenuOutlined />} aria-label="打开管理导航"
+          <Button ref={navigationTrigger} type="text" icon={<MenuOutlined />} aria-label="打开管理导航"
             aria-expanded={open} onClick={() => setOpen(true)}>管理导航</Button>
         </div>
-        <Drawer title="管理导航" placement="left" width="min(272px, 100vw)" open={open}
-          onClose={() => setOpen(false)}>{links}</Drawer>
+        <Drawer title="管理导航" aria-label="管理导航" placement="left" width="min(272px, 100vw)" open={open}
+          onClose={() => setOpen(false)}
+          afterOpenChange={shown => { if (!shown) requestAnimationFrame(() => navigationTrigger.current?.focus({ preventScroll: true })) }}>{links}</Drawer>
       </>}
       <WorkspaceScrollPanel className="management-content"><Outlet /></WorkspaceScrollPanel>
     </WorkspaceLayout>

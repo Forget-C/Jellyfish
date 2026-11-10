@@ -1479,13 +1479,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/models/ProvidersTab.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "3eef30f871a6438ec532d241a8396c003cafa0a1ff25ce32510c59a7ced9c4af",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/project/ProjectVisualStyleAndStyleFields.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,

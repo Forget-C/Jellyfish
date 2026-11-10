@@ -68,3 +68,149 @@
     flex-wrap: wrap;
   }
 }
+
+.management-page {
+  height: 100%;
+}
+
+.management-model-header {
+  flex-shrink: 0;
+}
+
+.app-shell .app-page-toolbar.management-heading,
+.app-shell .app-page-toolbar.management-toolbar {
+  min-height: 52px;
+  padding: 8px var(--app-page-gutter);
+  gap: 8px;
+}
+
+.app-shell .management-heading .app-page-title,
+.app-shell .management-toolbar .app-page-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.management-heading .app-page-title {
+  flex-shrink: 0;
+  margin-inline-end: 12px;
+}
+
+.management-tabs {
+  min-width: 0;
+}
+
+.management-tabs > .ant-tabs-nav {
+  margin: 0;
+}
+
+.management-tabs > .ant-tabs-nav::before {
+  border: 0;
+}
+
+.management-tabs .ant-tabs-tab.ant-tabs-tab-active {
+  background: var(--app-selected);
+  border-radius: 6px;
+}
+
+.management-tabs .ant-tabs-nav .ant-tabs-tab {
+  padding: 6px 12px;
+  margin-inline-start: 4px;
+}
+
+.management-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.management-toolbar {
+  --management-control-height: 32px;
+  font-size: 13px;
+}
+
+.management-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 8px;
+}
+
+.management-tools .ant-input-affix-wrapper {
+  width: min(240px, 100%);
+}
+
+.management-tools > :is(.ant-input-affix-wrapper, .ant-select),
+.management-toolbar .ant-btn {
+  height: var(--management-control-height);
+  font-size: inherit;
+}
+
+.management-primary {
+  margin-inline-start: auto;
+}
+
+.management-count {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.management-panel {
+  padding: 0 var(--app-page-gutter) 20px;
+}
+
+.management-surface {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.management-panel > .ant-alert {
+  margin-bottom: 12px;
+}
+
+.management-table .ant-table {
+  font-size: 13px;
+}
+
+.management-table .ant-table-thead > tr > th::before {
+  display: none;
+}
+
+.management-table .ant-table-thead > tr > th,
+.management-table .ant-table-tbody > tr > td {
+  border-bottom-color: #f0f3f8;
+}
+
+.management-table .management-name.ant-btn {
+  display: inline-block;
+  max-width: 100%;
+  padding-inline: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.management-table .management-name.ant-btn:focus-visible {
+  outline-offset: -2px;
+}
+
+.management-details .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+}
+
+@media (width < 1024px) {
+  .management-toolbar {
+    --management-control-height: 36px;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell .management-heading .management-tabs {
+    flex-basis: 100%;
+  }
+
+  .management-surface {
+    padding: 8px;
+  }
+}

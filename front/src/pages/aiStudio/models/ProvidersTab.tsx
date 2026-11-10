@@ -1,187 +1,174 @@
 import type { ReactNode } from 'react'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Layout,
-  Input,
+  Alert,
   Button,
+  Descriptions,
+  Drawer,
+  Dropdown,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Skeleton,
+  Space,
   Table,
   Tag,
-  Space,
-  Card,
-  Dropdown,
-  Drawer,
-  Modal,
-  Form,
-  Select,
   message,
-  Tooltip,
-  Empty,
-  Grid,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  CopyOutlined,
-  ExportOutlined,
-  MenuOutlined,
-  AppstoreOutlined,
-  UnorderedListOutlined,
-  DownOutlined,
-  ThunderboltOutlined,
-  WarningOutlined,
-} from '@ant-design/icons'
+import { DeleteOutlined, DownOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { LlmService } from '../../../services/generated/services/LlmService'
-import type { ProviderRead, ProviderStatus, ProviderSupportedRead } from '../../../services/generated'
-import {
-  PROVIDER_STATUS_MAP,
-  SORT_OPTIONS,
-  TABLE_ACTION_BTN_EDIT_CLASS,
-  TABLE_ACTION_BTN_MORE_CLASS,
-  TABLE_ACTION_BTN_TEST_CLASS,
-  maskUrl,
-} from './constants'
+import type { ProviderRead, ProviderSupportedRead } from '../../../services/generated'
+import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
+
+const PAGE_SIZE = 20
+
+/** 详情展示端点地址，URL 中可能携带的身份与查询凭据不参与展示。 */
+function endpointLabel(value?: string | null) {
+  if (!value) return '—'
+  try {
+    const url = new URL(value)
+    return `${url.protocol}//${url.host}${url.pathname}`
+  } catch {
+    return '未知'
+  }
+}
 
 export default function ProvidersTab({ header }: { header: ReactNode }) {
-  const [providers, setProviders] = useState<ProviderRead[]>([])
-  const [supportedSpecs, setSupportedSpecs] = useState<ProviderSupportedRead[]>([])
-  const [supportedLoading, setSupportedLoading] = useState(true)
+  const [result, setResult] = useState<{ providers: ProviderRead[]; total?: number } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [revision, setRevision] = useState(0)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated')
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
+  const [page, setPage] = useState(1)
+  const [supportedSpecs, setSupportedSpecs] = useState<ProviderSupportedRead[]>([])
+  const [supportedLoading, setSupportedLoading] = useState(true)
   const [selectedProvider, setSelectedProvider] = useState<ProviderRead | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
+  const detailTrigger = useRef<HTMLElement | null>(null)
   const [providerModalOpen, setProviderModalOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
   const [credentialsLoading, setCredentialsLoading] = useState(false)
-  const [testConnecting, setTestConnecting] = useState(false)
+  const credentialsRequest = useRef<ReturnType<typeof LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet> | null>(null)
+  const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
+  const deleteInFlight = useRef(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [modal, modalContext] = Modal.useModal()
   const [form] = Form.useForm()
-  const { xl: lg } = Grid.useBreakpoint()
-  const isLargeScreen = lg ?? false
 
-  const load = async () => {
+  const reload = () => setRevision(value => value + 1)
+
+  useEffect(() => {
+    let active = true
     setLoading(true)
-    try {
-      const order = sortBy === 'name' ? 'name' : 'updated_at'
-      const res = await LlmService.listProvidersApiV1LlmProvidersGet({
-        q: search.trim() || undefined,
-        order,
-        isDesc: true,
-        page: 1,
-        pageSize: 100,
-      })
-      setProviders(res.data?.items ?? [])
-    } catch {
-      message.error('加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void load()
-  }, [search, sortBy])
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      setSupportedLoading(true)
-      try {
-        const res = await LlmService.listSupportedProvidersApiV1LlmProvidersSupportedGet({})
-        if (!cancelled) setSupportedSpecs(res.data ?? [])
-      } catch {
-        if (!cancelled) {
-          message.error('加载系统支持的供应商列表失败')
-          setSupportedSpecs([])
-        }
-      } finally {
-        if (!cancelled) setSupportedLoading(false)
+    setLoadFailed(false)
+    const request = LlmService.listProvidersApiV1LlmProvidersGet({
+      q: search.trim() || undefined,
+      order: sortBy === 'name' ? 'name' : 'updated_at',
+      isDesc: sortBy !== 'name',
+      page,
+      pageSize: PAGE_SIZE,
+    })
+    void request.then(response => {
+      if (!active) return
+      const data = response.data
+      if (!data || !Array.isArray(data.items)) {
+        setLoadFailed(true)
+        return
       }
-    })()
+      setResult({
+        providers: data.items,
+        total: typeof data.pagination?.total === 'number' ? data.pagination.total : undefined,
+      })
+    }).catch(() => {
+      if (active) setLoadFailed(true)
+    }).finally(() => {
+      if (active) setLoading(false)
+    })
     return () => {
-      cancelled = true
+      active = false
+      request.cancel()
+    }
+  }, [page, revision, search, sortBy])
+
+  useEffect(() => {
+    let active = true
+    const request = LlmService.listSupportedProvidersApiV1LlmProvidersSupportedGet({})
+    void request.then(response => {
+      if (active) setSupportedSpecs(response.data ?? [])
+    }).catch(() => {
+      if (active) message.error('加载系统支持的供应商列表失败')
+    }).finally(() => {
+      if (active) setSupportedLoading(false)
+    })
+    return () => {
+      active = false
+      request.cancel()
     }
   }, [])
 
+  useEffect(() => () => credentialsRequest.current?.cancel(), [])
+
   const providerNameOptions = useMemo(() => {
-    const fromApi = supportedSpecs.map((s) => ({
-      label: s.is_experimental ? `${s.display_name}（实验）` : s.display_name,
-      value: s.display_name,
+    const fromApi = supportedSpecs.map(spec => ({
+      label: spec.is_experimental ? `${spec.display_name}（实验）` : spec.display_name,
+      value: spec.display_name,
     }))
     const name = providerEditing?.name?.trim()
-    if (!name) return fromApi
-    const known = supportedSpecs.some(
-      (s) => s.display_name === name || (s.aliases?.length && s.aliases.includes(name)),
-    )
-    if (known) return fromApi
+    if (!name || supportedSpecs.some(spec => spec.display_name === name || spec.aliases?.includes(name))) return fromApi
     return [{ label: `${name}（历史/未在清单内）`, value: name }, ...fromApi]
   }, [supportedSpecs, providerEditing])
 
   const applyDefaultBaseUrlForDisplayName = (displayName: string) => {
-    const spec = supportedSpecs.find(
-      (s) => s.display_name === displayName || (s.aliases?.length && s.aliases.includes(displayName)),
-    )
-    const def = spec?.default_base_url?.trim()
-    if (!def) return
+    const spec = supportedSpecs.find(item => item.display_name === displayName || item.aliases?.includes(displayName))
+    const defaultUrl = spec?.default_base_url?.trim()
+    if (!defaultUrl) return
     const current = (form.getFieldValue('base_url') as string | undefined)?.trim()
-    if (!providerEditing || !current) {
-      form.setFieldsValue({ base_url: def })
-    }
+    if (!providerEditing || !current) form.setFieldsValue({ base_url: defaultUrl })
   }
 
-  const providerList = useMemo(() => {
-    let list = providers
-    if (sortBy === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name))
-    return list
-  }, [providers, sortBy])
-
-  const handleTestConnection = async (provider?: ProviderRead) => {
-    const p = provider ?? selectedProvider
-    if (!p) return
-    setTestConnecting(true)
-    try {
-      await new Promise((r) => setTimeout(r, 800))
-      message.success('连接成功')
-    } catch {
-      message.error('连接失败，请检查 Base URL 与 AK/SK')
-    } finally {
-      setTestConnecting(false)
-    }
+  const closeProviderModal = () => {
+    credentialsRequest.current?.cancel()
+    credentialsRequest.current = null
+    setCredentialsLoading(false)
+    setProviderModalOpen(false)
+    setProviderEditing(null)
+    form.resetFields()
   }
 
   const handleSaveProvider = async () => {
+    if (saveInFlight.current || credentialsLoading) return
+    saveInFlight.current = true
+    setSaving(true)
     try {
       const values = await form.validateFields()
+      const sharedFields = {
+        name: values.name,
+        base_url: values.base_url,
+        image_base_url: values.image_base_url ?? null,
+        video_base_url: values.video_base_url ?? null,
+        description: values.description ?? null,
+        status: values.status ?? null,
+      }
       if (providerEditing) {
-        const requestBody: Parameters<typeof LlmService.updateProviderApiV1LlmProvidersProviderIdPatch>[0]['requestBody'] = {
-          name: values.name,
-          base_url: values.base_url,
-          image_base_url: values.image_base_url ?? null,
-          video_base_url: values.video_base_url ?? null,
-          description: values.description ?? null,
-          status: values.status ?? null,
-        }
+        const requestBody: Parameters<typeof LlmService.updateProviderApiV1LlmProvidersProviderIdPatch>[0]['requestBody'] = sharedFields
         if (values.api_key && values.api_key !== '********') requestBody.api_key = values.api_key
         if (values.api_secret && values.api_secret !== '********') requestBody.api_secret = values.api_secret
-        await LlmService.updateProviderApiV1LlmProvidersProviderIdPatch({
-          providerId: providerEditing.id,
-          requestBody,
-        })
+        await LlmService.updateProviderApiV1LlmProvidersProviderIdPatch({ providerId: providerEditing.id, requestBody })
         message.success('供应商已更新')
       } else {
-        const id =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `prov_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+        const id = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `prov_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
         await LlmService.createProviderApiV1LlmProvidersPost({
           requestBody: {
+            ...sharedFields,
             id,
-            name: values.name,
-            base_url: values.base_url,
-            image_base_url: values.image_base_url ?? null,
-            video_base_url: values.video_base_url ?? null,
             description: values.description,
             status: values.status,
             api_key: values.api_key,
@@ -190,182 +177,128 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         })
         message.success('供应商已添加')
       }
-      setProviderModalOpen(false)
-      setProviderEditing(null)
-      form.resetFields()
-      void load()
-    } catch (e) {
-      if (e && typeof e === 'object' && 'errorFields' in e) return
-      message.error('保存失败')
+      closeProviderModal()
+      reload()
+    } catch (error) {
+      if (error && typeof error === 'object' && 'errorFields' in error) return
+      message.error('保存供应商失败，请重试')
+    } finally {
+      saveInFlight.current = false
+      setSaving(false)
     }
   }
 
-  const handleDeleteProvider = async (p: ProviderRead) => {
-    let linked = 0
+  const handleDeleteProvider = async (provider: ProviderRead) => {
+    if (deleteInFlight.current) return
+    deleteInFlight.current = true
+    setConfirmingDelete(true)
+    let linked: number | undefined
     try {
-      const countRes = await LlmService.listModelsApiV1LlmModelsGet({
-        providerId: p.id,
-        pageSize: 1,
-      })
-      linked = countRes.data?.pagination?.total ?? 0
+      const response = await LlmService.listModelsApiV1LlmModelsGet({ providerId: provider.id, pageSize: 1 })
+      linked = response.data?.pagination?.total
     } catch {
-      // ignore
+      // 数量不可用时仍由既有删除接口校验关联限制。
     }
-    Modal.confirm({
-      title: '删除供应商',
-      content:
-        linked > 0
-          ? `该供应商下还有 ${linked} 个模型，删除后关联模型将失效。确定删除？`
-          : '确定删除该供应商？',
-      okText: '删除',
-      okType: 'danger',
-      onOk: async () => {
-        await LlmService.deleteProviderApiV1LlmProvidersProviderIdDelete({ providerId: p.id })
-        message.success('已删除')
-        if (selectedProvider?.id === p.id) setSelectedProvider(null)
-        void load()
-      },
-    })
+    try {
+      await modal.confirm({
+        title: `删除供应商「${provider.name}」？`,
+        content: linked === 0 ? '删除后无法恢复。' : linked === undefined
+          ? '未能读取关联模型数量。删除后，关联模型可能失效。'
+          : `该供应商关联 ${linked} 个模型，删除后关联模型可能失效。`,
+        okText: '删除',
+        okType: 'danger',
+        onOk: async () => {
+          try {
+            await LlmService.deleteProviderApiV1LlmProvidersProviderIdDelete({ providerId: provider.id })
+            message.success('供应商已删除')
+            if (result?.providers.length === 1 && page > 1) setPage(page - 1)
+            else reload()
+          } catch (error) {
+            message.error('删除供应商失败，请重试')
+            throw error
+          }
+        },
+      })
+    } finally {
+      deleteInFlight.current = false
+      setConfirmingDelete(false)
+    }
   }
 
-  /** 打开供应商表单，并仅在编辑时按需加载可由密码框显示的真实凭据。 */
-  const openProviderModal = async (p?: ProviderRead) => {
-    setProviderEditing(p ?? null)
-    if (p) {
-      form.setFieldsValue({
-        name: p.name,
-        base_url: p.base_url,
-        image_base_url: p.image_base_url ?? null,
-        video_base_url: p.video_base_url ?? null,
-        api_key: '',
-        api_secret: '',
-        description: p.description,
-        status: p.status ?? 'active',
-      })
-      setProviderModalOpen(true)
-      setCredentialsLoading(true)
-      try {
-        const res = await LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet({
-          providerId: p.id,
-        })
-        form.setFieldsValue({
-          api_key: res.data?.api_key ?? '',
-          api_secret: res.data?.api_secret ?? '',
-        })
-      } catch {
-        message.error('加载供应商密钥失败，请重新填写后保存')
-      } finally {
+  /** 真实凭据仅通过原编辑流程读取，列表和只读详情不请求凭据。 */
+  const openProviderModal = async (provider?: ProviderRead) => {
+    setProviderEditing(provider ?? null)
+    form.resetFields()
+    setProviderModalOpen(true)
+    if (!provider) return
+    form.setFieldsValue({
+      name: provider.name,
+      base_url: provider.base_url,
+      image_base_url: provider.image_base_url,
+      video_base_url: provider.video_base_url,
+      description: provider.description,
+      status: provider.status ?? 'active',
+    })
+    setCredentialsLoading(true)
+    const request = LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet({ providerId: provider.id })
+    credentialsRequest.current = request
+    try {
+      const response = await request
+      if (credentialsRequest.current === request) {
+        form.setFieldsValue({ api_key: response.data?.api_key ?? '', api_secret: response.data?.api_secret ?? '' })
+      }
+    } catch {
+      if (credentialsRequest.current === request) message.error('加载供应商密钥失败，可留空或重新填写后保存')
+    } finally {
+      if (credentialsRequest.current === request) {
+        credentialsRequest.current = null
         setCredentialsLoading(false)
       }
-    } else {
-      form.resetFields()
-      setProviderModalOpen(true)
     }
+  }
+
+  const changeSearch = (value: string) => {
+    setSearch(value)
+    setPage(1)
   }
 
   const providerColumns: TableColumnsType<ProviderRead> = [
-    { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true, render: (n) => <Space>{n}</Space> },
     {
-      title: 'Base URL',
-      dataIndex: 'base_url',
-      key: 'base_url',
-      ellipsis: true,
-      render: (url: string) => <Tooltip title={url}>{maskUrl(url)}</Tooltip>,
-    },
-    {
-      title: 'AK/SK',
-      key: 'aksk',
-      render: () => (
-        <span>
-          <WarningOutlined className="text-amber-500 mr-1" />
-          ******** / ********
-        </span>
+      title: '名称', dataIndex: 'name', key: 'name', width: 180,
+      render: (name: string, record) => (
+        <Button type="link" className="management-name" title={name} onClick={event => {
+          detailTrigger.current = event.currentTarget
+          setSelectedProvider(record)
+          setDetailPanelOpen(true)
+        }}>{name}</Button>
       ),
     },
     {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-      render: (d: string) => <Tooltip title={d}>{d || '—'}</Tooltip>,
+      title: '地址摘要', dataIndex: 'base_url', key: 'base_url', ellipsis: true,
+      render: (url: string) => {
+        const address = endpointLabel(url)
+        return address === '未知' || address === '—' ? address : maskUrl(address)
+      },
+    },
+    { title: '凭据配置状态', key: 'credentials', width: 132, render: () => '未知' },
+    {
+      title: '状态', dataIndex: 'status', key: 'status', width: 90,
+      render: (status: ProviderRead['status']) => status
+        ? <Tag color={PROVIDER_STATUS_MAP[status]?.color}>{PROVIDER_STATUS_MAP[status]?.text ?? '未知'}</Tag>
+        : '未知',
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 90,
-      render: (s: ProviderStatus) => (
-        <Tag color={PROVIDER_STATUS_MAP[s]?.color}>{PROVIDER_STATUS_MAP[s]?.text}</Tag>
-      ),
-    },
-    {
-      title: '创建人',
-      dataIndex: 'created_by',
-      key: 'created_by',
-      width: 100,
-      render: (c: string) => c || '—',
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 112,
-      fixed: 'right',
-      align: 'center',
+      title: '操作', key: 'action', width: 208,
       render: (_, record) => (
-        <Space size={4} className="flex-nowrap justify-center">
-          <Tooltip title="编辑">
-            <Button
-              type="text"
-              size="small"
-              className={TABLE_ACTION_BTN_EDIT_CLASS}
-              icon={<EditOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                void openProviderModal(record)
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="测试连接">
-            <Button
-              type="text"
-              size="small"
-              className={TABLE_ACTION_BTN_TEST_CLASS}
-              icon={<ThunderboltOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                void handleTestConnection(record)
-              }}
-            />
-          </Tooltip>
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'copy', label: '复制', icon: <CopyOutlined /> },
-                { key: 'export', label: '导出配置', icon: <ExportOutlined /> },
-                { type: 'divider' },
-                {
-                  key: 'delete',
-                  label: '删除',
-                  danger: true,
-                  icon: <DeleteOutlined />,
-                  onClick: ({ domEvent }) => {
-                    domEvent.stopPropagation()
-                    handleDeleteProvider(record)
-                  },
-                },
-              ],
-            }}
-            trigger={['click']}
-          >
-            <Tooltip title="更多">
-              <Button
-                type="text"
-                size="small"
-                className={TABLE_ACTION_BTN_MORE_CLASS}
-                icon={<MenuOutlined />}
-                onClick={(e) => e.stopPropagation()}
-              />
-            </Tooltip>
+        <Space size={4}>
+          <Button type="text" size="small" aria-label={`编辑 ${record.name}`} onClick={() => void openProviderModal(record)}>编辑</Button>
+          <Button type="text" size="small" disabled>测试（暂未接入）</Button>
+          <Dropdown trigger={['click']} menu={{ items: [{
+            key: 'delete', label: '删除', danger: true, icon: <DeleteOutlined />,
+            disabled: confirmingDelete,
+            onClick: () => void handleDeleteProvider(record),
+          }] }}>
+            <Button type="text" size="small" icon={<MoreOutlined />} aria-label={`${record.name}的更多操作`} />
           </Dropdown>
         </Space>
       ),
@@ -375,279 +308,108 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   return (
     <>
       {header}
-      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-600 text-sm">共 {providers.length} 个供应商</span>
-        </div>
-        <Space wrap>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
-            添加供应商
-          </Button>
+      <PageToolbar className="management-toolbar">
+        <div className="management-tools">
           <Input
-            placeholder="搜索名称/描述"
+            aria-label="搜索供应商"
+            prefix={<SearchOutlined />}
+            placeholder="搜索名称或描述"
             allowClear
-            className="w-48"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={event => changeSearch(event.target.value)}
           />
           <Dropdown
+            trigger={['click']}
             menu={{
-              items: SORT_OPTIONS.filter((o) => o.value !== 'category').map((o) => ({
-                key: o.value,
-                label: o.label,
-                onClick: () => setSortBy(o.value as 'updated' | 'name'),
+              selectable: true,
+              selectedKeys: [sortBy],
+              items: SORT_OPTIONS.filter(option => option.value !== 'category').map(option => ({
+                key: option.value, label: option.label,
+                onClick: () => {
+                  setSortBy(option.value as 'updated' | 'name')
+                  setPage(1)
+                },
               })),
             }}
           >
-            <Button icon={<DownOutlined />}>
-              排序：{SORT_OPTIONS.find((s) => s.value === sortBy)?.label}
-            </Button>
+            <Button icon={<DownOutlined />}>排序：{SORT_OPTIONS.find(option => option.value === sortBy)?.label}</Button>
           </Dropdown>
-        </Space>
-      </div>
-
-      <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
-
-
-        <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50">
-          <div className="flex justify-end gap-1 mb-2">
-            <Button
-              type={viewMode === 'table' ? 'primary' : 'default'}
-              size="small"
-              icon={<UnorderedListOutlined />}
-              onClick={() => setViewMode('table')}
-            />
-            <Button
-              type={viewMode === 'card' ? 'primary' : 'default'}
-              size="small"
-              icon={<AppstoreOutlined />}
-              onClick={() => setViewMode('card')}
-            />
-          </div>
-
-          {providerList.length === 0 ? (
-            <Card>
-              <Empty
-                description={
-                  providers.length === 0 ? '暂无供应商，点击「添加供应商」开始' : '无匹配结果'
-                }
-              >
-                {providers.length === 0 && (
-                  <Button type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
-                    添加第一个供应商
-                  </Button>
-                )}
-              </Empty>
-            </Card>
-          ) : viewMode === 'table' ? (
-            <Card>
-              <Table<ProviderRead>
-                rowKey="id"
-                loading={loading}
-                columns={providerColumns}
-                dataSource={providerList}
-                scroll={{ x: 1180 }}
-                pagination={{ pageSize: 20 }}
-                onRow={(record) => ({
-                  onClick: () => {
-                    setSelectedProvider(record)
-                    setDetailPanelOpen(true)
-                  },
-                  style: { cursor: 'pointer' },
-                })}
-                size="small"
-              />
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {providerList.map((p) => (
-                <Card
-                  key={p.id}
-                  hoverable
-                  className="cursor-pointer"
-                  style={{ minHeight: 220 }}
-                  onClick={() => {
-                    setSelectedProvider(p)
-                    setDetailPanelOpen(true)
-                  }}
-                  actions={[
-                    <Button
-                      key="edit"
-                      type="text"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void openProviderModal(p)
-                      }}
-                    >
-                      编辑
-                    </Button>,
-                    <Button
-                      key="test"
-                      type="text"
-                      size="small"
-                      icon={<ThunderboltOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleTestConnection(p)
-                      }}
-                    >
-                      测试
-                    </Button>,
-                    <Dropdown
-                      key="more"
-                      menu={{
-                        items: [
-                          {
-                            key: 'delete',
-                            label: '删除',
-                            danger: true,
-                            onClick: () => handleDeleteProvider(p),
-                          },
-                        ],
-                      }}
-                      trigger={['click']}
-                    >
-                      <Button type="text" size="small" onClick={(e) => e.stopPropagation()}>
-                        更多
-                      </Button>
-                    </Dropdown>,
-                  ]}
-                >
-                  <div className="font-medium mb-1">{p.name}</div>
-                  <div className="text-gray-500 text-sm mb-1 truncate" title={p.base_url}>
-                    Base URL：{maskUrl(p.base_url)}
-                  </div>
-                  <div className="text-gray-500 text-sm mb-1">AK/SK：******** / ********</div>
-                  <div className="text-gray-500 text-sm line-clamp-2 mb-2">{p.description || '—'}</div>
-                  <Tag color={PROVIDER_STATUS_MAP[p.status ?? 'active']?.color}>
-                    {PROVIDER_STATUS_MAP[p.status ?? 'active']?.text}
-                  </Tag>
-                  {p.created_by && (
-                    <span className="text-xs text-gray-400 ml-2">创建：{p.created_by}</span>
-                  )}
-                </Card>
-              ))}
-            </div>
-          )}
+          {result && <span className="management-count">
+            {result.total === undefined ? `已加载 ${result.providers.length} 个供应商` : `共 ${result.total} 个供应商`}
+          </span>}
         </div>
+        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
+          添加供应商
+        </Button>
+      </PageToolbar>
+      <WorkspaceScrollPanel className="management-panel">
+        {loadFailed && <Alert
+          showIcon
+          type="error"
+          message={result ? '刷新供应商失败，仍显示上次结果' : '加载供应商失败'}
+          action={<Button size="small" onClick={reload}>重试</Button>}
+        />}
+        {loading && !result && <div className="management-surface" role="status" aria-label="正在加载供应商">
+          <Skeleton active paragraph={{ rows: 4 }} />
+        </div>}
+        {result && <div className="management-surface">
+          <Table<ProviderRead>
+            className="management-table"
+            rowKey="id"
+            loading={loading}
+            columns={providerColumns}
+            dataSource={result.providers}
+            scroll={{ x: 790 }}
+            pagination={result.total === undefined ? false : { current: page, pageSize: PAGE_SIZE, total: result.total, showSizeChanger: false, onChange: setPage }}
+            locale={{
+              emptyText: loadFailed || loading ? null : (
+                <Empty description={search.trim() ? '无匹配结果' : '暂无供应商'}>
+                  {search.trim()
+                    ? <Button onClick={() => changeSearch('')}>清除搜索</Button>
+                    : <Button onClick={() => void openProviderModal()}>添加第一个供应商</Button>}
+                </Empty>
+              ),
+            }}
+            size="small"
+          />
+        </div>}
+      </WorkspaceScrollPanel>
 
-        {selectedProvider && isLargeScreen && (
-          <div
-            className="flex-shrink-0 overflow-auto border-l border-gray-200 bg-white"
-            style={{ width: 344 }}
-          >
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <span className="font-medium">详情</span>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  setDetailPanelOpen(false)
-                  setSelectedProvider(null)
-                }}
-              >
-                收起
-              </Button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div>
-                <div className="text-sm text-gray-500 mb-1">名称</div>
-                <div className="font-medium">{selectedProvider.name}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">文本/通用 Base URL</div>
-                <Tooltip title={selectedProvider.base_url}>
-                  <span className="text-sm">{maskUrl(selectedProvider.base_url)}</span>
-                </Tooltip>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">图片 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.image_base_url ? maskUrl(selectedProvider.image_base_url) : '回退到文本/通用'}</span>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">视频 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.video_base_url ? maskUrl(selectedProvider.video_base_url) : '回退到文本/通用'}</span>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">描述</div>
-                <div className="text-gray-700 text-sm">{selectedProvider.description || '—'}</div>
-              </div>
-              <Space>
-                <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={() => void openProviderModal(selectedProvider)}
-                >
-                  编辑
-                </Button>
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  loading={testConnecting}
-                  onClick={() => handleTestConnection()}
-                >
-                  测试连接
-                </Button>
-              </Space>
-            </div>
-          </div>
-        )}
+      <Drawer
+        title="供应商详情"
+        aria-label="供应商详情"
+        open={detailPanelOpen}
+        placement="right"
+        width="min(100vw, 420px)"
+        onClose={() => setDetailPanelOpen(false)}
+        afterOpenChange={open => {
+          if (!open) {
+            setSelectedProvider(null)
+            requestAnimationFrame(() => detailTrigger.current?.focus({ preventScroll: true }))
+          }
+        }}
+      >
+        {selectedProvider && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
+          { key: 'name', label: '名称', children: selectedProvider.name },
+          { key: 'url', label: '文本/通用 Base URL', children: endpointLabel(selectedProvider.base_url) },
+          { key: 'image', label: '图片 Base URL', children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : '回退到文本/通用' },
+          { key: 'video', label: '视频 Base URL', children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : '回退到文本/通用' },
+          { key: 'credentials', label: '凭据配置状态', children: '未知' },
+          { key: 'status', label: '状态', children: selectedProvider.status ? PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? '未知' : '未知' },
+          { key: 'description', label: '描述', children: selectedProvider.description || '—' },
+          { key: 'created', label: '创建人', children: selectedProvider.created_by || '—' },
+        ]} />}
+      </Drawer>
 
-        {selectedProvider && !isLargeScreen && (
-          <Drawer
-            title="详情"
-            placement="right"
-            open={detailPanelOpen}
-            onClose={() => setDetailPanelOpen(false)}
-            width="min(100%, 400px)"
-          >
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-gray-500 mb-1">名称</div>
-                <div className="font-medium">{selectedProvider.name}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">文本/通用 Base URL</div>
-                <span className="text-sm">{maskUrl(selectedProvider.base_url)}</span>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">图片 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.image_base_url ? maskUrl(selectedProvider.image_base_url) : '回退到文本/通用'}</span>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">视频 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.video_base_url ? maskUrl(selectedProvider.video_base_url) : '回退到文本/通用'}</span>
-              </div>
-              <Space>
-                <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={() => void openProviderModal(selectedProvider)}
-                >
-                  编辑
-                </Button>
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  onClick={() => handleTestConnection()}
-                >
-                  测试连接
-                </Button>
-              </Space>
-            </div>
-          </Drawer>
-        )}
-      </Layout>
-
+      {modalContext}
       <Modal
         title={providerEditing ? '编辑供应商' : '添加供应商'}
         open={providerModalOpen}
-        onCancel={() => {
-          setProviderModalOpen(false)
-          setProviderEditing(null)
-          form.resetFields()
-        }}
+        onCancel={() => { if (!saving) closeProviderModal() }}
         onOk={() => void handleSaveProvider()}
+        confirmLoading={saving}
+        okButtonProps={{ disabled: credentialsLoading }}
+        cancelButtonProps={{ disabled: saving }}
         width={560}
         destroyOnClose
       >
