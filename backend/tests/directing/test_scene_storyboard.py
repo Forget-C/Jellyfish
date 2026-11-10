@@ -170,6 +170,82 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(('card_type', 'field', 'subject', 'reason'), [
+    ('direction.blocking', 'position', 'warehouse', '场所'),
+    ('direction.camera', 'viewpoint', 'rain', '不接受'),
+    ('direction.blocking', 'position', 'unknown', '未登记'),
+])
+async def test_storyboard_repairs_the_invalid_design_subject(tmp_path, monkeypatch, card_type, field, subject, reason):
+    """A repair can identify the bad subject without dropping the design or the location."""
+    original = '小雨走进仓库。'
+    proposal = '用仓库门框交代小雨的位置'
+    calls = []
+
+    class ControlledModel:
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, messages):
+            calls.append(messages[-1].content)
+            design = {'id': 'door', 'card_type': card_type, 'object_id': subject,
+                      'fields': {field: {'state': 'proposal', 'text': proposal}}}
+            lighting = {'id': 'light', 'card_type': 'direction.lighting', 'object_id': 'rain',
+                        'fields': {'light_direction': {'state': 'proposal', 'text': '用侧光表现门框'}}}
+            feedback = json.loads(calls[-1].split('\n', 1)[1]) if len(calls) == 2 else []
+            issues = {tuple(issue['loc']): issue['msg'] for issue in feedback}
+            if reason in issues.get(('shots', 0, 'designs', 0, 'object_id'), ''):
+                if card_type == 'direction.camera':
+                    design.pop('object_id')
+                else:
+                    design['object_id'] = 'rain'
+            if '不接受' in issues.get(('shots', 0, 'designs', 1, 'object_id'), ''):
+                lighting.pop('object_id')
+            return SimpleNamespace(content=json.dumps({
+                'missed_objects': [
+                    {'id': 'rain', 'kind': 'character', 'name': '小雨', 'excerpt': '小雨'},
+                    {'id': 'warehouse', 'kind': 'scene', 'name': '仓库', 'excerpt': '仓库'},
+                ],
+                'shots': [{'id': 'enter', 'excerpt': original, 'object_ids': ['rain', 'warehouse'],
+                           'designs': [design, lighting]}],
+            }, ensure_ascii=False))
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = original
+            db.add(Provider(id='story-subject-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            await db.flush()
+            db.add(Model(id='story-subject-text', name='text', category='text', provider_id='story-subject-provider'))
+        base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        chapter = (await client.get(base)).json()['data']
+        scene = await client.post(base + '/sequences', json={'title': '场次', 'position': 0,
+            'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
+        assert scene.status_code == 200, scene.text
+        path = base + '/sequences/' + scene.json()['data']['id'] + '/storyboards'
+        submitted = await client.post(path, json={'request_id': 'subject', 'text_model_id': 'story-subject-text'})
+        assert submitted.status_code == 200, submitted.text
+        worker = TaskWorker(sessions)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=False)
+        ready = (await client.get(path + '/' + submitted.json()['data']['task_id'])).json()['data']
+        assert ready['status'] == 'succeeded', ready
+        assert len(calls) == 2
+        document = ready['candidate']['document']
+        assert any(card['type'] == 'reference.place' for card in document['cards'])
+        light = next(card for card in document['cards'] if card['type'] == 'direction.lighting')
+        assert light['fields']['light_direction']['text'] == '用侧光表现门框'
+        card = next(card for card in document['cards'] if card['type'] == card_type)
+        design_fields = card['fields'] if card_type == 'direction.camera' else card
+        assert design_fields[field]['text'] == proposal
+        if card_type == 'direction.blocking':
+            character = next(card for card in document['cards'] if card['type'] == 'content.character')
+            assert any(binding['source']['card_id'] == character['id'] for binding in card['input_bindings'])
+
+
+@pytest.mark.asyncio
 async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_facts(tmp_path, monkeypatch):
     """Both modes run the same task and save path; only complete permits proposals."""
     original = '阿青扶起椅子。'

@@ -3,6 +3,8 @@
 from functools import lru_cache
 from uuid import NAMESPACE_URL, uuid5
 
+from pydantic import ValidationError
+
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardField
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.storyboard_scope import (
@@ -83,10 +85,18 @@ def validate_storyboard(result: SceneStoryboard, args: dict) -> None:
                 not shot.estimated_duration or shot.estimated_duration.state != 'fact'):
             raise ValueError('忠实提取的预计时长必须有原文明示证据')
         _validate_occurrences(shot, result.conditions, occurrence_ids)
-    for owner, designs in [(None, result.designs)] + [(shot, shot.designs) for shot in result.shots]:
+    design_rows = [(('designs',), None, result.designs)] + [
+        (('shots', index, 'designs'), shot, shot.designs) for index, shot in enumerate(result.shots)]
+    subject_errors = []
+    for path, owner, designs in design_rows:
         span = source_span(source, owner.excerpt) if owner else (0, len(source))
-        for design in designs:
-            _validate_design(design, catalog, objects, source, span, complete=complete)
+        for index, design in enumerate(designs):
+            _validate_design(design, catalog, source, span, complete=complete)
+            if issue := _design_subject_issue(design, objects):
+                subject_errors.append({'type': 'value_error', 'loc': (*path, index, 'object_id'),
+                                       'input': design.object_id, 'ctx': {'error': ValueError(issue)}})
+    if subject_errors:
+        raise ValidationError.from_exception_data('SceneStoryboard', subject_errors)
     StoryboardDesignPlan(result).validate_relations(result)
 
 
@@ -111,7 +121,7 @@ def _validate_occurrences(shot, conditions, occurrence_ids) -> None:
         raise ValueError('镜头出现项遗漏原镜头范围')
 
 
-def _validate_design(design, catalog, objects, source, span, *, complete) -> None:
+def _validate_design(design, catalog, source, span, *, complete) -> None:
     if (design.card_type not in catalog or not set(design.fields) <= set(catalog[design.card_type])
             or not (design.fields or design.phases)):
         raise ValueError('镜头设计字段不属于实际设计卡')
@@ -120,14 +130,23 @@ def _validate_design(design, catalog, objects, source, span, *, complete) -> Non
         raise ValueError('运镜阶段必须具有唯一身份并属于运镜卡')
     if design.frame_target and design.card_type != 'direction.composition':
         raise ValueError('构图定位必须声明在实际构图卡')
-    if design.object_id and (design.object_id not in objects or design.card_type not in SUBJECT_PORTS
-            or objects[design.object_id] == 'scene'):
-        raise ValueError('设计对象与本镜头的实际关系不符')
-    if design.card_type in REQUIRED_SUBJECTS and not design.object_id and any(
-            note.state in ('fact', 'proposal') for note in design.fields.values()):
-        raise ValueError('本设计需明确适用的参与对象')
     for note in [*design.fields.values(), *(phase.frame for phase in design.phases)]:
         _validate_field(note, source, span, complete=complete)
+
+
+def _design_subject_issue(design, objects) -> str | None:
+    """区分卡片主体与镜头参与对象，为一次模型纠错提供可执行的原因。"""
+    if design.object_id:
+        if design.card_type not in SUBJECT_PORTS:
+            return f'{design.card_type} 不接受设计主体。省略 object_id，保留设计正文和真实镜头参与对象。'
+        if design.object_id not in objects:
+            return '设计主体未登记。引用真实参与对象的已准备 ID 或有原文证据的补漏 ID。'
+        if objects[design.object_id] == 'scene':
+            return '场所可以是镜头参与对象，但不能作为此卡的设计主体。使用实际参与的人物或道具 ID。'
+    elif design.card_type in REQUIRED_SUBJECTS and any(
+            note.state in ('fact', 'proposal') for note in design.fields.values()):
+        return '有内容的此类设计需明确主体。使用实际参与的人物或道具 ID。'
+    return None
 
 
 def _identity(canvas_id: str, key: str) -> str:

@@ -21,7 +21,7 @@ from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE
 from app.core.contracts.directing.scene_objects import SceneObjectExtraction
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, validate_storyboard
-from app.services.directing.storyboard_scope import organization_inputs, validate_organization
+from app.services.directing.storyboard_scope import REQUIRED_SUBJECTS, SUBJECT_PORTS, organization_inputs, validate_organization
 from app.core.contracts.directing.scene_instruction import SceneInstructionResult, SceneInstructionScope
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
@@ -66,11 +66,13 @@ def generate_directing_result(kind: str, llm, args: dict):
             "补写、取舍与摄影安排必须使用 proposal；不得标为 fact。适用的建议可带作为依据的原文摘录，但不得伪造出处。"
             "两种模式的事实字段 text 均须逐字来自 excerpt，未知用 undecided，明确没有或不适用保留摘录和理由。"
             "不强求所有部门和字段都有值，不改变原文情节，不编造人物、道具资产、文件、模型和画布身份。"
-            "镜头 object_ids 只用准备对象 ID；原文确有漏提才给 missed_objects 临时 ID 及出处。"
+            "镜头 object_ids 只列实际出现的对象，使用准备对象 ID，或原文确有漏提时使用 missed_objects 中有出处的临时 ID。场所可列入这里。"
             "简单直接设计放在镜头 designs 内，共用或跨镜设计放到全场 designs，从 supported_design_fields 选择。"
             "按字段用 scope 声明 shot_ids、phase、condition_id、occurrence_ids，没限制就省略；声音/后期仅在对应 phase。"
             "conditions 定义稳定条件键，只在镜头或 occurrences 的 condition_ids 中列实际成立的条件。"
-            "明确对象时填 object_id；需要的连续性依赖以逻辑设计 ID、实际字段和关系表达。仅作被引用依据的卡用 adoption=dependency。"
+            "设计卡的 object_id 是主体关系，只允许 subject_card_types 中的卡片填写。其他卡片省略它，即使正文提到了对象。"
+            "required_subject_card_types 中的卡片只要有事实或建议就须填主体。主体必须是适用镜头 object_ids 中实际参与的人物或道具，不能是场所。"
+            "需要的连续性依赖以逻辑设计 ID、实际字段和关系表达。仅作被引用依据的卡用 adoption=dependency。"
             "运镜画面写入 phases，构图或图片目标以 design_id、phase_id 指定。"
             "仅在明确有独立制作动作时列 occurrences，摘录按序覆盖整个镜头，可缩小参与对象。"
             "estimated_seconds 仅填写已有明确值或完整模式的实际设计估计；未知留空。"
@@ -129,7 +131,9 @@ def generate_directing_result(kind: str, llm, args: dict):
         from app.services.directing.storyboard_assembly import storyboard_design_fields
         model_args = {'mode': args['mode'], 'script_text': args['script_text'],
                       'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
-                      'supported_design_fields': storyboard_design_fields()}
+                      'supported_design_fields': storyboard_design_fields(),
+                      'subject_card_types': sorted(SUBJECT_PORTS),
+                      'required_subject_card_types': sorted(REQUIRED_SUBJECTS)}
     elif kind == STORYBOARD_ORGANIZATION:
         model_args = args
     note_rules = (
