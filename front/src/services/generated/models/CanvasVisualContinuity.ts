@@ -8,4 +8,3 @@
 export type CanvasVisualContinuity = {
     binding_id: string;
 };
-
