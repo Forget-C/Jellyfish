@@ -6,8 +6,9 @@ import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-provider-management-')
-const origin = 'http://127.0.0.1:4630'
-const server = await createServer({ root, server: { host: '127.0.0.1', port: 4630, strictPort: true, open: false } })
+const port = 4791
+const origin = `http://127.0.0.1:${port}`
+const server = await createServer({ root, server: { host: '127.0.0.1', port, strictPort: true, open: false } })
 const provider = {
   id: 'provider1',
   name: '验收供应商',

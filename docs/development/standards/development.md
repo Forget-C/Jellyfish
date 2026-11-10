@@ -17,6 +17,8 @@
 
 首页与项目列表的通用视觉规则、页面专属布局、数据状态及验收依据见[首页与项目列表前端规范](home-project-ui.md)。其中固定四行卡片、紧凑工具栏和首页滚动策略仅适用于对应页面，不作为全站组件默认值。
 
+管理区共用导航、工具栏、内容分栏与数据状态见[管理页面前端规范](management-ui.md)。各类对象的表格、卡片和阅读布局依该规范选择。
+
 项目工作台等带固定工具栏的页面必须使用 `PageToolbar`、`WorkspaceLayout` 和 `WorkspaceScrollPanel`，组件职责见[前端基础布局](../architecture/frontend-layout.md#路由内容与滚动)。tab 不得依赖父级的 `overflow: hidden` 来裁切自然高度内容。工作台的默认滚动面板不得使用 `overflow: auto`；需要横向浏览的表格、卡片带或代码块必须在自己的局部容器上显式使用 `overflow-x: auto`。
 
 ## 接口与文档同步

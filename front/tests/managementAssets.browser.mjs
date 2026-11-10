@@ -7,7 +7,7 @@ import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-management-assets-')
-const port = 4633
+const port = 4794
 const origin = `http://127.0.0.1:${port}`
 process.chdir(root)
 const server = await createServer({ root, server: { host: '127.0.0.1', port, strictPort: true, open: false } })

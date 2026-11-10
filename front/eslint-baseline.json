@@ -30,13 +30,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/agents/AgentManagement.tsx",
-      "rule": "@typescript-eslint/consistent-type-imports",
-      "severity": 1,
-      "fingerprint": "3e6f26a48c9563d1e33ec3e961859e23bfe734cb47a8add50cc3fad71188929a",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/assets/ActorAssetEditPage.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -104,69 +97,6 @@
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "40dd2adf289810dcd00b1304e65f71b7fceb2d685fe31744286743408fa34332",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/ActorsTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "ce7bba18a55a6cdcb3a6fe6260336511ec972c50cb5f32a3d7763900298c7c28",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/ActorsTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "e45e62f07a8a69837691cb6abc89fa1e1ed55c1fa49d4ae2e7affe764f7fee5a",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/AssetTypeTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "04afd8ddb0b7fd94047dd073dfdca55633d81bf599a294c13a25f664c7d809f8",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/CostumesTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "1740e05adc5f64fe64b8fb1e301cd2cf74f5718124093d7ebf9f4eb2516df3ae",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/CostumesTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "7899ae7370b5fc6dc54a1b7d8875fa3abc8b8ede661db73ee66688b1a70a20ad",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/PropsTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "1740e05adc5f64fe64b8fb1e301cd2cf74f5718124093d7ebf9f4eb2516df3ae",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/PropsTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "7899ae7370b5fc6dc54a1b7d8875fa3abc8b8ede661db73ee66688b1a70a20ad",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/ScenesTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "1740e05adc5f64fe64b8fb1e301cd2cf74f5718124093d7ebf9f4eb2516df3ae",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/tabs/ScenesTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "7899ae7370b5fc6dc54a1b7d8875fa3abc8b8ede661db73ee66688b1a70a20ad",
       "count": 2
     },
     {
@@ -1448,27 +1378,6 @@
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "8c3bed60c224cf16e3362c576087303bb2735162fe10184e03724d5b68eb66f8",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/models/ModelsTab.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "3eef30f871a6438ec532d241a8396c003cafa0a1ff25ce32510c59a7ced9c4af",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/models/ModelsTab.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "5be0c1a080b229589294237f23adf475e06427c9e30aa713a4a72a206965b2f0",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/models/ModelsTab.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "78836ffdac41615dc0cc062147460f085feacf742c5bd19f1b8671f8c98dea73",
       "count": 1
     },
     {

@@ -27,11 +27,15 @@ pnpm --dir front run test:browser
 pnpm --dir front run test:workbench-ui
 pnpm --dir front run test:canvas-graph
 pnpm --dir front run test:design-scope
+pnpm --dir front run test:browser management-ui
+pnpm --dir front run test:browser home-project-layout
 pnpm --dir front run test:browser -- graph-summary
 pnpm --dir front run test:browser -- --list
 ```
 
 使用本机 Chrome 时设置 `PLAYWRIGHT_CHANNEL=chrome`；CI 安装 Chromium。入口可从其他工作目录调用，内部统一使用前端目录。默认证据位于 `front/test-results/browser-*`；可传 `--output <新的空目录>`。每个用例保留 `run.log`、真实后端的 `backend.log` 和截图，根目录 `results.json` 记录通过／失败、时长与路径。成功只输出摘要；失败打印有限日志尾部并保留完整日志。超时和中断会请求清理浏览器／服务／后端，POSIX 环境还对自己创建的进程组执行兜底终止。
+
+`management-ui` 验证供应商、模型、运行设置、资产库、提示词模板、文件和 Agent 管理。`home-project-layout` 验证普通页面共享导航、管理入口、首页、项目、实验室及独立画布的外观隔离。两组使用隔离 HTTP 夹具，覆盖两种雾蓝主题和桌面、窄屏交互。界面验收范围见[管理页面前端规范](../../docs/development/standards/management-ui.md#验收)。
 
 `--manifest <文件>` 可使用同一 CLI 运行明确声明的本地清单；相对文件路径从清单目录解析，清单需包含 preflight、cases 和 suites。公开命令回归使用隔离清单验证成功、失败、超时、中断和端口占用，不启动真实模型。直接运行原 `.browser.mjs` 文件仍可用，但不会获得统一入口的预检／端口保护；没有指定统一证据目录时仍使用原有临时目录。
 
@@ -39,7 +43,7 @@ pnpm --dir front run test:browser -- --list
 
 新增或迁移用例时复用 `browser-runtime.mjs` 的证据目录、后端日志与幂等清理。graph 地址异常夹具复用 `canvas-graph-fixtures.mjs`：同时改名节点／边／视图和所有引用，保留 object、record、shot、unit 业务身份；跨画布来源只映射当前快照。长文本、多参考、历史重复行与并发读取继续由真实旅程／HTTP 回归验证。
 
-`.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 运行 lint 基线、纯逻辑、typecheck 和上述八组浏览器回归，并上传截图／JSON／日志。后端既有 pytest、Pylint CI 继续独立执行。本地通过不等同于 GitHub runner 已执行。
+`.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 运行 lint 基线、纯逻辑、typecheck 和清单中注册的浏览器套件，并上传截图／JSON／日志。后端既有 pytest、Pylint CI 继续独立执行。本地通过不等同于 GitHub runner 已执行。
 
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 

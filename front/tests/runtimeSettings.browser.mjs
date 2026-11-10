@@ -54,6 +54,7 @@ try {
   assert.equal(await timeout.inputValue(), '60')
   const section = page.getByRole('region', { name: '模型运行设置' })
   const logLevel = section.getByRole('combobox', { name: '日志级别' })
+  const selectedWarn = section.getByTitle('Warn', { exact: true })
   const save = section.getByRole('button', { name: /保存设置/ })
   await timeout.focus()
   await page.keyboard.press('Tab')
@@ -68,12 +69,12 @@ try {
 
   await timeout.fill('120')
   await logLevel.press('Enter')
-  await logLevel.press('ArrowDown')
-  await logLevel.press('Enter')
+  await page.getByText('Warn', { exact: true }).filter({ visible: true }).click()
+  await selectedWarn.waitFor()
   await save.click()
   await section.getByRole('alert').getByText(/输入已保留/).waitFor()
   assert.equal(await timeout.inputValue(), '120')
-  assert.equal(await section.getByText('Warn', { exact: true }).count(), 1)
+  assert.equal(await selectedWarn.isVisible(), true)
   assert.deepEqual(submitted, { api_timeout: 120, log_level: 'warn' })
 
   saveFails = false

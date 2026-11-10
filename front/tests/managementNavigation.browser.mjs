@@ -18,6 +18,7 @@ const list = items => ({
 })
 const agent = { id: 'agent1', name: '验收 Agent', type: 'plot', description: '', createdBy: '验收', enabled: true, version: '1.0' }
 const model = { id: 'model1', name: '验收文本模型', category: 'text', provider_id: 'provider1', params: {} }
+const assetRows = Array.from({ length: 12 }, (_, index) => ({ id: `a${index + 1}`, name: `验收演员 ${index + 1}` }))
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 4196, strictPort: true, open: false } })
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -37,6 +38,7 @@ try {
     if (pathname.endsWith('/models')) return respond(list(new URL(route.request().url()).searchParams.get('category') === 'image' ? [] : [model]))
     if (pathname.endsWith('/providers')) return respond(list([{ id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid', status: 'active' }]))
     if (pathname.endsWith('/entities/actor/a1')) return respond({ id: 'a1', name: '验收演员', description: '测试档案', tags: [] })
+    if (pathname.endsWith('/entities/actor')) return respond(list(assetRows))
     if (pathname.endsWith('/model-settings')) return respond({ id: 1, api_timeout: 60, log_level: 'INFO' })
     if (/\/(styles|assets|batches|categories|supported)$/.test(pathname)) return respond([])
     return respond(list([]))
@@ -57,6 +59,20 @@ try {
     assert.equal(await link.getAttribute('aria-current'), 'page')
     assert.equal(await enterManagement.getAttribute('aria-current'), 'page')
   }
+  await secondary.getByRole('link', { name: '资产库', exact: true }).click()
+  const createAsset = page.getByRole('button', { name: '新建演员', exact: true })
+  const firstAsset = page.getByRole('link', { name: '验收演员 1', exact: true })
+  const lastAsset = page.getByRole('link', { name: '验收演员 12', exact: true })
+  await firstAsset.waitFor()
+  const fixedAction = await createAsset.boundingBox()
+  const firstAssetTop = (await firstAsset.boundingBox()).y
+  assert.ok((await lastAsset.boundingBox()).y >= 900)
+  await lastAsset.scrollIntoViewIfNeeded()
+  assert.ok((await firstAsset.boundingBox()).y < firstAssetTop)
+  assert.ok((await lastAsset.boundingBox()).y < 900)
+  assert.deepEqual(await createAsset.boundingBox(), fixedAction, '滚动资产列表时页面操作保持可见')
+  assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 0)
+
   await page.goto(origin + '/assets/actors/a1/edit')
   const assets = secondary.getByRole('link', { name: '资产库', exact: true })
   assert.equal(await assets.getAttribute('aria-current'), 'page')
@@ -115,7 +131,18 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2))
     await page.screenshot({ path: output + '/' + width + '-management.png', animations: 'disabled' })
   }
-  console.log('Management navigation verified at 1440px, 900px and 375px.')
+  const banner = page.getByRole('banner')
+  const brand = banner.getByRole('link', { name: 'Jellyfish 首页', exact: true })
+  for (const [width, expectedHeight] of [[768, 56], [767, 100]]) {
+    await page.setViewportSize({ width, height: 812 })
+    assert.equal((await banner.boundingBox()).height, expectedHeight)
+    assert.deepEqual(await brand.evaluate(link => {
+      const { width, height } = link.querySelector('img').getBoundingClientRect()
+      return [width, height]
+    }), [32, 32])
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width)
+  }
+  console.log('Management navigation, list scroll ownership, and top-bar breakpoints verified.')
 } finally {
   await cleanup()
 }
