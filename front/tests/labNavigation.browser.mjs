@@ -290,6 +290,31 @@ try {
       }
     }
   }
+  // 低高度浏览器视口验证路由可达性，实体软键盘需要另行验收。
+  await page.setViewportSize({ width: 375, height: 320 })
+  const compactInput = page.getByRole('textbox', { name: '文本提示词', exact: true })
+  await compactInput.scrollIntoViewIfNeeded()
+  await compactInput.focus()
+  await page.keyboard.press('Tab')
+  const compactModel = page.getByRole('button', { name: '选择模型', exact: true })
+  await compactModel.and(page.locator(':focus-visible')).waitFor()
+  await compactModel.press('Enter')
+  const compactSelect = page.getByRole('combobox', { name: '文本模型', exact: true })
+  await compactSelect.and(page.locator(':focus')).waitFor()
+  await compactSelect.press('ArrowDown')
+  await compactSelect.and(page.locator('[aria-expanded="true"]')).waitFor()
+  await compactSelect.press('Escape')
+  await compactSelect.and(page.locator('[aria-expanded="false"]')).waitFor()
+  await compactSelect.press('Escape')
+  await compactSelect.waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: '验收文本模型', exact: true }).and(page.locator(':focus-visible')).waitFor()
+  const compactSend = page.getByRole('button', { name: '发送', exact: true })
+  await compactSend.scrollIntoViewIfNeeded()
+  assert.ok(await compactSend.evaluate(element => {
+    const bounds = element.getBoundingClientRect()
+    return bounds.top >= 0 && bounds.bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth
+  }))
+  await page.screenshot({ path: output + '/solid-375x320-lab.png', animations: 'disabled' })
   assert.deepEqual(pageErrors, [])
   console.log('Lab navigation, existing history, first submission and mobile focus verified.')
 } finally {

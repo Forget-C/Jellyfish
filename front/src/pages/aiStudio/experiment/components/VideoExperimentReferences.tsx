@@ -1,5 +1,5 @@
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefCallback } from 'react'
 import { Alert, Button, Empty, Input, Modal, Spin } from 'antd'
 import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { StudioFilesService, type FileRead, type VideoGenerationOptionsRead } from '../../../../services/generated'
@@ -61,12 +61,12 @@ type Props = {
   disabled: boolean
 }
 
-function VideoReferencePreview({ file }: { file: FileRead }) {
+function VideoReferencePreview({ file, playerRef }: { file: FileRead; playerRef: RefCallback<HTMLVideoElement> }) {
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   return <>
     {state === 'loading' && <p role="status">正在加载视频</p>}
     {state === 'failed' ? <Alert type="error" message="视频不可用" action={<Button onClick={() => setState('loading')}>重试加载</Button>} /> :
-      <video aria-label={file.name} className="experiment-reference-video" src={buildFileDownloadUrl(file.id)} controls playsInline preload="metadata" onLoadedMetadata={() => setState('ready')} onError={() => setState('failed')} />}
+      <video ref={playerRef} aria-label={file.name} className="experiment-reference-video" src={buildFileDownloadUrl(file.id)} controls playsInline preload="metadata" onLoadedMetadata={() => setState('ready')} onError={() => setState('failed')} />}
   </>
 }
 
@@ -76,6 +76,11 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
   useExperimentLeaveStatus(draft !== null && JSON.stringify(draft) !== JSON.stringify(value))
   const [target, setTarget] = useState<Target>()
   const [preview, setPreview] = useState<FileRead>()
+  const previewPlayer = useRef<HTMLVideoElement | null>(null)
+  const attachPlayer = useCallback((element: HTMLVideoElement | null) => {
+    if (!element) previewPlayer.current?.pause()
+    previewPlayer.current = element
+  }, [])
   const [uploading, setUploading] = useState(false)
   const [uploaded, setUploaded] = useState<string>()
   const [uploadError, setUploadError] = useState<{ target: Target; file: File; retryable: boolean }>()
@@ -90,12 +95,17 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
     if (target) libraryHeadingRef.current?.focus()
   }, [target])
 
+  const closePreview = () => {
+    previewPlayer.current?.pause()
+    setPreview(undefined)
+  }
+
   const reset = () => {
     panelEpoch.current += 1
     uploadPending.current = false
     setUploading(false)
     setTarget(undefined)
-    setPreview(undefined)
+    closePreview()
     setUploadError(undefined)
     setUploaded(undefined)
   }
@@ -300,8 +310,8 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
         {target && draftIssues.length > 0 && <p role="status" className="experiment-video-reference-issue">{draftIssues.join('；')}</p>}
       </div>}
     </ExperimentReferencePanel>
-    <Modal title={preview ? `预览参考素材：${preview.name}` : '预览参考素材'} open={Boolean(preview)} onCancel={() => setPreview(undefined)} footer={null} width="min(820px, calc(100vw - 24px))" zIndex={1100}>
-      {preview && (preview.type === 'video' ? <VideoReferencePreview key={preview.id} file={preview} /> : <ExperimentReferenceImage key={preview.id} id={preview.id} name={preview.name} full />)}
+    <Modal title={preview ? `预览参考素材：${preview.name}` : '预览参考素材'} open={Boolean(preview)} onCancel={closePreview} footer={null} width="min(820px, calc(100vw - 24px))" zIndex={1100}>
+      {preview && (preview.type === 'video' ? <VideoReferencePreview key={preview.id} file={preview} playerRef={attachPlayer} /> : <ExperimentReferenceImage key={preview.id} id={preview.id} name={preview.name} full />)}
     </Modal>
   </>
 }

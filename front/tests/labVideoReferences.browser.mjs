@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -11,6 +12,7 @@ const output = await browserOutput('jellyfish-lab-video-references-')
 const origin = 'http://127.0.0.1:4804'
 const timestamp = '2026-11-10T08:00:00Z'
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR2kAAAAASUVORK5CYII=', 'base64')
+const referenceVideo = await readFile(join(root, 'public/canvas-presets/pan.mp4'))
 const sessions = ['video-a', 'video-b'].map((id, index) => ({ id, lab_type: 'video', title: `视频会话 ${index + 1}`, created_at: timestamp, updated_at: timestamp }))
 const files = [
   { id: 'image-a', name: '验收图片 A', type: 'image' },
@@ -31,6 +33,7 @@ let uploadGate
 let uploadCount = 0
 let failUpload = false
 let failLibrary = true
+let failVideoPreview = true
 
 const server = await createServer({ root, cacheDir: join(output, 'vite'), server: { host: '127.0.0.1', port: 4804, strictPort: true, open: false } })
 let browser
@@ -67,6 +70,9 @@ try {
       if (failLibrary) return route.fulfill({ status: 503, json: { detail: '暂不可读取' } })
       return respond({ items: files, total: files.length })
     }
+    if (url.pathname.endsWith('/video-file/download')) return failVideoPreview
+      ? route.fulfill({ status: 503 })
+      : route.fulfill({ body: referenceVideo, contentType: 'video/mp4' })
     if (url.pathname.endsWith('/download')) return route.fulfill({ body: png, contentType: 'image/png' })
     const run = url.pathname.match(/\/labs\/video\/sessions\/([^/]+)\/tasks$/)
     if (run) {
@@ -221,6 +227,22 @@ try {
   await preview.waitFor({ state: 'hidden' })
   await picture.and(page.locator(':focus')).waitFor()
   assert.ok(await panel.isVisible())
+  const video = panel.getByRole('button', { name: '预览主体1视频：验收视频', exact: true })
+  await video.press('Enter')
+  const videoPreview = page.getByRole('dialog', { name: '预览参考素材：验收视频', exact: true })
+  await videoPreview.getByText('视频不可用', { exact: true }).waitFor()
+  failVideoPreview = false
+  await videoPreview.getByRole('button', { name: '重试加载', exact: true }).click()
+  const player = await videoPreview.locator('video[controls]').elementHandle()
+  await page.waitForFunction(element => element.readyState >= 1 && element.videoWidth > 0, player)
+  assert.equal(await player.evaluate(element => element.paused), true)
+  await player.evaluate(element => element.play())
+  await page.screenshot({ path: join(output, 'video-reference-playback-narrow.png'), animations: 'disabled' })
+  await videoPreview.getByRole('button', { name: 'Close', exact: true }).press('Escape')
+  await videoPreview.waitFor({ state: 'hidden' })
+  await video.and(page.locator(':focus')).waitFor()
+  assert.equal(await player.evaluate(element => element.paused), true)
+  assert.equal(submissions.length, 0)
   await page.screenshot({ path: join(output, 'video-reference-narrow.png'), animations: 'disabled' })
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
@@ -253,6 +275,33 @@ try {
   assert.equal(submissions[1].body.model_id, 'a')
   assert.deepEqual(submissions[1].body.media, submissions[0].body.media)
 
+  // 同一份配置切换到更严格的模型后，修正冲突才能提交。
+  await getCapability('B', 'A')
+  await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor()
+  await prompt.fill('修正模型冲突后提交')
+  await page.getByText('16:9（当前模型不支持）', { exact: true }).click()
+  await page.getByText('9:16', { exact: true }).last().click()
+  await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor({ state: 'hidden' })
+  assert.ok(await generate.isDisabled())
+  await trigger.click()
+  for (const label of ['首帧', '尾帧', '关键帧']) {
+    await panel.getByRole('button', { name: new RegExp(`^移除${label}：`) }).click()
+  }
+  await panel.getByRole('button', { name: '移除主体 2', exact: true }).click()
+  await panel.getByRole('button', { name: '移除主体1视频：验收视频', exact: true }).click()
+  await apply.click()
+  await panel.waitFor({ state: 'hidden' })
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    generate.click(),
+  ])
+  assert.deepEqual(submissions[2], { session: 'video-a', body: {
+    model_id: 'b',
+    execution_prompt: '修正模型冲突后提交',
+    media: { frames: { first: null, last: null, keys: [] }, subjects: [{ name: subjectName, media: [{ file_id: 'image-a', media_kind: 'image', ordinal: 0 }] }] },
+    operation_input: { kind: 'video_generation', ratio: '9:16' },
+  } })
+
   // 从另一会话返回后，旧抽屉的上传响应只能更新资料库。
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.getByRole('button', { name: '视频会话 2', exact: true }).click()
@@ -277,7 +326,7 @@ try {
   await first.click()
   await chooseFile('上传图片 4').waitFor()
   assert.equal(await chooseFile('上传图片 4').getAttribute('aria-pressed'), 'false')
-  assert.equal(submissions.length, 2)
+  assert.equal(submissions.length, 3)
   assert.deepEqual(deletions, [])
   console.log(`Video reference browser checks passed. Evidence: ${output}`)
 } catch (error) {
