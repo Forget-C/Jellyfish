@@ -140,7 +140,7 @@ export function GenerationCanvasWorkspace({
   }, [canvasId, current?.id, checkCardId, checkReportId, liveCheck])
   const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit, current?.revision)
   useEffect(() => { if (runtime.preview) setPreviewOpen(true) }, [runtime.preview])
-  const change: typeof edit = next => { runtime.invalidate(); edit(next) }
+  const change: typeof edit = (next, arrangement) => { runtime.invalidate(); edit(next, arrangement) }
   const scope = `${projectId}:${canvasId}`, latestScope = useRef(scope); latestScope.current = scope
   const retainedCopies = useRef(new Map<string, TextContentCard | ImageContentCard | VideoContentCard>())
 
@@ -223,10 +223,10 @@ export function GenerationCanvasWorkspace({
         {runtime.preview && <RunPreview canvas={document || undefined} catalog={catalog.current} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), diagnostic: target, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
+      <GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
-      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
+      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={change} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
         renderModelCardAction={renderModelCardAction}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />

@@ -13,7 +13,7 @@ export type GenerationCanvasLayoutPolicy = {
   placeAdditions?: (positions: Record<string, CanvasPoint>, retained: Record<string, CanvasPoint>,
     sizes: Record<string, GraphSize>, width: number) => Record<string, CanvasPoint>
   initial?: CanvasLayoutPlacement
-  explicit?: CanvasLayoutPlacement
+  explicit?: CanvasLayoutPlacement & { organize?: () => { groups: GenerationCanvasGroup[]; arrange: GraphArrange } | undefined }
 }
 
 /** 编组和堆叠的可见外框同时用于绘制、连线和主动整理。 */

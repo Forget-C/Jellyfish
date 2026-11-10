@@ -14,7 +14,8 @@ from tests.directing.test_store import database
 
 
 @pytest.mark.asyncio
-async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_operation(tmp_path, monkeypatch):
+@pytest.mark.parametrize('reorganized', [False, True])
+async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_operation(tmp_path, monkeypatch, reorganized):
     original = '小雨在侧光和顶光之间推门。小雨关灯。小雨离开。'
     shots = [{'id': key, 'excerpt': excerpt} for key, excerpt in (
         ('door', '小雨在侧光和顶光之间推门。'), ('light', '小雨关灯。'), ('leave', '小雨离开。'))]
@@ -75,6 +76,8 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
             return next(group for group in document['groups'] if group['kind'] == 'stack' and shot['card_id'] in group['card_ids'])
 
         automatic, manual, unchanged = map(stack_for, (first_shot, second_shot, third_shot))
+        if reorganized:
+            automatic['id'] += '-a1b2c3d4'
         manual['id'] = 'manually-regrouped'
         manual['name'] = '手工堆叠'
         before = await data(await client.put(canvas, json={'request_id': 'manual-group',

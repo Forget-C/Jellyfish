@@ -180,6 +180,65 @@ try {
   await ordinary.goto(url)
   await ordinary.locator(`[data-card-id="${ids[0]}"]`).waitFor()
   assert.deepEqual((await cards(ordinary, [ids[0]]))[0], ordinaryVideo, 'opening an existing storyboard does not rearrange its layout')
+  // 旧分镜的普通编组在显式整理时收纳设计，分组和视口一起进入历史。
+  const legacyPage = await newPage({ width: 1440, height: 960 })
+  const legacyTask = await generate('已有分镜完整整理')
+  const legacy = await open(legacyPage, legacyTask)
+  const readLegacy = () => request(`${canvases}/${legacyTask.canvas_id}`)
+  const savedLegacy = await readLegacy()
+  const legacyDocument = savedLegacy.document
+  const originalStacks = legacyDocument.groups.filter(group => group.kind === 'stack')
+  const partial = originalStacks.find(group => group.card_ids.length > 1)
+  assert.ok(partial, 'fixture has an automatic stack with multiple design cards')
+  const retainedMember = partial.card_ids[0]
+  legacyDocument.groups = legacyDocument.groups.filter(group => group.kind !== 'stack')
+  for (const originalStack of originalStacks) {
+    const owner = legacyDocument.storyboard.shots.find(shot => originalStack.card_ids.includes(shot.card_id))
+    const originalGroup = owner ? legacyDocument.groups.find(group => group.id === owner.group_id) : legacyDocument.groups[0]
+    originalGroup.card_ids.push(...originalStack.card_ids.filter(id => id !== retainedMember))
+  }
+  const legacyShot = legacyDocument.storyboard.shots.find(shot => !partial.card_ids.includes(shot.card_id))
+  legacyDocument.groups.find(group => group.id === legacyShot.group_id).name = '长'.repeat(255)
+  legacyDocument.groups.push({ ...partial, id: partial.id + '-abcd0123', card_ids: [retainedMember] })
+  legacyDocument.cards.push(...manualCards.map(id => ({ id, type: 'content.text', text: id })))
+  legacyDocument.groups.push(manualStack)
+  await request(`${canvases}/${legacyTask.canvas_id}`, 'PUT', {
+    request_id: randomUUID(), expected_revision: savedLegacy.revision, document: legacyDocument,
+  })
+  await legacyPage.reload()
+  const exposedId = partial.card_ids[1]
+  await legacyPage.locator(`[data-card-id="${exposedId}"]`).waitFor()
+  await legacyPage.getByRole('button', { name: '适应全部', exact: true }).click()
+  const originalView = await cards(legacyPage, [legacy.ids[0], exposedId])
+  const expectGroups = async groups => {
+    await poll(readLegacy, row => JSON.stringify(row.document.groups) === JSON.stringify(groups))
+  }
+  const beforeOrganizing = (await readLegacy()).document.groups
+  await legacyPage.getByRole('button', { name: '布局', exact: true }).click()
+  await legacyPage.getByRole('button', { name: '整理布局', exact: true }).click()
+  const organized = await poll(readLegacy, row => row.document.groups.filter(group => group.kind === 'stack').length === originalStacks.length + 1)
+  for (const originalStack of originalStacks) {
+    const restoredStack = organized.document.groups.find(group => group.kind === 'stack' && group.card_ids.includes(originalStack.card_ids[0]))
+    assert.ok(restoredStack)
+    assert.deepEqual(new Set(restoredStack.card_ids), new Set(originalStack.card_ids))
+  }
+  assert.deepEqual(organized.document.groups.find(group => group.id === manualStack.id),
+    beforeOrganizing.find(group => group.id === manualStack.id))
+  const organizedVideo = (await cards(legacyPage, [legacy.ids[0]]))[0]
+  assert.ok(fullyVisible(organizedVideo, legacyPage.viewportSize()))
+  await legacyPage.getByRole('button', { name: '撤销布局整理', exact: true }).click()
+  await legacyPage.keyboard.press('Escape')
+  await expectGroups(beforeOrganizing)
+  assert.deepEqual(await cards(legacyPage, [legacy.ids[0], exposedId]), originalView)
+  await legacyPage.getByRole('button', { name: '重做操作', exact: true }).click()
+  await expectGroups(organized.document.groups)
+  await legacyPage.getByRole('button', { name: '撤销操作', exact: true }).click()
+  await expectGroups(beforeOrganizing)
+  await legacyPage.getByRole('button', { name: '重做操作', exact: true }).click()
+  await expectGroups(organized.document.groups)
+  await legacyPage.reload()
+  await legacyPage.locator(`[data-card-id="${legacy.ids[0]}"]`).waitFor()
+  assert.deepEqual((await cards(legacyPage, [legacy.ids[0]]))[0], organizedVideo)
   // 共同堆叠收纳实际成员，但预检仍使用原设计和引用。
   await desktop.setViewportSize({ width: 1440, height: 960 })
   const savedCanvas = () => request(`${canvases}/${task.canvas_id}`)

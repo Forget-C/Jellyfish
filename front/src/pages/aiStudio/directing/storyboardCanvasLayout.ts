@@ -1,7 +1,7 @@
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { CanvasDocument, GenerationCanvasGroup } from '../../../services/generated'
 import { generationGroupBounds, type GenerationCanvasLayoutPolicy } from '../generationCanvas/generationLayout'
-import type { GraphSize } from './graphLayout'
+import type { GraphArrange, GraphSize } from './graphLayout'
 
 const gap = 64
 const narrowWidth = 700
@@ -111,12 +111,74 @@ function placeVideoRows(shots: string[][], sizes: Record<string, GraphSize>, wid
   return { positions, mainWidth: Math.max(...rows.map(row => rowWidth(row, sizes))) }
 }
 
+const designStackId = (shotId?: string) => `storyboard-stack-${shotId || 'shared'}`
+const belongsToDesignStack = (id: string, base: string) => id === base ||
+  id.startsWith(base + '-') && /^[0-9a-f]{8}$/.test(id.slice(base.length + 1))
+
+/** 仅用分镜来源归组设计，人工堆叠仍由原成员和身份表达。 */
+function organizeStoryboardDesigns(document: CanvasDocument) {
+  const { storyboard } = document
+  if (!storyboard) return
+  const groups = document.groups || []
+  const stacked = new Set(groups.filter(group => group.kind === 'stack').flatMap(group => group.card_ids || []))
+  const shots = storyboard.shots.map(shot => ({ ...shot, key: storyboard.origins[shot.card_id]?.semantic_key }))
+  const originalShotGroup = new Map(groups.filter(group => group.kind !== 'stack')
+    .flatMap(group => (group.card_ids || []).map(id => [id, group.id] as const)))
+  const designBuckets = new Map<string, { id: string; name: string; cardIds: string[] }>()
+  const moved = new Set<string>()
+  for (const card of document.cards || []) {
+    const source = storyboard.origins[card.id]
+    if (!card.type?.startsWith('direction.') || !source || stacked.has(card.id)) continue
+    const shot = shots.find(item => item.card_id === card.id ||
+      item.segments?.some(segment => segment.basis_card_id === card.id) ||
+      item.key && source.semantic_key.startsWith(item.key + ':'))
+    const sceneDesign = source.semantic_key.startsWith('scene:design:')
+    if (!shot && !sceneDesign) continue
+    const declared = source.applicability?.shot_ids || []
+    const candidates = declared.length ? shots.filter(item => declared.includes(item.shot_id)) : shots
+    const occurrences = source.applicability?.occurrence_ids || []
+    const matching = occurrences.length
+      ? candidates.filter(item => item.segments?.some(segment => segment.occurrence_id && occurrences.includes(segment.occurrence_id)))
+      : candidates
+    const owner = shot ?? (matching.length === 1 ? matching[0] : !matching.length && occurrences.length
+      ? candidates.find(item => item.group_id === originalShotGroup.get(card.id)) : undefined)
+    const id = designStackId(owner?.shot_id)
+    let bucket = designBuckets.get(id)
+    if (!bucket) {
+      const title = owner && (groups.find(group => group.id === owner.group_id)?.name ||
+        `镜头 ${String(shots.indexOf(owner) + 1).padStart(2, '0')}`)
+      const name = title ? `${Array.from(title).slice(0, 250).join('')} · 设计` : '共享设计'
+      bucket = { id, name, cardIds: [] }
+      designBuckets.set(id, bucket)
+    }
+    bucket.cardIds.push(card.id)
+    moved.add(card.id)
+  }
+  if (!moved.size) return
+  const replaced = new Set<string>()
+  const stacks = Array.from(designBuckets.values(), (bucket): GenerationCanvasGroup => {
+    const existing = groups.find(group => group.kind === 'stack' && belongsToDesignStack(group.id, bucket.id))
+    if (existing) replaced.add(existing.id)
+    // 更换收纳后的身份，沿用共同保存的显式解除及新建堆叠规则。
+    return { id: `${bucket.id}-${crypto.randomUUID().slice(0, 8)}`, kind: 'stack',
+      name: existing?.name ?? bucket.name, card_ids: [...(existing?.card_ids || []), ...bucket.cardIds] }
+  })
+  const kept = groups.flatMap(group => {
+    if (replaced.has(group.id)) return []
+    if (!group.card_ids?.some(id => moved.has(id))) return [group]
+    const card_ids = group.card_ids.filter(id => !moved.has(id))
+    return card_ids.length ? [{ ...group, card_ids }] : []
+  })
+  return { groups: [...kept, ...stacks], newStacks: new Set(stacks.map(stack => stack.id)) }
+}
+
 /** 工作台按镜头关系组织视频，普通入口不使用该策略。 */
 export function storyboardCanvasLayout(document: CanvasDocument, beforeApplication?: CanvasDocument): GenerationCanvasLayoutPolicy | undefined {
-  if (!document.storyboard) return
+  const { storyboard } = document
+  if (!storyboard) return
   const hidden = new Set(document.groups?.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || []))
   const videos = new Set(document.cards?.filter(card => card.type === 'model.video' && !hidden.has(card.id)).map(card => card.id))
-  const shots = document.storyboard.shots.map(shot => shot.model_card_ids.filter(id => videos.has(id))).filter(row => row.length)
+  const shots = storyboard.shots.map(shot => shot.model_card_ids.filter(id => videos.has(id))).filter(row => row.length)
   const anchorId = shots[0]?.[0]
   if (!anchorId) return
   const focus = (sizes: Record<string, GraphSize>, width: number, height: number) => {
@@ -134,6 +196,74 @@ export function storyboardCanvasLayout(document: CanvasDocument, beforeApplicati
   const placeAdditions = beforeApplication?.storyboard
     ? placeStoryboardAdditions(document, beforeApplication)
     : (positions: Record<string, CanvasPoint>) => positions
+  const arrangeExplicit = (groups: GenerationCanvasGroup[], newStacks?: Set<string>): GraphArrange =>
+    (nodes, sizes, width, _anchor, previous = {}) => {
+      const { positions: preferred, mainWidth } = placeVideoRows(shots, sizes, width)
+      const positions: Record<string, CanvasPoint> = {}
+      const live = new Set(nodes.map(node => node.id))
+      const groupFor = new Map(groups.flatMap(group => (group.card_ids || []).map(id => [id, group] as const)))
+      const shotGroups = new Set(document.storyboard?.shots.map(shot => shot.group_id))
+      const shotCards = new Set(document.storyboard?.shots.map(shot => shot.card_id))
+      const stackedPoints: Record<string, CanvasPoint> = {}
+      for (const group of groups) {
+        if (!newStacks?.has(group.id)) continue
+        let x = 0
+        for (const id of group.card_ids || []) {
+          if (!sizes[id]) continue
+          stackedPoints[id] = { x, y: 0 }
+          x += (x === 0 ? Math.max(sizes[id].width, 400) : sizes[id].width) + gap
+        }
+      }
+      const point = (id: string) => stackedPoints[id] ?? previous[id] ?? preferred[id] ?? { x: 0, y: 0 }
+      const liveMembers = (group: GenerationCanvasGroup) => (group.card_ids || []).filter(id => live.has(id))
+      const bounds = (members: string[], group?: GenerationCanvasGroup): Frame => {
+        const frames = members.map(id => ({ ...point(id), ...sizes[id] }))
+        if (group) frames.push(generationGroupBounds(group, members, point, sizes))
+        const x = Math.min(...frames.map(frame => frame.x))
+        const y = Math.min(...frames.map(frame => frame.y))
+        return {
+          x, y, width: Math.max(...frames.map(frame => frame.x + frame.width)) - x,
+          height: Math.max(...frames.map(frame => frame.y + frame.height)) - y,
+        }
+      }
+      const translate = (members: string[], dx: number, dy: number) => {
+        for (const id of members) positions[id] = { x: point(id).x + dx, y: point(id).y + dy }
+      }
+      // 视频仍是主区锚点，含视频的编组按原成员相对位置整体移动。
+      const main: Frame[] = []
+      for (const id of shots.flat()) {
+        if (positions[id]) continue
+        const group = groupFor.get(id)
+        const members = group ? liveMembers(group) : [id]
+        const frame = bounds(members, group)
+        const dx = preferred[id].x - point(id).x
+        const target = { ...frame, x: frame.x + dx, y: frame.y + preferred[id].y - point(id).y }
+        const y = availableY(target, main, 0)
+        translate(members, dx, y - frame.y)
+        main.push({ ...target, y })
+      }
+      const leftEdge = Math.min(0, ...main.map(frame => frame.x))
+      const rightEdge = Math.max(mainWidth, ...main.map(frame => frame.x + frame.width))
+      let leftTop = 0, rightTop = 0
+      const place = (members: string[], right: boolean, group?: GenerationCanvasGroup) => {
+        const frame = bounds(members, group)
+        const x = right ? rightEdge + gap : leftEdge - frame.width - gap
+        const y = right ? rightTop : leftTop
+        translate(members, x - frame.x, y - frame.y)
+        if (right) rightTop += frame.height + gap
+        else leftTop += frame.height + gap
+      }
+      const shotStacks = storyboard.shots.map(shot => designStackId(shot.shot_id))
+      for (const group of groups) {
+        const members = liveMembers(group)
+        if (members.length && !members.some(id => positions[id])) {
+          place(members, shotGroups.has(group.id) || members.some(id => shotCards.has(id)) ||
+            group.kind === 'stack' && shotStacks.some(id => belongsToDesignStack(group.id, id)), group)
+        }
+      }
+      for (const { id } of nodes) if (!positions[id]) place([id], false)
+      return positions
+    }
   return { placeAdditions, initial: firstApplication ? {
     anchorId,
     arrange: (nodes, sizes, width) => {
@@ -177,61 +307,10 @@ export function storyboardCanvasLayout(document: CanvasDocument, beforeApplicati
   } : undefined, explicit: {
     anchorId,
     focus,
-    arrange: (nodes, sizes, width, _anchor, previous = {}) => {
-      const { positions: preferred, mainWidth } = placeVideoRows(shots, sizes, width)
-      const positions: Record<string, CanvasPoint> = {}
-      const live = new Set(nodes.map(node => node.id))
-      const groups = document.groups || []
-      const groupFor = new Map(groups.flatMap(group => (group.card_ids || []).map(id => [id, group] as const)))
-      const shotGroups = new Set(document.storyboard?.shots.map(shot => shot.group_id))
-      const shotCards = new Set(document.storyboard?.shots.map(shot => shot.card_id))
-      const point = (id: string) => previous[id] ?? preferred[id] ?? { x: 0, y: 0 }
-      const liveMembers = (group: GenerationCanvasGroup) => (group.card_ids || []).filter(id => live.has(id))
-      const bounds = (members: string[], group?: GenerationCanvasGroup): Frame => {
-        const frames = members.map(id => ({ ...point(id), ...sizes[id] }))
-        if (group) frames.push(generationGroupBounds(group, members, point, sizes))
-        const x = Math.min(...frames.map(frame => frame.x))
-        const y = Math.min(...frames.map(frame => frame.y))
-        return {
-          x, y, width: Math.max(...frames.map(frame => frame.x + frame.width)) - x,
-          height: Math.max(...frames.map(frame => frame.y + frame.height)) - y,
-        }
-      }
-      const translate = (members: string[], dx: number, dy: number) => {
-        for (const id of members) positions[id] = { x: point(id).x + dx, y: point(id).y + dy }
-      }
-      // 视频仍是主区锚点，含视频的编组按原成员相对位置整体移动。
-      const main: Frame[] = []
-      for (const id of shots.flat()) {
-        if (positions[id]) continue
-        const group = groupFor.get(id)
-        const members = group ? liveMembers(group) : [id]
-        const frame = bounds(members, group)
-        const dx = preferred[id].x - point(id).x
-        const target = { ...frame, x: frame.x + dx, y: frame.y + preferred[id].y - point(id).y }
-        const y = availableY(target, main, 0)
-        translate(members, dx, y - frame.y)
-        main.push({ ...target, y })
-      }
-      const leftEdge = Math.min(0, ...main.map(frame => frame.x))
-      const rightEdge = Math.max(mainWidth, ...main.map(frame => frame.x + frame.width))
-      let leftTop = 0, rightTop = 0
-      const place = (members: string[], right: boolean, group?: GenerationCanvasGroup) => {
-        const frame = bounds(members, group)
-        const x = right ? rightEdge + gap : leftEdge - frame.width - gap
-        const y = right ? rightTop : leftTop
-        translate(members, x - frame.x, y - frame.y)
-        if (right) rightTop += frame.height + gap
-        else leftTop += frame.height + gap
-      }
-      for (const group of groups) {
-        const members = liveMembers(group)
-        if (members.length && !members.some(id => positions[id])) {
-          place(members, shotGroups.has(group.id) || members.some(id => shotCards.has(id)), group)
-        }
-      }
-      for (const { id } of nodes) if (!positions[id]) place([id], false)
-      return positions
+    arrange: arrangeExplicit(document.groups || []),
+    organize: () => {
+      const organized = organizeStoryboardDesigns(document)
+      if (organized) return { groups: organized.groups, arrange: arrangeExplicit(organized.groups, organized.newStacks) }
     },
   } }
 }

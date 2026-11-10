@@ -1,3 +1,4 @@
+import type { CanvasArrangementChange } from './useGenerationCanvasEditor'
 import { fixedCanvasSource } from './fixedCanvasSource'
 import { CheckCardSession } from './CheckCardSession'
 import { CardIssueIndicator } from './CardIssueIndicator'
@@ -35,13 +36,14 @@ import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image }
 import { StudioGenerationCanvasesService as Canvases, StudioFilesService, LlmService } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasRunRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, OutputIdentity, TextContentCard, VideoModelCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
+import type { CanvasPoint } from '../../../components/canvas/geometry'
 import { createSurfaceGesture } from './surfaceGesture'
 import { createConnectionSession, type ConnectionState } from './connectionSession'
 import { createMoveTransaction } from './moveTransaction'
 import { arrangeGenerationCards, generationVisibleFrames, placeStoryboardCards, type GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { readStoredGraphView, useGraphLayout } from '../directing/useGraphLayout'
-import type { GraphArrange } from '../directing/graphLayout'
+import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { editorPrompt } from './inputBindings'
 import type { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
@@ -100,7 +102,7 @@ export interface CanvasModelCardActionContext {
 }
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction }: { layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction }: { layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
@@ -334,8 +336,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         ? placeStoryboardCards(arranged, saved, groups, document.storyboard.origins, sizes)
         : arranged
     const base = !initial && saved && layoutPolicy?.placeAdditions ? layoutPolicy.placeAdditions(fallback, saved, sizes, width) : fallback
+    return completeArrangement(base, sizes, viewGroups, visibleCardIds, retained)
+  }
+  const completeArrangement = (base: Record<string, CanvasPoint>, sizes: Record<string, GraphSize>,
+    activeGroups: typeof viewGroups, visible: string[], retained?: Record<string, CanvasPoint>) => {
     const basePoint = (id: string) => base[id] || { x: 0, y: 0 }
-    const { cardFrames, groupFrames } = generationVisibleFrames(visibleCardIds, viewGroups, basePoint, sizes)
+    const { cardFrames, groupFrames } = generationVisibleFrames(visible, activeGroups, basePoint, sizes)
     const positions = placeLinkedResults(linkedResults, base, sizes, [...cardFrames, ...groupFrames.values()], retained && { ...historicalPositions.current, ...retained })
     for (const id of cachedResultIds) if (!positions[id] && retained?.[id]) positions[id] = retained[id]
     return positions
@@ -360,8 +366,25 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       focus: sizes => explicitLayout.focus(sizes, viewportWidth, container.current?.clientHeight || window.innerHeight) },
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
     onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, viewportWidth)
-  const arrangeLayout = () => { if (!arrangementBlocked) layout.rearrange() }
-  const layoutAction = <WorkbenchIconButton label="整理布局" variant="quiet" icon={<AppstoreOutlined />} disabled={arrangementBlocked} onClick={arrangeLayout} />
+  const arrangeDisabled = arrangementBlocked || !!explicitLayout?.organize && readonly
+  const arrangeLayout = () => {
+    if (arrangeDisabled) return
+    const organized = explicitLayout?.organize?.()
+    if (!organized) { layout.rearrange(); return }
+    const before = layout.view
+    const after = layout.arrangedView(before, (items, sizes, width, anchorId) => {
+      const content = items.filter(item => !resultsById.has(item.id))
+      const hidden = new Set(organized.groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || []))
+      const positions = organized.arrange(content, sizes, width, anchorId, before.positions)
+      return completeArrangement(positions, sizes, organized.groups, content.map(item => item.id).filter(id => !hidden.has(id)))
+    })
+    if (!after) return
+    onChange({ ...document, groups: organized.groups }, {
+      undo: () => layout.applyArrangement(before),
+      redo: () => layout.applyArrangement(after),
+    })
+  }
+  const layoutAction = <WorkbenchIconButton label="整理布局" variant="quiet" icon={<AppstoreOutlined />} disabled={arrangeDisabled} onClick={arrangeLayout} />
   const movementHost = useRef({ layout, history })
   movementHost.current = { layout, history }
   const [movement] = useState(() => createMoveTransaction({
@@ -1399,8 +1422,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           return result.reason
         }} />}
       <CanvasToolbarMenu label="布局" caption="布局">
-        <Button disabled={arrangementBlocked} onClick={arrangeLayout}>整理布局</Button>
-        <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
+        <Button disabled={arrangeDisabled} onClick={arrangeLayout}>整理布局</Button>
+        <Button disabled={!layout.canUndo && (readonly || !history?.canUndoArrangement)}
+          onClick={() => { if (layout.canUndo) layout.undo(); else history?.undo() }}>撤销布局整理</Button>
         <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
         <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
         <Select aria-label="选择连线" placeholder="选择连线" value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}

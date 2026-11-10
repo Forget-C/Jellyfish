@@ -1,4 +1,6 @@
 """Preview stack protection for a storyboard application without changing the shared guard."""
+import re
+
 from app.core.contracts.directing.scene_storyboard import StoryboardDiffStack
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.storyboard_assembly import storyboard_design_stack_id
@@ -14,6 +16,11 @@ def review_stack_changes(current: CanvasDocument, planned: CanvasDocument) -> tu
         return [], []
     automatic = {storyboard_design_stack_id(), *(storyboard_design_stack_id(shot.shot_id) for shot in current.storyboard.shots)} \
         if current.storyboard else set()
+    # 显式整理重新收纳成员时使用同一分镜归属下的新堆叠身份。
+    def is_automatic(group_id: str) -> bool:
+        base, _, revision = group_id.rpartition('-')
+        return group_id in automatic or base in automatic and re.fullmatch(r'[0-9a-f]{8}', revision) is not None
+
     # The comparison copy normalizes exactly as a save does before evaluating each stack.
     normalized, previous = _normalize_document(planned.model_copy(deep=True), current.model_copy(update={'groups': []}, deep=True))
     previous.groups = list(stacks.values())
@@ -31,7 +38,7 @@ def review_stack_changes(current: CanvasDocument, planned: CanvasDocument) -> tu
             if issue.detail['code'] != 'STACK_READ_ONLY':
                 raise
             group = stacks[issue.detail['target']['group_id']]
-            changes = auto_changes if group.id in automatic else manual_changes
+            changes = auto_changes if is_automatic(group.id) else manual_changes
             changes.append(StoryboardDiffStack(id=group.id, name=group.name))
             normalized.groups = [other for other in normalized.groups if other.id != group.id]
     return auto_changes, manual_changes

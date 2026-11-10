@@ -106,21 +106,24 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
   const setView = (update: (previous: GraphView) => GraphView) => setState(previous => ({ ...previous, view: update(previous.view) }))
   const move = (id: string, point: CanvasPoint) => setState(previous => ({ ...previous, view: { ...previous.view,
     positions: { ...previous.view.positions, [id]: point }, manuallyPlaced: [...new Set([...(previous.view.manuallyPlaced || []), id])] } }))
-  const rearrange = () => {
-    if (!scope || nodes.some(node => !measured[node.id])) return
-    setState(previous => {
-      const sizes = Object.fromEntries(nodes.map(node => [node.id, node.size || measured[node.id]]))
-      const target = scope.rearrangeTarget
-      const anchorId = target?.anchorId ?? scope.anchorId
-      const positions = scope.arrange(nodes, sizes, viewportWidth, anchorId)
-      const anchor = positions[anchorId] || { x: 0, y: 0 }
-      const focus = target?.focus(sizes)
-      const scale = focus?.scale ?? previous.view.transform.scale
-      const transform = { scale, x: (focus?.left ?? scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16)) - anchor.x * scale,
-        y: (focus?.top ?? (scope.initialTop || 64)) - anchor.y * scale }
-      return { ...previous, undo: previous.view, view: { ...previous.view, sizes, positions, transform, manuallyPlaced: [] }, ready: true }
-    })
+  const arrangedView = (view: GraphView, arrange = scope?.arrange): GraphView | undefined => {
+    if (!scope || !arrange || nodes.some(node => !measured[node.id])) return
+    const sizes = Object.fromEntries(nodes.map(node => [node.id, node.size || measured[node.id]]))
+    const target = scope.rearrangeTarget
+    const anchorId = target?.anchorId ?? scope.anchorId
+    const positions = arrange(nodes, sizes, viewportWidth, anchorId)
+    const anchor = positions[anchorId] || { x: 0, y: 0 }
+    const focus = target?.focus(sizes)
+    const scale = focus?.scale ?? view.transform.scale
+    const transform = { scale, x: (focus?.left ?? scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16)) - anchor.x * scale,
+      y: (focus?.top ?? (scope.initialTop || 64)) - anchor.y * scale }
+    return { ...view, sizes, positions, transform, manuallyPlaced: [] }
   }
+  const rearrange = () => setState(previous => {
+    const view = arrangedView(previous.view)
+    return view ? { ...previous, undo: previous.view, view, ready: true } : previous
+  })
+  const applyArrangement = (view: GraphView) => setState(previous => ({ ...previous, view, undo: undefined, ready: true }))
   const undo = () => setState(previous => previous.undo ? { ...previous, view: pruneGraphView(previous.undo, new Set(scope?.validIds), scope?.identityAliases), undo: undefined } : previous)
-  return { view: state.view, ready: state.ready && state.key === key, setView, move, rearrange, undo, canUndo: !!state.undo }
+  return { view: state.view, ready: state.ready && state.key === key, setView, move, arrangedView, applyArrangement, rearrange, undo, canUndo: !!state.undo }
 }
