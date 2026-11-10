@@ -1,0 +1,27 @@
+.home-page { padding: 24px var(--app-page-gutter); }
+.home-title { margin: 0 0 24px; font-size: 20px; font-weight: 650; line-height: 1.4; }
+.home-section-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.home-section-heading h2 { margin: 0; font-size: 16px; font-weight: 650; line-height: 1.4; }
+.home-sample-label { padding: 2px 7px; border-radius: 4px; background: #e7edf5; color: var(--app-muted); font-size: 12px; }
+.home-canvas-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.home-canvas-card { min-width: 0; overflow: hidden; border-radius: 12px; background: #fff; }
+.home-canvas-cover { display: block; width: 100%; height: 142px; object-fit: cover; }
+.home-canvas-caption { display: grid; gap: 4px; padding: 16px; line-height: 1.5; }
+.home-canvas-caption h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.home-canvas-caption p { margin: 0; color: var(--app-muted); font-size: 12px; }
+
+@media (min-width: 1024px) {
+  .home-canvas-grid { grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr)); }
+  .home-canvas-cover { height: 128px; }
+}
+
+@media (max-width: 767px) {
+  .home-page { padding-block: 16px; }
+  .home-canvas-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .home-canvas-cover { height: 112px; }
+}
+
+@media (max-width: 479px) {
+  .home-canvas-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-canvas-cover { height: 130px; }
+}

@@ -1,13 +1,22 @@
 export const mainNavigation = [
-  { key: 'projects', label: '项目列表', to: '/projects' },
-  { key: 'assets', label: '资产管理', to: '/assets' },
-  { key: 'prompts', label: '提示词模板', to: '/prompts' },
-  { key: 'files', label: '文件管理', to: '/files' },
-  { key: 'models', label: '模型管理', to: '/models' },
-  { key: 'agents', label: 'Agent 管理', to: '/agents' },
-  { key: 'lab', label: '实验室', to: '/lab' },
-  { key: 'settings', label: '设置', to: '/settings' },
+  { key: 'home', to: '/' },
+  { key: 'projects', to: '/projects' },
+  { key: 'management', to: '/models' },
+  { key: 'lab', to: '/lab' },
 ] as const
+
+const managementTitles: Record<string, string> = {
+  models: '模型管理', assets: '资产管理', prompts: '提示词模板', files: '文件管理', agents: 'Agent 管理',
+}
+
+export function activeMainNavigation(pathname: string): typeof mainNavigation[number]['key'] | undefined {
+  const section = pathname.split('/')[1]
+  if (!section) return 'home'
+  if (section === 'projects') return 'projects'
+  if (Object.prototype.hasOwnProperty.call(managementTitles, section)) return 'management'
+  if (section === 'lab') return 'lab'
+  return undefined
+}
 
 export type BreadcrumbItem = { label: string; to?: string }
 type NavigationTitles = { page?: string; project?: string; chapter?: string }
@@ -38,6 +47,6 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
     return [{ label: '资产', to: '/assets' }, { label: category.label, to: `/assets?tab=${category.tab}` }, { label: titles.page || `${category.label}档案` }]
   }
   if (path.length === 3 && path[0] === 'agents' && path[1] && path[2] === 'edit') return [{ label: 'Agent 管理', to: '/agents' }, { label: titles.page || 'Agent 编辑' }]
-  const entry = mainNavigation.find(item => item.to === pathname)
-  return [{ label: entry?.label || (path.length ? '页面未找到' : '项目列表') }]
+  const pageLabels: Record<string, string> = { ...managementTitles, projects: '项目列表', lab: '实验室', settings: '设置' }
+  return [{ label: path.length === 0 ? '首页' : (path.length === 1 && Object.prototype.hasOwnProperty.call(pageLabels, path[0]) ? pageLabels[path[0]] : '页面未找到') }]
 }

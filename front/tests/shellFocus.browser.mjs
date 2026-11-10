@@ -12,22 +12,23 @@ const server = await createServer({ root, server: { host: '127.0.0.1', port: 418
 let browser
 try {
   await server.listen()
-  browser = await chromium.launch({ headless: true })
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ locale: 'zh-CN' })
+  page.setDefaultTimeout(10000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   await page.route('**/api/**', route => route.fulfill({ json: { success: true, data: { items: [], next_cursor: null } } }))
   const measurements = []
-  for (const width of [1586, 375]) {
+  for (const width of [1440, 1024, 375]) {
     await page.setViewportSize({ width, height: 812 })
-    await page.goto('http://127.0.0.1:4185/settings')
-    if (width === 375) {
-      const trigger = page.getByRole('button', { name: '打开主导航' })
-      await trigger.focus()
-      await page.keyboard.press('Enter')
-    }
-    await page.waitForTimeout(400)
-    const navigation = page.getByRole('navigation', { name: width === 375 ? '移动主导航' : '主导航', exact: true })
-    const link = navigation.getByRole('link', { name: '资产管理', exact: true })
+    await page.goto('http://127.0.0.1:4185/')
+    const navigation = page.getByRole('navigation', { name: '主导航', exact: true })
+    await navigation.getByRole('link', { name: '首页', exact: true }).waitFor()
+    assert.deepEqual(await navigation.getByRole('link').allTextContents(), ['首页', '项目', '管理', '实验室'])
+    assert.equal(await navigation.getByRole('link', { name: '首页', exact: true }).getAttribute('aria-current'), 'page')
+    const canvas = page.getByRole('region', { name: '最近更新的画布' })
+    await canvas.getByText('示例数据', { exact: true }).waitFor()
+    assert.equal(await canvas.getByRole('link').count(), 0)
+    const link = navigation.getByRole('link', { name: '项目', exact: true })
     await link.focus()
     await page.keyboard.press('Tab')
     await page.keyboard.press('Shift+Tab')
@@ -39,11 +40,17 @@ try {
     assert.notEqual(measured.outline, 'none')
     measurements.push({ width, ...measured })
     await page.screenshot({ path: `${output}/${width}-navigation-focus.png`, animations: 'disabled' })
-    if (width === 375) {
-      await page.keyboard.press('Escape')
-      await page.getByRole('dialog').waitFor({ state: 'hidden' })
-      assert.equal(await page.getByRole('button', { name: '打开主导航' }).getAttribute('aria-expanded'), 'false')
-    }
+    await page.keyboard.press('Enter')
+    await page.waitForURL('**/projects')
+    await page.getByRole('link', { name: 'Jellyfish 首页' }).click()
+    await page.waitForURL('http://127.0.0.1:4185/')
+    await page.goBack()
+    await page.waitForURL('**/projects')
+    await page.reload()
+    await navigation.getByRole('link', { name: '项目', exact: true }).waitFor()
+    assert.equal(await navigation.getByRole('link', { name: '项目', exact: true }).getAttribute('aria-current'), 'page')
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2))
+
   }
   await writeFile(`${output}/focus.json`, JSON.stringify(measurements, null, 2))
   console.log(JSON.stringify({ output, measurements }))

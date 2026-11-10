@@ -2,6 +2,7 @@ import type React from 'react'
 import { lazy, Suspense } from 'react'
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation, useParams } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
+import HomePage from './pages/home/HomePage'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 import ProjectLobby from './pages/aiStudio/project/ProjectLobby'
@@ -46,7 +47,7 @@ const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStu
 const router = createBrowserRouter(createRoutesFromElements(
       <>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<Navigate to="/projects" replace />} />
+          <Route index element={<HomePage />} />
           <Route path="projects" element={<ProjectLobby />} />
           <Route path="projects/:projectId" element={<ProjectEntry />} />
           <Route path="projects/:projectId/generation-canvas" element={<GenerationCanvasRoute />} />
