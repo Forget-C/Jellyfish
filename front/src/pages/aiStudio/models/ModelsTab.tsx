@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { WorkspaceSidebar } from '../../../components/layout/WorkspaceSidebar'
+import { WorkspaceFilter } from '../../../components/layout/WorkspaceFilter'
 import { useEffect, useState, useMemo } from 'react'
 import {
   Alert,
@@ -478,24 +478,24 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
 
   return (
     <>
-      <Layout className="app-management-body flex-1 min-h-0 flex-row overflow-hidden">
-        <WorkspaceSidebar title="筛选">
-          <Tree
-            selectedKeys={categoryFilter ? [categoryFilter] : []}
-            treeData={treeData}
-            showLine
-            blockNode
-            onSelect={([key]) => setCategoryFilter(key ? (key as ModelCategoryKey) : null)}
-            className="py-2"
-          />
-        </WorkspaceSidebar>
+      <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
         <section className="flex flex-1 min-w-0 min-h-0 flex-col">
           {header}
-          <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white flex flex-wrap items-center justify-between gap-2">
+          <div className="flex-shrink-0 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="text-gray-600 text-sm">共 {models.length} 个模型</span>
             </div>
             <Space wrap>
+              <WorkspaceFilter title="筛选">
+                <Tree
+                  selectedKeys={categoryFilter ? [categoryFilter] : []}
+                  treeData={treeData}
+                  showLine
+                  blockNode
+                  onSelect={([key]) => setCategoryFilter(key ? (key as ModelCategoryKey) : null)}
+                  className="py-2"
+                />
+              </WorkspaceFilter>
               <Button icon={<SettingOutlined />} onClick={() => setDefaultModelsDrawerOpen(true)}>
                 默认模型 {configuredDefaultCount}/3
               </Button>

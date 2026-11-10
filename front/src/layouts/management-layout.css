@@ -1,0 +1,70 @@
+.app-workspace.management-layout {
+  flex-direction: row;
+}
+
+.management-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.management-content .app-page-tabs > .ant-tabs-nav::before {
+  border-bottom: 0;
+}
+
+.management-links {
+  display: flex;
+  flex: 0 0 216px;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.management-links .app-nav-link {
+  flex-shrink: 0;
+  justify-content: flex-start;
+  color: var(--app-muted, #536174);
+}
+
+.management-links .app-nav-link:hover,
+.management-links .app-nav-link[aria-current="page"] {
+  color: var(--app-accent, #245fc5);
+  background: var(--app-selected, #e4edfb);
+}
+
+.management-links .app-nav-link:focus-visible {
+  outline: 2px solid var(--app-accent, #245fc5);
+  outline-offset: 2px;
+}
+
+.ant-drawer-body > .management-links {
+  padding: 2px;
+}
+
+.management-navigation-trigger {
+  flex-shrink: 0;
+  padding-inline: var(--app-page-gutter);
+}
+
+@media (max-width: 1023px) {
+  .app-workspace.management-layout {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 767px) {
+  .management-content .app-content-tabs .ant-card-head-wrapper {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .management-content .app-content-tabs .ant-card-extra {
+    max-width: 100%;
+    margin-inline-start: 0;
+  }
+
+  .management-content .app-content-tabs .ant-card-extra .ant-space {
+    flex-wrap: wrap;
+  }
+}

@@ -104,19 +104,12 @@
 }
 
 .app-brand { text-decoration: none; }
-.app-management-sidebar { flex-shrink: 0; overflow: auto; background: #fff; border-right: 1px solid var(--app-border); }
-.app-sidebar-heading { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--app-border); }
-.app-sidebar-toggle { padding: 8px 16px; background: #fff; border-bottom: 1px solid var(--app-border); }
-@media (max-width: 1023px) {
-  .app-management-body { flex-direction: column !important; }
-}
-
 .app-context-menu { max-width: calc(100vw - 24px); }
 .app-context-menu .ant-dropdown-menu-title-content { white-space: normal; overflow-wrap: anywhere; }
 
 .project-lobby-panels { display: grid; grid-template-columns: minmax(0, 1fr) 344px; gap: 16px; }
-.app-management-sidebar .ant-tree-treenode, .app-sidebar-drawer .ant-tree-treenode { min-height: 36px; align-items: center; }
-.app-management-sidebar .ant-tree-node-content-wrapper, .app-sidebar-drawer .ant-tree-node-content-wrapper { min-height: 36px; line-height: 36px; }
+.app-sidebar-drawer .ant-tree-treenode { min-height: 36px; align-items: center; }
+.app-sidebar-drawer .ant-tree-node-content-wrapper { min-height: 36px; line-height: 36px; }
 @media (max-width: 1279px) {
   .project-lobby-panels { grid-template-columns: minmax(0, 1fr); }
 }

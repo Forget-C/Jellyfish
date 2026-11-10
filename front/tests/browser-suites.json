@@ -82,6 +82,7 @@
     "generation-canvas-performance": { "file": "generationCanvasPerformance.browser.mjs", "ports": [4285, 8285], "timeoutMs": 180000 },
     "generation-canvas-multi-view": { "file": "generationCanvasMultiView.browser.mjs", "ports": [4283, 8283], "timeoutMs": 180000 },
     "generation-canvas-named-references": { "file": "generationCanvasNamedReferences.browser.mjs", "ports": [4281, 8281], "timeoutMs": 180000 },
+    "management-navigation": { "file": "managementNavigation.browser.mjs", "ports": [4196], "timeoutMs": 120000 },
     "legacy-labs": { "file": "legacyLabs.browser.mjs", "ports": [4184], "timeoutMs": 180000 },
     "generation-canvas-acceptance": { "file": "generationCanvasAcceptance.browser.mjs", "ports": [4283, 8283], "timeoutMs": 180000 },
     "generation-canvas-selection": { "file": "generationCanvasSelection.browser.mjs", "ports": [4281, 8281], "timeoutMs": 180000 },
