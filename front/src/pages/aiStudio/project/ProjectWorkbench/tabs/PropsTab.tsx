@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, SkinOutlined, TagOutlined } from '@ant-design/icons'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectCostumeLinkRead, ProjectPropLinkRead } from '../../../../../services/generated'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { StudioAssetTypeFormModal } from '../../../assets/components/StudioAssetTypeFormModal'
+import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
-import { encodeWorkbenchAssetEditReturnTo, type WorkbenchAssetTabParam } from '../utils/workbenchAssetReturnTo'
 
 type AssetKind = 'prop' | 'costume'
 
@@ -28,7 +28,6 @@ function LinkedAssetTab({
   projectId: string
 }) {
   const navigate = useNavigate()
-  const workbenchTab: WorkbenchAssetTabParam = kind === 'prop' ? 'props' : 'costumes'
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -181,6 +180,9 @@ function LinkedAssetTab({
     }
   }
 
+  const { openDetail, detailView } = useProjectAssetDetail(kind, loadLinks)
+  if (detailView) return detailView
+
   return (
     <div className="project-resource-page">
       <ProjectContentToolbar>
@@ -205,12 +207,12 @@ function LinkedAssetTab({
                   variant="project"
                   imageFit="contain"
                   key={l.id}
-                  title={<Link className="project-resource-name" title={asset?.name ?? '资源信息暂不可用'} to={`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`}><span>{asset?.name ?? '资源信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></Link>}
+                  title={<button type="button" data-project-asset-id={assetId} className="project-resource-name" title={asset?.name ?? '资源信息暂不可用'} onClick={() => openDetail(assetId)}><span>{asset?.name ?? '资源信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></button>}
                   imageUrl={resolveAssetUrl(linkThumb ?? asset?.thumbnail)}
                   imageAlt={asset?.name ?? '资源信息暂不可用'}
                   placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
-                    { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`) },
+                    { key: 'edit', label: '编辑', onClick: () => openDetail(assetId) },
                     { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
                       Modal.confirm({
                         className: 'project-resource-dialog',

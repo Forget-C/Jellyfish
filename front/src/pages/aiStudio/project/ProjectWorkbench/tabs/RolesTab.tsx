@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Input, message, Select, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import {  useParams, useSearchParams } from 'react-router-dom'
 import {
   StudioProjectsService,
   StudioProjectAssetsService,
@@ -15,6 +15,7 @@ import {
   ProjectVisualStyleAndStyleFields,
   type ProjectVisualStyleChoice,
 } from '../../../project/ProjectVisualStyleAndStyleFields'
+import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import { directingError } from '../../../directing/common'
 import './project-roles.css'
@@ -36,7 +37,6 @@ type CostumeLike = {
 
 export function RolesTab() {
   const { options: projectStyleOptions, defaultVisualStyle, getDefaultStyle } = useProjectStyleOptions()
-  const navigate = useNavigate()
   const { projectId } = useParams<{ projectId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const { characters, loading, refresh } = useProjectCharacters(projectId)
@@ -306,6 +306,9 @@ export function RolesTab() {
     })
   }, [costumesById, projectCostumeLinks])
 
+  const { openDetail, detailView } = useProjectAssetDetail('character', refresh)
+  if (detailView) return detailView
+
   if (!projectId) {
     return null
   }
@@ -326,7 +329,7 @@ export function RolesTab() {
                 variant="project"
                 imageFit="contain"
                 key={c.id}
-                title={<Link className="project-resource-name" title={c.name} to={`/projects/${projectId}/roles/${c.id}/edit`}><span>{c.name}</span><ArrowRightOutlined aria-hidden /></Link>}
+                title={<button type="button" data-project-asset-id={c.id} className="project-resource-name" title={c.name} onClick={() => openDetail(c.id)}><span>{c.name}</span><ArrowRightOutlined aria-hidden /></button>}
                 imageUrl={resolveAssetUrl(c.thumbnail)}
                 imageAlt={c.name}
                 enablePreview
@@ -338,7 +341,7 @@ export function RolesTab() {
                   }} menu={{ items: [
                     { key: 'edit', label: '编辑', onClick: () => {
                       setMenuRoleId(undefined)
-                      navigate(`/projects/${projectId}/roles/${c.id}/edit`)
+                      openDetail(c.id)
                     } },
                     { key: 'delete', label: '删除角色', danger: true, disabled: deleting, onClick: () => {
                       setMenuRoleId(undefined)

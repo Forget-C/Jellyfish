@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Image, Input, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectActorLinkRead } from '../../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
@@ -9,8 +9,8 @@ import { useProjectCharacters } from '../hooks/useProjectData'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ActorEntityFormModal } from '../../../assets/components/ActorEntityFormModal'
+import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
-import { encodeWorkbenchAssetEditReturnTo } from '../utils/workbenchAssetReturnTo'
 
 type ActorLike = {
   id: string
@@ -181,6 +181,9 @@ export function ActorsTab() {
     [actors, linkedActorIdSet],
   )
 
+  const { openDetail, detailView } = useProjectAssetDetail('actor', async () => { await loadLinks(); await loadActors('') })
+  if (detailView) return detailView
+
   if (!projectId) return null
 
   return (
@@ -204,12 +207,12 @@ export function ActorsTab() {
                 <DisplayImageCard
                   variant="project"
                   key={l.id}
-                  title={<Link className="project-resource-name" title={a?.name ?? '演员信息暂不可用'} to={`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`}><span>{a?.name ?? '演员信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></Link>}
+                  title={<button type="button" data-project-asset-id={l.actor_id} className="project-resource-name" title={a?.name ?? '演员信息暂不可用'} onClick={() => openDetail(l.actor_id)}><span>{a?.name ?? '演员信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></button>}
                   imageUrl={resolveAssetUrl(a?.thumbnail)}
                   imageAlt={a?.name ?? '演员信息暂不可用'}
                   placeholder={<><UserOutlined aria-hidden />暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
-                    { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`) },
+                    { key: 'edit', label: '编辑', onClick: () => openDetail(l.actor_id) },
                     { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
                       Modal.confirm({
                         className: 'project-resource-dialog',

@@ -39,6 +39,8 @@ try {
       if(unlinkAttempts===1) return route.fulfill({status:503,json:{detail:'取消关联失败'}})
       links=links.filter(l=>l.id!==Number(path.split('/').at(-1))); return respond({})
     }
+    const actor=actors.find(a=>path.endsWith('/entities/actor/'+a.id))
+    if(actor)return respond(actor)
     if(path.endsWith('/entities/actor')) return respond({items:actors,pagination:{total:actors.length}})
     return respond({items:[],next_cursor:null})
   })
@@ -57,8 +59,14 @@ try {
   assert.equal(await page.getByRole('button',{name:'预览失败图片演员',exact:true}).count(),0)
   await page.getByText('未填写简介',{exact:true}).first().waitFor()
   assert.equal(await page.getByText(/actor_id：/).count(),0)
-  const nameLink=page.getByRole('link',{name:actors[0].name,exact:true})
-  assert.ok((await nameLink.getAttribute('href')).includes('/assets/actors/actor-one/edit?returnTo='))
+  const nameLink=page.getByRole('button',{name:actors[0].name,exact:true})
+  const originalUrl=page.url()
+  await nameLink.click()
+  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+  assert.equal(page.url(),originalUrl)
+  await page.getByRole('button',{name:'返回演员资产',exact:true}).click()
+  await nameLink.waitFor()
+
   for(const appearance of ['雾蓝微渐变','雾蓝纯色']) {
     await page.getByRole('button',{name:'用户与语言设置'}).click()
     await page.getByRole('menuitemradio',{name:appearance}).click()
@@ -77,7 +85,7 @@ try {
   const associate=page.getByRole('dialog',{name:'从资产库关联演员',exact:true})
   await associate.getByRole('button',{name:'关联到项目',exact:true}).click()
   await associate.waitFor({state:'hidden'})
-  await page.getByRole('link',{name:'待关联演员',exact:true}).waitFor()
+  await page.getByRole('button',{name:'待关联演员',exact:true}).waitFor()
   assert.ok(links.some(l=>l.actor_id==='actor-new'))
   await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
   await page.getByRole('menuitem',{name:'编辑',exact:true}).waitFor()
@@ -96,7 +104,7 @@ try {
   assert.equal(unlinkAttempts,2)
   links = [{id:4,project_id:'actors-project',actor_id:'actor-new'}]
   await page.reload()
-  const single = page.getByRole('article').filter({has:page.getByRole('link',{name:'待关联演员',exact:true})})
+  const single = page.getByRole('article').filter({has:page.getByRole('button',{name:'待关联演员',exact:true})})
   await single.waitFor()
   const singleBox = await single.boundingBox()
   assert.ok(singleBox.width >= 228 && singleBox.width < 400, 'single project resource keeps a normal column width')
@@ -109,6 +117,7 @@ try {
   await page.goto('http://127.0.0.1:4542/projects/actors-project?tab=actors')
   await page.getByRole('button',{name:'待关联演员更多操作',exact:true}).click()
   await page.getByRole('menuitem',{name:'编辑',exact:true}).click()
-  await page.waitForURL('**/assets/actors/actor-new/edit?returnTo=**')
+  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+  assert.equal(page.url(),originalUrl)
   console.log(JSON.stringify({output,passed:true}))
 } finally { await cleanup() }

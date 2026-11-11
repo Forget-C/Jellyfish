@@ -18,6 +18,8 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   for(const [kind,tab,label] of [['scene','scenes','场所'],['prop','props','道具'],['costume','costumes','服装']]) {
     const assets=[{id:'one',name:`${label}长名称测试`,description:'真实简介',thumbnail:'/api/cover'}, {id:'missing',name:`无图${label}`}, {id:'new',name:`新增${label}`},{id:'broken',name:`失效${label}`,thumbnail:'/api/broken'}]
+    let failAssetSave=false
+    const imageRows=[]
     let links=[assets[0],assets[1],assets[3]].map((a,i)=>({id:i+1,project_id:'resources',[kind+'_id']:a.id})), attempts=0
     await page.route('**/api/**',async route=>{
       const req=route.request(),path=new URL(req.url()).pathname
@@ -36,7 +38,14 @@ try {
       }
       if(path.endsWith('/entities/'+kind))return respond({items:assets,pagination:{total:assets.length}})
       const asset=assets.find(a=>path.endsWith('/entities/'+kind+'/'+a.id))
-      if(asset)return respond(asset)
+      if(asset){
+        if(req.method()==='PATCH') { if(failAssetSave)return route.fulfill({status:503,json:{detail:'保存失败'}});Object.assign(asset,req.postDataJSON()) }
+        return respond(asset)
+      }
+      if(path.endsWith('/images')) {
+        if(req.method()==='POST')imageRows.push({id:imageRows.length+1,view_angle:req.postDataJSON().view_angle})
+        return respond({items:imageRows,pagination:{total:imageRows.length}})
+      }
       return respond({items:[],next_cursor:null})
     })
     await page.goto(`http://127.0.0.1:4546/projects/resources?tab=${tab}`)
@@ -65,12 +74,36 @@ try {
       }
     }
     await page.setViewportSize({width:1440,height:900})
-    const title=page.getByRole('link',{name:assets[0].name,exact:true})
-    assert.ok((await title.getAttribute('href')).includes(`/assets/${tab}/one/edit?returnTo=`))
+    const originalUrl=page.url()
+    await page.getByRole('button',{name:assets[0].name,exact:true}).click()
+    const field=page.getByRole('textbox',{name:'名称',exact:true})
+    await field.waitFor()
+    await page.getByRole('navigation',{name:'项目导航',exact:true}).getByText('资源测试项目',{exact:true}).waitFor()
+    await page.screenshot({path:join(output,`${kind}-project-detail.png`),animations:'disabled'})
+    assert.equal(page.url(),originalUrl)
+    await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+    const back=page.getByRole('button',{name:kind==='scene'?'返回场景资产':`返回${label}资产`,exact:true})
+    await field.fill(assets[0].name+'修改')
+    await back.click()
+    const leave=page.getByRole('dialog',{name:'离开资产详情',exact:true})
+    await leave.getByRole('button',{name:'继续编辑',exact:true}).click()
+    await leave.waitFor({state:'hidden'})
+    assert.equal(await field.inputValue(),assets[0].name+'修改')
+    failAssetSave=true
+    await page.getByRole('button',{name:'保存资产',exact:true}).click()
+    await page.getByText('保存失败，修改已保留，请重试。',{exact:true}).waitFor()
+    failAssetSave=false
+    await page.getByRole('button',{name:'保存资产',exact:true}).click()
+    await page.getByRole('status').filter({hasText:/^已保存$/}).waitFor()
+    await back.click()
+    const title=page.getByRole('button',{name:assets[0].name,exact:true})
+    await title.and(page.locator(':focus')).waitFor()
+    assert.equal(page.url(),originalUrl)
+
     await page.getByRole('button',{name:/从资产库关联/}).click()
     const associate=page.getByRole('dialog').filter({hasText:'从资产库关联'})
     await associate.getByRole('button',{name:'关联到项目',exact:true}).click();await associate.waitFor({state:'hidden'})
-    await page.getByRole('link',{name:assets[2].name,exact:true}).waitFor()
+    await page.getByRole('button',{name:assets[2].name,exact:true}).waitFor()
     await page.getByRole('button',{name:assets[0].name+'更多操作',exact:true}).click()
     await page.getByRole('menuitem',{name:'取消关联',exact:true}).click()
     const confirm=page.getByRole('dialog').filter({hasText:'仅移除'})
@@ -79,7 +112,26 @@ try {
     await confirm.getByRole('button',{name:'取消关联',exact:true}).click();await confirm.waitFor({state:'hidden'});await title.waitFor({state:'hidden'})
     assert.equal(attempts,2)
     await page.getByRole('button',{name:assets[2].name+'更多操作',exact:true}).click()
-    await page.getByRole('menuitem',{name:'编辑',exact:true}).click();await page.waitForURL(`**/assets/${tab}/new/edit?returnTo=**`)
+    await page.getByRole('menuitem',{name:'编辑',exact:true}).click();await page.getByRole('textbox',{name:'名称',exact:true}).waitFor();assert.equal(page.url(),originalUrl);await page.getByRole('button',{name:kind==='scene'?'返回场景资产':`返回${label}资产`,exact:true}).click()
+    if(kind==='prop') {
+      assets.push(...Array.from({length:14},(_,i)=>({id:`extra-${i}`,name:`道具分页${i}`,description:'分页资源'})))
+      links=assets.map((asset,i)=>({id:i+1,project_id:'resources',[kind+'_id']:asset.id}))
+      await page.reload()
+      await page.setViewportSize({width:375,height:440})
+      await page.getByTitle('2',{exact:true}).click()
+      const restored=page.getByRole('button',{name:assets[13].name,exact:true})
+      await restored.scrollIntoViewIfNeeded()
+      const panel=page.locator('.project-workbench-content')
+      const scrollBefore=await panel.evaluate(node=>node.scrollTop)
+      assert.ok(scrollBefore>0)
+      await restored.click()
+      await page.getByRole('textbox',{name:'名称',exact:true}).waitFor()
+      assert.equal(page.url(),originalUrl)
+      await page.getByRole('button',{name:'返回道具资产',exact:true}).click()
+      await restored.and(page.locator(':focus')).waitFor()
+      assert.ok(Math.abs(await panel.evaluate(node=>node.scrollTop)-scrollBefore)<=1,'return preserves page 2 and its scroll position')
+      await page.setViewportSize({width:1440,height:900})
+    }
     links=[]
     await page.goto(`http://127.0.0.1:4546/projects/resources?tab=${tab}`)
     await page.getByText(/暂无项目/).waitFor()

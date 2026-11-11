@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, EnvironmentOutlined } from '@ant-design/icons'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectSceneLinkRead } from '../../../../../services/generated'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { StudioAssetTypeFormModal } from '../../../assets/components/StudioAssetTypeFormModal'
+import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
-import { encodeWorkbenchAssetEditReturnTo } from '../utils/workbenchAssetReturnTo'
 
 type SceneLike = {
   id: string
@@ -157,6 +157,9 @@ export function ScenesTab() {
     }
   }
 
+  const { openDetail, detailView } = useProjectAssetDetail('scene', loadLinks)
+  if (detailView) return detailView
+
   if (!projectId) return null
 
   return (
@@ -181,12 +184,12 @@ export function ScenesTab() {
                   variant="project"
                   imageFit="cover"
                   key={l.id}
-                  title={<Link className="project-resource-name" title={s?.name ?? '场所信息暂不可用'} to={`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`}><span>{s?.name ?? '场所信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></Link>}
+                  title={<button type="button" data-project-asset-id={l.scene_id} className="project-resource-name" title={s?.name ?? '场所信息暂不可用'} onClick={() => openDetail(l.scene_id)}><span>{s?.name ?? '场所信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></button>}
                   imageUrl={toThumbUrl(l.thumbnail ?? s?.thumbnail)}
                   imageAlt={s?.name ?? '场所信息暂不可用'}
                   placeholder={<><EnvironmentOutlined aria-hidden />暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
-                    { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`) },
+                    { key: 'edit', label: '编辑', onClick: () => openDetail(l.scene_id) },
                     { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
                       Modal.confirm({
                         className: 'project-resource-dialog',

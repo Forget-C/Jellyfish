@@ -7,7 +7,7 @@ import { AssetDossierImage, AssetDossierSection } from './AssetDossier'
 import './assetDossier.css'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components/layout/PageLayout'
 import { AssetFactsFields, ASSET_FIELDS, pickAssetFacts, previewAssetDescription, type AssetFacts, type AssetFieldName, type StructuredAssetType } from './AssetFactsFields'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Alert,
   Skeleton,
@@ -107,6 +107,8 @@ export type AssetEditPageBaseProps<TAsset extends BaseAsset, TImage extends Base
   assetDisplayName: string
   backTo: string
   embedded?: boolean
+  localDetail?: boolean
+  renderToolbar?: (title: ReactNode, actions: ReactNode) => ReactNode
   relationType: string
   getAsset: (assetId: string) => Promise<TAsset | null>
   updateAsset: (assetId: string, payload: AssetUpdate) => Promise<TAsset | null>
@@ -173,6 +175,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   assetDisplayName,
   backTo,
   embedded = false,
+  localDetail = false,
+  renderToolbar,
   relationType,
   getAsset,
   updateAsset,
@@ -187,6 +191,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const taskCopy = TASK_COPY.smartDetect
   const location = useLocation()
   // 独立详情统一采用管理资产的外观与保护；场次内嵌档案继续保持原模式。
+  const [closeRequested, setCloseRequested] = useState(false)
   const libraryDetail = !embedded
   const imagePanelRef = useRef<HTMLElement>(null)
   const detailBodyRef = useRef<HTMLDivElement>(null)
@@ -201,7 +206,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const saveLock = useRef(false)
   const serverTasks = useTaskUiStore(state => state.serverItems)
   const [asset, setAsset] = useState<TAsset | null>(null)
-  usePageTitle(asset?.id === assetId ? asset?.name : undefined, !embedded)
+  usePageTitle(asset?.id === assetId ? asset?.name : undefined, !embedded && !localDetail)
   const [images, setImages] = useState<TImage[]>([])
   const [selectedAngle, setSelectedAngle] = useState<AssetViewAngle | null>(null)
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
@@ -509,6 +514,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
   useWorkspaceDraft({ name: `${assetDisplayName}资产档案`, dirty: embedded && hasUnsavedChanges, busy: embedded && (savingBase || smartDetectBusy), save: handleSaveBaseInfo, discard: () => { if (asset) applyAsset(asset) } })
   const returnFromAsset = () => {
+    if (localDetail && (hasUnsavedChanges || partialSave || savingBase || generationSubmitting || !!adoptingImageId || smartDetectBusy)) { setCloseRequested(true); return }
     if (!libraryDetail && (savingBase || smartDetectBusy)) return
     if (embedded && hasUnsavedChanges) {
       Modal.confirm({ title: '资产档案有未保存的修改', content: '本场设计仍保留。请保存资产后返回，或取消并继续编辑。', okText: '保存并返回本场资产', cancelText: '继续编辑', onOk: async () => { if (!await handleSaveBaseInfo()) throw new Error('资产未保存'); onNavigate(backTo) } })
@@ -940,6 +946,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           </Button>
         </div>
   )
+  const toolbarTitle = <><Button type="text" aria-label={`返回${assetDisplayName}资产`} icon={<ArrowLeftOutlined />} onClick={returnFromAsset} /><span className="asset-detail-title" title={asset?.name}>{asset?.name ?? `${assetDisplayName}档案`}</span><Tag>{assetDisplayName}</Tag></>
   const DossierRoot = libraryDetail ? WorkspaceLayout : 'div'
   const DossierBody = libraryDetail ? WorkspaceScrollPanel : 'div'
 
@@ -953,9 +960,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
   return (
     <DossierRoot className={`asset-dossier${libraryDetail ? ' asset-library-detail' : ''}`}>
-      {libraryDetail ? <PageToolbar className="asset-detail-toolbar" title={<><Button type="text" aria-label={`返回${assetDisplayName}资产`} icon={<ArrowLeftOutlined />} onClick={returnFromAsset} /><span className="asset-detail-title" title={asset?.name}>{asset?.name ?? `${assetDisplayName}档案`}</span><Tag>{assetDisplayName}</Tag></>}>
-        {toolbarActions}
-      </PageToolbar> : <div className="asset-dossier-toolbar">
+      {libraryDetail ? renderToolbar ? renderToolbar(toolbarTitle, toolbarActions) : <PageToolbar className="asset-detail-toolbar" title={toolbarTitle}>{toolbarActions}</PageToolbar> : <div className="asset-dossier-toolbar">
         <Button type="text" aria-label={embedded ? '返回本场资产' : undefined} icon={<ArrowLeftOutlined />} disabled={savingBase || smartDetectBusy} onClick={returnFromAsset}>
           {embedded ? '返回本场资产' : `返回${assetDisplayName}资产`}
         </Button>
@@ -1057,7 +1062,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         </div>
       </DossierBody>
 
-      {libraryDetail && <AssetDetailLeaveGuard dirty={hasUnsavedChanges} busy={savingBase || generationSubmitting || !!adoptingImageId}
+      {libraryDetail && <AssetDetailLeaveGuard closeRequested={closeRequested} onContinue={() => setCloseRequested(false)} onClose={() => onNavigate(backTo)} dirty={hasUnsavedChanges} busy={savingBase || generationSubmitting || !!adoptingImageId}
         detecting={smartDetectBusy} canCancelDetection={!!smartDetectTask} cancellingDetection={!!smartDetectTask?.cancelRequested}
         partialSave={partialSave} save={handleSaveBaseInfo} cancelDetection={handleCancelSmartDetectTask} />}
       <Modal title={`${asset?.name ?? assetDisplayName} · ${ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}`}

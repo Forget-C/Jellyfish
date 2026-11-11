@@ -3,6 +3,9 @@ import { useCallback, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 
 type Props = {
+  closeRequested?: boolean
+  onContinue?: () => void
+  onClose?: () => void | Promise<void>
   dirty: boolean
   busy: boolean
   detecting: boolean
@@ -14,7 +17,7 @@ type Props = {
 }
 
 /** 独立资产详情注册路由保护，内嵌档案继续由工作台统一管理。 */
-export function AssetDetailLeaveGuard({ dirty, busy, detecting, canCancelDetection, cancellingDetection, partialSave, save, cancelDetection }: Props) {
+export function AssetDetailLeaveGuard({ closeRequested = false, onContinue, onClose, dirty, busy, detecting, canCancelDetection, cancellingDetection, partialSave, save, cancelDetection }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const lock = useRef(false)
@@ -30,20 +33,22 @@ export function AssetDetailLeaveGuard({ dirty, busy, detecting, canCancelDetecti
     if (lock.current || busy) return
     setError('')
     if (blocker.state === 'blocked') blocker.reset()
+    onContinue?.()
   }
   const leave = async (saveFirst: boolean) => {
-    if (blocker.state !== 'blocked' || lock.current || busy || detecting) return
+    if ((!closeRequested && blocker.state !== 'blocked') || lock.current || busy || detecting) return
     lock.current = true
     setSubmitting(true)
     setError('')
     try {
       if (saveFirst && !await save()) { setError('保存未完整完成，请处理页面提示后重试。'); return }
-      blocker.proceed()
+      if (blocker.state === 'blocked') blocker.proceed()
+      else await onClose?.()
     } catch { setError('保存失败，编辑内容已保留。') }
     finally { lock.current = false; setSubmitting(false) }
   }
   return <Modal title={busy ? '当前操作尚未完成' : detecting ? '智能检测进行中' : '离开资产详情'}
-    open={blocker.state === 'blocked'} zIndex={2100} maskClosable={false}
+    open={closeRequested || blocker.state === 'blocked'} zIndex={2100} maskClosable={false}
     closable={!busy && !submitting} keyboard={!busy && !submitting} onCancel={stay}
     afterOpenChange={open => { if (open) continueButton.current?.focus() }}
     footer={<Space wrap>
