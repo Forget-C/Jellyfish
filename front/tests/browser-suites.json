@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "asset-detail": { "file": "assetDetail.browser.mjs", "ports": [4810], "timeoutMs": 180000 },
     "generation-canvas-associations": { "file": "generationCanvasAssociations.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-sound-reference": { "file": "generationCanvasSoundReference.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },
     "generation-canvas-anchor-reference": {"file":"generationCanvasAnchorReference.browser.mjs","ports":[4287,8287],"timeoutMs":180000},
@@ -156,7 +157,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "management-ui": ["provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
+    "management-ui": ["asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
     "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "management-navigation", "lab-navigation", "legacy-labs"],
     "lab-ui": ["lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],

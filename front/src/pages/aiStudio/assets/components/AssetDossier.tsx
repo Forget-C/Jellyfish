@@ -13,7 +13,7 @@ export function AssetDossierSection({ title, children }: { title: string; childr
 }
 
 /** 主图和视角缩略图共用完整比例展示，缺图或加载失败时保留明确的空状态。 */
-export function AssetDossierImage({ src, alt, preview = false }: { src?: string; alt: string; preview?: boolean }) {
+export function AssetDossierImage({ src, alt, preview = false, onReady }: { src?: string; alt: string; preview?: boolean; onReady?: (src: string | undefined) => void }) {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export function AssetDossierImage({ src, alt, preview = false }: { src?: string;
     <div className="asset-dossier-image">
       {src && !failed ? (
         <Image src={src} alt={alt} width="100%" height="100%" style={{ objectFit: 'contain' }}
-          preview={preview} onError={() => setFailed(true)} />
+          preview={preview} onLoad={() => onReady?.(src)} onError={() => { setFailed(true); onReady?.(undefined) }} />
       ) : (
         <span className="asset-dossier-image-empty"><PictureOutlined /><span>{failed ? '图片加载失败' : '暂无图片'}</span></span>
       )}

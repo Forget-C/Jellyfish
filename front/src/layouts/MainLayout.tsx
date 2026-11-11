@@ -63,7 +63,7 @@ function OrdinaryLayout() {
   const activeNavigation = activeMainNavigation(pathname)
   const lastManagementPage = useLastManagementPage(pathname)
   const routeContent = <main className="app-route-viewport" id="main-content">
-    {crumbs.length > 1 && <Breadcrumb aria-label="当前位置" className="app-breadcrumb" items={compactCrumbs} />}
+    {crumbs.length > 1 && !/^\/assets\/(actors|scenes|props|costumes)\/[^/]+\/edit\/?$/.test(pathname) && <Breadcrumb aria-label="当前位置" className="app-breadcrumb" items={compactCrumbs} />}
     <Outlet />
   </main>
 

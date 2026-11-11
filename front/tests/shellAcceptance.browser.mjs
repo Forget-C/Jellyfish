@@ -178,11 +178,11 @@ try {
     asset.name = '旧信档案'
   }
   await visit('/assets/actors/a1/edit')
-  await page.locator('.asset-dossier-cover .ant-image-mask').click()
-  await page.locator('.ant-image-preview-wrap').waitFor()
+  await page.getByRole('button', { name: '放大当前视角图片', exact: true }).click()
+  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor()
   await snapshot('asset-image-preview')
-  await page.locator('.ant-image-preview-close').click()
-  await page.locator('.ant-image-preview-wrap').waitFor({ state: 'hidden' })
+  await page.keyboard.press('Escape')
+  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor({ state: 'hidden' })
   await visit('/models')
   await page.getByRole('cell', { name: 'openai', exact: true }).click()
   await snapshot('provider-details')

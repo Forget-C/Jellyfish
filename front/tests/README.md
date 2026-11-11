@@ -36,7 +36,9 @@ pnpm --dir front run test:browser -- --list
 
 使用本机 Chrome 时设置 `PLAYWRIGHT_CHANNEL=chrome`；CI 安装 Chromium。入口可从其他工作目录调用，内部统一使用前端目录。默认证据位于 `front/test-results/browser-*`；可传 `--output <新的空目录>`。每个用例保留 `run.log`、真实后端的 `backend.log` 和截图，根目录 `results.json` 记录通过／失败、时长与路径。成功只输出摘要；失败打印有限日志尾部并保留完整日志。超时和中断会请求清理浏览器／服务／后端，POSIX 环境还对自己创建的进程组执行兜底终止。
 
-`management-ui` 验证供应商、模型、运行设置、资产库、提示词模板、文件和 Agent 管理。`home-project-layout` 验证普通页面共享导航、管理入口、首页、项目、实验室及独立画布的外观隔离。两组使用隔离 HTTP 夹具，覆盖两种雾蓝主题和桌面、窄屏交互。界面验收范围见[管理页面前端规范](../../docs/development/standards/management-ui.md#验收)。
+`management-ui` 验证供应商、模型、运行设置、资产库及四类独立资产详情、提示词模板、文件和 Agent 管理。`home-project-layout` 验证普通页面共享导航、管理入口、首页、项目、实验室及独立画布的外观隔离。两组使用隔离 HTTP 夹具，覆盖两种雾蓝主题和桌面、窄屏交互。界面验收范围见[管理页面前端规范](../../docs/development/standards/management-ui.md#验收)。
+
+`asset-detail` 可单独运行，覆盖四类档案的双栏／单栏、矮屏滚动、两种主题、键盘图片预览与焦点恢复，以及保存失败、部分成功重试、未保存离开、检测取消确认、生成终态恢复、历史采用和读取失败。所有业务响应在 HTTP 边界隔离，不调用供应商生成。
 
 `lab-ui` 在真实页面上使用隔离 HTTP 和 SSE，覆盖会话导航与两种主题的视口矩阵、模板与参考配置、结果预览、提交恢复、草稿确认和运行中的文本停止。组合场景核对模板变量与素材一起提交、模型冲突修正、失败后继续编辑及返回会话读取结果。图片、视频使用本地测试媒体，包含主体参考视频的重载和播放检查。缩小视口、浏览器触屏模拟和组合输入事件用于检验前端行为，实体软键盘和真实供应商链路仍需单独验收。界面要求见[实验室前端规范](../../docs/development/standards/experiment-lab-ui.md#验收)。
 
