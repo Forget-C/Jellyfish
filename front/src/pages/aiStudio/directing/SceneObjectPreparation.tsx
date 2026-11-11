@@ -214,6 +214,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const disabled = !editable || saving
   const extractionDisabled = disabled || loading || running && !pendingRequest
   const extractionLabel = pendingRequest ? '核实提取请求' : action
+  const candidateTask = !pendingRequest ? data?.candidate_task_id : undefined
   const retryRead = () => void read()
   const filtered = (data?.objects ?? []).filter(object => !management ||
     (kindFilter === 'all' || object.kind === kindFilter) && (!unpreparedOnly || object.reference_state !== 'ready' ||
@@ -227,12 +228,12 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {management ? <>
       <h3 id="scene-object-preparation-title">场次对象与参考</h3>
       {management.host && createPortal(<>
-        <MainButton type="primary" loading={submitting} disabled={extractionDisabled}
-          onClick={() => data?.candidate_task_id && !pendingRequest ? setLocalReview(data.candidate_task_id) : void extract()}>
-          {data?.candidate_task_id && !pendingRequest ? '核对对象差异' : extractionLabel}
+        <MainButton type="primary" loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
+          onClick={() => candidateTask ? setLocalReview(candidateTask) : void extract()}>
+          {candidateTask ? '核对对象差异' : extractionLabel}
         </MainButton>
         <MainButton type="text" onClick={management.onContinue}>{editable ? '继续到分镜与画布' : '查看本场画布'}</MainButton>
-        {data?.candidate_task_id && !pendingRequest && <Dropdown trigger={['click']} menu={{ items: [
+        {candidateTask && <Dropdown trigger={['click']} menu={{ items: [
           { key: 'extract', label: action, disabled: extractionDisabled, onClick: () => void extract() },
         ] }}><MainButton type="text" icon={<MoreOutlined />} aria-label="对象步骤更多操作" /></Dropdown>}
       </>, management.host)}

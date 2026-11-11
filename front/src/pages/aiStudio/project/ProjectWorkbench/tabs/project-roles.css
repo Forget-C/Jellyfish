@@ -1,4 +1,3 @@
-.project-role-page { padding: 0; }
 .project-role-associations { display: grid; gap: 4px; color: var(--app-muted); font-size: 12px; }
 .project-role-associations p { margin: 0; overflow-wrap: anywhere; }
 .project-role-associations .anticon { margin-right: 6px; }

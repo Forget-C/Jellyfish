@@ -66,6 +66,9 @@ try {
     for(const viewport of [{width:1440,height:900},{width:1366,height:768},{width:1024,height:440},{width:1023,height:768},{width:768,height:768},{width:767,height:768},{width:375,height:812}]) {
       await page.setViewportSize(viewport)
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true)
+      const titleEdge = (await page.getByRole('heading', { name: '项目角色', exact: true }).boundingBox()).x
+      const cardEdge = (await page.getByRole('article').first().boundingBox()).x
+      assert.ok(Math.abs(cardEdge - titleEdge) <= 1, 'resource cards align with the content title and share one page gutter')
       assert.equal(await nameLink.getAttribute('title'),roleName)
       await page.screenshot({path:join(output,`roles-${theme}-${viewport.width}-${viewport.height}.png`),animations:'disabled'})
     }
