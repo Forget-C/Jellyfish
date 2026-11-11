@@ -130,7 +130,7 @@ try {
   const projectNavigation = page.getByRole('navigation', { name: '项目导航', exact: true })
   await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
   assert.deepEqual(await projectNavigation.getByRole('link').allTextContents(), [
-    '返回项目列表', '项目概览', '画布生成', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
+    '项目概览', '画布生成', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
   ])
   await projectNavigation.getByText('旧信', { exact: true }).waitFor()
   for (const label of ['章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置', '项目概览']) {
@@ -148,7 +148,7 @@ try {
   await page.reload()
   await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
   assert.equal(await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).getAttribute('aria-current'), 'page')
-  await projectNavigation.getByRole('link', { name: '返回项目列表', exact: true }).click()
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'项目',exact:true}).click()
   await page.waitForURL('**/projects')
   assert.equal(await projectNavigation.count(), 0)
   await visit('/projects/p2?tab=roles')

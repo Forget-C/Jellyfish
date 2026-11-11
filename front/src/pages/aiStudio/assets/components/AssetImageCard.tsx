@@ -154,7 +154,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
     <article className="asset-library-card">
       {coverAvailable ? <button type="button" className="asset-library-cover" ref={coverTrigger}
         title="放大预览" aria-label={`预览${asset.name}`} onClick={openPreview}>
-        {coverAvailable ? <img style={{objectFit: assetType === 'scene' ? 'cover' : 'contain'}} src={thumbnailUrl} alt={asset.name} loading="lazy" onError={() => setBrokenCover(thumbnailUrl)} /> : coverPlaceholder}
+        <img style={{ objectFit: assetType === 'scene' ? 'cover' : 'contain' }} src={thumbnailUrl} alt={asset.name} loading="lazy" onError={() => setBrokenCover(thumbnailUrl)} />
       </button> : <div className="asset-library-cover">{coverPlaceholder}</div>}
       <div className="asset-library-card-content">
         <div className="project-resource-title-row">

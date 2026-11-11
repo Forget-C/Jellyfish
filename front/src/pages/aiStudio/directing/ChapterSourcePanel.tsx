@@ -90,7 +90,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     return () => { active = false; clearTimeout(timer) }
   }, [projectId, chapterId, historyRefresh])
   const editDraft = (draft: ChapterDivisionDraft) => {
-    if (!editor) return
+    if (!editor || busy || pendingSave || viewing) return
     epoch.current++; setEditor({ ...editor, draft }); setPreview(undefined); setIdentityConfirmed(false); setError(''); setNotice('')
   }
   const acceptSaved = (saved: DivisionSaved) => {
@@ -252,7 +252,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         <Button onClick={() => { epoch.current++; setViewing(undefined) }}>返回当前编辑</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>基于此版本编辑</Button>
       </Space>} />}
       {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message="此版本基于旧原文；当前显示保存时的原文，基于此版本编辑时需要重新定位。" />}
-      <ChapterDivisionEditor management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
+      <ChapterDivisionEditor busy={busy || !!pendingSave} management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
         chapter={viewing?.chapter || editor.chapter} draft={viewing ? initialDivision(viewing.chapter) : draft}
         activeId={viewing ? historyActiveId : activeId} onActive={viewing ? setHistoryActiveId : setActiveId}
         mobileView={mobileView} onMobileView={onMobileView} onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />

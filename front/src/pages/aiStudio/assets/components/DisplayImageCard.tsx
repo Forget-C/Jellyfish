@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Card, Modal } from 'antd'
-import { ArrowRightOutlined, PictureOutlined } from '@ant-design/icons'
+import { PictureOutlined } from '@ant-design/icons'
 import './project-resource-card.css'
 
 type DisplayImageCardProps = {
@@ -69,7 +69,7 @@ export function DisplayImageCard({
         {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" title="放大预览" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>
           : <div className="project-resource-cover">{content}</div>}
         <div className="project-resource-card-body">
-          <div className="project-resource-title-row"><h2 className="project-resource-name">{title}<ArrowRightOutlined aria-hidden /></h2>{extra}</div>
+          <div className="project-resource-title-row"><h2>{title}</h2>{extra}</div>
           {meta}
           {footer}
           {actions && <div className="project-resource-actions">{actions}</div>}

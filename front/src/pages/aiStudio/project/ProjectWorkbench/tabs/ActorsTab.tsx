@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Image, Input, Modal, Space, message, Pagination } from 'antd'
-import { MoreOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectActorLinkRead } from '../../../../../services/generated'
@@ -204,7 +204,7 @@ export function ActorsTab() {
                 <DisplayImageCard
                   variant="project"
                   key={l.id}
-                  title={<Link title={a?.name ?? '演员信息暂不可用'} to={`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`}>{a?.name ?? '演员信息暂不可用'}</Link>}
+                  title={<Link className="project-resource-name" title={a?.name ?? '演员信息暂不可用'} to={`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`}><span>{a?.name ?? '演员信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></Link>}
                   imageUrl={resolveAssetUrl(a?.thumbnail)}
                   imageAlt={a?.name ?? '演员信息暂不可用'}
                   placeholder={<><UserOutlined aria-hidden />暂无封面</>}

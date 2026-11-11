@@ -132,3 +132,6 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
 .asset-library-card .project-resource-title-row > button { flex-shrink:0; }
 .asset-library-cover-placeholder { flex-direction:column; gap:8px; font-size:12px; }
 @media(max-width:767px) { .asset-library-card-content { padding:12px; } }
+
+.asset-library-card .project-resource-title-row h2 a.asset-library-name { display:inline-flex; }
+.asset-library-name > .anticon { flex-shrink:0; }

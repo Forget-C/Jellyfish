@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Input, message, Select, Pagination } from 'antd'
-import { MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   StudioProjectsService,
@@ -326,7 +326,7 @@ export function RolesTab() {
                 variant="project"
                 imageFit="contain"
                 key={c.id}
-                title={<Link title={c.name} to={`/projects/${projectId}/roles/${c.id}/edit`}>{c.name}</Link>}
+                title={<Link className="project-resource-name" title={c.name} to={`/projects/${projectId}/roles/${c.id}/edit`}><span>{c.name}</span><ArrowRightOutlined aria-hidden /></Link>}
                 imageUrl={resolveAssetUrl(c.thumbnail)}
                 imageAlt={c.name}
                 enablePreview

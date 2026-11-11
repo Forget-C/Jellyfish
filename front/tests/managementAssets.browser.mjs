@@ -200,6 +200,8 @@ try {
   records.prop = []
   await page.getByRole('button', { name: '刷新', exact: true }).click()
   await page.getByText('暂无道具资产', { exact: true }).waitFor()
+  const longName='长名称资产'.repeat(18)
+  records.actor.push({id:'actor-long',name:longName,description:'用于核对常驻进入箭头'})
   await page.goto(origin + '/assets?tab=actor')
 
   for (const [width, height, theme] of [[1440, 900, '雾蓝微渐变'], [1366, 768, '雾蓝纯色'], [1024, 768, '雾蓝纯色'], [1023, 768, '雾蓝纯色'], [600, 812, '雾蓝纯色'], [375, 812, '雾蓝微渐变']]) {
@@ -211,6 +213,11 @@ try {
     await appearance.waitFor({ state: 'hidden' })
     const backdrop = await page.getByRole('banner').evaluate(banner => getComputedStyle(banner.parentElement).backgroundImage)
     assert.equal(backdrop === 'none', theme === '雾蓝纯色')
+    const longCard=card(longName)
+    const longLink=longCard.getByRole('link',{name:longName,exact:true})
+    const arrow=await box(longLink.locator('svg'))
+    const titleBox=await box(longLink)
+    assert.ok(arrow.x>=titleBox.x && arrow.x+arrow.width<=titleBox.x+titleBox.width+1, 'long-name navigation arrow stays within the visible link')
     const primary = page.getByRole('button', { name: '新建演员', exact: true })
     assert.equal(await primary.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(36, 95, 197)')
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width)

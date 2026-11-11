@@ -20,6 +20,6 @@ button.project-resource-cover { cursor: zoom-in; }
 .project-resource-page .ant-pagination { margin-top: 16px; }
 @media(max-width:767px) { .project-resource-card-body { padding: 12px; } .project-resource-dialog .ant-modal-footer .ant-btn { min-height: 36px; height: auto; } }
 
-.project-resource-name { display:flex; align-items:center; gap:5px; color:var(--app-accent); }
-.project-resource-name > a { flex:0 1 auto; min-width:0; }
+.project-resource-title-row h2 a.project-resource-name { display:flex; align-items:center; gap:5px; color:var(--app-accent); }
+.project-resource-name > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .project-resource-name > .anticon { flex-shrink:0; font-size:12px; }

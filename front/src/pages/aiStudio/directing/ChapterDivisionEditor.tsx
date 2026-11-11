@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Drawer, Input, Radio, Select, Space } from 'antd'
+import { Alert, Button, Drawer, Grid, Input, Radio, Select, Space } from 'antd'
 import type { ChapterSequences, DivisionBaseline, SequenceRead, SourceSpan } from '../../../services/generated'
 import { ChapterSourceSelection } from './ChapterSourceSelection'
+import { WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { excerptMatches } from './common'
 import { changeDivisionSpan, removeDivisionMember, type ChapterDivisionDraft, type DraftMember } from './chapterDivision'
 import { sameSpan, sourceSlice } from './sourceSelection'
 
 /** 手动、AI 和历史方案共用原文选区与场次编辑；历史浏览只改变选中项。 */
-export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onActive, mobileView, onMobileView, onChange, readOnly = false, management = false, historicalMembers = [], restoredBaseline = [] }: {
+export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onActive, mobileView, onMobileView, onChange, readOnly = false, management = false, busy = false, historicalMembers = [], restoredBaseline = [] }: {
   projectId: string; chapter: ChapterSequences; draft: ChapterDivisionDraft; activeId?: string
   onActive: (id?: string) => void; mobileView: string; onMobileView: (view: string) => void
-  onChange: (draft: ChapterDivisionDraft) => void; readOnly?: boolean; management?: boolean; historicalMembers?: SequenceRead[]; restoredBaseline?: DivisionBaseline[]
+  onChange: (draft: ChapterDivisionDraft) => void; readOnly?: boolean; management?: boolean; busy?: boolean; historicalMembers?: SequenceRead[]; restoredBaseline?: DivisionBaseline[]
 }) {
   const layoutRef = useRef<HTMLDivElement>(null)
   const editTrigger = useRef<HTMLButtonElement>(null)
@@ -22,7 +23,8 @@ export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onA
     observer.observe(layoutRef.current)
     return () => observer.disconnect()
   }, [management])
-  const drawerMode = management && width >= 728 && width < 1280
+  const screens = Grid.useBreakpoint()
+  const drawerMode = management && screens.md === true && width > 0 && width < 1280
   useEffect(() => { if (!drawerMode) setEditing(false) }, [drawerMode])
   const current = draft.members.find(row => row.key === activeId)
   const identities = [...chapter.sequences, ...historicalMembers.filter(row => !chapter.sequences.some(current => current.id === row.id))]
@@ -95,7 +97,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onA
 
     </div>
     <Button className="chapter-division-mobile" onClick={() => onMobileView('editor')}>查看当前选区</Button>
-    {drawerMode && <Drawer title={current?.title || '编辑当前场次'} width="min(340px, 100vw)" open={editing} onClose={() => setEditing(false)}
-      afterOpenChange={open => { if (!open) editTrigger.current?.focus({ preventScroll: true }) }}>{editorPanel}</Drawer>}
+    {drawerMode && <Drawer className="management-division-drawer" title={current?.title || '编辑当前场次'} width="min(340px, 100vw)" open={editing} onClose={() => setEditing(false)}
+      afterOpenChange={open => { if (!open) editTrigger.current?.focus({ preventScroll: true }) }}><WorkspaceWriteBoundary busy={busy}>{editorPanel}</WorkspaceWriteBoundary></Drawer>}
   </>
 }

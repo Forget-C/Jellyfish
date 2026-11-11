@@ -124,4 +124,8 @@
 @media(max-width:767px) { .management-division .chapter-division-layout { display:block; } }
 
 .management-division .chapter-source-reader { border:0; border-radius:12px; background:#fff; }
-.management-workspace .management-panel > section { border-radius:12px; }
+.management-workspace .management-panel > section { border-radius:12px; background:#fff; padding:16px; }
+
+.management-division-drawer .chapter-division-editor { max-height:none; overflow:visible; padding:0; }
+.management-division-drawer .ant-drawer-title { font-size:16px; font-weight:600; }
+.management-division-drawer h3 { font-size:14px; }

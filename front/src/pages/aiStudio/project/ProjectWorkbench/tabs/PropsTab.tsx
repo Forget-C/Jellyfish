@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
-import { MoreOutlined, LinkOutlined, PlusOutlined, SkinOutlined, TagOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, SkinOutlined, TagOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectCostumeLinkRead, ProjectPropLinkRead } from '../../../../../services/generated'
@@ -205,7 +205,7 @@ function LinkedAssetTab({
                   variant="project"
                   imageFit="contain"
                   key={l.id}
-                  title={<Link title={asset?.name ?? '资源信息暂不可用'} to={`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`}>{asset?.name ?? '资源信息暂不可用'}</Link>}
+                  title={<Link className="project-resource-name" title={asset?.name ?? '资源信息暂不可用'} to={`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`}><span>{asset?.name ?? '资源信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></Link>}
                   imageUrl={resolveAssetUrl(linkThumb ?? asset?.thumbnail)}
                   imageAlt={asset?.name ?? '资源信息暂不可用'}
                   placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无封面</>}

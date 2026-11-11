@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
-import { MoreOutlined, LinkOutlined, PlusOutlined, EnvironmentOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, EnvironmentOutlined } from '@ant-design/icons'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectSceneLinkRead } from '../../../../../services/generated'
@@ -181,7 +181,7 @@ export function ScenesTab() {
                   variant="project"
                   imageFit="cover"
                   key={l.id}
-                  title={<Link title={s?.name ?? '场所信息暂不可用'} to={`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`}>{s?.name ?? '场所信息暂不可用'}</Link>}
+                  title={<Link className="project-resource-name" title={s?.name ?? '场所信息暂不可用'} to={`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`}><span>{s?.name ?? '场所信息暂不可用'}</span><ArrowRightOutlined aria-hidden /></Link>}
                   imageUrl={toThumbUrl(l.thumbnail ?? s?.thumbnail)}
                   imageAlt={s?.name ?? '场所信息暂不可用'}
                   placeholder={<><EnvironmentOutlined aria-hidden />暂无封面</>}
