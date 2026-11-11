@@ -14,6 +14,8 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 const types = [['actor', 'actors', '演员'], ['scene', 'scenes', '场景'], ['prop', 'props', '道具'], ['costume', 'costumes', '服装']]
 const assets = Object.fromEntries(types.map(([type, , label]) => [type, { id: 'a1', name: label + '档案', supplementary_info: '原始描述', tags: [], view_count: 1, visual_style: '现实', style: '真人都市' }]))
 const slots = Object.fromEntries(types.map(([type]) => [type, [{ id: 1, view_angle: 'FRONT', file_id: type === 'scene' ? 'landscape' : 'portrait' }]]))
+assets.character = { id:'a1', name:'项目角色档案', description:'角色简介', visual_style:'现实', style:'真人都市' }
+slots.character = [{id:1,view_angle:'FRONT',file_id:'portrait'}]
 let failSave = false, failSlot = false, failImages = false, failAsset = false, missingAsset = false
 let failHistory = false, adoptions = 0
 let generationStatus, statusReads = 0, generationCalls = 0
@@ -66,7 +68,7 @@ try {
       Object.assign(slots.actor[0], request.postDataJSON())
       return respond(slots.actor[0])
     }
-    const match = path.match(/\/entities\/(actor|scene|prop|costume)\/a1(\/images)?$/)
+    const match = path.match(/\/entities\/(actor|scene|prop|costume|character)\/a1(\/images)?$/)
     if (match) {
       const [, type, images] = match
       if (images) {
@@ -281,6 +283,42 @@ try {
   await page.getByRole('button', { name: '刷新', exact: true }).click()
   await page.getByText('图片加载失败', { exact: true }).first().waitFor()
   assert.equal(await page.getByRole('button', { name: '放大当前视角图片', exact: true }).count(), 0)
+  await page.goto(origin + '/projects/role-project/roles/a1/edit')
+  await name.waitFor()
+  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+  const roleBack=page.getByRole('button',{name:'返回角色资产',exact:true})
+  await roleBack.waitFor()
+  assert.equal(await roleBack.innerText(),'')
+  await name.fill('修改后的项目角色')
+  failSave=true
+  await save.click()
+  await page.getByText('保存失败，修改已保留，请重试。',{exact:true}).waitFor()
+  assert.equal(await name.inputValue(),'修改后的项目角色')
+  failSave=false
+  await save.click()
+  await page.getByRole('status').filter({hasText:/^已保存$/}).waitFor()
+  for(const theme of ['mist','solid']) {
+    await page.evaluate(value=>localStorage.setItem('jellyfish_appearance',value),theme)
+    await page.reload()
+    await name.waitFor()
+    for(const [width,height] of [[1440,900],[1024,440],[375,812]]) {
+      await page.setViewportSize({width,height})
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))
+      await save.scrollIntoViewIfNeeded()
+      const bounds=await save.boundingBox()
+      assert.ok(bounds.y>=0 && bounds.y+bounds.height<=height+1)
+      await page.screenshot({path:output+`/project-role-${theme}-${width}.png`,animations:'disabled'})
+    }
+  }
+  await name.fill('离开前的未保存角色')
+  await roleBack.click()
+  await leave.waitFor()
+  await leave.getByRole('button',{name:'继续编辑',exact:true}).click()
+  await leave.waitFor({state:'hidden'})
+  assert.equal(await name.inputValue(),'离开前的未保存角色')
+  await roleBack.click()
+  await leave.getByRole('button',{name:'放弃修改并离开',exact:true}).click()
+  await page.waitForURL('**/projects/role-project?tab=roles')
   assert.deepEqual(errors, [])
   console.log('Asset detail: four types, themes, responsive layout, image actions, save/leave and task recovery verified.')
 } finally { await cleanup() }

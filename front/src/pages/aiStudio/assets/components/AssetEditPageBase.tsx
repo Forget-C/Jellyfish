@@ -186,7 +186,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const { options: projectStyleOptions, defaultVisualStyle, getDefaultStyle } = useProjectStyleOptions()
   const taskCopy = TASK_COPY.smartDetect
   const location = useLocation()
-  const libraryDetail = !embedded && /^\/assets\/(actors|scenes|props|costumes)\/[^/]+\/edit\/?$/.test(location.pathname)
+  // 独立详情统一采用管理资产的外观与保护；场次内嵌档案继续保持原模式。
+  const libraryDetail = !embedded
   const imagePanelRef = useRef<HTMLElement>(null)
   const detailBodyRef = useRef<HTMLDivElement>(null)
   const [pinImages, setPinImages] = useState(false)
@@ -962,7 +963,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       </div>}
 
       <DossierBody ref={detailBodyRef} className="asset-dossier-body">
-        {libraryDetail && assetReadError && <Alert className="asset-detail-feedback" type="error" message={assetReadError === 'missing' ? '资产不存在或已被删除' : asset ? '刷新资产失败，保留已显示内容' : '读取资产失败'} action={<Button disabled={loading || savingBase || smartDetectBusy || hasUnsavedChanges} onClick={assetReadError === 'missing' ? returnFromAsset : () => void loadData()}>{assetReadError === 'missing' ? '返回资产库' : '重试读取资产'}</Button>} />}
+        {libraryDetail && assetReadError && <Alert className="asset-detail-feedback" type="error" message={assetReadError === 'missing' ? '资产不存在或已被删除' : asset ? '刷新资产失败，保留已显示内容' : '读取资产失败'} action={<Button disabled={loading || savingBase || smartDetectBusy || hasUnsavedChanges} onClick={assetReadError === 'missing' ? returnFromAsset : () => void loadData()}>{assetReadError === 'missing' ? relationType === 'character_image' ? '返回角色列表' : '返回资产库' : '重试读取资产'}</Button>} />}
         {libraryDetail && saveError && <Alert className="asset-detail-feedback" type="error" message={saveError} />}
         {libraryDetail && partialSave && <Alert className="asset-detail-feedback" type="warning" message="档案已保存，图片视角准备失败" description="已保存的档案不会回滚。请重试准备图片视角。" action={<Button loading={savingBase} disabled={hasUnsavedChanges || smartDetectBusy} onClick={() => void handleSaveBaseInfo()}>重试视角准备</Button>} /> }
         <div className="asset-dossier-sheet">

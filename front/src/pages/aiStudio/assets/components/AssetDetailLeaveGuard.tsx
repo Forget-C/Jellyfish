@@ -13,7 +13,7 @@ type Props = {
   cancelDetection: () => Promise<boolean>
 }
 
-/** 仅独立资产库详情注册路由保护，内嵌档案继续由工作台统一管理。 */
+/** 独立资产详情注册路由保护，内嵌档案继续由工作台统一管理。 */
 export function AssetDetailLeaveGuard({ dirty, busy, detecting, canCancelDetection, cancellingDetection, partialSave, save, cancelDetection }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
