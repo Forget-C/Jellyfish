@@ -4,14 +4,15 @@ import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Space
 import type { InputRef } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService, type SceneCanvasSummary, type StoryboardTaskSummary } from '../../../services/generated'
-import { readChapterBrowse, sceneCanvasLocation } from './chapterNavigation'
+import { readChapterBrowse, sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { SceneCanvasDeletion } from './SceneCanvasDeletion'
 import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
 import { WorkbenchCanvasRename } from './WorkbenchCanvasRename'
-import { WorkbenchStoryboardRetry } from './WorkbenchStoryboardRetry'
 import { useWorkspaceDraftStatus } from './WorkspaceDrafts'
 import './workbench-canvas-cards.css'
+import { canOpenStoryboardCanvas } from './storyboardCanvasAccess'
+import { WorkbenchStoryboardReview } from './WorkbenchStoryboardReview'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 
@@ -49,6 +50,8 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [loading, setLoading] = useState(true)
   const [revision, setRevision] = useState(0)
   const [query, setQuery] = useState('')
+  const [quickEntry, setQuickEntry] = useState(false)
+  const [reviewCanvas, setReviewCanvas] = useState<string>()
   const [detail, setDetail] = useState<string>()
   const [linkedTask, setLinkedTask] = useState<{ id: string; task?: StoryboardTaskSummary; error?: string }>()
   const targetElement = useRef<HTMLLIElement>(null)
@@ -75,6 +78,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   useEffect(() => {
     setQuery('')
     setDetail(undefined)
+    setReviewCanvas(undefined)
     focusedTarget.current = undefined
     if (!targetTask) return
     let active = true
@@ -139,6 +143,11 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     return () => window.removeEventListener('focus', refresh)
   }, [])
 
+  useEffect(() => {
+    if (targetId && canvases && linked?.task && canvases.find(canvas => canvas.id === targetId)?.latest_storyboard?.task_id === linked.task.task_id) {
+      setQuickEntry(false); setReviewCanvas(targetId)
+    }
+  }, [targetId, canvases, linked?.task])
   const openCanvas = (canvasId: string, taskId?: string) => {
     navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, canvasId, taskId), { state })
   }
@@ -223,28 +232,28 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               {located && <Tag color="processing">当前定位</Tag>}
               {canvas.id === created && <Tag color="processing">刚创建</Tag>}
             </div>
-            {task?.status === 'failed' && task.error && <p className="management-canvas-error">{task.error}</p>}
+            {task?.status === 'failed' && task.error && <Button type="link" style={{ whiteSpace: 'normal', height: 'auto', textAlign: 'left' }} className="management-canvas-error" onClick={() => setReviewCanvas(canvas.id)}>提取未完成，查看原因与处理建议</Button>}
             <div className="management-canvas-actions">
-              <Button onClick={() => openCanvas(canvas.id, located && linked?.task?.canvas_id === canvas.id
-                ? linked.task.task_id : undefined)}>打开画布</Button>
-              {candidateId && <Button type="link" onClick={() => openCanvas(canvas.id, candidateId)}>
-                {canvas.storyboard_review_required ? '核对分镜' : '查看分镜'}
+              {canOpenStoryboardCanvas(canvas) && <Button onClick={() => openCanvas(canvas.id)}>打开画布</Button>}
+              {(candidateId || task) && <Button type="link" onClick={() => { setQuickEntry(!canvas.storyboard_review_required); setReviewCanvas(canvas.id) }}>
+                {candidateId ? canvas.storyboard_review_required ? '核对分镜' : '进入画布' : activeTask(task) ? '查看提取进度' : '处理提取问题'}
               </Button>}
-              <WorkbenchStoryboardRetry {...{ projectId, chapterId, sequenceId, canvas, historical }} onReviewSource={() => onReviewSource(canvas.id)} onAccepted={() => {
-                setRevision(value => value + 1)
-                onChange()
-              }} />
             </div>
           </Card>
         </li>
       })}
     </ul>}
+    {reviewCanvas && canvases?.find(canvas => canvas.id === reviewCanvas) && <WorkbenchStoryboardReview key={reviewCanvas}
+      {...{ projectId, chapterId, sequenceId, historical }} quickEntry={quickEntry} canvas={canvases.find(canvas => canvas.id === reviewCanvas)!}
+      onClose={() => { setReviewCanvas(undefined); setRevision(value => value + 1); if (targetTask) onCloseTask(reviewCanvas) }} onChange={() => { setRevision(value => value + 1); onChange() }}
+      onEnter={() => openCanvas(reviewCanvas)} onReviewSource={() => onReviewSource(reviewCanvas)} />}
     {rename && <WorkbenchCanvasRename {...{ projectId, chapterId, sequenceId }} canvasId={rename.id}
       initialName={rename.name} onClose={closeRename} />}
-    <Modal title="分镜任务详情" open={!!detailTask} onCancel={closeDetail}
+    <Modal title="分镜任务详情" open={!!detailTask && !reviewCanvas && (!!detail || detailTask.task_id !== detailCard?.latest_storyboard?.task_id)} onCancel={closeDetail}
       footer={<Space wrap><Button aria-label="关闭分镜任务详情" onClick={closeDetail}>关闭</Button>
-        {taskDetail && <Button type="primary" onClick={() => openCanvas(taskDetail.canvas_id, taskDetail.task_id)}>打开此任务画布</Button>}
+        {detailCard && <Button type="primary" onClick={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard', { canvas: detailCard.id, storyboardTask: detailCard.latest_storyboard?.task_id }), { state })}>查看最新处理结果</Button>}
       </Space>}>
+      {detailTask && detailCard?.latest_storyboard?.task_id !== detailTask.task_id && <Alert type="info" message="已有后续处理结果；此历史任务仅供查看。" />}
       {detailTask && detailCard && <Descriptions column={1} size="small" items={[
         { key: 'canvas', label: '画布', children: detailCard.name },
         { key: 'status', label: '任务状态', children: taskLabel(detailTask) },

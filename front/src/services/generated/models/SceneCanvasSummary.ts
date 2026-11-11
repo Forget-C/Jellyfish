@@ -10,6 +10,7 @@ export type SceneCanvasSummary = {
     id: string;
     name: string;
     source_changed: boolean;
+    can_open?: boolean;
     created_at: string;
     latest_storyboard?: (StoryboardTaskSummary | null);
     candidate_storyboard_task_id?: (string | null);

@@ -196,7 +196,7 @@ try {
   await control({ storyboard_release: 1 })
   await poll(() => request(taskPath), task => task.status === 'succeeded')
   await page.goto(projectCanvas(storyboard.canvas_id))
-  await page.getByRole('button', { name: '核对差异', exact: true }).waitFor()
+  await page.getByRole('dialog', { name: '处理分镜提取结果', exact: true }).waitFor()
   assert.equal((await request(storyboardCanvas)).document.storyboard, undefined)
 
   const draft = { source_version: source.source_version,

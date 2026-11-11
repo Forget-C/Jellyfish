@@ -100,6 +100,13 @@ async def test_scene_canvas_summaries_keep_pending_and_adopted_sources_separate(
         assert row['applied_storyboard_task_id'] is None
         assert row['candidate_storyboard_task_id'] is None
 
+        assert not row['can_open']
+        blank = await data(await client.post(canvases_path, json={'name': '人工空白画布'}))
+        await data(await client.post(scene_path + '/canvases/' + blank['id'] + '/storyboards',
+                                    json={**config, 'request_id': 'blank-reextract'}))
+        listing = (await data(await client.get(canvases_path)))['canvases']
+        assert next(item for item in listing if item['id'] == blank['id'])['can_open']
+
 
 @pytest.mark.asyncio
 async def test_canvas_source_change_follows_confirmed_range_inside_same_chapter(tmp_path):

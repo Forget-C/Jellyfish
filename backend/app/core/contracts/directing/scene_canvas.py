@@ -21,6 +21,7 @@ class SceneCanvasSummary(Contract):
     id: Identity
     name: str
     source_changed: bool
+    can_open: bool = True
     created_at: datetime
     latest_storyboard: StoryboardTaskSummary | None = None
     candidate_storyboard_task_id: Identity | None = None

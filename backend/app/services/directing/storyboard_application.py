@@ -150,11 +150,14 @@ def plan_application(current: CanvasDocument, candidate: CanvasDocument,
     existing_design_stacks = ({storyboard_design_stack_id(),
                                *(storyboard_design_stack_id(shot.shot_id) for shot in current.storyboard.shots)}
                               if current.storyboard else set())
+    # 首次占位原文没有人工分组决定，沿用候选的公共组；既有组织保持原样。
+    initial_source = (current.fixed_source.card_id if current.fixed_source and not current.storyboard
+                      and not current.groups and len(current.cards) == 1 else None)
     for group in candidate.groups:
         # 既有镜头的新设计作为独立卡保留，即使原设计堆叠已经被解除。
         if group.kind == 'stack' and group.id in existing_design_stacks:
             continue
-        new_members = [key for key in group.card_ids if key in final and key not in previous]
+        new_members = [key for key in group.card_ids if key in final and (key not in previous or key == initial_source)]
         existing = groups.get(group.id)
         if new_members and (not existing or existing.kind != 'stack'):
             groups[group.id] = (existing or group).model_copy(update={

@@ -301,6 +301,39 @@ export async function selectCanvasReferenceImage(page, label) {
 export async function openReadyStoryboard(page, name) {
   const cards = page.getByRole('list', { name: '本场画布', exact: true })
   const card = cards.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) })
-  await card.getByRole('button', { name: '查看分镜', exact: true }).click()
+  await card.getByRole('button', { name: '进入画布', exact: true }).click()
+  await enterStoryboardCanvas(page)
   await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
+}
+
+/** 首次候选如经过纠错，须在管理页明确应用；普通成功可直接进入。 */
+export async function enterStoryboardCanvas(page) {
+  const workspace = page.getByRole('region', { name: '生成画布工作台', exact: true })
+  const apply = page.getByRole('dialog', { name: '处理分镜提取结果', exact: true })
+    .getByRole('button', { name: '应用并进入画布', exact: true })
+  await Promise.race([workspace.waitFor(), apply.waitFor()])
+  if (await apply.isVisible()) await apply.click()
+  await workspace.waitFor()
+}
+
+/** 重新提取完成后进入管理页的同一候选处理抽屉。 */
+export async function openStoryboardReview(page) {
+  const drawer = page.getByRole('dialog', { name: '处理分镜提取结果', exact: true })
+  if (!await drawer.isVisible()) {
+    const reextract = page.getByRole('dialog', { name: '重新提取', exact: true })
+    const back = page.getByRole('button', { name: '返回工作台管理', exact: true })
+    if (await reextract.isVisible()) await drawer.waitFor()
+    else {
+      if (await back.isVisible()) {
+        await back.click()
+        await page.waitForURL(url => url.pathname.endsWith('/workbench-management'))
+        const url = new URL(page.url())
+        url.searchParams.delete('storyboardTask')
+        await page.goto(url.href)
+      }
+      await page.getByRole('button', { name: '核对分镜', exact: true }).click()
+    }
+  }
+  await drawer.getByRole('button', { name: '应用并进入画布', exact: true }).waitFor()
+  return drawer
 }

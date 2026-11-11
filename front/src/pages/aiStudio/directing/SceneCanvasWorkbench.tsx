@@ -7,13 +7,15 @@ import { TaskCenter } from '../components/TaskCenter'
 import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasWorkspace'
 import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
 import { SceneStoryboardCheck } from './SceneStoryboardCheck'
-import { saveChapterBrowse, sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
+import { saveChapterBrowse, workbenchManagementLocation } from './chapterNavigation'
 import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { storyboardCanvasLayout } from './storyboardCanvasLayout'
 import { StoryboardVisualContinuity } from './StoryboardVisualContinuity'
 import { activeVisualContinuity, continuityResults, newContinuityResult, storyboardShotIndex, visualContinuitySources } from './visualContinuityRules'
+
+import { canOpenStoryboardCanvas } from './storyboardCanvasAccess'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 
@@ -60,13 +62,15 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
   const management = (step: 'division' | 'storyboard' = 'storyboard', taskId = selectedTaskId) => navigate(workbenchManagementLocation(
     projectId, chapterId, sequenceId, step, step === 'storyboard' ? { canvas: canvasId, storyboardTask: taskId } : undefined),
   { state: location.state })
-  if (scene?.canvases.some(canvas => canvas.id === canvasId)) {
+  const summary = scene?.canvases.find(canvas => canvas.id === canvasId)
+  if (summary && !canOpenStoryboardCanvas(summary)) return <Navigate replace state={location.state}
+    to={workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard',
+      { canvas: canvasId, storyboardTask: selectedTaskId ?? summary.latest_storyboard?.task_id })} />
+  if (summary && scene) {
     return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
       layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
-      storyboardTaskId={selectedTaskId} onCanvasRead={rememberOpened}
-      onStoryboardRepaired={taskId => navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, canvasId, taskId),
-        { replace: true, state: location.state })}
+      onCanvasRead={rememberOpened}
       back={{ label: '返回工作台管理', onClick: () => management() }}
       renderModelCardMenu={context => <StoryboardVisualContinuity {...context} />}
       modelCardSources={visualContinuitySources}
@@ -108,7 +112,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
             pendingModality: model?.type === 'model.video' ? 'video' : 'image',
             confirmSource: () => void requestLeave().then(allowed => { if (allowed) management('division') }),
           }} onResult={result => {
-            if (result.canvas_id === current.id) navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, current.id, result.task_id),
+            if (result.canvas_id === current.id) navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard', { canvas: current.id, storyboardTask: result.task_id }),
               { replace: true, state: location.state })
           }} />
           {!!current.document.storyboard?.shots.length && <SceneStoryboardCheck current={current}

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Select } from 'antd'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Alert, Select, Spin } from 'antd'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { DownOutlined, PictureOutlined } from '@ant-design/icons'
-import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
+import { ApiError, StudioDirectingService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasRead } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { workbenchManagementLocation } from '../directing/chapterNavigation'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { GenerationCanvasWorkspace } from './GenerationCanvasWorkspace'
+import { canOpenStoryboardCanvas } from '../directing/storyboardCanvasAccess'
 import { CanvasDeletionDialog } from './CanvasDeletionDialog'
 
 /** 项目入口管理画布列表和路由，画布工作区管理当前文档及运行。 */
@@ -17,13 +18,36 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const navigate = useNavigate()
   const { state } = useLocation()
   const canvasId = search.get('canvas')
+  const [selectedRead, setSelectedRead] = useState<CanvasRead>()
+  const [readError, setReadError] = useState('')
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
+  const [access, setAccess] = useState<{ id: string; allowed: boolean; task?: string | null; error?: string }>()
   const [error, setError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string>()
   const listRead = useRef(0)
   const deleting = !!deleteTarget && deleteTarget === canvasId
-  const scene = canvases.find(canvas => canvas.id === canvasId)?.scene
+  const scene = selectedRead?.id === canvasId ? selectedRead.scene : undefined
 
+  useEffect(() => {
+    if (!canvasId) return
+    let active = true
+    setReadError('')
+    const request = Canvases.canvasGet({ projectId, canvasId })
+    void request.then(({ data }) => { if (active && data) setSelectedRead(data) })
+      .catch(() => { if (active) setReadError('此画布已不可用或读取失败，请刷新重试。') })
+    return () => { active = false; request.cancel() }
+  }, [projectId, canvasId])
+  const chapterId = scene?.chapter_id, sequenceId = scene?.sequence_id
+  useEffect(() => {
+    if (!canvasId || !chapterId || !sequenceId) return
+    let active = true
+    const request = StudioDirectingService.directingSceneCanvases({ projectId, chapterId, sequenceId })
+    void request.then(({ data }) => {
+      const summary = data?.canvases.find(canvas => canvas.id === canvasId)
+      if (active) setAccess({ id: canvasId, allowed: !!summary && canOpenStoryboardCanvas(summary), task: summary?.latest_storyboard?.task_id })
+    }).catch(() => { if (active) setAccess({ id: canvasId, allowed: false, error: '无法核对场次画布，请刷新重试。' }) })
+    return () => { active = false; request.cancel() }
+  }, [projectId, canvasId, chapterId, sequenceId])
   const fail = (reason: unknown) => {
     const detail = reason instanceof ApiError ? reason.body?.data : undefined
     setError(detail?.code ? `${detail.code}: ${detail.message}` : reason instanceof ApiError ? reason.body?.message || '操作失败，请重试' : '操作失败，请重试')
@@ -65,6 +89,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     } catch (reason) { fail(reason) }
   }
   const rememberCanvas = useCallback((current: CanvasRead) => {
+    setSelectedRead(current)
     setCanvases(previous => previous.map(item => item.id === current.id ? current : item))
   }, [])
   const beginDelete = async (id: string, canEdit: () => boolean, requestLeave: () => Promise<boolean>) => {
@@ -73,7 +98,15 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
       setDeleteTarget(id)
     }
   }
-  return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId} storyboardTaskId={search.get('storyboardTask')}
+  if (canvasId && readError) return <Alert type="error" message={readError} />
+  if (canvasId && selectedRead?.id !== canvasId) return <Spin aria-label="正在核对画布" />
+  if (canvasId && scene && chapterId && sequenceId) {
+    if (access?.id !== canvasId) return <Spin aria-label="正在核对场次画布" />
+    if (access.error) return <Alert type="error" message={access.error} />
+    if (!access.allowed) return <Navigate replace state={state} to={workbenchManagementLocation(
+      projectId, chapterId, sequenceId, 'storyboard', { canvas: canvasId, storyboardTask: access.task })} />
+  }
+  return <GenerationCanvasWorkspace projectId={projectId} canvasId={canvasId}
     back={canvasId && scene ? { label: '返回工作台管理', onClick: () => navigate(workbenchManagementLocation(
       projectId, scene.chapter_id, scene.sequence_id, 'storyboard', { canvas: canvasId, storyboardTask: search.get('storyboardTask') }), { state }) }
       : { label: '返回项目', onClick: () => navigate(`/projects/${encodeURIComponent(projectId)}`) }}

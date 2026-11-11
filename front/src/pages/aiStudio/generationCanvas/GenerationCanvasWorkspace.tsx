@@ -12,8 +12,7 @@ import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
 import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
 import { CheckArchive } from './CheckArchive'
-import { SceneStoryboardReview, StoryboardReviewFindings } from '../directing/SceneStoryboardReview'
-import { directingError } from '../directing/common'
+import { StoryboardReviewFindings } from '../directing/SceneStoryboardReview'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDetailsProvider } from '../directing/ui/WorkbenchDetails'
@@ -72,8 +71,6 @@ interface GenerationCanvasWorkspaceProps {
   renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode
   renderModelCardMenu?: (context: WorkbenchModelMenuContext) => ReactNode
   modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]
-  storyboardTaskId?: string | null
-  onStoryboardRepaired?: (taskId: string) => void
   onCanvasRead?: (canvas: CanvasRead) => void
   hostError?: string
   hostErrorAction?: ReactNode
@@ -86,7 +83,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, storyboardTaskId, onStoryboardRepaired, onCanvasRead, hostError, hostErrorAction,
+  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
@@ -97,32 +94,18 @@ export function GenerationCanvasWorkspace({
   const leaveEditor = useRef(editor.requestLeave); leaveEditor.current = editor.requestLeave
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && editor.needsLeaveProtection())
   useEffect(() => { if (blocker.state === 'blocked') void leaveEditor.current().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
-  const { current, document, edit, save, saving, dirty, ownership, applyInitialCandidate, configureCatalog: configureEditorCatalog } = editor
+  const { current, document, edit, save, saving, dirty, ownership, configureCatalog: configureEditorCatalog } = editor
   const layoutApplication = editor.storyboardApplication
   const beforeApplication = layoutApplication?.taskId === document?.storyboard?.task_id &&
     layoutApplication?.before.id === document?.id && layoutApplication?.before.project_id === projectId
     ? layoutApplication.before : undefined
   const scene = current?.id === canvasId ? current.scene : undefined
   const chapterId = scene?.chapter_id, sequenceId = scene?.sequence_id
-  const candidateKey = JSON.stringify([projectId, canvasId, chapterId, sequenceId, storyboardTaskId])
-  const [discovery, setDiscovery] = useState<{ key: string; result?: StoryboardTaskRead; error?: string }>()
-  const [candidateRefresh, setCandidateRefresh] = useState(0)
-  const handledCandidate = useRef<string>()
-  const [reviewTask, setReviewTask] = useState<string>()
-  const discovered = discovery?.key === candidateKey ? discovery : undefined
-  const candidate = discovered?.result?.candidate
-  const candidateTask = discovered?.result?.task_id
-  const requiresReview = discovered?.result?.pending_application
   const appliedTask = current?.document.storyboard?.continuity_check_task_id
     ? undefined : current?.document.storyboard?.task_id
   const appliedRevision = current?.revision
   const [appliedReview, setAppliedReview] = useState<{ task: string; revision: number; result: StoryboardTaskRead }>()
   const savedReview = appliedReview?.task === appliedTask && appliedReview?.revision === appliedRevision ? appliedReview?.result : undefined
-  const receiveRepair = useCallback((result: StoryboardTaskRead) => {
-    if (result.canvas_id !== canvasId) return
-    if (onStoryboardRepaired) onStoryboardRepaired(result.task_id)
-    else setDiscovery({ key: candidateKey, result })
-  }, [canvasId, candidateKey, onStoryboardRepaired])
   useEffect(() => {
     if (!appliedTask || appliedRevision === undefined || !chapterId || !sequenceId) return
     let active = true
@@ -132,34 +115,6 @@ export function GenerationCanvasWorkspace({
     }).catch(() => { if (active) setAppliedReview(undefined) })
     return () => { active = false; request.cancel() }
   }, [appliedTask, appliedRevision, projectId, chapterId, sequenceId, canvasId])
-  useEffect(() => {
-    if (!canvasId || !chapterId || !sequenceId) return
-    let active = true
-    const request = Directing.directingStoryboardCandidate({ projectId, chapterId, sequenceId, canvasId,
-      taskId: storyboardTaskId ?? undefined })
-    void request.then(({ data }) => {
-      if (!active) return
-      if (data && (data.canvas_id !== canvasId || data.candidate?.document.id !== canvasId ||
-          data.candidate.document.storyboard?.task_id !== data.task_id)) throw new Error('此分镜候选不属于当前画布')
-      setDiscovery({ key: candidateKey, result: data ?? undefined })
-    }).catch(cause => {
-      if (active) setDiscovery({ key: candidateKey, error: directingError(cause) })
-    })
-    return () => { active = false; request.cancel() }
-  }, [candidateKey, projectId, canvasId, chapterId, sequenceId, storyboardTaskId, candidateRefresh])
-  useEffect(() => {
-    if (!current || !candidate || !candidateTask || handledCandidate.current === candidateTask) return
-    if (current.document.storyboard?.task_id === candidateTask) {
-      handledCandidate.current = candidateTask
-      return
-    }
-    if (!ownership.editable && ownership.state === 'checking') return
-    handledCandidate.current = candidateTask
-    if (requiresReview) setReviewTask(candidateTask)
-    else void applyInitialCandidate(candidate).then(result => {
-      if (result === 'pending' && handledCandidate.current === candidateTask) setReviewTask(candidateTask)
-    })
-  }, [candidateTask, current, candidate, applyInitialCandidate, ownership.editable, ownership.state, requiresReview])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -241,18 +196,6 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
-    {discovered?.error && <Alert type="error" showIcon message={discovered.error}
-      action={<Button onClick={() => setCandidateRefresh(value => value + 1)}>重试读取分镜</Button>} />}
-    {candidateTask && candidateTask === reviewTask && chapterId && sequenceId && current?.document.storyboard?.task_id !== candidateTask &&
-      <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
-        structureIssues={discovered?.result?.structure_issues} repairDetails={discovered?.result?.repair_details} report={discovered?.result?.review} candidate={candidate} onRepaired={receiveRepair}
-        reviewedOverwrite={discovered?.result?.reviewed_overwrite_card_ids}
-        prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
-        apply={async choice => {
-          const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: candidateTask }, choice)
-          if (applied) { runtime.invalidate(); setReviewTask(undefined) }
-          return applied
-        }} />}
     {savedReview?.review && (savedReview.review_state === 'warning' || savedReview.review_state === 'accepted' ||
       savedReview.review_state === 'stale') && current &&
       <Alert type="warning" showIcon message={savedReview.review_state === 'accepted' ? '已接受分镜设计风险' :

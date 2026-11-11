@@ -17,6 +17,8 @@ export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: st
 export type CanvasArrangementChange = { undo: () => void; redo: () => void }
 type HistoryEntry = { document: CanvasDocument; scene?: StoryboardScope; arrangement?: CanvasArrangementChange } | { apply: () => void; reverse: () => void }
 type HistorySide = 'past' | 'future'
+// 仅同标签页的工作台应用交接，刷新自然清空；修订不符时丢弃。
+const storyboardHandoffs = new Map<string, { revision: number; entry: HistoryEntry; receipt?: StoryboardApplicationReceipt }>()
 
 type Recovery = { schema: 1; baseline: CanvasRead; document: CanvasDocument; pending?: PendingSave }
 const validDocument = (value: CanvasDocument, projectId: string, canvasId: string) => value && value.id === canvasId && value.project_id === projectId && typeof value.name === 'string' && Array.isArray(value.cards) && value.cards.every(card => card && typeof card.id === 'string' && typeof card.type === 'string')
@@ -70,6 +72,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const cleaner = useRef<(value: CanvasDocument) => CanvasDocument>()
   const configureCatalog = useCallback((catalog: CanvasCatalog) => { cleaner.current = createCanvasOperations(createGraphRules(catalog)).clean }, [])
   const inFlight = useRef<Promise<boolean>>()
+  const handoffHistory = useRef(false)
   const history = useRef<{ scope: string; past: HistoryEntry[]; future: HistoryEntry[] }>({ scope: key, past: [], future: [] })
   const dirty = !!document && !!current && !same(document, current.document)
   const persist = () => {
@@ -91,6 +94,13 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       if (!active || !response.data) return
       const server = response.data
       state.current = { scope: key, current: server, document: server.document, conflict: false }
+      const handoff = storyboardHandoffs.get(key)
+      storyboardHandoffs.delete(key)
+      if (handoff?.revision === server.revision) {
+        history.current.past = [handoff.entry]
+        handoffHistory.current = true
+        setStoryboardApplication(handoff.receipt)
+      }
       setCurrent(server); setDocument(server.document)
       try {
         const raw = localStorage.getItem(key)
@@ -268,7 +278,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     }
     finally { if (s === state.current) setSaving(false) }
   }
-  const reload = async (keepLocal = false) => {
+  const reload = async (keepLocal = false, preserveHandoff = false) => {
     const s = state.current
     if (s.pending || s.recovery?.pending) { setError('请先核实未明保存请求，再处理冲突或放弃内容'); return false }
     try {
@@ -278,7 +288,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
         return false
       }
-      s.current = response.data; if (!keepLocal) { s.document = response.data.document; history.current = { scope: key, past: [], future: [] } }
+      const unchanged = s.current?.revision === response.data.revision
+      s.current = response.data; if (!keepLocal) { s.document = response.data.document; if (!preserveHandoff || !unchanged) history.current = { scope: key, past: [], future: [] } }
       s.conflict = false; s.recovery = undefined
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); setConflict(false); setError(''); persist(); return true
     } catch (reason) { setError(describe(reason)); return false }
@@ -287,7 +298,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   useEffect(() => {
     if (!ownership.editable || !refreshOnOwnership) return
     const s = state.current
-    if (s.current && !s.recovery && !s.pending && same(s.document, s.current.document)) void latestActions.current.reload()
+    if (s.current && !s.recovery && !s.pending && same(s.document, s.current.document)) void latestActions.current.reload(false, handoffHistory.current).finally(() => { handoffHistory.current = false })
   }, [ownership.editable, refreshOnOwnership])
   const applyInitialCandidate = async (candidate: StoryboardCandidate): Promise<'applied' | 'pending'> => {
     const s = state.current
@@ -389,8 +400,16 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     return !!(s.pending || s.recovery || s.current && !same(s.document, s.current.document))
   }
   const saveDiagnostic = failedDiagnostic?.scope === key && same(document, failedDiagnostic.document) ? failedDiagnostic.issue : undefined
+  const handoffStoryboardApplication = () => {
+    const s = state.current
+    const entry = history.current.past[history.current.past.length - 1]
+    if (s.current && entry && 'document' in entry && entry.scene && !s.pending && !s.recovery) {
+      storyboardHandoffs.set(key, { revision: s.current.revision, entry,
+        receipt: { taskId: entry.scene.taskId, before: entry.document } })
+    }
+  }
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename,
+  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

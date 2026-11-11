@@ -76,6 +76,7 @@ class SceneCanvasService(WorkspaceService):
             canvases.append(SceneCanvasSummary(
                 id=row.id, name=row.name, created_at=row.created_at, source_changed=source_changed,
                 applied_storyboard_task_id=row.applied_task,
+                can_open=bool(row.applied_task or not task or task.original_target == row.id),
                 latest_storyboard=StoryboardTaskSummary(
                     canvas_id=row.id, task_id=task.id, status=TaskStatus(task.status), stage=task.stage, error=task.error_message,
                     candidate_available=bool(candidate and candidate.id == task.id), retry_of_task_id=task.retry_of_task_id,
@@ -107,6 +108,9 @@ class SceneCanvasService(WorkspaceService):
             Task.id, Task.created_at, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id,
             canvas_id.label('canvas_id'), priority.label('priority'), SCENE_TASK_ORDER.label('admission_order'),
             Task.input_snapshot['reextract_canvas_id'].as_string().label('reextract_target'),
+            func.first_value(Task.input_snapshot['reextract_canvas_id'].as_string()).over(
+                partition_by=canvas_id, order_by=(SCENE_TASK_ORDER, Task.created_at, Task.id),
+            ).label('original_target'),
             Task.result['base_revision'].as_integer().label('base_revision'),
             Task.result['review_state'].as_string().label('review_state'),
             Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from'),

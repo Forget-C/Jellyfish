@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Descriptions, Modal, Radio, Space, Spin } from 'antd'
+import { Alert, Button, Descriptions, Modal as AntModal, Radio, Space, Spin } from 'antd'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { SceneCanvasSummary, StoryboardRetry, StoryboardRetryBasis } from '../../../services/generated'
@@ -22,10 +23,18 @@ function retryError(cause: unknown) {
   return /model not found/i.test(reason) ? '原文本模型已不可用。' : '原画布或任务已不可用'
 }
 
+function RetryContainer({ inline, actionHost, ...props }: React.ComponentProps<typeof AntModal> & { inline: boolean; actionHost?: HTMLElement | null }) {
+  return inline ? props.open ? <section aria-label={String(props.title)}>
+    <h3>{props.title}</h3>{props.children}<div>{typeof props.footer === 'function' ? null : actionHost ? createPortal(props.footer, actionHost) : props.footer}</div>
+  </section> : null : <AntModal {...props} />
+}
+
 /** 确认本次依据后重试原画布，未知结果只重放已保存的同一请求。 */
-export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted, onReviewSource }: {
+export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted, onReviewSource, inline = false, actionHost }: {
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary
   historical: boolean; onAccepted: () => void
+  actionHost?: HTMLElement | null
+  inline?: boolean
   onReviewSource: () => void
 }) {
   const navigate = useNavigate()
@@ -121,8 +130,8 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
     {!target && (error || pending && !submitting) && <p className="management-canvas-error" role="status">
       {pending ? '重试结果待核实。' : error}
     </p>}
-    <Modal title={reviewOnly ? '核对重试审查' : '核对重试分镜'} open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
-      <Button aria-label="关闭重试确认" onClick={() => setTarget(undefined)}>关闭</Button>
+    <RetryContainer inline={inline} actionHost={actionHost} title={reviewOnly ? '核对重试审查' : '核对重试分镜'} open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
+      {!inline && <Button aria-label="关闭重试确认" onClick={() => setTarget(undefined)}>关闭</Button>}
       <Button type="primary" loading={submitting} disabled={!pending && !ready} onClick={confirm}>
         {pending ? verifyLabel : regenerate ? '确认重新生成' : preview?.structure_only ? '继续纠错' : preview?.structure_issues?.length ? '确认重新生成' : '确认重试'}
       </Button>
@@ -170,6 +179,6 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
           onOpenSource={onReviewSource}
           onOpenObjects={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'objects'))} />
       </>}
-    </Modal>
+    </RetryContainer>
   </>
 }

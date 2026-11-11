@@ -142,6 +142,8 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         assert applied.status_code == 200, applied.text
         saved = applied.json()['data']
         assert saved['document']['name'] == '人工先保存'
+        fixed_id = saved['document']['fixed_source']['card_id']
+        assert any(fixed_id in group['card_ids'] for group in saved['document']['groups'])
         assert saved == (await client.get(late_path)).json()['data']
         replay = await client.post(late_task_path + '/apply', json={'expected_revision': untouched['revision']})
         assert replay.json()['data'] == saved

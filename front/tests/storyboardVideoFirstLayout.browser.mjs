@@ -1,3 +1,4 @@
+import { enterStoryboardCanvas, openStoryboardReview } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
@@ -77,6 +78,7 @@ try {
   const open = async (page, task) => {
     const url = `${projectUrl}/chapters/${chapter}/sequences/${scene.id}/canvas-workbench?canvas=${task.canvas_id}&storyboardTask=${task.task_id}`
     await page.goto(url)
+    await enterStoryboardCanvas(page)
     const { document } = await poll(() => request(`${canvases}/${task.canvas_id}`), row => row.document.storyboard)
     const ids = document.storyboard.shots.flatMap(shot => shot.model_card_ids)
     assert.equal(ids.length, 3)
@@ -175,7 +177,7 @@ try {
   assert.ok(ordinarySource.y < ordinaryVideoBefore.y, 'ordinary entry keeps its original layout rules')
   await ordinary.getByRole('button', { name: '布局', exact: true }).click()
   await ordinary.getByRole('button', { name: '整理布局', exact: true }).click()
-  const [arrangedSource, ordinaryVideo] = await cards(ordinary, [original, ids[0]])
+  const [arrangedSource, ordinaryVideo] = await poll(() => cards(ordinary, [original, ids[0]]), ([source, video]) => source.y < video.y)
   assert.ok(arrangedSource.y < ordinaryVideo.y, 'ordinary explicit arrange keeps the source above the video')
   await ordinary.goto(url)
   await ordinary.locator(`[data-card-id="${ids[0]}"]`).waitFor()
@@ -307,8 +309,8 @@ try {
   const newDesigns = diff.added.filter(card => card.type === 'direction.focus')
   assert.equal(newDesigns.length, 2)
   await desktop.goto(url.replace(task.task_id, rerun.task_id))
-  await desktop.getByRole('button', { name: '核对差异', exact: true }).click()
-  const review = desktop.getByRole('dialog', { name: '核对分镜差异', exact: true })
+  await openStoryboardReview(desktop)
+  const review = desktop.getByRole('dialog', { name: '处理分镜提取结果', exact: true })
   const applyRequests = []
   await desktop.route('**/apply', async route => {
     applyRequests.push(route.request().postDataJSON())
@@ -318,7 +320,7 @@ try {
       await route.abort('failed')
     } else await route.fulfill({ response })
   })
-  await review.getByRole('button', { name: '应用分镜', exact: true }).click()
+  await review.getByRole('button', { name: '应用并进入画布', exact: true }).click()
   await review.getByRole('button', { name: '核对最新画布', exact: true }).click()
   const applied = await poll(savedCanvas, row => row.document.storyboard.task_id === rerun.task_id)
   assert.ok(!applied.document.groups.some(group => group.id === own.id), 'the released design stack stays released')

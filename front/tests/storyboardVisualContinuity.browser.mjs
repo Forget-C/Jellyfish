@@ -1,3 +1,4 @@
+import { enterStoryboardCanvas, openStoryboardReview } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
@@ -76,6 +77,7 @@ try {
   assert.equal(ready.status, 'succeeded', JSON.stringify(ready))
   const canvas = base + '/' + task.canvas_id
   await page.goto(`${projectUrl}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${task.canvas_id}&storyboardTask=${task.task_id}`)
+  await enterStoryboardCanvas(page)
   const state = await poll(() => request(canvas), item => item.document.storyboard, 'storyboard was not saved')
   const [first, later] = state.document.storyboard.shots.map(item => item.model_card_ids[0])
   assert.ok(first && later)
@@ -226,14 +228,14 @@ try {
     await page.getByRole('button', { name: '重新提取', exact: true }).click()
     await page.getByRole('dialog', { name: '重新提取', exact: true })
       .getByRole('button', { name: '开始提取', exact: true }).click()
-    await page.getByRole('button', { name: '核对差异', exact: true }).click()
-    const diff = page.getByRole('dialog', { name: '核对分镜差异', exact: true })
+    await openStoryboardReview(page)
+    const diff = page.getByRole('dialog', { name: '处理分镜提取结果', exact: true })
     await diff.getByText('人工新增的卡片会保留。', { exact: false }).waitFor()
     return diff
   }
   const applyReextract = async (diff, targetCanvas = canvas) => {
     const before = await request(targetCanvas)
-    await diff.getByRole('button', { name: /^(应用分镜|应用并解除受影响的堆叠)$/ }).click()
+    await diff.getByRole('button', { name: '应用并进入画布', exact: true }).click()
     await diff.waitFor({ state: 'hidden' })
     return poll(() => request(targetCanvas), item => item.revision > before.revision, 're-extraction was not saved')
   }
@@ -247,10 +249,10 @@ try {
   const changed = await openReextract('design')
   await changed.getByText(/设计变化.*人工承接/).waitFor()
   const unchanged = await request(canvas)
-  await changed.getByRole('button', { name: '暂不应用', exact: true }).click()
+  await changed.getByRole('button', { name: '暂不处理', exact: true }).click()
   await changed.waitFor({ state: 'hidden' })
   assert.deepEqual(await request(canvas), unchanged, 'cancelling the review leaves the saved adoption unchanged')
-  await page.getByRole('button', { name: '核对差异', exact: true }).click()
+  await openStoryboardReview(page)
   const redesigned = await applyReextract(changed)
   const usesRearPerformance = ({ document }, target) => document.cards.find(card => card.id === target).input_bindings.some(input =>
     document.cards.some(card => card.id === input.source.card_id && card.type === 'direction.performance' &&
@@ -331,6 +333,7 @@ try {
     mode: 'faithful', production_model_id: 'story-video-model', pending_modality: 'video' })
   const secondCanvas = base + '/' + second.canvas_id
   await page.goto(`${projectUrl}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${second.canvas_id}&storyboardTask=${second.task_id}`)
+  await enterStoryboardCanvas(page)
   const prepared = await poll(() => request(secondCanvas), item => item.document.storyboard, 'second storyboard was not saved')
   const [beforeId, afterId] = prepared.document.storyboard.shots.map(item => item.model_card_ids[0])
   assert.equal((await request(secondCanvas + '/cards/' + afterId + '/compile')).video_media.subjects.length, 1)
