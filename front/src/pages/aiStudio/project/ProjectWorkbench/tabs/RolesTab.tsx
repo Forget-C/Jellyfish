@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Card, Button, Empty, Modal, Input, message, Space, Select, Pagination } from 'antd'
-import { EditOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Button, Dropdown, Empty, Modal, Input, message, Select, Pagination } from 'antd'
+import { MoreOutlined, PlusOutlined, SkinOutlined, UserOutlined } from '@ant-design/icons'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   StudioProjectsService,
   StudioProjectAssetsService,
@@ -15,6 +15,9 @@ import {
   ProjectVisualStyleAndStyleFields,
   type ProjectVisualStyleChoice,
 } from '../../../project/ProjectVisualStyleAndStyleFields'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
+import { directingError } from '../../../directing/common'
+import './project-roles.css'
 import { useProjectStyleOptions } from '../../../project/useProjectStyleOptions'
 
 type ActorLike = {
@@ -40,6 +43,31 @@ export function RolesTab() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [menuRoleId, setMenuRoleId] = useState<string>()
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string }>()
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const deletePending = useRef(false)
+  const deleteTrigger = useRef<HTMLElement | null>(null)
+  const createTrigger = useRef<HTMLButtonElement>(null)
+
+  async function deleteRole() {
+    if (!deleteTarget || deletePending.current) return
+    deletePending.current = true
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await StudioEntitiesApi.remove('character', deleteTarget.id)
+      message.success('已删除')
+      setDeleteTarget(undefined)
+      await refresh()
+    } catch (cause) {
+      setDeleteError(directingError(cause))
+    } finally {
+      deletePending.current = false
+      setDeleting(false)
+    }
+  }
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
   const [formActorId, setFormActorId] = useState<string | undefined>(undefined)
@@ -283,87 +311,48 @@ export function RolesTab() {
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <Card
-        title="项目角色"
-        extra={
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openNormalRoleCreate}>
-              新建角色
-            </Button>
-          </Space>
-        }
-      >
+    <div className="project-resource-page project-role-page">
+      <ProjectContentToolbar>
+        <h1 className="app-page-title">项目角色</h1>
+        <Button ref={createTrigger} aria-label="新建角色" type="primary" icon={<PlusOutlined />} onClick={openNormalRoleCreate}>新建角色</Button>
+      </ProjectContentToolbar>
         {characters.length === 0 && !loading ? (
-          <Empty
-            description="暂无项目角色"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          >
-            <Space>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openNormalRoleCreate}>
-                新建角色
-              </Button>
-            </Space>
-          </Empty>
+          <Empty description="暂无项目角色" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="project-resource-grid">
             {pagedRoleCards.map(({ c, actor, costume }) => (
               <DisplayImageCard
+                variant="project"
+                imageFit="contain"
                 key={c.id}
-                title={<div className="truncate">{c.name}</div>}
+                title={<Link title={c.name} to={`/projects/${projectId}/roles/${c.id}/edit`}>{c.name}</Link>}
                 imageUrl={resolveAssetUrl(c.thumbnail)}
                 imageAlt={c.name}
                 enablePreview
-                extra={
-                  <Space size="small">
-                    <Button
-                      type="default"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={() => {
-                        if (!projectId) return
-                        navigate(`/projects/${projectId}/roles/${c.id}/edit`)
-                      }}
-                    >
-                      编辑
-                    </Button>
-                    <Button
-                      size="small"
-                      danger
-                      onClick={() => {
-                        Modal.confirm({
-                          title: `删除角色「${c.name}」？`,
-                          okText: '删除',
-                          cancelText: '取消',
-                          okButtonProps: { danger: true },
-                          onOk: async () => {
-                            try {
-                              await StudioEntitiesApi.remove('character', c.id)
-                              message.success('已删除')
-                              await refresh()
-                            } catch {
-                              message.error('删除失败')
-                            }
-                          },
-                        })
-                      }}
-                    >
-                      删除
-                    </Button>
-                  </Space>
-                }
-                meta={
-                  <div className="space-y-1">
-                    {c.description ? <div className="text-xs text-gray-600 line-clamp-2">{c.description}</div> : null}
-                    <div className="text-xs text-gray-500 truncate">
-                      演员：{actor?.name ?? c.actor_id}
-                    </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      服装：{costume?.name ?? (c.costume_id ?? '—')}
-                    </div>
+                placeholder={<><UserOutlined aria-hidden />暂无角色图片</>}
+                extra={<Dropdown trigger={['click']} open={menuRoleId === c.id}
+                  onOpenChange={open => {
+                    setMenuRoleId(open ? c.id : undefined)
+                    if (open) deleteTrigger.current = document.activeElement as HTMLElement
+                  }} menu={{ items: [
+                    { key: 'edit', label: '编辑', onClick: () => {
+                      setMenuRoleId(undefined)
+                      navigate(`/projects/${projectId}/roles/${c.id}/edit`)
+                    } },
+                    { key: 'delete', label: '删除角色', danger: true, disabled: deleting, onClick: () => {
+                      setMenuRoleId(undefined)
+                      setDeleteError('')
+                      requestAnimationFrame(() => setDeleteTarget({ id: c.id, name: c.name }))
+                    } },
+                  ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${c.name}更多操作`} /></Dropdown>}
+                meta={<>
+                  <div className="project-resource-description">{c.description?.trim() || '未填写简介'}</div>
+                  <div className="project-role-associations">
+                    <p><UserOutlined aria-hidden />演员：{actor?.name ?? (loadingLinks ? '加载中' : c.actor_id ? '演员信息暂不可用' : '未关联演员')}</p>
+                    <p><SkinOutlined aria-hidden />服装：{costume?.name ?? (c.costume_id ? loadingLinks ? '加载中' : '服装信息暂不可用' : '未关联服装')}</p>
                   </div>
-                }
+                </>}
               />
             ))}
             </div>
@@ -382,9 +371,18 @@ export function RolesTab() {
             </div>
           </div>
         )}
-      </Card>
 
+      <Modal className="project-resource-dialog" title={deleteTarget ? `删除角色「${deleteTarget.name}」？` : '删除角色'} open={!!deleteTarget}
+        onCancel={() => { if (!deletePending.current) setDeleteTarget(undefined) }}
+        onOk={() => void deleteRole()} okText="删除角色" cancelText="取消" confirmLoading={deleting}
+        okButtonProps={{ danger: true, disabled: deleting }} cancelButtonProps={{ disabled: deleting }}
+        closable={!deleting} keyboard={!deleting} maskClosable={!deleting} focusTriggerAfterClose={false}
+        afterClose={() => (deleteTrigger.current?.isConnected ? deleteTrigger.current : createTrigger.current)?.focus({ preventScroll: true })}>
+        <p>删除角色将移除该项目角色配置，不会删除关联演员或服装资产。</p>
+        {deleteError && <Alert type="error" showIcon message={deleteError} />}
+      </Modal>
       <Modal
+        className="project-resource-dialog"
         title="新建角色"
         open={createOpen}
         onCancel={() => {
@@ -399,11 +397,11 @@ export function RolesTab() {
         <div className="space-y-3">
           <div>
             <div className="text-sm text-gray-600 mb-1">角色名称</div>
-            <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="例如：小雨" />
+            <Input aria-label="角色名称" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="例如：小雨" />
           </div>
           <div>
             <div className="text-sm text-gray-600 mb-1">描述（可选）</div>
-            <Input.TextArea rows={3} value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
+            <Input.TextArea aria-label="角色描述" rows={3} value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
           </div>
           <div>
             <ProjectVisualStyleAndStyleFields
@@ -419,6 +417,7 @@ export function RolesTab() {
           <div>
             <div className="text-sm text-gray-600 mb-1">关联演员（必填）</div>
             <Select
+              aria-label="关联演员"
               className="w-full"
               placeholder="选择当前项目已关联的演员"
               loading={loadingLinks}
@@ -433,6 +432,7 @@ export function RolesTab() {
           <div>
             <div className="text-sm text-gray-600 mb-1">关联服装（可选）</div>
             <Select
+              aria-label="关联服装"
               className="w-full"
               allowClear
               placeholder="选择当前项目已关联的服装"
