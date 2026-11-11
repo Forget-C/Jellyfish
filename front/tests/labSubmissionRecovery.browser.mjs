@@ -71,7 +71,7 @@ try {
 
   async function openLab(mode) {
     await page.goto(origin + '/lab?session=' + mode + '-session')
-    await page.getByRole('heading', { name: labels[mode] + '实验室 · ' + labels[mode] + '恢复会话' }).waitFor()
+    await page.getByRole('heading', { name: '实验室 · ' + labels[mode] + ' · ' + labels[mode] + '恢复会话' }).waitFor()
     await page.getByRole('button', { name: '选择模型' }).click()
     await page.getByRole('button', { name: labels[mode] + '恢复模型' }).waitFor()
     await page.keyboard.press('Escape')
@@ -177,7 +177,7 @@ try {
   assert.equal(await textSubmit.isEnabled(), true)
 
   await page.goto(origin + '/lab?session=image-session')
-  await page.getByRole('heading', { name: '图片实验室 · 图片恢复会话' }).waitFor()
+  await page.getByRole('heading', { name: '实验室 · 图片 · 图片恢复会话' }).waitFor()
   modelsState = 'failed'
   await page.getByRole('button', { name: '选择模型' }).click()
   await page.getByText('加载模型失败', { exact: true }).waitFor()

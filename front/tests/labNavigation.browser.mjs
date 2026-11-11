@@ -15,6 +15,8 @@ const sessions = [
   ...Array.from({ length: 24 }, (_, index) => session('image-' + (index + 1), 'image', '图片历史 ' + (index + 1))),
   session('video-1', 'video', '视频历史一'),
 ]
+sessions.find(item => item.id === 'image-1').updated_at = '2026-09-17T00:00:00Z'
+sessions.find(item => item.id === 'video-1').updated_at = '2026-09-16T00:00:00Z'
 let created = 0
 let clearAttempts = 0
 let deleteAttempts = 0
@@ -50,7 +52,7 @@ try {
       if (request.method() === 'POST') {
         const { title, lab_type } = request.postDataJSON()
         assert.equal(lab_type, 'text')
-        const newSession = session('new-text', lab_type, title)
+        const newSession = { ...session('new-text', lab_type, title), updated_at: '2026-09-18T00:00:00Z' }
         sessions.unshift(newSession)
         created += 1
         return respond(newSession)
@@ -108,31 +110,39 @@ try {
 
   await page.goto(origin + '/image-lab?keep=1')
   await page.waitForURL(url => url.pathname === '/lab' && url.searchParams.get('mode') === 'image' && url.searchParams.get('keep') === '1')
-  const types = page.getByRole('navigation', { name: '实验室类型' })
-  const history = page.getByRole('navigation', { name: '当前类型会话' })
+  const types = page.locator('.experiment-navigation')
+  const startDraft = async label => {
+    await page.getByRole('button', { name: '新建会话', exact: true }).click()
+    await page.getByRole('menuitem', { name: label + '会话', exact: true }).click()
+  }
+  const history = page.getByRole('navigation', { name: '最近会话' })
   await history.getByRole('button', { name: '图片历史 1', exact: true }).waitFor()
-  assert.equal(await types.getByRole('button', { name: '图片', exact: true }).getAttribute('aria-pressed'), 'true')
-  assert.equal(await history.getByRole('button', { name: '文本历史一', exact: true }).count(), 0)
-  await page.getByRole('heading', { name: '图片实验室 · 新会话', exact: true }).waitFor()
+  assert.deepEqual(await history.locator('.experiment-session-link').evaluateAll(items => items.slice(0, 3).map(item => item.textContent)), ['图片历史 1', '视频历史一', '文本历史一'])
+  assert.equal(await page.getByRole('navigation', { name: '实验室类型' }).count(), 0)
+  assert.equal(await history.getByRole('button', { name: '文本历史一', exact: true }).count(), 1)
+  await page.getByRole('heading', { name: '实验室 · 图片 · 新会话', exact: true }).waitFor()
   const imageInput = page.getByRole('textbox', { name: '图片提示词', exact: true })
   const imageInputBefore = await imageInput.boundingBox()
   await history.getByRole('button', { name: '图片历史 24', exact: true }).scrollIntoViewIfNeeded()
   assert.deepEqual(await imageInput.boundingBox(), imageInputBefore)
   await history.getByRole('button', { name: '图片历史 24', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-24')
+  await history.getByRole('button', { name: '图片历史 24', exact: true }).and(page.locator('[aria-current="page"]')).waitFor()
   assert.equal(await history.getByRole('button', { name: '图片历史 24', exact: true }).getAttribute('aria-current'), 'page')
-  await types.getByRole('button', { name: '视频', exact: true }).click()
+  await startDraft('视频')
   await page.waitForURL(url => url.searchParams.get('mode') === 'video')
   await history.getByRole('button', { name: '视频历史一', exact: true }).waitFor()
   await page.goBack()
   await history.getByRole('button', { name: '图片历史 24', exact: true }).waitFor()
+  await history.getByRole('button', { name: '图片历史 24', exact: true }).and(page.locator('[aria-current="page"]')).waitFor()
   assert.equal(await history.getByRole('button', { name: '图片历史 24', exact: true }).getAttribute('aria-current'), 'page')
   await page.reload()
   await history.getByRole('button', { name: '图片历史 24', exact: true }).waitFor()
 
-  await types.getByRole('button', { name: '文本', exact: true }).click()
+  await startDraft('文本')
   await page.waitForURL(url => url.searchParams.get('mode') === 'text')
-  await page.getByRole('button', { name: /新建对话/ }).click()
+  await page.getByRole('button', { name: '新建会话', exact: true }).click()
+  await page.keyboard.press('Escape')
   assert.equal(created, 0)
   await page.getByRole('button', { name: /选择模型/ }).click()
   await page.getByRole('button', { name: /验收文本模型/ }).waitFor()
@@ -148,7 +158,7 @@ try {
   await page.waitForURL(url => url.searchParams.get('session') === 'new-text')
   await page.getByText('验收回复', { exact: true }).waitFor()
   assert.equal(created, 1)
-  await page.getByRole('heading', { name: '文本实验室 · 新文本会话', exact: true }).waitFor()
+  await page.getByRole('heading', { name: '实验室 · 文本 · 新文本会话', exact: true }).waitFor()
 
   const openClear = async () => {
     await page.getByRole('button', { name: '更多会话操作', exact: true }).click()
@@ -208,9 +218,10 @@ try {
   releaseImageLookup()
   lookupImage = undefined
   await history.getByRole('button', { name: '图片历史 1', exact: true }).waitFor()
+  await history.getByRole('button', { name: '图片历史 1', exact: true }).and(page.locator('[aria-current="page"]')).waitFor()
   assert.equal(await history.getByRole('button', { name: '图片历史 1', exact: true }).getAttribute('aria-current'), 'page')
   await imageInput.waitFor()
-  await page.getByRole('alert').getByText('部分会话读取失败', { exact: true }).waitFor()
+  await page.getByRole('alert').getByText('视频会话读取失败', { exact: true }).waitFor()
   assert.deepEqual(prematureImageMessages, [])
   await imageInput.fill('刷新时保留的图片草稿')
   failedType = 'image'
@@ -220,19 +231,20 @@ try {
     retry.click(),
   ])
   await retry.waitFor()
-  await page.getByRole('heading', { name: '图片实验室 · 图片历史 1', exact: true }).waitFor()
+  await page.getByRole('heading', { name: '实验室 · 图片 · 图片历史 1', exact: true }).waitFor()
   assert.equal(await imageInput.inputValue(), '刷新时保留的图片草稿')
   await history.getByRole('button', { name: '图片历史 2', exact: true }).waitFor()
   await imageInput.fill('')
   failedType = undefined
   await page.getByRole('button', { name: '重试' }).click()
-  await page.getByText('部分会话读取失败', { exact: true }).waitFor({ state: 'hidden' })
+  await page.getByText('图片会话读取失败', { exact: true }).waitFor({ state: 'hidden' })
+  await history.getByRole('button', { name: '图片历史 1', exact: true }).and(page.locator('[aria-current="page"]')).waitFor()
   assert.equal(await history.getByRole('button', { name: '图片历史 1', exact: true }).getAttribute('aria-current'), 'page')
 
   hideHistory = true
   await page.goto(origin + '/lab')
-  await history.getByText('暂无会话', { exact: true }).waitFor()
-  await types.getByRole('button', { name: '图片', exact: true }).click()
+  await history.getByText('暂无会话，从右上方新建开始', { exact: true }).waitFor()
+  await startDraft('图片')
   await imageInput.waitFor()
   await page.goBack()
   await page.waitForURL(origin + '/lab')
@@ -252,12 +264,12 @@ try {
     await trigger.focus()
     await trigger.press('Enter')
     const drawer = page.getByRole('dialog').filter({ has: types })
-    await drawer.getByRole('button', { name: width === 900 ? '文本' : '图片', exact: true }).waitFor()
+    await drawer.getByRole('button', { name: '新建会话', exact: true }).waitFor()
     await page.keyboard.press('Escape')
     await drawer.waitFor({ state: 'hidden' })
     await trigger.and(page.locator(':focus')).waitFor()
     await trigger.click()
-    await drawer.getByRole('button', { name: width === 900 ? '图片' : '视频', exact: true }).click()
+    await startDraft(width === 900 ? '图片' : '视频')
     await drawer.waitFor({ state: 'hidden' })
     await page.waitForURL(url => url.searchParams.get('mode') === (width === 900 ? 'image' : 'video'))
     await trigger.and(page.locator(':focus')).waitFor()
@@ -271,7 +283,7 @@ try {
     await page.getByRole('button', { name: '用户与语言设置', exact: true }).click()
     await page.getByRole('menuitemradio', { name: label, exact: true }).click()
     await page.getByRole('menuitemradio', { name: label, exact: true }).waitFor({ state: 'hidden' })
-    const heading = page.getByRole('heading', { name: '文本实验室 · 新会话', exact: true })
+    const heading = page.getByRole('heading', { name: '实验室 · 文本 · 新会话', exact: true })
     const send = page.getByRole('button', { name: '发送', exact: true })
     await heading.waitFor()
     for (const [width, height] of sizes) {
@@ -285,7 +297,7 @@ try {
       assert.ok(layout.barHeight >= 52 && layout.barHeight <= 56)
       assert.equal(layout.hasOverflow, false)
       if (width < 1024) await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
-      else assert.equal(Math.round((await types.boundingBox()).width) + 24, 216)
+      else assert.equal(Math.round((await types.boundingBox()).width), 216)
       await page.waitForFunction(({ button, controlHeight }) => {
         const bounds = button.getBoundingClientRect()
         return Math.abs(bounds.height - controlHeight) < 0.5 && bounds.bottom <= innerHeight

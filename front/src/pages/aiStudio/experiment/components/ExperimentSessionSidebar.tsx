@@ -1,8 +1,8 @@
 /** 实验室左侧最近会话列表。 */
-import { DeleteOutlined, EditOutlined, MessageOutlined, MoreOutlined, PictureOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { DownOutlined, DeleteOutlined, EditOutlined, MessageOutlined, MoreOutlined, PictureOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { Alert, Button, Dropdown, Input, Modal, Tooltip } from 'antd'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ExperimentSessionRead } from '../../../../services/generated'
 import { ExperimentSessionConfirmation } from './ExperimentSessionConfirmation'
 
@@ -13,7 +13,6 @@ type ExperimentSessionSidebarProps = {
   currentSessionDirty?: boolean
   currentSessionGenerating?: boolean
   sessions: ExperimentSessionRead[]
-  labType: ExperimentLabType
   loading: boolean
   failedTypes: ExperimentLabType[]
   onRetry: () => void
@@ -28,7 +27,8 @@ type ExperimentSessionSidebarProps = {
  *
  * 新建入口只选择实验模态并进入草稿态；首条有效提交由页面创建持久化会话。
  */
-export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSessionGenerating, sessions, labType, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
+export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSessionGenerating, sessions, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
+  const newSessionTrigger = useRef<HTMLButtonElement>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [targetSession, setTargetSession] = useState<ExperimentSessionRead | null>(null)
   const [title, setTitle] = useState('')
@@ -43,9 +43,9 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
 
   /** 返回会话模态对应的低干扰图标与名称。 */
   const labMeta: Record<ExperimentLabType, { label: string; icon: ReactNode }> = {
-    text: { label: '文本', icon: <MessageOutlined /> },
-    image: { label: '图片', icon: <PictureOutlined /> },
-    video: { label: '视频', icon: <VideoCameraOutlined /> },
+    text: { label: '文本', icon: <MessageOutlined aria-hidden="true" /> },
+    image: { label: '图片', icon: <PictureOutlined aria-hidden="true" /> },
+    video: { label: '视频', icon: <VideoCameraOutlined aria-hidden="true" /> },
   }
 
   /** 生成每个会话自己的悬浮操作菜单。 */
@@ -61,25 +61,27 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
     } : null,
   ].filter(Boolean)
 
-  const visibleSessions = sessions.filter(session => session.lab_type === labType)
   return <aside className="experiment-navigation">
-    <nav className="experiment-types" aria-label="实验室类型">
-      {(Object.keys(labMeta) as ExperimentLabType[]).map(type => <button
-        key={type} type="button" className="experiment-nav-item" aria-pressed={labType === type}
-        onClick={() => onStartDraft(type)}>
-        <span aria-hidden="true">{labMeta[type].icon}</span>
-        {labMeta[type].label}
-      </button>)}
-    </nav>
     <div className="experiment-session-heading">
       <h2>最近会话</h2>
-      <Button type="text" size="small" icon={<PlusOutlined />} aria-label="新建对话" onClick={() => onStartDraft(labType)}>新建对话</Button>
+      <Dropdown trigger={['click']} overlayClassName="experiment-session-dropdown" menu={{ items:
+        (Object.keys(labMeta) as ExperimentLabType[]).map(type => ({
+          key: type, icon: labMeta[type].icon, label: `${labMeta[type].label}会话`,
+          onClick: () => {
+            newSessionTrigger.current?.focus()
+            onStartDraft(type)
+          },
+        })),
+      }}>
+        <Button ref={newSessionTrigger} type="text" icon={<PlusOutlined />} aria-label="新建会话">新建 <DownOutlined /></Button>
+      </Dropdown>
     </div>
-    {failedTypes.length > 0 && <Alert type="error" message={failedTypes.length === 3 ? '读取会话失败' : '部分会话读取失败'}
+    {failedTypes.length > 0 && <Alert type="error"
+      message={failedTypes.length === 3 ? '读取会话失败' : `${failedTypes.map(type => labMeta[type].label).join('、')}会话读取失败`}
       action={<Button type="text" size="small" aria-label="重试" onClick={onRetry}>重试</Button>} />}
-    <nav className="experiment-session-list" aria-label="当前类型会话" aria-busy={loading}>
-      {!visibleSessions.length && !failedTypes.includes(labType) && <p role="status">{loading ? '正在读取会话…' : '暂无会话'}</p>}
-      {visibleSessions.map((session) => {
+    <nav className="experiment-session-list" aria-label="最近会话" aria-busy={loading}>
+      {!sessions.length && (loading || !failedTypes.length) && <p role="status">{loading ? '正在读取会话…' : '暂无会话，从右上方新建开始'}</p>}
+      {sessions.map((session) => {
         const selected = session.id === value
         const menuItems = getMenuItems(session)
         return <div key={session.id} className="experiment-session-row">
@@ -87,10 +89,13 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
             type="button"
             className="experiment-nav-item experiment-session-link"
             onClick={() => onChange(session)}
+            aria-label={session.title}
+            aria-description={`${labMeta[session.lab_type].label}会话`}
             aria-current={selected ? 'page' : undefined}
           >
-            <Tooltip title={session.title} placement="right" mouseEnterDelay={0.6}>
-              <span className={`block truncate text-sm leading-6 ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
+            <span className="experiment-session-type" aria-hidden="true">{labMeta[session.lab_type].icon}</span>
+            <Tooltip title={`${labMeta[session.lab_type].label}会话 · ${session.title}`} placement="right" mouseEnterDelay={0.6}>
+              <span className={`experiment-session-name ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
             </Tooltip>
           </button>
           {menuItems.length ? <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight" overlayClassName="experiment-session-dropdown">

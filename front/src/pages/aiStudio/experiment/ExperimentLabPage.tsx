@@ -109,7 +109,6 @@ export default function ExperimentLabPage() {
       sidebarTrigger={sidebarTrigger}
       sidebar={(close) => <ExperimentSessionSidebar
         value={selectedSessionId}
-        labType={selectedLabType}
         sessions={sessions}
         loading={loading}
         failedTypes={failedTypes}
@@ -136,10 +135,10 @@ export default function ExperimentLabPage() {
 
   return <ExperimentLeaveStatusContext.Provider value={register}>
     {selectedLabType === 'image'
-      ? <ImageExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
+      ? <ImageExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('实验室 · 图片')} />
       : selectedLabType === 'video'
-        ? <VideoExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
-        : <TextExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />}
+        ? <VideoExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('实验室 · 视频')} />
+        : <TextExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('实验室 · 文本')} />}
     {dialog}
   </ExperimentLeaveStatusContext.Provider>
 }

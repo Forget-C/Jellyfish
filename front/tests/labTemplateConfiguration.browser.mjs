@@ -87,7 +87,7 @@ try {
   const goToLab = async (mode) => {
     currentMode = mode
     await page.goto(origin + '/lab?session=' + mode + '-session')
-    await page.getByRole('heading', { name: `${labNames[mode]}实验室 · ${labNames[mode]}测试会话` }).waitFor()
+    await page.getByRole('heading', { name: `实验室 · ${labNames[mode]} · ${labNames[mode]}测试会话` }).waitFor()
   }
   const editor = page.getByRole('dialog', { name: '编辑模板变量' })
   const edit = page.getByRole('button', { name: '编辑变量', exact: true })

@@ -127,15 +127,10 @@
   padding: 2px;
 }
 
-.experiment-types,
 .experiment-session-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.experiment-types {
-  flex-shrink: 0;
 }
 
 .experiment-nav-item {
@@ -149,12 +144,13 @@
   background: transparent;
   border: 0;
   border-radius: 8px;
+  font-size: 14px;
+  line-height: 20px;
   text-align: start;
   cursor: pointer;
 }
 
 .experiment-nav-item:hover,
-.experiment-nav-item[aria-pressed="true"],
 .experiment-session-row:has([aria-current="page"]) {
   color: var(--app-accent, #245fc5);
   background: var(--app-selected, #e4edfb);
@@ -266,3 +262,12 @@
 .experiment-task-read-state .ant-btn { height: auto; padding: 0 4px; font-size: 12px; }
 .experiment-result-note { color: var(--app-muted); font-size: 12px; margin: 4px 0 0; }
 .experiment-result-error { color: #ad2838; }
+
+.experiment-session-heading .ant-btn { height: 32px; padding-inline: 8px; font-size: 13px; }
+.experiment-session-type { flex-shrink: 0; color: var(--app-muted); font-size: 16px; }
+.experiment-session-name { min-width: 0; overflow: hidden; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) {
+  .experiment-session-heading .ant-btn,
+  .experiment-session-dropdown .ant-dropdown-menu-item { min-height: 44px; }
+  .experiment-session-link { min-height: 44px; }
+}

@@ -100,7 +100,7 @@ try {
     await page.getByRole('button', { name: from ? '验收模型 ' + from : '选择模型', exact: true }).click()
     await page.getByRole('combobox', { name: '视频模型', exact: true }).press('ArrowDown')
     await page.getByText('验收模型 ' + to, { exact: true }).last().click()
-    await page.getByRole('heading', { name: /视频实验室/ }).click()
+    await page.getByRole('heading', { name: /实验室 · 视频/ }).click()
   }
   const getCapability = (model, from) => Promise.all([
     page.waitForResponse(response => response.url().endsWith('/video-generation-options?model_id=' + model.toLowerCase()), { timeout: 15000 }),
