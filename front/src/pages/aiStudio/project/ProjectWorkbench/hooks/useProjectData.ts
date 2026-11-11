@@ -85,6 +85,7 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
+  const [totalKnown, setTotalKnown] = useState(false)
   const [error, setError] = useState('')
   const request = useRef(0)
 
@@ -96,11 +97,11 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
       setLoading(false)
       return
     }
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setTotalKnown(false)
     try {
       if (useMock) {
         const items = mockChapters.filter(c => c.projectId === projectId && `${c.title} ${c.summary}`.includes(query))
-        setChapters(items.slice((page - 1) * pageSize, page * pageSize)); setTotal(items.length)
+        setChapters(items.slice((page - 1) * pageSize, page * pageSize)); setTotal(items.length); setTotalKnown(true)
       } else {
         const res = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({
           projectId, page, pageSize, q: query || undefined,
@@ -108,6 +109,7 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
         if (!res.data) throw new Error('章节列表读取失败')
         if (identity === request.current) {
           setChapters(res.data.items.map(toUIChapter)); setTotal(res.data.pagination?.total ?? res.data.items.length)
+          setTotalKnown(Number.isFinite(res.data.pagination?.total) && (res.data.pagination?.total ?? -1) >= 0)
         }
       }
     } catch {
@@ -122,7 +124,7 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
     return () => { request.current++ }
   }, [load])
 
-  return { chapters, loading, total, error, refresh: load }
+  return { chapters, loading, total, totalKnown, error, refresh: load }
 }
 
 export function useProjectCharacters(projectId: string | undefined) {

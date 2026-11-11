@@ -18,10 +18,13 @@ import { CostumesTab, PropsTab } from './tabs/PropsTab'
 import { FilesTab } from './tabs/FilesTab'
 import { SettingsTab } from './tabs/SettingsTab'
 import { useProject, useChapters } from './hooks/useProjectData'
-import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
+import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 import { StudioDirectingService } from '../../../../services/generated'
 import { readRecentWork } from '../../directing/workspaceContext'
 import { chapterLocation, workbenchManagementLocation } from '../../directing/chapterNavigation'
+
+import { ProjectToolbarProvider } from './ProjectContentToolbar'
+import './project-production.css'
 
 const TAB_PARAM = 'tab'
 
@@ -104,33 +107,34 @@ const ProjectWorkbench: FC = () => {
 
   return (
     <WorkspaceLayout>
-      <PageToolbar title={projectTabLabel(activeTab)}>
+      <ProjectToolbarProvider title={projectTabLabel(activeTab)} actions={
         <Space size="small" wrap className="app-page-actions">
           {(!productionPage || recentDestination) && <Button type="primary" icon={primaryCta.icon} onClick={primaryCta.onClick}>{primaryCta.label}</Button>}
           <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
             <Button icon={<EllipsisOutlined />}>更多</Button>
           </Dropdown>
         </Space>
-      </PageToolbar>
+      }>
 
-      <WorkspaceScrollPanel
-        className="app-page-content project-workbench-content animate-fadeIn"
-        style={{ animation: 'fadeIn 0.25s ease-out' }}
-      >
-        {activeTab === 'dashboard' && <DashboardTab />}
+        <WorkspaceScrollPanel
+          className="app-page-content project-workbench-content animate-fadeIn"
+          style={{ animation: 'fadeIn 0.25s ease-out' }}
+        >
+          {activeTab === 'dashboard' && <DashboardTab />}
 
-        {activeTab === 'chapters' && <ChaptersTab />}
+          {activeTab === 'chapters' && <ChaptersTab />}
 
-        {activeTab === 'actors' && <ActorsTab />}
-        {activeTab === 'roles' && <RolesTab />}
-        {activeTab === 'scenes' && <ScenesTab />}
-        {activeTab === 'props' && <PropsTab />}
-        {activeTab === 'costumes' && <CostumesTab />}
-        {activeTab === 'files' && <FilesTab />}
-        {activeTab === 'settings' && project && project.id === projectId && (
-          <SettingsTab key={project.id} project={project} saving={saving} onSave={saveProject} />
-        )}
-      </WorkspaceScrollPanel>
+          {activeTab === 'actors' && <ActorsTab />}
+          {activeTab === 'roles' && <RolesTab />}
+          {activeTab === 'scenes' && <ScenesTab />}
+          {activeTab === 'props' && <PropsTab />}
+          {activeTab === 'costumes' && <CostumesTab />}
+          {activeTab === 'files' && <FilesTab />}
+          {activeTab === 'settings' && project && project.id === projectId && (
+            <SettingsTab key={project.id} project={project} saving={saving} onSave={saveProject} />
+          )}
+        </WorkspaceScrollPanel>
+      </ProjectToolbarProvider>
     </WorkspaceLayout>
   )
 }
