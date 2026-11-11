@@ -227,8 +227,14 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {management ? <>
       <h3 id="scene-object-preparation-title">场次对象与参考</h3>
       {management.host && createPortal(<>
-        <MainButton type="primary" loading={submitting} disabled={extractionDisabled} onClick={() => void extract()}>{extractionLabel}</MainButton>
-        <MainButton onClick={management.onContinue}>{editable ? '继续到分镜与画布' : '查看本场画布'}</MainButton>
+        <MainButton type="primary" loading={submitting} disabled={extractionDisabled}
+          onClick={() => data?.candidate_task_id && !pendingRequest ? setLocalReview(data.candidate_task_id) : void extract()}>
+          {data?.candidate_task_id && !pendingRequest ? '核对对象差异' : extractionLabel}
+        </MainButton>
+        <MainButton type="text" onClick={management.onContinue}>{editable ? '继续到分镜与画布' : '查看本场画布'}</MainButton>
+        {data?.candidate_task_id && !pendingRequest && <Dropdown trigger={['click']} menu={{ items: [
+          { key: 'extract', label: action, disabled: extractionDisabled, onClick: () => void extract() },
+        ] }}><MainButton type="text" icon={<MoreOutlined />} aria-label="对象步骤更多操作" /></Dropdown>}
       </>, management.host)}
     </> : <div className="scene-canvas-list-header">
       <h2 id="scene-object-preparation-title">场次对象与参考</h2>
@@ -246,10 +252,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       description={data.task.error} />}
     {data?.task?.status === 'cancelled' && <Alert type="warning" message="对象提取已取消，已保留此前准备" />}
     {data?.source_changed && <Alert type="warning" showIcon message="场次原文已变更，请重新提取对象后核对参考。" />}
-    {data?.candidate_task_id && <Alert type="info" showIcon message="对象候选已就绪，当前准备仍可使用。" action={management
-      ? <MainButton onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>核对对象差异</MainButton>
-      : <Button onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>核对对象差异</Button>} />}
-    {reviewTaskId && <SceneObjectCandidateReview key={reviewTaskId} {...scope} taskId={reviewTaskId} editable={editable}
+    {data?.candidate_task_id && <Alert type="info" showIcon message="对象候选已就绪，当前准备仍可使用。" action={!management && <Button onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>核对对象差异</Button>} />}
+    {reviewTaskId && <SceneObjectCandidateReview key={reviewTaskId} {...scope} taskId={reviewTaskId} editable={editable} management={!!management}
       onClose={() => {
         setLocalReview(undefined)
         if (management?.candidateTaskId) management.clearCandidateTask()
@@ -364,7 +368,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       event.target.value = ''
       if (object && file) void upload(object, file)
     }} />
-    <AssetModal title="新建并关联资产" open={!!draft} width={480} closable={!saving} maskClosable={false} styles={assetModalStyles}
+    <AssetModal className={management ? 'management-object-dialog' : undefined} title="新建并关联资产" open={!!draft} width={480} closable={!saving} maskClosable={false} styles={assetModalStyles}
       onCancel={() => { if (!saving) setDraft(undefined) }}
       onOk={() => void create()} confirmLoading={saving}
       okText={draft?.attempted ? '核实并重试关联' : '创建并关联'} cancelText="取消"
@@ -379,7 +383,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           onChange={event => setDraft({ ...draft, description: event.target.value })} />
       </div>}
     </AssetModal>
-    <AssetModal title={assetEditor ? `准备${kinds[assetEditor.kind]}图片 · ${assetEditor.name}` : '准备资产图片'}
+    <AssetModal className={management ? 'management-object-dialog' : undefined} title={assetEditor ? `准备${kinds[assetEditor.kind]}图片 · ${assetEditor.name}` : '准备资产图片'}
       open={!!assetEditor} closable={false} keyboard={false} maskClosable={false} footer={null}
       width="min(1200px, 96vw)" styles={assetModalStyles} destroyOnClose>
       {assetEditor && <AssetEditPageBase assetId={assetEditor.id} {...assetAdapters[assetEditor.kind]} embedded backTo="本场资产" onNavigate={closeAsset} />}

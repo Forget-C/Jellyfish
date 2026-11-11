@@ -34,3 +34,38 @@
   .project-chapter-list .chapter-table .ant-table-cell { width: auto !important; }
 }
 .project-workbench-content.app-page-content { padding-inline: var(--app-page-gutter); }
+
+.project-content-toolbar.app-page-toolbar { min-height: 56px; padding: 10px 20px; gap: 8px; background: transparent; border: 0; }
+.project-content-toolbar .app-page-title { font-size: 16px; font-weight: 600; }
+.project-content-toolbar-slot:not([hidden]) { display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 0; gap: 8px; flex-wrap: wrap; }
+.project-content-toolbar-leading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.project-toolbar-count { color: var(--app-muted); font-size: 12px; }
+.project-content-toolbar .ant-input-search { width: 240px; max-width: 100%; }
+.project-content-toolbar .ant-btn, .project-content-toolbar .ant-input-affix-wrapper { min-height: 32px; font-size: 13px; border-radius: 8px; }
+.project-chapter-list .project-production-surface { padding: 12px 16px; }
+.project-chapter-list .chapter-title-link { height: auto; white-space: normal; text-align: left; padding-inline: 0; font-size: 14px; font-weight: 600; }
+.project-chapter-list .chapter-table .ant-btn { font-size: 13px; }
+.project-chapter-list .chapter-table .ant-space { gap: 8px !important; }
+.project-chapter-list .chapter-table .ant-btn-link { padding-inline: 0; }
+.project-chapter-list .chapter-list-production { align-items: flex-start; flex-direction: column; }
+@media (max-width: 767px) {
+  .project-content-toolbar.app-page-toolbar { padding-inline: 16px; }
+  .project-content-toolbar .ant-btn, .project-content-toolbar .ant-input-affix-wrapper { min-height: 36px; }
+  .project-content-toolbar-leading { flex: 1 1 100%; }
+  .project-chapter-list .chapter-table .ant-table-cell { padding: 12px 8px; }
+}
+
+.project-overview .project-section-title, .project-overview .project-section-heading h3 { font-size: 14px; font-weight: 600; }
+.project-overview .project-current-chapter h3 { font-size: 14px; font-weight: 600; }
+.project-overview .project-production-surface { padding: 16px; }
+.project-overview a { color: var(--app-accent); font-size: 13px; text-decoration: none; }
+.project-overview a:hover { color: var(--app-accent); text-decoration: underline; }
+.project-overview a:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; border-radius: 4px; }
+.project-overview-scene-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.project-overview-scene-list a { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 8px; }
+.project-overview-scene-list a span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.project-overview-scene-list a .anticon { flex-shrink: 0; }
+.project-overview .ant-btn { font-size: 13px; }
+
+.project-overview .project-overview-grid { gap: 20px; }
+.project-overview .project-current-chapter p { font-size: 12px; }

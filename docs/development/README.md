@@ -7,6 +7,7 @@
 - [开发规范](standards/development.md)
 - [文档规范](standards/documentation.md)
 - [首页与项目列表前端规范](standards/home-project-ui.md)
+- [项目内部页前端规范](standards/project-internal-ui.md)
 - [管理页面前端规范](standards/management-ui.md)
 - [实验室前端规范](standards/experiment-lab-ui.md)
 - [工作台前端设计标准](standards/workbench-design.md)

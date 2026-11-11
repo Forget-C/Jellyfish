@@ -24,9 +24,9 @@ const taskStatus = { queued: '对象提取排队中', running: '正在提取对�
   cancelled: '对象提取已取消', succeeded: '对象提取已完成，暂无可核对差异' }
 
 /** 只确认当前预览，未知结果保留原命令，过期预览要求重新核对。 */
-export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, taskId, editable, onClose }: {
+export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, taskId, editable, onClose, management = false }: {
   projectId: string; chapterId: string; sequenceId: string; taskId: string;
-  editable: boolean; onClose: () => void;
+  editable: boolean; onClose: () => void; management?: boolean;
 }) {
   const [preview, setPreview] = useState<CandidateReview>()
   const [loading, setLoading] = useState(true)
@@ -80,7 +80,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
   }
   const adopted = typeof preview?.applied_revision === 'number'
   const hasCandidate = preview?.candidate_available
-  return <Modal title={hasCandidate ? '核对对象差异' : '对象提取任务'} open width={660} closable={!applying} keyboard={!applying}
+  return <Modal className={management ? 'management-object-dialog management-object-review-dialog' : undefined} title={hasCandidate ? '核对对象差异' : '对象提取任务'} open width={660} closable={!applying} keyboard={!applying}
     maskClosable={false} onCancel={onClose}
     styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
     footer={<Space><Button disabled={applying} onClick={onClose}>{adopted || !hasCandidate ? '关闭' : '暂不应用'}</Button>
