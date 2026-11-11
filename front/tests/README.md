@@ -352,3 +352,5 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 `generation-canvas-narrative` 覆盖叙事概览、节拍、事件与镜头的共享预设应用及重开恢复、字段引用、关系与覆盖节拍排序、镜头画面目标、只读及桌面／390px 布局。
 
 `sound-constraint` 覆盖声音与连续性约束八类共享入口、预设、字段引用、对白版本、原有声音／证据／验收关系与390px布局。
+
+工作台画布管理回归复用 `workbench-canvas-creation`、`workbench-canvas-cards`、`workbench-canvas-rename` 和 `workbench-storyboard-retry`：覆盖更多菜单中的空白创建、提交身份核实、未提交配置保护、候选采用与独立画布打开、失败恢复及更名。卡片用例同时核对双主题与桌面／矮屏／窄屏布局、长任务详情的底部操作和键盘关闭焦点；所有任务使用既有隔离后端，不验证真实供应商生成质量。

@@ -94,19 +94,33 @@ try {
   assert.deepEqual(await ordering(), ['新分镜方案', '旧空白方案'])
   await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
   await page.getByRole('textbox', { name: '画布名称' }).fill('还未提交的方案')
-  await card('新分镜方案').getByRole('button', { name: '打开画布' }).click()
+  await card('新分镜方案').getByRole('button', { name: /^(打开画布|进入画布)$/ }).click()
   const discard = page.getByRole('dialog', { name: '有未提交的配置' })
   await discard.getByRole('button', { name: '继续填写' }).click()
+  await page.getByRole('button', { name: '暂不处理', exact: true }).click()
+  assert.equal(await page.getByRole('textbox', { name: '画布名称', exact: true }).inputValue(), '还未提交的方案')
   await search.fill('方案')
   assert.equal(await card('新分镜方案').getByText('最近打开', { exact: true }).count(), 0)
   await card('旧空白方案').getByText('最近打开', { exact: true }).waitFor()
   await search.fill('')
-  await card('新分镜方案').getByRole('button', { name: '查看分镜' }).click()
+  await card('新分镜方案').getByRole('button', { name: /^(打开画布|进入画布)$/ }).click()
   await discard.getByRole('button', { name: '放弃配置' }).click()
   await page.locator('[data-card-type="direction.shot"]').first().waitFor()
   await page.goBack()
   await card('新分镜方案').getByText('最近打开', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'desktop.png') })
+  for (const theme of ['雾蓝纯色', '雾蓝微渐变']) {
+    await page.getByRole('button', { name: '用户与语言设置', exact: true }).click()
+    await page.getByRole('menuitemradio', { name: theme, exact: true }).click()
+    for (const [width, height] of [[1440,900],[1366,768],[1024,440],[375,812]]) {
+      await page.setViewportSize({ width, height })
+      await card('新分镜方案').getByRole('button', { name: '打开画布', exact: true }).scrollIntoViewIfNeeded()
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '卡片内容不得造成页面横向溢出')
+      await page.screenshot({ path: join(output, `cards-${theme}-${width}.png`), animations: 'disabled' })
+    }
+    await page.setViewportSize({ width: 1366, height: 900 })
+  }
+
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('button', { name: '切换场次' }).waitFor()
@@ -132,7 +146,10 @@ try {
   await details.getByText(failed.task_id, { exact: true }).waitFor()
   await details.getByRole('button', { name: '关闭分镜任务详情' }).press('Enter')
   await details.waitFor({ state: 'hidden' })
-  await failedCard.getByRole('button', { name: '打开画布' }).waitFor()
+  await failedCard.getByRole('button', { name: '失败后保留的方案更多操作', exact: true }).and(page.locator(':focus')).waitFor()
+
+  await failedCard.getByRole('button', { name: '处理提取问题', exact: true }).waitFor()
+  assert.equal(await failedCard.getByRole('button', { name: '打开画布', exact: true }).count(), 0)
 
   const canvasListRequest = '**/directing/chapters/' + chapter + '/sequences/' + sequence.id + '/canvases'
   await page.route(canvasListRequest, route => route.abort('failed'), { times: 1 })
@@ -142,6 +159,32 @@ try {
   await failedCard.waitFor()
   await retry.click()
   await retry.waitFor({ state: 'hidden' })
+
+  // HTTP-boundary fixture: long real-field values must keep management details usable.
+  const longName = '雨夜码头连续性方案'.repeat(12)
+  await page.route(canvasListRequest, async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    body.data.canvases = body.data.canvases.map(canvas => canvas.id === failed.canvas_id
+      ? { ...canvas, name: longName, latest_storyboard: { ...canvas.latest_storyboard, error: '需要核对上游场次依据。'.repeat(120) } } : canvas)
+    await route.fulfill({ response, json: body })
+  })
+  await page.reload()
+  await page.setViewportSize({ width: 1024, height: 440 })
+  const longCard = card(longName)
+  await longCard.getByRole('button', { name: longName + '更多操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '查看任务详情', exact: true }).click()
+  await details.waitFor()
+  const close = details.getByRole('button', { name: '关闭分镜任务详情', exact: true })
+  const closeBox = await close.boundingBox()
+  assert.ok(closeBox && closeBox.y >= 0 && closeBox.y + closeBox.height <= 440, '矮屏长任务详情底部操作可达')
+  await close.focus()
+  await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]') && !document.querySelector('.ant-zoom-appear'))
+  await page.screenshot({ path: join(output, 'task-detail-short-viewport.png'), animations: 'disabled' })
+  await page.keyboard.press('Escape')
+  await details.waitFor({ state: 'hidden' })
+  await longCard.getByRole('button', { name: longName + '更多操作', exact: true }).and(page.locator(':focus')).waitFor()
+
 } finally {
   if (backend.exitCode === null) {
     await request(api + '/test/runtime-controls', 'POST', { disconnect: true, storyboard_release: 100 }).catch(() => {})
