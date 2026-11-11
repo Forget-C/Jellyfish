@@ -732,3 +732,15 @@
   .generation-requirement-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
   .generation-requirement-columns .instruction-relation-lines { display: block; }
 }
+
+.chapter-editor-modal { top: 24px; padding-bottom: 24px; }
+.chapter-editor-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); border-radius: 12px; padding: 16px; }
+.chapter-editor-modal .ant-modal-header, .chapter-editor-modal .ant-modal-footer { flex-shrink: 0; }
+.chapter-editor-modal .ant-modal-body { min-height: 0; overflow-y: auto; }
+@media (max-width: 767px) {
+  .chapter-editor-modal { top: 0; padding-bottom: 0; }
+  .chapter-editor-modal .ant-modal-content { max-height: 100dvh; border-radius: 0; }
+}
+.chapter-editor-modal .ant-modal-title { font-size: 16px; font-weight: 600; }
+.chapter-editor-modal .ant-btn { font-size: 13px; }
+.chapter-editor-modal .ant-modal-footer { margin-top: 16px; }

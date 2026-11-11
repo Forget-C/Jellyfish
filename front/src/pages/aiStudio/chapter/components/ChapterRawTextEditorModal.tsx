@@ -612,7 +612,7 @@ export function ChapterRawTextEditorModal({
         }
         styles={{
           header: { paddingRight: 48 },
-          body: { maxHeight: '70vh', overflow: 'auto', paddingTop: 12 },
+          body: { maxHeight: 'calc(100dvh - 220px)', overflowY: 'auto', paddingTop: 12 },
         }}
       >
         <Alert type="info" showIcon message="改变章节内容后不会自动更新场次。" description="此处的章节内容指章节原文；仅修改名称或精简文本不会改变场次原文依据。" style={{ marginBottom: 12 }} />
