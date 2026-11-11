@@ -113,7 +113,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       ? rememberedStep : scene?.canvas_count ? 'storyboard' : 'objects'
   const step = explicitStep && explicitStep !== 'division' ? explicitStep : initialStep(selected)
   const returnSearch = typeof state?.managementReturn === 'string' ? state.managementReturn : undefined
-  const returnScene = returnSearch ? current.find(scene => scene.id === new URLSearchParams(returnSearch).get('sequence')) : undefined
+  const returnScene = current.find(scene => scene.id === (returnSearch ? new URLSearchParams(returnSearch).get('sequence') : explicitId))
   const divisionTarget = current.find(scene => scene.id === explicitId)?.id
   const loading = !overview && !error
   const hasActive = scenes.some(scene => [scene.object_task, scene.storyboard_task]
@@ -218,7 +218,9 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       {loadError}
       <PageToolbar className="management-division-heading">
         <Button type="text" icon={<ArrowLeftOutlined />} title={returnScene ? '返回场次制作' : '返回章节列表'} aria-label={returnScene ? '返回场次制作' : '返回章节列表'} disabled={updatingDivision}
-          onClick={() => returnScene ? drafts.transition(() => navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })) : returnToChapters()} />
+          onClick={() => returnScene ? drafts.transition(() => returnSearch
+            ? navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })
+            : select(returnScene.id, initialStep(returnScene))) : returnToChapters()} />
         <h2 ref={regionHeading} tabIndex={-1}>本章场次划分</h2>
       </PageToolbar>
       {retiredNotice}

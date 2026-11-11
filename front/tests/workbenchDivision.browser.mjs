@@ -73,7 +73,12 @@ try {
   const list = page.getByRole('complementary', { name: '本章场次' })
   const draftList = page.getByRole('complementary', { name: '划场场次列表' })
   const openDivision = page.getByRole('button', { name: '场次划分', exact: true })
-  const enterProduction = page.getByRole('button', { name: '进入场次制作', exact: true })
+  const enterProduction = { click: async () => {
+    await page.getByRole('button', { name: /^返回(场次制作|章节列表)$/ }).click()
+    if (new URL(page.url()).searchParams.get('tab') === 'chapters') {
+      await page.locator(`[data-chapter-workbench=${JSON.stringify(chapter)}]`).click()
+    }
+  } }
   assert.equal(await list.count(), 0)
   await draftList.getByRole('button', { name: /后院/ }).click()
   await page.waitForFunction(() => document.querySelector('.source-selection')?.textContent === '后院下雨。')
@@ -100,6 +105,7 @@ try {
   await page.screenshot({ path: join(output, 'division.png') })
 
   await enterProduction.click()
+  await list.getByRole('button',{name:/后院暴雨/}).click()
   await page.getByRole('heading', { name: '后院暴雨', exact: true }).waitFor()
   const metadata = page.getByRole('dialog', { name: '编辑场次名称与顺序' })
   await page.getByRole('button', { name: '编辑场次名称与顺序' }).click()
@@ -143,9 +149,9 @@ try {
   await page.getByText('章节原文已变化，请核对场次范围。', { exact: true }).waitFor()
   await enterProduction.click()
   await list.getByRole('button', { name: /前厅/ }).click()
-  await page.getByRole('button', { name: '分镜与画布〔本场〕' }).click()
+  await page.getByRole('button', { name: '分镜与画布' }).click()
   await page.getByRole('button', { name: '前往核对场次范围' }).click()
-  await page.getByRole('button', { name: '返回该场次制作' }).waitFor()
+  await page.getByRole('button', { name: '返回场次制作' }).waitFor()
   assert.equal(await title.inputValue(), '前厅')
   assert.equal((await request(chapterApi)).sequences[0].source_text, '前厅点灯。')
   assert.equal((await request(firstApi + '/objects')).source_changed, false)
@@ -161,7 +167,7 @@ try {
   await page.getByRole('button', { name: '保存新版本' }).click()
   await preview.getByRole('button', { name: '保存本章划分' }).click()
   await page.getByText('已保存，共 2 个场次').waitFor()
-  await page.getByRole('button', { name: '返回该场次制作' }).click()
+  await page.getByRole('button', { name: '返回场次制作' }).click()
   await list.getByRole('button', { name: /前厅.*对象准备已过时/ }).waitFor()
   await page.getByText('对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。').waitFor()
   assert.equal(await page.getByText('章节原文已变化，仍使用本场已确认摘录。', { exact: true }).count(), 0)
