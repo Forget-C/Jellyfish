@@ -123,6 +123,18 @@ class ControlledModel:
         if os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1' and '放下信封' in args['script_text']:
             revised = '前门的阿同放下信封。'
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'front', 'excerpt': revised}]}, ensure_ascii=False))
+        if control.get('storyboard_structure_choices') and args.get('mode') == 'complete':
+            subject = next(item['id'] for item in args['objects'] if item['kind'] == 'character')
+            selected = '"selected_option": {' in messages[-1].content
+            if len(messages) > 2 and not selected:
+                return SimpleNamespace(content=json.dumps({'structure_choices': [{
+                    'id': 'include-subject', 'title': '补充镜头参与对象',
+                    'impact': '镜头 only 增加已准备人物，保留等待设计和镜头结构。',
+                    'instruction': '将设计主体加入镜头 only 的 object_ids'}]}))
+            return SimpleNamespace(content=json.dumps({'shots': [{
+                'id': 'only', 'excerpt': args['script_text'], 'object_ids': [subject] if selected else [],
+                'designs': [{'id': 'blocking', 'card_type': 'direction.blocking', 'object_id': subject,
+                             'fields': {'position': {'state': 'proposal', 'text': '保持原地等待'}}}]}]}))
         if args.get('mode') in ('complete', 'faithful'):
             if storyboard_recovery_fixture and len(messages) == 2:
                 from httpx import ConnectError
@@ -268,7 +280,7 @@ async def set_control(body: dict = Body(...)):
     if storyboard_recovery_fixture:
         for key in ('storyboard_release', 'storyboard_fail_on', 'storyboard_review_release',
                     'storyboard_review_fail_on', 'storyboard_review_conflict_on', 'storyboard_repair_on',
-                    'storyboard_repair_release', 'storyboard_recheck_release'):
+                    'storyboard_repair_release', 'storyboard_recheck_release', 'storyboard_structure_choices'):
             if key in body:
                 control[key] = body[key]
     return control

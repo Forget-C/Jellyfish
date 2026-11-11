@@ -41,6 +41,7 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         '目标使用现有 shot_id、design_id 和 field_id；全场 designs 的 shot_id 为空，镜头自身字段的 design_id 为空。'
         '同一全场字段适用多个镜头时须列全受影响镜头；不得将原文事实、待定、结构或无关设计作为修正目标。'
         '若有 recheck_shot_ids，重点复核这些镜头及连续性边界，同时如实报告发现的问题。'
+        '冲突必须引用具体字段原文并解释为何无法同时满足；只因描述含糊、空间基准不明或可能省略扭身动作时标 insufficient_basis。不得因修正困难把真实冲突降级。'
         '没有问题返回空 issues。只返回符合以下结构的 JSON：'
     )
     if inputs.get('saved_canvas_check'):

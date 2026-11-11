@@ -118,7 +118,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
     {appliedRisks && <Button onClick={() => setReportOpen('applied')}>
       {appliedCheck?.review_state === 'stale' ? '已接受的检查风险依据已变' : '查看已接受的检查风险'}
     </Button>}
-    {task?.pending_application && task.review_state !== 'stale' && <SceneStoryboardReview savedCheck
+    {task?.pending_application && task.review_state !== 'stale' && <SceneStoryboardReview savedCheck repairDetails={task.repair_details}
       key={task.task_id} scope={{ ...scope, taskId: task.task_id }} editable={editable} prepare={prepare} reload={reload}
       applying={saving} report={task.review} candidate={task.candidate} onRepaired={setTask}
       apply={choice => apply({ chapterId, sequenceId, taskId: task.task_id }, choice)} />}

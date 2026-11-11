@@ -20,7 +20,8 @@ class RepairField:
     shots: tuple[str, ...]
 
 
-def repair_fields(draft: SceneStoryboard, report: StoryboardReviewReport, protected: set[str]) -> dict[tuple, RepairField]:
+def repair_fields(draft: SceneStoryboard, report: StoryboardReviewReport, protected: set[str],
+                  reasons: list[str] | None = None) -> dict[tuple, RepairField]:
     """Allow only explicitly identified proposals whose whole scope was reviewed."""
     plan = StoryboardDesignPlan(draft)
     shots = {shot.id: shot for shot in draft.shots}
@@ -33,15 +34,24 @@ def repair_fields(draft: SceneStoryboard, report: StoryboardReviewReport, protec
                 key = plan.design_key(target.shot_id, target.design_id)
                 piece = plan.fields.get((key, target.field_id))
                 if not piece:
+                    if reasons is not None:
+                        reasons.append('目标设计字段不存在')
                     continue
                 note, scope = piece.notes[target.field_id], piece.scope.shots
             elif target.shot_id in shots and target.field_id in SHOT_FIELDS:
                 key = f'shot:{target.shot_id}' + (':beat' if target.field_id == 'beat' else '')
                 note, scope = getattr(shots[target.shot_id], target.field_id), (target.shot_id,)
             else:
+                if reasons is not None:
+                    reasons.append('目标不是允许定向修正的字段')
                 continue
-            if (note and note.state == 'proposal' and set(scope) <= set(issue.shot_ids)
-                    and not any(item == key or item.startswith(key + ':scope:') for item in protected)):
+            reason = ('目标不是可修改的设计建议' if not note or note.state != 'proposal' else
+                      '审查未覆盖目标的全部适用镜头' if not set(scope) <= set(issue.shot_ids) else
+                      '目标包含受保护的人工修改' if any(item == key or item.startswith(key + ':scope:') for item in protected) else '')
+            if reason:
+                if reasons is not None:
+                    reasons.append(reason)
+            else:
                 allowed[target.key] = RepairField(target, note, scope)
     return allowed
 
@@ -52,6 +62,7 @@ def repair_storyboard(llm, inputs: dict) -> StoryboardRepairResult:
         '只修正 repair_targets 中的提议正文，针对 review 的矛盾给出最少的 edits。'
         '使用相同 shot_id、design_id、field_id，text 仅含修正后的可执行描述。'
         '保留原文事实、因果、对象、镜头顺序、范围、关联和所有其他字段。'
+        '优先保留原文事实、人工决定与共享空间安排，选择影响字段最少的方案；修正朝向后核对持物可见性。不同解会明显改变视觉意图且无法判断时不要擅自取舍。'
         '不能确定如何修正时省略该项；无安全修改时返回空 edits。只返回符合结构的 JSON：'
     )
     return invoke_storyboard_json(llm, inputs, StoryboardRepairResult, instruction, '分镜修正返回无效，原草案已保留')

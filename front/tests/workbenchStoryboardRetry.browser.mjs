@@ -206,6 +206,7 @@ try {
   const camera = correctedCanvas.document.cards.find(card => card.type === 'direction.camera')
   assert.equal(camera.fields.viewpoint.text, '保持原地，固定机位切近')
   assert.equal((await readControls()).storyboard_repair_calls, 1)
+  assert.ok((await data(sceneApi + '/storyboards/' + repairTask.task_id)).structure_issues.length)
 
   await page.reload()
   const checkButton = page.getByRole('button', { name: '检查分镜连续性', exact: true })
@@ -235,6 +236,33 @@ try {
   await ordinaryChecked.locator('[data-card-type="direction.shot"]').first().waitFor()
   assert.equal(await ordinaryChecked.getByRole('button', { name: '检查分镜连续性', exact: true }).count(), 0)
   await ordinaryChecked.close()
+
+  await control({ storyboard_structure_choices: true, storyboard_repair_on: 0 })
+  const structureTask = await data(sceneApi + '/storyboards', 'POST', {
+    name: '结构纠错方案', request_id: 'structure-options', mode: 'complete',
+  })
+  const structurePath = sceneApi + '/storyboards/' + structureTask.task_id
+  await poll(() => data(structurePath), value => value.status === 'failed')
+  await page.goto(management)
+  const structureCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '结构纠错方案', exact: true }) })
+  await structureCard.getByRole('button', { name: '重试分镜', exact: true }).click()
+  const structureDialog = page.getByRole('dialog', { name: '核对重试分镜', exact: true })
+  const correct = structureDialog.getByRole('button', { name: '继续纠错', exact: true })
+  await structureDialog.getByRole('radio', { name: '补充镜头参与对象', exact: true }).waitFor()
+  await structureDialog.getByText('镜头 only 增加已准备人物，保留等待设计和镜头结构。', { exact: true }).waitFor()
+  assert.equal(await correct.isDisabled(), true)
+  await structureDialog.getByRole('radio', { name: '补充镜头参与对象', exact: true }).check()
+  assert.equal(await correct.isEnabled(), true)
+  await page.waitForTimeout(350) // Wait for the modal entrance animation before visual evidence.
+  await page.screenshot({ path: join(output, 'structure-options-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await structureDialog.evaluate(element => element.scrollWidth <= element.clientWidth), true)
+  await page.waitForTimeout(350)
+  await page.screenshot({ path: join(output, 'structure-options-narrow.png') })
+  await correct.click()
+  await structureCard.getByRole('button', { name: '核对分镜', exact: true }).waitFor()
+  assert.equal((await data(studio + '/generation-canvases/' + project + '/' + structureTask.canvas_id)).revision, 0)
+
 } finally {
   if (backend.exitCode === null) await control({ disconnect: true, storyboard_release: 100, storyboard_review_release: 100,
     storyboard_repair_release: true, storyboard_recheck_release: true }).catch(() => {})

@@ -245,7 +245,7 @@ export function GenerationCanvasWorkspace({
       action={<Button onClick={() => setCandidateRefresh(value => value + 1)}>重试读取分镜</Button>} />}
     {candidateTask && candidateTask === reviewTask && chapterId && sequenceId && current?.document.storyboard?.task_id !== candidateTask &&
       <SceneStoryboardReview key={candidateTask} scope={{ projectId, chapterId, sequenceId, taskId: candidateTask }} editable={ownership.editable && !editor.recovery && !editor.conflict}
-        report={discovered?.result?.review} candidate={candidate} onRepaired={receiveRepair}
+        structureIssues={discovered?.result?.structure_issues} repairDetails={discovered?.result?.repair_details} report={discovered?.result?.review} candidate={candidate} onRepaired={receiveRepair}
         reviewedOverwrite={discovered?.result?.reviewed_overwrite_card_ids}
         prepare={editor.prepareReview} reload={editor.reload} applying={saving} saveError={editor.error}
         apply={async choice => {

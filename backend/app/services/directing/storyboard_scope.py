@@ -104,7 +104,10 @@ class StoryboardDesignPlan:
             notes = {**design.fields, **{'phase:' + phase.id: phase.frame for phase in design.phases}}
             by_scope = {}
             for name, note in notes.items():
-                scope = _applicability(note, owner, design, shots, occurrences, result.conditions)
+                try:
+                    scope = _applicability(note, owner, design, shots, occurrences, result.conditions)
+                except ValueError as error:
+                    raise ValueError(f'{error}：设计 {prefix}，字段 {name}') from error
                 by_scope.setdefault(scope, {})[name] = note
             if design.card_type in UNIQUE_STORY_CARDS and len(by_scope) > 1:
                 raise ValueError('同一节拍、事件、对白或验收身份的范围不可冲突，请拆分适用设计')
@@ -118,7 +121,9 @@ class StoryboardDesignPlan:
                 piece = DesignPiece(key, owner, design, scope, scoped_notes)
                 if (design.object_id and not piece.carries_subject
                         and any(design.object_id not in shots[key].object_ids for key in scope.shots)):
-                    raise ValueError('设计主体未参与其声明的镜头')
+                    missing = [key for key in scope.shots if design.object_id not in shots[key].object_ids]
+                    raise ValueError(f'设计主体未参与其声明的镜头：设计 {prefix}，字段 {", ".join(scoped_notes)}，'
+                                     f'对象 {design.object_id}，镜头 {", ".join(missing)}；请核对设计范围或实际参与对象，不得机械补充对象')
                 self.pieces.append(piece)
                 self.fields.update({(prefix, name): piece for name in scoped_notes})
 
@@ -141,7 +146,11 @@ class StoryboardDesignPlan:
         used = set()
         for name, note in piece.notes.items():
             for relation in note.dependencies:
-                source = self.locate(piece.owner, relation.design_id, relation.field_id)
+                try:
+                    source = self.locate(piece.owner, relation.design_id, relation.field_id)
+                except ValueError as error:
+                    identity = self.design_key(piece.owner, piece.design.id)
+                    raise ValueError(f'{error}：设计 {identity}，字段 {name}，引用 {relation.design_id}.{relation.field_id}') from error
                 inline = not relation.candidate and relation.relation in ('context', 'anchor')
                 marker = (name if inline else None, source.key, relation.relation, relation.candidate)
                 if marker not in used:
@@ -162,19 +171,22 @@ class StoryboardDesignPlan:
         dependency_graph = {}
         for piece in self.pieces:
             dependencies = set()
-            for _, source, relation in self.relations(piece):
+            for name, source, relation in self.relations(piece):
                 output, target = RELATIONS[relation.relation]
                 rule = policies.get((source.design.card_type, output, piece.design.card_type, target))
                 if source.key == piece.key or not rule or not relation.candidate and not rule.adoption_allowed:
-                    raise ValueError('设计依赖与真实卡片端点不匹配')
+                    raise ValueError(f'设计依赖与真实卡片端点不匹配：设计 {self.design_key(piece.owner, piece.design.id)}，字段 {name}')
                 if not relation.candidate and (not source.scope.includes(piece.scope)
                         or not self._allows_subject(result, source, piece)):
-                    raise ValueError('设计依赖不能将其他镜头、阶段、条件或参与对象的字段带入制作')
+                    raise ValueError(f'设计依赖不能将其他镜头、阶段、条件或参与对象的字段带入制作：设计 {self.design_key(piece.owner, piece.design.id)}，字段 {name}')
                 dependencies.add(source.key)
             if piece.design.frame_target:
-                source = self.frame(piece.owner, piece.design.frame_target)
+                try:
+                    source = self.frame(piece.owner, piece.design.frame_target)
+                except ValueError as error:
+                    raise ValueError(f'{error}：设计 {self.design_key(piece.owner, piece.design.id)}，字段 frame_target') from error
                 if not source.scope.includes(piece.scope):
-                    raise ValueError('构图画面目标超出适用范围')
+                    raise ValueError(f'构图画面目标超出适用范围：设计 {self.design_key(piece.owner, piece.design.id)}，字段 frame_target')
                 dependencies.add(source.key)
             dependency_graph[piece.key] = dependencies
         while dependency_graph:

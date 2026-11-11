@@ -43,12 +43,13 @@ RESULT_CONTRACTS = {STORYBOARD_KIND: SceneStoryboard, STORYBOARD_ORGANIZATION: S
 
 
 class DirectingOutputError(ValueError):
-    """可显示的结构错误摘要，不携带模型正文或上游连接信息。"""
+    """可显示的错误摘要；模型输出仅保存在任务内部诊断中。"""
 
     def __init__(self, message: str, diagnostics: SceneDesignDiagnostics | None = None):
         """模型主动返回的工作单另存只读诊断，不混入错误摘要或成功结果。"""
         super().__init__(message)
         self.diagnostics = diagnostics
+        self.storyboard_structure: dict | None = None
 
 
 def generate_directing_result(kind: str, llm, args: dict):
@@ -68,6 +69,8 @@ def generate_directing_result(kind: str, llm, args: dict):
             "不强求所有部门和字段都有值，不改变原文情节，不编造人物、道具资产、文件、模型和画布身份。"
             "先确定全场共同状态：人物与道具的位置、相对朝向、持物手、动作状态、摄影机轴线所在侧。"
             "用已有空间、站位、表演和连续性卡表达，不额外输出隐藏工作单。原文未写明的共同状态在忠实模式保留 undecided；完整模式只补必要的可拍安排并标为 proposal。"
+            "明确区分人物自身左右、画面左右与靠近镜头的一侧，避免使用有歧义的画面前方。人物扭身或机位改变必须明确交代。"
+            "提交前交叉核对共享机位、人物朝向、持物可见性与景别，逐镜安排不得与共享设计矛盾。"
             "逐镜核对前镜后态和本镜前态，用 direction.continuity 的 before、change、after、following_constraints 写清继承状态、允许变化、结束状态及后续约束。"
             "摄影切到人物、道具或动作细节只改变展示范围，不凭空让人物入场、换手、换位或改变动作阶段。对象出画仍须保持场内状态。"
             "镜头 object_ids 只列实际出现的对象，使用准备对象 ID，或原文确有漏提时使用 missed_objects 中有出处的临时 ID。场所可列入这里。"
@@ -155,6 +158,13 @@ def generate_directing_result(kind: str, llm, args: dict):
                       + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(model_args, ensure_ascii=False)),
     ]
+    structure_saved = args.get('structure_resume') if kind == STORYBOARD_KIND else None
+    if structure_saved:
+        from app.services.directing.storyboard_structure import structure_feedback
+        messages.append(HumanMessage(content=structure_feedback(structure_saved)))
+    structure_failed = structure_saved
+    structure_original = structure_saved.get('draft') if structure_saved else None
+    structure_issues = structure_saved.get('issues', []) if structure_saved else []
     unit_repair_scope = None
     retained_fields = set()
     retained_reasons = set()
@@ -164,11 +174,17 @@ def generate_directing_result(kind: str, llm, args: dict):
         original_notes = design_note_fields(original)
         retained_fields = {path for path, note in original_notes.items() if note.text}
         retained_reasons = {path for path, note in original_notes.items() if note.reason}
-    for attempt in range(2):
+    for attempt in range(1 if structure_saved else 2):
+        if kind == STORYBOARD_KIND and structure_failed and args.get('structure_checkpoint'):
+            args['structure_checkpoint'](structure_failed)
         scope_issues = []
         try:
             response = llm.invoke(messages)
         except (HTTPError, APIError) as error:
+            if kind == STORYBOARD_KIND and structure_failed:
+                failure = DirectingOutputError('结构纠错调用未完成，原输出已保留，请核对后重试')
+                failure.storyboard_structure = structure_failed
+                raise failure from error
             if candidate is None:
                 raise
             candidate.diagnostics = SceneDesignDiagnostics(output='',
@@ -184,8 +200,21 @@ def generate_directing_result(kind: str, llm, args: dict):
         if text.startswith("```") and "\n" in text:
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         try:
+            if kind == STORYBOARD_KIND and structure_original:
+                from app.services.directing.storyboard_structure import structure_choices
+                choices = structure_choices(text)
+                if choices is not None:
+                    reason = json.loads(text).get('reason') or ('关联存在多种合理解释，需要选择修正方向。' if choices else '缺少可靠修正依据，无法自动决定对象关联或设计范围。')
+                    reason = str(reason)[:1200]
+                    failure = DirectingOutputError('结构纠错需要创作选择，请核对方案后继续' if choices else '无法形成可靠纠错方案，请核对设计依据或明确重新生成')
+                    failure.storyboard_structure = {'output': text, 'draft': structure_original,
+                        'issues': structure_issues + [reason], 'options': choices}
+                    raise failure
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             if kind == STORYBOARD_KIND:
+                if structure_original:
+                    from app.services.directing.storyboard_structure import validate_structure_repair
+                    validate_structure_repair(structure_original, result.model_dump(mode='json'), structure_issues, args['objects'])
                 validate_storyboard(result, args)
             if kind == STORYBOARD_ORGANIZATION:
                 validate_organization(result, args)
@@ -245,11 +274,13 @@ def generate_directing_result(kind: str, llm, args: dict):
                             f'{issue.owner}.{issue.field}：{issue.reason}' for issue in issues))
             break
         except (ValidationError, ValueError) as error:
+            if isinstance(error, DirectingOutputError) and error.storyboard_structure:
+                raise
             errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources' if isinstance(error, DesignSourceError) else 'design'], 'msg': str(error)}]
             if accept_candidate and scope_issues:
                 errors = [{'loc': issue.path[:-1] if issue.code == 'empty_row_scope' else issue.path,
                     'msg': issue.reason, 'type': issue.code} for issue in scope_issues]
-            if attempt == 1:
+            if attempt == 1 or structure_saved:
                 diagnostics = (SceneDesignDiagnostics(output=content,
                     issues=[('.'.join(map(str, item['loc'])) or '工作单') + '：' + item['msg'] for item in errors])
                     if require_complete else None)
@@ -261,10 +292,25 @@ def generate_directing_result(kind: str, llm, args: dict):
                 if kind == 'directing_unit_design' and not isinstance(error, ValidationError):
                     raise DirectingOutputError('单元方案范围校验失败：' + str(error)) from None
                 paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
-                raise DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths), diagnostics) from None
+                failure = DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths), diagnostics)
+                if kind == STORYBOARD_KIND:
+                    from app.services.directing.storyboard_structure import retained_structure
+                    failure.storyboard_structure = retained_structure(text, paths)
+                    if structure_original:
+                        failure.storyboard_structure['draft'] = structure_original
+                        failure.storyboard_structure['issues'] = structure_issues + paths
+                raise failure from None
             # 结构、来源与单元范围共用一次纠错，沿用 Worker 的取消回调和总时限。
             feedback = errors
+            if kind == STORYBOARD_KIND:
+                from app.services.directing.storyboard_structure import retained_structure
+                structure_issues = [('.'.join(map(str, item['loc'])) or '工作单') + '：' + item['msg'] for item in errors]
+                structure_failed = retained_structure(text, structure_issues)
+                structure_original = structure_failed['draft']
             repair_instruction = '只修正以下结构、关联或来源错误，保留原文事实和既有设计意图，返回完整 JSON：\n'
+            if kind == STORYBOARD_KIND:
+                from app.services.directing.storyboard_structure import CHOICE_INSTRUCTION
+                repair_instruction = CHOICE_INSTRUCTION + repair_instruction
             if kind == 'directing_unit_design':
                 repair_instruction = ('修正以下单元方案结构或范围错误，保留用户要求和本次局部执行目标。'
                     '局部动作与完整设计项不一致时，修正选择，不得扩大 action_scope 为完整镜头来绕过校验；'

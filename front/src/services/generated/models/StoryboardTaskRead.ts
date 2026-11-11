@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { StoryboardCandidate } from './StoryboardCandidate';
+import type { StoryboardRepairDetails } from './StoryboardRepairDetails';
 import type { StoryboardReviewReport } from './StoryboardReviewReport';
 import type { TaskStatus } from './TaskStatus';
 /**
@@ -17,6 +18,8 @@ export type StoryboardTaskRead = {
     candidate_available?: boolean;
     retry_of_task_id?: (string | null);
     review_state?: ('pending' | 'incomplete' | 'passed' | 'warning' | 'conflict' | 'accepted' | 'stale' | null);
+    structure_issues?: Array<string>;
+    repair_details?: (StoryboardRepairDetails | null);
     pending_application?: boolean;
     candidate?: (StoryboardCandidate | null);
     review?: (StoryboardReviewReport | null);

@@ -163,6 +163,8 @@ class SceneStoryboardService(SceneObjectService):
         """保留原配置与画布身份，仍按当前画布基线组织差异。"""
         await self._scene(chapter_id, sequence_id)
         failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        if body.regenerate and (body.structure_choice_id or body.targeted_repair or body.review_plan):
+            raise ValueError('重新生成不能同时选择局部纠错')
         if body.review_plan:
             if body.targeted_repair or body.use_saved_objects or body.basis_token:
                 raise ValueError('请单独提交本次画布方案的审查选择')
@@ -171,17 +173,18 @@ class SceneStoryboardService(SceneObjectService):
             return await self._targeted_repair(chapter_id, sequence_id, failed, body)
         if failed.status not in (TaskStatus.failed, TaskStatus.cancelled):
             raise RevisionConflict('只有失败或取消的分镜任务可以重试')
-        if self._review_source(failed) or failed.kind == STORYBOARD_CHECK_KIND:
+        if not body.regenerate and (self._review_source(failed) or failed.kind == STORYBOARD_CHECK_KIND):
             return await self._retry_review(chapter_id, sequence_id, failed, body)
         request = self._retry_request(failed, body.request_id, body.basis_token, use_saved=body.use_saved_objects)
         return await self._submit(chapter_id, sequence_id, request,
-                                  canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id)
+                                  canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id, regenerate=body.regenerate, structure_choice_id=body.structure_choice_id)
 
     @staticmethod
     def _retry_request(failed: Task, request_id: str, basis_token: str | None = None, *,
                        use_saved: bool = False, preview: bool = False) -> StoryboardReextractRequest:
         """保留原任务实际文本模型，单独记录本次确认依据。"""
-        config = {**failed.input_snapshot['storyboard_request'], 'request_id': request_id,
+        config = {**{key: value for key, value in failed.input_snapshot['storyboard_request'].items()
+                     if key not in ('regenerate', 'structure_choice_id')}, 'request_id': request_id,
                   'basis_token': basis_token, 'use_saved_objects': use_saved}
         if basis_token or preview:
             config['text_model_id'] = failed.input_snapshot['model_id']
@@ -210,6 +213,9 @@ class SceneStoryboardService(SceneObjectService):
         basis = await self._storyboard_basis(sequence, chapter, objects, inputs, canvas=canvas, settings=settings)
         return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis,
             source_kind='confirmed_scene' if body.adopt_current_source else 'fixed',
+            structure_only=bool(((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('draft')),
+            structure_issues=((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('issues', []),
+            structure_options=((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('options', []),
             mode=body.mode, text_model_name=model.name, production_model_id=body.production_model_id,
             production_model_name=production.name if production else None, pending_modality=body.pending_modality or 'image')
 
@@ -359,9 +365,14 @@ class SceneStoryboardService(SceneObjectService):
             raise RevisionConflict('对象提取进行中，请等待或明确使用已保存对象继续')
 
     async def _submit(self, chapter_id: str, sequence_id: str, body: StoryboardRequest,
-                      *, canvas_id: str | None = None, retry_of_task_id: str | None = None) -> StoryboardTaskRead:
+                      *, canvas_id: str | None = None, retry_of_task_id: str | None = None, regenerate: bool = False,
+                      structure_choice_id: str | None = None) -> StoryboardTaskRead:
         sequence, chapter = await self._scene(chapter_id, sequence_id, lock=True)
         request = body.model_dump(mode='json')
+        if regenerate:
+            request['regenerate'] = True
+        if structure_choice_id:
+            request['structure_choice_id'] = structure_choice_id
         existing = await self.db.scalar(self._storyboards(sequence_id).where(
             Task.input_snapshot['storyboard_request']['request_id'].as_string() == body.request_id))
         if existing:
@@ -412,6 +423,21 @@ class SceneStoryboardService(SceneObjectService):
         args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
                 'objects': model_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
+        if retry_of_task_id and not regenerate:
+            failed = await self.db.get(Task, retry_of_task_id)
+            saved = ((failed.result or {}).get('storyboard_structure')
+                     or failed.input_snapshot['run_args'].get('structure_resume'))
+            prior_args = {key: value for key, value in failed.input_snapshot['run_args'].items() if key != 'structure_resume'}
+            if saved and saved.get('draft'):
+                if prior_args != args:
+                    raise RevisionConflict('提取依据已变化，无法继续原草案纠错，请明确选择重新生成')
+                options = saved.get('options', [])
+                selected = next((option for option in options if option['id'] == structure_choice_id), None)
+                if options and not selected:
+                    raise RevisionConflict('请先选择本次结构纠错方案')
+                if structure_choice_id and not selected:
+                    raise ValueError('纠错方案已失效，请重新核对')
+                args['structure_resume'] = {**saved, 'selected_option': selected}
         protected = await self.storyboard_repair_protections(canvas.id, sequence_id) if canvas_id else set()
         current = (await CanvasStore(self.db, self.project_id).get(canvas.id)).document if canvas_id else canvas.document
         review_basis = capture_review_basis(CanvasDocument.model_validate(current))
@@ -785,6 +811,8 @@ class SceneStoryboardService(SceneObjectService):
             elif summary['review_state'] is None:
                 summary['review_state'] = review_state(task.status, 'pending')
         return StoryboardTaskRead(**summary, candidate=candidate, pending_application=pending,
+            structure_issues=((task.result or {}).get('storyboard_structure') or (task.result or {}).get('structure_history') or {}).get('issues', []),
+            repair_details=(task.result or {}).get('repair_details'),
             review=(task.result or {}).get('review'), accepted_conflict_ids=sorted(accepted), saved_check=saved_check,
             reviewed_overwrite_card_ids=task.input_snapshot.get('review_overwrite_card_ids', []))
 

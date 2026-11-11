@@ -40,10 +40,12 @@ export function StoryboardReviewFindings({ report, candidate, action }: {
 }
 
 /** Compare the saved revision and exact overwrite selection before applying. */
-export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, savedCheck, reviewedOverwrite }: {
+export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, savedCheck, reviewedOverwrite, repairDetails, structureIssues }: {
   scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<StoryboardReviewPreparation | undefined>;
   reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
   report?: StoryboardReviewReport | null; candidate?: StoryboardCandidate | null;
+  repairDetails?: StoryboardTaskRead['repair_details'];
+  structureIssues?: string[];
   onRepaired: (result: StoryboardTaskRead) => void;
   savedCheck?: boolean;
   reviewedOverwrite?: string[];
@@ -162,6 +164,17 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     setSelected(values => overwrite ? [...values, id] : values.filter(value => value !== id))
   }
   return <>
+    {!!structureIssues?.length && <details><summary>已完成结构纠错，查看原问题</summary>
+      <ul>{structureIssues.map((issue, index) => <li key={index}>{issue}</li>)}</ul></details>}
+    {repairDetails && <details>
+      <summary>{repairDetails.status === 'applied' ? `已修正 ${repairDetails.changes?.length ?? 0} 个字段` : '查看修正结果'} · 剩余 {report?.issues.filter(issue => issue.kind === 'conflict').length ?? 0} 项冲突</summary>
+      <p>{repairDetails.reason}</p>
+      {repairDetails.changes?.map((change, index) => <div key={index}>
+        <strong>{change.shot_id || '共享设计'} · {change.design_id} · {change.field_id}</strong>
+        <p>修改前：{change.before}</p><p>修改后：{change.after}</p>
+      </div>)}
+      <details><summary>修正前的审查意见</summary><StoryboardReviewFindings report={repairDetails.before_review} candidate={candidate} /></details>
+    </details>}
     {savedCheck ? <Button disabled={!editable} loading={opening} onClick={() => void open()}>核对检查差异</Button> :
     <Alert type="warning" showIcon message={baseline === undefined && error ? error :
       hasConflicts ? '分镜存在设计冲突，现有画布内容已保留。' : '分镜结果待应用，现有画布内容已保留。'}

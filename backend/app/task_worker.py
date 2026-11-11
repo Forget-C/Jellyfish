@@ -273,7 +273,8 @@ class TaskWorker:
             await self._fail(task_id, "continuity_changed", str(error))
         except DirectingOutputError as error:
             await self._fail(task_id, 'directing_output_invalid', str(error),
-                result={'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None)
+                result=({'storyboard_structure': error.storyboard_structure} if error.storyboard_structure else
+                        {'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None))
         except Exception as error:
             await self._fail(task_id, "submission_failed", self._error_message(error))
 
@@ -422,7 +423,7 @@ class TaskWorker:
             generated = SceneStoryboard.model_validate(saved['review_draft'])
             if saved['review_production']:
                 generated.attach_production(StoryboardOrganization.model_validate({'shots': saved['review_production']}))
-            repair = saved.get('review_repair')
+            repair = None if targeted else saved.get('review_repair')
         else:
             generated = await self._run_script(task, llm, args, stopped)
             async with self.sessions() as db:
@@ -430,6 +431,12 @@ class TaskWorker:
                 await db.commit()
         async with self.sessions() as db:
             checkpoint = await self._prepare_storyboard_checkpoint(db, task, generated, repair)
+            prior = saved if source_id else (await db.get(Task, task.id)).result or {}
+            structure_history = prior.get('structure_history') or prior.get('storyboard_structure')
+            if structure_history:
+                checkpoint['structure_history'] = structure_history
+            if source_id and not targeted and saved.get('repair_details'):
+                checkpoint['repair_details'] = saved['repair_details']
             stage = 'rechecking_storyboard' if repair else 'repairing_storyboard' if targeted else 'reviewing_storyboard'
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, stage):
                 return
@@ -441,6 +448,11 @@ class TaskWorker:
             checkpoint, review = await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review, selected)
             if checkpoint is None:
                 return
+        details = checkpoint.get('repair_details')
+        if details and details['status'] == 'applied':
+            details['reason'] = ('修正已完成并通过复查。' if review.state == 'passed' else
+                                 '修正已完成，复查仍存在设计冲突。' if review.state == 'conflict' else
+                                 '修正已完成，复查仍有依据不足的提示。')
         async with self.sessions() as db:
             candidate = {key: checkpoint[key] for key in ('base_revision', 'document')}
             if review.state == 'conflict' or task.input_snapshot.get('reextract_canvas_id'):
@@ -448,7 +460,10 @@ class TaskWorker:
             if 'reviewed_plan_fingerprint' in checkpoint:
                 candidate['reviewed_plan_fingerprint'] = checkpoint['reviewed_plan_fingerprint']
             await TaskService(db).finish(task.id, result={**candidate, 'review_state': review.state,
-                'review': review.model_dump(mode='json')})
+                'review': review.model_dump(mode='json'),
+                'review_repair': checkpoint.get('review_repair'),
+                'repair_details': checkpoint.get('repair_details'),
+                'structure_history': checkpoint.get('structure_history')})
             await db.commit()
 
     async def _saved_storyboard_check(self, task: Task, llm, stopped: Event) -> None:
@@ -592,11 +607,17 @@ class TaskWorker:
         """Spend the single automatic attempt before sending it, then recheck the valid change."""
         async with self.sessions() as db:
             protected = await self._storyboard_protected_designs(db, task)
-            allowed = repair_fields(generated, selected, protected)
+            reasons = []
+            allowed = repair_fields(generated, selected, protected, reasons)
             if not allowed:
+                reason = '；'.join(dict.fromkeys(reasons)) or '审查未提供可安全修改的目标字段'
+                checkpoint['repair_details'] = {'status': 'unavailable', 'reason': reason,
+                    'before_review': review.model_dump(mode='json'), 'changes': []}
                 return checkpoint, review
             repair = {'report': review.model_dump(mode='json'), 'recheck_shot_ids': []}
-            checkpoint = {**checkpoint, 'review_repair': repair}
+            checkpoint = {**checkpoint, 'review_repair': repair, 'repair_details': {
+                'status': 'attempted', 'reason': '已使用本次自动修正机会；中断后不重复修正。',
+                'before_review': review.model_dump(mode='json'), 'changes': []}}
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'repairing_storyboard'):
                 return None, review
         inputs = {**self._storyboard_review_inputs(task, checkpoint), 'review': selected.model_dump(mode='json'),
@@ -606,12 +627,24 @@ class TaskWorker:
         repaired = generated.model_copy(deep=True)
         async with self.sessions() as db:
             current = repair_fields(repaired, selected, await self._storyboard_protected_designs(db, task, lock=True))
-            scope = apply_repair(repaired, edits, {key: field for key, field in current.items() if key in allowed})
+            eligible = {key: field for key, field in current.items() if key in allowed}
+            changes = [{**edit.model_dump(mode='json', exclude={'text'}), 'before': eligible[edit.key].note.text,
+                        'after': edit.text} for edit in edits.edits if edit.key in eligible
+                       and eligible[edit.key].note.text != edit.text]
+            scope = apply_repair(repaired, edits, eligible)
             if not scope:
+                invalid = len({edit.key for edit in edits.edits}) != len(edits.edits) or any(edit.key not in eligible for edit in edits.edits)
+                checkpoint['repair_details'].update(status='rejected' if invalid else 'no_change',
+                    reason='修正包含越界或重复字段，整批修改未采用。' if invalid else '模型未返回有效变化，原草案已保留。')
                 return checkpoint, review
             validate_storyboard(repaired, task.input_snapshot['run_args'])
             repair = {**repair, 'recheck_shot_ids': scope}
+            details = {**checkpoint['repair_details'], 'status': 'applied', 'reason': '修正已通过结构校验，仍需复查。', 'changes': changes}
+            history = checkpoint.get('structure_history')
             checkpoint = await self._prepare_storyboard_checkpoint(db, task, repaired, repair)
+            if history:
+                checkpoint['structure_history'] = history
+            checkpoint['repair_details'] = details
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'rechecking_storyboard'):
                 return None, review
         return checkpoint, await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
@@ -803,6 +836,23 @@ class TaskWorker:
 
     async def _run_script(self, task: Task, llm, args: dict, stopped: Event, *, execute=None):
         """等待超时不代表线程退出；线程实际结束前继续占用文本名额。"""
+        if task.kind == 'directing_storyboard' and execute is None:
+            loop = asyncio.get_running_loop()
+            async def checkpoint_structure(saved):
+                async with self.sessions() as db:
+                    return await self._save_storyboard_checkpoint(db, task, {'storyboard_structure': saved}, 'repairing_structure')
+            def checkpoint(saved):
+                pending = asyncio.run_coroutine_threadsafe(checkpoint_structure(saved), loop)
+                try:
+                    ready = pending.result(timeout=10)
+                except TimeoutError as error:
+                    pending.cancel()
+                    failure = DirectingOutputError('结构纠错保存超时，请稍后重试')
+                    failure.storyboard_structure = saved
+                    raise failure from error
+                if not ready:
+                    raise DirectingOutputError('任务已取消，停止结构纠错')
+            args = {**args, 'structure_checkpoint': checkpoint}
         future = asyncio.wrap_future(self.text_pool.submit(execute, llm, args) if execute else
                                      self.text_pool.submit(generate_script_result, task.kind, llm, args))
         self.text_threads[task.id] = future

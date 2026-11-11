@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { StoryboardBasis } from './StoryboardBasis';
+import type { StoryboardStructureOption } from './StoryboardStructureOption';
 /**
  * 本次重试实际可采用的依据与沿用的模型配置。
  */
@@ -16,4 +17,7 @@ export type StoryboardRetryBasis = {
     production_model_name?: (string | null);
     pending_modality: 'image' | 'video';
     review_only?: boolean;
+    structure_only?: boolean;
+    structure_issues?: Array<string>;
+    structure_options?: Array<StoryboardStructureOption>;
 };

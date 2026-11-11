@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Descriptions, Modal, Space, Spin } from 'antd'
+import { Alert, Button, Descriptions, Modal, Radio, Space, Spin } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { SceneCanvasSummary, StoryboardRetry, StoryboardRetryBasis } from '../../../services/generated'
@@ -42,6 +42,8 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [useSaved, setUseSaved] = useState(false)
+  const [regenerate, setRegenerate] = useState(false)
+  const [choice, setChoice] = useState<string>()
   const mounted = useRef(false), sending = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -51,7 +53,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   useEffect(() => {
     if (!target) return
     let active = true
-    setPreview(undefined); setError(''); setUseSaved(false); setLoading(true)
+    setPreview(undefined); setError(''); setUseSaved(false); setChoice(undefined); setRegenerate(false); setLoading(true)
     const request = Directing.directingStoryboardRetryBasis({ projectId, chapterId, sequenceId, taskId: target })
     void request.then(response => {
       if (!active) return
@@ -105,10 +107,11 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   const basis = preview?.basis
   const ready = retryable && task?.task_id === target && !!basis && !basis.preparation_stale
     && (!basis.object_task_active || basis.preparation_revision > 0 && useSaved)
+    && (regenerate || !preview?.structure_options?.length || !!choice)
   const confirm = () => {
     if (pending) void submit(pending)
     else if (ready && basis && target) void submit({ taskId: target, body: {
-      request_id: crypto.randomUUID(), basis_token: basis.token, use_saved_objects: basis.object_task_active && useSaved,
+      request_id: crypto.randomUUID(), basis_token: basis.token, regenerate, structure_choice_id: regenerate ? undefined : choice, use_saved_objects: basis.object_task_active && useSaved,
     } })
   }
   const verifyLabel = '核实重试'
@@ -121,7 +124,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
     <Modal title={reviewOnly ? '核对重试审查' : '核对重试分镜'} open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
       <Button aria-label="关闭重试确认" onClick={() => setTarget(undefined)}>关闭</Button>
       <Button type="primary" loading={submitting} disabled={!pending && !ready} onClick={confirm}>
-        {pending ? verifyLabel : '确认重试'}
+        {pending ? verifyLabel : regenerate ? '确认重新生成' : preview?.structure_only ? '继续纠错' : preview?.structure_issues?.length ? '确认重新生成' : '确认重试'}
       </Button>
     </Space>}>
       <p>{reviewOnly ? '已保留分镜草案。本次从审查阶段继续，结果仍需核对后应用。'
@@ -131,6 +134,29 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
         && <Button size="small" onClick={refresh}>重新读取依据</Button>} />}
       {loading && <Spin aria-label="正在读取重试依据" />}
       {preview && <>
+        {!preview.review_only && <Radio.Group value={regenerate} disabled={!!pending || submitting}
+          onChange={event => setRegenerate(event.target.value as boolean)}>
+          <Radio value={false}>{preview.structure_only ? '继续原草案纠错' : '重新提取分镜'}</Radio>
+          {preview.structure_only && <Radio value={true}>重新生成整份分镜</Radio>}
+        </Radio.Group>}
+        {!preview.structure_only && !!preview.structure_issues?.length && <>
+          <p>原输出无法恢复为可靠草案，本次将重新生成整份分镜。请核对输入后明确确认。</p>
+          <ul>{preview.structure_issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
+        </>}
+        {preview.structure_only && !regenerate && <>
+          <p>仅尝试一次关联纠错，保留镜头结构和设计正文。无进展时会说明原因，不自动重新生成；结果仍需核对后应用。</p>
+          <details><summary>查看结构校验问题</summary>
+            <ul>{preview.structure_issues?.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
+          </details>
+          {!!preview.structure_options?.length && <Radio.Group value={choice} disabled={!!pending || submitting}
+            onChange={event => setChoice(event.target.value as string)}>
+            {preview.structure_options.map(option => <div key={option.id}>
+              <Radio value={option.id} aria-label={option.title}>{option.title}
+                <small style={{ display: 'block', marginTop: 4 }}>{option.impact}</small>
+              </Radio>
+            </div>)}
+          </Radio.Group>}
+        </>}
         <Descriptions column={1} size="small" items={[
           { key: 'canvas', label: '目标画布', children: canvas.name },
           { key: 'mode', label: '分镜模式', children: preview.mode === 'faithful' ? '忠实提取' : '自动产出完整分镜' },

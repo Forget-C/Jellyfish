@@ -249,9 +249,30 @@ class StoryboardTaskSummary(SceneObjectTaskRead):
     review_state: Literal['pending', 'incomplete', 'passed', 'warning', 'conflict', 'accepted', 'stale'] | None = None
 
 
+class StoryboardRepairChange(Contract):
+    """One verified proposal edit, retained independently of the final verdict."""
+
+    shot_id: Identity | None = None
+    design_id: Identity | None = None
+    field_id: Identity
+    before: str
+    after: str
+
+
+class StoryboardRepairDetails(Contract):
+    """An attempt is not evidence that a repair or its recheck succeeded."""
+
+    status: Literal['attempted', 'applied', 'no_change', 'rejected', 'unavailable']
+    reason: str = ''
+    before_review: StoryboardReviewReport
+    changes: list[StoryboardRepairChange] = Field(default_factory=list)
+
+
 class StoryboardTaskRead(StoryboardTaskSummary):
     """真实任务状态及成功后可读取的候选。"""
 
+    structure_issues: list[str] = Field(default_factory=list)
+    repair_details: StoryboardRepairDetails | None = None
     pending_application: bool = False
     candidate: StoryboardCandidate | None = None
     review: StoryboardReviewReport | None = None
@@ -281,12 +302,23 @@ class StoryboardTargetedRepair(StoryboardPlanReview):
     review_token: str = Field(min_length=64, max_length=64)
 
 
+class StoryboardStructureOption(Contract):
+    """A proposed association correction requiring an explicit creative choice."""
+
+    id: Identity
+    title: Text = Field(max_length=160)
+    impact: Text = Field(max_length=1200)
+    instruction: Text = Field(max_length=1200)
+
+
 class StoryboardRetry(Contract):
     """使用失败任务的原配置，在同一目标上提交新的文本任务。"""
 
     request_id: Identity
     basis_token: str | None = Field(default=None, min_length=64, max_length=64)
     use_saved_objects: bool = False
+    regenerate: bool = False
+    structure_choice_id: Identity | None = None
     targeted_repair: StoryboardTargetedRepair | None = Field(default=None, exclude_if=lambda value: value is None)
     review_plan: StoryboardPlanReview | None = Field(default=None, exclude_if=lambda value: value is None)
 
@@ -303,6 +335,9 @@ class StoryboardRetryBasis(Contract):
     production_model_name: str | None = None
     pending_modality: Literal['image', 'video']
     review_only: bool = False
+    structure_only: bool = False
+    structure_issues: list[str] = Field(default_factory=list)
+    structure_options: list[StoryboardStructureOption] = Field(default_factory=list)
 
 
 class StoryboardApplication(Contract):

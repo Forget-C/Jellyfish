@@ -218,6 +218,10 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 else:
                     assert len(rechecks) == 1 and not rechecks[0]['recheck_shot_ids']
             assert result['status'] == 'succeeded', result
+            if outcome == 'still_conflict':
+                assert result['repair_details']['status'] == 'applied'
+                assert result['repair_details']['changes'][0]['after'] == corrected
+
             applied_repair = outcome in ('repaired', 'still_conflict', 'recheck_timeout')
             if applied_repair:
                 assert rechecks[0]['recheck_shot_ids'] == ['first', 'second']
@@ -386,3 +390,92 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
             assert stale.status_code == 409 and stale.json()['data']['code'] == 'STORYBOARD_REVIEW_STALE'
         finally:
             worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout'])
+async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, monkeypatch, outcome):
+    calls = []
+    class ControlledModel:
+        def __init__(self, **_kwargs):
+            pass
+        def invoke(self, messages):
+            args = json.loads(messages[1].content)
+            calls.append(messages)
+            if 'storyboard_draft' in args:
+                return SimpleNamespace(content='{"issues": []}')
+            result = {'shots': [{'id': 'only', 'excerpt': '张三等待。', 'designs': [{
+                'id': 'blocking', 'card_type': 'direction.blocking', 'object_id': 'zs',
+                'fields': {'position': {'state': 'proposal', 'text': '保持原地'}}}]}],
+                'missed_objects': [{'id': 'zs', 'name': '张三', 'kind': 'character', 'excerpt': '张三等待。'}]}
+            if outcome == 'unsafe_association':
+                result['designs'] = [{'id': 'unrelated', 'card_type': 'direction.camera', 'fields': {
+                    'position': {'state': 'proposal', 'text': '保持机位', 'scope': {'shot_ids': ['only']}}}}]
+            if len(calls) == 2 and outcome.startswith('choice'):
+                return SimpleNamespace(content=json.dumps({'structure_choices': [{'id': 'include',
+                    'title': '补充镜头参与对象', 'impact': '张三参与镜头 only，保留原地等待设计',
+                    'instruction': '把已登记的张三 zs 加入镜头 only 的 object_ids'}]}))
+            if len(calls) == 3 and outcome == 'choice_timeout':
+                raise httpx.ReadTimeout('controlled structural correction timeout')
+            if len(calls) >= 3:
+                result['shots'][0]['object_ids'] = ['zs']
+                if outcome == 'unsafe_association':
+                    result['designs'][0]['fields']['position']['scope']['phase'] = 'video'
+                if outcome == 'unsafe':
+                    result['shots'][0]['designs'][0]['fields']['position']['text'] = '改成奔跑'
+            return SimpleNamespace(content=json.dumps(result))
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = '张三等待。'
+            db.add(Provider(id='structure-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            await db.flush()
+            db.add(Model(id='structure-text', name='text', category='text', provider_id='structure-provider'))
+        chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        source = await read_data(client, 'GET', chapter)
+        scene = await read_data(client, 'POST', chapter + '/sequences', {'title': '等待', 'position': 0,
+            'source_version': source['source_version'], 'span': {'start': 0, 'end': 5}})
+        path = chapter + '/sequences/' + scene['id'] + '/storyboards'
+        task = await read_data(client, 'POST', path, {'request_id': 'structure', 'text_model_id': 'structure-text'})
+        worker = TaskWorker(sessions)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            first = await read_data(client, 'GET', path + '/' + task['task_id'])
+            assert first['status'] == 'failed'
+            basis = await read_data(client, 'GET', path + '/' + task['task_id'] + '/retry/basis')
+            assert basis['structure_only']
+            assert 'blocking' in basis['structure_issues'][0] or outcome.startswith('choice')
+            if outcome.startswith('choice'):
+                assert basis['structure_options'][0]['id'] == 'include'
+                refused = await client.post(path + '/' + task['task_id'] + '/retry', json={
+                    'request_id': 'no-choice', 'basis_token': basis['basis']['token']})
+                assert refused.status_code == 409
+            retry = await read_data(client, 'POST', path + '/' + task['task_id'] + '/retry', {
+                'request_id': 'fix-structure', 'basis_token': basis['basis']['token'],
+                'structure_choice_id': 'include' if outcome.startswith('choice') else None})
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+            result = await read_data(client, 'GET', path + '/' + retry['task_id'])
+            if outcome == 'choice_timeout':
+                assert result['status'] == 'failed'
+                again = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
+                assert again['structure_only']
+                resumed = await read_data(client, 'POST', path + '/' + retry['task_id'] + '/retry', {
+                    'request_id': 'resume-structure', 'basis_token': again['basis']['token'], 'structure_choice_id': 'include'})
+                await worker.tick()
+                await asyncio.gather(*worker.jobs.values())
+                result = await read_data(client, 'GET', path + '/' + resumed['task_id'])
+            if outcome in ('unsafe', 'unsafe_association'):
+                assert result['status'] == 'failed'
+                assert len(calls) == 3
+                assert ('未涉及错误的关联' if outcome == 'unsafe_association' else '结构纠错改变了') in result['error']
+            else:
+                assert result['status'] == 'succeeded', result
+                assert result['pending_application']
+                assert len(calls) == (5 if outcome == 'choice_timeout' else 4)
+            assert '继续修正保留草案' in calls[2][-1].content
+        finally:
+            worker.text_pool.shutdown(wait=False)
+            if worker.client:
+                await worker.client.aclose()
