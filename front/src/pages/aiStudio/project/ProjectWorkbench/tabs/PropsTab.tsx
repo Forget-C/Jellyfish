@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Empty, Input, Modal, Space, message, Pagination } from 'antd'
-import { EditOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
+import { MoreOutlined, LinkOutlined, PlusOutlined, SkinOutlined, TagOutlined } from '@ant-design/icons'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectCostumeLinkRead, ProjectPropLinkRead } from '../../../../../services/generated'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { StudioAssetTypeFormModal } from '../../../assets/components/StudioAssetTypeFormModal'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import { encodeWorkbenchAssetEditReturnTo, type WorkbenchAssetTabParam } from '../utils/workbenchAssetReturnTo'
 
 type AssetKind = 'prop' | 'costume'
@@ -66,11 +67,10 @@ function LinkedAssetTab({
         pageSize: 100,
       })
 
-      const items = (res.data?.items ?? []) as any[]
-      const typedItems = items as (ProjectPropLinkRead | ProjectCostumeLinkRead)[]
-      setLinks(typedItems)
+      const items = (res.data?.items ?? []) as (ProjectPropLinkRead | ProjectCostumeLinkRead)[]
+      setLinks(items)
 
-      const ids = Array.from(new Set(items.map((l) => (kind === 'prop' ? l.prop_id : l.costume_id)).filter(Boolean))) as string[]
+      const ids = Array.from(new Set(items.map((l) => ('prop_id' in l ? l.prop_id : l.costume_id)).filter(Boolean))) as string[]
 
       const entityIdKey = kind === 'prop' ? 'prop' : 'costume'
       const detailList = await Promise.all(
@@ -141,6 +141,7 @@ function LinkedAssetTab({
   const available = useMemo(() => assets.filter((a) => !linkedIdSet.has(a.id)), [assets, linkedIdSet])
 
   const handleLink = async (assetId: string, assetName: string) => {
+    if (linkingId) return
     setLinkingId(assetId)
     try {
       if (kind === 'prop') {
@@ -174,91 +175,53 @@ function LinkedAssetTab({
       await loadLinks()
     } catch {
       message.error('取消关联失败')
+      throw new Error('取消关联失败')
     } finally {
       setUnlinkingId(null)
     }
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <Card
-        title={`项目${kind === 'prop' ? '道具' : '服装'}`}
-        extra={
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-              新建
-            </Button>
-            <Button
-              type="primary"
-              icon={<LinkOutlined />}
-              onClick={() => {
-                setSearch('')
-                setLinkModalOpen(true)
-              }}
-            >
-              从资产库关联
-            </Button>
-            <Button icon={<PlusOutlined />} onClick={() => navigate(`/assets?tab=${kind}`)}>
-              前往资产管理
-            </Button>
-          </Space>
-        }
-      >
+    <div className="project-resource-page">
+      <ProjectContentToolbar>
+        <h1 className="app-page-title">{`项目${kind === 'prop' ? '道具' : '服装'}`}</h1>
+        <Space wrap>
+          <Button type="primary" icon={<LinkOutlined />} onClick={() => { setSearch(''); setLinkModalOpen(true) }}>从资产库关联</Button>
+          <Button icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>新建</Button>
+          <Button type="link" onClick={() => navigate(`/assets?tab=${kind}`)}>查看资产库</Button>
+        </Space>
+      </ProjectContentToolbar>
         {links.length === 0 && !loading ? (
           <Empty description={`暂无项目${kind === 'prop' ? '道具' : '服装'}`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="project-resource-grid">
             {pagedLinks.map((l) => {
               const assetId = 'prop_id' in l ? l.prop_id : l.costume_id
               const asset = assetsById[assetId]
-              const linkThumb = (l as any).thumbnail as string | undefined
+              const linkThumb = l.thumbnail
               return (
                 <DisplayImageCard
+                  variant="project"
+                  imageFit="contain"
                   key={l.id}
-                  title={<div className="truncate">{asset?.name ?? assetId}</div>}
+                  title={<Link title={asset?.name ?? '资源信息暂不可用'} to={`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`}>{asset?.name ?? '资源信息暂不可用'}</Link>}
                   imageUrl={resolveAssetUrl(linkThumb ?? asset?.thumbnail)}
-                  imageAlt={asset?.name ?? assetId}
-                  extra={
-                    <Space size="small">
-                      <Button
-                        type="default"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => {
-                          const path =
-                            kind === 'prop'
-                              ? `/assets/props/${assetId}/edit`
-                              : `/assets/costumes/${assetId}/edit`
-                          navigate(`${path}?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`)
-                        }}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        size="small"
-                        danger
-                        loading={unlinkingId === l.id}
-                        onClick={() => {
-                          Modal.confirm({
-                            title: `取消关联「${asset?.name ?? assetId}」？`,
-                            okText: '取消关联',
-                            cancelText: '取消',
-                            okButtonProps: { danger: true },
-                            onOk: () => handleUnlink(l),
-                          })
-                        }}
-                      >
-                        取消关联
-                      </Button>
-                    </Space>
-                  }
-                  meta={
-                    <div className="space-y-1">
-                      <div className="text-xs text-gray-600 line-clamp-2">{asset?.description ?? '—'}</div>
-                      <div className="text-xs text-gray-500 truncate">{`${kind}_id：${assetId}`}</div>
-                    </div>
-                  }
+                  imageAlt={asset?.name ?? '资源信息暂不可用'}
+                  placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无{kind === 'prop' ? '道具' : '服装'}图片</>}
+                  extra={<Dropdown trigger={['click']} menu={{ items: [
+                    { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`) },
+                    { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
+                      Modal.confirm({
+                        className: 'project-resource-dialog',
+                        title: `取消关联「${asset?.name ?? '资源信息暂不可用'}」？`,
+                        content: '仅移除此资源与当前项目的关联，不会删除资产库中的资源。',
+                        okText: '取消关联', cancelText: '取消', okButtonProps: { danger: true },
+                        onOk: () => handleUnlink(l),
+                      })
+                    } },
+                  ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${asset?.name ?? '资源信息暂不可用'}更多操作`} /></Dropdown>}
+                  meta={<><div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div><span className="project-resource-description">已关联项目</span></>}
                 />
               )
             })}
@@ -278,7 +241,7 @@ function LinkedAssetTab({
             </div>
           </div>
         )}
-      </Card>
+
 
       <StudioAssetTypeFormModal
         open={createModalOpen}
@@ -305,9 +268,11 @@ function LinkedAssetTab({
       />
 
       <Modal
+        className="project-resource-dialog"
         title={`从资产库关联${kind === 'prop' ? '道具' : '服装'}`}
         open={linkModalOpen}
-        onCancel={() => setLinkModalOpen(false)}
+        onCancel={() => { if (!linkingId) setLinkModalOpen(false) }}
+        closable={!linkingId} keyboard={!linkingId} maskClosable={!linkingId}
         footer={null}
         width={560}
       >
@@ -340,7 +305,7 @@ function LinkedAssetTab({
                       {a.description ? <div className="text-xs text-gray-500 truncate">{a.description}</div> : null}
                     </div>
                   </div>
-                  <Button type="primary" size="small" loading={linkingId === a.id} onClick={() => handleLink(a.id, a.name)}>
+                  <Button type="primary" size="small" disabled={!!linkingId} loading={linkingId === a.id} onClick={() => handleLink(a.id, a.name)}>
                     关联到项目
                   </Button>
                 </div>
