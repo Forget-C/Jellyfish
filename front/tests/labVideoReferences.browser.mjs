@@ -1,3 +1,4 @@
+import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -84,22 +85,21 @@ try {
     return respond([])
   })
   await page.goto(origin + '/lab?session=video-a')
-  const trigger = page.getByRole('button', { name: '参考素材', exact: true })
+  const trigger = page.getByRole('button', { name: '添加内容', exact: true })
   const panel = page.getByRole('dialog', { name: '配置视频参考素材', exact: true })
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await panel.getByRole('heading', { name: '帧参考', exact: true }).waitFor()
   await panel.getByRole('heading', { name: '主体参考', exact: true }).waitFor()
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
   const prompt = page.getByRole('textbox', { name: '视频提示词', exact: true })
-  const generate = page.getByRole('button', { name: '生成视频', exact: true })
+  const generate = page.getByRole('button', { name: /^发\s*送$/, exact: true })
   const apply = panel.getByRole('button', { name: '应用参考素材', exact: true })
   const back = panel.getByRole('button', { name: '返回已选素材', exact: true })
   const chooseFile = name => panel.getByRole('button', { name, exact: true })
   const selectModel = async (from, to) => {
     await page.getByRole('button', { name: from ? '验收模型 ' + from : '选择模型', exact: true }).click()
-    await page.getByRole('combobox', { name: '视频模型', exact: true }).press('ArrowDown')
-    await page.getByText('验收模型 ' + to, { exact: true }).last().click()
+    await page.getByRole('menuitemradio', { name: '验收模型 ' + to, exact: true }).click()
     await page.getByRole('heading', { name: /实验室 · 视频/ }).click()
   }
   const getCapability = (model, from) => Promise.all([
@@ -109,7 +109,7 @@ try {
 
   await getCapability('A')
   await prompt.fill('验证混合主体素材与帧引用')
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await panel.getByRole('button', { name: '选择首帧', exact: true }).click()
   await panel.getByText('视频参考资料库读取失败', { exact: true }).waitFor()
   assert.equal(await panel.getByText('资料库中暂无图片', { exact: true }).count(), 0)
@@ -147,10 +147,11 @@ try {
   assert.equal(submissions.length, 0)
   await apply.click()
   await panel.waitFor({ state: 'hidden' })
-  await page.getByText('首帧已选 · 尾帧已选 · 关键帧已选 · 主体 2 个', { exact: true }).waitFor()
+  await page.getByRole('list', { name: '本轮参考素材', exact: true }).getByRole('button', { name: '预览首帧：验收图片 A', exact: true }).waitFor()
+  await page.getByRole('button', { name: '查看全部 6 项素材', exact: true }).waitFor()
 
   // 有效引用在取消后保持原值，上传结果可以留在资料库。
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   const first = panel.getByRole('button', { name: '选择首帧', exact: true })
   await first.click()
   let releaseUpload
@@ -161,7 +162,7 @@ try {
   await page.keyboard.press('Escape')
   await panel.waitFor({ state: 'hidden' })
   await trigger.and(page.locator(':focus')).waitFor()
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await first.click()
   releaseUpload()
   await chooseFile('上传图片 1').waitFor()
@@ -215,7 +216,7 @@ try {
   await getCapability('C', 'B')
   await page.getByText('模型未提供完整参考限制，提交时由服务端校验', { exact: true }).waitFor()
   await page.setViewportSize({ width: 375, height: 812 })
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await panel.getByRole('textbox', { name: '主体 1 名称', exact: true }).waitFor()
   assert.equal(Math.round((await panel.boundingBox()).width), 375)
   assert.equal(await panel.getByRole('textbox', { name: '主体 1 名称', exact: true }).inputValue(), subjectName)
@@ -283,7 +284,7 @@ try {
   await page.getByText('9:16', { exact: true }).last().click()
   await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor({ state: 'hidden' })
   assert.ok(await generate.isDisabled())
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   for (const label of ['首帧', '尾帧', '关键帧']) {
     await panel.getByRole('button', { name: new RegExp(`^移除${label}：`) }).click()
   }
@@ -306,7 +307,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.getByRole('button', { name: '视频会话 2', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'video-b')
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await first.click()
   uploadGate = new Promise(resolve => { releaseUpload = resolve })
   await pickFirst()
@@ -314,7 +315,7 @@ try {
   await page.goBack()
   await page.waitForURL(url => url.searchParams.get('session') === 'video-a')
   await panel.waitFor({ state: 'hidden' })
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/files/upload')),
     releaseUpload(),
@@ -322,7 +323,7 @@ try {
   assert.equal(await panel.getByRole('button', { name: '移除首帧', exact: true }).count(), 0)
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await page.reload()
-  await trigger.click()
+  await openLabAddition(page, '配置参考素材')
   await first.click()
   await chooseFile('上传图片 4').waitFor()
   assert.equal(await chooseFile('上传图片 4').getAttribute('aria-pressed'), 'false')

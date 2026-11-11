@@ -19,9 +19,7 @@
   list-style: none;
 }
 
-.experiment-reference-list.experiment-reference-summary { flex-direction: row; flex-wrap: wrap; }
 .experiment-reference-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.experiment-reference-summary .experiment-reference-row { max-width: 176px; }
 .experiment-reference-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .experiment-reference-row .ant-checkbox-wrapper { min-width: 0; overflow-wrap: anywhere; }
 
@@ -58,14 +56,23 @@
 .experiment-reference-image img.is-loading { visibility: hidden; }
 .experiment-reference-placeholder { display: grid; position: absolute; inset: 0; place-content: center; justify-items: center; gap: 4px; color: var(--app-muted, #536174); font-size: 12px; line-height: 1.1; text-align: center; overflow-wrap: anywhere; }
 .experiment-reference-image.is-full .experiment-reference-placeholder { font-size: 13px; gap: 8px; }
-.experiment-image-references .experiment-reference-count { display: none; }
 
 @media (max-width: 1023px) {
   .experiment-reference-panel { --experiment-reference-panel-width: 100vw; }
   .experiment-reference-remove { width: 44px; height: 44px; }
 }
 
-@media (max-height: 540px) {
-  .experiment-image-references .experiment-reference-summary { display: none; }
-  .experiment-image-references .experiment-reference-count { display: inline-flex; }
+.experiment-reference-summary-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.experiment-reference-summary-bar .experiment-reference-summary { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.experiment-summary-thumb { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.experiment-summary-visual { display: block; position: relative; width: 32px; height: 32px; }
+.experiment-summary-visual .experiment-reference-image { border-radius: 6px; }
+.experiment-summary-visual .experiment-reference-placeholder > span:not(.anticon) { display: none; }
+.experiment-summary-badge { position: absolute; right: 0; bottom: 0; padding: 0 2px; border-radius: 3px; font-size: 12px; line-height: 16px; color: var(--app-accent, #245fc5); background: white; }
+.experiment-summary-more.ant-btn { padding-inline: 4px; font-size: 12px; }
+.experiment-summary-video { display: flex; position: relative; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 6px; overflow: hidden; background: var(--app-selected, #e4edfb); color: var(--app-accent, #245fc5); }
+.experiment-summary-video img { width: 100%; height: 100%; object-fit: cover; }
+.experiment-summary-video img + .anticon { position: absolute; color: white; filter: drop-shadow(0 1px 2px #263244); }
+@media (pointer: coarse) {
+  .experiment-summary-thumb, .experiment-summary-more.ant-btn { min-width: 44px; height: 44px; }
 }

@@ -4,7 +4,7 @@
  * 该组件只处理图片生成特有的输入、异步任务和结果呈现；会话选择及页面布局由
  * ExperimentLabPage 统一维护，从而避免图片实验室继续作为独立页面存在。
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useRef, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { message } from 'antd'
 import {
   StudioFilesService,
@@ -18,6 +18,7 @@ import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
 import { useExperimentSubmission } from '../hooks/useExperimentSubmission'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
+import type { ExperimentReferenceHandle } from '../components/ExperimentReferencePanel'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
@@ -228,10 +229,11 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       })}
     </div>
   </ExperimentHistory>
-  const composer = <ExperimentComposer
-      submitting={disabled} submitDisabled={disabled || submission.outcomePending} submitLabel="生成图片" onSubmit={() => void handleSubmit()}
-      options={<ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="图片模型" modelPlaceholder="选择已登记的图片模型" onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />}
-      contextActions={<ImageExperimentReferences
+  const referencePicker = useRef<ExperimentReferenceHandle>(null)
+  const composer = <ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="图片模型" onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: "添加参考图", onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer
+      submitting={disabled} submitDisabled={disabled || submission.outcomePending} onSubmit={() => void handleSubmit()}
+      options={modelControl} addAction={addControl}
+      contextActions={<ImageExperimentReferences ref={referencePicker}
         key={sessionId ?? 'draft'}
         value={referenceFileIds}
         onChange={setReferenceFileIds}
@@ -241,6 +243,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         onUploaded={file => setFiles(current => [file, ...current.filter(item => item.id !== file.id)])}
         disabled={disabled}
       />}
-    >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>
+    >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
   return render({ history: historyContent, composer, clearContent, overlays: null, disabled })
 }

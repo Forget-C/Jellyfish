@@ -66,19 +66,17 @@
 .experiment-composer-options,
 .experiment-composer-submit {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
 }
 .experiment-composer-toolbar { margin-top: 8px; }
-.experiment-composer-options { flex: 1 1 200px; min-width: 0; }
-.experiment-composer-submit { justify-content: flex-end; margin-inline-start: auto; }
+.experiment-composer-options { flex: 1; min-width: 0; }
+.experiment-composer-submit { flex-shrink: 0; justify-content: flex-end; margin-inline-start: auto; }
 .experiment-composer-toolbar :is(.ant-btn, .ant-select) { height: var(--experiment-control-height); font-size: 13px; }
 .experiment-composer-toolbar .ant-select .ant-select-selector { height: 100%; }
 .experiment-composer-toolbar .ant-btn-primary:not(:disabled) { background: var(--app-accent); }
 .experiment-composer-toolbar .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
-.experiment-option-button { max-width: min(180px, 44vw); }
-.experiment-option-button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .experiment-workspace :is(button, textarea):focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: 2px;
@@ -270,4 +268,31 @@
   .experiment-session-heading .ant-btn,
   .experiment-session-dropdown .ant-dropdown-menu-item { min-height: 44px; }
   .experiment-session-link { min-height: 44px; }
+}
+
+/* 输入区底栏始终按模型、素材、添加、提交的顺序浏览。 */
+.experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: 180px; padding-inline: 8px; }
+.experiment-model-trigger > span:not(.anticon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.experiment-model-trigger .anticon { flex: none; }
+.experiment-model-trigger[aria-expanded='true'],
+.experiment-add-trigger[aria-expanded='true'] { color: var(--app-accent); background: var(--app-selected); }
+.experiment-add-trigger.ant-btn { width: var(--experiment-control-height); padding: 0; flex: none; }
+.experiment-composer-feedback { display: grid; gap: 4px; margin-top: 8px; }
+.experiment-model-panel { width: min(288px, calc(100vw - 48px)); font-size: 13px; }
+.experiment-model-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.experiment-model-panel .ant-menu { max-height: min(320px, 45dvh); overflow-y: auto; border: 0; }
+.experiment-model-panel .ant-menu-item { height: auto; min-height: 36px; line-height: 20px; padding-block: 8px; font-size: 13px; }
+.experiment-model-panel .ant-menu-item-selected { color: var(--app-accent, #245fc5); background: var(--app-selected, #e4edfb); }
+.experiment-model-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; white-space: normal; overflow-wrap: anywhere; }
+.experiment-model-row .anticon { flex: none; }
+.experiment-add-menu .ant-dropdown-menu-item { font-size: 13px; }
+.experiment-model-panel :is(button, input, li):focus-visible { outline: 2px solid var(--app-accent, #245fc5); outline-offset: -2px; }
+@media (max-width: 767px) {
+  .experiment-composer-toolbar, .experiment-composer-options, .experiment-composer-submit { gap: 4px; }
+  .experiment-model-trigger.ant-btn { padding-inline: 4px; }
+}
+@media (pointer: coarse) {
+  .experiment-composer-toolbar :is(.ant-btn, .ant-select) { min-height: 44px; height: 44px; }
+  .experiment-add-trigger.ant-btn { width: 44px; }
+  .experiment-add-menu .ant-dropdown-menu-item, .experiment-model-panel .ant-menu-item { min-height: 44px; }
 }

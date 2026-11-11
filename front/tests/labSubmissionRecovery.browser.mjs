@@ -1,3 +1,4 @@
+import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -79,7 +80,7 @@ try {
 
   await openLab('image')
   const imageInput = page.getByRole('textbox', { name: '图片提示词' })
-  const imageSubmit = page.getByRole('button', { name: '生成图片' })
+  const imageSubmit = page.getByRole('button', { name: /^发\s*送$/ })
   const prompt = '请求未接收前保留完整输入'
   await imageInput.fill(prompt)
   let entered
@@ -137,7 +138,7 @@ try {
 
   await openLab('video')
   const videoInput = page.getByRole('textbox', { name: '视频提示词' })
-  const videoSubmit = page.getByRole('button', { name: '生成视频' })
+  const videoSubmit = page.getByRole('button', { name: /^发\s*送$/ })
   await videoInput.fill('视频创建失败后可以继续编辑')
   submission = route => route.fulfill({ status: 422, json: { detail: '视频素材被拒绝' } })
   await videoSubmit.click()
@@ -205,14 +206,13 @@ try {
   modelsState = 'ready'
 
   // 创建失败及重试仍携带已应用的图片，先前取消的参考图不会回到请求。
-  const referenceTrigger = page.getByRole('button', { name: '参考图', exact: true })
-  const references = page.getByRole('dialog', { name: '配置参考图', exact: true })
-  await referenceTrigger.click()
+    const references = page.getByRole('dialog', { name: '配置参考图', exact: true })
+  await openLabAddition(page, '添加参考图')
   await references.getByRole('tab', { name: '资料库', exact: true }).click()
   await references.getByRole('checkbox', { name: '恢复参考图 A', exact: true }).check()
   await references.getByRole('button', { name: '应用参考图', exact: true }).click()
   await references.waitFor({ state: 'hidden' })
-  await referenceTrigger.click()
+  await openLabAddition(page, '添加参考图')
   await references.getByRole('tab', { name: '资料库', exact: true }).click()
   await references.getByRole('checkbox', { name: '恢复参考图 B', exact: true }).check()
   await references.getByRole('button', { name: '取消参考配置', exact: true }).click()
@@ -253,7 +253,7 @@ try {
 
   // 视频的模板变量和帧配置在创建失败后仍能原样再次提交。
   await openLab('video')
-  await page.getByRole('button', { name: '自由输入' }).click()
+  await openLabAddition(page, '选择提示词模板')
   await page.getByRole('combobox', { name: '提示词模板' }).press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('视频提示词 · 恢复模板 · v2', { exact: true }).click()
   const template = page.getByRole('dialog', { name: '编辑模板变量' })
@@ -262,7 +262,7 @@ try {
   await template.getByRole('button', { name: /^应\s*用$/ }).click()
   await template.waitFor({ state: 'hidden' })
 
-  await page.getByRole('button', { name: '参考素材', exact: true }).click()
+  await openLabAddition(page, '配置参考素材')
   const videoReferences = page.getByRole('dialog', { name: '配置视频参考素材' })
   await videoReferences.getByRole('button', { name: '选择首帧', exact: true }).click()
   await videoReferences.getByRole('button', { name: '恢复参考图 A', exact: true }).click()
@@ -272,7 +272,7 @@ try {
   submission = route => route.fulfill({ status: 422, json: { detail: '视频配置暂未通过' } })
   await videoSubmit.click()
   await page.getByText('视频配置暂未通过', { exact: true }).waitFor()
-  await page.getByText('首帧已选', { exact: true }).waitFor()
+  await page.getByRole('list', { name: '本轮参考素材', exact: true }).getByRole('button', { name: '预览首帧：恢复参考图 A', exact: true }).waitFor()
   await page.getByRole('button', { name: '编辑变量', exact: true }).click()
   assert.equal(await template.getByRole('textbox', { name: '主体', exact: true }).inputValue(), '海鸥')
   await page.keyboard.press('Escape')

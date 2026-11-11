@@ -1,12 +1,13 @@
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefCallback } from 'react'
+import { forwardRef, useImperativeHandle, useCallback, useEffect, useRef, useState, type ChangeEvent, type RefCallback } from 'react'
 import { Alert, Button, Empty, Input, Modal, Spin } from 'antd'
-import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { CloseOutlined, FolderOpenOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import type { FileRead, VideoGenerationOptionsRead } from '../../../../services/generated'
 import { useExperimentReferenceUpload } from '../hooks/useExperimentReferenceUpload'
 import { buildFileDownloadUrl } from '../../assets/utils'
+import { ExperimentReferenceSummary, type ReferenceSummaryItem } from './ExperimentReferenceSummary'
 import { ExperimentReferenceImage } from './ExperimentReferenceImage'
-import { ExperimentReferencePanel } from './ExperimentReferencePanel'
+import { ExperimentReferencePanel, type ExperimentReferenceHandle } from './ExperimentReferencePanel'
 import './experiment-video-references.css'
 
 export const frameLabels = { first: '首帧', last: '尾帧', key: '关键帧' }
@@ -72,11 +73,14 @@ function VideoReferencePreview({ file, playerRef }: { file: FileRead; playerRef:
 }
 
 /** 参考素材按角色编辑，抽屉内的临时选择在应用前不会改变本轮生成。 */
-export function VideoExperimentReferences({ value, onChange, files, libraryState, onRetryLibrary, onUploaded, capability, disabled }: Props) {
+export const VideoExperimentReferences = forwardRef<ExperimentReferenceHandle, Props>(function VideoExperimentReferences({ value, onChange, files, libraryState, onRetryLibrary, onUploaded, capability, disabled }, ref) {
+  const summaryRoot = useRef<HTMLDivElement>(null)
+  const [previewTarget, setPreviewTarget] = useState<Target>()
   const [draft, setDraft] = useState<References | null>(null)
   useExperimentLeaveStatus(draft !== null && JSON.stringify(draft) !== JSON.stringify(value))
   const [target, setTarget] = useState<Target>()
   const [preview, setPreview] = useState<FileRead>()
+  const [previewContext, setPreviewContext] = useState('')
   const previewPlayer = useRef<HTMLVideoElement | null>(null)
   const attachPlayer = useCallback((element: HTMLVideoElement | null) => {
     if (!element) previewPlayer.current?.pause()
@@ -95,6 +99,7 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
   const closePreview = () => {
     previewPlayer.current?.pause()
     setPreview(undefined)
+    setPreviewTarget(undefined)
   }
 
   const reset = () => {
@@ -132,15 +137,15 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
     if (target && file) void upload(target, file)
   }
 
-  const thumbnail = (file: FileRead, label: string) => <button type="button" className="experiment-reference-thumb" aria-label={`预览${label}：${file.name}`} onClick={() => setPreview(file)}>
+  const thumbnail = (file: FileRead, label: string, context = label) => <button type="button" className="experiment-reference-thumb" aria-label={`预览${label}：${file.name}`} onClick={() => { setPreviewTarget(undefined); setPreviewContext(`${context}：${file.name}`); setPreview(file) }}>
     {file.type === 'video' ? <VideoCameraOutlined aria-hidden="true" /> : <ExperimentReferenceImage id={file.id} name={file.name} />}
   </button>
 
-  const row = (id: string, label: string, remove: () => void) => {
+  const row = (id: string, label: string, remove: () => void, context = label) => {
     const file = files.find(item => item.id === id)
     const name = file?.name ?? id
     return <li key={id} className="experiment-reference-row">
-      {file && thumbnail(file, label)}
+      {file && thumbnail(file, label, context)}
       <span className="experiment-reference-name" title={name}>{name}</span>
       <button type="button" className="experiment-reference-remove" aria-label={`移除${label}：${name}`} onClick={remove}>
         <CloseOutlined aria-hidden="true" />
@@ -159,6 +164,14 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
     requestAnimationFrame(() => libraryTriggerRef.current?.focus({ preventScroll: true }))
   }
 
+  const returnFocus = useRef<HTMLElement | null>(null)
+  const open = (trigger?: HTMLElement | null) => {
+    returnFocus.current = trigger ?? null
+    reset()
+    setDraft(value)
+  }
+  useImperativeHandle(ref, () => ({ open }))
+
   const close = () => {
     reset()
     setDraft(null)
@@ -166,8 +179,31 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
 
   const noSubjectSupport = capability?.supports_subject_image_reference === false && capability?.supports_subject_video_reference === false
   const draftIssues = draft ? videoReferenceIssues(draft, capability) : []
-  const summary = [...frameSlots.filter(slot => value.frames[slot]).map(slot => `${frameLabels[slot]}已选`),
-    ...(value.subjects.length ? [`主体 ${value.subjects.length} 个`] : [])].join(' · ')
+  const summary: (ReferenceSummaryItem & { target: Target })[] = [
+    ...frameSlots.flatMap(slot => {
+      const id = value.frames[slot]
+      if (!id) return []
+      const file = files.find(item => item.id === id)
+      const name = file?.name ?? id
+      return [{ key: slot, id, name, label: `${frameLabels[slot]}：${name}`, kind: 'image' as const,
+        badge: { first: '首', last: '尾', key: '关' }[slot], target: { slot, kind: 'image' as const } }]
+    }),
+    ...value.subjects.flatMap(subject => subject.media.map((media, index) => {
+      const file = files.find(item => item.id === media.id)
+      const name = file?.name ?? media.id
+      return { key: `${subject.id}:${media.id}`, id: media.id, name, label: `主体 ${subject.name} · 第 ${index + 1} 项：${name}`,
+        kind: media.kind, thumbnail: file?.thumbnail, target: { subjectId: subject.id, kind: media.kind } }
+    })),
+  ]
+  const removePreview = () => {
+    if (!previewTarget || !preview || disabled) return
+    onChange('slot' in previewTarget ? { ...value, frames: { ...value.frames, [previewTarget.slot]: undefined } } : {
+      ...value, subjects: value.subjects.map(subject => subject.id === previewTarget.subjectId
+        ? { ...subject, media: subject.media.filter(media => media.id !== preview.id) } : subject),
+    })
+    closePreview()
+    returnFocus.current = summaryRoot.current?.closest('.experiment-composer')?.querySelector<HTMLElement>('.experiment-add-trigger') ?? null
+  }
 
   const limits = [
     typeof capability?.max_subjects === 'number' ? `主体最多 ${capability.max_subjects} 个` : '',
@@ -183,12 +219,14 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
     ? [draft.frames[target.slot]]
     : draft.subjects.find(subject => subject.id === target.subjectId)?.media.map(item => item.id) ?? [] : []
 
-  return <>
-    <Button icon={<PictureOutlined aria-hidden="true" />} disabled={disabled} onClick={() => {
-      reset()
-      setDraft(value)
-    }}>参考素材</Button>
-    {summary && <span className="experiment-video-reference-summary">{summary}</span>}
+  return <div ref={summaryRoot} className="experiment-video-references">
+    <ExperimentReferenceSummary items={summary} label="本轮参考素材" disabled={disabled} onOpen={open}
+      onPreview={(item, trigger) => {
+        returnFocus.current = trigger
+        setPreviewContext(item.label)
+        setPreviewTarget(summary.find(candidate => candidate.key === item.key)?.target)
+        setPreview(files.find(file => file.id === item.id) ?? { id: item.id, name: item.name, type: item.kind })
+      }} />
     <ExperimentReferencePanel
       open={draft !== null}
       title="配置视频参考素材"
@@ -196,6 +234,7 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
       applyDisabled={disabled || uploading || draftIssues.length > 0}
       previewOpen={Boolean(preview)}
       onCancel={close}
+      onAfterClose={() => returnFocus.current?.focus()}
       onApply={() => {
         if (!draft || disabled || isUploadPending() || draftIssues.length) return
         onChange(draft)
@@ -271,7 +310,7 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
               </div>
               {capability?.supports_subject_image_reference === false && !subject.media.some(item => item.kind === 'image') && <p className="experiment-reference-hint">当前模型不支持主体图片</p>}
               {capability?.supports_subject_video_reference === false && !subject.media.some(item => item.kind === 'video') && <p className="experiment-reference-hint">当前模型不支持主体视频</p>}
-              <ul className="experiment-reference-list">{subject.media.map(({ id, kind }) => row(id, `主体${index + 1}${kindLabel[kind]}`, () => toggle({ subjectId: subject.id, kind }, id, false)))}</ul>
+              <ul className="experiment-reference-list">{subject.media.map(({ id, kind }, mediaIndex) => row(id, `主体${index + 1}${kindLabel[kind]}`, () => toggle({ subjectId: subject.id, kind }, id, false), `主体 ${subject.name} · 第 ${mediaIndex + 1} 项`))}</ul>
               {subjectIssues(subject, draft.subjects, capability).map(issue => <p key={issue} role="alert" className="experiment-video-reference-issue">{issue}</p>)}
             </fieldset>)}
           </section>
@@ -279,8 +318,10 @@ export function VideoExperimentReferences({ value, onChange, files, libraryState
         {target && draftIssues.length > 0 && <p role="status" className="experiment-video-reference-issue">{draftIssues.join('；')}</p>}
       </div>}
     </ExperimentReferencePanel>
-    <Modal title={preview ? `预览参考素材：${preview.name}` : '预览参考素材'} open={Boolean(preview)} onCancel={closePreview} footer={null} width="min(820px, calc(100vw - 24px))" zIndex={1100}>
+    <Modal title={preview ? `预览参考素材：${preview.name}` : '预览参考素材'} open={Boolean(preview)} onCancel={closePreview} afterClose={() => { if (draft === null) returnFocus.current?.focus() }}
+      footer={previewTarget && draft === null ? <Button disabled={disabled} onClick={removePreview}>移除本项参考素材</Button> : null} width="min(820px, calc(100vw - 24px))" zIndex={1100}>
+      {preview && <p className="experiment-reference-hint">{previewContext}</p>}
       {preview && (preview.type === 'video' ? <VideoReferencePreview key={preview.id} file={preview} playerRef={attachPlayer} /> : <ExperimentReferenceImage key={preview.id} id={preview.id} name={preview.name} full />)}
     </Modal>
-  </>
-}
+  </div>
+})

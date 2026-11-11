@@ -1,11 +1,12 @@
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
-import { useRef, useState, type ChangeEvent } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState, type ChangeEvent } from 'react'
 import { Alert, Button, Checkbox, Empty, Modal, Spin, Tabs } from 'antd'
-import { CloseOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
+import { CloseOutlined, UploadOutlined } from '@ant-design/icons'
 import type { FileRead } from '../../../../services/generated'
 import { useExperimentReferenceUpload } from '../hooks/useExperimentReferenceUpload'
+import { ExperimentReferenceSummary } from './ExperimentReferenceSummary'
 import { ExperimentReferenceImage } from './ExperimentReferenceImage'
-import { ExperimentReferencePanel } from './ExperimentReferencePanel'
+import { ExperimentReferencePanel, type ExperimentReferenceHandle } from './ExperimentReferencePanel'
 
 type ImageExperimentReferencesProps = {
   value: string[]
@@ -17,10 +18,9 @@ type ImageExperimentReferencesProps = {
   disabled: boolean
 }
 
-const summaryLimit = 4
-
 /** 当前会话的应用值由图片模态持有，抽屉只编辑一次临时选择。 */
-export function ImageExperimentReferences({ value, onChange, files, libraryState, onRetryLibrary, onUploaded, disabled }: ImageExperimentReferencesProps) {
+export const ImageExperimentReferences = forwardRef<ExperimentReferenceHandle, ImageExperimentReferencesProps>(function ImageExperimentReferences({ value, onChange, files, libraryState, onRetryLibrary, onUploaded, disabled }, ref) {
+  const summaryRoot = useRef<HTMLDivElement>(null)
   const [draft, setDraft] = useState<string[] | null>(null)
   useExperimentLeaveStatus(draft !== null && (draft.length !== value.length || draft.some((id, index) => id !== value[index])))
   const [tab, setTab] = useState('selected')
@@ -29,11 +29,15 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
     useExperimentReferenceUpload<undefined>(onUploaded, '参考图上传失败')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const open = () => {
+  const returnFocus = useRef<HTMLElement | null>(null)
+  const open = (trigger?: HTMLElement | null) => {
+    returnFocus.current = trigger ?? null
     setDraft([...value])
     setTab('selected')
     resetUpload()
   }
+
+  useImperativeHandle(ref, () => ({ open }))
 
   const close = () => {
     setDraft(null)
@@ -61,14 +65,14 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
   }
 
   const referenceName = (id: string) => files.find(file => file.id === id)?.name ?? id
-  const referenceRow = (id: string, onRemove: () => void, summary = false) => {
+  const referenceRow = (id: string, onRemove: () => void) => {
     const name = referenceName(id)
     return <li key={id} className="experiment-reference-row">
       <button type="button" className="experiment-reference-thumb" aria-label={`预览参考图：${name}`} onClick={() => setPreview({ id, name })}>
         <ExperimentReferenceImage id={id} name={name} />
       </button>
       <span className="experiment-reference-name" title={name}>{name}</span>
-      <button type="button" className="experiment-reference-remove" aria-label={`移除参考图：${name}`} disabled={summary && disabled} onClick={onRemove}>
+      <button type="button" className="experiment-reference-remove" aria-label={`移除参考图：${name}`} disabled={disabled} onClick={onRemove}>
         <CloseOutlined aria-hidden="true" />
       </button>
     </li>
@@ -88,15 +92,10 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
     </ul>
   </>
 
-  return <div className="experiment-image-references">
-    <Button icon={<PictureOutlined aria-hidden="true" />} disabled={disabled} onClick={open}>参考图</Button>
-    {value.length > 0 && <>
-      <ul aria-label="本轮参考图" className="experiment-reference-summary experiment-reference-list">
-        {value.slice(0, summaryLimit).map(id => referenceRow(id, () => onChange(value.filter(item => item !== id)), true))}
-      </ul>
-      {value.length > summaryLimit && <Button className="experiment-reference-summary" type="text" disabled={disabled} onClick={open}>查看全部（{value.length}）</Button>}
-      <Button className="experiment-reference-count" type="text" disabled={disabled} onClick={open}>已选 {value.length} 张参考图</Button>
-    </>}
+  return <div ref={summaryRoot} className="experiment-image-references">
+    <ExperimentReferenceSummary label="本轮参考图" disabled={disabled}
+      items={value.map(id => ({ key: id, id, name: referenceName(id), label: `参考图：${referenceName(id)}`, kind: 'image' }))}
+      onOpen={open} onPreview={(item, trigger) => { returnFocus.current = trigger; setPreview({ id: item.id, name: item.name }) }} />
     <ExperimentReferencePanel
       open={draft !== null}
       title="配置参考图"
@@ -104,6 +103,7 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
       applyDisabled={disabled || uploading}
       previewOpen={Boolean(preview)}
       onCancel={close}
+      onAfterClose={() => returnFocus.current?.focus()}
       onApply={() => {
         if (draft === null || disabled || isUploadPending()) return
         onChange(draft)
@@ -123,8 +123,13 @@ export function ImageExperimentReferences({ value, onChange, files, libraryState
         { key: 'library', label: '资料库', children: library },
       ]} />
     </ExperimentReferencePanel>
-    <Modal title={preview ? `预览参考图：${preview.name}` : '预览参考图'} open={Boolean(preview)} onCancel={() => setPreview(undefined)} footer={null} width="min(820px, calc(100vw - 24px))" zIndex={1100}>
+    <Modal title={preview ? `预览参考图：${preview.name}` : '预览参考图'} open={Boolean(preview)} onCancel={() => setPreview(undefined)} afterClose={() => { if (draft === null) returnFocus.current?.focus() }}
+      footer={preview && draft === null && value.includes(preview.id) ? <Button disabled={disabled} onClick={() => {
+        onChange(value.filter(id => id !== preview.id))
+        setPreview(undefined)
+        returnFocus.current = summaryRoot.current?.closest('.experiment-composer')?.querySelector<HTMLElement>('.experiment-add-trigger') ?? null
+      }}>移除参考图</Button> : null} width="min(820px, calc(100vw - 24px))" zIndex={1100}>
       {preview && <ExperimentReferenceImage key={preview.id} id={preview.id} name={preview.name} full />}
     </Modal>
   </div>
-}
+})

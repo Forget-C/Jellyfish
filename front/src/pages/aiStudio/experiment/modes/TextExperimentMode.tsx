@@ -359,57 +359,58 @@ export function TextExperimentMode({
       </ExperimentHistory>
     ),
     composer: (
-      <ExperimentComposer
-        secondaryAction={liveRun ? <Button icon={<StopOutlined aria-hidden="true" />} danger
-          loading={stopState === 'requesting'}
-          disabled={!streamTaskIdRef.current || stopState === 'requested'}
-          onClick={() => { void handleStop().catch(() => {}) }}>停止生成</Button> : null}
-        submitting={submitting}
-        submitDisabled={submitting || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
-        onSubmit={() => void handleSubmit()}
-        options={(
-          <ExperimentOptionBar
-            models={models.map((model) => ({ id: model.id, name: model.name }))}
-            templates={templates.map((template) => ({
-              id: template.id, name: template.name, version: template.version,
-              preview: template.preview, category: textPromptCategoryLabels[template.category],
-            }))}
-            modelId={modelId}
-            selectedTemplate={selectedTemplate ?? undefined}
-            modelsLoading={modelsLoading}
-            modelsFailed={modelsFailed}
-            onRefreshModels={() => void loadModels(true)}
-            templatesLoading={templatesLoading}
-            templatesFailed={templatesFailed}
-            onRefreshTemplates={() => void loadTemplates(true)}
-            disabled={submitting}
-            modelLabel="文本模型"
-            modelPlaceholder="选择已登记的文本模型"
-            onModelChange={setModelId}
-            onTemplateChange={selectTemplate}
-            onModelOpenChange={(open) => { if (open) void loadModels() }}
-            onTemplateOpenChange={(open) => { if (open) void loadTemplates() }}
-          />
-        )}
+      <ExperimentOptionBar
+        models={models.map((model) => ({ id: model.id, name: model.name }))}
+        templates={templates.map((template) => ({
+          id: template.id, name: template.name, version: template.version,
+          preview: template.preview, category: textPromptCategoryLabels[template.category],
+        }))}
+        modelId={modelId}
+        selectedTemplate={selectedTemplate ?? undefined}
+        modelsLoading={modelsLoading}
+        modelsFailed={modelsFailed}
+        onRefreshModels={() => void loadModels(true)}
+        templatesLoading={templatesLoading}
+        templatesFailed={templatesFailed}
+        onRefreshTemplates={() => void loadTemplates(true)}
+        disabled={submitting}
+        modelLabel="文本模型"
+        onModelChange={setModelId}
+        onTemplateChange={selectTemplate}
+        onModelOpenChange={(open) => { if (open) void loadModels() }}
+        onTemplateOpenChange={(open) => { if (open) void loadTemplates() }}
       >
-        {replacementDialog}
-        {liveRun && stopState === 'requested' && <p role="status">已请求停止，等待本轮结束。</p>}
-        {liveRun && stopState === 'failed' && <p role="alert">停止生成请求失败，请重试。</p>}
-        <ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} />
-        <ExperimentPromptEditor
-          template={selectedTemplate}
-          templateValues={templateValues}
-          draft={draft}
-          placeholder="输入提示词；Shift + Enter 换行"
-          label="文本提示词"
-          disabled={submitting}
-          submitOnEnter
-          onDraftChange={setDraft}
-          onTemplateValuesChange={setTemplateValues}
-          onUseFreeInput={applyFreeInput}
-          onSubmit={() => void handleSubmit()}
-        />
-      </ExperimentComposer>
+        {({ modelControl, addControl }) => (
+          <ExperimentComposer
+            secondaryAction={liveRun ? <Button icon={<StopOutlined aria-hidden="true" />} danger
+              loading={stopState === 'requesting'}
+              disabled={!streamTaskIdRef.current || stopState === 'requested'}
+              onClick={() => { void handleStop().catch(() => {}) }}>停止</Button> : null}
+            submitting={submitting}
+            submitDisabled={submitting || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
+            onSubmit={() => void handleSubmit()}
+            options={modelControl} addAction={addControl}
+          >
+            {replacementDialog}
+            {liveRun && stopState === 'requested' && <p role="status">已请求停止，等待本轮结束。</p>}
+            {liveRun && stopState === 'failed' && <p role="alert">停止生成请求失败，请重试。</p>}
+            <ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} />
+            <ExperimentPromptEditor
+              template={selectedTemplate}
+              templateValues={templateValues}
+              draft={draft}
+              placeholder="输入提示词；Shift + Enter 换行"
+              label="文本提示词"
+              disabled={submitting}
+              submitOnEnter
+              onDraftChange={setDraft}
+              onTemplateValuesChange={setTemplateValues}
+              onUseFreeInput={applyFreeInput}
+              onSubmit={() => void handleSubmit()}
+            />
+          </ExperimentComposer>
+        )}
+      </ExperimentOptionBar>
     ),
     disabled: submitting,
   })

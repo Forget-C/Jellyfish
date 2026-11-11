@@ -1,3 +1,4 @@
+import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -106,7 +107,7 @@ try {
   // Failed and empty reads never replace the current prompt.
   failTemplates = true
   await goToLab('text')
-  await page.getByRole('button', { name: '自由输入', exact: true }).click()
+  await openLabAddition(page, '选择提示词模板')
   const error = page.getByRole('alert').filter({ hasText: '加载提示词模板失败' })
   await error.waitFor()
   failTemplates = false
@@ -140,7 +141,7 @@ try {
     await editor.waitFor({ state: 'hidden' })
     await edit.and(page.locator(':focus')).waitFor()
   }
-  await page.getByRole('button', { name: '角色与地点 · v2', exact: true }).click()
+  await openLabAddition(page, '选择提示词模板')
   failTemplates = true
   await page.getByRole('button', { name: '刷新模板', exact: true }).click()
   await error.waitFor()
@@ -169,7 +170,7 @@ try {
   const send = async (mode) => {
     await selectModel(mode)
     const run = page.waitForResponse(response => response.url().includes(`/labs/${mode}/sessions/`) && response.request().method() === 'POST')
-    await page.getByRole('button', { name: mode === 'text' ? /^发\s*送$/ : '生成' + labNames[mode] }).click()
+    await page.getByRole('button', { name: /^发\s*送$/ }).click()
     assert.ok((await run).ok())
     await page.getByText('测试结果', { exact: true }).waitFor()
   }
@@ -188,12 +189,11 @@ try {
   await convert.getByRole('button', { name: /^转\s*换$/ }).click()
   const textInput = page.getByRole('textbox', { name: '文本提示词', exact: true })
   await assertField(textInput, '角色 旅人，地点 海岸。')
-  await page.getByRole('button', { name: '自由输入', exact: true }).click()
+  await openLabAddition(page, '选择提示词模板')
   await choose('首帧图片提示词 · 固定模板 · v2')
   await replacement.getByRole('button', { name: /^替\s*换$/ }).click()
   await page.getByText('无需填写变量', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '固定模板 · v2', exact: true }).click()
-  if (!await select.isVisible()) await page.getByRole('button', { name: '固定模板 · v2', exact: true }).click()
+  await openLabAddition(page, '选择提示词模板')
   await choose('首帧图片提示词 · ' + longName + ' · v2')
   await replacement.getByRole('button', { name: /^替\s*换$/ }).click()
   await page.getByText('已填 0／共 20 个变量', { exact: true }).waitFor()
@@ -215,7 +215,7 @@ try {
 
   for (const mode of ['image', 'video']) {
     await goToLab(mode)
-    await page.getByRole('button', { name: '自由输入', exact: true }).click()
+    await openLabAddition(page, '选择提示词模板')
     await choose((mode === 'image' ? '首帧图片' : '视频提示词') + ' · 角色与地点 · v2')
     await edit.click()
     await place.fill(mode === 'image' ? '森林' : '雪原')

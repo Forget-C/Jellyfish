@@ -1,3 +1,4 @@
+import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -66,10 +67,10 @@ try {
   })
 
   await page.goto(origin + '/lab?session=image-a')
-  const trigger = page.getByRole('button', { name: '参考图', exact: true })
+  const trigger = page.getByRole('button', { name: '添加内容', exact: true })
   const panel = page.getByRole('dialog', { name: '配置参考图', exact: true })
   const choose = async name => panel.getByRole('checkbox', { name, exact: true }).check()
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.getByText('上传文件保留在资料库，应用后用于本轮实验', { exact: true }).waitFor()
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
   await panel.getByText('图片资料库读取失败', { exact: true }).waitFor()
@@ -83,7 +84,7 @@ try {
   await panel.waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: '预览参考图：参考图片 2', exact: true }).waitFor()
 
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.getByRole('button', { name: '移除参考图：参考图片 2', exact: true }).click()
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
   await choose('参考图片 3')
@@ -98,14 +99,14 @@ try {
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('参考图次序验证')
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/image-a/tasks')),
-    page.getByRole('button', { name: '生成图片', exact: true }).click(),
+    page.getByRole('button', { name: /^发\s*送$/, exact: true }).click(),
   ])
   assert.deepEqual(submissions.map(({ session, body }) => [session, body.media.references]), [[
     'image-a', [{ file_id: 'file-2', media_kind: 'image', ordinal: 0 }, { file_id: 'file-1', media_kind: 'image', ordinal: 1 }],
   ]])
 
   // 展开、重载和关闭预览不改变选择或创建任务。
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
   const broken = panel.getByRole('button', { name: '预览资料库图片：参考图片 6', exact: true })
   await broken.click()
@@ -123,7 +124,7 @@ try {
   await panel.waitFor({ state: 'hidden' })
   await trigger.and(page.locator(':focus')).waitFor()
   for (const dismiss of [() => panel.getByRole('button', { name: 'Close', exact: true }).click(), () => page.mouse.click(20, 120)]) {
-    await trigger.click()
+    await openLabAddition(page, '添加参考图')
     await panel.getByRole('button', { name: '移除参考图：参考图片 1', exact: true }).click()
     await dismiss()
     await panel.waitFor({ state: 'hidden' })
@@ -132,7 +133,7 @@ try {
 
   // 上传失败可用原文件重试；成功仅写入资料库和打开的面板草稿。
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('上传失败后保留提示词')
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   const pickUpload = () => panel.getByLabel('上传参考图文件').setInputFiles({ name: 'reference.png', mimeType: 'image/png', buffer: png })
   failUpload = true
   await pickUpload()
@@ -144,7 +145,7 @@ try {
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
   assert.equal(await page.getByRole('textbox', { name: '图片提示词', exact: true }).inputValue(), '上传失败后保留提示词')
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
   const uploaded = panel.getByRole('checkbox', { name: '上传图片 2', exact: true })
   await uploaded.waitFor()
@@ -156,14 +157,14 @@ try {
   await panel.waitFor({ state: 'hidden' })
 
   // 取消、重开后的慢上传只能进入资料库，新面板没有该项的应用选择。
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   let releaseUpload
   uploadGate = new Promise(resolve => { releaseUpload = resolve })
   await pickUpload()
   await panel.getByText('正在上传参考图', { exact: true }).waitFor()
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
   releaseUpload()
   const late = panel.getByRole('checkbox', { name: '上传图片 3', exact: true })
@@ -177,14 +178,14 @@ try {
   await page.getByRole('button', { name: '图片会话 2', exact: true }).click()
   await page.getByRole('button', { name: '放弃未发送内容并离开', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-b')
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   uploadGate = new Promise(resolve => { releaseUpload = resolve })
   await pickUpload()
   await panel.getByText('正在上传参考图', { exact: true }).waitFor()
   await page.goBack()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-a')
   await panel.waitFor({ state: 'hidden' })
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/files/upload')),
     releaseUpload(),
@@ -192,7 +193,7 @@ try {
   await panel.getByRole('tab', { name: '已选素材（0）', exact: true }).waitFor()
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await page.reload()
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.getByRole('tab', { name: '资料库', exact: true }).click()
   const lateFromOtherSession = panel.getByRole('checkbox', { name: '上传图片 4', exact: true })
   await lateFromOtherSession.waitFor()
@@ -206,17 +207,17 @@ try {
   await panel.getByRole('button', { name: '应用参考图', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
   const summary = page.getByRole('list', { name: '本轮参考图', exact: true })
-  assert.equal(await summary.getByRole('listitem').count(), 4)
-  await page.getByRole('button', { name: '查看全部（5）', exact: true }).click()
+  assert.equal(await summary.getByRole('listitem').count(), 3)
+  await page.getByRole('button', { name: '查看全部 5 项素材', exact: true }).click()
   await panel.getByRole('button', { name: `预览参考图：${longName}`, exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'image-reference-desktop.png'), animations: 'disabled' })
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
   await page.setViewportSize({ width: 1024, height: 440 })
-  await page.getByRole('button', { name: '已选 5 张参考图', exact: true }).waitFor()
+  await page.getByRole('button', { name: '查看全部 5 项素材', exact: true }).waitFor()
   assert.equal(await summary.isVisible(), false)
   await page.setViewportSize({ width: 375, height: 812 })
-  await trigger.click()
+  await openLabAddition(page, '添加参考图')
   await panel.waitFor()
   assert.equal(Math.round((await panel.boundingBox()).width), 375)
   const remove = await panel.getByRole('button', { name: '移除参考图：参考图片 2', exact: true }).boundingBox()
@@ -233,7 +234,7 @@ try {
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('应用已上传的参考图')
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/image-a/tasks')),
-    page.getByRole('button', { name: '生成图片', exact: true }).click(),
+    page.getByRole('button', { name: /^发\s*送$/, exact: true }).click(),
   ])
   assert.deepEqual(submissions[1].body.media.references, [
     { file_id: 'file-2', media_kind: 'image', ordinal: 0 },
@@ -243,8 +244,10 @@ try {
     { file_id: 'file-5', media_kind: 'image', ordinal: 4 },
     { file_id: 'uploaded-5', media_kind: 'image', ordinal: 5 },
   ])
-  await summary.getByRole('button', { name: '移除参考图：参考图片 2', exact: true }).click()
-  await page.getByRole('button', { name: '查看全部（5）', exact: true }).waitFor()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await summary.getByRole('button', { name: '预览参考图：参考图片 2', exact: true }).click()
+  await page.getByRole('dialog', { name: '预览参考图：参考图片 2', exact: true }).getByRole('button', { name: '移除参考图', exact: true }).click()
+  await page.getByRole('button', { name: '查看全部 5 项素材', exact: true }).waitFor()
   assert.equal(submissions.length, 2)
   assert.deepEqual(deletions, [])
   console.log(`Image reference browser checks passed. Evidence: ${output}`)

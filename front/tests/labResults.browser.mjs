@@ -219,7 +219,7 @@ try {
   await page.getByRole('button', { name: '选择模型', exact: true }).click()
   await page.getByRole('button', { name: '验收图片模型', exact: true }).waitFor()
   await page.getByRole('textbox', { name: '图片提示词' }).fill(stalePrompt.content)
-  const generate = page.getByRole('button', { name: '生成图片', exact: true })
+  const generate = page.getByRole('button', { name: /^发\s*送$/, exact: true })
   await generate.click()
   await history.getByText('生成中 29%', { exact: true }).waitFor()
   staleStatusAvailable = false

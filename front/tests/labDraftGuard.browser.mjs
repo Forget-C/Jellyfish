@@ -1,3 +1,4 @@
+import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -231,7 +232,7 @@ try {
   await streamStarted
   holdAcceptance = false
   accept(live)
-  await page.getByRole('button', { name: '停止生成', exact: true }).waitFor()
+  await page.getByRole('button', { name: /^停\s*止$/ }).waitFor()
   const currentActions = page.getByRole('button', { name: '新文本会话 更多操作', exact: true })
   await currentActions.focus()
   await currentActions.press('Enter')
@@ -256,7 +257,7 @@ try {
 
   // Acknowledgement is distinct from a terminal SSE event.
   stopBehavior = 'acknowledge'
-  await page.getByRole('button', { name: '停止生成', exact: true }).click()
+  await page.getByRole('button', { name: /^停\s*止$/ }).click()
   await page.getByText('已请求停止，等待本轮结束。', { exact: true }).waitFor()
   assert.equal(streams.has(live.response), true)
   assert.equal(await page.getByText('已取消', { exact: true }).count(), 0)
@@ -301,7 +302,7 @@ try {
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片历史' }).waitFor()
   await selectModel('图片')
   const imagePanel = page.getByRole('dialog', { name: '配置参考图', exact: true })
-  await page.getByRole('button', { name: '参考图', exact: true }).click()
+  await openLabAddition(page, '添加参考图')
   await imagePanel.getByRole('tab', { name: '资料库', exact: true }).click()
   await imagePanel.getByRole('checkbox', { name: '测试参考图', exact: true }).check()
   await page.evaluate(() => history.back())
@@ -317,11 +318,11 @@ try {
   await selectModel('图片')
 
   // Submitted template configuration stays visible but is clean.
-  await page.getByRole('button', { name: '自由输入', exact: true }).click()
+  await openLabAddition(page, '选择提示词模板')
   await page.getByRole('combobox', { name: '提示词模板' }).click()
   await page.getByText('首帧图片 · 保护模板 · v1', { exact: true }).click()
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片历史' }).click()
-  await page.getByRole('button', { name: '生成图片', exact: true }).click()
+  await page.getByRole('button', { name: /^发\s*送$/, exact: true }).click()
   await page.getByText('请求已接收', { exact: true }).waitFor()
   await type('视频').click()
   await page.getByRole('heading', { name: '实验室 · 视频 · 新会话' }).waitFor()
@@ -333,7 +334,7 @@ try {
   await type('图片').click()
   await leave.getByRole('button', { name: '继续编辑' }).click()
   assert.equal(await videoInput.inputValue(), '视频草稿')
-  await page.getByRole('button', { name: '生成视频', exact: true }).click()
+  await page.getByRole('button', { name: /^发\s*送$/, exact: true }).click()
   await page.getByText('请求已接收', { exact: true }).waitFor()
   await type('图片').click()
   await page.getByRole('button', { name: '图片历史', exact: true }).click()
@@ -344,11 +345,11 @@ try {
   await page.getByRole('button', { name: '图片模板历史', exact: true }).click()
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片模板历史' }).waitFor()
   await selectModel('图片')
-  await page.getByRole('button', { name: '自由输入', exact: true }).click()
+  await openLabAddition(page, '选择提示词模板')
   await page.getByRole('combobox', { name: '提示词模板' }).click()
   await page.getByText('首帧图片 · 保护模板 · v1', { exact: true }).click()
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片模板历史' }).click()
-  await page.getByRole('button', { name: '生成图片', exact: true }).click()
+  await page.getByRole('button', { name: /^发\s*送$/, exact: true }).click()
   await page.getByText('已完成', { exact: true }).waitFor()
   await page.getByRole('button', { name: '编辑变量', exact: true }).click()
   const variables = page.getByRole('dialog', { name: '编辑模板变量' })

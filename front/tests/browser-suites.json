@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "lab-composer": { "file": "labComposer.browser.mjs", "ports": [4811], "timeoutMs": 180000 },
     "asset-detail": { "file": "assetDetail.browser.mjs", "ports": [4810], "timeoutMs": 180000 },
     "generation-canvas-associations": { "file": "generationCanvasAssociations.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-sound-reference": { "file": "generationCanvasSoundReference.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },
@@ -159,7 +160,7 @@
   "suites": {
     "management-ui": ["asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
     "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "management-navigation", "lab-navigation", "legacy-labs"],
-    "lab-ui": ["lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
+    "lab-ui": ["lab-composer", "lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],
     "performance-design": ["generation-canvas-narrative-spatial-objects", "generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
     "canvas-design": ["generation-canvas-associations","generation-canvas-design-focus","generation-canvas-multipath-protection","generation-canvas-candidate-states","generation-canvas-design-names","generation-canvas-design-metadata","generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],

@@ -7,6 +7,8 @@ import { SendOutlined } from '@ant-design/icons'
 type ExperimentComposerProps = {
   appearance?: 'default' | 'workbench'
   options: ReactNode
+  addAction?: ReactNode
+  feedback?: ReactNode
   contextActions?: ReactNode
   secondaryAction?: ReactNode
   children: ReactNode
@@ -26,6 +28,8 @@ export function ExperimentComposer({
   options,
   appearance = 'default',
   contextActions,
+  addAction,
+  feedback,
   secondaryAction,
   children,
   submitting = false,
@@ -38,12 +42,14 @@ export function ExperimentComposer({
     <div className="experiment-composer">
       <div className="experiment-composer-input">{children}</div>
       <div className="experiment-composer-toolbar">
-        <div className="experiment-composer-options">{options}{contextActions}</div>
+        <div className="experiment-composer-options">{options}</div>
         <div className="experiment-composer-submit">
-          {secondaryAction}
-          <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</Button>
+          {contextActions}
+          {addAction}
+          {secondaryAction ?? <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</Button>}
         </div>
       </div>
+      {feedback && <div className="experiment-composer-feedback">{feedback}</div>}
     </div>
   )
   return (
