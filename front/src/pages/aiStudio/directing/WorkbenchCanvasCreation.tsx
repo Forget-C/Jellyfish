@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Button, Card, Input, Radio, Space, Spin } from 'antd'
+import { Alert, Button, Card, Dropdown, Input, Radio, Space, Spin } from 'antd'
+import { MoreOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { SceneCanvasCreate, StoryboardBasis, StoryboardRequest } from '../../../services/generated'
@@ -40,6 +41,8 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
   const key = 'jellyfish:management-canvas-submission:' + JSON.stringify([projectId, chapterId, sequenceId])
   const [pending, setPending] = useState(() => savedIntent(key))
   const [draft, setDraft] = useState<Draft>()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const moreButton = useRef<HTMLButtonElement>(null)
   const [basis, setBasis] = useState<StoryboardBasis>()
   const [basisLoading, setBasisLoading] = useState(false)
   const [basisError, setBasisError] = useState('')
@@ -133,7 +136,14 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
     {pending ? <Button type="primary" loading={submitting} onClick={() => void submit(pending)}>核实提交</Button>
       : <>
         <Button type="primary" disabled={!editable || !!draft} onClick={() => start('storyboard')}>生成新分镜画布</Button>
-        <Button disabled={!editable || !!draft} onClick={() => start('blank')}>新建空白画布</Button>
+        <Dropdown trigger={['click']} open={menuOpen} onOpenChange={setMenuOpen} menu={{ items: [
+          { key: 'blank', label: '新建空白画布', disabled: !editable || !!draft, onClick: () => {
+            setMenuOpen(false)
+            requestAnimationFrame(() => start('blank'))
+          } },
+        ] }}>
+          <Button ref={moreButton} aria-label="画布更多操作" icon={<MoreOutlined />} disabled={!editable || !!draft}>更多</Button>
+        </Dropdown>
       </>}
   </Space>
   return <>
@@ -161,7 +171,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
           </> : <p>画布从本场已确认摘录开始，保留固定原文卡片。</p>}
         </fieldset>
         <Space wrap>
-          <Button onClick={() => { setDraft(undefined); setError('') }} disabled={submitting}>取消</Button>
+          <Button onClick={() => { setDraft(undefined); setError(''); if (draft.kind === 'blank') requestAnimationFrame(() => moreButton.current?.focus()) }} disabled={submitting}>取消</Button>
           <Button type="primary" loading={submitting} disabled={!eligible || !editable} onClick={confirm}>
             {needsBasis ? '开始提取' : '创建画布'}
           </Button>

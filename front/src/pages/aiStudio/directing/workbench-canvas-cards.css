@@ -46,3 +46,32 @@
 @media (max-width: 575px) {
   .management-card-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 普通管理页表面；不应用到独立画布或其浮层。 */
+.management-workspace .management-canvas-surface.ant-card,
+.management-workspace .management-canvas-configuration > .ant-card {
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: none;
+}
+.management-workspace .management-canvas-surface.ant-card > .ant-card-body,
+.management-workspace .management-canvas-configuration > .ant-card > .ant-card-body { padding: 16px; }
+.management-workspace .management-canvas-created.ant-card { background: #f5f8fe; }
+.management-workspace .management-canvas-card-heading h4 { font-size: 14px; font-weight: 600; }
+.management-workspace .management-canvas-toolbar h3,
+.management-workspace .management-canvas-configuration h3 { font-size: 14px; font-weight: 600; }
+.management-workspace .management-canvas-cards .ant-btn { height: 32px; border-radius: 8px; font-size: 13px; }
+.management-workspace .management-canvas-status { font-size: 12px; }
+.management-workspace .management-canvas-configuration { font-size: 14px; }
+.management-workspace .management-canvas-configuration > .ant-card { max-width: 720px; }
+.management-canvas-dialog { top: 16px; padding-bottom: 16px; }
+.management-canvas-dialog .ant-modal-content { max-height: calc(100dvh - 32px); display: flex; flex-direction: column; border-radius: 12px; padding: 16px; }
+.management-canvas-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
+.management-canvas-dialog .ant-modal-body { min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
+.management-canvas-dialog .ant-modal-footer { flex-shrink: 0; }
+.management-canvas-dialog .ant-btn { font-size: 13px; border-radius: 8px; }
+@media (max-width: 767px) {
+  .management-workspace .management-canvas-cards .ant-btn,
+  .management-canvas-dialog .ant-btn { min-height: 36px; height: auto; }
+}

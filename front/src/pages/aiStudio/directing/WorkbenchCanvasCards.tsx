@@ -53,6 +53,8 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [quickEntry, setQuickEntry] = useState(false)
   const [reviewCanvas, setReviewCanvas] = useState<string>()
   const [detail, setDetail] = useState<string>()
+  const [menuOpen, setMenuOpen] = useState<string>()
+  const detailTrigger = useRef<HTMLElement>()
   const [linkedTask, setLinkedTask] = useState<{ id: string; task?: StoryboardTaskSummary; error?: string }>()
   const targetElement = useRef<HTMLLIElement>(null)
   const focusedTarget = useRef<string>()
@@ -169,6 +171,10 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       else searchInput.current?.focus({ preventScroll: true })
     })
   }
+  const menuAction = (action: () => void) => {
+    setMenuOpen(undefined)
+    requestAnimationFrame(action)
+  }
   const keyword = query.trim().toLocaleLowerCase()
   const shown = canvases?.filter(canvas => canvas.name.toLocaleLowerCase().includes(keyword))
   return <section aria-labelledby="management-canvas-list-title" className="management-canvas-cards">
@@ -201,16 +207,16 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
         const currentTaskIsCandidate = candidateId && task?.task_id === candidateId
         const located = canvas.id === targetId
         return <li key={canvas.id} ref={located ? targetElement : undefined} tabIndex={located ? -1 : undefined}>
-          <Card size="small" className={canvas.id === created || located ? 'management-canvas-created' : undefined}>
+          <Card size="small" bordered={false} className={canvas.id === created || located ? 'management-canvas-surface management-canvas-created' : 'management-canvas-surface'}>
             <div className="management-canvas-card-heading">
               <h4>{canvas.name}</h4>
-              <Dropdown trigger={['click']} menu={{ items: [
-                { key: 'rename', label: '更名', onClick: () => setRename({ id: canvas.id, name: canvas.name }) },
-                ...(task ? [{ key: 'detail', label: '查看任务详情', onClick: () => setDetail(canvas.id) }] : []),
-                { key: 'delete', label: '删除画布', danger: true, onClick: () => drafts.transition(() => {
+              <Dropdown trigger={['click']} open={menuOpen === canvas.id} onOpenChange={open => setMenuOpen(open ? canvas.id : undefined)} menu={{ items: [
+                { key: 'rename', label: '更名', onClick: () => menuAction(() => setRename({ id: canvas.id, name: canvas.name })) },
+                ...(task ? [{ key: 'detail', label: '查看任务详情', onClick: () => menuAction(() => { detailTrigger.current = menuButtons.current.get(canvas.id); setDetail(canvas.id) }) }] : []),
+                { key: 'delete', label: '删除画布', danger: true, onClick: () => menuAction(() => drafts.transition(() => {
                   setDeleteError('')
                   setDeleteTarget(canvas.id)
-                }) },
+                })) },
               ] }}>
                 <Button type="text" icon={<MoreOutlined />} aria-label={`${canvas.name}更多操作`} ref={element => {
                   if (element) menuButtons.current.set(canvas.id, element)
@@ -249,7 +255,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       onEnter={() => openCanvas(reviewCanvas)} onReviewSource={() => onReviewSource(reviewCanvas)} />}
     {rename && <WorkbenchCanvasRename {...{ projectId, chapterId, sequenceId }} canvasId={rename.id}
       initialName={rename.name} onClose={closeRename} />}
-    <Modal title="分镜任务详情" open={!!detailTask && !reviewCanvas && (!!detail || detailTask.task_id !== detailCard?.latest_storyboard?.task_id)} onCancel={closeDetail}
+    <Modal className="management-canvas-dialog" title="分镜任务详情" afterClose={() => detailTrigger.current?.focus({ preventScroll: true })} open={!!detailTask && !reviewCanvas && (!!detail || detailTask.task_id !== detailCard?.latest_storyboard?.task_id)} onCancel={closeDetail}
       footer={<Space wrap><Button aria-label="关闭分镜任务详情" onClick={closeDetail}>关闭</Button>
         {detailCard && <Button type="primary" onClick={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard', { canvas: detailCard.id, storyboardTask: detailCard.latest_storyboard?.task_id }), { state })}>查看最新处理结果</Button>}
       </Space>}>
