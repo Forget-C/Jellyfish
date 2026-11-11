@@ -51,7 +51,7 @@ function SceneList({ overview, selected, historyOpen, setHistoryOpen, onSelect, 
   const historical = matching(overview.historical_sequences)
   const rows = (items: WorkbenchSceneSummary[]) => <ul className="management-scenes">
     {items.map(row => <li key={row.id}>
-      <button type="button" className="management-scene-row" aria-pressed={row.id === selected} onClick={() => onSelect(row.id)}>
+      <button type="button" className="management-scene-row" aria-pressed={row.id === selected} aria-current={row.id === selected ? 'true' : undefined} onClick={() => onSelect(row.id)}>
         <span className="management-scene-title">{row.position + 1}. {row.title}</span>
         <span className="management-scene-meta">{row.object_count} 个对象 · {row.canvas_count} 张画布</span>
         {sceneNotices(row).map(notice => <small className="management-scene-notice" key={notice}>{notice}</small>)}
@@ -257,24 +257,26 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
         {list}
       </aside>}
       <div className="management-content">
-        <PageToolbar>
-          {selected && <div className="management-scene-heading">
-            <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>
-            {historical && <span className="management-scene-meta">历史场次</span>}
-            {!historical && <Button type="text" icon={<EditOutlined />} aria-label="编辑场次名称与顺序"
-              onClick={() => drafts.transition(() => setEditingMetadata(true))} />}
-          </div>}
-          {!desktop && <div className="management-mobile-navigation">
-            <Button ref={sceneToggle} icon={<MenuOutlined />} aria-expanded={drawerOpen}
-              onClick={() => setDrawerOpen(true)}>切换场次</Button>
-            {openDivision}
-          </div>}
+        <PageToolbar className="management-toolbar">
+          <div className="management-identity">
+            {selected && <div className="management-scene-heading">
+              <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>
+              {historical && <span className="management-scene-meta">历史场次</span>}
+              {!historical && <Button type="text" icon={<EditOutlined />} aria-label="编辑场次名称与顺序"
+                onClick={() => drafts.transition(() => setEditingMetadata(true))} />}
+            </div>}
+            {!desktop && <div className="management-mobile-navigation">
+              <Button ref={sceneToggle} icon={<MenuOutlined />} aria-expanded={drawerOpen}
+                onClick={() => setDrawerOpen(true)}>切换场次</Button>
+              {openDivision}
+            </div>}
+          </div>
           {selected && <nav className="management-steps" aria-label="工作台步骤">
             {steps.map(({ id, label }) => <Button key={id} aria-current={step === id ? 'step' : undefined}
-              type={step === id ? 'default' : 'text'} onClick={() => { if (step !== id) select(selected.id, id) }}>{label}</Button>)}
+              type="text" onClick={() => { if (step !== id) select(selected.id, id) }}>{label}</Button>)}
           </nav>}
           {selected && step === 'objects' && <div className="management-object-actions" ref={setObjectActions} />}
-          {selected && step === 'storyboard' && <div ref={setStoryboardActions} />}
+          {selected && step === 'storyboard' && <div className="management-storyboard-actions" ref={setStoryboardActions} />}
         </PageToolbar>
         <WorkspaceScrollPanel className="management-panel">
           {loadError}
