@@ -1,4 +1,5 @@
-import { Alert, Button, Input, Radio, Select, Space } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { Alert, Button, Drawer, Input, Radio, Select, Space } from 'antd'
 import type { ChapterSequences, DivisionBaseline, SequenceRead, SourceSpan } from '../../../services/generated'
 import { ChapterSourceSelection } from './ChapterSourceSelection'
 import { excerptMatches } from './common'
@@ -6,11 +7,23 @@ import { changeDivisionSpan, removeDivisionMember, type ChapterDivisionDraft, ty
 import { sameSpan, sourceSlice } from './sourceSelection'
 
 /** 手动、AI 和历史方案共用原文选区与场次编辑；历史浏览只改变选中项。 */
-export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onActive, mobileView, onMobileView, onChange, readOnly = false, historicalMembers = [], restoredBaseline = [] }: {
+export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onActive, mobileView, onMobileView, onChange, readOnly = false, management = false, historicalMembers = [], restoredBaseline = [] }: {
   projectId: string; chapter: ChapterSequences; draft: ChapterDivisionDraft; activeId?: string
   onActive: (id?: string) => void; mobileView: string; onMobileView: (view: string) => void
-  onChange: (draft: ChapterDivisionDraft) => void; readOnly?: boolean; historicalMembers?: SequenceRead[]; restoredBaseline?: DivisionBaseline[]
+  onChange: (draft: ChapterDivisionDraft) => void; readOnly?: boolean; management?: boolean; historicalMembers?: SequenceRead[]; restoredBaseline?: DivisionBaseline[]
 }) {
+  const layoutRef = useRef<HTMLDivElement>(null)
+  const editTrigger = useRef<HTMLButtonElement>(null)
+  const [width, setWidth] = useState(0)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!management || !layoutRef.current) return
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    observer.observe(layoutRef.current)
+    return () => observer.disconnect()
+  }, [management])
+  const drawerMode = management && width >= 728 && width < 1280
+  useEffect(() => { if (!drawerMode) setEditing(false) }, [drawerMode])
   const current = draft.members.find(row => row.key === activeId)
   const identities = [...chapter.sequences, ...historicalMembers.filter(row => !chapter.sequences.some(current => current.id === row.id))]
   const old = identities.find(row => row.id === current?.sequence_id)
@@ -38,21 +51,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onA
         ? [...new Set([...origin.target_keys, current.key])]
         : origin.sequence_id === current.sequence_id ? origin.target_keys.filter(key => key !== current.key) : origin.target_keys })) })
   }
-  return <>
-    <Radio.Group className="chapter-division-mobile" aria-label="划场内容" value={mobileView} onChange={event => onMobileView(event.target.value)} optionType="button" options={[{ value: 'list', label: '本章场次' }, { value: 'source', label: '完整原文' }, { value: 'editor', label: '当前选区' }]} />
-    <div className={`chapter-division-layout show-${mobileView}`}>
-      <aside className="chapter-division-list" aria-label="划场场次列表"><div className="chapter-division-members"><h3>{readOnly ? '历史场次' : '本章草稿'}</h3>
-        {draft.members.map((row, index) => <Button block key={row.key} aria-pressed={current?.key === row.key} onClick={() => { onActive(row.key); onMobileView('source') }}>{index + 1}. {row.title || '未命名'}{!row.span ? ' · 待定位' : ''}</Button>)}
-        {!draft.members.length && <p>尚无场次，可框选原文新建。</p>}
-        {!readOnly && <Button block disabled={!chapter.raw_text.trim()} onClick={() => {
-          const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: '' }] }); onActive(key); onMobileView('source')
-        }}>新增场次</Button>}
-        <p>普通底色为未分配原文，可保留缺口。</p>
-      </div></aside>
-      <ChapterSourceSelection projectId={projectId} chapterId={readOnly ? `${chapter.chapter_id}:history:${chapter.current_version?.id}` : chapter.chapter_id} raw={chapter.raw_text}
-        marks={draft.members.filter(row => row.span).map((row, index) => ({ id: row.key, label: `${index + 1} · ${row.title || '未命名'}`, span: row.span! }))}
-        span={current?.span} focusId={current?.key} onScene={onActive} onSelect={selectSpan} readOnly={readOnly} />
-      <aside className="chapter-division-editor" aria-label="当前选区"><h3>{readOnly ? '查看历史场次' : '编辑本章场次'}</h3>
+  const editorPanel = <aside className="chapter-division-editor" aria-label="当前选区"><h3>{readOnly ? '查看历史场次' : '编辑本章场次'}</h3>
         {!current ? <p>选择场次或框选原文新建；所有操作先保留在本章草稿。</p> : <Space direction="vertical" style={{ width: '100%' }}>
           {old?.source_changed && <><Alert type="warning" message="需要重新定位：旧范围未绘制到当前原文，确认范围后才能更新来源。" /><p className="chapter-source-excerpt">{old.source_text}</p></>}
           <label>场次名称<Input aria-label="场次标题" readOnly={readOnly} value={current.title} onChange={event => update({ title: event.target.value })} /></label>
@@ -77,7 +76,26 @@ export function ChapterDivisionEditor({ projectId, chapter, draft, activeId, onA
           <Button className="chapter-division-mobile" onClick={() => onMobileView('source')}>返回完整原文选区</Button>
         </Space>}
       </aside>
+  return <>
+    <Radio.Group className="chapter-division-mobile" aria-label="划场内容" value={mobileView} onChange={event => onMobileView(event.target.value)} optionType="button" options={[{ value: 'list', label: '本章场次' }, { value: 'source', label: '完整原文' }, { value: 'editor', label: '当前选区' }]} />
+    {drawerMode && <Button ref={editTrigger} onClick={() => setEditing(true)}>编辑当前场次</Button>}
+    <div ref={layoutRef} className={`chapter-division-layout show-${mobileView}${drawerMode ? ' with-editor-drawer' : ''}`}>
+      <aside className="chapter-division-list" aria-label="划场场次列表"><div className="chapter-division-members"><h3>{readOnly ? '历史场次' : '本章草稿'}</h3>
+        {draft.members.map((row, index) => <Button block key={row.key} aria-pressed={current?.key === row.key} onClick={() => { onActive(row.key); onMobileView('source') }}>{index + 1}. {row.title || '未命名'}{!row.span ? ' · 待定位' : ''}</Button>)}
+        {!draft.members.length && <p>尚无场次，可框选原文新建。</p>}
+        {!readOnly && <Button block disabled={!chapter.raw_text.trim()} onClick={() => {
+          const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: '' }] }); onActive(key); onMobileView('source')
+        }}>新增场次</Button>}
+        <p>普通底色为未分配原文，可保留缺口。</p>
+      </div></aside>
+      <ChapterSourceSelection projectId={projectId} chapterId={readOnly ? `${chapter.chapter_id}:history:${chapter.current_version?.id}` : chapter.chapter_id} raw={chapter.raw_text}
+        marks={draft.members.filter(row => row.span).map((row, index) => ({ id: row.key, label: `${index + 1} · ${row.title || '未命名'}`, span: row.span! }))}
+        span={current?.span} focusId={current?.key} onScene={onActive} onSelect={selectSpan} readOnly={readOnly} />
+      {!drawerMode && editorPanel}
+
     </div>
     <Button className="chapter-division-mobile" onClick={() => onMobileView('editor')}>查看当前选区</Button>
+    {drawerMode && <Drawer title={current?.title || '编辑当前场次'} width="min(340px, 100vw)" open={editing} onClose={() => setEditing(false)}
+      afterOpenChange={open => { if (!open) editTrigger.current?.focus({ preventScroll: true }) }}>{editorPanel}</Drawer>}
   </>
 }

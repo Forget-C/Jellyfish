@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
-import { EditOutlined, MenuOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, EditOutlined, MenuOutlined } from '@ant-design/icons'
 import { Alert, Button, Drawer, Empty, Grid, Input, Spin } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
@@ -19,8 +19,8 @@ import './workbench-management.css'
 
 type ProductionStep = Exclude<WorkbenchManagementStep, 'division'>
 const steps: { id: ProductionStep; label: string }[] = [
-  { id: 'objects', label: '对象与参考〔本场〕' },
-  { id: 'storyboard', label: '分镜与画布〔本场〕' },
+  { id: 'objects', label: '对象与参考' },
+  { id: 'storyboard', label: '分镜与画布' },
 ]
 
 function sceneNotices(scene: WorkbenchSceneSummary): string[] {
@@ -167,11 +167,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       return next
     }, { state: { ...state, managementReturn: returnTo } })
   }
-  const startProduction = () => {
-    const scene = current.find(row => row.id === savedDivision?.id) ?? rememberedScene ?? current[0]
-    if (retired) select(undefined, 'storyboard')
-    else select(scene?.id, scene ? initialStep(scene) : 'storyboard')
-  }
   const reviewSource = (canvasId?: string) => {
     if (!selected || historical) return
     const previous = new URLSearchParams(params)
@@ -208,6 +203,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     setError('')
     setRevision(value => value + 1)
   }}>重试</Button>} />
+  const returnToChapters = () => drafts.transition(() => navigate(`/projects/${projectId}?tab=chapters`, { state: { chapterReturn: chapterId } }))
   const openDivision = <Button ref={divisionButton} onClick={() => {
     if (selected && !historical) reviewSource()
     else select(undefined, 'division')
@@ -220,12 +216,11 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     {loading && <Spin className="management-loading" aria-label="正在读取工作台管理" />}
     {overview && division && <WorkspaceScrollPanel className="management-panel">
       {loadError}
-      <div className="management-scene-heading">
+      <PageToolbar className="management-division-heading">
+        <Button type="text" icon={<ArrowLeftOutlined />} title={returnScene ? '返回场次制作' : '返回章节列表'} aria-label={returnScene ? '返回场次制作' : '返回章节列表'} disabled={updatingDivision}
+          onClick={() => returnScene ? drafts.transition(() => navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })) : returnToChapters()} />
         <h2 ref={regionHeading} tabIndex={-1}>本章场次划分</h2>
-        {returnScene
-          ? <Button disabled={updatingDivision} onClick={() => navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })}>返回该场次制作</Button>
-          : <Button disabled={updatingDivision || (!current.length && !history.length)} onClick={startProduction}>进入场次制作</Button>}
-      </div>
+      </PageToolbar>
       {retiredNotice}
       {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
       {current.some(scene => scene.source_changed) && <Alert type="warning" showIcon message="章节原文已变化，请核对场次范围。" />}
@@ -259,6 +254,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       <div className="management-content">
         <PageToolbar className="management-toolbar">
           <div className="management-identity">
+            <Button type="text" icon={<ArrowLeftOutlined />} title="返回章节列表" aria-label="返回章节列表" onClick={returnToChapters} />
             {selected && <div className="management-scene-heading">
               <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>
               {historical && <span className="management-scene-meta">历史场次</span>}

@@ -89,8 +89,13 @@ try {
     for(const viewport of [{width:1440,height:900},{width:1366,height:768},{width:1024,height:440},{width:1023,height:768},{width:768,height:768},{width:767,height:768},{width:375,height:812}]) {
       await page.setViewportSize(viewport)
       const form=page.getByRole('form',{name:'项目设置表单'})
-      assert.ok((await form.boundingBox()).width<=641)
+      assert.ok((await form.boundingBox()).width<=801)
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true)
+      if(viewport.width>=1024) {
+        const visual=await page.getByRole('combobox',{name:/视觉风格/}).boundingBox()
+        const style=await page.getByRole('combobox',{name:/视频风格/}).boundingBox()
+        assert.ok(Math.abs(visual.y-style.y)<2 && style.x>visual.x, 'short style fields share a row')
+      }
       await save.scrollIntoViewIfNeeded()
       const box=await save.boundingBox()
       assert.ok(box.y+box.height<=viewport.height+1)

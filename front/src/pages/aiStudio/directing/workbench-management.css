@@ -5,7 +5,7 @@
   flex-direction: column;
   flex: 0 0 256px;
   padding: 12px;
-  background: #fff;
+  background: transparent;
   border-right: 0;
 }
 .management-workspace .management-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
@@ -65,7 +65,7 @@
 .management-workspace .management-scene-meta { color: #536174; }
 .management-workspace .management-toolbar {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
   min-height: 56px;
   background: transparent;
@@ -108,3 +108,20 @@
   .management-workspace .management-panel { padding: 12px 16px 20px; }
   .management-scene-dialog { top: 16px; padding-bottom: 16px; }
 }
+
+.management-workspace .management-identity { display:flex; align-items:center; gap:8px; }
+.management-workspace .management-division-heading { display:flex; align-items:center; gap:8px; padding:0; min-height:52px; }
+.management-workspace .management-division-heading h2 { font-size:16px; font-weight:600; margin:0; }
+.management-workspace .management-division { margin-top:0; }
+.management-division .chapter-division-save { position:sticky; top:0; z-index:2; display:flex; justify-content:flex-end; background:var(--app-background); padding:8px 0; }
+.management-division .chapter-division-toolbar { position:static !important; }
+.management-division .chapter-division-layout { grid-template-columns:minmax(220px,240px) minmax(0,1fr) minmax(300px,340px); gap:20px; }
+.management-division .chapter-division-layout.with-editor-drawer { grid-template-columns:220px minmax(0,1fr); }
+.management-division .chapter-source-text { margin-inline:auto; }
+.management-division .chapter-division-members > .ant-btn { border:0; box-shadow:none; border-radius:8px; background:transparent; }
+.management-division .chapter-division-members > .ant-btn[aria-pressed=true] { background:var(--app-selected); color:var(--app-accent); }
+.management-division h3 { font-size:14px; }
+@media(max-width:767px) { .management-division .chapter-division-layout { display:block; } }
+
+.management-division .chapter-source-reader { border:0; border-radius:12px; background:#fff; }
+.management-workspace .management-panel > section { border-radius:12px; }

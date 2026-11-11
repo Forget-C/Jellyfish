@@ -184,7 +184,7 @@ export function ScenesTab() {
                   title={<Link title={s?.name ?? '场所信息暂不可用'} to={`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`}>{s?.name ?? '场所信息暂不可用'}</Link>}
                   imageUrl={toThumbUrl(l.thumbnail ?? s?.thumbnail)}
                   imageAlt={s?.name ?? '场所信息暂不可用'}
-                  placeholder={<><EnvironmentOutlined aria-hidden />暂无场所图片</>}
+                  placeholder={<><EnvironmentOutlined aria-hidden />暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
                     { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`) },
                     { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
@@ -197,7 +197,7 @@ export function ScenesTab() {
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${s?.name ?? '场所信息暂不可用'}更多操作`} /></Dropdown>}
-                  meta={<><div className="project-resource-description">{s?.description?.trim() || '未填写简介'}</div><span className="project-resource-description">已关联项目</span></>}
+                  meta={<><div className="project-resource-description">{s?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}

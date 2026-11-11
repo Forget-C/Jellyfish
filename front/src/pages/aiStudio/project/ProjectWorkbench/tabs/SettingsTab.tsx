@@ -69,18 +69,20 @@ export function SettingsTab({ project, saving, onSave }: {
         </section>
         <section className="project-settings-group" aria-labelledby="project-settings-generation">
         <h2 id="project-settings-generation">生成默认设置</h2>
-        <ProjectVisualStyleAndStyleFields form={form} options={options} />
-        <Form.Item name="seed" label="全局种子值" rules={[{ required: true, type: 'integer', min: 0, message: '请输入非负整数' }]} tooltip="固定种子可确保整部短剧视觉调性一致">
+        <div className="project-settings-short-fields"><ProjectVisualStyleAndStyleFields form={form} options={options} /></div>
+        <div className="project-settings-short-fields"><Form.Item name="seed" label="全局种子值" rules={[{ required: true, type: 'integer', min: 0, message: '请输入非负整数' }]} tooltip="固定种子可确保整部短剧视觉调性一致">
           <InputNumber min={0} className="w-full" />
         </Form.Item>
         <Form.Item name="default_video_ratio" label="默认视频比例">
           <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
         </Form.Item>
-        <Form.Item name="unify_style" label="风格统一" valuePropName="checked" tooltip="开启后所有章节继承项目风格">
-          <Switch />
-        </Form.Item>
+        </div><div className="project-settings-switch-row">
+          <div><span>风格统一</span><p>所有章节继承项目风格</p></div>
+          <Form.Item name="unify_style" valuePropName="checked" noStyle><Switch aria-label="风格统一" /></Form.Item>
+        </div>
         </section>
         <Space size={8} className="project-settings-actions">
+          {dirty && <span role="status">有未保存修改</span>}
           <Button disabled={!dirty || saving} onClick={cancel}>取消</Button>
           <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>保存</Button>
         </Space>

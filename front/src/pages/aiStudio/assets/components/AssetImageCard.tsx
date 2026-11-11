@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Dropdown, Modal, Spin, Tag, message } from 'antd'
+import { Alert, Button, Dropdown, Modal, Spin, message } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { FilmService } from '../../../../services/generated'
 import { useTaskUiStore } from '../../components/taskUiStore'
+import './project-resource-card.css'
 import { assetAdapters } from '../assetAdapters'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../utils'
 
@@ -145,34 +146,35 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
   const coverAvailable = Boolean(thumbnailUrl && thumbnailUrl !== brokenCover)
   const generateLabel = generating ? '生成中' : thumbnailUrl ? '重新生成' : '生成'
   const description = asset.description?.trim()
-  const tags = [...new Set(asset.tags?.filter(Boolean) ?? [])].slice(0, 3)
   const coverPlaceholder = <span className="asset-library-cover-placeholder">
-    <PictureOutlined aria-hidden="true" />{thumbnailUrl ? '封面加载失败' : '暂无封面'}
+    <PictureOutlined aria-hidden="true" />{thumbnailUrl ? '图片加载失败' : '暂无封面'}
   </span>
 
   return <>
     <article className="asset-library-card">
-      {thumbnailUrl ? <button type="button" className="asset-library-cover" ref={coverTrigger}
-        aria-label={`预览${asset.name}`} onClick={openPreview}>
-        {coverAvailable ? <img src={thumbnailUrl} alt={asset.name} loading="lazy" onError={() => setBrokenCover(thumbnailUrl)} /> : coverPlaceholder}
+      {coverAvailable ? <button type="button" className="asset-library-cover" ref={coverTrigger}
+        title="放大预览" aria-label={`预览${asset.name}`} onClick={openPreview}>
+        {coverAvailable ? <img style={{objectFit: assetType === 'scene' ? 'cover' : 'contain'}} src={thumbnailUrl} alt={asset.name} loading="lazy" onError={() => setBrokenCover(thumbnailUrl)} /> : coverPlaceholder}
       </button> : <div className="asset-library-cover">{coverPlaceholder}</div>}
       <div className="asset-library-card-content">
+        <div className="project-resource-title-row">
         <h2>
           <Link to={editPath} className="asset-library-name">
             <span title={asset.name}>{asset.name}</span><ArrowRightOutlined aria-hidden="true" />
           </Link>
         </h2>
-        <p className="asset-library-description" title={description}>{description || '暂无描述'}</p>
-        <div className="asset-library-tags">{tags.length ? tags.map(tag => <Tag key={tag} title={tag}>{tag}</Tag>) : '暂无标签'}</div>
+          <Dropdown menu={{ items: [{ key: 'delete', label: '删除', danger: true, onClick: onDelete }] }} trigger={['click']}>
+            <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
+          </Dropdown>
+        </div>
+        <p className="asset-library-description" title={description}>{description || '未填写简介'}</p>
         <div className="asset-library-card-actions">
           <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
             aria-label={generateLabel} loading={generating} disabled={generating} onClick={() => void generate()}>
             {generateLabel}
           </Button>
           {taskReadFailed && <span role="status">状态读取失败，正在重试</span>}
-          <Dropdown menu={{ items: [{ key: 'delete', label: '删除', danger: true, onClick: onDelete }] }} trigger={['click']}>
-            <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
-          </Dropdown>
+
         </div>
       </div>
     </article>

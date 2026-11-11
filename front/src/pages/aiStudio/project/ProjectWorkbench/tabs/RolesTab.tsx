@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Input, message, Select, Pagination } from 'antd'
-import { MoreOutlined, PlusOutlined, SkinOutlined, UserOutlined } from '@ant-design/icons'
+import { MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   StudioProjectsService,
@@ -321,7 +321,7 @@ export function RolesTab() {
         ) : (
           <div className="space-y-3">
             <div className="project-resource-grid">
-            {pagedRoleCards.map(({ c, actor, costume }) => (
+            {pagedRoleCards.map(({ c }) => (
               <DisplayImageCard
                 variant="project"
                 imageFit="contain"
@@ -330,7 +330,7 @@ export function RolesTab() {
                 imageUrl={resolveAssetUrl(c.thumbnail)}
                 imageAlt={c.name}
                 enablePreview
-                placeholder={<><UserOutlined aria-hidden />暂无角色图片</>}
+                placeholder={<><UserOutlined aria-hidden />暂无封面</>}
                 extra={<Dropdown trigger={['click']} open={menuRoleId === c.id}
                   onOpenChange={open => {
                     setMenuRoleId(open ? c.id : undefined)
@@ -348,10 +348,6 @@ export function RolesTab() {
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${c.name}更多操作`} /></Dropdown>}
                 meta={<>
                   <div className="project-resource-description">{c.description?.trim() || '未填写简介'}</div>
-                  <div className="project-role-associations">
-                    <p><UserOutlined aria-hidden />演员：{actor?.name ?? (loadingLinks ? '加载中' : c.actor_id ? '演员信息暂不可用' : '未关联演员')}</p>
-                    <p><SkinOutlined aria-hidden />服装：{costume?.name ?? (c.costume_id ? loadingLinks ? '加载中' : '服装信息暂不可用' : '未关联服装')}</p>
-                  </div>
                 </>}
               />
             ))}

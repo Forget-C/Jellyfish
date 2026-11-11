@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Card, Modal } from 'antd'
-import { PictureOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, PictureOutlined } from '@ant-design/icons'
 import './project-resource-card.css'
 
 type DisplayImageCardProps = {
@@ -62,14 +62,14 @@ export function DisplayImageCard({
   if (variant === 'project') {
     const content = displayUrl
       ? <img src={displayUrl} alt={imageAlt} style={{ objectFit: imageFit }} onError={() => setImgError(true)} />
-      : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : placeholder}</span>
+      : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : onImageClick ? placeholder : <><PictureOutlined aria-hidden />暂无封面</>}</span>
     const canOpen = !!onImageClick || !!(enablePreview && displayUrl)
     return <>
       <article className="project-resource-card">
-        {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>
+        {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" title="放大预览" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>
           : <div className="project-resource-cover">{content}</div>}
         <div className="project-resource-card-body">
-          <div className="project-resource-title-row"><h2>{title}</h2>{extra}</div>
+          <div className="project-resource-title-row"><h2 className="project-resource-name">{title}<ArrowRightOutlined aria-hidden /></h2>{extra}</div>
           {meta}
           {footer}
           {actions && <div className="project-resource-actions">{actions}</div>}

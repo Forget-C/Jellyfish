@@ -55,9 +55,8 @@ try {
   await nameLink.waitFor()
   assert.equal(await nameLink.getAttribute('href'),'/projects/roles-project/roles/role-one/edit')
   assert.equal(await page.getByRole('button',{name:'新建角色',exact:true}).count(),1)
-  await page.getByRole('article').filter({has:nameLink}).getByText('演员：真实关联演员长名称应自然换行',{exact:true}).waitFor()
-  await page.getByRole('article').filter({has:nameLink}).getByText('服装：真实关联服装长名称应自然换行',{exact:true}).waitFor()
-  await page.getByText('未关联服装',{exact:false}).waitFor()
+  assert.equal(await page.getByText(/^(演员：|服装：)/).count(),0)
+  assert.equal(await page.getByText('未关联服装',{exact:false}).count(),0)
   assert.equal(await page.getByText('unavailable-actor',{exact:false}).count(),0)
   for(const theme of ['mist','solid']) {
     await page.evaluate(value=>localStorage.setItem('jellyfish_appearance',value),theme)

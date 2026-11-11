@@ -126,3 +126,9 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
   .asset-library-tabs .management-tools { flex-basis: 160px; }
   .asset-library-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+.asset-library-card-content { padding:16px; }
+.asset-library-card h2 { flex:1; font-weight:600; }
+.asset-library-card .project-resource-title-row > button { flex-shrink:0; }
+.asset-library-cover-placeholder { flex-direction:column; gap:8px; font-size:12px; }
+@media(max-width:767px) { .asset-library-card-content { padding:12px; } }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Drawer } from 'antd'
-import { ArrowLeftOutlined, MenuOutlined } from '@ant-design/icons'
+import { MenuOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 import { projectNavigationGroups, projectTabLocation, resolveProjectTab } from './constants'
 import './project-navigation.css'
@@ -38,9 +38,6 @@ export function ProjectNavigation({ projectId, projectName }: { projectId: strin
   }, [])
 
   const menu = <nav className="app-project-navigation" aria-label="项目导航">
-    <Link to="/projects" className="app-project-back" onClick={closeDrawer}>
-      <ArrowLeftOutlined aria-hidden="true" /><span>返回项目列表</span>
-    </Link>
     <strong className="app-project-name" title={projectName}>{projectName || '项目'}</strong>
     {projectNavigationGroups.map(group => <div className="app-project-nav-group" key={group.label}>
       <span className="app-project-nav-heading">{group.label}</span>

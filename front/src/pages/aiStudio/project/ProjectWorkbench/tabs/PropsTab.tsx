@@ -208,7 +208,7 @@ function LinkedAssetTab({
                   title={<Link title={asset?.name ?? '资源信息暂不可用'} to={`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`}>{asset?.name ?? '资源信息暂不可用'}</Link>}
                   imageUrl={resolveAssetUrl(linkThumb ?? asset?.thumbnail)}
                   imageAlt={asset?.name ?? '资源信息暂不可用'}
-                  placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无{kind === 'prop' ? '道具' : '服装'}图片</>}
+                  placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
                     { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/${workbenchTab}/${assetId}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, workbenchTab)}`) },
                     { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
@@ -221,7 +221,7 @@ function LinkedAssetTab({
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${asset?.name ?? '资源信息暂不可用'}更多操作`} /></Dropdown>}
-                  meta={<><div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div><span className="project-resource-description">已关联项目</span></>}
+                  meta={<><div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}

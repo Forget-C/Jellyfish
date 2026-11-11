@@ -207,7 +207,7 @@ export function ActorsTab() {
                   title={<Link title={a?.name ?? '演员信息暂不可用'} to={`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`}>{a?.name ?? '演员信息暂不可用'}</Link>}
                   imageUrl={resolveAssetUrl(a?.thumbnail)}
                   imageAlt={a?.name ?? '演员信息暂不可用'}
-                  placeholder={<><UserOutlined aria-hidden />暂无演员图片</>}
+                  placeholder={<><UserOutlined aria-hidden />暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
                     { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`) },
                     { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
@@ -220,7 +220,7 @@ export function ActorsTab() {
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${a?.name ?? '演员'}更多操作`} /></Dropdown>}
-                  meta={<><div className="project-resource-description">{a?.description?.trim() || '未填写简介'}</div><span className="project-resource-description">已关联项目</span></>}
+                  meta={<><div className="project-resource-description">{a?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}

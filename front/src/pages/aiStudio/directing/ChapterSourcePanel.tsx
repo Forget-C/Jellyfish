@@ -234,9 +234,14 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     {!chapter.raw_text.trim() && <Alert type="info" message={embedded ? '本章尚未填写原文' : '请先添加章节原文。'}
       action={<Button onClick={() => guard(onEdit)}>填写章节原文</Button>} />}
     <WorkspaceWriteBoundary busy={busy || !!pendingSave}>
+            {!viewing && <Space wrap className="chapter-division-save">
+        <Button type="primary" disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存新版本</Button>
+        <Button disabled={!draftDirty} onClick={() => setDiscardOpen(true)}>放弃修改</Button>
+        <span>{draftDirty ? '整章草稿尚未保存' : '本章划分没有未保存变更'}</span>
+      </Space>}
       <div className="chapter-division-toolbar">
         <div><strong>{chapter.title}</strong><span> · {chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}{draftDirty ? ' · 有未保存草稿' : ''}</span></div>
-        <Space wrap><Button type="primary" disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {
+        <Space wrap><Button disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {
           if (draftDirty) Modal.confirm({ title: '使用 AI 智能划分？', content: '分析成功后将替换当前草稿；若分析期间继续编辑，结果会保留到历史版本。', okText: '开始分析', cancelText: '取消', onOk: startAnalysis })
           else void startAnalysis()
         }}>{running || activeTasks.length ? '划分中…' : 'AI智能划分'}</Button><Button onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
@@ -247,15 +252,11 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         <Button onClick={() => { epoch.current++; setViewing(undefined) }}>返回当前编辑</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>基于此版本编辑</Button>
       </Space>} />}
       {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message="此版本基于旧原文；当前显示保存时的原文，基于此版本编辑时需要重新定位。" />}
-      <ChapterDivisionEditor key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
+      <ChapterDivisionEditor management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
         chapter={viewing?.chapter || editor.chapter} draft={viewing ? initialDivision(viewing.chapter) : draft}
         activeId={viewing ? historyActiveId : activeId} onActive={viewing ? setHistoryActiveId : setActiveId}
         mobileView={mobileView} onMobileView={onMobileView} onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />
-      {!viewing && <Space wrap style={{ marginTop: 16 }}>
-        <Button type="primary" disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存新版本</Button>
-        <Button disabled={!draftDirty} onClick={() => setDiscardOpen(true)}>放弃修改</Button>
-        <span>{draftDirty ? '整章草稿尚未保存' : '本章划分没有未保存变更'}</span>
-      </Space>}
+
     </WorkspaceWriteBoundary>
     <DivisionHistoryModal open={historyOpen || !!targetTask} targetTask={targetTask} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh}
       onClose={() => { setHistoryOpen(false); if (targetTask) onCloseTask?.() }}
