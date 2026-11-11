@@ -1,0 +1,12 @@
+.project-settings-form.app-settings-form { display: grid; gap: 20px; width: 100%; max-width: 640px; padding: 0; border: 0; background: transparent; border-radius: 0; }
+.project-settings-group { min-width: 0; background: #fff; border-radius: 12px; padding: 16px; }
+.project-settings-group h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; color: var(--app-text); }
+.project-settings-group .ant-form-item { margin-bottom: 16px; }
+.project-settings-group .ant-form-item:last-child { margin-bottom: 0; }
+.project-settings-group .ant-form-item-label > label { font-size: 13px; }
+.project-settings-group .ant-input:not(textarea), .project-settings-group .ant-input-number, .project-settings-group .ant-select-single { min-height: 36px; }
+.project-settings-group .ant-input-number-input { height: 34px; }
+.project-settings-group .ant-select-single .ant-select-selector { min-height: 36px; align-items: center; }
+.project-settings-group textarea { width: 100%; }
+.project-settings-actions .ant-btn { font-size: 13px; border-radius: 8px; }
+@media (max-width: 767px) { .project-settings-actions .ant-btn { min-height: 36px; } }
