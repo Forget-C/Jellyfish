@@ -69,6 +69,10 @@ try {
   const list = page.getByRole('list', { name: '本场画布' })
 
   await page.goto(location)
+  assert.equal(await page.getByRole('button', { name: '新建空白画布', exact: true }).count(), 0)
+  await page.getByRole('button', { name: '画布更多操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '新建空白画布', exact: true }).waitFor()
+  await page.keyboard.press('Escape')
   await start.click()
   await form.getByText('后门的阿同等待。', { exact: false }).waitFor()
   assert.match(await name.inputValue(), /^分镜画布-\d{8}-\d{6}$/)
@@ -141,7 +145,8 @@ try {
     assert.ok(modelCards.length > 0)
     assert.ok(modelCards.every(card => card.type === 'model.video' && card.model_id === null))
   }
-  await page.getByRole('button', { name: '新建空白画布', exact: true }).click()
+  await page.getByRole('button', { name: '画布更多操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '新建空白画布', exact: true }).click()
   const blank = page.getByRole('region', { name: '新建空白画布配置' })
   await blank.getByRole('textbox', { name: '画布名称' }).fill('空白方案')
   await blank.getByRole('button', { name: '创建画布' }).click()
