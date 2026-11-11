@@ -1248,20 +1248,6 @@
       "count": 2
     },
     {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/tabs/PropsTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "42ea0ccefec2e183408091bbba4303def3b01fe2d8eb29539ee8a47d86208184",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/tabs/PropsTab.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "80e81511516f7402153157263f1107cffe8ee9beed769047e6c1eb3706803272",
-      "count": 1
-    },
-    {
       "file": "src/services/http.ts",
       "rule": "@typescript-eslint/consistent-type-imports",
       "severity": 1,

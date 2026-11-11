@@ -234,6 +234,15 @@ try {
   await review.waitFor({ state: 'hidden' })
   assert.equal((await read()).revision, adopted.revision)
 
+  // Keep a real pending candidate when this scene becomes historical.
+  await request(`${objectsUrl}/extractions`, 'POST', { request_id: 'historical-candidate' })
+  let historicalCandidate
+  for (let attempt = 0; attempt < 80; attempt++) {
+    historicalCandidate = (await read()).candidate_task_id
+    if (historicalCandidate) break
+    await delay(100)
+  }
+  assert.ok(historicalCandidate)
   const assetUrl = `${studio}/entities/character/object-browser-character`
   await request(assetUrl, 'DELETE')
   await page.goto(management)
@@ -260,7 +269,19 @@ try {
     preview_token: preview.preview_token, identity_changes_confirmed: true })
   await page.goto(management)
   await front.waitFor()
-  assert.equal(await page.getByRole('button', { name: '重新提取对象', exact: true }).isDisabled(), true)
+  const historicalReview = page.getByRole('button', { name: '核对对象差异', exact: true })
+  assert.equal(await historicalReview.isEnabled(), true)
+  await historicalReview.click()
+  await review.getByRole('button', { name: '应用整批对象', exact: true }).waitFor()
+  assert.equal(await review.getByRole('button', { name: '应用整批对象', exact: true }).isDisabled(), true)
+  await review.getByRole('button', { name: '暂不应用', exact: true }).click()
+  await review.waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: '对象步骤更多操作' }).click()
+  const archivedExtract = page.getByRole('menuitem', { name: '重新提取对象', exact: true })
+  await archivedExtract.waitFor()
+  assert.equal(await archivedExtract.getAttribute('aria-disabled'), 'true')
+  await page.keyboard.press('Escape')
+  await archivedExtract.waitFor({ state: 'hidden' })
   assert.equal(await front.getByRole('combobox', { name: '关联资产' }).isDisabled(), true)
   assert.equal(await front.getByRole('button', { name: '对象更多操作' }).isDisabled(), true)
   const rejected = (url, method, body) => fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

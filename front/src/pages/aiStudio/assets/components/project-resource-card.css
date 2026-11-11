@@ -17,6 +17,5 @@ button.project-resource-cover { cursor: zoom-in; }
 .project-resource-dialog .ant-modal-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
 .project-resource-dialog .ant-modal-footer { flex-shrink: 0; }
 .project-resource-dialog .ant-modal-footer .ant-btn { font-size: 13px; border-radius: 8px; }
-.project-resource-page { padding: 20px; }
 .project-resource-page .ant-pagination { margin-top: 16px; }
-@media(max-width:767px) { .project-resource-page { padding: 16px; } .project-resource-card-body { padding: 12px; } .project-resource-dialog .ant-modal-footer .ant-btn { min-height: 36px; height: auto; } }
+@media(max-width:767px) { .project-resource-card-body { padding: 12px; } .project-resource-dialog .ant-modal-footer .ant-btn { min-height: 36px; height: auto; } }

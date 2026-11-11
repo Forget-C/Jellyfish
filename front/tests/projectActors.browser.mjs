@@ -63,6 +63,9 @@ try {
     for(const [width,height] of [[1440,900],[1366,768],[1024,440],[375,768]]) {
       await page.setViewportSize({width,height})
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
+      const titleEdge = (await page.getByRole('heading', { name: '项目演员', exact: true }).boundingBox()).x
+      const cardEdge = (await page.getByRole('article').first().boundingBox()).x
+      assert.ok(Math.abs(cardEdge - titleEdge) <= 1, 'resource cards align with the content title and share one page gutter')
       await page.screenshot({path:join(output,`actors-${appearance}-${width}.png`),animations:'disabled'})
     }
   }

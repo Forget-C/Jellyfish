@@ -122,6 +122,9 @@ try {
       await image.waitFor()
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '文件内容不得造成横向溢出')
+      const titleEdge = (await page.getByRole('heading', { name: '项目文件', exact: true }).boundingBox()).x
+      const cardEdge = (await page.getByRole('article').first().boundingBox()).x
+      assert.ok(Math.abs(cardEdge - titleEdge) <= 1, 'resource cards align with the content title and share one page gutter')
       await page.screenshot({ path: join(output, `files-${theme}-${width}.png`), animations: 'disabled' })
     }
     await page.setViewportSize({ width: 1440, height: 900 })
