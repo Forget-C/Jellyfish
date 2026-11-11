@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Card, Modal } from 'antd'
+import { PictureOutlined } from '@ant-design/icons'
+import './project-resource-card.css'
 
 type DisplayImageCardProps = {
+  variant?: 'default' | 'project'
+  imageFit?: 'contain' | 'cover'
   title: ReactNode
   imageUrl?: string
   imageAlt: string
@@ -19,6 +23,8 @@ type DisplayImageCardProps = {
 }
 
 export function DisplayImageCard({
+  variant = 'default',
+  imageFit = 'contain',
   title,
   imageUrl,
   imageAlt,
@@ -33,6 +39,7 @@ export function DisplayImageCard({
   hoverable = true,
   imageHeightClassName = 'h-44',
 }: DisplayImageCardProps) {
+  const previewTrigger = useRef<HTMLButtonElement>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -51,6 +58,29 @@ export function DisplayImageCard({
   }
 
   const displayUrl = imgError ? undefined : imageUrl
+
+  if (variant === 'project') {
+    const content = displayUrl
+      ? <img src={displayUrl} alt={imageAlt} style={{ objectFit: imageFit }} onError={() => setImgError(true)} />
+      : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : placeholder}</span>
+    const canOpen = !!onImageClick || !!(enablePreview && displayUrl)
+    return <>
+      <article className="project-resource-card">
+        {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>
+          : <div className="project-resource-cover">{content}</div>}
+        <div className="project-resource-card-body">
+          <div className="project-resource-title-row"><h2>{title}</h2>{extra}</div>
+          {meta}
+          {footer}
+          {actions && <div className="project-resource-actions">{actions}</div>}
+        </div>
+      </article>
+      <Modal className="project-resource-dialog" focusTriggerAfterClose={false} title={imageAlt} open={previewOpen} onCancel={() => setPreviewOpen(false)}
+        afterClose={() => previewTrigger.current?.focus({ preventScroll: true })} footer={null} width={960}>
+        {displayUrl && <img className="project-resource-preview" src={displayUrl} alt={imageAlt} />}
+      </Modal>
+    </>
+  }
 
   return (
     <>
