@@ -289,7 +289,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     {capabilityIncomplete && <span className="experiment-video-reference-summary">模型未提供完整参考限制，提交时由服务端校验</span>}
     {ratioConflict && <span role="alert" className="experiment-video-reference-issue">当前模型不支持比例 {ratio}，请重新选择</span>}
     {referenceIssues.length > 0 && <span role="alert" className="experiment-video-reference-issue">{referenceIssues.join('；')}</span>}
-</>}>{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" label="视频提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
+</>}>{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频；Shift + Enter 换行" label="视频提示词" disabled={disabled} submitOnEnter onSubmit={() => void submit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
   const clearHistory = async () => {
     if (!sessionId || !clearSessionMessages) return
     await clearSessionMessages(sessionId)

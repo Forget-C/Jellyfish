@@ -243,6 +243,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         onUploaded={file => setFiles(current => [file, ...current.filter(item => item.id !== file.id)])}
         disabled={disabled}
       />}
-    >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片…" label="图片提示词" disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
+    >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片；Shift + Enter 换行" label="图片提示词" disabled={disabled} submitOnEnter onSubmit={() => void handleSubmit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
   return render({ history: historyContent, composer, clearContent, overlays: null, disabled })
 }

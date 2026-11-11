@@ -196,7 +196,14 @@ try {
     await page.getByRole('button', { name: '选择模型', exact: true }).click()
     await page.getByRole('button', { name: modelNames[mode], exact: true }).waitFor()
     await input.fill(label + '实验输入')
-    await page.getByRole('button', { name: /^发\s*送$/, exact: true }).click()
+    const sentBefore = mediaRequests.length
+    await input.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, isComposing: true })
+    await input.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229 })
+    assert.equal(await input.inputValue(), label + '实验输入')
+    await input.press('Shift+Enter')
+    assert.equal(await input.inputValue(), label + '实验输入\n')
+    assert.equal(mediaRequests.length, sentBefore, '输入法选词和换行不发送任务')
+    await input.press('Enter')
     await page.getByText(mode + ' 已提交', { exact: true }).waitFor()
   }
   assert.deepEqual(mediaRequests, [
