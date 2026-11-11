@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Empty, Image, Input, Modal, Space, message, Pagination } from 'antd'
-import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Button, Dropdown, Empty, Image, Input, Modal, Space, message, Pagination } from 'antd'
+import { MoreOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectActorLinkRead } from '../../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
@@ -9,6 +9,7 @@ import { useProjectCharacters } from '../hooks/useProjectData'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ActorEntityFormModal } from '../../../assets/components/ActorEntityFormModal'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import { encodeWorkbenchAssetEditReturnTo } from '../utils/workbenchAssetReturnTo'
 
 type ActorLike = {
@@ -104,7 +105,7 @@ export function ActorsTab() {
   }, [projectId])
 
   const handleLinkActor = async (actor: ActorLike) => {
-    if (!projectId) return
+    if (!projectId || linkingId) return
     setLinkingId(actor.id)
     try {
       await StudioProjectAssetsService.createProjectActorLinkApiV1StudioProjectAssetsActorPost({
@@ -137,6 +138,7 @@ export function ActorsTab() {
       await loadLinks()
     } catch {
       message.error('取消关联失败')
+      throw new Error('取消关联失败')
     } finally {
       setUnlinkingId(null)
     }
@@ -182,98 +184,43 @@ export function ActorsTab() {
   if (!projectId) return null
 
   return (
-    <div className="h-full overflow-auto">
-      <Card
-        title="项目演员"
-        extra={
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-              新建
-            </Button>
-            <Button
-              type="primary"
-              icon={<LinkOutlined />}
-              onClick={() => {
-                setSearch('')
-                setLinkModalOpen(true)
-              }}
-            >
-              从资产库关联
-            </Button>
-            <Button icon={<PlusOutlined />} onClick={() => navigate('/assets')}>
-              前往资产管理
-            </Button>
-          </Space>
-        }
-      >
+    <div className="project-resource-page">
+      <ProjectContentToolbar>
+        <h1 className="app-page-title">项目演员</h1>
+        <Space wrap>
+          <Button type="primary" icon={<LinkOutlined />} onClick={() => { setSearch(''); setLinkModalOpen(true) }}>从资产库关联</Button>
+          <Button icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>新建</Button>
+          <Button type="link" onClick={() => navigate('/assets')}>查看资产库</Button>
+        </Space>
+      </ProjectContentToolbar>
         {links.length === 0 && !linksLoading ? (
-          <Empty description="暂无项目演员，可从资产库关联演员到本项目" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-            <Space>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-                新建
-              </Button>
-              <Button
-                type="primary"
-                icon={<LinkOutlined />}
-                onClick={() => {
-                  setSearch('')
-                  setLinkModalOpen(true)
-                }}
-              >
-                从资产库关联
-              </Button>
-              <Button onClick={() => navigate('/assets')}>前往资产管理</Button>
-            </Space>
-          </Empty>
+          <Empty description="暂无项目演员，可从资产库关联演员到本项目" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="project-resource-grid">
             {pagedLinks.map((l) => {
               const a = linkedByActorId.get(l.actor_id)
               return (
                 <DisplayImageCard
+                  variant="project"
                   key={l.id}
-                  title={<div className="truncate">{a?.name ?? l.actor_id}</div>}
+                  title={<Link title={a?.name ?? '演员信息暂不可用'} to={`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`}>{a?.name ?? '演员信息暂不可用'}</Link>}
                   imageUrl={resolveAssetUrl(a?.thumbnail)}
-                  imageAlt={a?.name ?? l.actor_id}
-                  extra={
-                    <Space size="small">
-                      <Button
-                        type="default"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() =>
-                          navigate(
-                            `/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`,
-                          )
-                        }
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        size="small"
-                        danger
-                        loading={unlinkingId === l.id}
-                        onClick={() => {
-                          Modal.confirm({
-                            title: `取消关联「${a?.name ?? l.actor_id}」？`,
-                            okText: '取消关联',
-                            cancelText: '取消',
-                            okButtonProps: { danger: true },
-                            onOk: () => handleUnlinkActor(l),
-                          })
-                        }}
-                      >
-                        取消关联
-                      </Button>
-                    </Space>
-                  }
-                  meta={
-                    <div className="space-y-1">
-                      <div className="text-xs text-gray-600 line-clamp-2">{a?.description ?? '—'}</div>
-                      <div className="text-xs text-gray-500 truncate">actor_id：{l.actor_id}</div>
-                    </div>
-                  }
+                  imageAlt={a?.name ?? '演员信息暂不可用'}
+                  placeholder={<><UserOutlined aria-hidden />暂无演员图片</>}
+                  extra={<Dropdown trigger={['click']} menu={{ items: [
+                    { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/actors/${l.actor_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'actors')}`) },
+                    { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
+                      Modal.confirm({
+                        className: 'project-resource-dialog',
+                        title: `取消关联「${a?.name ?? '此演员'}」？`,
+                        content: '仅移除此演员与当前项目的关联，不会删除资产库中的演员。',
+                        okText: '取消关联', cancelText: '取消', okButtonProps: { danger: true },
+                        onOk: () => handleUnlinkActor(l),
+                      })
+                    } },
+                  ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${a?.name ?? '演员'}更多操作`} /></Dropdown>}
+                  meta={<><div className="project-resource-description">{a?.description?.trim() || '未填写简介'}</div><span className="project-resource-description">已关联项目</span></>}
                 />
               )
             })}
@@ -293,7 +240,7 @@ export function ActorsTab() {
             </div>
           </div>
         )}
-      </Card>
+
 
       <ActorEntityFormModal
         open={createModalOpen}
@@ -306,9 +253,11 @@ export function ActorsTab() {
       />
 
       <Modal
+        className="project-resource-dialog"
         title="从资产库关联演员"
         open={linkModalOpen}
-        onCancel={() => setLinkModalOpen(false)}
+        onCancel={() => { if (!linkingId) setLinkModalOpen(false) }}
+        closable={!linkingId} keyboard={!linkingId} maskClosable={!linkingId}
         footer={null}
         width={560}
       >
@@ -355,6 +304,7 @@ export function ActorsTab() {
                   <Button
                     type="primary"
                     size="small"
+                    disabled={!!linkingId}
                     loading={linkingId === actor.id}
                     onClick={() => handleLinkActor(actor)}
                   >

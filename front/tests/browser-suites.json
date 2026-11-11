@@ -122,6 +122,7 @@
     "lab-draft-guard": { "file": "labDraftGuard.browser.mjs", "ports": [4807], "timeoutMs": 120000 },
     "home-activity": { "file": "homeActivity.browser.mjs", "ports": [4798], "timeoutMs": 120000 },
     "legacy-labs": { "file": "legacyLabs.browser.mjs", "ports": [4184], "timeoutMs": 180000 },
+    "project-actors": { "file": "projectActors.browser.mjs", "ports": [4542], "timeoutMs": 120000 },
     "project-chapters-ui": { "file": "projectChaptersUi.browser.mjs", "ports": [4541], "timeoutMs": 90000 },
     "project-overview": { "file": "projectOverview.browser.mjs", "ports": [4539], "timeoutMs": 90000 },
     "project-lobby": { "file": "projectLobby.browser.mjs", "ports": [4783], "timeoutMs": 120000 },
@@ -182,7 +183,7 @@
   },
   "suites": {
     "management-ui": ["asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
-    "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "project-chapters-ui", "management-navigation", "lab-navigation", "legacy-labs"],
+    "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "project-chapters-ui", "project-actors", "management-navigation", "lab-navigation", "legacy-labs"],
     "lab-ui": ["lab-composer", "lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],
     "performance-design": ["generation-canvas-narrative-spatial-objects", "generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
