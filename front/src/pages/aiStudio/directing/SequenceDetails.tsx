@@ -58,7 +58,7 @@ export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onS
     <Space>场次顺序<InputNumber aria-label="场次顺序" min={1} precision={0} value={position + 1} onChange={value => setPosition((value || 1) - 1)} /></Space>
   </>
   const failure = error && <Alert type="error" showIcon message={error} action={!sequence && <Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />
-  return <Modal open title="编辑场次名称与顺序" width={480} onCancel={() => guard(onClose)}
+  return <Modal className="management-scene-dialog" open title="编辑场次名称与顺序" width={480} onCancel={() => guard(onClose)}
     closable={!busy} keyboard={!busy} maskClosable={!busy} footer={<Space wrap>
       <Button disabled={busy} onClick={() => guard(onClose)}>取消</Button>
       <Button type="primary" loading={busy} disabled={!dirty || sequence?.is_current === false} onClick={() => void save()}>保存</Button>

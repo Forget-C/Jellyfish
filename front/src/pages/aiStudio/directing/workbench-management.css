@@ -1,24 +1,24 @@
 .management-workspace .management-loading { align-self: center; margin: 24px; }
-.management-body { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.management-sidebar {
+.management-workspace .management-body { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.management-workspace .management-sidebar {
   display: flex;
   flex-direction: column;
   flex: 0 0 256px;
   padding: 12px;
   background: #fff;
-  border-right: 1px solid var(--app-border);
+  border-right: 0;
 }
-.management-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.management-sidebar-heading h2 { font-size: 14px; margin: 0; }
-.management-scene-list { min-width: 0; min-height: 0; overflow-y: auto; }
-.management-scenes { list-style: none; padding: 0; margin: 8px 0; }
-.management-scene-row {
+.management-workspace .management-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.management-workspace .management-sidebar-heading h2 { font-size: 14px; margin: 0; }
+.management-workspace .management-scene-list { min-width: 0; min-height: 0; overflow-y: auto; }
+.management-workspace .management-scenes { list-style: none; padding: 0; margin: 8px 0; }
+.management-workspace .management-scene-row {
   display: flex;
   flex-direction: column;
   width: 100%;
   gap: 4px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   padding: 8px;
@@ -26,45 +26,85 @@
   overflow-wrap: anywhere;
   cursor: pointer;
 }
-.management-scene-row:hover { background: var(--app-background); }
-.management-scene-row[aria-pressed="true"] { background: #eaf3ff; border-color: #91caff; }
-.management-scene-title { font-weight: 600; }
-.management-scene-meta { font-size: 12px; color: var(--app-muted); }
-.management-scene-notice { font-size: 12px; color: #8a5610; }
-.management-history-toggle { margin-top: 8px; }
-.management-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.management-content > .app-page-toolbar {
-  justify-content: space-between;
-  gap: 8px 16px;
-  min-height: 0;
-  padding: 8px 16px;
-  background: transparent;
-}
-.management-steps { display: flex; flex-wrap: wrap; gap: 4px; }
-.management-panel { padding: 16px; }
-.management-scene-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.management-scene-heading h2 { margin: 0; overflow-wrap: anywhere; }
-.management-mobile-navigation { display: flex; flex-wrap: wrap; gap: 8px; }
-@media (max-width: 991px) {
-  .management-content > .app-page-toolbar { justify-content: flex-start; }
-  .management-content > .app-page-toolbar .management-scene-heading { flex-basis: 100%; }
-}
-.management-panel .ant-alert { flex-wrap: wrap; row-gap: 8px; }
-.management-panel h3 { margin: 12px 0 8px; }
-.management-panel .ant-alert { margin-top: 8px; }
-.management-excerpt { max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; }
-.management-division { margin-top: 16px; min-width: 0; }
-.management-division .chapter-division-toolbar {
+.management-workspace .management-scene-row:hover { background: var(--app-background); }
+.management-workspace .management-scene-row[aria-pressed="true"] { background: #e4edfb; }
+.management-workspace .management-scene-title { font-weight: 600; }
+.management-workspace .management-scene-meta { font-size: 12px; color: var(--app-muted); }
+.management-workspace .management-scene-notice { font-size: 12px; color: #8a5610; }
+.management-workspace .management-history-toggle { margin-top: 8px; }
+.management-workspace .management-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.management-workspace .management-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+.management-workspace .management-panel { padding: 16px; }
+.management-workspace .management-scene-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.management-workspace .management-scene-heading h2 { margin: 0; overflow-wrap: anywhere; }
+.management-workspace .management-mobile-navigation { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.management-workspace .management-panel .ant-alert { flex-wrap: wrap; row-gap: 8px; }
+.management-workspace .management-panel h3 { margin: 12px 0 8px; }
+.management-workspace .management-panel .ant-alert { margin-top: 8px; }
+.management-workspace .management-excerpt { max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.management-workspace .management-division { margin-top: 16px; min-width: 0; }
+.management-workspace .management-division .chapter-division-toolbar {
   position: sticky;
   top: 0;
   z-index: 1;
   padding: 8px 0;
   background: var(--app-background);
 }
-.management-division .chapter-source-text { max-width: 70ch; }
+.management-workspace .management-division .chapter-source-text { max-width: 70ch; }
 @media (min-width: 768px) {
   .management-division .chapter-division-layout {
     grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) minmax(180px, 220px);
     gap: 12px;
   }
+}
+
+.management-workspace { color: #263244; }
+.management-workspace .management-sidebar { font-size: 13px; }
+.management-workspace .management-scene-title { font-size: 14px; }
+.management-workspace .management-scene-meta { color: #536174; }
+.management-workspace .management-toolbar {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  min-height: 56px;
+  background: transparent;
+  border-bottom: 0;
+  padding: 10px 20px;
+  gap: 8px 16px;
+}
+.management-workspace .management-identity { min-width: 0; }
+.management-workspace .management-scene-heading { flex-wrap: nowrap; }
+.management-workspace .management-scene-heading h2 { font-size: 16px; font-weight: 600; line-height: 1.5; }
+.management-workspace .management-toolbar .ant-btn { font-size: 13px; height: 32px; border-radius: 8px; }
+.management-workspace .management-steps { gap: 4px; }
+.management-workspace .management-steps .ant-btn[aria-current="step"] { background: #e4edfb; color: #245fc5; font-weight: 600; }
+.management-workspace .management-object-actions,
+.management-workspace .management-storyboard-actions { justify-self: end; min-width: 0; }
+.management-workspace .management-object-actions .ant-space,
+.management-workspace .management-storyboard-actions .ant-space { flex-wrap: wrap; justify-content: flex-end; }
+.management-workspace .management-panel { padding: 16px 20px 20px; }
+.management-workspace button:focus-visible { outline: 2px solid #245fc5; outline-offset: 2px; }
+.management-scene-dialog { top: 16px; padding-bottom: 16px; }
+.management-scene-dialog .ant-modal-content { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.management-scene-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
+.management-scene-dialog .ant-modal-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
+.management-scene-dialog .ant-modal-footer { flex-shrink: 0; }
+.management-scene-dialog .ant-btn { font-size: 13px; border-radius: 8px; }
+.management-scene-dialog .ant-modal-body label { display: block; font-size: 14px; }
+@media (max-width: 1199px) {
+  .management-workspace .management-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .management-workspace .management-identity { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+  .management-workspace .management-toolbar { display: flex; flex-direction: column; align-items: stretch; padding: 12px 16px; }
+  .management-workspace .management-mobile-navigation { margin-top: 8px; }
+  .management-workspace .management-toolbar .ant-btn,
+  .management-scene-dialog .ant-btn { min-height: 36px; height: auto; }
+  .management-workspace .management-object-actions,
+  .management-workspace .management-storyboard-actions { align-self: stretch; }
+  .management-workspace .management-object-actions .ant-space,
+  .management-workspace .management-storyboard-actions .ant-space { justify-content: flex-start; }
+  .management-workspace .management-panel { padding: 12px 16px 20px; }
+  .management-scene-dialog { top: 16px; padding-bottom: 16px; }
 }
