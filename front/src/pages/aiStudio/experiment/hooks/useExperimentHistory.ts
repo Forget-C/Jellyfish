@@ -24,6 +24,10 @@ export interface ExperimentHistoryState {
   loadingMore: boolean
   /** 最近一次读取历史失败时的错误，成功读取后会清空。 */
   error: Error | null
+  /** 是否已经成功读取过本会话，包括成功返回空列表。 */
+  hasLoadedHistory: boolean
+  /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
+  errorOnLoadMore: boolean
   /** 从第一页重新读取当前会话历史。 */
   refresh: () => Promise<void>
   /** 读取并按服务端序号合并当前会话更早的一页历史。 */
@@ -40,6 +44,7 @@ export interface ExperimentHistoryState {
  * 首次提交会把草稿切换为持久化会话，Hook 可能随 sessionId 重建；这里仅缓存
  * 服务端已返回的正式消息，不保存前端伪造消息，因此消息 ID 与顺序始终可追溯。
  */
+const emptyHistory: ExperimentMessageRead[] = []
 const adoptedMessagesBySession = new Map<string, ExperimentMessageRead[]>()
 
 /** 按消息 ID 覆盖合并，并使用服务端 sequence 维持唯一稳定顺序。 */
@@ -70,10 +75,14 @@ export function useExperimentHistory(
   const [messages, setMessages] = useState<ExperimentMessageRead[]>([])
   const [historyPage, setHistoryPage] = useState(1)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(Boolean(sessionId))
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
+  const [errorOnLoadMore, setErrorOnLoadMore] = useState(false)
   const requestVersionRef = useRef(0)
+  const historySessionIdRef = useRef(sessionId)
+  const historyPageRef = useRef(1)
   const currentSessionIdRef = useRef(sessionId)
   currentSessionIdRef.current = sessionId
 
@@ -93,15 +102,19 @@ export function useExperimentHistory(
     if (currentSessionId) adoptedMessagesBySession.delete(currentSessionId)
     requestVersionRef.current += 1
     setMessages([])
+    setHasLoadedHistory(false)
+    historyPageRef.current = 1
     setHistoryPage(1)
     setHasMoreHistory(false)
     setLoading(false)
     setLoadingMore(false)
+    setErrorOnLoadMore(false)
     setError(null)
   }, [])
 
   /** 从第一页重新读取当前会话的完整可见历史。 */
   const refresh = useCallback(async () => {
+    if (sessionId !== currentSessionIdRef.current) return
     if (!sessionId) {
       clearLocalHistory()
       return
@@ -111,6 +124,7 @@ export function useExperimentHistory(
     requestVersionRef.current = requestVersion
     setLoading(true)
     setLoadingMore(false)
+    setErrorOnLoadMore(false)
     setError(null)
 
     try {
@@ -119,22 +133,30 @@ export function useExperimentHistory(
         page: 1,
         pageSize,
       })
-      if (requestVersion !== requestVersionRef.current) return
+      if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
 
       const items = response.data ?? []
       const adopted = adoptedMessagesBySession.get(sessionId) ?? []
-      setMessages(mergeExperimentMessages(adopted, items))
+      // 刷新第一页时保留已分页读取的更早消息，避免读者失去当前位置。
+      const preserveEarlier = items.length === pageSize && historyPageRef.current > 1
+      const earliest = preserveEarlier ? Math.min(...items.map((item) => item.sequence)) : undefined
+      setMessages((current) => mergeExperimentMessages(
+        earliest === undefined ? [] : current.filter((item) => item.sequence < earliest),
+        adopted,
+        items,
+      ))
       releaseAdoptedMessages(sessionId, items)
-      setHistoryPage(1)
-      setHasMoreHistory(items.length === pageSize)
+      setHasLoadedHistory(true)
+      if (!preserveEarlier) {
+        historyPageRef.current = 1
+        setHistoryPage(1)
+        setHasMoreHistory(items.length === pageSize)
+      }
     } catch (reason) {
-      if (requestVersion !== requestVersionRef.current) return
-      setMessages(adoptedMessagesBySession.get(sessionId) ?? [])
-      setHistoryPage(1)
-      setHasMoreHistory(false)
+      if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
       setError(reason instanceof Error ? reason : new Error('加载实验室历史失败'))
     } finally {
-      if (requestVersion === requestVersionRef.current) setLoading(false)
+      if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoading(false)
     }
   }, [clearLocalHistory, pageSize, sessionId])
 
@@ -145,6 +167,7 @@ export function useExperimentHistory(
     const nextPage = historyPage + 1
     const requestVersion = requestVersionRef.current
     setLoadingMore(true)
+    setErrorOnLoadMore(false)
     setError(null)
 
     try {
@@ -153,32 +176,42 @@ export function useExperimentHistory(
         page: nextPage,
         pageSize,
       })
-      if (requestVersion !== requestVersionRef.current) return
+      if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
 
       const items = response.data ?? []
       setMessages((current) => mergeExperimentMessages(items, current))
+      historyPageRef.current = nextPage
       setHistoryPage(nextPage)
       setHasMoreHistory(items.length === pageSize)
     } catch (reason) {
-      if (requestVersion !== requestVersionRef.current) return
+      if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
+      setErrorOnLoadMore(true)
       setError(reason instanceof Error ? reason : new Error('加载更早实验室历史失败'))
     } finally {
-      if (requestVersion === requestVersionRef.current) setLoadingMore(false)
+      if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoadingMore(false)
     }
   }, [hasMoreHistory, historyPage, loading, loadingMore, pageSize, sessionId])
 
   useEffect(() => {
+    historySessionIdRef.current = sessionId
+    historyPageRef.current = 1
     setMessages(sessionId ? adoptedMessagesBySession.get(sessionId) ?? [] : [])
+    setHasLoadedHistory(false)
+    setHistoryPage(1)
+    setHasMoreHistory(false)
     void refresh()
   }, [refresh, sessionId])
 
+  const isCurrentHistory = historySessionIdRef.current === sessionId
   return {
-    messages,
+    messages: isCurrentHistory ? messages : emptyHistory,
     historyPage,
-    hasMoreHistory,
-    loading,
-    loadingMore,
-    error,
+    hasMoreHistory: isCurrentHistory && hasMoreHistory,
+    loading: isCurrentHistory ? loading : Boolean(sessionId),
+    loadingMore: isCurrentHistory && loadingMore,
+    error: isCurrentHistory ? error : null,
+    hasLoadedHistory: isCurrentHistory && hasLoadedHistory,
+    errorOnLoadMore,
     refresh,
     loadMore,
     adoptCanonicalMessages,

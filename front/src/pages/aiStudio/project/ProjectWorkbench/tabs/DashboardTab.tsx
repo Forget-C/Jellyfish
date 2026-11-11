@@ -1,40 +1,72 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Empty, Space, Spin, Statistic } from 'antd'
-import { useNavigate, useParams } from 'react-router-dom'
-import { StudioDirectingService } from '../../../../../services/generated'
-import type { ChapterOverview } from '../../../../../services/generated'
+import { Alert, Button, Empty, Space, Spin } from 'antd'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { StudioDirectingService, type ChapterOverview } from '../../../../../services/generated'
 import { useChapters } from '../hooks/useProjectData'
-import type { TabKey } from '../constants'
 import { directingError } from '../../../directing/common'
-import { workbenchManagementLocation } from '../../../directing/chapterNavigation'
+import { chapterActionLocation, chapterLocation, workbenchManagementLocation } from '../../../directing/chapterNavigation'
+import { readRecentWork } from '../../../directing/workspaceContext'
+import { chapterProduction } from '../../chapterProduction'
+import { ProjectCanvasPreview } from '../ProjectCanvasPreview'
+import '../project-production.css'
 
-/** 项目概览以章节和场次为入口，不再用旧镜头准备状态判断新流程。 */
-export function DashboardTab({ onSelectTab }: { onSelectTab: (tab: TabKey) => void }) {
+/** 项目概览使用真实章节和已有场次入口呈现当前制作。 */
+export function DashboardTab() {
   const { projectId = '' } = useParams()
   const navigate = useNavigate()
-  const { chapters, loading } = useChapters(projectId)
+  const { chapters, loading, error: chapterError, refresh } = useChapters(projectId)
   const [rows, setRows] = useState<ChapterOverview[]>([])
-  const [error, setError] = useState('')
+  const [sceneError, setSceneError] = useState('')
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     let active = true
-    setRows([]); setError('')
+    setRows([])
+    setSceneError('')
     void Promise.all(chapters.map(chapter => StudioDirectingService.directingChapterOverview({ projectId, chapterId: chapter.id })))
-      .then(results => { if (active) { setRows(results.flatMap(result => result.data ? [result.data] : [])); setError('') } })
-      .catch(cause => { if (active) setError(directingError(cause)) })
+      .then(results => { if (active) setRows(results.flatMap(result => result.data ? [result.data] : [])) })
+      .catch(cause => { if (active) setSceneError(directingError(cause)) })
     return () => { active = false }
   }, [chapters, projectId, retry])
-  if (loading) return <Spin />
-  return <Space direction="vertical" size="large" className="w-full">
-    {error && <Alert type="error" message={error} action={<Button onClick={() => setRetry(value => value + 1)}>重试读取场次</Button>} />}
-    <Card title="场次创作" extra={<Button type="primary" onClick={() => onSelectTab('chapters')}>管理章节</Button>}>
-      <p>在工作台管理确认场次、准备对象并生成分镜画布，再打开画布编辑和制作。</p>
-      <Space size="large"><Statistic title="章节" value={chapters.length} /><Statistic title="场次" value={rows.reduce((sum, row) => sum + row.sequences.length, 0)} /></Space>
-    </Card>
-    {!chapters.length && <Empty description="创建第一章开始创作"><Button onClick={() => navigate(`/projects/${projectId}?tab=chapters&create=1`)}>创建第一章</Button></Empty>}
-    {rows.map(row => <Card key={row.chapter_id} title={row.title} extra={<Button onClick={() => navigate(workbenchManagementLocation(projectId, row.chapter_id))}>工作台管理</Button>}>
-      {row.sequences.length ? <Space wrap>{row.sequences.map(scene => <Button key={scene.id}
-        onClick={() => navigate(workbenchManagementLocation(projectId, row.chapter_id, scene.id))}>{scene.title} · 打开工作台管理</Button>)}</Space> : <span>尚未确认场次</span>}
-    </Card>)}
-  </Space>
+
+  const recentChapterId = readRecentWork(projectId)?.chapterId
+  const chapter = chapters.find(row => row.id === recentChapterId)
+    ?? chapters.find(row => row.status !== 'done') ?? chapters[0]
+  const production = chapter && chapterProduction(chapter)
+  return <div className="project-overview">
+    <div className="project-overview-grid">
+      <section aria-labelledby="project-current-production">
+        <h2 id="project-current-production" className="project-section-title">当前制作</h2>
+        <div className="project-production-surface">
+          {loading ? <Spin /> : chapterError
+            ? <Alert type="error" message={chapterError} action={<Button onClick={() => void refresh()}>重试</Button>} />
+            : chapter && production ? <div className="project-current-chapter">
+              <span className="chapter-production-state" data-tone={production.tone}>{production.state}</span>
+              <h3>第 {chapter.index} 章 · {chapter.title}</h3>
+              <p>{chapter.sequenceCount === undefined ? '场次数量待核对' : `${chapter.sequenceCount} 个场次`}</p>
+              <Space wrap>
+                <Button type="primary" onClick={() => navigate(chapterActionLocation(projectId, chapter.id, production.target))}>{production.primaryAction}</Button>
+                <Link to={chapterLocation(projectId)}>查看章节列表 →</Link>
+              </Space>
+            </div> : <Empty description="创建第一章开始创作">
+              <Button type="primary" onClick={() => navigate(`${chapterLocation(projectId)}&create=1`)}>创建第一章</Button>
+            </Empty>}
+        </div>
+      </section>
+      <ProjectCanvasPreview projectId={projectId} />
+    </div>
+    {sceneError && <Alert type="error" message={sceneError} action={<Button onClick={() => setRetry(value => value + 1)}>重试读取场次</Button>} />}
+    {!loading && !chapterError && rows.some(row => row.sequences.length > 0) && <section aria-labelledby="project-overview-sequences">
+      <h2 id="project-overview-sequences" className="project-section-title">章节场次</h2>
+      <div className="project-overview-sequences">
+        {rows.filter(row => row.sequences.length > 0).map(row => <article key={row.chapter_id} className="project-production-surface">
+          <div className="project-section-heading">
+            <h3>{row.title}</h3>
+            <Link to={workbenchManagementLocation(projectId, row.chapter_id)}>工作台管理</Link>
+          </div>
+          <Space wrap>{row.sequences.map(scene => <Button key={scene.id}
+            onClick={() => navigate(workbenchManagementLocation(projectId, row.chapter_id, scene.id))}>{scene.title} · 打开工作台管理</Button>)}</Space>
+        </article>)}
+      </div>
+    </section>}
+  </div>
 }

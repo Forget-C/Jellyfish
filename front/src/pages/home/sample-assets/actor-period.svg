@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="room" x2="1" y2="1">
+      <stop stop-color="#eed3ba"/>
+      <stop offset="1" stop-color="#9e6765"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#room)"/>
+  <circle cx="159" cy="83" r="68" fill="#fae4c7" opacity=".6"/>
+  <path d="M17 28h76v133H17zm210 0h76v133h-76zM42 28v133m26-133v133m185-133v133m25-133v133M17 73h76m-76 42h76m134-42h76m-76 42h76" fill="none" stroke="#995f5e" stroke-width="2" opacity=".35"/>
+  <path d="M91 181c8-32 25-47 57-53h26c31 6 48 21 56 53z" fill="#7c354b"/>
+  <path d="M134 121c-13-7-14-39-5-59 3-15 17-26 32-26 23 0 36 19 36 43 1 16-5 32-9 44l-14-9-27 1z" fill="#302637"/>
+  <ellipse cx="160" cy="36" rx="19" ry="13" fill="#302637"/>
+  <path d="m138 43 46-14" stroke="#b48254" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="182" cy="29" r="5" fill="#e6b76c"/>
+  <path d="M149 112h24l6 19-18 16-19-16z" fill="#c38772"/>
+  <path d="M137 77c10 0 20-6 30-17 5 10 11 15 20 18v13c0 17-11 31-26 31-14 0-24-13-24-31z" fill="#efba99"/>
+  <path d="M144 87h8m17 0h8m-24 17c6 3 11 3 16 0" stroke="#944e57" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="m137 132 26 19 24-19 8 10-28 35-40-35z" fill="#e6bd91"/>
+  <path d="m141 147 22 15 17-12" fill="none" stroke="#d19874" stroke-width="2"/>
+</svg>

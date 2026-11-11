@@ -1,0 +1,49 @@
+.runtime-settings.management-surface {
+  max-width: 640px;
+  padding: 16px;
+}
+
+.runtime-settings-note,
+.runtime-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.runtime-settings-note {
+  margin-bottom: 16px;
+  color: var(--app-muted);
+}
+
+.runtime-settings-note .ant-btn {
+  padding-inline: 0;
+  color: var(--app-accent);
+  font-size: inherit;
+}
+
+.runtime-settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.runtime-settings-form .ant-form-item {
+  margin-bottom: 0;
+}
+
+.runtime-settings-form .ant-form-item-label > label {
+  font-size: 13px;
+}
+
+.runtime-settings-form .ant-input-number {
+  width: 100%;
+}
+
+.runtime-settings-actions [role='status'] {
+  color: var(--app-muted);
+}
+
+.runtime-settings-actions [role='alert'] {
+  color: #a61d24;
+}

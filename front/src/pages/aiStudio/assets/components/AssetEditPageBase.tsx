@@ -1,11 +1,16 @@
 import { useWorkspaceDraft } from '../../directing/WorkspaceDrafts'
 import { usePageTitle } from '../../../../layouts/pageTitle'
+import { AssetDetailLeaveGuard } from './AssetDetailLeaveGuard'
+import { useTaskUiStore } from '../../components/taskUiStore'
 import { AssetReferencePicker } from './AssetReferencePicker'
 import { AssetDossierImage, AssetDossierSection } from './AssetDossier'
 import './assetDossier.css'
+import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components/layout/PageLayout'
 import { AssetFactsFields, ASSET_FIELDS, pickAssetFacts, previewAssetDescription, type AssetFacts, type AssetFieldName, type StructuredAssetType } from './AssetFactsFields'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Alert,
+  Skeleton,
   Button,
   Card,
   Col,
@@ -23,7 +28,7 @@ import {
   message,
 } from 'antd'
 import { ArrowLeftOutlined, CloseCircleOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons'
-import { FilmService, ScriptProcessingService } from '../../../../services/generated'
+import { ApiError, FilmService, ScriptProcessingService } from '../../../../services/generated'
 import type { TaskOutputHistoryRead, AssetPromptAudit, AssetFieldSuggestion, AssetImagePromptRenderBody, TaskStatus } from '../../../../services/generated'
 import { buildFileDownloadUrl } from '../utils'
 import { DisplayImageCard } from './DisplayImageCard'
@@ -181,12 +186,26 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const { options: projectStyleOptions, defaultVisualStyle, getDefaultStyle } = useProjectStyleOptions()
   const taskCopy = TASK_COPY.smartDetect
   const location = useLocation()
+  const libraryDetail = !embedded && /^\/assets\/(actors|scenes|props|costumes)\/[^/]+\/edit\/?$/.test(location.pathname)
+  const imagePanelRef = useRef<HTMLElement>(null)
+  const detailBodyRef = useRef<HTMLDivElement>(null)
+  const [pinImages, setPinImages] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [assetReadError, setAssetReadError] = useState<'missing' | 'failed'>()
+  const [imageReadError, setImageReadError] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [partialSave, setPartialSave] = useState(false)
+  const [imageReading, setImageReading] = useState(false)
+  const [generationSubmitting, setGenerationSubmitting] = useState(false)
+  const saveLock = useRef(false)
+  const serverTasks = useTaskUiStore(state => state.serverItems)
   const [asset, setAsset] = useState<TAsset | null>(null)
   usePageTitle(asset?.id === assetId ? asset?.name : undefined, !embedded)
   const [images, setImages] = useState<TImage[]>([])
   const [selectedAngle, setSelectedAngle] = useState<AssetViewAngle | null>(null)
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
+  const enlargeButtonRef = useRef<HTMLButtonElement>(null)
+  const [readyCover, setReadyCover] = useState<string>()
 
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
@@ -217,6 +236,18 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     setImagePreviewOpen(false)
   }, [assetId])
 
+  useEffect(() => {
+    if (!libraryDetail || loading || !imagePanelRef.current || !detailBodyRef.current) return
+    const panel = imagePanelRef.current
+    const body = detailBodyRef.current
+    const measure = () => setPinImages(body.clientWidth >= 1000 && panel.offsetHeight + 40 <= body.clientHeight)
+    const observer = new ResizeObserver(measure)
+    observer.observe(panel)
+    observer.observe(body)
+    measure()
+    return () => observer.disconnect()
+  }, [libraryDetail, loading])
+
   const [smartDetectLoading, setSmartDetectLoading] = useState(false)
   const [smartDetectOpen, setSmartDetectOpen] = useState(false)
   const [smartDetectIssues, setSmartDetectIssues] = useState<string[]>([])
@@ -225,8 +256,10 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const currentFactsSnapshot = JSON.stringify({ name: formName, facts: formFacts, supplement: formDesc })
 
   const [generatingByImageId, setGeneratingByImageId] = useState<Record<number, boolean>>({})
+  const [generationImageId, setGenerationImageId] = useState<number>()
   const [generationTask, setGenerationTask] = useState<RelationTaskState | null>(null)
   const [generationSettledTask, setGenerationSettledTask] = useState<RelationTaskState | null>(null)
+  const refreshedImageTasks = useRef(new Set<string>())
 
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false)
   const [promptPreviewLoading, setPromptPreviewLoading] = useState(false)
@@ -240,6 +273,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState(false)
   const [historyCandidates, setHistoryCandidates] = useState<HistoryCandidate<TImage>[]>([])
   const [editingSlotImage, setEditingSlotImage] = useState<TImage | null>(null)
   const [adoptingImageId, setAdoptingImageId] = useState<string | null>(null)
@@ -276,7 +310,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       },
     })
   }, [])
-  const { task: smartDetectTask, settledTask: smartDetectSettledTask, trackTaskData: trackSmartDetectTaskData, applyCancelData: applySmartDetectCancelData } = useCancelableRelationTask({
+  const { task: rawSmartDetectTask, settledTask: smartDetectSettledTask, trackTaskData: trackSmartDetectTaskData, applyCancelData: applySmartDetectCancelData } = useCancelableRelationTask({
     enabled: !!assetId && !!smartDetectRelationType && !!smartDetectRelationEntityId,
     relationType: smartDetectRelationType || '',
     relationEntityId: smartDetectRelationEntityId,
@@ -298,6 +332,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         : null,
     ],
   )
+  const smartDetectTask = rawSmartDetectTask && !isTerminalStatus(rawSmartDetectTask.status) ? rawSmartDetectTask : null
   const smartDetectBusy = smartDetectLoading || !!smartDetectTask
 
   const ensureImageSlots = useCallback(async (targetViewCount: number) => {
@@ -345,14 +380,39 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     setFormViewCount(clampViewCount(nextAsset.view_count))
   }, [structuredType, defaultVisualStyle, getDefaultStyle])
 
+  const reloadImages = useCallback(async () => {
+    if (!assetId) return
+    setImageReading(true)
+    try { setImages(await listImages(assetId)); setImageReadError(false) }
+    catch { setImageReadError(true) }
+    finally { setImageReading(false) }
+  }, [assetId, listImages])
+
+  // 全局任务轮询可在局部轮询中断后恢复图片；只刷新图片，保留正在编辑的档案。
+  useEffect(() => {
+    if (!libraryDetail) return
+    let refresh = false
+    for (const task of Object.values(serverTasks)) {
+      if (task.target_type !== `${relationType}_slot` || !images.some(image => String(image.id) === String(task.target_id)) || !isTerminalStatus(task.status)) continue
+      if (task.task_id === generationTask?.taskId) setGenerationTask(null)
+      if (task.status === 'succeeded' && !refreshedImageTasks.current.has(task.task_id)) {
+        refreshedImageTasks.current.add(task.task_id)
+        refresh = true
+      }
+    }
+    if (refresh) void reloadImages()
+  }, [libraryDetail, serverTasks, relationType, images, generationTask, reloadImages])
+
   /** 加载资产和已有视角，初始化档案表单及图片区域。 */
   const loadData = useCallback(async () => {
     if (!assetId) return
 
     setLoading(true)
+    setAssetReadError(undefined)
     try {
       const nextAsset = await getAsset(assetId)
       if (!nextAsset) {
+        if (libraryDetail) { setAssetReadError('missing'); return }
         message.error(`未找到${assetDisplayName}资产`)
         onNavigate(backTo, true)
         return
@@ -361,14 +421,19 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       applyAsset(nextAsset)
       const targetCount = clampViewCount(nextAsset.view_count)
 
+      if (libraryDetail) {
+        await reloadImages()
+        return
+      }
       const imageRows = embedded ? await listImages(assetId) : await ensureImageSlots(targetCount)
       setImages(imageRows)
-    } catch {
-      message.error(`加载${assetDisplayName}资产失败`)
+    } catch (error) {
+      if (libraryDetail) setAssetReadError(error instanceof ApiError && error.status === 404 ? 'missing' : 'failed')
+      else message.error(`加载${assetDisplayName}资产失败`)
     } finally {
       setLoading(false)
     }
-  }, [assetId, assetDisplayName, backTo, applyAsset, ensureImageSlots, getAsset, onNavigate, embedded, listImages])
+  }, [assetId, assetDisplayName, backTo, applyAsset, ensureImageSlots, getAsset, onNavigate, embedded, listImages, libraryDetail, reloadImages])
 
   useEffect(() => {
     void loadData()
@@ -398,13 +463,15 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
   /** 保存整份资产档案并补齐新增视角，用服务端返回值确认字段和保存状态。 */
   const handleSaveBaseInfo = async () => {
-    if (!assetId || !asset) return false
+    if (!assetId || !asset || saveLock.current || smartDetectBusy) return false
     if (!formName.trim()) {
       message.warning('请输入名称')
       return false
     }
 
+    saveLock.current = true
     setSavingBase(true)
+    setSaveError('')
     try {
       const nextViewCount = Math.max(minViewCount, clampViewCount(formViewCount))
       const payload: AssetUpdate = {
@@ -414,23 +481,34 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         visual_style: formVisualStyle,
         style: formStyle,
       }
-      const nextAsset = await updateAsset(assetId, payload)
+      const nextAsset = libraryDetail && !hasUnsavedChanges ? asset : await updateAsset(assetId, payload)
       if (!nextAsset) throw new Error('保存响应缺少资产数据')
       applyAsset(nextAsset)
-      setImages(await ensureImageSlots(nextViewCount))
+      try {
+        setImages(await ensureImageSlots(nextViewCount))
+        setPartialSave(false)
+        setImageReadError(false)
+      } catch (error) {
+        if (!libraryDetail) throw error
+        setPartialSave(true)
+        setImageReadError(true)
+        return false
+      }
       message.success('资产已保存')
       return true
     } catch {
-      message.error('保存失败')
+      if (libraryDetail) setSaveError('保存失败，修改已保留，请重试。')
+      else message.error('保存失败')
       return false
     } finally {
+      saveLock.current = false
       setSavingBase(false)
     }
   }
 
   useWorkspaceDraft({ name: `${assetDisplayName}资产档案`, dirty: embedded && hasUnsavedChanges, busy: embedded && (savingBase || smartDetectBusy), save: handleSaveBaseInfo, discard: () => { if (asset) applyAsset(asset) } })
   const returnFromAsset = () => {
-    if (savingBase || smartDetectBusy) return
+    if (!libraryDetail && (savingBase || smartDetectBusy)) return
     if (embedded && hasUnsavedChanges) {
       Modal.confirm({ title: '资产档案有未保存的修改', content: '本场设计仍保留。请保存资产后返回，或取消并继续编辑。', okText: '保存并返回本场资产', cancelText: '继续编辑', onOk: async () => { if (!await handleSaveBaseInfo()) throw new Error('资产未保存'); onNavigate(backTo) } })
     } else onNavigate(backTo)
@@ -523,9 +601,9 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   }
 
   const handleCancelSmartDetectTask = async () => {
-    if (!smartDetectTask?.taskId) return
+    if (!smartDetectTask?.taskId) return false
     try {
-      await executeTaskCancel({
+      const result = await executeTaskCancel({
         taskId: smartDetectTask.taskId,
         reason: `用户在${assetDisplayName}资产编辑页取消智能检测任务`,
         applyCancelData: applySmartDetectCancelData,
@@ -533,8 +611,9 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         cancelRequestedMessage: taskCopy.cancelRequestedMessage,
         fallbackErrorMessage: '取消智能检测任务失败',
       })
+      return Boolean(result)
     } catch {
-      // executeTaskCancel 已统一处理错误提示
+      return false
     }
   }
 
@@ -609,7 +688,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   /** 打开槽位预览，每次从已保存的资产和推荐参考图开始。 */
   const openPromptPreview = async (image: TImage) => {
     if (!assetId) return
-    if (hasUnsavedChanges) {
+    if (hasUnsavedChanges || (libraryDetail && partialSave)) {
       message.warning('请先保存资产设定，再预览生成提示词')
       return
     }
@@ -629,13 +708,19 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       return
     }
 
+    if (libraryDetail && (hasUnsavedChanges || partialSave || savingBase || generationSubmitting || activeImageTask)) return
+    setGenerationImageId(promptPreviewImage.id)
+    setGenerationSubmitting(true)
     setGeneratingByImageId((prev) => ({ ...prev, [promptPreviewImage.id]: true }))
+    let accepted = false
     try {
       const taskId = await createGenerationTask(assetId, promptPreviewImage.id, { prompt, images: promptPreviewRefFileIds, saveAsCandidate: promptOptions.mode === 'edit', audit: promptAudit })
       if (!taskId) {
         message.error('生成任务创建失败：缺少任务 ID')
         return
       }
+      accepted = true
+      setGenerationSubmitting(false)
       setGenerationTask({
         taskId,
         status: 'queued',
@@ -666,13 +751,15 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       if (finalStatus === 'succeeded') {
         setPromptPreviewOpen(false)
         setPromptPreviewImage(null)
-        await loadData()
+        if (libraryDetail) await reloadImages()
+        else await loadData()
       } else if (finalStatus !== 'failed' && finalStatus !== 'cancelled') {
         message.warning('生成任务仍在执行，请稍后刷新')
       }
     } catch {
-      message.error('发起生成失败')
+      message.error(accepted ? '任务已提交，读取生成状态失败；可在任务中心查看进度' : '发起生成失败')
     } finally {
+      setGenerationSubmitting(false)
       setGeneratingByImageId((prev) => ({ ...prev, [promptPreviewImage.id]: false }))
     }
   }
@@ -681,6 +768,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     setEditingSlotImage(targetImage)
     setHistoryOpen(true)
     setHistoryLoading(true)
+    setHistoryError(false)
 
     try {
       const outputs: TaskOutputHistoryRead[] = []
@@ -738,7 +826,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
       setHistoryCandidates(taskOutputCandidates.length > 0 ? taskOutputCandidates : fallbackCandidates)
     } catch {
-      message.error('加载历史生成图片失败')
+      if (libraryDetail) setHistoryError(true)
+      else message.error('加载历史生成图片失败')
       setHistoryCandidates([])
     } finally {
       setHistoryLoading(false)
@@ -746,7 +835,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   }
 
   const handleAdoptHistoryImage = async (candidate: HistoryCandidate<TImage>) => {
-    if (!assetId || !editingSlotImage || !candidate.file_id) return
+    if (!assetId || !editingSlotImage || !candidate.file_id || (libraryDetail && (hasUnsavedChanges || partialSave || savingBase || smartDetectBusy))) return
 
     setAdoptingImageId(candidate.id)
     try {
@@ -759,13 +848,99 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       message.success('角度图片已更新')
       setHistoryOpen(false)
       setEditingSlotImage(null)
-      await loadData()
+      if (libraryDetail) await reloadImages()
+      else await loadData()
     } catch {
       message.error('更新角度图片失败')
     } finally {
       setAdoptingImageId(null)
     }
   }
+
+  const activeImageTask = Object.values(serverTasks).find(task => task.target_type === `${relationType}_slot`
+    && String(task.target_id) === String(selectedSlot?.image?.id) && (task.status === 'queued' || task.status === 'running'))
+    ?? (generationImageId === selectedSlot?.image?.id && generationTask
+      && !isTerminalStatus((serverTasks[generationTask.taskId] ?? generationTask).status) ? generationTask : undefined)
+
+  const cover = (
+                <figure className="m-0 min-w-0">
+                  <div className="asset-dossier-cover">
+                    {libraryDetail && selectedSlot?.imageUrl && readyCover === selectedSlot.imageUrl && <button ref={enlargeButtonRef} className="asset-detail-enlarge" type="button" aria-label="放大当前视角图片" onClick={() => setImagePreviewOpen(true)}><span>放大图片</span></button>}
+                    <AssetDossierImage src={selectedSlot?.imageUrl}
+                      alt={`${asset?.name ?? assetDisplayName} · ${ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}`} preview={!libraryDetail} onReady={libraryDetail ? setReadyCover : undefined} />
+                  </div>
+                  <figcaption className="mt-2 text-center text-sm text-gray-500">
+                    {ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']} · {selectedSlot?.imageUrl ? !libraryDetail || readyCover === selectedSlot.imageUrl ? '点击图片放大' : '图片加载中或不可用' : '暂无图片'}
+                  </figcaption>
+                </figure>
+  )
+  const viewCountControl = (
+                  structuredType ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label htmlFor="asset-dossier-view-count" className="text-sm text-gray-600">视角数</label>
+                      <InputNumber id="asset-dossier-view-count" min={minViewCount} max={MAX_VIEW_COUNT} precision={0}
+                        value={formViewCount} onChange={(v) => setFormViewCount(v ?? minViewCount)}
+                        disabled={smartDetectBusy || savingBase || (libraryDetail && loading)} />
+                      <span className="text-xs text-gray-500">仅可增加，最多 {MAX_VIEW_COUNT} 个；保存后生效</span>
+                    </div>
+                  ) : null
+  )
+  const imageSection = (
+              <AssetDossierSection title="多视角图片">
+                <div className="space-y-4">
+                  {libraryDetail && cover}
+                  {libraryDetail && imageReadError && !partialSave && <Alert type="error" message="读取图片失败，档案内容已保留" action={<Button loading={imageReading} onClick={() => void reloadImages()}>重试读取图片</Button>} />}
+                  {libraryDetail && activeImageTask && <p role="status">{activeImageTask.status === 'queued' ? '图片排队中' : '图片生成中'}</p>}
+                  {!libraryDetail && viewCountControl}
+                  <div className="asset-dossier-view-list" aria-label="图片视角">
+                    {slotItems.map((slot) => (
+                      <button type="button" key={slot.angle} className="asset-dossier-view"
+                        aria-label={`切换到${ANGLE_LABEL_MAP[slot.angle]}视角`}
+                        aria-pressed={slot.angle === selectedSlot?.angle} onClick={() => setSelectedAngle(slot.angle)}>
+                        <span className="asset-dossier-view-image">
+                          <AssetDossierImage src={slot.imageUrl} alt={ANGLE_LABEL_MAP[slot.angle]} />
+                        </span>
+                        {ANGLE_LABEL_MAP[slot.angle]}{!slot.image ? libraryDetail && !hasUnsavedChanges ? ' · 未准备' : ' · 待保存' : ''}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-gray-600 mr-1">当前：{ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}</span>
+                    {!libraryDetail && <Button disabled={!selectedSlot?.imageUrl} onClick={() => setImagePreviewOpen(true)}>查看大图</Button>}
+                    <Button disabled={!selectedSlot?.image || savingBase || smartDetectBusy || (libraryDetail && (hasUnsavedChanges || partialSave || !!activeImageTask))}
+                      loading={Boolean(selectedSlot?.image && generatingByImageId[selectedSlot.image.id])}
+                      onClick={() => selectedSlot?.image && void openPromptPreview(selectedSlot.image)}>
+                      {selectedSlot?.imageUrl ? '重新生成' : '生成图片'}
+                    </Button>
+                    <Button icon={<EditOutlined aria-hidden="true" />} disabled={!selectedSlot?.image || savingBase || (!libraryDetail && hasUnsavedChanges)}
+                      onClick={() => selectedSlot?.image && void openHistoryModal(selectedSlot.image)}>
+                      {libraryDetail ? '历史图片' : '编辑图片'}
+                    </Button>
+                  </div>
+                  {libraryDetail && viewCountControl}
+                  {libraryDetail && !imageReadError && !hasUnsavedChanges && slotItems.some(slot => !slot.image) && <Button loading={savingBase} disabled={smartDetectBusy} onClick={() => void handleSaveBaseInfo()}>准备图片视角</Button>}
+                  {hasUnsavedChanges ? <div className="text-sm text-amber-600">请先保存资产，再生成或采用图片。</div> : null}
+                </div>
+              </AssetDossierSection>
+  )
+  const toolbarActions = (
+        <div className="asset-dossier-toolbar-actions">
+          {embedded && !images.length && <Button disabled={loading || hasUnsavedChanges || savingBase} onClick={async () => { setSavingBase(true); try { setImages(await ensureImageSlots(clampViewCount(formViewCount))) } catch { message.error('图片视角准备失败，可重试') } finally { setSavingBase(false) } }}>准备图片视角</Button>}
+          <span className={hasUnsavedChanges ? 'text-sm text-amber-600' : 'text-sm text-gray-500'} role="status">
+            {loading ? '加载中' : savingBase ? '保存中' : partialSave ? '档案已保存，视角待准备' : hasUnsavedChanges ? '有未保存的修改' : asset ? '已保存' : '未加载'}
+          </span>
+          <Button icon={<ReloadOutlined aria-hidden="true" />} onClick={() => void loadData()} loading={loading}
+            disabled={savingBase || smartDetectBusy || hasUnsavedChanges}>
+            刷新
+          </Button>
+          <Button type="primary" onClick={() => void handleSaveBaseInfo()} loading={savingBase}
+            disabled={loading || smartDetectBusy || !asset || (!hasUnsavedChanges && !partialSave)}>
+            保存资产
+          </Button>
+        </div>
+  )
+  const DossierRoot = libraryDetail ? WorkspaceLayout : 'div'
+  const DossierBody = libraryDetail ? WorkspaceScrollPanel : 'div'
 
   if (!assetId) {
     return (
@@ -776,54 +951,46 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   }
 
   return (
-    <div className="asset-dossier">
-      <div className="asset-dossier-toolbar">
+    <DossierRoot className={`asset-dossier${libraryDetail ? ' asset-library-detail' : ''}`}>
+      {libraryDetail ? <PageToolbar className="asset-detail-toolbar" title={<><Button type="text" aria-label={`返回${assetDisplayName}资产`} icon={<ArrowLeftOutlined />} onClick={returnFromAsset} /><span className="asset-detail-title" title={asset?.name}>{asset?.name ?? `${assetDisplayName}档案`}</span><Tag>{assetDisplayName}</Tag></>}>
+        {toolbarActions}
+      </PageToolbar> : <div className="asset-dossier-toolbar">
         <Button type="text" aria-label={embedded ? '返回本场资产' : undefined} icon={<ArrowLeftOutlined />} disabled={savingBase || smartDetectBusy} onClick={returnFromAsset}>
           {embedded ? '返回本场资产' : `返回${assetDisplayName}资产`}
         </Button>
-        <div className="asset-dossier-toolbar-actions">
-          {embedded && !images.length && <Button disabled={loading || hasUnsavedChanges || savingBase} onClick={async () => { setSavingBase(true); try { setImages(await ensureImageSlots(clampViewCount(formViewCount))) } catch { message.error('图片视角准备失败，可重试') } finally { setSavingBase(false) } }}>准备图片视角</Button>}
-          <span className={hasUnsavedChanges ? 'text-sm text-amber-600' : 'text-sm text-gray-500'} role="status">
-            {loading ? '加载中' : hasUnsavedChanges ? '有未保存的修改' : '已保存'}
-          </span>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}
-            disabled={savingBase || smartDetectBusy || hasUnsavedChanges}>
-            刷新
-          </Button>
-          <Button type="primary" onClick={() => void handleSaveBaseInfo()} loading={savingBase}
-            disabled={loading || smartDetectBusy || !hasUnsavedChanges}>
-            保存资产
-          </Button>
-        </div>
-      </div>
+        {toolbarActions}
+      </div>}
 
-      <div className="asset-dossier-body">
+      <DossierBody ref={detailBodyRef} className="asset-dossier-body">
+        {libraryDetail && assetReadError && <Alert className="asset-detail-feedback" type="error" message={assetReadError === 'missing' ? '资产不存在或已被删除' : asset ? '刷新资产失败，保留已显示内容' : '读取资产失败'} action={<Button disabled={loading || savingBase || smartDetectBusy || hasUnsavedChanges} onClick={assetReadError === 'missing' ? returnFromAsset : () => void loadData()}>{assetReadError === 'missing' ? '返回资产库' : '重试读取资产'}</Button>} />}
+        {libraryDetail && saveError && <Alert className="asset-detail-feedback" type="error" message={saveError} />}
+        {libraryDetail && partialSave && <Alert className="asset-detail-feedback" type="warning" message="档案已保存，图片视角准备失败" description="已保存的档案不会回滚。请重试准备图片视角。" action={<Button loading={savingBase} disabled={hasUnsavedChanges || smartDetectBusy} onClick={() => void handleSaveBaseInfo()}>重试视角准备</Button>} /> }
         <div className="asset-dossier-sheet">
-          {loading ? (
+          {libraryDetail && !asset ? <div className="asset-detail-initial">{loading ? <Skeleton active /> : <Empty description={assetReadError === 'missing' ? '资产不存在或已被删除' : '资产暂不可用'} />}</div> : loading && !libraryDetail ? (
             <div className="py-8 text-center"><Spin /></div>
           ) : (
             <>
               <div className="asset-dossier-overview" data-asset-type={structuredType ?? 'character'}>
                 <div className="min-w-0">
-                  <div className="text-sm text-gray-500">{assetDisplayName}档案</div>
-                  <h1 className="asset-dossier-name">{asset?.name || `${assetDisplayName}资产`}</h1>
+                  {libraryDetail ? <h2 className="asset-detail-section-title">基本信息</h2> : <><div className="text-sm text-gray-500">{assetDisplayName}档案</div>
+                  <h1 className="asset-dossier-name">{asset?.name || `${assetDisplayName}资产`}</h1></>}
                   <div className="space-y-4">
                     <div className="asset-dossier-fields">
                       <label className="block min-w-0 text-sm text-gray-600">
                         名称
                         <Input className="mt-1" value={formName} onChange={(e) => setFormName(e.target.value)}
-                          disabled={smartDetectBusy || savingBase} />
+                          disabled={smartDetectBusy || savingBase || (libraryDetail && loading)} />
                       </label>
                       {structuredType ? (
                         <label className="block min-w-0 text-sm text-gray-600">
                           标签
                           <Input className="mt-1" placeholder="多个标签用逗号分隔" value={formTags}
-                            onChange={(e) => setFormTags(e.target.value)} disabled={smartDetectBusy || savingBase} />
+                            onChange={(e) => setFormTags(e.target.value)} disabled={smartDetectBusy || savingBase || (libraryDetail && loading)} />
                         </label>
                       ) : null}
                     </div>
                     {structuredType ? <AssetFactsFields type={structuredType} section="overview" value={formFacts}
-                      onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase} /> : null}
+                      onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase || (libraryDetail && loading)} /> : null}
                   </div>
                   {asset?.id ? (
                     <details className="mt-4 text-xs text-gray-500">
@@ -832,21 +999,13 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                     </details>
                   ) : null}
                 </div>
-                <figure className="m-0 min-w-0">
-                  <div className="asset-dossier-cover">
-                    <AssetDossierImage src={selectedSlot?.imageUrl}
-                      alt={`${asset?.name ?? assetDisplayName} · ${ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}`} preview />
-                  </div>
-                  <figcaption className="mt-2 text-center text-sm text-gray-500">
-                    {ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']} · {selectedSlot?.imageUrl ? '点击图片放大' : '等待生成'}
-                  </figcaption>
-                </figure>
+                {!libraryDetail && cover}
               </div>
 
               <AssetDossierSection title={structuredType === 'actor' ? '外貌设定' : `${assetDisplayName}设定`}>
                 <div className="space-y-4">
-                  {structuredType ? <AssetFactsFields type={structuredType} section="details" value={formFacts}
-                    onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase} /> : null}
+                  {structuredType ? <AssetFactsFields type={structuredType} section="details" expandLongFields={libraryDetail} value={formFacts}
+                    onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase || (libraryDetail && loading)} /> : null}
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                       <label htmlFor="asset-dossier-description" className="text-gray-600 text-sm">
@@ -869,7 +1028,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                     </div>
                     <Input.TextArea id="asset-dossier-description" autoSize={{ minRows: 2, maxRows: 8 }} value={formDesc}
                       maxLength={structuredType ? 8000 : undefined} onChange={(e) => setFormDesc(e.target.value)}
-                      disabled={smartDetectBusy || savingBase} />
+                      disabled={smartDetectBusy || savingBase || (libraryDetail && loading)} />
                   </div>
                   {structuredType ? (
                     <details className="text-sm text-gray-500">
@@ -883,7 +1042,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
               </AssetDossierSection>
 
               <AssetDossierSection title="生成风格">
-                <ProjectVisualStyleAndStyleFields layout="horizontal" disabled={smartDetectBusy || savingBase}
+                <ProjectVisualStyleAndStyleFields layout="horizontal" disabled={smartDetectBusy || savingBase || (libraryDetail && loading)}
                   visual_style={formVisualStyle} style={formStyle} options={projectStyleOptions}
                   onChange={(next) => {
                     setFormVisualStyle(next.visual_style)
@@ -891,52 +1050,21 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                   }} />
               </AssetDossierSection>
 
-              <AssetDossierSection title="多视角图片">
-                <div className="space-y-4">
-                  {structuredType ? (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <label htmlFor="asset-dossier-view-count" className="text-sm text-gray-600">视角数</label>
-                      <InputNumber id="asset-dossier-view-count" min={minViewCount} max={MAX_VIEW_COUNT} precision={0}
-                        value={formViewCount} onChange={(v) => setFormViewCount(v ?? minViewCount)}
-                        disabled={smartDetectBusy || savingBase} />
-                      <span className="text-xs text-gray-500">仅可增加，最多 {MAX_VIEW_COUNT} 个；保存后生效</span>
-                    </div>
-                  ) : null}
-                  <div className="asset-dossier-view-list" aria-label="图片视角">
-                    {slotItems.map((slot) => (
-                      <button type="button" key={slot.angle} className="asset-dossier-view"
-                        aria-label={`切换到${ANGLE_LABEL_MAP[slot.angle]}视角`}
-                        aria-pressed={slot.angle === selectedSlot?.angle} onClick={() => setSelectedAngle(slot.angle)}>
-                        <span className="asset-dossier-view-image">
-                          <AssetDossierImage src={slot.imageUrl} alt={ANGLE_LABEL_MAP[slot.angle]} />
-                        </span>
-                        {ANGLE_LABEL_MAP[slot.angle]}{!slot.image ? ' · 待保存' : ''}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-gray-600 mr-1">当前：{ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}</span>
-                    <Button disabled={!selectedSlot?.imageUrl} onClick={() => setImagePreviewOpen(true)}>查看大图</Button>
-                    <Button disabled={!selectedSlot?.image || savingBase || smartDetectBusy}
-                      loading={Boolean(selectedSlot?.image && generatingByImageId[selectedSlot.image.id])}
-                      onClick={() => selectedSlot?.image && void openPromptPreview(selectedSlot.image)}>
-                      {selectedSlot?.imageUrl ? '重新生成' : '生成图片'}
-                    </Button>
-                    <Button icon={<EditOutlined />} disabled={!selectedSlot?.image || savingBase || hasUnsavedChanges}
-                      onClick={() => selectedSlot?.image && void openHistoryModal(selectedSlot.image)}>
-                      编辑图片
-                    </Button>
-                  </div>
-                  {hasUnsavedChanges ? <div className="text-sm text-amber-600">请先保存资产，再生成或采用图片。</div> : null}
-                </div>
-              </AssetDossierSection>
+              {libraryDetail ? <aside ref={imagePanelRef} className="asset-detail-images" data-sticky={pinImages}>{imageSection}</aside> : imageSection}
             </>
           )}
         </div>
-      </div>
+      </DossierBody>
 
+      {libraryDetail && <AssetDetailLeaveGuard dirty={hasUnsavedChanges} busy={savingBase || generationSubmitting || !!adoptingImageId}
+        detecting={smartDetectBusy} canCancelDetection={!!smartDetectTask} cancellingDetection={!!smartDetectTask?.cancelRequested}
+        partialSave={partialSave} save={handleSaveBaseInfo} cancelDetection={handleCancelSmartDetectTask} />}
       <Modal title={`${asset?.name ?? assetDisplayName} · ${ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}`}
-        open={imagePreviewOpen} onCancel={() => setImagePreviewOpen(false)} footer={null} width={960}>
+        open={imagePreviewOpen} onCancel={() => {
+          setImagePreviewOpen(false)
+          if (libraryDetail) enlargeButtonRef.current?.focus()
+        }}
+        afterClose={() => { if (libraryDetail) enlargeButtonRef.current?.focus() }} footer={null} width={960}>
         <div className="asset-dossier-preview">
           <AssetDossierImage src={selectedSlot?.imageUrl} alt={ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']} />
         </div>
@@ -952,11 +1080,12 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         footer={null}
         width={960}
       >
+        {libraryDetail && (hasUnsavedChanges || partialSave) && <Alert type="info" message="请先保存资产并完成视角准备，再采用图片。" />}
         {historyLoading ? (
           <div className="py-8 text-center">
             <Spin />
           </div>
-        ) : historyCandidates.length === 0 ? (
+        ) : libraryDetail && historyError ? <Alert type="error" message="读取历史图片失败" action={<Button onClick={() => editingSlotImage && void openHistoryModal(editingSlotImage)}>重试历史图片</Button>} /> : historyCandidates.length === 0 ? (
           <Empty description="暂无可用历史图片" />
         ) : (
           <Row gutter={[16, 16]}>
@@ -975,11 +1104,11 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                       type="primary"
                       size="small"
                       block
-                      disabled={!candidate.file_id}
+                      disabled={!candidate.file_id || (libraryDetail && (hasUnsavedChanges || partialSave || savingBase || smartDetectBusy))}
                       loading={adoptingImageId === candidate.id}
                       onClick={() => void handleAdoptHistoryImage(candidate)}
                     >
-                      选中并更新当前角度
+                      {libraryDetail ? '用于当前视角' : '选中并更新当前角度'}
                     </Button>
                   }
                 />
@@ -1136,6 +1265,6 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           </div>
         )}
       </Modal>
-    </div>
+    </DossierRoot>
   )
 }

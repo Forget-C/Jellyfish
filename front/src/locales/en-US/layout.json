@@ -2,7 +2,18 @@
   "title": "Jellyfish",
   "subtitle": "AI Short-form Studio",
   "welcome": "Welcome to Jellyfish",
+  "brandHome": "Jellyfish Home",
+  "primaryNavigation": "Main navigation",
+  "appearance": {
+    "label": "Appearance",
+    "mist": "Mist Blue Gradient",
+    "solid": "Mist Blue Solid"
+  },
   "menu": {
+    "home": "Home",
+    "projects": "Projects",
+    "management": "Management",
+    "lab": "Lab",
     "settings": "Settings"
   },
   "user": {

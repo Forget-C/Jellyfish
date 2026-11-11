@@ -58,13 +58,14 @@ export function previewAssetDescription(type: StructuredAssetType, facts: AssetF
 }
 
 /** 按档案区域复用分类字段；弹窗默认展示全部字段与描述预览，未知值允许留空。 */
-export function AssetFactsFields({ type, value, onChange, supplementaryInfo, disabled = false, section = 'all' }: {
+export function AssetFactsFields({ type, value, onChange, supplementaryInfo, disabled = false, section = 'all', expandLongFields = false }: {
   type: StructuredAssetType
   value: AssetFacts
   onChange: (next: AssetFacts) => void
   supplementaryInfo: string
   disabled?: boolean
   section?: 'all' | 'overview' | 'details'
+  expandLongFields?: boolean
 }) {
   const fields = ASSET_FIELDS[type].filter(({ key }) => section === 'all'
     || OVERVIEW_FIELDS[type].includes(key) === (section === 'overview'))
@@ -76,7 +77,7 @@ export function AssetFactsFields({ type, value, onChange, supplementaryInfo, dis
       {section === 'all' ? <div className="text-sm text-gray-600">分类设定（未确定的项目可留空）</div> : null}
       <div className={section === 'all' ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'asset-dossier-fields'}>
         {fields.map(({ key, label, maxLength, fullWidth }) => (
-          <label key={key} className={`block min-w-0 text-sm text-gray-600 ${section === 'details' && fullWidth ? 'col-span-full' : ''}`}>
+          <label key={key} className={`block min-w-0 text-sm text-gray-600 ${section === 'details' && (fullWidth || (expandLongFields && maxLength > 200)) ? 'col-span-full' : ''}`}>
             {label}
             <Input.TextArea
               className="mt-1"

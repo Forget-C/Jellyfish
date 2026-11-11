@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { loadSource } from './directing-fixtures.mjs'
 
 const { legacyChapterManagementLocation, sceneCanvasLocation, sequenceAction, chapterLocation,
-  sequenceLocation, readChapterBrowse, saveChapterBrowse } = await loadSource('chapterNavigation')
+  sequenceLocation, readChapterBrowse, saveChapterBrowse, chapterAction, chapterActionLocation } = await loadSource('chapterNavigation')
 const scene = { id: 's1', source_changed: false, confirmed_design_count: 0, plan_count: 0, take_count: 0, unreviewed_take_count: 0, active_cut_revision_id: null }
 
 test('chapter revision changes do not redirect away from a version with fixed basis; unknown stages are ignored', () => {
@@ -60,4 +60,13 @@ test('old links preserve explicit scope and task targets when entering managemen
   assert.equal(target('sequence=s1&objectTask=t2'), '/projects/p1/chapters/ch1/workbench-management?sequence=s1&step=objects&objectTask=t2')
   assert.equal(sceneCanvasLocation('p1', 'ch1', 's1', 'c1', 't1'),
     '/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=c1&storyboardTask=t1')
+})
+
+
+test('project chapter actions preserve editing and enter the independent management workflow', () => {
+  const destination = chapter => chapterActionLocation('p1', 'ch1', chapterAction(chapter).target)
+  assert.equal(destination({ rawText: '', sequenceCount: 0 }), '/projects/p1?tab=chapters&edit=ch1')
+  assert.equal(destination({ rawText: '正文', sequenceCount: 0 }), '/projects/p1/chapters/ch1/workbench-management?step=division')
+  assert.equal(destination({ rawText: '正文', sequenceCount: 2 }), '/projects/p1/chapters/ch1/workbench-management')
+  assert.equal(destination({}), '/projects/p1/chapters/ch1/workbench-management')
 })

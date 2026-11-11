@@ -1,0 +1,182 @@
+.file-tag-filter {
+  width: 132px;
+  max-width: 100%;
+}
+
+.file-tag-filter.ant-select .ant-select-selector {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.file-toolbar-actions,
+.file-batch-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-batch-actions {
+  flex: 0 0 auto;
+  margin: 0 var(--app-page-gutter) 12px;
+  font-size: 13px;
+  color: var(--app-muted);
+}
+
+.file-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+}
+
+.file-card {
+  position: relative;
+  min-width: 0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.file-card[data-selected] {
+  box-shadow: inset 0 0 0 2px var(--app-selected);
+  background: #f7faff;
+}
+
+.file-thumbnail {
+  display: grid;
+  place-items: center;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  height: 160px;
+  border-radius: 12px 12px 0 0;
+  background: #eaf0f8;
+  overflow: hidden;
+}
+
+.file-thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.file-thumbnail-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.file-thumbnail-placeholder .anticon {
+  font-size: 24px;
+}
+
+.file-card-select {
+  position: absolute;
+  z-index: 1;
+  inset: 8px 8px auto auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.file-card-details {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.file-card-details h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.file-card-details h2,
+.file-card-meta span,
+.file-card-tags .ant-tag {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-card-meta,
+.file-card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--app-muted);
+}
+
+.file-card-meta span:first-child,
+.file-card-tags > span:not(.ant-tag) {
+  flex: 0 0 auto;
+}
+
+.file-card-tags {
+  min-height: 22px;
+}
+
+.file-card-tags .ant-tag {
+  margin: 0;
+}
+
+@media (max-width: 767px) {
+  .file-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.management-tools .file-search.ant-input-search {
+  width: min(240px, 100%);
+}
+
+.management-tools .file-search .ant-input-affix-wrapper {
+  width: 100%;
+}
+
+.file-preview-trigger {
+  display: block;
+  position: relative;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  border-radius: 12px 12px 0 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.file-preview-trigger:focus-visible {
+  outline-offset: -3px;
+}
+
+.file-preview-label {
+  position: absolute;
+  inset: auto 8px 8px auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--app-accent);
+  font-size: 12px;
+}
+
+.file-preview-media {
+  display: grid;
+  place-items: center;
+}
+
+.file-preview-media :is(img, video, audio) {
+  max-width: 100%;
+  max-height: 65vh;
+}
+
+.file-pagination {
+  margin-top: 16px;
+  justify-content: flex-end;
+}

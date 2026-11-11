@@ -27,13 +27,6 @@
   transform: translateY(-2px);
 }
 
-/* 页面页签统一使用全站主题。 */
-.project-workbench-tabs.ant-tabs .ant-tabs-ink-bar {
-  height: 3px;
-}
-.project-workbench-tabs.ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
-  font-weight: 600;
-}
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

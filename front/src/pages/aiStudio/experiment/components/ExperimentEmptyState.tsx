@@ -8,7 +8,7 @@ type ExperimentEmptyStateProps = {
 /** Keeps the empty-history icon, typography, and centered spacing identical across experiment modalities. */
 export function ExperimentEmptyState({ description }: ExperimentEmptyStateProps) {
   return (
-    <div className="flex h-full min-h-56 items-center justify-center">
+    <div className="experiment-empty-state">
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description={<span className="text-sm text-slate-500">{description}</span>}

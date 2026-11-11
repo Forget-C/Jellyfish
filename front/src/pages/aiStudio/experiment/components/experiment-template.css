@@ -1,0 +1,52 @@
+.experiment-template-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.experiment-template-summary-text {
+  min-width: 0;
+}
+
+.experiment-template-summary-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.experiment-template-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--app-muted, #536174);
+  font-size: 12px;
+}
+
+.experiment-template-summary > button {
+  flex-shrink: 0;
+}
+
+.experiment-template-drawer {
+  --experiment-template-drawer-width: 480px;
+}
+
+.experiment-template-drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.experiment-template-form {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1023px) {
+  .experiment-template-drawer {
+    --experiment-template-drawer-width: 100vw;
+  }
+}

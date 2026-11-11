@@ -1,36 +1,20 @@
-/** 统一实验室历史消息的三段式气泡外观与交互容器。 */
+import { MessageOutlined, UserOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 
 type ExperimentMessageBubbleProps = {
-  align: 'left' | 'right'
-  children: ReactNode
+  children?: ReactNode
   footer?: ReactNode
-  header: ReactNode
+  identity: string
   tone: 'assistant' | 'user'
+  status?: ReactNode
 }
 
-/**
- * 用稳定的 header、content、footer 结构呈现实验室消息。
- *
- * 三种实验室的消息载荷各不相同，但身份标记、内容容器和操作区的布局规则一致。
- * footer 始终保留在 DOM 中，使悬浮操作和未来的状态/复制操作无需再脱离气泡定位。
- */
-export function ExperimentMessageBubble({ align, children, footer, header, tone }: ExperimentMessageBubbleProps) {
-  const hasFooter = Boolean(footer)
-
-  return (
-    <article className={`group max-w-[85%] ${align === 'right' ? 'ml-auto' : 'mr-auto'}`}>
-      <header className="flex min-h-6 items-center px-1 text-xs">
-        {header}
-      </header>
-      <div className={`rounded-lg px-3 py-2 ${tone === 'user' ? 'bg-blue-50' : 'bg-gray-50'}`}>
-        <div className="whitespace-pre-wrap">
-          {children}
-        </div>
-      </div>
-      <footer className={`flex items-center justify-end px-1 ${hasFooter ? 'min-h-8 pt-1' : 'min-h-2'}`}>
-        {footer}
-      </footer>
-    </article>
-  )
+/** 统一身份、正文和轻量操作的顺序，正文宽度随消息内容收缩。 */
+export function ExperimentMessageBubble({ children, footer, identity, tone, status }: ExperimentMessageBubbleProps) {
+  const Icon = tone === 'user' ? UserOutlined : MessageOutlined
+  return <article className={`experiment-message experiment-message-${tone}`}>
+    <header className="experiment-message-header"><span><Icon aria-hidden="true" /> {identity}</span>{status}</header>
+    {children ? <div className="experiment-message-body">{children}</div> : null}
+    {footer ? <footer className="experiment-message-footer">{footer}</footer> : null}
+  </article>
 }

@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import type { ProjectRead } from '../services/generated'
 import type { Project, Agent, Provider, Model, ModelSettings, Chapter } from './data'
 import {
   agents as initialAgents,
@@ -13,7 +14,8 @@ import {
 } from './data'
 
 // 可变的项目列表，支持创建/编辑/删除（会话内生效）
-let projectsList: Project[] = [...initialProjects]
+type MockProject = Project & Pick<ProjectRead, 'visual_style' | 'default_video_ratio'>
+let projectsList: MockProject[] = [...initialProjects]
 let chaptersList: Chapter[] = [...chapters]
 let agentsList: Agent[] = [...initialAgents]
 let providersList: Provider[] = [...initialProviders]
@@ -68,7 +70,7 @@ function notFound(message = 'Not found') {
   )
 }
 
-function toProjectRead(p: Project) {
+function toProjectRead(p: MockProject) {
   return {
     id: p.id,
     name: p.name,
@@ -77,7 +79,9 @@ function toProjectRead(p: Project) {
     seed: p.seed,
     unify_style: p.unifyStyle,
     progress: p.progress,
-    stats: p.stats,
+    visual_style: p.visual_style,
+    default_video_ratio: p.default_video_ratio,
+    stats: { ...p.stats, updated_at: p.updatedAt },
   }
 }
 
@@ -115,7 +119,7 @@ export const handlers = [
   }),
 
   http.post('/api/v1/studio/projects', async ({ request }) => {
-    const body = (await request.json()) as Partial<Project> & {
+    const body = (await request.json()) as Partial<MockProject> & {
       id?: string
       name?: string
       description?: string
@@ -128,9 +132,11 @@ export const handlers = [
 
     const id = body.id || nextProjectId()
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
-    const newProject: Project = {
+    const newProject: MockProject = {
       id,
       name: body.name ?? '未命名项目',
+      visual_style: body.visual_style,
+      default_video_ratio: body.default_video_ratio,
       description: body.description ?? '',
       style: (body.style as Project['style']) ?? '现实主义',
       seed: typeof body.seed === 'number' ? body.seed : Math.floor(Math.random() * 99999),
@@ -160,6 +166,8 @@ export const handlers = [
       name: string
       description: string
       style: Project['style']
+      visual_style: MockProject['visual_style']
+      default_video_ratio: MockProject['default_video_ratio']
       seed: number
       unify_style: boolean
       progress: number
@@ -168,8 +176,10 @@ export const handlers = [
 
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
     const current = projectsList[idx]
-    const updated: Project = {
+    const updated: MockProject = {
       ...current,
+      visual_style: body.visual_style ?? current.visual_style,
+      default_video_ratio: body.default_video_ratio === undefined ? current.default_video_ratio : body.default_video_ratio,
       name: body.name ?? current.name,
       description: body.description ?? current.description,
       style: (body.style as Project['style']) ?? current.style,

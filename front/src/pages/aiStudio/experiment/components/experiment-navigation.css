@@ -1,0 +1,298 @@
+.experiment-workspace {
+  --experiment-control-height: 32px;
+  --experiment-section-gap: 16px;
+}
+
+.app-lab-layout { display: flex; flex: 1; min-height: 0; }
+.app-lab-main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.app-lab-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--experiment-section-gap);
+  min-height: 0;
+  padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
+}
+.app-lab-history { container-type: inline-size; }
+.experiment-history-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.experiment-history-list { min-height: 100%; }
+.experiment-history-list > * + * { margin-top: 16px; }
+.app-lab-history:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.experiment-history-jump { position: absolute; right: 12px; bottom: 8px; box-shadow: 0 2px 8px rgb(38 50 68 / 12%); }
+
+.experiment-empty-state { display: grid; min-height: 100%; place-items: center; padding: 8px; }
+.experiment-empty-state .ant-empty { margin: 0; }
+
+.experiment-workspace .experiment-toolbar {
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 52px;
+  padding: 4px var(--app-page-gutter);
+}
+.app-shell .experiment-toolbar .app-page-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.experiment-session-title { color: var(--app-muted); font-size: 13px; font-weight: 400; }
+.experiment-toolbar .ant-btn { flex-shrink: 0; height: var(--experiment-control-height); font-size: 13px; }
+.experiment-toolbar .experiment-icon-action { width: 36px; }
+
+.experiment-composer {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 12px 16px;
+  color: var(--app-text);
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+}
+.experiment-composer:focus-within { border-color: var(--app-accent); }
+.experiment-composer-input { max-height: 45dvh; overflow-y: auto; }
+.experiment-composer-input .experiment-prompt-input {
+  padding: 0 2px;
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: none;
+}
+.experiment-composer-toolbar,
+.experiment-composer-options,
+.experiment-composer-submit {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.experiment-composer-toolbar { margin-top: 8px; }
+.experiment-composer-options { flex: 1; min-width: 0; }
+.experiment-composer-submit { flex-shrink: 0; justify-content: flex-end; margin-inline-start: auto; }
+.experiment-composer-toolbar :is(.ant-btn, .ant-select) { height: var(--experiment-control-height); font-size: 13px; }
+.experiment-composer-toolbar .ant-select .ant-select-selector { height: 100%; }
+.experiment-composer-toolbar .ant-btn-primary:not(:disabled) { background: var(--app-accent); }
+.experiment-composer-toolbar .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
+.experiment-workspace :is(button, textarea):focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+.experiment-composer-input textarea:focus-visible { outline-offset: -2px; }
+
+@media (max-width: 1023px) {
+  .experiment-workspace { --experiment-control-height: 36px; }
+}
+
+@media (max-width: 767px) {
+  .experiment-composer { padding-inline: 12px; }
+  .experiment-toolbar .ant-btn:not(.experiment-icon-action) { padding-inline: 4px; }
+}
+
+@media (pointer: coarse) {
+  .experiment-toolbar .experiment-icon-action,
+  .experiment-navigation .experiment-icon-action.ant-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-height: 540px) {
+  .experiment-workspace { --experiment-section-gap: 8px; }
+  .experiment-composer { padding-block: 8px; }
+  .experiment-empty-state .ant-empty-image { height: 32px; margin-bottom: 4px; }
+}
+
+@media (max-height: 380px) {
+  .experiment-workspace { flex: 1 0 auto; }
+}
+
+.experiment-navigation {
+  display: flex;
+  flex: 0 0 216px;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+}
+
+.ant-drawer-body > .experiment-navigation {
+  height: 100%;
+  padding: 2px;
+}
+
+.experiment-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.experiment-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 12px;
+  color: var(--app-muted, #536174);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.experiment-nav-item:hover,
+.experiment-session-row:has([aria-current="page"]) {
+  color: var(--app-accent, #245fc5);
+  background: var(--app-selected, #e4edfb);
+}
+
+.experiment-navigation :is(button, a):focus-visible {
+  outline: 2px solid var(--app-accent, #245fc5);
+  outline-offset: 2px;
+}
+
+.experiment-session-heading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding-inline: 8px;
+}
+
+.experiment-session-heading h2 {
+  margin: 0;
+  color: var(--app-muted, #536174);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.experiment-session-list {
+  flex: 1;
+  min-height: 0;
+  padding: 3px;
+  overflow-y: auto;
+}
+
+.experiment-session-list > p {
+  padding-inline: 8px;
+  color: var(--app-muted, #536174);
+  font-size: 13px;
+}
+
+.experiment-session-row {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.experiment-session-link {
+  flex: 1;
+  min-height: 36px;
+  color: inherit;
+  padding-inline: 8px;
+}
+
+.experiment-session-link > span {
+  min-width: 0;
+}
+
+.experiment-session-actions {
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .experiment-session-actions {
+    opacity: 0;
+  }
+
+  .experiment-session-row:is(:hover, :focus-within) .experiment-session-actions {
+    opacity: 1;
+  }
+}
+
+.experiment-history-loading { padding: 12px; color: var(--app-muted); font-size: 13px; }
+.experiment-message {
+  width: fit-content;
+  max-width: min(100%, 80ch);
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.experiment-message-user { margin-inline-start: auto; }
+.experiment-message-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-block-end: 4px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.experiment-message-user .experiment-message-header { justify-content: flex-end; }
+.experiment-message-body {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: white;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.experiment-message-body:empty { display: none; }
+.experiment-message-user .experiment-message-body { background: var(--app-selected); }
+.experiment-message-footer { display: flex; justify-content: flex-end; margin-block-start: 4px; }
+.experiment-task-status,
+.experiment-task-read-state { display: inline-flex; align-items: center; gap: 4px; }
+.experiment-task-status { padding: 2px 6px; border-radius: 6px; background: #eef1f5; }
+.experiment-task-status-active { color: var(--app-accent); background: var(--app-selected); }
+.experiment-task-status-success { color: #18734f; background: #e8f6ee; }
+.experiment-task-status-error { color: #ad2838; background: #ffedf0; }
+.experiment-task-read-state .ant-btn { height: auto; padding: 0 4px; font-size: 12px; }
+.experiment-result-note { color: var(--app-muted); font-size: 12px; margin: 4px 0 0; }
+.experiment-result-error { color: #ad2838; }
+
+.experiment-session-heading .ant-btn { height: 32px; padding-inline: 8px; font-size: 13px; }
+.experiment-session-type { flex-shrink: 0; color: var(--app-muted); font-size: 16px; }
+.experiment-session-name { min-width: 0; overflow: hidden; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) {
+  .experiment-session-heading .ant-btn,
+  .experiment-session-dropdown .ant-dropdown-menu-item { min-height: 44px; }
+  .experiment-session-link { min-height: 44px; }
+}
+
+/* 输入区底栏始终按模型、素材、添加、提交的顺序浏览。 */
+.experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: 180px; padding-inline: 8px; }
+.experiment-model-trigger > span:not(.anticon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.experiment-model-trigger .anticon { flex: none; }
+.experiment-model-trigger[aria-expanded='true'],
+.experiment-add-trigger[aria-expanded='true'] { color: var(--app-accent); background: var(--app-selected); }
+.experiment-add-trigger.ant-btn { width: var(--experiment-control-height); padding: 0; flex: none; }
+.experiment-composer-feedback { display: grid; gap: 4px; margin-top: 8px; }
+.experiment-model-panel { width: min(288px, calc(100vw - 48px)); font-size: 13px; }
+.experiment-model-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.experiment-model-panel .ant-menu { max-height: min(320px, 45dvh); overflow-y: auto; border: 0; }
+.experiment-model-panel .ant-menu-item { height: auto; min-height: 36px; line-height: 20px; padding-block: 8px; font-size: 13px; }
+.experiment-model-panel .ant-menu-item-selected { color: var(--app-accent, #245fc5); background: var(--app-selected, #e4edfb); }
+.experiment-model-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; white-space: normal; overflow-wrap: anywhere; }
+.experiment-model-row .anticon { flex: none; }
+.experiment-add-menu .ant-dropdown-menu-item { font-size: 13px; }
+.experiment-model-panel :is(button, input, li):focus-visible { outline: 2px solid var(--app-accent, #245fc5); outline-offset: -2px; }
+@media (max-width: 767px) {
+  .experiment-composer-toolbar, .experiment-composer-options, .experiment-composer-submit { gap: 4px; }
+  .experiment-model-trigger.ant-btn { padding-inline: 4px; }
+}
+@media (pointer: coarse) {
+  .experiment-composer-toolbar :is(.ant-btn, .ant-select) { min-height: 44px; height: 44px; }
+  .experiment-add-trigger.ant-btn { width: 44px; }
+  .experiment-add-menu .ant-dropdown-menu-item, .experiment-model-panel .ant-menu-item { min-height: 44px; }
+}

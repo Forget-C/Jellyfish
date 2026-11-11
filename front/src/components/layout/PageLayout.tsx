@@ -1,12 +1,12 @@
-import type { HTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type HTMLAttributes, type ReactNode } from 'react'
 
 type LayoutSlotProps = HTMLAttributes<HTMLElement> & {
   children: ReactNode
 }
 
 /** 页面共用的标题与操作区；业务页签及内容保留在各自页面。 */
-export function PageToolbar({ title, children }: { title?: ReactNode; children?: ReactNode }) {
-  return <div className="app-page-toolbar">
+export function PageToolbar({ title, children, className }: { title?: ReactNode; children?: ReactNode; className?: string }) {
+  return <div className={className ? `app-page-toolbar ${className}` : 'app-page-toolbar'}>
     {title && <h1 className="app-page-title">{title}</h1>}
     {children}
   </div>
@@ -29,10 +29,12 @@ export function WorkspaceLayout({ children, className = '', ...props }: LayoutSl
  * Defines the default vertical scroll surface inside a WorkspaceLayout.
  * Use this for natural-height content such as dashboards and lists.
  */
-export function WorkspaceScrollPanel({ children, className = '', ...props }: LayoutSlotProps) {
+export const WorkspaceScrollPanel = forwardRef<HTMLDivElement, LayoutSlotProps>(function WorkspaceScrollPanel(
+  { children, className = '', ...props }, ref,
+) {
   return (
-    <div className={`app-workspace-scroll ${className}`.trim()} {...props}>
+    <div ref={ref} className={`app-workspace-scroll ${className}`.trim()} {...props}>
       {children}
     </div>
   )
-}
+})

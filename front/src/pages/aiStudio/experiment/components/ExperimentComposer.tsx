@@ -7,7 +7,10 @@ import { SendOutlined } from '@ant-design/icons'
 type ExperimentComposerProps = {
   appearance?: 'default' | 'workbench'
   options: ReactNode
+  addAction?: ReactNode
+  feedback?: ReactNode
   contextActions?: ReactNode
+  secondaryAction?: ReactNode
   children: ReactNode
   submitting?: boolean
   submitDisabled?: boolean
@@ -19,12 +22,15 @@ type ExperimentComposerProps = {
  * 将输入、上下文附件、模型配置与提交动作收纳为单个实验输入框。
  *
  * 选项始终位于底部工具栏，避免模型或提示词选择与当前输入内容脱节。
- * workbench 外观只消费宿主工作台 tokens；默认实验页面仍使用原浅色样式。
+ * 实验室外观使用应用壳样式，工作台外观沿用宿主 tokens。
  */
 export function ExperimentComposer({
   options,
   appearance = 'default',
   contextActions,
+  addAction,
+  feedback,
+  secondaryAction,
   children,
   submitting = false,
   submitDisabled = false,
@@ -32,21 +38,33 @@ export function ExperimentComposer({
   submitLabel = '发送',
 }: ExperimentComposerProps) {
   const workbench = appearance === 'workbench'
+  if (!workbench) return (
+    <div className="experiment-composer">
+      <div className="experiment-composer-input">{children}</div>
+      <div className="experiment-composer-toolbar">
+        <div className="experiment-composer-options">{options}</div>
+        <div className="experiment-composer-submit">
+          {contextActions}
+          {addAction}
+          {secondaryAction ?? <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</Button>}
+        </div>
+      </div>
+      {feedback && <div className="experiment-composer-feedback">{feedback}</div>}
+    </div>
+  )
   return (
-    <div className={`mt-3 overflow-hidden rounded-md border transition-colors focus-within:ring-2 ${workbench ? 'focus-within:ring-[var(--wb-focus)]' : 'border-slate-300 bg-white text-slate-900 focus-within:border-blue-500 focus-within:ring-blue-100'}`}
-      style={workbench ? { borderColor: 'var(--wb-border)', background: 'var(--wb-surface)', color: 'var(--wb-text)' } : undefined}>
+    <div className="mt-3 overflow-hidden rounded-md border transition-colors focus-within:ring-2 focus-within:ring-[var(--wb-focus)]"
+      style={{ borderColor: 'var(--wb-border)', background: 'var(--wb-surface)', color: 'var(--wb-text)' }}>
       <div className="p-4">
         {children}
       </div>
-      <div className={`flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 ${workbench ? '' : 'border-slate-200 bg-slate-100/80'}`}
-        style={workbench ? { borderColor: 'var(--wb-border)', background: 'var(--wb-inset)' } : undefined}>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3"
+        style={{ borderColor: 'var(--wb-border)', background: 'var(--wb-inset)' }}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {options}
           {contextActions}
         </div>
-        {workbench ? <WorkbenchButton variant="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</WorkbenchButton> : <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>
-          {submitLabel}
-        </Button>}
+        <WorkbenchButton variant="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</WorkbenchButton>
       </div>
     </div>
   )

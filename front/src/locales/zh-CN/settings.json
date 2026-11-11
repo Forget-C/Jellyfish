@@ -2,8 +2,6 @@
   "title": "系统设置",
   "nickname": "昵称",
   "role": "角色",
-  "darkMode": "深色模式",
-  "darkModeTooltip": "示例开关，实际项目中可接入主题切换",
   "save": "保存设置",
   "updated": "已更新基础信息（示例）",
   "roleOptions": {

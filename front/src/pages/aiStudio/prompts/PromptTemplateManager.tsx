@@ -1,8 +1,9 @@
-import { PageToolbar } from '../../../components'
+import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FC, Key } from 'react'
-import { Card, Tree, Input, Row, Col, Tag, Pagination, Button, Modal, Form, Select, Switch, message } from 'antd'
-import type { DataNode } from 'antd/es/tree'
+import type { FC } from 'react'
+import { Alert, Skeleton, Input, Tag, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
+import { searchManagementList } from '../managementListSearch'
+import './prompt-manager.css'
 import { StudioPromptsService } from '../../../services/generated'
 import type { PromptCategory, PromptTemplateRead } from '../../../services/generated'
 
@@ -107,7 +108,9 @@ const PromptTemplateManager: FC = () => {
   const [loading, setLoading] = useState(false)
   const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>(fallbackCategoryLabels)
   const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState<number | undefined>()
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [modalMode, setModalMode] = useState<PromptModalMode>('create')
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -120,31 +123,55 @@ const PromptTemplateManager: FC = () => {
   )
   const [createForm] = Form.useForm<CreatePromptForm>()
   const requestIdRef = useRef(0)
+  const submittingRef = useRef(false)
+  const listRef = useRef<HTMLElement | null>(null)
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
+  const [readerOpen, setReaderOpen] = useState(false)
+  const selectedButton = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)')
+    const update = () => { setWide(media.matches); if (media.matches) setReaderOpen(false) }
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   const loadTemplates = async (nextPage: number, nextQuery: string) => {
     const requestId = ++requestIdRef.current
     setLoading(true)
+    setLoadError(false)
     try {
-      const res = await StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({
-        q: nextQuery.trim() || null,
-        page: nextPage,
-        pageSize: PAGE_SIZE,
-      })
-      if (requestId !== requestIdRef.current) return
-
-      const items = res.data?.items ?? []
-      const totalCount = res.data?.pagination?.total ?? 0
+      const isCurrent = () => requestId === requestIdRef.current
+      const readPage = async (requestedPage: number, pageSize: number) => {
+        const { data } = await StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ page: requestedPage, pageSize })
+        if (!data || !Array.isArray(data.items)) throw new Error('模板列表响应无效')
+        return { items: data.items, total: data.pagination?.total }
+      }
+      const keyword = nextQuery.trim().toLocaleLowerCase()
+      const filtered = keyword ? await searchManagementList(
+        requestedPage => readPage(requestedPage, 100), 100,
+        item => item.name.toLocaleLowerCase().includes(keyword) || (item.preview ?? '').toLocaleLowerCase().includes(keyword),
+        isCurrent,
+      ) : undefined
+      if (!isCurrent()) return
+      const result = filtered
+        ? { items: filtered.slice((nextPage - 1) * PAGE_SIZE, nextPage * PAGE_SIZE), total: filtered.length }
+        : await readPage(nextPage, PAGE_SIZE)
+      if (!isCurrent()) return
+      const { items, total: totalCount } = result
 
       // 空页时自动回退上一页，避免用户停留在无数据页。
-      if (nextPage > 1 && items.length === 0 && totalCount > 0) {
+      if (nextPage > 1 && items.length === 0 && totalCount !== undefined && totalCount > 0) {
         setPage(nextPage - 1)
         return
       }
 
       setTemplates(items)
+      setSelected(previous => previous ? items.find(item => item.id === previous.id) ?? null : null)
       setTotal(totalCount)
+      setLoaded(true)
     } catch {
-      message.error('加载模板失败')
+      if (requestId === requestIdRef.current) setLoadError(true)
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false)
@@ -180,9 +207,10 @@ const PromptTemplateManager: FC = () => {
 
   useEffect(() => {
     void loadTemplates(page, query)
+    return () => { requestIdRef.current += 1 }
   }, [page, query])
 
-  const treeData: DataNode[] = useMemo(() => {
+  const templateGroups = useMemo(() => {
     const grouped = new Map<(typeof groupOrder)[number], PromptTemplateRead[]>()
     groupOrder.forEach((key) => grouped.set(key, []))
 
@@ -213,12 +241,6 @@ const PromptTemplateManager: FC = () => {
   const handlePageChange = (nextPage: number) => {
     setSelected(null)
     setPage(nextPage)
-  }
-
-  const onSelect = (_: Key[], info: { node: { key: Key } }) => {
-    const id = String(info.node.key)
-    const t = templates.find((x) => x.id === id)
-    setSelected(t || null)
   }
 
   const openCreateModal = () => {
@@ -273,9 +295,11 @@ const PromptTemplateManager: FC = () => {
   }
 
   const handleFormSubmit = async () => {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(true)
     try {
       const values = await createForm.validateFields()
-      setSubmitting(true)
       const payload = buildPayload(values)
 
       if (modalMode === 'create') {
@@ -324,6 +348,7 @@ const PromptTemplateManager: FC = () => {
       if (error && typeof error === 'object' && 'errorFields' in error) return
       message.error(modalMode === 'create' ? '添加提示词失败' : '更新提示词失败')
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -331,7 +356,8 @@ const PromptTemplateManager: FC = () => {
   const handleDeleteTemplate = (template: PromptTemplateRead) => {
     Modal.confirm({
       title: '删除提示词',
-      content: `确定删除「${template.name}」吗？`,
+      zIndex: 1100,
+      content: `确定删除「${template.name}」吗？此操作不可恢复。`,
       okText: '删除',
       okType: 'danger',
       cancelText: '取消',
@@ -340,9 +366,16 @@ const PromptTemplateManager: FC = () => {
           await StudioPromptsService.deletePromptTemplateApiV1StudioPromptsTemplateIdDelete({
             templateId: template.id,
           })
+          requestIdRef.current += 1
+          if (templates.some(item => item.id === template.id)) {
+            setTemplates(previous => previous.filter(item => item.id !== template.id))
+            setTotal(previous => previous === undefined ? undefined : Math.max(0, previous - 1))
+          }
           message.success('提示词已删除')
           if (selected?.id === template.id) {
             setSelected(null)
+            selectedButton.current = null
+            setReaderOpen(false)
           }
 
           if (templates.length === 1 && page > 1) {
@@ -350,120 +383,129 @@ const PromptTemplateManager: FC = () => {
           } else {
             void loadTemplates(page, query)
           }
-        } catch {
+        } catch (error) {
           message.error('删除提示词失败')
+          throw error
         }
       },
     })
   }
 
-  const restoreSystemDefault = async (template: PromptTemplateRead) => {
-    try {
-      const res = await StudioPromptsService.updatePromptTemplateApiV1StudioPromptsTemplateIdPatch({
-        templateId: template.id,
-        requestBody: { is_default: true },
-      })
-      if (!res.data) return
-      message.success('已恢复系统默认模板')
-      setSelected(res.data)
-      void loadTemplates(page, query)
-    } catch {
-      message.error('恢复系统默认模板失败')
-    }
+  const restoreSystemDefault = (template: PromptTemplateRead) => {
+    Modal.confirm({
+      title: '恢复系统默认模板',
+      zIndex: 1100,
+      content: `将「${template.name}」恢复为本类别的默认提示词，替换当前默认选择；不会修改模板正文。`,
+      okText: '恢复默认',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await StudioPromptsService.updatePromptTemplateApiV1StudioPromptsTemplateIdPatch({
+            templateId: template.id,
+            requestBody: { is_default: true },
+          })
+          if (!res.data) throw new Error('缺少更新结果')
+          message.success('已恢复系统默认模板')
+          setSelected(res.data)
+          void loadTemplates(page, query)
+        } catch (error) {
+          message.error('恢复系统默认模板失败')
+          throw error
+        }
+      },
+    })
   }
 
+  const restoreListFocus = () => {
+    const target = selectedButton.current?.isConnected ? selectedButton.current : listRef.current
+    target?.focus({ preventScroll: true })
+  }
+
+  const readerContent = selected ? <>
+    <div className="management-prompt-reader-heading">
+      <h2>{selected.name}</h2>
+      <div className="management-prompt-reader-actions">
+        {!selected.is_system && <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>}
+        {selected.is_system && !selected.is_default && <Button size="small" onClick={() => void restoreSystemDefault(selected)}>恢复默认</Button>}
+        {!selected.is_system && <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>删除</Button>}
+      </div>
+    </div>
+    <div className="management-prompt-reader-tags">
+      <Tag bordered={false}>{categoryLabels[selected.category] || selected.category}</Tag>
+      {selected.is_system && <Tag bordered={false} color="gold">系统预置</Tag>}
+      {selected.is_default && <Tag bordered={false} color="blue">默认提示词</Tag>}
+    </div>
+    <p className="management-prompt-reader-summary">{selected.preview || '暂无简介'}</p>
+    <h3>正文</h3>
+    <pre className="management-prompt-reader-content">{selected.content}</pre>
+    <h3>变量</h3>
+    <p>{selected.variables.length ? selected.variables.join(', ') : '暂无变量'}</p>
+    <h3>变量默认值</h3>
+    {Object.keys(selected.variable_defaults ?? {}).length
+      ? <pre className="management-prompt-reader-defaults">{JSON.stringify(selected.variable_defaults, null, 2)}</pre>
+      : <p>暂无默认值</p>}
+  </> : <p className="management-prompt-reader-empty">选择模板阅读正文</p>
+
   return (
-    <div className="space-y-4">
-      <PageToolbar title="提示词模板管理"><div className="app-page-actions"><Button type="primary" onClick={openCreateModal}>添加提示词</Button></div></PageToolbar>
-      <Card className="app-page-list" loading={loading && templates.length === 0}>
-        <Input.Search
-          placeholder="搜索模板名称或预览"
-          allowClear
-          className="mb-4 max-w-md"
-          value={searchText}
-          onSearch={handleSearch}
-          onChange={(e) => {
-            const value = e.target.value
-            setSearchText(value)
-            if (!value) {
-              handleSearch('')
-            }
-          }}
-        />
-        <Row gutter={16}>
-          <Col xs={24} md={10}>
-            <Tree
-              showLine
-              defaultExpandAll
-              blockNode
-              treeData={treeData}
-              onSelect={onSelect}
-              fieldNames={{ title: 'title', key: 'key', children: 'children' }}
-            />
-            <div className="mt-4 flex justify-end">
-              <Pagination
-                current={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                showSizeChanger={false}
-                onChange={handlePageChange}
-              />
-            </div>
-          </Col>
-          <Col xs={24} md={14}>
-            {selected ? (
-              <Card
-                title={selected.name}
-                size="small"
-                extra={(
-                  <div className="flex gap-2">
-                    {!selected.is_system && <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>}
-                    {selected.is_system && !selected.is_default && (
-                      <Button size="small" onClick={() => void restoreSystemDefault(selected)}>恢复默认</Button>
-                    )}
-                    {!selected.is_system && (
-                      <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>
-                        删除
-                      </Button>
-                    )}
-                  </div>
-                )}
-              >
-                <Tag>{categoryLabels[selected.category] || selected.category}</Tag>
-                <p className="text-gray-600 text-sm mt-2">{selected.preview}</p>
-                <pre className="mt-3 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-48">
-                  {selected.content}
-                </pre>
-                {selected.variables.length > 0 && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    变量：{selected.variables.join(', ')}
-                  </div>
-                )}
-                {Object.keys(selected.variable_defaults ?? {}).length > 0 && (
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-32">
-                    默认变量：{JSON.stringify(selected.variable_defaults, null, 2)}
-                  </pre>
-                )}
-                <div className="mt-3 flex gap-2">
-                  {selected.is_system && <Tag color="gold">系统预置</Tag>}
-                  {selected.is_default && <Tag color="blue">默认提示词</Tag>}
-                </div>
-              </Card>
-            ) : (
-              <Card>
-                <div className="text-gray-500 text-center py-8">
-                  左侧选择模板查看详情
-                </div>
-              </Card>
-            )}
-          </Col>
-        </Row>
-      </Card>
+    <WorkspaceLayout className="management-page prompt-manager">
+      <PageToolbar title="提示词模板" className="management-toolbar">
+        <span className="management-count">{loaded ? total === undefined ? `已加载 ${templates.length} 项` : `共 ${total} 项` : loading ? '读取中' : '数量未知'}</span>
+        <div className="management-tools">
+          <Input.Search aria-label="搜索模板名称或简介" placeholder="搜索模板名称或简介" allowClear
+            value={searchText} onSearch={handleSearch} onChange={event => {
+              setSearchText(event.target.value)
+              if (!event.target.value) handleSearch('')
+            }} />
+          <Button onClick={() => void loadTemplates(page, query)} disabled={loading}>刷新模板</Button>
+        </div>
+        <Button type="primary" className="management-primary" onClick={openCreateModal}>添加提示词</Button>
+      </PageToolbar>
+      <div className="management-panel prompt-columns">
+        <section className="management-surface prompt-list" aria-label="模板列表" tabIndex={-1} ref={listRef} aria-busy={loading}>
+          {loadError && <Alert type="error" showIcon message={loaded ? '刷新模板失败，已保留当前内容' : '无法读取模板列表'}
+            action={<Button size="small" disabled={loading} onClick={() => void loadTemplates(page, query)}>重试</Button>} />}
+          <WorkspaceScrollPanel>
+            {!loaded && loading ? <Skeleton active paragraph={{ rows: 6 }} /> : !loadError && templates.length === 0 ? <div className="management-prompt-reader-empty">
+              <p>{query ? '没有匹配的模板' : '暂无提示词模板'}</p>
+              {query && <Button size="small" onClick={() => { setSearchText(''); handleSearch('') }}>清除搜索</Button>}
+            </div> : null}
+            {templateGroups.map(group => <section key={group.key} className="prompt-group">
+              <h2>{group.title}</h2>
+              {group.children.map(item => <button type="button" key={item.key} title={item.title}
+                aria-pressed={selected?.id === item.key} onClick={event => {
+                  selectedButton.current = event.currentTarget
+                  setSelected(templates.find(template => template.id === item.key) ?? null)
+                  if (!wide) setReaderOpen(true)
+                }}>{item.title}</button>)}
+            </section>)}
+          </WorkspaceScrollPanel>
+          {loaded && total !== undefined && <Pagination size="small" current={page} pageSize={PAGE_SIZE} total={total}
+            disabled={loading} showSizeChanger={false} onChange={handlePageChange} />}
+        </section>
+        {wide && <WorkspaceScrollPanel className="management-surface management-prompt-reader" role="region" aria-label="模板阅读">
+          {readerContent}
+        </WorkspaceScrollPanel>}
+      </div>
+      {!wide && <Drawer title="模板阅读" aria-label="模板阅读" width="min(720px, 100vw)" open={readerOpen}
+        onClose={() => {
+          setReaderOpen(false)
+          requestAnimationFrame(restoreListFocus)
+        }} afterOpenChange={shown => {
+          if (!shown) requestAnimationFrame(restoreListFocus)
+        }} className="management-prompt-reader-drawer">
+        <div className="management-prompt-reader">{readerContent}</div>
+      </Drawer>}
 
       <Modal
         title={modalMode === 'create' ? '添加提示词' : '编辑提示词'}
         open={formOpen}
+        zIndex={1100}
+        closable={!submitting}
+        maskClosable={!submitting}
+        keyboard={!submitting}
+        cancelButtonProps={{ disabled: submitting }}
         onCancel={() => {
+          if (submittingRef.current) return
           setFormOpen(false)
           setEditingTemplateId(null)
         }}
@@ -514,7 +556,7 @@ const PromptTemplateManager: FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </WorkspaceLayout>
   )
 }
 

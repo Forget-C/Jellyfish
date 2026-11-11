@@ -1,6 +1,6 @@
 import { usePageTitle } from '../../../../layouts/pageTitle'
-import React, { useEffect, useState } from 'react'
-import { Card, Button, Tabs, Space, Dropdown, Empty } from 'antd'
+import { useEffect, useState, type FC } from 'react'
+import { Card, Button, Space, Dropdown, Empty } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined,
@@ -8,8 +8,7 @@ import {
   ArrowLeftOutlined,
 } from '@ant-design/icons'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { TAB_CONFIG, type TabKey, isTabKey, DEFAULT_TAB } from './constants'
-import { generationCanvasLocation } from '../../generationCanvas/navigation'
+import { DEFAULT_TAB, projectTabLabel, projectTabLocation, resolveProjectTab, type TabKey } from './constants'
 import { DashboardTab } from './tabs/DashboardTab'
 import { ChaptersTab } from './tabs/ChaptersTab'
 import { ActorsTab } from './tabs/ActorsTab'
@@ -19,25 +18,24 @@ import { CostumesTab, PropsTab } from './tabs/PropsTab'
 import { FilesTab } from './tabs/FilesTab'
 import { SettingsTab } from './tabs/SettingsTab'
 import { useProject, useChapters } from './hooks/useProjectData'
-import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
+import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 import { StudioDirectingService } from '../../../../services/generated'
 import { readRecentWork } from '../../directing/workspaceContext'
 import { chapterLocation, workbenchManagementLocation } from '../../directing/chapterNavigation'
 
 const TAB_PARAM = 'tab'
 
-const ProjectWorkbench: React.FC = () => {
+const ProjectWorkbench: FC = () => {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
-  const resolvedTab: TabKey =
-    tabFromUrl !== null && isTabKey(tabFromUrl) ? tabFromUrl : DEFAULT_TAB
+  const activeTab = resolveProjectTab(tabFromUrl)
+  const productionPage = activeTab === 'dashboard' || activeTab === 'chapters'
 
-  const { project, loading: projectLoading } = useProject(projectId)
+  const { project, loading: projectLoading, saving, saveProject } = useProject(projectId)
   usePageTitle(project?.id === projectId ? project?.name : undefined)
   const { chapters } = useChapters(projectId)
-  const [activeTab, setActiveTab] = useState<TabKey>(() => resolvedTab)
 
   const [recentDestination, setRecentDestination] = useState<string>()
   useEffect(() => {
@@ -56,7 +54,6 @@ const ProjectWorkbench: React.FC = () => {
   }, [projectId, chapters])
   const primaryCta = {
     label: recentDestination ? '继续工作' : chapters.length ? '进入章节场次' : '创建第一章',
-    hint: '章节原文 → 工作台管理 → 工作台画布',
     icon: <PlusOutlined />,
     onClick: () => {
       if (recentDestination) navigate(recentDestination)
@@ -65,11 +62,9 @@ const ProjectWorkbench: React.FC = () => {
     },
   }
 
-  // 与 URL 中的 tab 同步：URL 变化时更新 activeTab；初次或无效 tab 时写回 URL
+  // 保留旧的默认分区地址，同时以 URL 为选中状态的唯一来源。
   useEffect(() => {
-    if (tabFromUrl !== null && isTabKey(tabFromUrl)) {
-      setActiveTab(tabFromUrl)
-    } else if (tabFromUrl === null || tabFromUrl === '') {
+    if (tabFromUrl !== activeTab) {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
@@ -79,18 +74,10 @@ const ProjectWorkbench: React.FC = () => {
         { replace: true }
       )
     }
-  }, [tabFromUrl, setSearchParams])
+  }, [activeTab, tabFromUrl, setSearchParams])
 
   const setTabInUrl = (tab: TabKey) => {
-    if (tab === 'generation' && projectId) { navigate(generationCanvasLocation(projectId)); return }
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        next.set(TAB_PARAM, tab)
-        return next
-      },
-      { replace: true }
-    )
+    if (projectId) navigate(projectTabLocation(projectId, tab))
   }
 
   const moreMenuItems: MenuProps['items'] = [
@@ -117,48 +104,20 @@ const ProjectWorkbench: React.FC = () => {
 
   return (
     <WorkspaceLayout>
-      <div
-        className="app-page-toolbar project-workbench-header"
-      >
-        <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <Tabs
-            activeKey={activeTab}
-            onChange={(k) => setTabInUrl(k as TabKey)}
-            size="middle"
-            className="project-workbench-tabs app-page-tabs flex-1 min-w-0"
-            items={TAB_CONFIG.map(({ key, label, icon }) => ({
-              key,
-              label: (
-                <span className="flex items-center gap-1.5">
-                  {icon}
-                  {label}
-                </span>
-              ),
-            }))}
-          />
-          {activeTab !== 'generation' && <Space size="small" wrap className="shrink-0">
-            <Button
-              type="primary"
-              icon={primaryCta.icon}
-              onClick={primaryCta.onClick}
-            >
-              {primaryCta.label}
-            </Button>
-            <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
-              <Button icon={<EllipsisOutlined />}>更多</Button>
-            </Dropdown>
-          </Space>}
-        </div>
-        {activeTab !== 'generation' && <div className="text-xs text-gray-500">
-          {primaryCta.hint}
-        </div>}
-      </div>
+      <PageToolbar title={projectTabLabel(activeTab)}>
+        <Space size="small" wrap className="app-page-actions">
+          {(!productionPage || recentDestination) && <Button type="primary" icon={primaryCta.icon} onClick={primaryCta.onClick}>{primaryCta.label}</Button>}
+          <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
+            <Button icon={<EllipsisOutlined />}>更多</Button>
+          </Dropdown>
+        </Space>
+      </PageToolbar>
 
       <WorkspaceScrollPanel
-        className="app-page-content animate-fadeIn"
+        className="app-page-content project-workbench-content animate-fadeIn"
         style={{ animation: 'fadeIn 0.25s ease-out' }}
       >
-        {activeTab === 'dashboard' && <DashboardTab onSelectTab={setTabInUrl} />}
+        {activeTab === 'dashboard' && <DashboardTab />}
 
         {activeTab === 'chapters' && <ChaptersTab />}
 
@@ -168,7 +127,9 @@ const ProjectWorkbench: React.FC = () => {
         {activeTab === 'props' && <PropsTab />}
         {activeTab === 'costumes' && <CostumesTab />}
         {activeTab === 'files' && <FilesTab />}
-        {activeTab === 'settings' && <SettingsTab />}
+        {activeTab === 'settings' && project && project.id === projectId && (
+          <SettingsTab key={project.id} project={project} saving={saving} onSave={saveProject} />
+        )}
       </WorkspaceScrollPanel>
     </WorkspaceLayout>
   )

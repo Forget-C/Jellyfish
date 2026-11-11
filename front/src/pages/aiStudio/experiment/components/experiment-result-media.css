@@ -1,0 +1,85 @@
+.experiment-result-media {
+  display: grid;
+  gap: 8px;
+  width: min(480px, calc(100cqw - 24px));
+  max-width: 100%;
+  white-space: normal;
+}
+
+.experiment-result-multiple {
+  width: min(720px, calc(100cqw - 24px));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+
+.experiment-result-frame {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 16 / 9;
+  max-height: 280px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f2f5f9;
+}
+
+.experiment-result-open {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.experiment-result-open :is(img, video) { pointer-events: none; }
+.experiment-result-open:disabled { cursor: default; }
+.experiment-result-open:focus-visible { outline: 2px solid #245fc5; outline-offset: -2px; }
+
+.experiment-result-frame :is(img, video) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: scale-down;
+}
+
+.experiment-result-video .experiment-result-frame,
+.experiment-result-dialog video { background: #171c25; }
+
+.experiment-result-play {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: white;
+  background: rgb(23 28 37 / 86%);
+  font-size: 13px;
+}
+
+.experiment-result-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #536174;
+  background: #f2f5f9;
+  font-size: 13px;
+}
+
+.experiment-result-dialog .ant-modal-content { max-height: calc(100dvh - 24px); overflow-y: auto; }
+
+.experiment-result-dialog .experiment-result-frame {
+  height: min(62dvh, 660px);
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+.experiment-result-dialog .experiment-result-frame :is(img, video) { object-fit: contain; }
+
+.experiment-result-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; }

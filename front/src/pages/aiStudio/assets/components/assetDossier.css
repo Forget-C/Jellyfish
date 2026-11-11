@@ -163,3 +163,58 @@
   .asset-dossier-overview[data-asset-type='prop'] > figure { width: min(100%, 224px); }
   .asset-dossier-overview[data-asset-type='scene'] > figure { width: min(100%, 300px); }
 }
+
+/* 资产库独立详情使用管理区主题；项目角色与场次内嵌档案保留原布局。 */
+.asset-dossier.asset-library-detail { height: auto; overflow: visible; background: transparent; }
+.asset-library-detail .asset-detail-toolbar { flex: 0 0 auto; min-height: 52px; padding: 8px 20px; gap: 8px; }
+.asset-library-detail .asset-detail-toolbar .app-page-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 16px; font-weight: 600; }
+.asset-detail-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-detail-toolbar .ant-tag { flex-shrink: 0; margin: 0; font-size: 12px; }
+.asset-library-detail .asset-dossier-toolbar-actions { gap: 8px; }
+.asset-library-detail .asset-dossier-toolbar-actions > span { font-size: 12px; }
+.asset-library-detail .ant-btn { height: 32px; font-size: 13px; }
+.asset-library-detail .asset-dossier-sheet { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 28%, 400px); gap: 20px; padding: 0 20px 20px; }
+.asset-library-detail .asset-dossier-overview,
+.asset-library-detail .asset-dossier-sheet > .asset-dossier-section { display: block; grid-column: 1; min-width: 0; margin: 0; padding: 16px; border: 0; border-radius: 12px; background: white; }
+.asset-library-detail .asset-dossier-section-title,
+.asset-detail-section-title { margin: 0 0 16px; color: var(--app-text); font-size: 14px; line-height: 20px; font-weight: 600; }
+.asset-library-detail .asset-dossier-fields { gap: 16px; }
+.asset-library-detail label { font-size: 13px; color: var(--app-muted); }
+.asset-library-detail :is(.ant-input, .ant-input-number, .ant-select-selector) { min-height: 36px; font-size: 14px; }
+.asset-library-detail .ant-input-number-input { height: 34px; }
+.asset-library-detail .asset-dossier-image { border-radius: 12px; }
+.asset-detail-images { grid-column: 2; grid-row: 1 / span 3; align-self: start; min-width: 0; padding: 16px; background: white; border-radius: 12px; }
+.asset-detail-images[data-sticky='true'] { position: sticky; top: 0; }
+.asset-detail-images .asset-dossier-section { display: block; margin: 0; padding: 0; border: 0; }
+.asset-detail-images .asset-dossier-cover { position: relative; height: min(320px, 40dvh); aspect-ratio: auto; }
+.asset-detail-images figure { width: 100%; }
+.asset-detail-enlarge { position: absolute; inset: 0; z-index: 1; display: flex; justify-content: flex-end; align-items: flex-end; padding: 8px; border: 0; border-radius: 12px; background: transparent; color: var(--app-accent); font-size: 13px; cursor: pointer; }
+.asset-detail-enlarge > span { padding: 4px 8px; border-radius: 6px; background: white; }
+.asset-detail-images .asset-dossier-view-list { grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 8px; }
+.asset-detail-images .asset-dossier-view { position: relative; border: 0; color: var(--app-muted); background: var(--app-control-bg, #f3f5f9); }
+.asset-detail-images .asset-dossier-view[aria-pressed='true'] { color: var(--app-accent); background: var(--app-selected); box-shadow: none; }
+.asset-detail-images .asset-dossier-view[aria-pressed='true']::after { content: '✓'; position: absolute; top: 4px; right: 4px; padding: 0 3px; border-radius: 4px; background: var(--app-selected); }
+.asset-detail-images .asset-dossier-view-image { height: 64px; }
+.asset-library-detail :is(button, summary):focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.asset-detail-feedback { margin: 0 20px 16px; }
+.asset-library-detail .asset-dossier-preview { height: min(65dvh, 640px); }
+@container asset-dossier (max-width: 999px) {
+  .asset-library-detail .asset-dossier-sheet { grid-template-columns: minmax(0, 1fr); }
+  .asset-detail-images { grid-column: 1; grid-row: auto; position: static; }
+  .asset-detail-images .asset-dossier-view-list { grid-template-columns: repeat(auto-fit, minmax(64px, 96px)); }
+}
+@container asset-dossier (max-width: 600px) {
+  .asset-library-detail .asset-detail-toolbar { flex-wrap: wrap; padding-inline: 16px; }
+  .asset-library-detail .asset-detail-toolbar .app-page-title { flex-basis: 100%; }
+  .asset-library-detail .asset-dossier-toolbar-actions { width: 100%; justify-content: flex-end; }
+  .asset-library-detail .asset-dossier-sheet { padding-inline: 16px; }
+  .asset-library-detail .asset-dossier-fields { grid-template-columns: 1fr; }
+  .asset-library-detail .ant-btn { min-height: 36px; height: auto; }
+  .asset-detail-feedback { margin-inline: 16px; }
+}
+@media (pointer: coarse) {
+  .asset-library-detail .asset-dossier-view,
+  .asset-library-detail .asset-detail-toolbar .ant-btn { min-height: 44px; }
+}
+
+.asset-detail-initial { grid-column: 1 / -1; padding: 16px; border-radius: 12px; background: white; }

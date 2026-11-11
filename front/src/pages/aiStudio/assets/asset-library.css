@@ -1,0 +1,128 @@
+.asset-library-tabs,
+.asset-library-tabs > .ant-tabs-content-holder,
+.asset-library-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.asset-library-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.asset-library-tabs .management-heading .ant-tabs-nav {
+  min-width: 0;
+  margin: 0;
+}
+
+.asset-library-tabs .management-heading .ant-tabs-nav::before {
+  border-bottom: 0;
+}
+
+.asset-library-tabs .management-tools .ant-input-search {
+  width: min(240px, 100%);
+}
+
+.asset-library-tabs .management-toolbar .ant-input-search .ant-input-affix-wrapper {
+  height: var(--management-control-height);
+}
+
+.asset-library-tabs .management-tools { flex: 1 1 auto; }
+
+.asset-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 228px), 1fr));
+  gap: 16px;
+}
+
+.asset-library-card {
+  min-width: 0;
+  background: #fff;
+  border-radius: 12px;
+}
+
+.asset-library-cover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 160px;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 12px 12px 0 0;
+  background: #eaf0f7;
+  color: var(--app-muted, #536174);
+}
+
+button.asset-library-cover { cursor: zoom-in; }
+button.asset-library-cover:focus-visible { outline-offset: -3px; }
+.asset-library-cover img,
+.asset-library-preview-image img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.asset-library-cover-placeholder { display: flex; align-items: center; gap: 6px; }
+.asset-library-card-content { min-width: 0; display: grid; gap: 8px; padding: 12px; }
+.asset-library-card h2 { min-width: 0; margin: 0; font-size: 14px; font-weight: 650; line-height: 22px; }
+.asset-library-name {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 5px;
+  color: var(--app-accent, #245fc5);
+  text-decoration: none;
+}
+.asset-library-name:hover { text-decoration: underline; }
+.asset-library-name > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-library-description {
+  display: -webkit-box;
+  height: 40px;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--app-muted, #536174);
+  font-size: 13px;
+  line-height: 20px;
+}
+.asset-library-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 24px;
+  overflow: hidden;
+  color: var(--app-muted, #536174);
+  font-size: 12px;
+}
+.asset-library-tags .ant-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; margin: 0; }
+.asset-library-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.asset-library-card-actions > [role="status"] { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.asset-library-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
+.asset-library-skeleton { padding: 12px; }
+.asset-library-skeleton > .ant-skeleton.ant-skeleton-element,
+.asset-library-skeleton .ant-skeleton-image { width: 100%; height: 160px; }
+.asset-library-preview .ant-modal-body { max-height: calc(100dvh - 116px); overflow-y: auto; }
+.asset-library-preview { top: min(48px, 5dvh); }
+.asset-library-preview .ant-modal-title,
+.asset-library-delete .ant-modal-title { padding-inline-end: 24px; overflow-wrap: anywhere; }
+.asset-library-preview-image {
+  position: relative;
+  display: grid;
+  height: min(480px, 65dvh);
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f7f8fb;
+  color: #536174;
+}
+.asset-library-preview-angles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+@media (max-width: 767px) {
+  .asset-library-tabs .management-heading .ant-tabs-nav { flex-basis: 100%; }
+  .asset-library-tabs .management-tools { flex-basis: 160px; }
+  .asset-library-grid { grid-template-columns: minmax(0, 1fr); }
+}

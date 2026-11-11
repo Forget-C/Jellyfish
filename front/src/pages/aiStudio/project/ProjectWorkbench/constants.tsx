@@ -1,4 +1,4 @@
-import React from 'react'
+import type { ReactNode } from 'react'
 import {
   HomeOutlined,
   UnorderedListOutlined,
@@ -9,6 +9,7 @@ import {
   SettingOutlined,
 } from '@ant-design/icons'
 import type { Chapter } from '../../../../mocks/data'
+import { generationCanvasLocation } from '../../generationCanvas/navigation'
 
 export type TabKey =
   | 'generation'
@@ -22,37 +23,45 @@ export type TabKey =
   | 'files'
   | 'settings'
 
-const TAB_KEYS: TabKey[] = [
-  'generation',
-  'dashboard',
-  'chapters',
-  'actors',
-  'roles',
-  'scenes',
-  'props',
-  'costumes',
-  'files',
-  'settings',
-]
-
-export function isTabKey(s: string): s is TabKey {
-  return TAB_KEYS.includes(s as TabKey)
-}
-
 export const DEFAULT_TAB: TabKey = 'dashboard'
 
-export const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'generation', label: '画布生成', icon: <PictureOutlined /> },
-  { key: 'dashboard', label: '仪表盘', icon: <HomeOutlined /> },
-  { key: 'chapters', label: '章节', icon: <UnorderedListOutlined /> },
-  { key: 'actors', label: '演员', icon: <UserOutlined /> },
-  { key: 'roles', label: '角色', icon: <UserOutlined /> },
-  { key: 'scenes', label: '场景', icon: <PictureOutlined /> },
-  { key: 'props', label: '道具', icon: <ScissorOutlined /> },
-  { key: 'costumes', label: '服装', icon: <ScissorOutlined /> },
-  { key: 'files', label: '文件', icon: <FileImageOutlined /> },
-  { key: 'settings', label: '设置', icon: <SettingOutlined /> },
+type ProjectNavigationItem = { key: TabKey; label: string; icon: ReactNode }
+
+export const projectNavigationGroups: { label: string; items: ProjectNavigationItem[] }[] = [
+  { label: '创作', items: [
+    { key: 'dashboard', label: '项目概览', icon: <HomeOutlined /> },
+    { key: 'generation', label: '画布生成', icon: <PictureOutlined /> },
+    { key: 'chapters', label: '章节', icon: <UnorderedListOutlined /> },
+  ] },
+  { label: '项目资源', items: [
+    { key: 'actors', label: '演员', icon: <UserOutlined /> },
+    { key: 'roles', label: '角色', icon: <UserOutlined /> },
+    { key: 'scenes', label: '场景', icon: <PictureOutlined /> },
+    { key: 'props', label: '道具', icon: <ScissorOutlined /> },
+    { key: 'costumes', label: '服装', icon: <ScissorOutlined /> },
+  ] },
+  { label: '项目管理', items: [
+    { key: 'files', label: '文件', icon: <FileImageOutlined /> },
+    { key: 'settings', label: '项目设置', icon: <SettingOutlined /> },
+  ] },
 ]
+
+const projectNavigationItems = projectNavigationGroups.flatMap(group => group.items)
+
+export function resolveProjectTab(tab: string | null): TabKey {
+  return projectNavigationItems.find(item => item.key === tab)?.key ?? DEFAULT_TAB
+}
+
+export function projectTabLabel(tab: TabKey) {
+  return projectNavigationItems.find(item => item.key === tab)?.label
+}
+
+/** 切换分区时使用稳定地址，章节定位参数仍由章节入口和浏览器历史保存。 */
+export function projectTabLocation(projectId: string, tab: TabKey) {
+  return tab === 'generation'
+    ? generationCanvasLocation(projectId)
+    : `/projects/${encodeURIComponent(projectId)}?tab=${tab}`
+}
 
 export const chapterStatusMap: Record<Chapter['status'], { color: string; text: string }> = {
   draft: { color: 'default', text: '草稿' },

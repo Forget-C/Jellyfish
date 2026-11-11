@@ -3,6 +3,8 @@ import { lazy, Suspense } from 'react'
 import { Alert } from 'antd'
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation, useParams } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
+import ManagementLayout from './layouts/ManagementLayout'
+import HomePage from './pages/home/HomePage'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 import ProjectLobby from './pages/aiStudio/project/ProjectLobby'
@@ -50,7 +52,7 @@ function ProjectEntry() {
   if (projectId && assembly) return <Alert type="error" showIcon message="章节组合已停用，旧链接缺少章节标识。" />
   return projectId && params.get('tab') === 'generation'
     ? <Navigate replace to={generationCanvasLocation(projectId, params)} />
-    : <ProjectWorkbench />
+    : <ProjectWorkbench key={projectId} />
 }
 
 const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStudio/directing/ui/WorkbenchExamples')) : undefined
@@ -58,25 +60,29 @@ const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStu
 const router = createBrowserRouter(createRoutesFromElements(
       <>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<Navigate to="/projects" replace />} />
+          <Route index element={<HomePage />} />
           <Route path="projects" element={<ProjectLobby />} />
-          <Route path="projects/:projectId" element={<ProjectEntry />} />
+          <Route path="projects/:projectId" id="project-navigation">
+            <Route index element={<ProjectEntry />} />
+            <Route path="roles/:characterId/edit" element={<RoleDetailPage />} />
+            <Route path="chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
+          </Route>
           <Route path="projects/:projectId/generation-canvas" element={<GenerationCanvasRoute />} />
-          <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/workbench-management" element={<WorkbenchManagementPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId/canvas-workbench" element={<SceneCanvasWorkbench />} />
-          <Route path="assets" element={<AssetManager />} />
-          <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
-          <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />
-          <Route path="assets/props/:propId/edit" element={<PropAssetEditPage />} />
-          <Route path="assets/costumes/:costumeId/edit" element={<CostumeAssetEditPage />} />
-          <Route path="prompts" element={<PromptTemplateManager />} />
-          <Route path="files" element={<FileManager />} />
-          <Route path="agents/:id/edit" element={<AgentEdit />} />
-          <Route path="agents" element={<AgentManagement />} />
-          <Route path="models" element={<ModelManagement />} />
+          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
+          <Route element={<ManagementLayout />}>
+            <Route path="assets" element={<AssetManager />} />
+            <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
+            <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />
+            <Route path="assets/props/:propId/edit" element={<PropAssetEditPage />} />
+            <Route path="assets/costumes/:costumeId/edit" element={<CostumeAssetEditPage />} />
+            <Route path="prompts" element={<PromptTemplateManager />} />
+            <Route path="files" element={<FileManager />} />
+            <Route path="agents/:id/edit" element={<AgentEdit />} />
+            <Route path="agents" element={<AgentManagement />} />
+            <Route path="models" element={<ModelManagement />} />
+          </Route>
           <Route path="lab" element={<ExperimentLabPage />} />
           <Route path="text-lab" element={<LegacyLabRedirect mode="text" />} />
           <Route path="image-lab" element={<LegacyLabRedirect mode="image" />} />

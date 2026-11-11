@@ -40,6 +40,6 @@ export function readExperimentInputSnapshot(message: ExperimentMessageRead): Exp
 /** Moves focus to the shared free-text editor after a history input is restored. */
 export function focusExperimentPromptEditor(): void {
   window.requestAnimationFrame(() => {
-    document.querySelector<HTMLTextAreaElement>('#experiment-prompt-editor textarea')?.focus()
+    document.getElementById('experiment-prompt-editor')?.focus()
   })
 }

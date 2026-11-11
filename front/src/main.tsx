@@ -7,7 +7,7 @@ import App from './App.tsx'
 import 'antd/dist/reset.css'
 import './index.css'
 import './i18n'
-import './services/openapi'
+import { initOpenAPI } from './services/openapi'
 import { useAppStore } from './store/useAppStore'
 
 const RootApp: React.FC = () => {
@@ -75,19 +75,17 @@ function renderApp() {
   )
 }
 
-// 先立即渲染，避免 MSW 启动阻塞导致白屏
-renderApp()
-
-async function enableMocking() {
-  if (import.meta.env.VITE_USE_MOCK !== 'true') {
-    return
-  }
+async function startMockApp() {
+  initOpenAPI()
   try {
     const { worker } = await import('./mocks/browser')
     await worker.start({ onUnhandledRequest: 'bypass' })
   } catch (error) {
     console.error('MSW start failed:', error)
   }
+  renderApp()
 }
 
-void enableMocking()
+// 演示模式等待拦截器就绪，让首个项目读取与后续保存使用同一份演示数据。
+if (import.meta.env.VITE_USE_MOCK === 'true') void startMockApp()
+else renderApp()

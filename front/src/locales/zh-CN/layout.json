@@ -2,7 +2,18 @@
   "title": "Jellyfish",
   "subtitle": "AI 短剧工作台",
   "welcome": "欢迎使用 Jellyfish",
+  "brandHome": "Jellyfish 首页",
+  "primaryNavigation": "主导航",
+  "appearance": {
+    "label": "外观",
+    "mist": "雾蓝微渐变",
+    "solid": "雾蓝纯色"
+  },
   "menu": {
+    "home": "首页",
+    "projects": "项目",
+    "management": "管理",
+    "lab": "实验室",
     "settings": "系统设置"
   },
   "user": {

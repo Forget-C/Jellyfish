@@ -88,24 +88,14 @@ body {
 }
 
 .experiment-session-dropdown .ant-dropdown-menu-item {
-  min-height: 44px;
-  padding: 10px 12px;
-  border-radius: 9px;
-  font-size: 15px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
 .experiment-session-dropdown .ant-dropdown-menu-item-icon {
-  font-size: 17px;
-}
-
-/* 生成模态选择只承担入口选择，避免默认弹窗样式抢占三张卡片的视觉重心。 */
-.experiment-create-modal .ant-modal-content {
-  border-radius: 18px;
-  padding: 22px 24px 24px;
-}
-
-.experiment-create-modal .ant-modal-title {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 /* * {

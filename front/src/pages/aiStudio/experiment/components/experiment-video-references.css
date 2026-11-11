@@ -1,0 +1,31 @@
+.experiment-video-reference-editor h3 {
+  margin: 12px 0 8px;
+  color: var(--app-text, #263244);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.experiment-video-frame-list,
+.experiment-video-subject {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.experiment-video-subject {
+  margin: 8px 0;
+  padding: 8px 12px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--app-surface-muted, #f7f8fb);
+}
+
+.experiment-video-subject legend { font-size: 13px; color: var(--app-muted, #536174); }
+.experiment-video-reference-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.experiment-video-reference-actions > .ant-input { flex: 1; min-width: 0; }
+.experiment-video-reference-summary { font-size: 12px; color: var(--app-muted, #536174); }
+.experiment-video-reference-issue { color: #a02222; font-size: 12px; }
+.experiment-video-reference-editor .experiment-video-file-choice { min-width: 0; max-width: calc(100% - 56px); text-align: start; }
+.experiment-video-file-choice > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.experiment-video-file-choice[aria-pressed='true'] { background: var(--app-selected, #e4edfb); }
+.experiment-reference-video { display: block; width: 100%; max-height: 65dvh; background: #161b24; border-radius: 8px; }

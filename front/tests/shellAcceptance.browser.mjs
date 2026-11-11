@@ -38,12 +38,13 @@ try {
     if (path.includes('/test-image/')) return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="192" height="288"><rect width="192" height="288" fill="#eaf3ff"/><rect x="32" y="64" width="128" height="160" rx="6" fill="white" stroke="#1677ff"/><path d="M48 96h96M48 120h96M48 144h64" stroke="#1677ff" stroke-width="4"/></svg>' })
     if (path === '/api/agents') return route.fulfill({ json: [agent] })
     if (path === '/api/agents/agent1') return route.fulfill({ json: agent })
-    if (path === '/api/files') return route.fulfill({ json: [] })
+    if (path === '/api/v1/studio/files') return respond(list([]))
     if (path.endsWith('/film/tasks')) return respond({ items: taskRows, next_cursor: null })
     if (path.endsWith('/film/tasks/task1/cancel')) { taskRows[0].cancel_requested = true; return respond({ task_id: 'task1', cancel_requested: true }) }
     if (path.endsWith('/providers')) return respond(list([provider]))
     if (path.endsWith('/models')) return respond(list([model]))
     if (path.endsWith('/projects')) return respond(list([project]))
+    if (path.endsWith('/projects/p2')) return respond({ ...project, id: 'p2', name: '第二个项目' })
     if (path.endsWith('/projects/p1')) return failProject ? route.fulfill({ status: 503, json: { detail: '测试加载失败' } }) : respond(project)
     if (path.endsWith('/chapters/ch1') && !path.includes('/directing/')) return respond(chapter)
     if (path.endsWith('/chapters')) return respond(list([chapter]))
@@ -65,9 +66,8 @@ try {
     return respond(list([]))
   })
   const routes = [
-    ['projects', '/projects'], ['project', '/projects/p1'],
+    ['home', '/'], ['projects', '/projects'], ['project', '/projects/p1'],
     ['role', '/projects/p1/roles/a1/edit'], ['chapter', '/projects/p1/chapters/ch1/sequences'],
-    ['sequence', '/projects/p1/chapters/ch1/sequences/s1?view=design'],
     ['assets', '/assets'], ...['actors', 'scenes', 'props', 'costumes'].map(type => [type, `/assets/${type}/a1/edit`]),
     ['prompts', '/prompts'], ['files', '/files'], ['models', '/models'],
     ['models-models', '/models'], ['agents', '/agents'], ['agent', '/agents/agent1/edit'],
@@ -76,7 +76,7 @@ try {
   ]
   for (const [width, height] of (process.env.SHELL_INTERACTIONS_ONLY ? [] : [[1586, 992], [1440, 900], [1024, 768], [768, 1024], [375, 812]])) {
     await page.setViewportSize({ width, height })
-    const representatives = ['projects', 'project', 'actors', 'models', 'models-models', 'agent', 'lab-text', 'sequence', 'settings']
+    const representatives = ['home', 'projects', 'project', 'actors', 'models', 'models-models', 'agent', 'lab-text', 'settings']
     for (const [name, path] of routes.filter(([name]) => width === 1586 || representatives.includes(name))) {
       console.log(`Shell ${width} ${name}`)
       await page.goto(`http://127.0.0.1:4184${path}`)
@@ -87,18 +87,21 @@ try {
       const geometry = await page.evaluate(() => {
         const box = selector => { const element = document.querySelector(selector); if (!element) return null; const { x, y, width, height } = element.getBoundingClientRect(); return { x, y, width, height } }
         const viewport = document.querySelector('.app-route-viewport'); if (!viewport) return null
-        return { header: box('.app-topbar'), rail: box('.app-nav-rail'), brand: box('.app-brand'), sidebar: box('.app-context-sidebar, .app-management-sidebar'), inspector: box('.app-editor-properties'), content: box('.app-route-viewport'), documentWidth: document.documentElement.scrollWidth, contentWidth: viewport.scrollWidth,
-          overflow: [...viewport.querySelectorAll('*')].filter(el => { const b = el.getBoundingClientRect(); return b.width > 0 && b.right > innerWidth + 2 && getComputedStyle(el).position !== 'fixed' }).slice(0, 8).map(el => `${el.tagName}.${el.className}`), breadcrumb: document.querySelector('.app-breadcrumb').textContent }
+        return { header: box('.app-topbar'), navigation: box('.app-primary-navigation'), brand: box('.app-brand'), actions: box('.app-global-actions'), sidebar: box('.app-context-sidebar, .app-management-sidebar'), inspector: box('.app-editor-properties'), content: box('.app-route-viewport'), documentWidth: document.documentElement.scrollWidth, contentWidth: viewport.scrollWidth,
+          overflow: [...viewport.querySelectorAll('*')].filter(el => { const b = el.getBoundingClientRect(); return b.width > 0 && b.right > innerWidth + 2 && getComputedStyle(el).position !== 'fixed' }).slice(0, 8).map(el => `${el.tagName}.${el.className}`), breadcrumb: document.querySelector('.app-breadcrumb')?.textContent ?? '' }
       })
       assert.ok(geometry, `${name}: application shell missing; ${JSON.stringify(errors)}`)
-      assert.equal(geometry.header.height, 48)
-      if (width >= 1280) {
-        assert.equal(geometry.brand.width, 272)
-        if (geometry.sidebar) { assert.equal(geometry.sidebar.width, 208); assert.equal(geometry.sidebar.y, 48) }
-        if (geometry.inspector) assert.equal(geometry.inspector.width, 344)
+      if (width >= 768) {
+        assert.equal(geometry.header.height, 56)
+        assert.equal(geometry.navigation.x + geometry.navigation.width / 2, width / 2)
+        assert.ok(geometry.brand.x + geometry.brand.width <= geometry.navigation.x)
+        assert.ok(geometry.navigation.x + geometry.navigation.width <= geometry.actions.x)
+      } else {
+        assert.ok(geometry.navigation.y >= geometry.brand.y + geometry.brand.height)
+        assert.ok(geometry.navigation.y >= geometry.actions.y + geometry.actions.height)
       }
-      if (width >= 768) assert.equal(geometry.rail.width, 64)
-      else assert.equal(geometry.rail, null)
+      assert.equal(await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link').count(), 4)
+      if (width >= 1280 && geometry.inspector) assert.equal(geometry.inspector.width, 344)
       await page.screenshot({ animations: 'disabled', path: `${output}/${width}-${name}.png` })
       results.push({ name, path, width, height, ...geometry })
     }
@@ -118,18 +121,40 @@ try {
   const closeDialog = async name => { const dialog = name ? page.getByRole('dialog', { name, exact: true }) : page.getByRole('dialog'); await dialog.locator('.ant-modal-close, .ant-drawer-close').click(); await dialog.waitFor({ state: 'hidden' }) }
   await page.setViewportSize({ width: 1586, height: 992 })
   await visit('/')
-  await page.waitForURL(url => url.pathname === '/projects')
+  await page.waitForURL(url => url.pathname === '/')
   await visit('/unknown-page')
   await page.getByRole('button', { name: /返回/ }).click()
-  await page.waitForURL(url => url.pathname === '/projects')
+  await page.waitForURL(url => url.pathname === '/')
   interactions.push('root-and-not-found-return')
   await visit('/projects/p1')
-  for (const label of ['章节', '演员', '角色', '场景', '道具', '服装', '文件', '设置', '仪表盘']) {
-    console.log('Tab', label)
-    await page.getByRole('tab', { name: new RegExp(`${label}$`) }).click()
-    await page.waitForTimeout(300)
+  const projectNavigation = page.getByRole('navigation', { name: '项目导航', exact: true })
+  await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
+  assert.deepEqual(await projectNavigation.getByRole('link').allTextContents(), [
+    '返回项目列表', '项目概览', '画布生成', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
+  ])
+  await projectNavigation.getByText('旧信', { exact: true }).waitFor()
+  for (const label of ['章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置', '项目概览']) {
+    const item = projectNavigation.getByRole('link', { name: label, exact: true })
+    await item.click()
+    assert.equal(await item.getAttribute('aria-current'), 'page')
     await snapshot(`project-${label}`)
   }
+  await page.goBack()
+  const settingsLink = projectNavigation.getByRole('link', { name: '项目设置', exact: true })
+  await page.waitForURL('**?tab=settings')
+  assert.equal(await settingsLink.getAttribute('aria-current'), 'page')
+  await page.goForward()
+  await page.waitForURL('**?tab=dashboard')
+  await page.reload()
+  await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
+  assert.equal(await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).getAttribute('aria-current'), 'page')
+  await projectNavigation.getByRole('link', { name: '返回项目列表', exact: true }).click()
+  await page.waitForURL('**/projects')
+  assert.equal(await projectNavigation.count(), 0)
+  await visit('/projects/p2?tab=roles')
+  await projectNavigation.getByText('第二个项目', { exact: true }).waitFor()
+  assert.equal(await projectNavigation.getByText('旧信', { exact: true }).count(), 0)
+  assert.equal(await projectNavigation.getByRole('link', { name: '角色', exact: true }).getAttribute('aria-current'), 'page')
   await visit('/assets')
   for (const label of ['演员', '场景', '道具', '服装']) {
     console.log('Tab', label)
@@ -153,11 +178,11 @@ try {
     asset.name = '旧信档案'
   }
   await visit('/assets/actors/a1/edit')
-  await page.locator('.asset-dossier-cover .ant-image-mask').click()
-  await page.locator('.ant-image-preview-wrap').waitFor()
+  await page.getByRole('button', { name: '放大当前视角图片', exact: true }).click()
+  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor()
   await snapshot('asset-image-preview')
-  await page.locator('.ant-image-preview-close').click()
-  await page.locator('.ant-image-preview-wrap').waitFor({ state: 'hidden' })
+  await page.keyboard.press('Escape')
+  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor({ state: 'hidden' })
   await visit('/models')
   await page.getByRole('cell', { name: 'openai', exact: true }).click()
   await snapshot('provider-details')
@@ -201,35 +226,39 @@ try {
     interactions.push(`legacy-${mode}`)
   }
   if (!process.env.SHELL_LAB_REGRESSION_ONLY) {
-    await visit('/projects/p1/chapters/ch1/sequences/s1')
-    await page.locator('.app-breadcrumb').getByRole('link', { name: '第二章', exact: true }).click()
-    await page.waitForURL(url => url.pathname.endsWith('/chapters/ch1/sequences'))
+    const rolePath = '/projects/p1/roles/a1/edit'
+    await visit(rolePath)
+    assert.equal(await projectNavigation.getByRole('link', { name: '角色', exact: true }).getAttribute('aria-current'), 'page')
+    const breadcrumbs = page.getByRole('navigation', { name: '当前位置' })
+    await breadcrumbs.getByRole('link', { name: '角色', exact: true }).click()
+    await page.waitForURL(url => url.pathname === '/projects/p1' && url.searchParams.get('tab') === 'roles')
     await page.goBack()
-    await page.waitForURL(url => url.pathname.endsWith('/sequences/s1'))
+    await page.waitForURL(url => url.pathname === rolePath)
     await page.goForward()
-    await page.waitForURL(url => url.pathname.endsWith('/chapters/ch1/sequences'))
+    await page.waitForURL(url => url.pathname === '/projects/p1' && url.searchParams.get('tab') === 'roles')
     interactions.push('breadcrumbs-back-forward')
     project.name = '一个需要保留完整名称并允许查看上级路径的长项目标题'.repeat(3)
-    workspace.sequence.title = '需要完整阅读且不挤压任务和用户入口的场次标题'.repeat(3)
-    await visit('/projects/p1/chapters/ch1/sequences/s1')
+    await visit(rolePath)
     await page.getByRole('button', { name: '查看上级页面' }).click()
     await page.getByRole('menu').waitFor()
     await snapshot('long-breadcrumbs')
     await page.keyboard.press('Escape')
     failProject = true
-    await visit('/projects/p1/chapters/ch1/sequences/s1')
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await visit(rolePath)
     await page.getByRole('button', { name: '查看上级页面' }).click()
     await page.getByRole('menuitem', { name: '项目名称暂不可用', exact: true }).waitFor()
     assert.ok(!(await page.getByRole('menu').innerText()).includes(project.name))
     await snapshot('failed-parent-read')
     await page.keyboard.press('Escape')
     failProject = false
-    project.name = '旧信'; workspace.sequence.title = '旧信重逢'
+    project.name = '旧信'
+    await page.setViewportSize({ width: 1586, height: 992 })
     taskRows = ['running', 'succeeded'].map((status, index) => ({ task_id: `task${index + 1}`, task_kind: 'directing_design', title: `设计任务 ${index + 1}`, status, stage: '设计', progress: index === 0 ? 25 : 100, cancel_requested: false, project_id: 'p1', target_type: 'directing_sequence', target_id: 's1', created_at_ts: 1789430400, updated_at_ts: Math.floor(Date.now() / 1000), source: { kind: 'sequence', id: 's1', project_id: 'p1', chapter_id: 'ch1', title: '旧信重逢' } }))
     await visit('/settings')
     await page.getByLabel('运行中任务 1').waitFor()
     const pollStart = requests.filter(request => request.path.endsWith('/film/tasks')).length
-    for (const name of ['项目列表', '资产管理', '设置']) await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name, exact: true }).click()
+    for (const name of ['首页', '项目', '管理']) await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name, exact: true }).click()
     await page.waitForTimeout(4500)
     const pollEnd = requests.filter(request => request.path.endsWith('/film/tasks')).length
     assert.ok(pollEnd - pollStart >= 1 && pollEnd - pollStart <= 2, 'Route changes must preserve a single task polling loop')
@@ -246,6 +275,9 @@ try {
     await closeDialog('任务历史')
     assert.equal(requests.filter(request => request.method === 'POST' && request.path.endsWith('/cancel')).length, 1)
     await page.getByRole('button', { name: '用户与语言设置' }).click()
+    await page.getByRole('menuitem', { name: '个人中心', exact: true }).click()
+    await page.waitForURL('**/settings')
+    await page.getByRole('button', { name: '用户与语言设置' }).click()
     await page.getByRole('menu').waitFor()
     await snapshot('account-menu')
     await page.getByRole('menuitem', { name: 'English', exact: true }).click()
@@ -258,6 +290,23 @@ try {
     await page.getByRole('heading', { name: '系统设置', exact: true }).waitFor()
     interactions.push('language-switch-and-reload')
     await page.setViewportSize({ width: 375, height: 812 })
+    await visit('/projects/p1?tab=chapters')
+    const projectNavTrigger = page.getByRole('button', { name: '打开项目导航', exact: true })
+    assert.equal(await projectNavigation.count(), 0)
+    await projectNavTrigger.focus()
+    await page.keyboard.press('Enter')
+    const projectDrawer = page.getByRole('dialog').filter({ has: projectNavigation })
+    await projectDrawer.waitFor()
+    assert.equal(await projectDrawer.getByRole('link', { name: '章节', exact: true }).getAttribute('aria-current'), 'page')
+    await page.keyboard.press('Escape')
+    await projectDrawer.waitFor({ state: 'hidden' })
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开项目导航')
+    await page.keyboard.press('Enter')
+    await projectDrawer.getByRole('link', { name: '角色', exact: true }).click()
+    await projectDrawer.waitFor({ state: 'hidden' })
+    await page.waitForURL('**?tab=roles')
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开项目导航')
+    await snapshot('mobile-project-navigation')
     await visit('/models')
     await page.getByRole('tab', { name: '模型', exact: true }).click()
     await page.getByRole('button', { name: /筛选$/ }).click()
@@ -274,8 +323,8 @@ try {
     await page.getByRole('dialog').filter({ hasText: '会话导航' }).waitFor()
     await snapshot('mobile-sessions')
     await closeDialog()
-    await page.getByRole('button', { name: '打开主导航' }).click()
-    await page.getByRole('navigation', { name: '移动主导航' }).getByRole('link', { name: '设置', exact: true }).click()
+    await page.getByRole('button', { name: '用户与语言设置' }).click()
+    await page.getByRole('menuitem', { name: '个人中心', exact: true }).click()
     await page.waitForURL(url => url.pathname === '/settings')
     await page.getByRole('button', { name: /保\s*存/ }).click()
     await snapshot('mobile-settings-save')
