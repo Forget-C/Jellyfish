@@ -31,8 +31,8 @@
 .management-reference-frame {
   aspect-ratio: 4 / 3;
   overflow: hidden;
-  border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border: 0;
+  border-radius: 8px;
   background: var(--app-background);
 }
 .management-reference-frame button {
@@ -48,3 +48,24 @@
 .management-reference-frame .ant-image,
 .management-reference-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .management-reference-option img { width: 34px; height: 26px; object-fit: contain; }
+
+.management-object-preparation { margin-block-start: 0; font-size: 13px; color: #263244; }
+.management-object-preparation h3 { font-size: 14px; font-weight: 600; }
+.management-object-preparation .management-object-card { border: 0; border-radius: 12px; background: #fff; box-shadow: none; }
+.management-object-preparation .management-object-card > .ant-card-body { padding: 16px; }
+.management-object-preparation .management-object-card h4 { font-size: 14px; font-weight: 600; }
+.management-object-preparation .ant-typography-secondary { color: #536174; }
+.management-object-preparation .ant-btn { border-radius: 8px; font-size: 13px; }
+.management-object-preparation .management-object-filters { margin: 12px 0; }
+.management-object-dialog { top: 16px; padding-bottom: 16px; }
+.management-object-dialog .ant-modal-content { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.management-object-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
+.management-object-dialog .ant-modal-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
+.management-object-review-dialog .ant-modal-body h3 { font-size: 14px; }
+.management-object-dialog .ant-modal-footer { flex-shrink: 0; }
+.management-object-dialog .ant-modal-footer .ant-btn { font-size: 13px; border-radius: 8px; }
+@media (max-width: 767px) {
+  .management-object-preparation .ant-btn,
+  .management-object-dialog .ant-modal-footer .ant-btn { min-height: 36px; height: auto; }
+  .management-object-preparation .management-object-card > .ant-card-body { padding: 12px; }
+}
