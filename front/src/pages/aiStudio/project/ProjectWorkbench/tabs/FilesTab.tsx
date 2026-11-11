@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Button, Card, Checkbox, Col, Empty, Modal, Pagination, Row, Select, Space, Spin, Tag } from 'antd'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, Button, Checkbox, Empty, Modal, Pagination, Select, Space, Spin, Tag, Tooltip } from 'antd'
 import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StudioFilesService } from '../../../../../services/generated'
 import type { FileRead } from '../../../../../services/generated'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { useChapters } from '../hooks/useProjectData'
-import { buildFileDownloadUrl } from '../../../assets/utils'
+import { buildFileDownloadUrl, resolveAssetUrl } from '../../../assets/utils'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
+import './project-files.css'
 
 const PAGE_SIZE = 10
 
@@ -32,6 +34,9 @@ export function FilesTab() {
   const [files, setFiles] = useState<FileRead[]>([])
   const [total, setTotal] = useState(0)
   const [filesLoading, setFilesLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [batchMode, setBatchMode] = useState(false)
+  const mediaTrigger = useRef<HTMLElement | null>(null)
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [previewVideo, setPreviewVideo] = useState<FileRead | null>(null)
@@ -48,9 +53,11 @@ export function FilesTab() {
         order: 'updated_at',
         isDesc: true,
       })
+      setError('')
       setFiles(res.data?.items ?? [])
       setTotal(res.data?.pagination?.total ?? 0)
     } catch {
+      setError('读取项目文件失败，请重试')
       setFiles([])
       setTotal(0)
     } finally {
@@ -88,45 +95,32 @@ export function FilesTab() {
 
   return (
     <>
-      <Card
-        title="项目文件"
-        extra={
-          <Space wrap>
-            {selectedIds.size > 0 ? (
-              <Button type="primary" icon={<DownloadOutlined />} onClick={handleBatchDownload}>
-                批量下载（{selectedIds.size}）
-              </Button>
-            ) : null}
-            <Button onClick={() => navigate('/files')}>前往文件管理</Button>
-          </Space>
-        }
-      >
-        <div className="mb-4">
-          <Space wrap>
-            <Select
-              allowClear
-              placeholder="章节标题"
-              style={{ minWidth: 220 }}
-              value={chapterTitle}
-              options={chapters.map((c) => ({ value: c.title, label: `${c.title}（第${c.index}章）` }))}
-              onChange={(v) => {
-                setChapterTitle(v ?? undefined)
-                setPage(1)
-              }}
-              loading={chaptersLoading}
-            />
-
-          </Space>
+      <div className="project-resource-page project-files-page">
+      <ProjectContentToolbar>
+        <div className="project-content-toolbar-leading">
+          <h1 className="app-page-title">项目文件</h1>
+          <Select className="project-files-filter" aria-label="按章节筛选文件" allowClear placeholder="全部章节" style={{ width: 200, maxWidth: '100%' }}
+            value={chapterTitle} options={chapters.map(c => ({ value: c.title, label: `${c.title}（第${c.index}章）` }))}
+            onChange={value => { setChapterTitle(value ?? undefined); setPage(1) }} loading={chaptersLoading} />
         </div>
-
+        <Space wrap>
+          {batchMode && <Button type="primary" aria-label={`批量下载（${selectedIds.size}）`} icon={<DownloadOutlined />} disabled={selectedIds.size === 0}
+            onClick={handleBatchDownload}>批量下载（{selectedIds.size}）</Button>}
+          <Button onClick={() => { setBatchMode(value => !value); setSelectedIds(new Set()) }}>
+            {batchMode ? '退出批量选择' : '批量选择'}
+          </Button>
+          <Button type="link" onClick={() => navigate('/files')}>前往文件管理</Button>
+        </Space>
+      </ProjectContentToolbar>
+      {error && <Alert type="error" showIcon message={error} action={<Button onClick={() => void loadFiles()}>重试读取文件</Button>} />}
         <Spin spinning={filesLoading}>
-          {files.length === 0 && !filesLoading ? (
+          {files.length === 0 && !filesLoading && !error ? (
             <Empty
               description="暂无文件（仅展示已在项目中产生过关联记录的文件）"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           ) : (
-            <Row gutter={[16, 16]}>
+            <div className="project-resource-grid">
               {files.map((file) => {
                 const url = fileResourceUrl(file)
                 const checked = selectedIds.has(file.id)
@@ -134,57 +128,51 @@ export function FilesTab() {
                 const isAudio = file.type === 'audio'
 
                 return (
-                  <Col key={file.id} xs={24} sm={12} md={8} lg={6}>
+                  <div key={file.id}>
                     <DisplayImageCard
+                      variant="project"
                       title={
                         <div className="flex items-start gap-2 pr-1 min-w-0">
-                          <Checkbox
+                          {batchMode && <Checkbox
+                            aria-label={`选择${file.name}`}
                             checked={checked}
                             onChange={(e) => {
                               e.stopPropagation()
                               toggleSelect(file.id, e.target.checked)
                             }}
                             onClick={(e) => e.stopPropagation()}
-                          />
-                          <span className="truncate flex-1 min-w-0 text-sm font-normal" title={file.name}>
+                          />}
+                          <span className="truncate flex-1 min-w-0 text-sm font-semibold" title={file.name}>
                             {file.name}
                           </span>
                         </div>
                       }
-                      imageUrl={isAudio ? undefined : url}
+                      imageUrl={isAudio ? undefined : isVideo ? resolveAssetUrl(file.thumbnail) : url}
                       imageAlt={file.name}
                       enablePreview={!isVideo && !isAudio}
-                      onImageClick={isVideo || isAudio ? () => setPreviewVideo(file) : undefined}
+                      onImageClick={isVideo || isAudio ? () => { mediaTrigger.current = document.activeElement as HTMLElement; setPreviewVideo(file) } : undefined}
                       placeholder={
                         isAudio ? <SoundOutlined className="text-4xl" /> : isVideo ? (
-                          <span className="flex flex-col items-center gap-1 text-gray-400">
+                          <span className="flex flex-col items-center gap-1">
                             <VideoCameraOutlined className="text-4xl" />
                             <span className="text-xs">点击预览</span>
                           </span>
                         ) : (
-                          <FileImageOutlined className="text-5xl text-gray-300" />
+                          <FileImageOutlined className="text-5xl" />
                         )
                       }
                       meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? '视频' : isAudio ? '音频' : '图片'}</Tag>}
-                      footer={
-                        <Button
-                          block
-                          type="primary"
-                          ghost
-                          icon={<DownloadOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            downloadOne(file)
-                          }}
-                        >
-                          下载
-                        </Button>
+                      extra={
+                        <Tooltip title={`下载${file.name}`}>
+                          <Button type="text" icon={<DownloadOutlined />} aria-label={`下载${file.name}`}
+                            onClick={() => downloadOne(file)} />
+                        </Tooltip>
                       }
                     />
-                  </Col>
+                  </div>
                 )
               })}
-            </Row>
+            </div>
           )}
         </Spin>
 
@@ -200,9 +188,12 @@ export function FilesTab() {
             />
           </div>
         )}
-      </Card>
+      </div>
 
       <Modal
+        className="project-resource-dialog"
+        focusTriggerAfterClose={false}
+        afterClose={() => mediaTrigger.current?.focus({ preventScroll: true })}
         title={previewVideo?.name ?? '媒体预览'}
         open={previewVideo !== null}
         footer={null}
@@ -212,6 +203,7 @@ export function FilesTab() {
       >
         {previewVideo?.type === 'audio' ? <audio aria-label="音频预览" src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
           <video
+            aria-label="视频预览"
             className="w-full max-h-[70vh] bg-black rounded"
             src={buildFileDownloadUrl(previewVideo.id)}
             controls
