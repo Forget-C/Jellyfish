@@ -54,3 +54,18 @@
   .project-content-toolbar-leading { flex: 1 1 100%; }
   .project-chapter-list .chapter-table .ant-table-cell { padding: 12px 8px; }
 }
+
+.project-overview .project-section-title, .project-overview .project-section-heading h3 { font-size: 14px; font-weight: 600; }
+.project-overview .project-current-chapter h3 { font-size: 14px; font-weight: 600; }
+.project-overview .project-production-surface { padding: 16px; }
+.project-overview a { color: var(--app-accent); font-size: 13px; text-decoration: none; }
+.project-overview a:hover { color: var(--app-accent); text-decoration: underline; }
+.project-overview a:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; border-radius: 4px; }
+.project-overview-scene-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.project-overview-scene-list a { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 8px; }
+.project-overview-scene-list a span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.project-overview-scene-list a .anticon { flex-shrink: 0; }
+.project-overview .ant-btn { font-size: 13px; }
+
+.project-overview .project-overview-grid { gap: 20px; }
+.project-overview .project-current-chapter p { font-size: 12px; }

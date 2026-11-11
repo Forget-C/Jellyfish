@@ -3,6 +3,8 @@ import { Alert, Button, Form, Input, InputNumber, Select, Space, Switch, message
 import { type ProjectRead, type ProjectUpdate } from '../../../../../services/generated'
 import { directingError } from '../../../directing/common'
 import { ProjectVisualStyleAndStyleFields } from '../../ProjectVisualStyleAndStyleFields'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
+import './project-settings.css'
 import { useProjectStyleOptions } from '../../useProjectStyleOptions'
 
 function settingsValues(project: ProjectRead): ProjectUpdate {
@@ -52,28 +54,37 @@ export function SettingsTab({ project, saving, onSave }: {
   }
 
   return (
-    <Form form={form} layout="vertical" className="app-settings-form" initialValues={saved} onFinish={save} disabled={saving}>
-      {error && <Alert type="error" showIcon message={error} className="mb-4" />}
-      <Form.Item name="name" label="项目名称" rules={[{ required: true, whitespace: true, message: '请输入项目名称' }]}>
-        <Input />
-      </Form.Item>
-      <Form.Item name="description" label="项目简介">
-        <Input.TextArea rows={3} />
-      </Form.Item>
-      <ProjectVisualStyleAndStyleFields form={form} options={options} />
-      <Form.Item name="seed" label="全局种子值" rules={[{ required: true, type: 'integer', min: 0, message: '请输入非负整数' }]} tooltip="固定种子可确保整部短剧视觉调性一致">
-        <InputNumber min={0} className="w-full" />
-      </Form.Item>
-      <Form.Item name="default_video_ratio" label="默认视频比例">
-        <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
-      </Form.Item>
-      <Form.Item name="unify_style" label="风格统一" valuePropName="checked" tooltip="开启后所有章节继承项目风格">
-        <Switch />
-      </Form.Item>
-      <Space>
-        <Button disabled={!dirty || saving} onClick={cancel}>取消</Button>
-        <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>保存</Button>
-      </Space>
-    </Form>
+    <>
+      <ProjectContentToolbar><h1 className="app-page-title">项目设置</h1></ProjectContentToolbar>
+      <Form aria-label="项目设置表单" form={form} layout="vertical" className="app-settings-form project-settings-form" initialValues={saved} onFinish={save} disabled={saving}>
+        {error && <Alert type="error" showIcon message={error} className="mb-4" />}
+        <section className="project-settings-group" aria-labelledby="project-settings-basic">
+        <h2 id="project-settings-basic">基本信息</h2>
+        <Form.Item name="name" label="项目名称" rules={[{ required: true, whitespace: true, message: '请输入项目名称' }]}>
+          <Input />
+        </Form.Item>
+        <Form.Item name="description" label="项目简介">
+          <Input.TextArea rows={3} />
+        </Form.Item>
+        </section>
+        <section className="project-settings-group" aria-labelledby="project-settings-generation">
+        <h2 id="project-settings-generation">生成默认设置</h2>
+        <ProjectVisualStyleAndStyleFields form={form} options={options} />
+        <Form.Item name="seed" label="全局种子值" rules={[{ required: true, type: 'integer', min: 0, message: '请输入非负整数' }]} tooltip="固定种子可确保整部短剧视觉调性一致">
+          <InputNumber min={0} className="w-full" />
+        </Form.Item>
+        <Form.Item name="default_video_ratio" label="默认视频比例">
+          <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
+        </Form.Item>
+        <Form.Item name="unify_style" label="风格统一" valuePropName="checked" tooltip="开启后所有章节继承项目风格">
+          <Switch />
+        </Form.Item>
+        </section>
+        <Space size={8} className="project-settings-actions">
+          <Button disabled={!dirty || saving} onClick={cancel}>取消</Button>
+          <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>保存</Button>
+        </Space>
+      </Form>
+    </>
   )
 }
