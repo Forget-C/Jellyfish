@@ -95,7 +95,7 @@ try {
   await page.goto(`${origin}/projects/p-manage?tab=chapters`)
   const chapter = page.getByRole('row').filter({ hasText: '无人应答' })
   await chapter.getByText('已有场次', { exact: true }).waitFor()
-  await chapter.getByRole('button', { name: '场次管理', exact: true }).waitFor()
+  await chapter.getByRole('button', { name: '工作台管理', exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'chapters-desktop.png'), animations: 'disabled' })
 
   await page.setViewportSize({ width: 375, height: 812 })

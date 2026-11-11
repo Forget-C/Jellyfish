@@ -10,6 +10,7 @@ import { directingError } from '../../../directing/common'
 import { chapterAction, chapterActionLocation, chapterLocation, readChapterBrowse, saveChapterBrowse, workbenchManagementLocation } from '../../../directing/chapterNavigation'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { chapterProduction } from '../../chapterProduction'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import '../project-production.css'
 import '../../../directing/workspace.css'
 
@@ -26,7 +27,7 @@ function ChaptersContent() {
   const [params, setParams] = useSearchParams()
   const [page, setPage] = useState(() => readChapterBrowse(projectId).page || 1)
   const [query, setQuery] = useState(() => readChapterBrowse(projectId).query || '')
-  const { chapters, loading, total, error, refresh } = useChapters(projectId, { page, pageSize: 10, query })
+  const { chapters, loading, total, totalKnown, error, refresh } = useChapters(projectId, { page, pageSize: 10, query })
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [title, setTitle] = useState('')
@@ -122,14 +123,15 @@ function ChaptersContent() {
     setPage(nextPage); setQuery(nextQuery)
   }
   return <div ref={root} className="project-chapter-list">
-    <header className="project-section-heading">
-      <h2 className="project-section-title">章节列表</h2>
-      <Space wrap>
+    <ProjectContentToolbar>
+      <div className="project-content-toolbar-leading">
+        <h1 className="app-page-title">章节场次</h1>
+        <span className="project-toolbar-count">{loading || error || !totalKnown ? '数量未确认' : `共 ${total} 章`}</span>
         <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
           onChange={event => changePage(1, event.target.value)} />
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>
-      </Space>
-    </header>
+      </div>
+      <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>
+    </ProjectContentToolbar>
     <div className="project-production-surface">
       {showOffPageChapter && <Alert type="info" message={`返回章节：${showOffPageChapter.title}`} action={<Space wrap>
         <Button onClick={() => openEditor(showOffPageChapter.id)}>编辑章节</Button>
@@ -145,15 +147,22 @@ function ChaptersContent() {
                 <Button type="link" className="chapter-title-link" aria-label={`${chapter.index}. ${chapter.title} · 编辑章节`} onClick={() => openEditor(chapter.id)}>{chapter.index}. {chapter.title}</Button>
                 <div className="chapter-list-state">
                   <span className="chapter-production-state" data-tone={production.tone}>{production.state}</span>
-                  <Button type="link" onClick={() => openAction(chapter)}>{production.label}</Button>
                 </div>
               </div>
             } },
             { title: '原文预览', key: 'preview', responsive: ['lg'], render: (_, chapter) => <p className="chapter-table-preview">{chapter.rawText || '未填写原文'}</p> },
             { title: '原文字数', key: 'words', width: 100, responsive: ['md'], render: (_, chapter) => chapter.rawText?.length ?? 0 },
             { title: '场次数量', key: 'count', width: 100, render: (_, chapter) => chapter.sequenceCount === undefined ? '—' : `${chapter.sequenceCount} 场` },
-            { title: '操作', key: 'actions', width: 160, render: (_, chapter) => <Button type="primary"
-              data-chapter-workbench={chapter.id} onClick={() => openManagement(chapter.id)}>工作台管理</Button> },
+            { title: '操作', key: 'actions', width: 200, render: (_, chapter) => {
+              const action = chapterAction(chapter)
+              return <Space size={8} wrap>
+                {action.target === 'edit' && <Button type="link" onClick={() => openEditor(chapter.id)}>编辑原文</Button>}
+                <Button type="link" data-chapter-workbench={chapter.id}
+                  onClick={() => action.target === 'source' ? openAction(chapter) : openManagement(chapter.id)}>
+                  {action.target === 'source' ? '划分场次' : '工作台管理'}
+                </Button>
+              </Space>
+            } },
           ]} />}
     </div>
     {editingId && <ChapterRawTextEditorModal open chapterId={editingId} projectId={projectId} onClose={closeEditor}
