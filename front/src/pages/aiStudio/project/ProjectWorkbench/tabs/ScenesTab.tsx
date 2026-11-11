@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Empty, Input, Modal, Space, message, Pagination } from 'antd'
-import { EditOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
+import { MoreOutlined, LinkOutlined, PlusOutlined, EnvironmentOutlined } from '@ant-design/icons'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectSceneLinkRead } from '../../../../../services/generated'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { StudioAssetTypeFormModal } from '../../../assets/components/StudioAssetTypeFormModal'
+import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import { encodeWorkbenchAssetEditReturnTo } from '../utils/workbenchAssetReturnTo'
 
 type SceneLike = {
@@ -126,7 +127,7 @@ export function ScenesTab() {
   }
 
   const handleLinkScene = async (scene: SceneLike) => {
-    if (!projectId) return
+    if (!projectId || linkingId) return
     setLinkingId(scene.id)
     try {
       await StudioProjectAssetsService.createProjectSceneLinkApiV1StudioProjectAssetsScenePost({
@@ -150,6 +151,7 @@ export function ScenesTab() {
       await loadLinks()
     } catch {
       message.error('取消关联失败')
+      throw new Error('取消关联失败')
     } finally {
       setUnlinkingId(null)
     }
@@ -158,81 +160,44 @@ export function ScenesTab() {
   if (!projectId) return null
 
   return (
-    <div className="h-full overflow-auto">
-      <Card
-        title="项目场景"
-        extra={
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-              新建
-            </Button>
-            <Button
-              type="primary"
-              icon={<LinkOutlined />}
-              onClick={() => {
-                setSearch('')
-                setLinkModalOpen(true)
-              }}
-            >
-              从资产库关联
-            </Button>
-            <Button icon={<PlusOutlined />} onClick={() => navigate('/assets?tab=scene')}>
-              前往资产管理
-            </Button>
-          </Space>
-        }
-      >
+    <div className="project-resource-page">
+      <ProjectContentToolbar>
+        <h1 className="app-page-title">项目场景</h1>
+        <Space wrap>
+          <Button type="primary" icon={<LinkOutlined />} onClick={() => { setSearch(''); setLinkModalOpen(true) }}>从资产库关联</Button>
+          <Button icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>新建</Button>
+          <Button type="link" onClick={() => navigate('/assets?tab=scene')}>查看资产库</Button>
+        </Space>
+      </ProjectContentToolbar>
         {links.length === 0 && !linksLoading ? (
           <Empty description="暂无项目场景，可从资产库关联场景到本项目" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="project-resource-grid">
             {pagedLinks.map((l) => {
               const s = scenesById[l.scene_id]
               return (
                 <DisplayImageCard
+                  variant="project"
+                  imageFit="cover"
                   key={l.id}
-                  title={<div className="truncate">{s?.name ?? l.scene_id}</div>}
+                  title={<Link title={s?.name ?? '场所信息暂不可用'} to={`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`}>{s?.name ?? '场所信息暂不可用'}</Link>}
                   imageUrl={toThumbUrl(l.thumbnail ?? s?.thumbnail)}
-                  imageAlt={s?.name ?? l.scene_id}
-                  extra={
-                    <Space size="small">
-                      <Button
-                        type="default"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() =>
-                          navigate(
-                            `/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`,
-                          )
-                        }
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        size="small"
-                        danger
-                        loading={unlinkingId === l.id}
-                        onClick={() => {
-                          Modal.confirm({
-                            title: `取消关联「${s?.name ?? l.scene_id}」？`,
-                            okText: '取消关联',
-                            cancelText: '取消',
-                            okButtonProps: { danger: true },
-                            onOk: () => handleUnlinkScene(l),
-                          })
-                        }}
-                      >
-                        取消关联
-                      </Button>
-                    </Space>
-                  }
-                  meta={
-                    <div className="space-y-1">
-                      <div className="text-xs text-gray-600 line-clamp-2">{s?.description ?? '—'}</div>
-                      <div className="text-xs text-gray-500 truncate">scene_id：{l.scene_id}</div>
-                    </div>
-                  }
+                  imageAlt={s?.name ?? '场所信息暂不可用'}
+                  placeholder={<><EnvironmentOutlined aria-hidden />暂无场所图片</>}
+                  extra={<Dropdown trigger={['click']} menu={{ items: [
+                    { key: 'edit', label: '编辑', onClick: () => navigate(`/assets/scenes/${l.scene_id}/edit?returnTo=${encodeWorkbenchAssetEditReturnTo(projectId, 'scenes')}`) },
+                    { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
+                      Modal.confirm({
+                        className: 'project-resource-dialog',
+                        title: `取消关联「${s?.name ?? '场所信息暂不可用'}」？`,
+                        content: '仅移除此资源与当前项目的关联，不会删除资产库中的资源。',
+                        okText: '取消关联', cancelText: '取消', okButtonProps: { danger: true },
+                        onOk: () => handleUnlinkScene(l),
+                      })
+                    } },
+                  ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${s?.name ?? '场所信息暂不可用'}更多操作`} /></Dropdown>}
+                  meta={<><div className="project-resource-description">{s?.description?.trim() || '未填写简介'}</div><span className="project-resource-description">已关联项目</span></>}
                 />
               )
             })}
@@ -252,7 +217,7 @@ export function ScenesTab() {
             </div>
           </div>
         )}
-      </Card>
+
 
       <StudioAssetTypeFormModal
         open={createModalOpen}
@@ -277,9 +242,11 @@ export function ScenesTab() {
       />
 
       <Modal
+        className="project-resource-dialog"
         title="从资产库关联场景"
         open={linkModalOpen}
-        onCancel={() => setLinkModalOpen(false)}
+        onCancel={() => { if (!linkingId) setLinkModalOpen(false) }}
+        closable={!linkingId} keyboard={!linkingId} maskClosable={!linkingId}
         footer={null}
         width={560}
       >
@@ -321,7 +288,7 @@ export function ScenesTab() {
                       {scene.description && <div className="text-xs text-gray-500 truncate">{scene.description}</div>}
                     </div>
                   </div>
-                  <Button type="primary" size="small" loading={linkingId === scene.id} onClick={() => handleLinkScene(scene)}>
+                  <Button type="primary" size="small" disabled={!!linkingId} loading={linkingId === scene.id} onClick={() => handleLinkScene(scene)}>
                     关联到项目
                   </Button>
                 </div>
