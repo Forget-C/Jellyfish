@@ -51,7 +51,7 @@
   padding: 8px 0;
   background: var(--app-background);
 }
-.management-workspace .management-division .chapter-source-text { max-width: 70ch; }
+.management-workspace .management-division :is(.chapter-source-text, .chapter-source-native) { max-width: 70ch; }
 
 
 .management-workspace { color: #263244; }
@@ -112,7 +112,7 @@
 .management-division .chapter-division-toolbar { position:static !important; }
 .management-division .chapter-division-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:20px; }
 .management-division .chapter-division-layout.with-editor-drawer { grid-template-columns:minmax(0,1fr); }
-.management-division .chapter-source-text { margin-inline:auto; }
+.management-division :is(.chapter-source-text, .chapter-source-native) { margin-inline:0; padding-inline:0; }
 :is(.management-division, .management-division-drawer) .chapter-division-members > .ant-btn { border:0; box-shadow:none; border-radius:8px; background:transparent; }
 :is(.management-division, .management-division-drawer) .chapter-division-members > .ant-btn[aria-pressed=true] { background:var(--app-selected); color:var(--app-accent); }
 .management-division h3 { font-size:14px; }
