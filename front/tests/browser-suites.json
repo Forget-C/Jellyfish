@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "project-files-performance": { "file": "projectFilesPerformance.browser.mjs", "ports": [4545], "timeoutMs": 600000 },
     "scene-canvas-legacy-routes": { "file": "sceneCanvasLegacyRoutes.browser.mjs", "ports": [4331, 8331], "timeoutMs": 180000 },
     "storyboard-recovery": { "file": "storyboardRecovery.browser.mjs", "ports": [4330, 8330], "timeoutMs": 180000 },
     "storyboard-scope": { "file": "storyboardScope.browser.mjs", "ports": [4319, 8319], "timeoutMs": 180000 },

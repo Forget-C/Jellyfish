@@ -8,6 +8,7 @@ type DisplayImageCardProps = {
   variant?: 'default' | 'project'
   imageFit?: 'contain' | 'cover'
   lazyImage?: boolean
+  requireImageForClick?: boolean
   title: ReactNode
   imageUrl?: string
   imageAlt: string
@@ -27,6 +28,7 @@ export function DisplayImageCard({
   variant = 'default',
   imageFit = 'contain',
   lazyImage = false,
+  requireImageForClick = false,
   title,
   imageUrl,
   imageAlt,
@@ -65,7 +67,7 @@ export function DisplayImageCard({
     const content = displayUrl
       ? <img loading={lazyImage ? 'lazy' : undefined} src={displayUrl} alt={imageAlt} style={{ objectFit: imageFit }} onError={() => setImgError(true)} />
       : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : onImageClick ? placeholder : <><PictureOutlined aria-hidden />暂无封面</>}</span>
-    const canOpen = !!onImageClick || !!(enablePreview && displayUrl)
+    const canOpen = (!!onImageClick && (!requireImageForClick || !!displayUrl)) || !!(enablePreview && displayUrl)
     return <>
       <article className="project-resource-card">
         {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" title="放大预览" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>

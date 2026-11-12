@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Empty, Modal, Select, Space, Spin, Tag, Tooltip } from 'antd'
-import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined, DownOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StudioFilesService } from '../../../../../services/generated'
 import type { FileRead } from '../../../../../services/generated'
@@ -8,6 +8,7 @@ import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { useChapters } from '../hooks/useProjectData'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../../../assets/utils'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
+import { useFileViewport } from './useFileViewport'
 import './project-files.css'
 
 const PAGE_SIZE = 24
@@ -45,6 +46,20 @@ export function FilesTab() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [previewVideo, setPreviewVideo] = useState<FileRead | null>(null)
+  const request = useRef<ReturnType<typeof StudioFilesService.listFilesApiApiV1StudioFilesGet>>()
+  const knownIds = useRef(new Set<string>())
+  const viewport = useFileViewport(pageRoot, files.length)
+  const [focusedId, setFocusedId] = useState<string>()
+  const [hintUsed, setHintUsed] = useState(false)
+  const [hintFocused, setHintFocused] = useState(false)
+  const previewScroll = useRef(0)
+  const openPreview = (file: FileRead) => {
+    mediaTrigger.current = document.activeElement as HTMLElement
+    previewScroll.current = pageRoot.current?.closest('.project-workbench-content')?.scrollTop || 0
+    setPreviewVideo(file)
+  }
+  const hintVisible = !previewVideo && !error && !filesLoading && viewport.remaining > 80 && !viewport.scrolling && !viewport.blocked
+  useEffect(() => { if (viewport.scrolling) setHintUsed(true) }, [viewport.scrolling])
 
   // A generation owns its pagination; responses from earlier filters cannot update this list.
   const loadFiles = useCallback(async () => {
@@ -55,15 +70,18 @@ export function FilesTab() {
     setFilesLoading(true)
     setError('')
     try {
-      const res = await StudioFilesService.listFilesApiApiV1StudioFilesGet({
+      const pending = StudioFilesService.listFilesApiApiV1StudioFilesGet({
         projectId, chapterTitle: chapterTitle ?? null, page: nextPage,
         pageSize: PAGE_SIZE, order: 'updated_at', isDesc: true,
       })
+      request.current = pending
+      const res = await pending
       if (requestGeneration !== generation.current) return
       const items = res.data?.items ?? []
       const count = res.data?.pagination?.total
       page.current = nextPage
-      setFiles(previous => Array.from(new Map([...previous, ...items].map(file => [file.id, file])).values()))
+      const added = items.filter(file => { if (knownIds.current.has(file.id)) return false; knownIds.current.add(file.id); return true })
+      setFiles(previous => [...previous, ...added])
       setTotal(count ?? 0)
       setHasMore(items.length > 0 && ((count === undefined || count === null) ? items.length === PAGE_SIZE : nextPage * PAGE_SIZE < count))
     } catch {
@@ -78,6 +96,10 @@ export function FilesTab() {
 
   useEffect(() => {
     generation.current += 1
+    request.current?.cancel()
+    knownIds.current.clear()
+    setHintUsed(false)
+    setFocusedId(undefined)
     page.current = 0
     loading.current = false
     setFiles([])
@@ -89,7 +111,7 @@ export function FilesTab() {
     const panel = pageRoot.current?.closest('.project-workbench-content')
     if (panel) panel.scrollTop = 0
     void loadFiles()
-    return () => { generation.current += 1 }
+    return () => { generation.current += 1; request.current?.cancel() }
   }, [loadFiles])
 
   useEffect(() => {
@@ -126,6 +148,13 @@ export function FilesTab() {
     batchOpenDownloads(urls)
   }
 
+  const firstIndex = viewport.start * viewport.columns
+  const visibleFiles = files.slice(firstIndex, viewport.end * viewport.columns).map((file, offset) => ({ file, index: firstIndex + offset }))
+  for (const id of [focusedId, previewVideo?.id]) {
+    const pinnedIndex = files.findIndex(file => file.id === id)
+    if (pinnedIndex >= 0 && !visibleFiles.some(item => item.index === pinnedIndex)) visibleFiles.push({ file: files[pinnedIndex], index: pinnedIndex })
+  }
+
   return (
     <>
       <div ref={pageRoot} className="project-resource-page project-files-page">
@@ -155,18 +184,36 @@ export function FilesTab() {
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           ) : (
-            <div className="project-resource-grid">
-              {files.map((file) => {
+            <div ref={viewport.grid} className="project-resource-grid project-files-virtual" style={{ height: Math.ceil(files.length / viewport.columns) * viewport.stride - (files.length ? 16 : 0) }}>
+              {visibleFiles.map(({ file, index }) => {
+                const row = Math.floor(index / viewport.columns)
                 const url = fileResourceUrl(file)
                 const checked = selectedIds.has(file.id)
                 const isVideo = file.type === 'video'
                 const isAudio = file.type === 'audio'
 
                 return (
-                  <div key={file.id}>
+                  <div key={file.id} data-file-id={file.id} onKeyDown={event => {
+                    if (event.key !== 'Tab') return
+                    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'))
+                    const boundary = event.shiftKey ? controls[0] : controls[controls.length - 1]
+                    const nextIndex = index + (event.shiftKey ? -1 : 1)
+                    if (event.target !== boundary || nextIndex < 0 || nextIndex >= files.length || visibleFiles.some(item => item.index === nextIndex)) return
+                    event.preventDefault()
+                    const next = files[nextIndex]
+                    setFocusedId(next.id)
+                    const panel = pageRoot.current?.closest('.project-workbench-content')
+                    if (panel) panel.scrollTop = Math.floor(nextIndex / viewport.columns) * viewport.stride
+                    requestAnimationFrame(() => {
+                      const card = pageRoot.current?.querySelector(`[data-file-id="${CSS.escape(next.id)}"]`)
+                      const targets = card?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')
+                      targets?.[event.shiftKey ? targets.length - 1 : 0]?.focus({ preventScroll: true })
+                    })
+                  }} onFocus={() => setFocusedId(file.id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusedId(undefined) }} style={{ position: 'absolute', top: row * viewport.stride, left: `calc(${index % viewport.columns} * (100% + 16px) / ${viewport.columns})`, width: `calc((100% - ${(viewport.columns - 1) * 16}px) / ${viewport.columns})` }}>
                     <DisplayImageCard
                       variant="project"
                       lazyImage
+                      requireImageForClick={!isVideo && !isAudio}
                       title={
                         <div className="flex items-start gap-2 pr-1 min-w-0">
                           {batchMode && <Checkbox
@@ -183,10 +230,10 @@ export function FilesTab() {
                           </span>
                         </div>
                       }
-                      imageUrl={isAudio ? undefined : isVideo ? resolveAssetUrl(file.thumbnail) : url}
+                      imageUrl={isAudio ? undefined : resolveAssetUrl(file.thumbnail) || (isVideo ? undefined : url)}
                       imageAlt={file.name}
-                      enablePreview={!isVideo && !isAudio}
-                      onImageClick={isVideo || isAudio ? () => { mediaTrigger.current = document.activeElement as HTMLElement; setPreviewVideo(file) } : undefined}
+                      enablePreview={false}
+                      onImageClick={() => openPreview(file)}
                       placeholder={
                         isAudio ? <SoundOutlined className="text-4xl" /> : isVideo ? (
                           <span className="flex flex-col items-center gap-1">
@@ -219,18 +266,21 @@ export function FilesTab() {
         </div>
       </div>
 
+      <button type="button" style={{ bottom: 20 + viewport.hintOffset }} aria-label="向下浏览文件" className={`project-files-scroll-hint ${!hintUsed ? 'is-breathing' : ''}`} hidden={!hintVisible && !hintFocused}
+        onFocus={() => setHintFocused(true)} onBlur={() => setHintFocused(false)} onAnimationEnd={() => setHintUsed(true)}
+        onClick={() => { setHintUsed(true); const panel = pageRoot.current?.closest('.project-workbench-content'); panel?.scrollBy({ top: panel.clientHeight * 0.75, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }) }}><DownOutlined /></button>
       <Modal
         className="project-resource-dialog"
         focusTriggerAfterClose={false}
-        afterClose={() => mediaTrigger.current?.focus({ preventScroll: true })}
+        afterClose={() => { const panel = pageRoot.current?.closest('.project-workbench-content'); if (panel) panel.scrollTop = previewScroll.current; mediaTrigger.current?.focus({ preventScroll: true }) }}
         title={previewVideo?.name ?? '媒体预览'}
         open={previewVideo !== null}
         footer={null}
         width={720}
-        onCancel={() => setPreviewVideo(null)}
+        onCancel={() => { setFocusedId(previewVideo?.id); setPreviewVideo(null) }}
         destroyOnClose
       >
-        {previewVideo?.type === 'audio' ? <audio aria-label="音频预览" src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
+        {previewVideo?.type === 'image' ? <img className="project-resource-preview" alt={previewVideo.name} src={buildFileDownloadUrl(previewVideo.id)} /> : previewVideo?.type === 'audio' ? <audio aria-label="音频预览" src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
           <video
             aria-label="视频预览"
             className="w-full max-h-[70vh] bg-black rounded"

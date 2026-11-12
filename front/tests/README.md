@@ -356,3 +356,5 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 工作台画布管理回归复用 `workbench-canvas-creation`、`workbench-canvas-cards`、`workbench-canvas-rename` 和 `workbench-storyboard-retry`：覆盖更多菜单中的空白创建、提交身份核实、未提交配置保护、候选采用与独立画布打开、失败恢复及更名。卡片用例同时核对双主题与桌面／矮屏／窄屏布局、长任务详情的底部操作和键盘关闭焦点；所有任务使用既有隔离后端，不验证真实供应商生成质量。
 
 `project-files` 通过真实项目文件页面与隔离HTTP覆盖显式批量模式、退出清空、追加选择保留、筛选重置和迟到响应隔离、图片与有效本地音视频预览、键盘关闭焦点、真实单项／批量下载目标、读取失败重试及空列表。用例使用ffmpeg生成短音视频夹具，沿用既有媒体工具预检；同时检查两种雾蓝主题和四种视口的长名称与横向溢出，不连接真实生成供应商。
+
+文件长列表性能：`PLAYWRIGHT_CHANNEL=chrome node tests/run-browser.mjs project-files-performance`。240／1200／5000条记录，1920×1080栅格图片；输出挂载卡片、加载耗时、强制GC后的JS堆和滚动帧间隔P95。JS堆不包含全部解码图片与进程内存，不作为浏览器总内存证明。基线对比可通过FILE_PERF_ROOT指定旧前端快照并设置BASELINE=1。

@@ -106,7 +106,7 @@ const ProjectWorkbench: FC = () => {
   }
 
   return (
-    <WorkspaceLayout>
+    <WorkspaceLayout style={activeTab === 'files' ? { position: 'relative' } : undefined}>
       <ProjectToolbarProvider title={projectTabLabel(activeTab)} actions={
         <Space size="small" wrap className="app-page-actions">
           {(!productionPage || recentDestination) && <Button type="primary" icon={primaryCta.icon} onClick={primaryCta.onClick}>{primaryCta.label}</Button>}
