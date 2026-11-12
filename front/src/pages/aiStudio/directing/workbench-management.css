@@ -129,3 +129,32 @@
 .management-division-drawer .chapter-division-editor { max-height:none; overflow:visible; padding:0; }
 .management-division-drawer .ant-drawer-title { font-size:16px; font-weight:600; }
 .management-division-drawer h3 { font-size:14px; }
+
+/* 管理正文的卡片直接置于页面背景；表单和原文仍使用独立表面。 */
+.management-workspace .management-panel > section:not(.management-inline-asset) { background: transparent; padding: 0; }
+.management-workspace .management-scene-heading h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.management-workspace .management-scene-heading > .ant-btn { flex-shrink: 0; }
+.management-workspace .management-steps { min-width: 0; }
+.management-workspace .management-asset-toolbar { padding: 0 0 12px; min-height: 52px; }
+.management-workspace .management-asset-toolbar .app-page-title { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.management-inline-asset .asset-dossier-sheet { padding: 0; }
+.management-inline-asset .asset-detail-feedback { margin-inline: 0; }
+.management-content:has(.management-inline-asset) > .management-toolbar { display: none; }
+.management-workspace .management-division-heading { flex: 0 0 auto; padding: 10px 20px; gap: 8px; flex-wrap: wrap; }
+.management-division-action-host { margin-left: auto; }
+.management-division-action-host .chapter-division-save { position: static; padding: 0; background: transparent; }
+@media (max-width: 767px) {
+  .management-workspace .management-scene-heading h2 { white-space: normal; }
+  .management-workspace .management-division-heading { padding-inline: 16px; }
+}
+@media (max-width: 767px) {
+  .management-workspace .management-identity { flex-wrap: wrap; }
+  .management-workspace .management-scene-heading { flex: 1; min-width: 0; }
+  .management-workspace .management-mobile-navigation { flex: 0 0 100%; }
+}
+.management-workspace .management-scene-notice[data-tone="muted"] { color: var(--app-muted); }
+.management-workspace .management-scene-notice[data-tone="error"] { color: #b42318; }
+.management-inline-asset .management-asset-toolbar { position: sticky; top: 0; z-index: 3; background: var(--app-page-background); }
+.management-scene-notices:empty { display: none; }
+.management-scene-notices details { margin-top: 8px; font-size: 13px; }
+.management-scene-notices summary { cursor: pointer; color: var(--app-muted); }

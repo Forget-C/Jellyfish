@@ -71,6 +71,7 @@ try {
   const openDivision = async (trigger = divisionButton) => {
     await trigger.press('Enter')
     await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
+    await page.locator('.management-division-heading').getByRole('button', { name: '保存新版本', exact: true }).waitFor()
   }
   const enterProduction = page.getByRole('button', { name: '进入场次制作', exact: true })
   const returnToProduction = page.getByRole('button', { name: '返回场次制作', exact: true })
@@ -177,7 +178,7 @@ try {
   await list.getByRole('button', { name: '查看历史场次' }).click()
   await list.getByRole('button', { name: /旧码头.*1 张画布/ }).click()
   await page.getByRole('heading', { name: '旧码头', exact: true }).waitFor()
-  await page.getByRole('list', { name: '本场画布' }).getByRole('button', { name: '打开画布' }).click()
+  await page.getByRole('list', { name: '本场画布' }).getByRole('button', { name: '历史方案', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('canvas') === canvas.id)
   await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
   assert.deepEqual(taskWrites, [])

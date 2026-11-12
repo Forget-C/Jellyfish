@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MoreOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, MoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Space, Spin, Tag, message } from 'antd'
 import type { InputRef } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -12,6 +12,7 @@ import { WorkbenchCanvasRename } from './WorkbenchCanvasRename'
 import { useWorkspaceDraftStatus } from './WorkspaceDrafts'
 import './workbench-canvas-cards.css'
 import { canOpenStoryboardCanvas } from './storyboardCanvasAccess'
+import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
 import { WorkbenchStoryboardReview } from './WorkbenchStoryboardReview'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
@@ -49,7 +50,9 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [revision, setRevision] = useState(0)
-  const [query, setQuery] = useState('')
+  const browseKey = managementBrowseKey(projectId, chapterId, sequenceId, 'storyboard')
+  const [query, setQuery] = useState(() => targetCanvas || targetTask ? '' : readManagementBrowse(browseKey).query ?? '')
+  useEffect(() => { saveManagementBrowse(browseKey, { query }) }, [browseKey, query])
   const [quickEntry, setQuickEntry] = useState(false)
   const [reviewCanvas, setReviewCanvas] = useState<string>()
   const [detail, setDetail] = useState<string>()
@@ -61,6 +64,14 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const [rename, setRename] = useState<Pick<SceneCanvasSummary, 'id' | 'name'>>()
   const menuButtons = useRef(new Map<string, HTMLElement>())
   const searchInput = useRef<InputRef>(null)
+  const collection = useRef<HTMLUListElement>(null)
+  const focusRestored = useRef(false)
+  useEffect(() => {
+    if (!canvases || focusRestored.current || targetCanvas || targetTask) return
+    focusRestored.current = true
+    const id = readManagementBrowse(browseKey).focus
+    if (id) collection.current?.querySelector<HTMLElement>(`[data-canvas-id="${CSS.escape(id)}"] .management-canvas-name`)?.focus({ preventScroll: true })
+  }, [canvases, browseKey, targetCanvas, targetTask])
   const [deleteTarget, setDeleteTarget] = useState<string>()
   const [deleteError, setDeleteError] = useState('')
   const drafts = useWorkspaceDraftStatus()
@@ -78,7 +89,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const hasActive = canvases?.some(canvas => activeTask(canvas.latest_storyboard))
 
   useEffect(() => {
-    setQuery('')
+    if (targetCanvas || targetTask) setQuery('')
     setDetail(undefined)
     setReviewCanvas(undefined)
     focusedTarget.current = undefined
@@ -151,6 +162,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     }
   }, [targetId, canvases, linked?.task])
   const openCanvas = (canvasId: string, taskId?: string) => {
+    saveManagementBrowse(browseKey, { focus: canvasId })
     navigate(sceneCanvasLocation(projectId, chapterId, sequenceId, canvasId, taskId), { state })
   }
   const closeDetail = () => {
@@ -199,17 +211,21 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
     {!error && canvases?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={historical ? '此历史场次没有画布' : '本场尚无画布，可生成新分镜画布开始设计'} />}
     {!error && !!canvases?.length && shown?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的画布" />}
-    {!!shown?.length && <ul className="management-card-grid" aria-label="本场画布">
+    {!!shown?.length && <ul ref={collection} className="management-card-grid" aria-label="本场画布">
       {shown.map(canvas => {
         const task = canvas.latest_storyboard
         const candidateId = canvas.candidate_storyboard_task_id
         const adoptedId = canvas.applied_storyboard_task_id
         const currentTaskIsCandidate = candidateId && task?.task_id === candidateId
         const located = canvas.id === targetId
-        return <li key={canvas.id} ref={located ? targetElement : undefined} tabIndex={located ? -1 : undefined}>
+        const taskStatus = task && !currentTaskIsCandidate && task.task_id !== adoptedId && <Tag
+          color={task.status === 'failed' ? 'error' : activeTask(task) ? 'processing' : undefined}>{taskLabel(task)}</Tag>
+        const failed = task?.status === 'failed' || task?.status === 'cancelled'
+
+        return <li key={canvas.id} data-canvas-id={canvas.id} ref={located ? targetElement : undefined} tabIndex={located ? -1 : undefined}>
           <Card size="small" bordered={false} className={canvas.id === created || located ? 'management-canvas-surface management-canvas-created' : 'management-canvas-surface'}>
             <div className="management-canvas-card-heading">
-              <h4>{canvas.name}</h4>
+              <h4>{canOpenStoryboardCanvas(canvas) ? <Button type="link" className="management-canvas-name" onClick={() => openCanvas(canvas.id)} title={canvas.name}>{canvas.name}<ArrowRightOutlined aria-hidden /></Button> : <span title={canvas.name}>{canvas.name}</span>}</h4>
               <Dropdown trigger={['click']} open={menuOpen === canvas.id} onOpenChange={open => setMenuOpen(open ? canvas.id : undefined)} menu={{ items: [
                 { key: 'rename', label: '更名', onClick: () => menuAction(() => setRename({ id: canvas.id, name: canvas.name })) },
                 ...(task ? [{ key: 'detail', label: '查看任务详情', onClick: () => menuAction(() => { detailTrigger.current = menuButtons.current.get(canvas.id); setDetail(canvas.id) }) }] : []),
@@ -225,24 +241,25 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               </Dropdown>
             </div>
             <div className="management-canvas-status">
-              {task && !currentTaskIsCandidate && task.task_id !== adoptedId && <Tag
-                color={task.status === 'failed' ? 'error' : activeTask(task) ? 'processing' : undefined}>{taskLabel(task)}</Tag>}
+              {failed && taskStatus}
+              {canvas.source_changed && <Tag color="warning">原文已变化</Tag>}
               {candidateId && <Tag color={canvas.storyboard_review_required ? 'warning' : 'success'}>
                 {currentTaskIsCandidate && (task?.review_state === 'conflict' || task?.review_state === 'warning')
                   ? taskLabel(task) : canvas.storyboard_review_required ? '需要核对' : '分镜已就绪'}
               </Tag>}
               {task?.review_state === 'warning' && task.task_id === adoptedId && <Tag color="warning">{taskLabel(task)}</Tag>}
+              {!failed && taskStatus}
               {adoptedId && <Tag color="success" title={`采用任务 ${adoptedId}`}>当前已采用</Tag>}
-              {canvas.source_changed && <Tag color="warning">原文已变化</Tag>}
+            </div>
+            <div className="management-canvas-markers">
               {canvas.id === recentCanvas && <Tag>最近打开</Tag>}
               {located && <Tag color="processing">当前定位</Tag>}
               {canvas.id === created && <Tag color="processing">刚创建</Tag>}
             </div>
             {task?.status === 'failed' && task.error && <Button type="link" style={{ whiteSpace: 'normal', height: 'auto', textAlign: 'left' }} className="management-canvas-error" onClick={() => setReviewCanvas(canvas.id)}>提取未完成，查看原因与处理建议</Button>}
             <div className="management-canvas-actions">
-              {canOpenStoryboardCanvas(canvas) && <Button onClick={() => openCanvas(canvas.id)}>打开画布</Button>}
-              {(candidateId || task) && <Button type="link" onClick={() => { setQuickEntry(!canvas.storyboard_review_required); setReviewCanvas(canvas.id) }}>
-                {candidateId ? canvas.storyboard_review_required ? '核对分镜' : '进入画布' : activeTask(task) ? '查看提取进度' : '处理提取问题'}
+              {(candidateId || task && task.task_id !== adoptedId) && <Button type="link" onClick={() => { setQuickEntry(!canvas.storyboard_review_required); setReviewCanvas(canvas.id) }}>
+                {candidateId ? canvas.storyboard_review_required ? '核对分镜' : '查看并采用分镜' : activeTask(task) ? '查看提取进度' : task?.status === 'failed' || task?.status === 'cancelled' ? '处理提取问题' : '查看任务结果'}
               </Button>}
             </div>
           </Card>

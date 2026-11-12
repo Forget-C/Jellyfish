@@ -3,6 +3,7 @@ import { ArrowLeftOutlined, EditOutlined, MenuOutlined } from '@ant-design/icons
 import { Alert, Button, Drawer, Empty, Grid, Input, Spin } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
+import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
 import { usePageTitle } from '../../../layouts/pageTitle'
 import { StudioDirectingService, type ChapterWorkbenchManagement, type WorkbenchSceneSummary } from '../../../services/generated'
 import {
@@ -54,7 +55,7 @@ function SceneList({ overview, selected, historyOpen, setHistoryOpen, onSelect, 
       <button type="button" className="management-scene-row" aria-pressed={row.id === selected} aria-current={row.id === selected ? 'true' : undefined} onClick={() => onSelect(row.id)}>
         <span className="management-scene-title">{row.position + 1}. {row.title}</span>
         <span className="management-scene-meta">{row.object_count} 个对象 · {row.canvas_count} 张画布</span>
-        {sceneNotices(row).map(notice => <small className="management-scene-notice" key={notice}>{notice}</small>)}
+        {sceneNotices(row).map(notice => <small className="management-scene-notice" data-tone={notice.includes('失败') ? 'error' : /变化|过时/.test(notice) ? 'warning' : 'muted'} key={notice}>{notice}</small>)}
       </button>
     </li>)}
   </ul>
@@ -80,9 +81,11 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [divisionRevision, setDivisionRevision] = useState(0)
   const [divisionView, setDivisionView] = useState('source')
   const [editingMetadata, setEditingMetadata] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState<boolean>()
-  const [sceneQuery, setSceneQuery] = useState('')
-  const sceneScroll = useRef(0)
+  const sidebarKey = managementBrowseKey(projectId, chapterId, '', 'sidebar')
+  const [historyOpen, setHistoryOpen] = useState<boolean | undefined>(() => readManagementBrowse(sidebarKey).history)
+  const [sceneQuery, setSceneQuery] = useState(() => readManagementBrowse(sidebarKey).query ?? '')
+  const sceneScroll = useRef(readManagementBrowse(sidebarKey).top ?? 0)
+  useEffect(() => () => { saveManagementBrowse(sidebarKey, { query: sceneQuery, history: historyOpen, top: sceneScroll.current }) }, [sidebarKey, sceneQuery, historyOpen])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [storyboardActions, setStoryboardActions] = useState<HTMLDivElement | null>(null)
   const [objectActions, setObjectActions] = useState<HTMLDivElement | null>(null)
@@ -90,6 +93,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const divisionButton = useRef<HTMLButtonElement>(null)
   const regionHeading = useRef<HTMLHeadingElement>(null)
   const previousDivision = useRef<boolean>()
+  const [divisionActions, setDivisionActions] = useState<HTMLDivElement | null>(null)
   const [savedDivision, setSavedDivision] = useState<{ id: string; count: number }>()
   const [updatingDivision, setUpdatingDivision] = useState(false)
   const [retiredSelection, setRetiredSelection] = useState<string>()
@@ -188,6 +192,37 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     }
     previousDivision.current = division
   }, [overview, division])
+  const readingPanel = useRef<HTMLDivElement>(null)
+  const browseKey = managementBrowseKey(projectId, chapterId, selected?.id ?? '', step)
+  const ready = !!overview
+  const hasTarget = !!(params.get('canvas') || params.get('storyboardTask') || params.get('objectTask'))
+  useLayoutEffect(() => {
+    const panel = readingPanel.current
+    if (!panel || division) return
+    const top = hasTarget ? 0 : readManagementBrowse(browseKey).top ?? 0
+    let restoring = true
+    const observer = new ResizeObserver(() => restore())
+    const stop = () => { restoring = false; observer.disconnect() }
+    const restore = () => {
+      panel.scrollTop = top
+      if (panel.scrollHeight >= top + panel.clientHeight) stop()
+    }
+    const remember = () => { if (!restoring) saveManagementBrowse(browseKey, { top: panel.scrollTop }) }
+    if (panel.firstElementChild) observer.observe(panel.firstElementChild)
+    restore()
+    panel.addEventListener('scroll', remember, { passive: true })
+    panel.addEventListener('wheel', stop, { passive: true })
+    panel.addEventListener('pointerdown', stop)
+    panel.addEventListener('keydown', stop)
+    return () => {
+      if (!restoring) saveManagementBrowse(browseKey, { top: panel.scrollTop })
+      stop()
+      panel.removeEventListener('scroll', remember)
+      panel.removeEventListener('wheel', stop)
+      panel.removeEventListener('pointerdown', stop)
+      panel.removeEventListener('keydown', stop)
+    }
+  }, [browseKey, ready, division, hasTarget])
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? (historical || !current.length)}
     query={sceneQuery} setQuery={setSceneQuery} scrollTop={sceneScroll}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
@@ -209,20 +244,27 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     else select(undefined, 'division')
   }}>场次划分</Button>
 
+  const sourceNotice = selected?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，仍使用本场已确认摘录。"
+    action={!historical && <Button size="small" onClick={() => reviewSource()}>前往核对场次范围</Button>} />
+  const preparationNotice = selected?.preparation_stale && !historical && step !== 'objects' && <Alert type="warning" showIcon
+    message="对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。"
+    action={<Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
     {state?.chapterCompositionRetired === true && <Alert type="info" showIcon
       message="章节组合已停用，可在工作台管理中继续准备场次。" />}
     {!overview && loadError}
     {loading && <Spin className="management-loading" aria-label="正在读取工作台管理" />}
-    {overview && division && <WorkspaceScrollPanel className="management-panel">
-      {loadError}
+    {overview && division && <>
       <PageToolbar className="management-division-heading">
         <Button type="text" icon={<ArrowLeftOutlined />} title={returnScene ? '返回场次制作' : '返回章节列表'} aria-label={returnScene ? '返回场次制作' : '返回章节列表'} disabled={updatingDivision}
           onClick={() => returnScene ? drafts.transition(() => returnSearch
             ? navigate({ search: returnSearch }, { state: { ...state, managementReturn: undefined } })
             : select(returnScene.id, initialStep(returnScene))) : returnToChapters()} />
         <h2 ref={regionHeading} tabIndex={-1}>本章场次划分</h2>
+        <div ref={setDivisionActions} className="management-division-action-host" />
       </PageToolbar>
+      <WorkspaceScrollPanel className="management-panel">
+      {loadError}
       {retiredNotice}
       {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
       {current.some(scene => scene.source_changed) && <Alert type="warning" showIcon message="章节原文已变化，请核对场次范围。" />}
@@ -230,7 +272,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       {!current.length && !!history.length && <Button onClick={() => select(undefined, 'storyboard')}>查看历史场次</Button>}
       {savedDivision && <Alert type="success" showIcon message={`已保存，共 ${savedDivision.count} 个场次`} />}
       <WorkbenchDivisionStep {...{ projectId, chapterId }} sequenceId={divisionTarget} refreshKey={divisionRevision}
-        mobileView={divisionView} onMobileView={setDivisionView}
+        actionHost={divisionActions} mobileView={divisionView} onMobileView={setDivisionView}
         targetTask={params.get('divisionTask')}
         onCloseTask={() => setParams(previous => {
           const next = new URLSearchParams(previous)
@@ -244,7 +286,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           setRevision(value => value + 1)
           if (!drafts.pendingNavigation && !explicitStep) select(divisionTarget, 'division')
         }} />
-    </WorkspaceScrollPanel>}
+    </WorkspaceScrollPanel></>}
     {overview && !division && <div className="management-body">
       {desktop && <aside className="management-sidebar" aria-label="本章场次">
         <div className="management-sidebar-heading">
@@ -258,7 +300,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           <div className="management-identity">
             <Button type="text" icon={<ArrowLeftOutlined />} title="返回章节列表" aria-label="返回章节列表" onClick={returnToChapters} />
             {selected && <div className="management-scene-heading">
-              <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>
+              <h2 title={selected.title} id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>
               {historical && <span className="management-scene-meta">历史场次</span>}
               {!historical && <Button type="text" icon={<EditOutlined />} aria-label="编辑场次名称与顺序"
                 onClick={() => drafts.transition(() => setEditingMetadata(true))} />}
@@ -276,18 +318,17 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           {selected && step === 'objects' && <div className="management-object-actions" ref={setObjectActions} />}
           {selected && step === 'storyboard' && <div className="management-storyboard-actions" ref={setStoryboardActions} />}
         </PageToolbar>
-        <WorkspaceScrollPanel className="management-panel">
+        <WorkspaceScrollPanel ref={readingPanel} className="management-panel">
           {loadError}
           {retiredNotice}
           {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
           {!selected && !invalidScene && <p>{current.length ? '请选择当前场次继续制作。' : '本章没有当前场次，可从历史场次查看已有内容。'}</p>}
           {selected && <section key={selected.id} aria-labelledby="management-current-scene">
             {historical && <Alert type="info" showIcon message="此场次已退出当前划分，可查看原有准备和画布。" />}
-            {selected.source_changed && <Alert type="warning" showIcon message="章节原文已变化，仍使用本场已确认摘录。"
-              action={!historical && <Button size="small" onClick={() => reviewSource()}>前往核对场次范围</Button>} />}
-            {selected.preparation_stale && !historical && step !== 'objects' && <Alert type="warning" showIcon
-              message="对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。"
-              action={<Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />}
+            <div className="management-scene-notices" aria-label="本场制作提示">
+              {preparationNotice}
+              {sourceNotice && (preparationNotice ? <details><summary>章节原文也已变化，查看范围核对入口</summary>{sourceNotice}</details> : sourceNotice)}
+            </div>
             {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
               editable={!historical && !!selected.source_excerpt.trim()}
               management={{ host: objectActions, onContinue: () => select(selected.id, 'storyboard'),

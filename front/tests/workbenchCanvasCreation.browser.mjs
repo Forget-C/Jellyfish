@@ -65,7 +65,7 @@ try {
   const form = page.getByRole('region', { name: '生成新分镜画布配置' })
   const name = form.getByRole('textbox', { name: '画布名称' })
   const openDivision = page.getByRole('button', { name: '场次划分', exact: true })
-  const returnToProduction = page.getByRole('button', { name: '返回该场次制作', exact: true })
+  const returnToProduction = page.getByRole('button', { name: '返回场次制作', exact: true })
   const list = page.getByRole('list', { name: '本场画布' })
 
   await page.goto(location)

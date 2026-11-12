@@ -69,3 +69,9 @@
   .management-object-dialog .ant-modal-footer .ant-btn { min-height: 36px; height: auto; }
   .management-object-preparation .management-object-card > .ant-card-body { padding: 12px; }
 }
+
+.management-object-preparation[hidden] { display: none; }
+.management-object-card h4 { display: flex; align-items: baseline; gap: 8px; }
+.management-object-card h4 small { font-size: 12px; font-weight: 400; color: var(--app-muted); }
+.management-object-card .management-reference-frame { background: #eaf0f8; }
+.management-object-card .management-reference-frame:empty::after { content: '未选参考图'; display: grid; place-items: center; height: 100%; color: var(--app-muted); font-size: 12px; }

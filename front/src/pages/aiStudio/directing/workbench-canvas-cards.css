@@ -75,3 +75,14 @@
   .management-workspace .management-canvas-cards .ant-btn,
   .management-canvas-dialog .ant-btn { min-height: 36px; height: auto; }
 }
+
+.management-workspace .management-card-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 360px)); gap: 16px; }
+.management-workspace .management-canvas-card-heading h4 { min-width: 0; }
+.management-workspace .management-canvas-name.ant-btn { display: flex; align-items: center; gap: 6px; height: auto; max-width: 100%; padding: 0; text-align: left; white-space: normal; font-size: 14px; font-weight: 600; }
+.management-workspace .management-canvas-name .anticon { flex-shrink: 0; }
+.management-workspace .management-canvas-card-heading > .ant-dropdown-trigger { flex-shrink: 0; }
+.management-canvas-markers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; color: var(--app-muted); font-size: 12px; }
+.management-canvas-markers:empty, .management-canvas-actions:empty { display: none; }
+.management-canvas-markers .ant-tag { margin: 0; background: transparent; border: 0; color: inherit; }
+@media (max-width: 575px) { .management-workspace .management-card-grid { grid-template-columns: minmax(0, 1fr); } }
+.management-workspace .management-card-grid > li > .management-canvas-surface { height: 100%; }

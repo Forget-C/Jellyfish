@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
 import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
 import { directingError } from './common'
@@ -15,10 +15,11 @@ const changes = { added: '新增', title: '名称', position: '顺序', range: '
 const newKey = () => crypto.randomUUID()
 
 /** 单一草稿承接手动、AI 和历史方案；保存后才切换正式版本。 */
-export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, refreshKey, sequenceId, embedded = false, targetTask, onCloseTask, mobileView, onMobileView }: {
+export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, refreshKey, sequenceId, embedded = false, targetTask, onCloseTask, mobileView, onMobileView, actionHost }: {
   projectId: string; chapterId: string; onChanged: (sequenceId: string, count: number) => void; onEdit: () => void; refreshKey: number; sequenceId?: string
   targetTask?: string | null; onCloseTask?: () => void
   mobileView: string; onMobileView: (view: string) => void
+  actionHost?: HTMLDivElement | null
   embedded?: boolean
 }) {
   const [chapter, setChapter] = useState<ChapterSequences>()
@@ -222,6 +223,11 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   if (!chapter || !editor) return <Space>{loadError ? readFailure : <Spin />}</Space>
   const draft = editor.draft
   const stale = editor.chapter.source_version !== chapter.source_version || !divisionBaselineMatches(draft, chapter) || editor.chapter.current_version?.id !== chapter.current_version?.id
+  const saveActions = <Space wrap className="chapter-division-save">
+        <Button type="primary" disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存新版本</Button>
+        <Button disabled={!draftDirty} onClick={() => setDiscardOpen(true)}>放弃修改</Button>
+        <span>{draftDirty ? '整章草稿尚未保存' : '本章划分没有未保存变更'}</span>
+      </Space>
   return <div className="chapter-division" onKeyDownCapture={event => {
     if (historyOpen && event.key === 'Escape') { event.stopPropagation(); setHistoryOpen(false) }
   }}>
@@ -234,11 +240,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     {!chapter.raw_text.trim() && <Alert type="info" message={embedded ? '本章尚未填写原文' : '请先添加章节原文。'}
       action={<Button onClick={() => guard(onEdit)}>填写章节原文</Button>} />}
     <WorkspaceWriteBoundary busy={busy || !!pendingSave}>
-            {!viewing && <Space wrap className="chapter-division-save">
-        <Button type="primary" disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存新版本</Button>
-        <Button disabled={!draftDirty} onClick={() => setDiscardOpen(true)}>放弃修改</Button>
-        <span>{draftDirty ? '整章草稿尚未保存' : '本章划分没有未保存变更'}</span>
-      </Space>}
+      {!viewing && (actionHost ? createPortal(<WorkspaceWriteBoundary busy={busy || !!pendingSave}>{saveActions}</WorkspaceWriteBoundary>, actionHost) : saveActions)}
       <div className="chapter-division-toolbar">
         <div><strong>{chapter.title}</strong><span> · {chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}{draftDirty ? ' · 有未保存草稿' : ''}</span></div>
         <Space wrap><Button disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {

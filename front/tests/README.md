@@ -360,3 +360,5 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 文件长列表性能：`PLAYWRIGHT_CHANNEL=chrome node tests/run-browser.mjs project-files-performance`。240／1200／5000条记录，1920×1080栅格图片；输出挂载卡片、加载耗时、强制GC后的JS堆和滚动帧间隔P95。JS堆不包含全部解码图片与进程内存，不作为浏览器总内存证明。基线对比可通过FILE_PERF_ROOT指定旧前端快照并设置BASELINE=1。
 
 管理文件页由file-management回归覆盖六列、渐进检索96条上限／继续检索、筛选重置和刷新保护；managed-files-performance检查240／1200／5000条下的挂载数量及JS堆和帧间隔。与项目文件共享网格和箭头变更时同时运行project-files。JS堆不代表浏览器全部图片或进程内存，元信息仍随加载累积。
+
+工作台管理布局与入口调整由 `workbench-management`、`workbench-canvas-cards`、`scene-object-preparation` 回归：固定划分工具栏、画布名称进入与候选采用区分、列表搜索返回恢复、当前正文复用资产详情及未保存保护。`workbench-division`、`workbench-canvas-creation`、`workbench-storyboard-retry` 补查原有草稿、提交和恢复行为。浏览器使用隔离后端及受控供应商，不代表真实供应商生成质量已验收。

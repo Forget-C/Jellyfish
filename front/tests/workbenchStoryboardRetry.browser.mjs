@@ -200,7 +200,7 @@ try {
   await repairCard.getByText('正在复核分镜连续性', { exact: true }).waitFor()
   assert.equal((await data(repairCanvas)).revision, 0)
   await control({ storyboard_recheck_release: true })
-  await repairCard.getByRole('button', { name: '进入画布', exact: true }).click()
+  await repairCard.getByRole('button', { name: '查看并采用分镜', exact: true }).click()
   await page.getByRole('button', { name: '应用并进入画布', exact: true }).click()
   const correctedCanvas = await poll(() => data(repairCanvas), value => value.document.storyboard?.task_id === repairTask.task_id)
   const camera = correctedCanvas.document.cards.find(card => card.type === 'direction.camera')

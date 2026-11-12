@@ -7,6 +7,8 @@ import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../s
 import { AssetEditPageBase } from '../assets/components/AssetEditPageBase'
 import { assetAdapters } from '../assets/assetAdapters'
 import { buildFileDownloadUrl } from '../assets/utils'
+import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
+import { PageToolbar } from '../../../components/layout/PageLayout'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { SceneObjectCandidateReview } from './SceneObjectCandidateReview'
 import { directingError } from './common'
@@ -61,8 +63,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [choiceError, setChoiceError] = useState<{ objectId: string; message: string; retry?: ObjectChoice }>()
   const [localReview, setLocalReview] = useState<string>()
   const reviewTaskId = management?.candidateTaskId ?? localReview
-  const [kindFilter, setKindFilter] = useState<keyof typeof kinds | 'all'>('all')
-  const [unpreparedOnly, setUnpreparedOnly] = useState(false)
+  const browseKey = managementBrowseKey(projectId, chapterId, sequenceId, 'objects')
+  const [kindFilter, setKindFilter] = useState<keyof typeof kinds | 'all'>(() => management ? readManagementBrowse(browseKey).kind ?? 'all' : 'all')
+  const [unpreparedOnly, setUnpreparedOnly] = useState(() => management ? readManagementBrowse(browseKey).unprepared ?? false : false)
+  useEffect(() => { if (management) saveManagementBrowse(browseKey, { kind: kindFilter, unprepared: unpreparedOnly }) }, [browseKey, kindFilter, unpreparedOnly, management])
   const lastRead = useRef<SceneObjectsRead>()
   const summaryChanged = useRef(management?.onChange)
   summaryChanged.current = management?.onChange
@@ -207,7 +211,25 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     } finally { setSavingObject(undefined) }
   }
 
-  const closeAsset = useCallback(() => { setAssetEditor(undefined); void read() }, [read])
+  const listHeading = useRef<HTMLHeadingElement>(null)
+  const assetOrigin = useRef<{ panel: HTMLElement | null; top: number; objectId: string }>({ panel: null, top: 0, objectId: '' })
+  const openAsset = (asset: AssetSummary, objectId: string) => {
+    const panel = document.activeElement?.closest<HTMLElement>('.management-panel') ?? document.querySelector<HTMLElement>('.management-workspace .management-panel')
+    assetOrigin.current = { panel, top: panel?.scrollTop ?? 0, objectId }
+    setAssetEditor(asset)
+    if (management && panel) panel.scrollTop = 0
+  }
+  const closeAsset = useCallback(async () => {
+    await read()
+    setAssetEditor(undefined)
+    requestAnimationFrame(() => {
+      const { panel, top, objectId } = assetOrigin.current
+      if (!panel?.isConnected) return
+      panel.scrollTop = top
+      const trigger = panel.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(objectId)}"] button[aria-label="对象更多操作"]`)
+      ;(trigger ?? listHeading.current)?.focus({ preventScroll: true })
+    })
+  }, [read])
   const action = data?.task?.status === 'failed' || data?.task?.status === 'cancelled' ? '重试提取对象'
     : data?.revision ? '重新提取对象' : '提取对象'
 
@@ -224,10 +246,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const retryChoice = pendingChoice && <MainButton size="small" disabled={disabled} onClick={() => void save(
     pendingChoice.objectId, pendingChoice.assetId, pendingChoice.imageFileId)}>核对后重试选择</MainButton>
   const AssetModal = management ? Modal : WorkbenchModal
-  return <section className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
+  return <><section hidden={!!management && !!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>
-      <h3 id="scene-object-preparation-title">场次对象与参考</h3>
-      {management.host && createPortal(<>
+      <h3 ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
+      {management.host && !assetEditor && createPortal(<>
         <MainButton type="primary" loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
           onClick={() => candidateTask ? setLocalReview(candidateTask) : void extract()}>
           {candidateTask ? '核对对象差异' : extractionLabel}
@@ -289,7 +311,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
             setCreateError(''); setDraft({ object, name: object.name, description: '', requestId: crypto.randomUUID(), attempted: false })
           }
           const openUpload = () => { uploadObject.current = object; fileInput.current?.click() }
-          const assetAction = asset ? { key: 'prepare', label: '准备图片', onClick: () => setAssetEditor(asset) }
+          const assetAction = asset ? { key: 'prepare', label: '准备图片', onClick: () => openAsset(asset, object.id) }
             : { key: 'create', label: '新建并关联', onClick: openCreate }
           if (management) {
             const imageOptions = images.map((id, index) => ({ key: `file:${id}`,
@@ -309,12 +331,11 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
               onClick: () => void save(object.id, object.asset_id ?? undefined) }] : [])]
             const referenceButton = <MainButton disabled={disabled || assetUnavailable} loading={savingObject === object.id}
               onClick={images.length ? undefined : openUpload}>{referenceAction}</MainButton>
-            return <li key={object.id}>
+            return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
+                  <h4>{object.name}<small>{kinds[kind]}</small></h4>
                   <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} />
-                  <h4>{object.name}</h4>
-                  {object.description && <Typography.Text type="secondary" className="management-object-description">{object.description}</Typography.Text>}
                   <details><summary>描述与出处</summary>
                     {object.description && <p>{object.description}</p>}
                     <small>出处：{object.excerpt}</small>
@@ -338,7 +359,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
               </section>
             </li>
           }
-          return <li key={object.id}>
+          return <li key={object.id} data-management-object={object.id}>
             <section className="scene-object-row" aria-label={`${object.name} · ${object.excerpt}`}>
               <div className="scene-object-identity">
                 {referenceFileId && <img alt={`${object.name}已选参考图`} src={buildFileDownloadUrl(referenceFileId)} />}
@@ -384,10 +405,16 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           onChange={event => setDraft({ ...draft, description: event.target.value })} />
       </div>}
     </AssetModal>
-    <AssetModal className={management ? 'management-object-dialog' : undefined} title={assetEditor ? `准备${kinds[assetEditor.kind]}图片 · ${assetEditor.name}` : '准备资产图片'}
+    {!management && <AssetModal title={assetEditor ? `准备${kinds[assetEditor.kind]}图片 · ${assetEditor.name}` : '准备资产图片'}
       open={!!assetEditor} closable={false} keyboard={false} maskClosable={false} footer={null}
       width="min(1200px, 96vw)" styles={assetModalStyles} destroyOnClose>
       {assetEditor && <AssetEditPageBase assetId={assetEditor.id} {...assetAdapters[assetEditor.kind]} embedded backTo="本场资产" onNavigate={closeAsset} />}
-    </AssetModal>
+    </AssetModal>}
   </section>
+  {management && assetEditor && <section className="management-inline-asset" aria-label="本场资产详情">
+    <AssetEditPageBase key={assetEditor.id} assetId={assetEditor.id} {...assetAdapters[assetEditor.kind]} localDetail
+      backTo="本场资产" onNavigate={closeAsset}
+      renderToolbar={(title, actions) => <PageToolbar className="management-asset-toolbar" title={title}>{actions}</PageToolbar>} />
+  </section>}
+  </>
 }
