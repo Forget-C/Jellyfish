@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
+import { HistoryOutlined, SaveOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
 import { directingError } from './common'
 import { sourceSlice } from './sourceSelection'
@@ -12,6 +13,7 @@ import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 type Editor = { chapter: ChapterSequences; draft: ChapterDivisionDraft; history?: DivisionVersionDetail }
 type RunningAnalysis = { id: string; epoch: number; chapter: ChapterSequences }
 const changes = { added: '新增', title: '名称', position: '顺序', range: '范围', source: '重新确认来源', exited: '退出当前划分', restored: '恢复历史身份' }
+const MagicWandIcon = () => <span className="anticon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m4 20 13-13 3 3L7 23zM14 10l3 3M5 3v4M3 5h4M19 1v4M17 3h4M21 16v4M19 18h4" /></svg></span>
 const newKey = () => crypto.randomUUID()
 
 /** 单一草稿承接手动、AI 和历史方案；保存后才切换正式版本。 */
@@ -230,12 +232,12 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   const stale = editor.chapter.source_version !== chapter.source_version || !divisionBaselineMatches(draft, chapter) || editor.chapter.current_version?.id !== chapter.current_version?.id
   const saveActions = <Space wrap className="chapter-division-save">
     <span className="chapter-division-version">{chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}</span>
-    <Button disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {
+    <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {
       if (draftDirty) Modal.confirm({ title: '使用 AI 智能划分？', content: '分析成功后将替换当前草稿；若分析期间继续编辑，结果会保留到历史版本。', okText: '开始分析', cancelText: '取消', onOk: startAnalysis })
       else void startAnalysis()
-    }}>{running || activeTasks.length ? '划分中…' : 'AI智能划分'}</Button>
-    <Button onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
-    {!viewing && <Button type="primary" disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存为新版本</Button>}
+    }}>{running || activeTasks.length ? '划分中…' : '智能划分'}</Button>
+    <Button icon={<HistoryOutlined aria-hidden />} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
+    {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存为新版本</Button>}
   </Space>
   return <div className="chapter-division" onKeyDownCapture={event => {
     if (historyOpen && event.key === 'Escape') { event.stopPropagation(); setHistoryOpen(false) }

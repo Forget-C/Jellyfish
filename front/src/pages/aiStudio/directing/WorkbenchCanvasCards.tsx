@@ -198,7 +198,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       onChange()
     }} />
     <div className="management-canvas-toolbar">
-      <h3 id="management-canvas-list-title">本场画布</h3>
+      <span id="management-canvas-list-title" className="management-list-count">{canvases ? `${canvases.length} 张画布` : '画布数量未确认'}</span>
       {!!canvases?.length && <Input ref={searchInput} aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
         onChange={event => setQuery(event.target.value)} />}
     </div>

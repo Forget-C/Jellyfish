@@ -157,9 +157,9 @@
 .management-flow-sidebar { flex: 0 0 216px; padding: 12px; }
 .management-flow-links { display: flex; flex-direction: column; gap: 4px; }
 .management-flow-links > strong { padding: 8px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.management-flow-links > .ant-btn { display: flex; align-items: center; justify-content: flex-start; height: 40px; gap: 8px; padding: 0 8px; font-size: 14px; color: var(--app-muted); border-radius: 8px; }
-.management-flow-links > .ant-btn > span:last-child { margin-left: auto; }
-.management-flow-links > .ant-btn[aria-current=step] { background: var(--app-selected); color: var(--app-accent); font-weight: 600; }
+.management-flow-links > .ant-btn { display: flex; align-items: center; justify-content: flex-start; height: 40px; gap: 8px; padding: 0 8px; font-size: 14px; color: var(--app-muted, #536174); border-radius: 8px; }
+.management-flow-links .management-step-status { margin-left:auto; }
+.management-flow-links > .ant-btn[aria-current=step] { background: var(--app-selected, #e4edfb); color: var(--app-accent, #245fc5); font-weight: 600; }
 .management-flow-content { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .management-workspace .management-toolbar { display: flex; justify-content: space-between; }
 .management-scene-picker { display: flex; align-items: center; gap: 8px; padding: 0 20px 8px; flex: 0 0 auto; min-width: 0; }
@@ -179,7 +179,7 @@
 :is(.management-division, .management-division-drawer) .chapter-division-member .ant-space { padding:8px; }
 .management-division .chapter-division-list { overflow-y:auto; overflow-x:hidden; }
 .management-division .chapter-source-reader { display:block; }
-.management-division-version { font-size:13px; color:var(--app-muted); }
+.chapter-division-version { font-size:13px; color:var(--app-muted); }
 .management-division-action-host { flex:1; }
 .chapter-division-save { display:flex; width:100%; justify-content:flex-end; }
 .chapter-division-save > .ant-space-item:first-child { margin-right:auto; }
@@ -187,4 +187,30 @@
 :is(.management-division, .management-division-heading, .management-division-drawer) .ant-btn { font-size:13px; height:32px; border-radius:8px; }
 @media (max-width:767px) {
   :is(.management-division, .management-division-heading, .management-division-drawer) .ant-btn { min-height:36px; }
+}
+
+.management-chapter-heading { display:flex; align-items:center; gap:4px; min-width:0; min-height:40px; margin-bottom:4px; }
+.management-chapter-heading > .ant-btn { flex-shrink:0; width:32px; height:32px; }
+.management-chapter-heading > strong { min-width:0; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.app-shell .management-workspace .app-page-toolbar:is(.management-toolbar,.management-division-heading) { min-height:56px; padding:10px 20px; gap:8px; }
+.management-workspace :is(.management-identity,.management-division-heading) h2 { margin:0; font-size:16px; font-weight:600; line-height:24px; }
+.management-flow-links > .ant-btn > .anticon { font-size:16px; }
+.management-flow-trigger { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.management-flow-trigger .management-chapter-heading { flex:1; margin:0; }
+.management-list-count { font-size:13px; color:var(--app-muted); }
+@media(max-width:767px) { .app-shell .management-workspace .app-page-toolbar:is(.management-toolbar,.management-division-heading) { padding-inline:16px; } }
+
+.management-division .chapter-source-reader-tools { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; margin-bottom:12px; }
+.management-division .chapter-source-view-tools { margin-left:auto; }
+.management-division .chapter-source-reader-tools strong { font-size:14px; }
+.management-division .chapter-selection-action > .ant-btn:first-child { width:150px; background:var(--app-selected); color:var(--app-accent); border-color:transparent; }
+.management-division .chapter-selection-action > .ant-btn:first-child:disabled { color:rgba(0,0,0,.25); background:rgba(0,0,0,.04); }
+.management-division .chapter-selection-action > .ant-btn { border-radius:8px; }
+.management-division .chapter-source-reader-tools .anticon, .chapter-division-save .anticon { font-size:14px; }
+
+.management-flow-links > .ant-btn:focus-visible { outline:2px solid #245fc5; outline-offset:2px; }
+
+@media(max-width:767px) {
+  .management-flow-trigger > .ant-btn { min-height:36px; }
+  .management-flow-trigger .management-chapter-heading > .ant-btn { width:36px; height:36px; }
 }

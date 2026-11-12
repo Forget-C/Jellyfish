@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Button, Card, Dropdown, Input, Radio, Space, Spin } from 'antd'
-import { MoreOutlined } from '@ant-design/icons'
+import { MoreOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { SceneCanvasCreate, StoryboardBasis, StoryboardRequest } from '../../../services/generated'
@@ -135,7 +135,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
   const actions = <Space wrap>
     {pending ? <Button type="primary" loading={submitting} onClick={() => void submit(pending)}>核实提交</Button>
       : <>
-        <Button type="primary" disabled={!editable || !!draft} onClick={() => start('storyboard')}>生成新分镜画布</Button>
+        <Button type="primary" icon={<PlusOutlined aria-hidden />} disabled={!editable || !!draft} onClick={() => start('storyboard')}>生成新分镜画布</Button>
         <Dropdown trigger={['click']} open={menuOpen} onOpenChange={setMenuOpen} menu={{ items: [
           { key: 'blank', label: '新建空白画布', disabled: !editable || !!draft, onClick: () => {
             setMenuOpen(false)

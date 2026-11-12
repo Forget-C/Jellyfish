@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Empty, Grid, Image, Input, Modal, Select, Space, Spin, Typography } from 'antd'
-import { CheckOutlined, MoreOutlined } from '@ant-design/icons'
+import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, StudioFilesService } from '../../../services/generated'
 import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
 import { AssetEditPageBase } from '../assets/components/AssetEditPageBase'
@@ -269,7 +269,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {management ? <>
       <h3 className="management-accessible-heading" ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
       {management.host && !assetEditor && createPortal(<>
-        <MainButton type="primary" loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
+        <MainButton type="primary" icon={candidateTask ? <DiffOutlined aria-hidden /> : <ScanOutlined aria-hidden />} loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
           onClick={() => candidateTask ? setLocalReview(candidateTask) : void extract()}>
           {candidateTask ? '核对对象差异' : extractionLabel}
         </MainButton>
@@ -309,7 +309,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => { setReference(key) }, items: [{key:'all',label:'全部参考状态'},{key:'missing',label:'未选参考图'},{key:'ready',label:'已选参考图'},{key:'unavailable',label:'参考图不可用'}] }}><MainButton type="text" aria-label="参考筛选">参考筛选{reference !== 'all' ? ' · 已筛选' : ''}</MainButton></Dropdown>
       <span>{filtered.length} 个对象</span>
       {!filtered.length && <MainButton type="text" onClick={() => { setKindFilter('all'); setAssociation('all'); setReference('all') }}>清除筛选</MainButton>}
-      <span title="参考图可留空，各画布采用后独立管理。" tabIndex={0}>ⓘ</span>
+      <span title="参考图可留空，各画布采用后独立管理。" tabIndex={0}><InfoCircleOutlined aria-hidden /></span>
     </div>}
     {(management ? ['all' as const] : Object.keys(kinds) as Array<keyof typeof kinds>).map(group => {
       const rows = group === 'all' ? filtered : filtered.filter(object => object.kind === group)
@@ -361,7 +361,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                     <small>出处：{object.excerpt}</small>
                   </details>
                   <div className="management-object-asset">
-                    <div className="management-association-control">{assetSelect}{asset && <MainButton type="text" aria-label={`查看${asset.name}资产`} onClick={() => openAsset(asset, object.id)}>↗</MainButton>}</div>
+                    <div className="management-association-control">{assetSelect}{asset && <MainButton type="text" aria-label={`查看${asset.name}资产`} icon={<ArrowRightOutlined />} onClick={() => openAsset(asset, object.id)} />}</div>
                     {!object.asset_id && <Typography.Text type="secondary">尚未关联资产</Typography.Text>}
                     {assetUnavailable && <Badge status="warning" text="关联资产不可用，请更换或解除关联" />}
                   </div>

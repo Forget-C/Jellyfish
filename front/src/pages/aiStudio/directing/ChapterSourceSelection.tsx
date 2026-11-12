@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Space } from 'antd'
+import { Button, Dropdown, Popover, Space } from 'antd'
+import { SelectOutlined, InfoCircleOutlined, DownOutlined, CheckOutlined } from '@ant-design/icons'
 import type { SourceSpan } from '../../../services/generated'
 import { readChapterBrowse, saveChapterBrowse } from './chapterNavigation'
 import { readSourceSelection, textareaSpan } from './sourceSelection'
@@ -60,13 +61,19 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
   }, [native, raw, focusId])
   const rememberScroll = (value: number) => { scrollTop.current = value; saveChapterBrowse(projectId, chapterId, { sourceTop: value }) }
   return <section className="chapter-source-reader" aria-label="完整章节原文">
-    <Space wrap className="chapter-source-reader-tools">
-      <strong>完整章节原文</strong>
-      <Button onClick={() => setNative(value => !value)}>{native ? '返回范围高亮' : '键盘/触屏选区'}</Button>
-    </Space>
-    {actions}
-    <p className="text-gray-500">{readOnly ? '正在只读查看历史原文和场次范围。' : '框选连续原文后确认范围。浅蓝为已划分，虚线为 AI 候选，橙色为当前选区；红色表示重叠。'}</p>
-    {native ? <><p>正文只读。使用方向键及 Shift 选择，或长按文本拖动选区手柄。</p>
+    <div className="chapter-source-reader-tools">
+      <Space wrap><strong>章节原文</strong>{actions}</Space>
+      <Space className="chapter-source-view-tools">
+        <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [native ? 'native' : 'pointer'], items: [
+          { key: 'pointer', label: '鼠标框选', icon: !native ? <CheckOutlined aria-hidden /> : undefined },
+          { key: 'native', label: '键盘／触屏选择', icon: native ? <CheckOutlined aria-hidden /> : undefined },
+        ], onClick: ({ key }) => setNative(key === 'native') }}><Button icon={<SelectOutlined aria-hidden />} aria-label="选区方式">选区方式<DownOutlined aria-hidden /></Button></Dropdown>
+        <Popover trigger={['click']} content={<p style={{ maxWidth: 280 }}>{readOnly ? '正在只读查看历史原文和场次范围。' : '选择连续原文后执行操作。浅蓝为已划分，橙色为当前选区，红色表示重叠。键盘选择可使用方向键及 Shift。'}</p>}>
+          <Button type="text" icon={<InfoCircleOutlined aria-hidden />} aria-label="选区说明" />
+        </Popover>
+      </Space>
+    </div>
+    {native ? <>
       <textarea ref={plain} aria-label="键盘或触屏选择原文" className="chapter-source-native" readOnly value={raw} onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onKeyDown={event => {
         // 只读文本在部分平台上用方向键滚动；显式提供逐字符键盘选择，跳过 UTF-16 代理对。
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || event.altKey) return

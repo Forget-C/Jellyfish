@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { Button, Drawer, Input, Modal, Radio, Select, Space } from 'antd'
+import { cloneElement, useEffect, useRef, useState, type ReactElement } from 'react'
+import { Button, Drawer, Dropdown, Input, Modal, Radio, Select, Space } from 'antd'
+import { PlusOutlined, SelectOutlined, ScissorOutlined, MergeCellsOutlined, DownOutlined } from '@ant-design/icons'
 import type { ChapterSequences, DivisionBaseline, SequenceRead, SourceSpan } from '../../../services/generated'
 import { ChapterSourceSelection } from './ChapterSourceSelection'
 import { WorkspaceWriteBoundary } from './WorkspaceDrafts'
@@ -81,14 +82,22 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
     }
     setOperation(undefined); setSelection(undefined)
   }
+  const canCreate = !!selection && !draft.members.some(row => row.span && selection.start < row.span.end && row.span.start < selection.end)
+  const createFromSelection = () => {
+    if (!selection || !canCreate) return
+    const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: '', span: selection }] }); onActive(key); setSelection(undefined); if (drawerMode) setEditing(true)
+  }
+  const selectionLabel = !selection ? '应用选区' : !current ? '新建场次' : !current.span ? '定位当前场次' : '更新场次范围'
   const sourceActions = !readOnly && <Space wrap className="chapter-source-actions">
-    <Button disabled={!selection || draft.members.some(row => row.span && selection.start < row.span.end && row.span.start < selection.end)} onClick={() => {
-      if (!selection) return
-      const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: '', span: selection }] }); onActive(key); setSelection(undefined); if (drawerMode) setEditing(true)
-    }}>选区新建场次</Button>
-    <Button disabled={!selection || !current} onClick={() => { if (selection) applySpan(selection); setSelection(undefined) }}>应用场次范围</Button>
-    <Button disabled={!canSplit} onClick={() => { setRetain('first'); setOperation('split') }}>从选区起点拆分</Button>
-    <Button disabled={!canMerge} onClick={() => { setRetain('first'); setOperation('merge') }}>与下一场合并</Button>
+    <Dropdown.Button buttonsRender={([left, right]) => [left, cloneElement(right as ReactElement<{ 'aria-label': string }>, { 'aria-label': '选区更多操作' })]} trigger={['click']} className="chapter-selection-action" icon={<DownOutlined aria-hidden />} disabled={!selection || (!current && !canCreate)} menu={{ items: [
+      { key: 'create', icon: <PlusOutlined aria-hidden />, label: canCreate ? '新建场次' : '新建场次 · 选区与已有场次重叠', disabled: !canCreate, onClick: createFromSelection },
+    ] }} onClick={() => {
+      if (current && selection) { applySpan(selection); setSelection(undefined) } else createFromSelection()
+    }}><SelectOutlined aria-hidden />{selectionLabel}</Dropdown.Button>
+    <Dropdown trigger={['click']} menu={{ items: [
+      { key: 'split', icon: <ScissorOutlined aria-hidden />, label: <span>从选区起点拆分{!canSplit && <small> · 请先选择场内原文</small>}</span>, disabled: !canSplit, onClick: () => { setRetain('first'); setOperation('split') } },
+      { key: 'merge', icon: <MergeCellsOutlined aria-hidden />, label: <span>与下一场合并{!canMerge && <small> · 没有可合并的下一场</small>}</span>, disabled: !canMerge, onClick: () => { setRetain('first'); setOperation('merge') } },
+    ] }}><Button icon={<ScissorOutlined aria-hidden />}>调整划分<DownOutlined aria-hidden /></Button></Dropdown>
   </Space>
   const editorPanel = <aside className="chapter-division-list" aria-label="划场场次列表">
     <div className="chapter-division-members">{!drawerMode && <h3>{readOnly ? '历史场次' : '本章场次'}</h3>}

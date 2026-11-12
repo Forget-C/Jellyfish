@@ -70,16 +70,21 @@ try {
   await steps.waitFor()
   await page.getByRole('heading', { name: '对象参考', exact: true }).waitFor()
   assert.equal(Math.round((await page.locator('.management-flow-sidebar').boundingBox()).width), 216)
-  await steps.getByRole('button', { name: /1\s*场次划分/ }).click()
-  await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
+  await page.locator('.management-flow-sidebar').getByRole('button', { name: '返回章节列表', exact: true }).waitFor()
+  assert.equal(await page.locator('.management-toolbar').getByRole('button', { name: '返回章节列表', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('heading', { name: '对象参考', exact: true }).evaluate(el => getComputedStyle(el).fontSize), '16px')
+  const titleHeight = (await page.locator('.management-toolbar').boundingBox()).height
+  await steps.getByRole('button', { name: /场次划分/ }).click()
+  await page.getByRole('heading', { name: '场次划分', exact: true }).waitFor()
+  assert.equal((await page.locator('.management-division-heading').boundingBox()).height, titleHeight, 'step toolbars have matching height')
   await page.locator('.management-division-heading').getByRole('button', { name: '保存为新版本', exact: true }).waitFor()
-  await steps.getByRole('button', { name: /2\s*对象参考/ }).click()
+  await steps.getByRole('button', { name: /对象参考/ }).click()
   await page.getByRole('group', { name: '选择场次' }).getByRole('button', { name: /后院/ }).click()
   assert.equal(new URL(page.url()).searchParams.get('sequence'), second.id)
-  await steps.getByRole('button', { name: /3\s*分镜画布/ }).click()
+  await steps.getByRole('button', { name: /分镜画布/ }).click()
   await page.getByRole('heading', { name: '分镜画布', exact: true }).waitFor()
   assert.equal(new URL(page.url()).searchParams.get('sequence'), second.id)
-  await page.getByRole('button', { name: '全部场次⌄' }).click()
+  await page.getByRole('button', { name: '全部场次' }).click()
   const sceneDrawer = page.getByRole('dialog').filter({ hasText: '本章场次' })
   await sceneDrawer.waitFor()
   if (await sceneDrawer.getByRole('button', { name: '查看历史场次' }).count()) await sceneDrawer.getByRole('button', { name: '查看历史场次' }).click()
@@ -95,6 +100,16 @@ try {
     await page.getByRole('heading', { name: '对象参考', exact: true }).waitFor()
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
     assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, '页面整体不滚动')
+    if (width === 375) {
+      await page.waitForFunction(() => {
+        const back = document.querySelector('.management-flow-trigger button[aria-label="返回章节列表"]')?.getBoundingClientRect()
+        const menu = document.querySelector('.management-flow-trigger button[aria-label="制作步骤"]')?.getBoundingClientRect()
+        return back && menu && back.width >= 35.9 && back.height >= 35.9 && menu.height >= 35.9
+      })
+      const back = await page.getByRole('button', { name: '返回章节列表', exact: true }).boundingBox()
+      const menu = await page.getByRole('button', { name: '制作步骤', exact: true }).boundingBox()
+      assert.ok(back.width >= 35.9 && back.height >= 35.9 && menu.height >= 35.9, JSON.stringify({ back, menu }))
+    }
     await page.screenshot({ path: join(output, `steps-${width}.png`), animations: 'disabled' })
   }
   await page.getByRole('combobox', { name: '选择场次', exact: true }).press('ArrowDown')
@@ -102,7 +117,7 @@ try {
   assert.equal(new URL(page.url()).searchParams.get('sequence'), second.id)
   await page.getByRole('button', { name: '制作步骤', exact: true }).click()
   const navigation = page.getByRole('dialog').filter({ has: page.getByRole('navigation', { name: '制作步骤' }) })
-  await navigation.getByRole('button', { name: /3\s*分镜画布/ }).click()
+  await navigation.getByRole('button', { name: /分镜画布/ }).click()
   await navigation.waitFor({ state: 'hidden' })
   await page.getByRole('heading', { name: '分镜画布', exact: true }).waitFor()
 
@@ -120,7 +135,7 @@ try {
   await page.getByRole('alert').waitFor()
   const emptyChapter = 'management-empty'
   await page.goto(location.replace(chapter, emptyChapter))
-  await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
+  await page.getByRole('heading', { name: '场次划分', exact: true }).waitFor()
   await page.getByRole('navigation', { name: '制作步骤' }).waitFor()
 
 } finally {
