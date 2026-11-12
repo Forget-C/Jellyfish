@@ -203,9 +203,6 @@
 .management-division .chapter-source-reader-tools { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; margin-bottom:12px; }
 .management-division .chapter-source-view-tools { margin-left:auto; }
 .management-division .chapter-source-reader-tools strong { font-size:14px; }
-.management-division .chapter-selection-action > .ant-btn:first-child { width:150px; background:var(--app-selected); color:var(--app-accent); border-color:transparent; }
-.management-division .chapter-selection-action > .ant-btn:first-child:disabled { color:rgba(0,0,0,.25); background:rgba(0,0,0,.04); }
-.management-division .chapter-selection-action > .ant-btn { border-radius:8px; }
 .management-division .chapter-source-reader-tools .anticon, .chapter-division-save .anticon { font-size:14px; }
 
 .management-flow-links > .ant-btn:focus-visible { outline:2px solid #245fc5; outline-offset:2px; }
@@ -214,3 +211,22 @@
   .management-flow-trigger > .ant-btn { min-height:36px; }
   .management-flow-trigger .management-chapter-heading > .ant-btn { width:36px; height:36px; }
 }
+
+.chapter-scene-name-row { display:flex; align-items:center; min-width:0; gap:4px; }
+.chapter-scene-name-row > .ant-input { flex:1; min-width:0; }
+.chapter-scene-name-row > .ant-btn:not(.chapter-scene-select) { flex:0 0 32px; padding:0; }
+.chapter-scene-name-row .chapter-scene-select { flex:1; min-width:0; text-align:left; border:0; box-shadow:none; background:transparent; overflow:hidden; text-overflow:ellipsis; }
+.chapter-scene-name-row .chapter-scene-select[aria-pressed=true] { background:var(--app-selected,#e4edfb); color:var(--app-accent,#245fc5); }
+.chapter-stage-primary { min-width:150px; background:var(--app-selected,#e4edfb); color:var(--app-accent,#245fc5); }
+.chapter-selection-method .ant-radio-button-wrapper { height:32px; padding-inline:10px; border:0; background:transparent; border-radius:8px; }
+.chapter-selection-method .ant-radio-button-wrapper::before { display:none; }
+.chapter-selection-method .ant-radio-button-wrapper-checked { background:#e4edfb; color:#245fc5; box-shadow:none; }
+@media(max-width:767px) { .chapter-scene-name-row > .ant-btn:not(.chapter-scene-select) { flex-basis:36px; } .chapter-selection-method .ant-radio-button-wrapper { height:36px; line-height:34px; } }
+
+@media(hover:hover) {
+  .chapter-scene-name-row > button[aria-label="编辑场次名称"] { opacity:0; }
+  .chapter-division-member:hover button[aria-label="编辑场次名称"], .chapter-division-member:focus-within button[aria-label="编辑场次名称"], .chapter-division-member:has([aria-pressed=true]) button[aria-label="编辑场次名称"] { opacity:1; }
+}
+@media(max-width:767px) { .chapter-scene-name-row > button[aria-label="编辑场次名称"] { opacity:1; } }
+
+@media(max-width:767px) { .chapter-scene-name-row > .ant-input { min-height:36px; } }

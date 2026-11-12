@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Dropdown, Popover, Space } from 'antd'
-import { SelectOutlined, InfoCircleOutlined, DownOutlined, CheckOutlined } from '@ant-design/icons'
+import { useEffect, useLayoutEffect, useRef, useState, useId, type ReactNode } from 'react'
+import { Button, Radio, Popover, Space, Tooltip } from 'antd'
+import { SelectOutlined, InfoCircleOutlined, FontSizeOutlined } from '@ant-design/icons'
 import type { SourceSpan } from '../../../services/generated'
 import { readChapterBrowse, saveChapterBrowse } from './chapterNavigation'
 import { readSourceSelection, textareaSpan } from './sourceSelection'
@@ -8,14 +8,17 @@ import { readSourceSelection, textareaSpan } from './sourceSelection'
 export type SourceMark = { id: string; label: string; span: SourceSpan; candidate?: boolean }
 
 /** 只读原文与原生选区共用真实文本；边界标签用装饰层呈现，不进入复制或偏移。 */
-export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, focusId, onSelect, onScene, actions, readOnly = false }: {
-  projectId: string; chapterId: string; raw: string; marks: SourceMark[]; span?: SourceSpan; focusId?: string
+export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, pendingSpan, focusId, onSelect, onScene, actions, readOnly = false }: {
+  projectId: string; chapterId: string; raw: string; marks: SourceMark[]; span?: SourceSpan; pendingSpan?: SourceSpan; focusId?: string
   onSelect: (span: SourceSpan) => void; onScene: (id: string) => void
   actions?: ReactNode
   readOnly?: boolean
 }) {
+  const modeName = useId()
   const root = useRef<HTMLDivElement>(null)
   const plain = useRef<HTMLTextAreaElement>(null)
+  const selectionToRestore = useRef({ span, pendingSpan })
+  selectionToRestore.current = { span, pendingSpan }
   const [native, setNative] = useState(false)
   const dragging = useRef(false)
   const selectedByPointer = useRef(false)
@@ -55,8 +58,10 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
     const element = native ? plain.current : root.current
     if (element) element.scrollTop = scrollTop.current
     if (native) {
-      plain.current?.focus({ preventScroll: true })
-      plain.current?.setSelectionRange(chars.slice(0, span?.start || 0).join('').replace(/\r\n?/g, '\n').length, chars.slice(0, span?.end || 0).join('').replace(/\r\n?/g, '\n').length)
+      // 只在视图、原文或场次变化时恢复，不能在每次选区变化时重设方向。
+      const { span, pendingSpan } = selectionToRestore.current
+      const chars = Array.from(raw)
+      plain.current?.setSelectionRange(chars.slice(0, pendingSpan?.start ?? span?.start ?? 0).join('').replace(/\r\n?/g, '\n').length, chars.slice(0, pendingSpan?.end ?? pendingSpan?.start ?? span?.start ?? 0).join('').replace(/\r\n?/g, '\n').length)
     }
   }, [native, raw, focusId])
   const rememberScroll = (value: number) => { scrollTop.current = value; saveChapterBrowse(projectId, chapterId, { sourceTop: value }) }
@@ -64,10 +69,10 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
     <div className="chapter-source-reader-tools">
       <Space wrap><strong>章节原文</strong>{actions}</Space>
       <Space className="chapter-source-view-tools">
-        <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [native ? 'native' : 'pointer'], items: [
-          { key: 'pointer', label: '鼠标框选', icon: !native ? <CheckOutlined aria-hidden /> : undefined },
-          { key: 'native', label: '键盘／触屏选择', icon: native ? <CheckOutlined aria-hidden /> : undefined },
-        ], onClick: ({ key }) => setNative(key === 'native') }}><Button icon={<SelectOutlined aria-hidden />} aria-label="选区方式">选区方式<DownOutlined aria-hidden /></Button></Dropdown>
+        <span role="radiogroup" aria-label="原文选择方式"><Radio.Group name={modeName} className="chapter-selection-method" value={native ? 'native' : 'pointer'} onChange={event => setNative(event.target.value === 'native')}>
+          <Tooltip title="鼠标框选"><Radio.Button value="pointer" aria-label="鼠标框选"><SelectOutlined aria-hidden /></Radio.Button></Tooltip>
+          <Tooltip title="键盘／触屏选择"><Radio.Button value="native" aria-label="键盘／触屏选择"><FontSizeOutlined aria-hidden /></Radio.Button></Tooltip>
+        </Radio.Group></span>
         <Popover trigger={['click']} content={<p style={{ maxWidth: 280 }}>{readOnly ? '正在只读查看历史原文和场次范围。' : '选择连续原文后执行操作。浅蓝为已划分，橙色为当前选区，红色表示重叠。键盘选择可使用方向键及 Shift。'}</p>}>
           <Button type="text" icon={<InfoCircleOutlined aria-hidden />} aria-label="选区说明" />
         </Popover>

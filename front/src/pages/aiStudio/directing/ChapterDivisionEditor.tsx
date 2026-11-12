@@ -1,22 +1,31 @@
-import { cloneElement, useEffect, useRef, useState, type ReactElement } from 'react'
-import { Button, Drawer, Dropdown, Input, Modal, Radio, Select, Space } from 'antd'
-import { PlusOutlined, SelectOutlined, ScissorOutlined, MergeCellsOutlined, DownOutlined } from '@ant-design/icons'
+import { useEffect, useRef, useState, type MutableRefObject, type FocusEvent } from 'react'
+import { Button, Drawer, Input, Modal, Radio, Select, Space, Tooltip } from 'antd'
+import { PlusOutlined, SelectOutlined, ScissorOutlined, MergeCellsOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import type { ChapterSequences, DivisionBaseline, SequenceRead, SourceSpan } from '../../../services/generated'
 import { ChapterSourceSelection } from './ChapterSourceSelection'
 import { WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { excerptMatches } from './common'
-import { changeDivisionSpan, orderedDivisionMembers, removeDivisionMember, type ChapterDivisionDraft, type DraftMember } from './chapterDivision'
+import { changeDivisionSpan, orderedDivisionMembers, removeDivisionMember, type ChapterDivisionDraft } from './chapterDivision'
 import { sameSpan, sourceSlice } from './sourceSelection'
 
+export type DivisionInteraction = { prepare: () => ChapterDivisionDraft | undefined; discard: () => void }
+export type DivisionInteractionStatus = { dirty: boolean; blocked?: string }
+
 /** 手动、AI 和历史方案共用原文选区与场次编辑；历史浏览只改变选中项。 */
-export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, activeId, onActive, onChange, readOnly = false, management = false, busy = false, historicalMembers = [], restoredBaseline = [] }: {
+export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, activeId, onActive, onChange, interactionRef, onInteractionChange, readOnly = false, management = false, busy = false, historicalMembers = [], restoredBaseline = [] }: {
   projectId: string; chapter: ChapterSequences; draft: ChapterDivisionDraft; activeId?: string
+  interactionRef?: MutableRefObject<DivisionInteraction | undefined>; onInteractionChange?: (status: DivisionInteractionStatus) => void
   onActive: (id?: string) => void
   onChange: (draft: ChapterDivisionDraft) => void; readOnly?: boolean; management?: boolean; busy?: boolean; historicalMembers?: SequenceRead[]; restoredBaseline?: DivisionBaseline[]
 }) {
   const draft = { ...inputDraft, members: orderedDivisionMembers(inputDraft.members) }
   const [selection, setSelection] = useState<SourceSpan>()
   useEffect(() => { setSelection(undefined) }, [activeId, chapter.source_version, chapter.current_version?.id])
+  const [phase, setPhase] = useState<'create' | 'split' | 'merge'>()
+  const [newName, setNewName] = useState('')
+  const [rename, setRename] = useState<{ key?: string; value: string; original: string }>()
+  const [nameError, setNameError] = useState('')
+  const composing = useRef(false)
   const [operation, setOperation] = useState<'split' | 'merge'>()
   const [retain, setRetain] = useState('first')
   const layoutRef = useRef<HTMLDivElement>(null)
@@ -36,9 +45,35 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
   const old = identities.find(row => row.id === current?.sequence_id)
   const excerpt = current?.suggested_excerpt || old?.source_text
   const matches = excerpt ? excerptMatches(chapter.raw_text, excerpt) : []
-  const update = (patch: Partial<DraftMember>) => {
-    if (current && !readOnly) onChange({ ...draft, members: draft.members.map(row => row.key === current.key ? { ...row, ...patch } : row) })
+  const resetInteraction = () => { setPhase(undefined); setNewName(''); setRename(undefined); setNameError(''); setSelection(undefined); setOperation(undefined) }
+  const nameInvalid = !!rename && !rename.value.trim()
+  const blocked = phase || selection ? '请先确认或取消当前操作' : nameInvalid ? '请补全场次名称' : undefined
+  const interactionDirty = !!selection || !!newName || !!rename && rename.value !== rename.original
+  useEffect(() => { onInteractionChange?.({ dirty: interactionDirty, blocked }) }, [onInteractionChange, interactionDirty, blocked, selection, newName, rename])
+  const prepareName = () => {
+    if (nameInvalid) { setNameError('请输入场次名称'); return undefined }
+    return rename?.key ? { ...draft, members: draft.members.map(row => row.key === rename.key ? { ...row, title: rename.value.trim() } : row) } : draft
   }
+  const finishName = () => {
+    const value = prepareName()
+    if (!value) return false
+    if (rename?.key) onChange(value)
+    else if (rename) setNewName(rename.value.trim())
+    setRename(undefined); setNameError(''); return true
+  }
+  if (interactionRef) interactionRef.current = { prepare: () => {
+    if (blocked) return undefined
+    const value = prepareName()
+    if (value && rename) { onChange(value); setRename(undefined) }
+    return value
+  }, discard: resetInteraction }
+  const transition = (action: () => void) => {
+    if (!interactionDirty) { resetInteraction(); action(); return }
+    if (phase || selection || nameInvalid) Modal.confirm({ title: '放弃本次操作？', content: '此前已确认的本章草稿保持不变。', okText: '放弃本次操作', cancelText: '继续当前操作', onOk: () => { resetInteraction(); action() } })
+    else if (finishName()) { resetInteraction(); action() }
+  }
+  const selectScene = (key: string) => { if (key !== activeId) transition(() => onActive(key)) }
+  const beginCreate = () => transition(() => { setPhase('create'); setRename({ value: '', original: '' }); if (drawerMode) setEditing(true) })
   const applySpan = (span: SourceSpan) => {
     if (readOnly) return
     if (current) onChange(changeDivisionSpan(draft, current.key, span))
@@ -80,38 +115,67 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
         restored_baseline: draft.restored_baseline?.filter(row => ids.has(row.sequence_id)),
         lineage: draft.lineage.map(origin => ({ ...origin, target_keys: [...new Set(origin.target_keys.map(key => key === next.key ? current.key : key))] })) })
     }
-    setOperation(undefined); setSelection(undefined)
+    resetInteraction()
   }
   const canCreate = !!selection && !draft.members.some(row => row.span && selection.start < row.span.end && row.span.start < selection.end)
   const createFromSelection = () => {
-    if (!selection || !canCreate) return
-    const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: '', span: selection }] }); onActive(key); setSelection(undefined); if (drawerMode) setEditing(true)
+    if (!selection || !canCreate || !newName.trim()) { setNameError('请填写名称并选择未分配原文'); return }
+    const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: newName.trim(), span: selection }] }); resetInteraction(); onActive(key)
   }
-  const selectionLabel = !selection ? '应用选区' : !current ? '新建场次' : !current.span ? '定位当前场次' : '更新场次范围'
+  const selectionLabel = phase === 'create' ? '创建场次' : phase === 'split' ? '确认拆分' : phase === 'merge' ? '确认合并' : !selection ? '应用选区' : !current ? '新建场次' : !current.span ? '确认定位' : '更新场次范围'
+  const primaryDisabled = phase === 'create' ? !canCreate || !newName.trim() : phase === 'split' ? !canSplit : phase === 'merge' ? !canMerge : !selection || !current && !canCreate
   const sourceActions = !readOnly && <Space wrap className="chapter-source-actions">
-    <Dropdown.Button buttonsRender={([left, right]) => [left, cloneElement(right as ReactElement<{ 'aria-label': string }>, { 'aria-label': '选区更多操作' })]} trigger={['click']} className="chapter-selection-action" icon={<DownOutlined aria-hidden />} disabled={!selection || (!current && !canCreate)} menu={{ items: [
-      { key: 'create', icon: <PlusOutlined aria-hidden />, label: canCreate ? '新建场次' : '新建场次 · 选区与已有场次重叠', disabled: !canCreate, onClick: createFromSelection },
-    ] }} onClick={() => {
-      if (current && selection) { applySpan(selection); setSelection(undefined) } else createFromSelection()
-    }}><SelectOutlined aria-hidden />{selectionLabel}</Dropdown.Button>
-    <Dropdown trigger={['click']} menu={{ items: [
-      { key: 'split', icon: <ScissorOutlined aria-hidden />, label: <span>从选区起点拆分{!canSplit && <small> · 请先选择场内原文</small>}</span>, disabled: !canSplit, onClick: () => { setRetain('first'); setOperation('split') } },
-      { key: 'merge', icon: <MergeCellsOutlined aria-hidden />, label: <span>与下一场合并{!canMerge && <small> · 没有可合并的下一场</small>}</span>, disabled: !canMerge, onClick: () => { setRetain('first'); setOperation('merge') } },
-    ] }}><Button icon={<ScissorOutlined aria-hidden />}>调整划分<DownOutlined aria-hidden /></Button></Dropdown>
+    <Button className="chapter-stage-primary" icon={<SelectOutlined aria-hidden />} disabled={primaryDisabled} onClick={() => {
+      if (phase === 'create') createFromSelection()
+      else if (phase) { setRetain('first'); setOperation(phase) }
+      else if (current && selection) { applySpan(selection); setSelection(undefined) }
+      else { setPhase('create'); setRename({ value: '', original: '' }); if (drawerMode) setEditing(true) }
+    }}>{selectionLabel}</Button>
+    {phase || selection ? <Button onClick={resetInteraction}>取消{phase === 'create' ? '新建' : phase === 'split' ? '拆分' : phase === 'merge' ? '合并' : '范围调整'}</Button> : <>
+      <Tooltip title="拆分当前场次"><Button aria-label="拆分当前场次" icon={<ScissorOutlined aria-hidden />} disabled={!current?.span} onClick={() => { setPhase('split'); setSelection(undefined) }} /></Tooltip>
+      <Tooltip title="与下一场合并"><Button aria-label="与下一场合并" icon={<MergeCellsOutlined aria-hidden />} disabled={!canMerge} onClick={() => setPhase('merge')} /></Tooltip>
+    </>}
+    {phase === 'merge' && <span>{current?.title} ＋ {next?.title}</span>}
+    {(phase === 'create' && !newName.trim() || nameInvalid) && <Button type="text" onClick={() => {
+      if (phase === 'create' && !rename) setRename({ value: newName, original: newName })
+      if (drawerMode) setEditing(true)
+      requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.chapter-scene-name-row input')?.focus())
+    }}>完善场次名称</Button>}
   </Space>
+  const finishOnRowBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (rename && !composing.current && !(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) finishName()
+  }
+  const nameInput = rename && <>
+            <Input autoFocus aria-label={rename?.key ? '场次标题' : '新场次名称'} status={nameError ? 'error' : undefined} value={rename?.value || ''} onChange={event => { setRename({ ...rename!, value: event.target.value }); setNameError('') }}
+              onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }}
+              onKeyDown={event => {
+                if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return
+                if (event.key === 'Enter') { event.preventDefault(); finishName() }
+                if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setRename(undefined); setNameError('') }
+              }} />
+            <Button aria-label="确认改名" icon={<CheckOutlined aria-hidden />} onPointerDown={event => event.preventDefault()} onClick={finishName} />
+            <Button aria-label="取消改名" icon={<CloseOutlined aria-hidden />} onPointerDown={event => event.preventDefault()} onClick={() => { setRename(undefined); setNameError('') }} />
+  </>
   const editorPanel = <aside className="chapter-division-list" aria-label="划场场次列表">
     <div className="chapter-division-members">{!drawerMode && <h3>{readOnly ? '历史场次' : '本章场次'}</h3>}
       {draft.members.map((row, index) => <div className="chapter-division-member" key={row.key}>
-        <Button block aria-pressed={current?.key === row.key} onClick={() => { onActive(row.key); setSelection(undefined) }}>{index + 1}. {row.title || '未命名'}{!row.span ? ' · 待定位' : ''}</Button>
-        {current?.key === row.key && <Space direction="vertical" style={{ width: '100%' }}>
-          <Input aria-label="场次标题" readOnly={readOnly} value={current.title} onChange={event => update({ title: event.target.value })} />
-          {!readOnly && <Button type="text" danger onClick={() => { onChange(removeDivisionMember(draft, current.key)); onActive(draft.members.find(row => row.key !== current.key)?.key) }}>移出本章草稿</Button>}
-        </Space>}
+        <div className="chapter-scene-name-row" onBlur={finishOnRowBlur}>
+          {rename?.key === row.key ? <>
+            {nameInput}
+          </> : <>
+            <Button className="chapter-scene-select" aria-pressed={current?.key === row.key} onClick={() => selectScene(row.key)}>{index + 1}. {row.title || '未命名'}{!row.span ? ' · 待定位' : ''}</Button>
+            {!readOnly && <Button aria-label="编辑场次名称" icon={<EditOutlined aria-hidden />} onClick={() => transition(() => { onActive(row.key); setRename({ key: row.key, value: row.title, original: row.title }) })} />}
+          </>}
+        </div>
+        {rename?.key === row.key && nameError && <small role="alert">{nameError}</small>}
+        {current?.key === row.key && !readOnly && <Button type="text" danger onClick={() => transition(() => { onChange(removeDivisionMember(draft, current.key)); onActive(draft.members.find(row => row.key !== current.key)?.key) })}>移出本章草稿</Button>}
       </div>)}
       {!draft.members.length && <p>尚无场次，可框选原文新建。</p>}
-      {!readOnly && <Button block disabled={!chapter.raw_text.trim()} onClick={() => {
-        const key = crypto.randomUUID(); onChange({ ...draft, members: [...draft.members, { key, title: '' }] }); onActive(key)
-      }}>新增场次</Button>}
+      {phase === 'create' && <div className="chapter-scene-name-row" onBlur={finishOnRowBlur}>
+        {rename && !rename.key ? nameInput : <><span>{newName || '新场次'}</span><Button aria-label="编辑新场次名称" icon={<EditOutlined aria-hidden />} onClick={() => setRename({ value: newName, original: newName })} /></>}
+        {nameError && <small role="alert">{nameError}</small>}
+      </div>}
+      {!readOnly && <Button block icon={<PlusOutlined aria-hidden />} disabled={!chapter.raw_text.trim()} onClick={beginCreate}>新建场次</Button>}
       {current && !readOnly && (old?.source_changed || current.suggested_excerpt || !current.sequence_id) && <details>
         <summary>核对来源与关联</summary>
         {excerpt && <p className="chapter-source-excerpt">{excerpt}</p>}
@@ -127,7 +191,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
     <div ref={layoutRef} className={`chapter-division-layout${drawerMode ? ' with-editor-drawer' : ''}`}>
       <ChapterSourceSelection projectId={projectId} chapterId={readOnly ? `${chapter.chapter_id}:history:${chapter.current_version?.id}` : chapter.chapter_id} raw={chapter.raw_text}
         marks={draft.members.filter(row => row.span).map((row, index) => ({ id: row.key, label: `${index + 1} · ${row.title || '未命名'}`, span: row.span! }))}
-        span={selection || current?.span} focusId={current?.key} onScene={id => { onActive(id); setSelection(undefined) }} onSelect={setSelection} readOnly={readOnly} actions={sourceActions} />
+        pendingSpan={selection} span={selection || current?.span} focusId={current?.key} onScene={selectScene} onSelect={setSelection} readOnly={readOnly} actions={sourceActions} />
       {!drawerMode && editorPanel}
 
     </div>
@@ -140,6 +204,9 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
       ]} />
     </Modal>
     {drawerMode && <Drawer aria-label="本章场次" className="management-division-drawer" title="本章场次" width="min(340px, 100vw)" open={editing} onClose={() => setEditing(false)}
-      afterOpenChange={open => { if (!open) editTrigger.current?.focus({ preventScroll: true }) }}><WorkspaceWriteBoundary busy={busy}>{editorPanel}</WorkspaceWriteBoundary></Drawer>}
+      afterOpenChange={open => {
+        if (open) document.querySelector<HTMLInputElement>('.ant-drawer-open .chapter-scene-name-row input')?.focus({ preventScroll: true })
+        else editTrigger.current?.focus({ preventScroll: true })
+      }}><WorkspaceWriteBoundary busy={busy}>{editorPanel}</WorkspaceWriteBoundary></Drawer>}
   </>
 }

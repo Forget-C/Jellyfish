@@ -6,7 +6,7 @@ import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionA
 import { directingError } from './common'
 import { sourceSlice } from './sourceSelection'
 import { analysisDivision, divisionBaselineMatches, divisionRequest, initialDivision, orderedDivisionMembers, versionDivision, type ChapterDivisionDraft } from './chapterDivision'
-import { ChapterDivisionEditor } from './ChapterDivisionEditor'
+import { ChapterDivisionEditor, type DivisionInteraction, type DivisionInteractionStatus } from './ChapterDivisionEditor'
 import { DivisionHistoryModal, type DivisionHistorySelection } from './DivisionHistoryModal'
 import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 
@@ -23,6 +23,9 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   actionHost?: HTMLDivElement | null
   embedded?: boolean
 }) {
+  const interactionRef = useRef<DivisionInteraction>()
+  const [interaction, setInteraction] = useState<DivisionInteractionStatus>({ dirty: false })
+  const interactionChanged = useCallback((status: DivisionInteractionStatus) => { epoch.current++; setInteraction(status) }, [])
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [editor, setEditor] = useState<Editor>()
   const [activeId, setActiveId] = useState(sequenceId)
@@ -134,17 +137,19 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     saveApproval.current?.(saved); saveApproval.current = undefined
     return saved
   }
-  const guard = useWorkspaceDraft({ name: '本章划分草稿', dirty: draftDirty, busy: busy || !!pendingSave, save: async () => {
+  const guard = useWorkspaceDraft({ name: '本章划分草稿', dirty: draftDirty || interaction.dirty, saveBlockedReason: interaction.blocked, busy: busy || !!pendingSave, save: async () => {
       if (!await previewChanges()) return false
       return new Promise<boolean>(resolve => { saveApproval.current = resolve })
     },
-    discard: () => { if (editor) { epoch.current++; setEditor({ chapter: editor.chapter, draft: initialDivision(editor.chapter) }); setPreview(undefined) } } })
+    discard: () => { interactionRef.current?.discard(); if (editor) { epoch.current++; setEditor({ chapter: editor.chapter, draft: initialDivision(editor.chapter) }); setPreview(undefined) } } })
   const previewChanges = async () => {
-    if (!editor || !chapter || busy || !draftDirty) return false
+    if (!editor || !chapter || busy || interaction.blocked || !draftDirty && !interaction.dirty) return false
     setBusy(true); setError('')
     try {
       if (editor.chapter.source_version !== chapter.source_version || !divisionBaselineMatches(editor.draft, chapter)) throw new Error('原文或场次集合已变化，草稿已保留。请对照最新划分后处理。')
-      const draft = divisionRequest(editor.draft, editor.chapter.raw_text)
+      const prepared = interactionRef.current ? interactionRef.current.prepare() : editor.draft
+      if (!prepared) { setError('请先完成或取消当前操作'); return false }
+      const draft = divisionRequest(prepared, editor.chapter.raw_text)
       const response = await StudioDirectingService.directingPreviewDivision({ projectId, chapterId, requestBody: draft })
       if (!response.data) throw new Error('没有取得划分预览，请重试')
       setPreview({ value: response.data, draft }); setIdentityConfirmed(false); return true
@@ -232,16 +237,17 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   const stale = editor.chapter.source_version !== chapter.source_version || !divisionBaselineMatches(draft, chapter) || editor.chapter.current_version?.id !== chapter.current_version?.id
   const saveActions = <Space wrap className="chapter-division-save">
     <span className="chapter-division-version">{chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}</span>
-    <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing} onClick={() => {
+    <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing || interaction.dirty || !!interaction.blocked} onClick={() => {
       if (draftDirty) Modal.confirm({ title: '使用 AI 智能划分？', content: '分析成功后将替换当前草稿；若分析期间继续编辑，结果会保留到历史版本。', okText: '开始分析', cancelText: '取消', onOk: startAnalysis })
       else void startAnalysis()
     }}>{running || activeTasks.length ? '划分中…' : '智能划分'}</Button>
-    <Button icon={<HistoryOutlined aria-hidden />} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
-    {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty || stale} onClick={() => void previewChanges()}>保存为新版本</Button>}
+    <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
+    {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>保存为新版本</Button>}
   </Space>
   return <div className="chapter-division" onKeyDownCapture={event => {
     if (historyOpen && event.key === 'Escape') { event.stopPropagation(); setHistoryOpen(false) }
   }}>
+    {interaction.blocked && <Alert type="info" message={interaction.blocked} />}
     {readFailure}{error && <Alert type="error" showIcon message={error} />}{notice && <Alert type="info" message={notice} />}
     {analysisError && <Alert type="warning" message={`分析状态读取失败，正在重试读取：${analysisError}`} />}
     {pendingSave && <Alert type="warning" message="保存结果尚未确认。草稿与请求身份已保留，核对后才能继续编辑或离开。" action={<Space wrap>
@@ -256,7 +262,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         <Button onClick={() => { epoch.current++; setViewing(undefined) }}>返回当前编辑</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>基于此版本编辑</Button>
       </Space>} />}
       {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message="此版本基于旧原文；当前显示保存时的原文，基于此版本编辑时需要重新定位。" />}
-      <ChapterDivisionEditor busy={busy || !!pendingSave} management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
+      <ChapterDivisionEditor interactionRef={interactionRef} onInteractionChange={interactionChanged} busy={busy || !!pendingSave} management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
         chapter={viewing?.chapter || editor.chapter} draft={viewing ? initialDivision(viewing.chapter) : draft}
         activeId={viewing ? historyActiveId : activeId} onActive={viewing ? setHistoryActiveId : setActiveId}
         onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />

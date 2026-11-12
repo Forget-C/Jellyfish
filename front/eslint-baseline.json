@@ -219,13 +219,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/ChapterSourceSelection.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "a2bde7a28f267348d2a9e8890d9fa92db093e5d9fb3af07b8fde61a4feaf842e",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/designCard.ts",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
