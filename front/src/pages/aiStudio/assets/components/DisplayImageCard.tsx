@@ -7,6 +7,7 @@ import './project-resource-card.css'
 type DisplayImageCardProps = {
   variant?: 'default' | 'project'
   imageFit?: 'contain' | 'cover'
+  lazyImage?: boolean
   title: ReactNode
   imageUrl?: string
   imageAlt: string
@@ -25,6 +26,7 @@ type DisplayImageCardProps = {
 export function DisplayImageCard({
   variant = 'default',
   imageFit = 'contain',
+  lazyImage = false,
   title,
   imageUrl,
   imageAlt,
@@ -61,7 +63,7 @@ export function DisplayImageCard({
 
   if (variant === 'project') {
     const content = displayUrl
-      ? <img src={displayUrl} alt={imageAlt} style={{ objectFit: imageFit }} onError={() => setImgError(true)} />
+      ? <img loading={lazyImage ? 'lazy' : undefined} src={displayUrl} alt={imageAlt} style={{ objectFit: imageFit }} onError={() => setImgError(true)} />
       : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : onImageClick ? placeholder : <><PictureOutlined aria-hidden />暂无封面</>}</span>
     const canOpen = !!onImageClick || !!(enablePreview && displayUrl)
     return <>

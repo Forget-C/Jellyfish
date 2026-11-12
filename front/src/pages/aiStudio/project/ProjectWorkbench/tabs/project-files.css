@@ -7,3 +7,11 @@
   .project-files-filter.ant-select { height: 36px; }
   .project-files-page .ant-btn { min-height: 36px; height: auto; }
 }
+
+.project-files-page .project-resource-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.project-files-count, .project-files-load-status { color: var(--app-text-secondary, #64748b); font-size: 12px; }
+.project-files-load-status { padding: 20px 0; text-align: center; }
+@media (max-width: 1279px) { .project-files-page .project-resource-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .project-files-page .project-resource-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .project-files-page .project-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479px) { .project-files-page .project-resource-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -15,25 +15,28 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 600 }, locale: 'zh-CN' })
   const page = await context.newPage()
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   page.setDefaultTimeout(10000)
   const listRequests = [], downloads = []
-  let failList = false, empty = false
+  let failList = false, empty = false, delayRain = false, releaseRain
+  const rainGate = new Promise(resolve => { releaseRain = resolve })
   const video = execFileSync('ffmpeg', ['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=navy:s=128x72:d=0.2','-c:v','libx264','-pix_fmt','yuv420p','-f','mp4','-movflags','frag_keyframe+empty_moov','pipe:1'])
   const audio = execFileSync('ffmpeg', ['-hide_banner','-loglevel','error','-f','lavfi','-i','anullsrc=r=8000:cl=mono','-t','0.2','-f','wav','pipe:1'])
-  const rows = Array.from({ length: 11 }, (_, i) => ({ id: `file${i}`, type: i === 1 ? 'video' : i === 2 ? 'audio' : 'image', name: i === 0 ? '雨夜参考图' : i === 1 ? '雨夜视频' : i === 2 ? '雨夜音频' : i === 3 ? '损坏图片' : i === 4 ? '很长的参考图片名称'.repeat(10) : `图片${i}` }))
-  await context.route('**/api/**', route => {
+  const rows = Array.from({ length: 60 }, (_, i) => ({ id: `file${i}`, type: i === 1 ? 'video' : i === 2 ? 'audio' : 'image', name: i === 0 ? '雨夜参考图' : i === 1 ? '雨夜视频' : i === 2 ? '雨夜音频' : i === 3 ? '损坏图片' : i === 4 ? '很长的参考图片名称'.repeat(10) : `图片${i}` }))
+  await context.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (path.endsWith('/projects/p-files')) return respond({ id: 'p-files', name: '文件项目', stats: {} })
-    if (path.endsWith('/chapters')) return respond({ items: [{ id: 'c1', project_id: 'p-files', index: 1, title: '雨夜' }], pagination: { total: 1 } })
+    if (path.endsWith('/chapters')) return respond({ items: [{ id: 'c1', project_id: 'p-files', index: 1, title: '雨夜' }, { id: 'c2', project_id: 'p-files', index: 2, title: '晴天' }], pagination: { total: 1 } })
     if (path.endsWith('/files')) {
       listRequests.push(Object.fromEntries(url.searchParams))
+      if (delayRain && url.searchParams.get('chapter_title') === '雨夜') await rainGate
+      if (url.searchParams.get('chapter_title') === '晴天') return respond({ items: [{ id: 'sun', name: '晴天唯一文件', type: 'image' }], pagination: { total: 1 } })
       if (failList) return route.fulfill({ status: 503, json: { detail: '文件读取不可用' } })
       const pageNumber = Number(url.searchParams.get('page') || 1)
-      return respond({ items: empty ? [] : rows.slice((pageNumber - 1) * 10, pageNumber * 10), pagination: { total: empty ? 0 : 11 } })
+      return respond({ items: empty ? [] : rows.slice((pageNumber - 1) * Number(url.searchParams.get('page_size')), pageNumber * Number(url.searchParams.get('page_size'))), pagination: { total: empty ? 0 : 60 } })
     }
     if (path.endsWith('/files/file3/download')) return route.fulfill({ status: 404, body: 'missing image' })
     if (path.endsWith('/download') && request.isNavigationRequest()) {
@@ -47,6 +50,8 @@ try {
   })
   await page.goto('http://127.0.0.1:4544/projects/p-files?tab=files')
   await page.getByText('雨夜参考图', { exact: true }).waitFor()
+  assert.equal(listRequests[0].page_size, '24', '每批加载24条')
+  assert.equal(await page.locator('.project-resource-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), 6, '宽屏每行六个')
   assert.equal(await page.getByRole('checkbox').count(), 0, '默认浏览不显示复选框')
   await page.getByRole('button', { name: '批量选择', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '批量下载（0）', exact: true }).isDisabled(), true)
@@ -99,19 +104,32 @@ try {
   await page.getByRole('checkbox', { name: '选择雨夜参考图', exact: true }).check()
   const filter = page.getByRole('combobox', { name: '按章节筛选文件', exact: true })
   const filtered = page.waitForResponse(response => new URL(response.url()).searchParams.get('chapter_title') === '雨夜')
-  await filter.click()
+  await filter.focus()
+  await filter.press('ArrowDown')
   await page.getByText('雨夜（第1章）', { exact: true }).click()
   await filtered
   assert.equal(listRequests.at(-1).project_id, 'p-files')
   assert.equal(listRequests.at(-1).chapter_title, '雨夜')
-  await page.getByTitle('2', { exact: true }).click()
-  await page.getByText('图片10', { exact: true }).waitFor()
-  assert.equal(listRequests.at(-1).page, '2')
-  await page.getByRole('button', { name: '批量下载（1）', exact: true }).waitFor()
-  await page.getByTitle('1', { exact: true }).click()
+  await page.getByRole('button', { name: '批量选择', exact: true }).waitFor()
+  assert.equal(await page.getByRole('checkbox').count(), 0, '筛选清空并退出批量选择')
+  await page.getByRole('button', { name: '批量选择', exact: true }).click()
+  await page.getByRole('button', { name: '选择已加载文件', exact: true }).click()
+  await page.getByRole('button', { name: '批量下载（24）', exact: true }).waitFor()
+  failList = true
+  await page.locator('.project-workbench-content').evaluate(el => { el.scrollTop = el.scrollHeight })
+  await page.getByRole('button', { name: '重试读取文件', exact: true }).waitFor()
   await image.waitFor()
-  assert.equal(await page.getByRole('checkbox', { name: '选择雨夜参考图', exact: true }).isChecked(), true, '既有跨筛选分页选择语义保持')
+  failList = false
+  await page.getByRole('button', { name: '重试读取文件', exact: true }).click()
+  await page.getByText('图片47', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '批量下载（24）', exact: true }).waitFor()
+  assert.equal(await page.getByRole('checkbox', { name: '选择图片47', exact: true }).isChecked(), false)
+  await page.locator('.project-workbench-content').evaluate(el => { el.scrollTop = el.scrollHeight })
+  await page.getByText('已显示全部 60 个文件', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('article').count(), 60)
+  assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), '仅内容区滚动')
   await page.getByRole('button', { name: '退出批量选择', exact: true }).click()
+  await page.locator('.project-workbench-content').evaluate(el => { el.scrollTop = 0 })
   for (const theme of ['雾蓝纯色', '雾蓝微渐变']) {
     await page.getByRole('button', { name: '用户与语言设置', exact: true }).click()
     await page.getByRole('menuitemradio', { name: theme, exact: true }).click()
@@ -129,6 +147,23 @@ try {
     }
     await page.setViewportSize({ width: 1440, height: 900 })
   }
+  await page.setViewportSize({ width: 1440, height: 2000 })
+  await page.reload()
+  await page.getByText('已显示全部 60 个文件', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('article').count(), 60, '高视口自动补齐内容')
+  await page.setViewportSize({ width: 1440, height: 600 })
+  const lastImage = page.getByRole('button', { name: '预览图片59', exact: true })
+  await lastImage.focus()
+  const scrollBeforePreview = await page.locator('.project-workbench-content').evaluate(el => el.scrollTop)
+  assert.ok(scrollBeforePreview > 0)
+  await lastImage.press('Enter')
+  const lastPreview = page.getByRole('dialog', { name: '图片59', exact: true })
+  await lastPreview.waitFor()
+  await page.waitForFunction(() => !document.querySelector('.ant-zoom-appear'))
+  await page.keyboard.press('Escape')
+  await lastPreview.waitFor({ state: 'hidden' })
+  await lastImage.and(page.locator(':focus')).waitFor()
+  assert.equal(await page.locator('.project-workbench-content').evaluate(el => el.scrollTop), scrollBeforePreview)
   failList = true
   await page.reload()
   await page.getByText('读取项目文件失败，请重试', { exact: true }).waitFor()
@@ -136,6 +171,21 @@ try {
   failList = false
   await page.getByRole('button', { name: '重试读取文件', exact: true }).click()
   await image.waitFor()
+  delayRain = true
+  await filter.focus()
+  await filter.press('ArrowDown')
+  await page.getByText('雨夜（第1章）', { exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('.ant-spin-spinning'))
+  await filter.focus()
+  await filter.press('ArrowDown')
+  await page.getByText('晴天（第2章）', { exact: true }).click()
+  await page.getByText('晴天唯一文件', { exact: true }).waitFor()
+  const lateRain = page.waitForResponse(response => new URL(response.url()).searchParams.get('chapter_title') === '雨夜')
+  releaseRain()
+  await lateRain
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  assert.equal(await page.getByRole('article').count(), 1, '旧筛选迟到响应不能覆盖新筛选')
+  await page.getByText('晴天唯一文件', { exact: true }).waitFor()
   empty = true
   await page.reload()
   await page.getByText('暂无文件（仅展示已在项目中产生过关联记录的文件）', { exact: true }).waitFor()
