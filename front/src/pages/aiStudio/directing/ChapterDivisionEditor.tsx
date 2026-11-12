@@ -131,10 +131,12 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
       else if (current && selection) { applySpan(selection); setSelection(undefined) }
       else { setPhase('create'); setRename({ value: '', original: '' }); if (drawerMode) setEditing(true) }
     }}>{selectionLabel}</Button>
-    {phase || selection ? <Button onClick={resetInteraction}>取消{phase === 'create' ? '新建' : phase === 'split' ? '拆分' : phase === 'merge' ? '合并' : '范围调整'}</Button> : <>
-      <Tooltip title="拆分当前场次"><Button aria-label="拆分当前场次" icon={<ScissorOutlined aria-hidden />} disabled={!current?.span} onClick={() => { setPhase('split'); setSelection(undefined) }} /></Tooltip>
+    {phase ? <Button onClick={resetInteraction}>取消{phase === 'create' ? '新建' : phase === 'split' ? '拆分' : phase === 'merge' ? '合并' : '范围调整'}</Button> : <>
+      {!!selection && <Button onClick={resetInteraction}>取消范围调整</Button>}
+      <Tooltip title="拆分当前场次"><Button aria-label="拆分当前场次" icon={<ScissorOutlined aria-hidden />} disabled={!current?.span} onClick={() => setPhase('split')} /></Tooltip>
       <Tooltip title="与下一场合并"><Button aria-label="与下一场合并" icon={<MergeCellsOutlined aria-hidden />} disabled={!canMerge} onClick={() => setPhase('merge')} /></Tooltip>
     </>}
+    {phase === 'split' && <span role="status">{canSplit ? '以选中文字的起点拆分；确认后仍需保存新版本。' : '请选中场次内部断点后的至少一个字。'}</span>}
     {phase === 'merge' && <span>{current?.title} ＋ {next?.title}</span>}
     {(phase === 'create' && !newName.trim() || nameInvalid) && <Button type="text" onClick={() => {
       if (phase === 'create' && !rename) setRename({ value: newName, original: newName })

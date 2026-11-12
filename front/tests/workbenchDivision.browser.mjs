@@ -382,6 +382,23 @@ try {
   await preview.getByRole('button', { name: '保存本章划分' }).click()
   await preview.waitFor({ state: 'hidden' })
   assert.equal((await request(manualApi)).sequences[0].title, '手动前厅')
+  await manualText.press('Home')
+  await manualText.press('ArrowRight')
+  await manualText.press('ArrowRight')
+  await manualText.press('Shift+ArrowRight')
+  assert.equal(await page.getByRole('button', { name: '拆分当前场次', exact: true }).isVisible(), true,
+    'selecting the split position first must not hide the split entry')
+  await page.getByRole('button', { name: '拆分当前场次', exact: true }).click()
+  await page.getByRole('button', { name: '确认拆分', exact: true }).click()
+  await split.getByRole('button', { name: '确认拆分', exact: true }).click()
+  await page.getByRole('button', { name: '保存为新版本', exact: true }).click()
+  await preview.getByRole('checkbox', { name: /核对拆分/ }).check()
+  await preview.getByRole('button', { name: '保存本章划分' }).click()
+  await preview.waitFor({ state: 'hidden' })
+  const splitSaved = await request(manualApi)
+  assert.equal(splitSaved.sequences.length, 2)
+  assert.deepEqual(splitSaved.sequences.map(row => row.source_text), ['前厅', '点灯。'])
+
 
 } finally {
   await cleanup()
