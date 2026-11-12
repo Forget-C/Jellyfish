@@ -51,7 +51,6 @@
   padding: 8px 0;
   background: var(--app-background);
 }
-.management-workspace .management-division :is(.chapter-source-text, .chapter-source-native) { max-width: 70ch; }
 
 
 .management-workspace { color: #263244; }
