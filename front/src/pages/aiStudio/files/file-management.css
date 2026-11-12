@@ -180,3 +180,13 @@
   margin-top: 16px;
   justify-content: flex-end;
 }
+
+.file-manager-page .file-card-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.file-virtual-grid { position: relative; width: 100%; }
+.file-virtual-grid .file-card { height: 270px; }
+.file-card-details h2 { font-weight: 600; }
+.file-load-status { padding: 20px 0; text-align: center; color: var(--app-muted); font-size: 12px; }
+@media (max-width: 1279px) { .file-manager-page .file-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .file-manager-page .file-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .file-manager-page .file-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479px) { .file-manager-page .file-card-grid { grid-template-columns: minmax(0, 1fr); } }

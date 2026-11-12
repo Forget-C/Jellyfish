@@ -6,7 +6,7 @@ export function useFileViewport(root: RefObject<HTMLDivElement>, count: number) 
   const [view, setView] = useState({ start: 0, end: 6, columns: 6, stride: 270, remaining: 0, blocked: false })
   const [scrolling, setScrolling] = useState(false)
   useEffect(() => {
-    const panel = root.current?.closest('.project-workbench-content') as HTMLElement | null
+    const panel = root.current?.closest('.app-workspace-scroll') as HTMLElement | null
     if (!panel) return
     setScrolling(false)
     let frame = 0
@@ -15,14 +15,14 @@ export function useFileViewport(root: RefObject<HTMLDivElement>, count: number) 
       const element = grid.current
       if (!element) return
       const columns = getComputedStyle(element).gridTemplateColumns.split(' ').length
-      const card = element.querySelector<HTMLElement>('.project-resource-card')
+      const card = element.querySelector<HTMLElement>('.project-resource-card, .file-card')
       const stride = (card?.getBoundingClientRect().height || 254) + 16
       const top = Math.max(0, panel.getBoundingClientRect().top - element.getBoundingClientRect().top)
       const start = Math.max(0, Math.floor(top / stride) - 2)
       const end = Math.ceil((top + panel.clientHeight) / stride) + 2
       const bounds = panel.getBoundingClientRect()
       const size = 44
-      const overlaps = () => Array.from(element.querySelectorAll('button:not(.project-resource-cover), input')).some(element => {
+      const overlaps = () => Array.from(element.querySelectorAll('button:not(.project-resource-cover):not(.file-preview-trigger), input')).some(element => {
         const rect = element.getBoundingClientRect()
         return rect.right > bounds.right - 20 - size && rect.left < bounds.right - 20 && rect.bottom > bounds.bottom - 20 - size && rect.top < bounds.bottom - 20
       })

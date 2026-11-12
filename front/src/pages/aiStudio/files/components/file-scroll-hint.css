@@ -1,0 +1,8 @@
+.project-files-scroll-hint { position: absolute; right: 20px; bottom: 20px; z-index: 5; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: rgba(91, 156, 226, .8); cursor: pointer; }
+.project-files-scroll-hint svg { width: 24px; height: 36px; fill: currentColor; filter: drop-shadow(0 2px 2px #315c9833); pointer-events: none; }
+.project-files-scroll-hint:hover { color: rgba(61, 128, 205, .95); }
+.project-files-scroll-hint[hidden] { display: none; }
+.project-files-scroll-hint.is-breathing { animation: file-hint-breathe 1.8s ease-in-out 2; }
+.project-files-scroll-hint:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+@keyframes file-hint-breathe { 50% { opacity: .65; } }
+@media (prefers-reduced-motion: reduce) { .project-files-scroll-hint.is-breathing { animation: none; } }

@@ -8,7 +8,9 @@ import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { useChapters } from '../hooks/useProjectData'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../../../assets/utils'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
-import { useFileViewport } from './useFileViewport'
+import { useFileViewport } from '../../../files/components/useFileViewport'
+import { FileVirtualGrid } from '../../../files/components/FileVirtualGrid'
+import { FileScrollHint } from '../../../files/components/FileScrollHint'
 import './project-files.css'
 
 const PAGE_SIZE = 24
@@ -51,14 +53,13 @@ export function FilesTab() {
   const viewport = useFileViewport(pageRoot, files.length)
   const [focusedId, setFocusedId] = useState<string>()
   const [hintUsed, setHintUsed] = useState(false)
-  const [hintFocused, setHintFocused] = useState(false)
   const previewScroll = useRef(0)
   const openPreview = (file: FileRead) => {
     mediaTrigger.current = document.activeElement as HTMLElement
     previewScroll.current = pageRoot.current?.closest('.project-workbench-content')?.scrollTop || 0
     setPreviewVideo(file)
   }
-  const hintVisible = !previewVideo && !error && !filesLoading && viewport.remaining > 80 && !viewport.scrolling && !viewport.blocked
+  const hintVisible = files.length > 0 && !previewVideo && !error && !filesLoading && viewport.remaining > 80 && !viewport.scrolling && !viewport.blocked
   useEffect(() => { if (viewport.scrolling) setHintUsed(true) }, [viewport.scrolling])
 
   // A generation owns its pagination; responses from earlier filters cannot update this list.
@@ -148,13 +149,6 @@ export function FilesTab() {
     batchOpenDownloads(urls)
   }
 
-  const firstIndex = viewport.start * viewport.columns
-  const visibleFiles = files.slice(firstIndex, viewport.end * viewport.columns).map((file, offset) => ({ file, index: firstIndex + offset }))
-  for (const id of [focusedId, previewVideo?.id]) {
-    const pinnedIndex = files.findIndex(file => file.id === id)
-    if (pinnedIndex >= 0 && !visibleFiles.some(item => item.index === pinnedIndex)) visibleFiles.push({ file: files[pinnedIndex], index: pinnedIndex })
-  }
-
   return (
     <>
       <div ref={pageRoot} className="project-resource-page project-files-page">
@@ -184,32 +178,14 @@ export function FilesTab() {
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           ) : (
-            <div ref={viewport.grid} className="project-resource-grid project-files-virtual" style={{ height: Math.ceil(files.length / viewport.columns) * viewport.stride - (files.length ? 16 : 0) }}>
-              {visibleFiles.map(({ file, index }) => {
-                const row = Math.floor(index / viewport.columns)
+            <FileVirtualGrid files={files} viewport={viewport} root={pageRoot} pinnedIds={[focusedId, previewVideo?.id]} onFocus={setFocusedId} className="project-resource-grid project-files-virtual">
+              {file => {
                 const url = fileResourceUrl(file)
                 const checked = selectedIds.has(file.id)
                 const isVideo = file.type === 'video'
                 const isAudio = file.type === 'audio'
 
                 return (
-                  <div key={file.id} data-file-id={file.id} onKeyDown={event => {
-                    if (event.key !== 'Tab') return
-                    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'))
-                    const boundary = event.shiftKey ? controls[0] : controls[controls.length - 1]
-                    const nextIndex = index + (event.shiftKey ? -1 : 1)
-                    if (event.target !== boundary || nextIndex < 0 || nextIndex >= files.length || visibleFiles.some(item => item.index === nextIndex)) return
-                    event.preventDefault()
-                    const next = files[nextIndex]
-                    setFocusedId(next.id)
-                    const panel = pageRoot.current?.closest('.project-workbench-content')
-                    if (panel) panel.scrollTop = Math.floor(nextIndex / viewport.columns) * viewport.stride
-                    requestAnimationFrame(() => {
-                      const card = pageRoot.current?.querySelector(`[data-file-id="${CSS.escape(next.id)}"]`)
-                      const targets = card?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')
-                      targets?.[event.shiftKey ? targets.length - 1 : 0]?.focus({ preventScroll: true })
-                    })
-                  }} onFocus={() => setFocusedId(file.id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusedId(undefined) }} style={{ position: 'absolute', top: row * viewport.stride, left: `calc(${index % viewport.columns} * (100% + 16px) / ${viewport.columns})`, width: `calc((100% - ${(viewport.columns - 1) * 16}px) / ${viewport.columns})` }}>
                     <DisplayImageCard
                       variant="project"
                       lazyImage
@@ -252,10 +228,9 @@ export function FilesTab() {
                         </Tooltip>
                       }
                     />
-                  </div>
                 )
-              })}
-            </div>
+              }}
+            </FileVirtualGrid>
           )}
         </Spin>
 
@@ -266,9 +241,7 @@ export function FilesTab() {
         </div>
       </div>
 
-      <button type="button" aria-label="向下浏览文件" className={`project-files-scroll-hint ${!hintUsed ? 'is-breathing' : ''}`} hidden={!hintVisible && !hintFocused}
-        onFocus={() => setHintFocused(true)} onBlur={() => setHintFocused(false)} onAnimationEnd={() => setHintUsed(true)}
-        onClick={() => { setHintUsed(true); const panel = pageRoot.current?.closest('.project-workbench-content'); panel?.scrollBy({ top: panel.clientHeight * 0.75, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }) }}><svg viewBox="0 0 24 36" aria-hidden="true" focusable="false"><path d="M8 0h8v2H8z M8 5h8v4H8z M8 12h8v12h8L12 36 0 24h8z" /></svg></button>
+      <FileScrollHint root={pageRoot} visible={hintVisible} used={hintUsed} onUsed={() => setHintUsed(true)} />
       <Modal
         className="project-resource-dialog"
         focusTriggerAfterClose={false}

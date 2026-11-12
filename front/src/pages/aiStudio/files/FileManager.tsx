@@ -1,30 +1,14 @@
-import { useEffect, useId, useState } from 'react'
-import { Alert, Button, Checkbox, Empty, Input, Modal, Pagination, Select, Skeleton, Tag } from 'antd'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Alert, Button, Checkbox, Empty, Input, Modal, Select, Skeleton, Tag } from 'antd'
 import { FileImageOutlined, FileOutlined, ReloadOutlined, SoundOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
-import api from '../../../services/aiStudioApi'
-import { StudioFilesService } from '../../../services/generated'
 import type { FileRead } from '../../../services/generated'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../assets/utils'
-import { searchManagementList } from '../managementListSearch'
+import { useManagedFiles, DEMO_MODE, type FileEntry } from './useManagedFiles'
+import { useFileViewport } from './components/useFileViewport'
+import { FileVirtualGrid } from './components/FileVirtualGrid'
+import { FileScrollHint } from './components/FileScrollHint'
 import './file-management.css'
-
-const PAGE_SIZE = 24
-const DEMO_MODE = import.meta.env.VITE_USE_MOCK === 'true'
-
-type FileEntry = Omit<FileRead, 'tags'> & { tags: string[]; createdAt?: string }
-type FilePage = { items: FileEntry[]; total?: number; page: number }
-
-function normalizeFiles(response: (FileRead & { createdAt?: string })[]): FileEntry[] {
-  if (!Array.isArray(response) || response.some(file => !file || typeof file.id !== 'string' || !file.id)) {
-    throw new Error('文件列表响应无效')
-  }
-  return response.map(file => ({
-    ...file,
-    name: typeof file.name === 'string' ? file.name : '',
-    tags: Array.isArray(file.tags) ? Array.from(new Set(file.tags.filter(tag => typeof tag === 'string' && tag.trim()))) : [],
-  }))
-}
 
 function FileThumbnail({ src, name, type }: { src?: string; name: string; type: FileRead['type'] }) {
   const [failed, setFailed] = useState(false)
@@ -80,92 +64,41 @@ function FileCard({ file, selected, onSelect, onPreview }: {
 }
 
 export default function FileManager() {
-  const [result, setResult] = useState<FilePage | null>(null)
-  const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
-  const [allTags, setAllTags] = useState<string[]>([])
-  const [preview, setPreview] = useState<FileEntry | null>(null)
-  const [previewFailed, setPreviewFailed] = useState(false)
-  const [loadStatus, setLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
-  const [revision, setRevision] = useState(0)
   const [search, setSearch] = useState('')
   const [tagFilter, setTagFilter] = useState<string>()
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-
+  const [preview, setPreview] = useState<FileEntry | null>(null)
+  const [previewFailed, setPreviewFailed] = useState(false)
+  const [focusedId, setFocusedId] = useState<string>()
+  const [hintUsed, setHintUsed] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const sentinel = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLElement | null>(null)
+  const previewScroll = useRef(0)
+  const data = useManagedFiles(query, tagFilter, () => {
+    setSelectedIds([]); setBatchMode(false); setFocusedId(undefined); setHintUsed(false)
+    if (root.current) root.current.scrollTop = 0
+  })
+  const { files: visible, tags: allTags, busy, filtered, error, more, load } = data
+  const loadStatus = busy ? 'loading' : error ? 'error' : 'loaded'
+  const viewport = useFileViewport(root, visible.length)
+  useEffect(() => { if (viewport.scrolling) setHintUsed(true) }, [viewport.scrolling])
   useEffect(() => {
-    let active = true
-    let request: { cancel: () => void } | undefined
-    setLoadStatus('loading')
-    const discovered = new Set<string>()
-    const rememberTags = (items: FileEntry[]) => {
-      items.forEach(file => file.tags.forEach(tag => discovered.add(tag)))
-      return items
-    }
-    const keyword = query.toLocaleLowerCase()
-    const matches = (file: FileEntry) => (
-      (!keyword || file.name.toLocaleLowerCase().includes(keyword) || file.tags.some(tag => tag.toLocaleLowerCase().includes(keyword))) &&
-      (!tagFilter || file.tags.includes(tagFilter))
-    )
-    const slicePage = (items: FileEntry[]) => ({
-      items: items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-      total: items.length,
-    })
-    const readPage = async (requestedPage: number) => {
-      const reading = StudioFilesService.listFilesApiApiV1StudioFilesGet({
-        page: requestedPage, pageSize: PAGE_SIZE, order: 'updated_at', isDesc: true,
-      })
-      request = reading
-      const { data } = await reading
-      if (!data) throw new Error('文件列表响应缺少数据')
-      return { items: rememberTags(normalizeFiles(data.items)), total: data.pagination?.total }
-    }
-    const load = async () => {
-      if (DEMO_MODE) {
-        const files = rememberTags(normalizeFiles(await api.files.list()))
-        return slicePage(files.filter(matches))
-      }
-      if (keyword || tagFilter) {
-        const filtered = await searchManagementList(readPage, PAGE_SIZE, matches, () => active)
-        return filtered && slicePage(filtered)
-      }
-      return readPage(page)
-    }
-    void load().then(data => {
-      if (!active || !data) return
-      const last = data.total === undefined ? page : Math.max(1, Math.ceil(data.total / PAGE_SIZE))
-      if (page > last) {
-        setPage(last)
-        return
-      }
-      setAllTags(previous => [...new Set([...previous, ...discovered])].sort())
-      setResult({ ...data, page })
-      setLoadStatus('loaded')
-    }).catch(() => {
-      if (active) setLoadStatus('error')
-    })
-    return () => {
-      active = false
-      request?.cancel()
-    }
-  }, [page, query, revision, tagFilter])
-
-  const refresh = () => {
-    if (loadStatus === 'loading') return
-    setLoadStatus('loading')
-    setRevision(value => value + 1)
-  }
-
-  const searchFiles = (value: string) => {
-    setQuery(value.trim())
-    setPage(1)
-  }
-
-  const visible = result?.items ?? []
+    if (filtered || busy || error || !more || !sentinel.current) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void load()
+    }, { root: root.current, rootMargin: `0px 0px ${root.current?.clientHeight || 0}px 0px` })
+    observer.observe(sentinel.current)
+    return () => observer.disconnect()
+  }, [filtered, busy, error, more, load])
   const selected = new Set(selectedIds)
-  const selectedVisible = visible.filter(file => selected.has(file.id)).length
-  const filtered = Boolean(query || tagFilter)
+  const refresh = () => { void data.load(true) }
+  const searchFiles = (value: string) => setQuery(value.trim())
   const previewUrl = preview ? buildFileDownloadUrl(preview.id) : undefined
+  const countLabel = filtered ? data.more ? `已找到 ${visible.length} 项 · 已检查 ${data.scanned} 项` : `共 ${visible.length} 个文件`
+    : `已加载 ${visible.length}${data.total === undefined ? '' : ` / 共 ${data.total}`} 个文件`
 
   const toggleBatchMode = () => {
     if (batchMode) setSelectedIds([])
@@ -173,7 +106,7 @@ export default function FileManager() {
   }
 
   return (
-    <WorkspaceLayout className="management-page">
+    <WorkspaceLayout className="management-page file-manager-page" style={{ position: 'relative' }}>
       <PageToolbar title="文件管理" className="management-toolbar">
         <div className="management-tools">
           <Input.Search
@@ -194,12 +127,12 @@ export default function FileManager() {
             placeholder="按标签筛选"
             allowClear
             value={tagFilter}
-            onChange={value => { setTagFilter(value); setPage(1) }}
+            onChange={value => { setTagFilter(value) }}
             options={allTags.map(tag => ({ label: tag, value: tag }))}
           />
-          {result && <span className="management-count">{result.total === undefined
-            ? `已加载 ${result.items.length} 个文件` : `共 ${result.total} 个文件`}</span>}
-          {result && DEMO_MODE && <Tag>示例数据</Tag>}
+          <span className="management-count">{countLabel}</span>
+          <span className="management-count">已发现标签</span>
+          {DEMO_MODE && <Tag>示例数据</Tag>}
         </div>
         <div className="file-toolbar-actions management-primary">
           <Button type="text" icon={<ReloadOutlined />} loading={loadStatus === 'loading'} onClick={refresh}>刷新</Button>
@@ -210,44 +143,47 @@ export default function FileManager() {
       </PageToolbar>
       {batchMode && (
         <div className="file-batch-actions management-surface">
-          <span role="status">已选 {selected.size} 项{selectedVisible < selected.size && `（${selected.size - selectedVisible} 项不在当前${filtered ? '筛选' : '页'}）`}</span>
+          <span role="status">已选 {selected.size} 项</span>
+          <Button size="small" disabled={busy} onClick={() => setSelectedIds(visible.map(file => file.id))}>选择已加载文件</Button>
           <Button size="small" disabled>批量标记（暂未接入）</Button>
           <Button size="small" disabled>批量导出（暂未接入）</Button>
         </div>
       )}
-      <WorkspaceScrollPanel className="management-panel">
+      <WorkspaceScrollPanel ref={root} className="management-panel">
         {loadStatus === 'error' && (
           <Alert
             showIcon
             type="error"
-            message={result ? '刷新文件失败，仍显示上次结果' : '读取文件失败'}
-            action={<Button size="small" onClick={refresh}>重试</Button>}
+            message={error}
+            action={<Button size="small" onClick={() => void data.load(error.startsWith('刷新'))}>重试</Button>}
           />
         )}
-        {loadStatus === 'loading' && !result && (
+        {loadStatus === 'loading' && visible.length === 0 && (
           <div className="file-card-grid" role="status" aria-label="正在读取文件">
             {[1, 2, 3].map(item => <div className="management-surface" key={item}><Skeleton active paragraph={{ rows: 3 }} /></div>)}
           </div>
         )}
         {visible.length > 0 && (
-          <div className="file-card-grid">
-            {visible.map(file => <FileCard
+          <FileVirtualGrid files={visible} viewport={viewport} root={root} pinnedIds={[focusedId, preview?.id]} onFocus={setFocusedId} className="file-card-grid file-virtual-grid">
+            {file => <FileCard
               key={file.id}
               file={file}
               selected={selected.has(file.id)}
               onPreview={!DEMO_MODE && !file.deleted && ['image', 'video', 'audio'].includes(file.type) ? () => {
+                trigger.current = document.activeElement as HTMLElement
+                previewScroll.current = root.current?.scrollTop || 0
                 setPreviewFailed(false)
                 setPreview(file)
               } : undefined}
               onSelect={batchMode ? checked => setSelectedIds(ids => checked
                 ? [...new Set([...ids, file.id])]
                 : ids.filter(id => id !== file.id)) : undefined}
-            />)}
-          </div>
+            />}
+          </FileVirtualGrid>
         )}
         {loadStatus === 'loaded' && visible.length === 0 && (
           <div className="management-surface">
-            <Empty description={filtered ? '无匹配文件' : '暂无文件'}>
+            <Empty description={filtered ? data.more ? '当前已检查范围内暂无匹配' : '无匹配文件' : '暂无文件'}>
               {filtered && <Button onClick={() => {
                 setSearch('')
                 searchFiles('')
@@ -256,14 +192,15 @@ export default function FileManager() {
             </Empty>
           </div>
         )}
-        {result && result.total !== undefined && <Pagination
-          className="file-pagination" size="small" current={result.page} pageSize={PAGE_SIZE}
-          total={result.total} showSizeChanger={false} hideOnSinglePage
-          disabled={loadStatus === 'loading'} onChange={setPage}
-        />}
+        <div ref={sentinel} className="file-load-status" role="status">
+          {busy ? '正在读取文件…' : !error && data.more ? <Button onClick={() => void data.load()}>{filtered ? '继续检索' : '加载更多'}</Button>
+            : !error && visible.length > 0 ? `已显示全部 ${visible.length} 个文件` : null}
+        </div>
       </WorkspaceScrollPanel>
+      <FileScrollHint root={root} used={hintUsed} onUsed={() => setHintUsed(true)} visible={visible.length > 0 && !preview && !busy && !error && !viewport.scrolling && !viewport.blocked && viewport.remaining > 80} />
       <Modal title={preview ? `${preview.name || '未命名文件'} · 预览` : '文件预览'}
-        open={Boolean(preview)} onCancel={() => setPreview(null)} footer={null} destroyOnClose
+        focusTriggerAfterClose={false} afterClose={() => { if (root.current) root.current.scrollTop = previewScroll.current; trigger.current?.focus({ preventScroll: true }) }}
+        open={Boolean(preview)} onCancel={() => { setFocusedId(preview?.id); setPreview(null) }} footer={null} destroyOnClose
         width="min(720px, calc(100vw - 24px))">
         {previewFailed ? <Alert type="error" showIcon message="无法预览此文件" /> : preview && previewUrl && (
           <div className="file-preview-media">

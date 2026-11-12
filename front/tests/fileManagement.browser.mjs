@@ -19,6 +19,9 @@ const files = [
   { id: 'file-last', name: '后续页文件', type: 'audio', tags: ['后续页标签'] },
 ]
 let browser
+let holdPage = false
+let releasePage
+const heldPage = new Promise(resolve => { releasePage = resolve })
 let listFails = true
 let listResult = files
 const fileRequests = []
@@ -38,6 +41,7 @@ try {
       const query = url.searchParams.get('q')
       fileRequests.push({ method: route.request().method(), page })
       if (listFails) return route.fulfill({ status: 500, json: { message: '测试读取失败' } })
+      if (holdPage) await heldPage
       const matches = listResult.filter(file => !query || file.name.includes(query))
       return route.fulfill({ json: { code: 200, data: {
         items: matches.slice((page - 1) * pageSize, page * pageSize),
@@ -61,12 +65,9 @@ try {
   listFails = false
   await page.getByRole('button', { name: /重\s*试/ }).click()
   await page.getByRole('heading', { name: '雨中对白' }).waitFor()
-  assert.equal(await page.getByText('共 25 个文件').count(), 1)
-  assert.ok(fileRequests.every(request => request.page === 1), '普通浏览仅请求当前页')
-  await page.getByTitle('下一页', { exact: true }).click()
-  await page.getByRole('heading', { name: '后续页文件' }).waitFor()
-  await page.getByTitle('上一页', { exact: true }).click()
-  await page.getByRole('heading', { name: '雨中对白' }).waitFor()
+  assert.equal(await page.locator('.file-card-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), 6, '宽屏六列')
+  await page.getByText(/已加载 .*共 25/).waitFor()
+  await page.getByText('已显示全部 25 个文件').waitFor()
   const imageCard = page.getByRole('article', { name: '雨中对白' })
   const videoCard = page.getByRole('article', { name: '街道成片' })
   await imageCard.getByRole('img', { name: '雨中对白缩略图' }).waitFor()
@@ -80,6 +81,7 @@ try {
   await preview.getByRole('img', { name: '雨中对白' }).waitFor()
   await preview.getByRole('button', { name: /Close|关闭/ }).click()
   await preview.waitFor({ state: 'hidden' })
+  await imageCard.getByRole('button', { name: '预览雨中对白' }).and(page.locator(':focus')).waitFor()
   assert.equal(await page.getByRole('checkbox').count(), 0)
 
   const filter = page.getByRole('combobox', { name: '按标签筛选' })
@@ -114,8 +116,7 @@ try {
   await search.fill('成片')
   await search.press('Enter')
   await imageCard.waitFor({ state: 'hidden' })
-  await page.getByText(/已选 1 项.*1 项不在当前筛选/).waitFor()
-  await page.getByRole('button', { name: '退出批量管理' }).click()
+  await page.getByRole('button', { name: '批量管理', exact: true }).waitFor()
   assert.equal(await page.getByRole('checkbox').count(), 0)
   await batch.click()
   await page.getByRole('status').filter({ hasText: '已选 0 项' }).waitFor()
@@ -156,9 +157,56 @@ try {
     }
   }
 
+  listResult = Array.from({ length: 150 }, (_, i) => ({ id: `sparse${i}`, name: i === 130 ? '目标命中' : `普通${i}`, type: 'image', tags: [] }))
+  const requestsBeforeSearch = fileRequests.length
+  await search.fill('目标')
+  await search.press('Enter')
+  await page.getByText('已找到 0 项 · 已检查 96 项').waitFor()
+  assert.equal(fileRequests.length - requestsBeforeSearch, 4, '每轮最多读取四页')
+  await page.getByText('当前已检查范围内暂无匹配').waitFor()
+  await page.getByRole('button', { name: '继续检索', exact: true }).click()
+  await page.getByRole('heading', { name: '目标命中', exact: true }).waitFor()
+  await page.getByText('共 1 个文件', { exact: true }).waitFor()
+  await search.fill('')
+  await page.getByRole('heading', { name: '普通0', exact: true }).waitFor()
+  holdPage = true
+  const startedOld = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/studio/files')
+  await search.fill('旧筛选')
+  await search.press('Enter')
+  await startedOld
+  const cancelled = page.waitForEvent('requestfailed', { predicate: request => new URL(request.url()).pathname === '/api/v1/studio/files' })
+  holdPage = false
+  await search.fill('目标')
+  await search.press('Enter')
+  await cancelled
+  releasePage()
+  await page.getByText('已找到 0 项 · 已检查 96 项').waitFor()
+  await page.getByRole('button', { name: '继续检索', exact: true }).click()
+  await page.getByRole('heading', { name: '目标命中', exact: true }).waitFor()
+  await search.fill('')
+  await page.getByRole('heading', { name: '普通0', exact: true }).waitFor()
+  await page.getByRole('button', { name: '批量管理', exact: true }).click()
+  await page.getByRole('button', { name: '选择已加载文件', exact: true }).click()
+  const selectedBeforeRefresh = await page.getByRole('status').filter({ hasText: /^已选/ }).textContent()
+  listFails = true
+  await page.getByRole('button', { name: /刷\s*新/ }).click()
+  await page.getByText('刷新文件失败，仍显示上次结果').waitFor()
+  assert.equal(await page.getByRole('status').filter({ hasText: /^已选/ }).textContent(), selectedBeforeRefresh)
+  listFails = false
+  listResult = Array.from({ length: 96 }, (_, i) => ({ id: `refresh${i}`, name: i % 24 < 10 ? `匹配${i}` : `其他${i}`, type: 'image', tags: [] }))
+  await search.fill('匹配')
+  await search.press('Enter')
+  await page.getByText('已找到 30 项 · 已检查 72 项').waitFor()
+  await page.getByRole('button', { name: /刷\s*新/ }).click()
+  await page.getByText('正在读取文件…', { exact: true }).waitFor({ state: 'hidden' })
+  await page.getByText('已找到 30 项 · 已检查 72 项').waitFor()
+  await page.getByRole('button', { name: '批量管理', exact: true }).waitFor()
   listResult = []
+  await search.fill('')
+  await page.getByText('暂无文件', { exact: true }).waitFor()
   await page.getByRole('button', { name: /刷\s*新/ }).click()
   await page.getByText('暂无文件', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: '向下浏览文件', exact: true }).count(), 0, '空列表不显示箭头')
   assert.ok(fileRequests.length > 0 && fileRequests.every(request => request.method === 'GET'))
   console.log('文件管理：读取重试、筛选、独立批量选择、缺图、主题及视口通过。')
 } finally {
