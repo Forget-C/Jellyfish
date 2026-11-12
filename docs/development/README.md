@@ -9,6 +9,7 @@
 - [首页与项目列表前端规范](standards/home-project-ui.md)
 - [项目内部页前端规范](standards/project-internal-ui.md)
 - [管理页面前端规范](standards/management-ui.md)
+- [媒体文件展示规范](standards/media-files-ui.md)
 - [实验室前端规范](standards/experiment-lab-ui.md)
 - [工作台前端设计标准](standards/workbench-design.md)
 - [提交规范](standards/commit-convention.md)

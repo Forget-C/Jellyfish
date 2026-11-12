@@ -19,6 +19,8 @@
 
 管理区共用导航、工具栏、内容分栏与数据状态见[管理页面前端规范](management-ui.md)。各类对象的表格、卡片和阅读布局依该规范选择。
 
+项目文件与管理文件页的六列网格、内容区滚动、分页追加、渐进检索和媒体生命周期统一遵循[媒体文件展示规范](media-files-ui.md)。该规范不适用于业务资产档案。
+
 实验室的会话导航、输入配置、结果展示及失败恢复见[实验室前端规范](experiment-lab-ui.md)。
 
 项目工作台等带固定工具栏的页面必须使用 `PageToolbar`、`WorkspaceLayout` 和 `WorkspaceScrollPanel`，组件职责见[前端基础布局](../architecture/frontend-layout.md#路由内容与滚动)。tab 不得依赖父级的 `overflow: hidden` 来裁切自然高度内容。工作台的默认滚动面板不得使用 `overflow: auto`；需要横向浏览的表格、卡片带或代码块必须在自己的局部容器上显式使用 `overflow-x: auto`。
