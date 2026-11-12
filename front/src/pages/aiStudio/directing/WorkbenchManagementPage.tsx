@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
-import { ArrowLeftOutlined, EditOutlined, MenuOutlined } from '@ant-design/icons'
-import { Alert, Button, Drawer, Empty, Grid, Input, Spin } from 'antd'
+import { ArrowLeftOutlined, FolderOpenOutlined, ClockCircleOutlined, ExclamationCircleOutlined, MinusCircleOutlined, MenuOutlined } from '@ant-design/icons'
+import { Alert, Button, Drawer, Empty, Grid, Input, Select, Spin, Tooltip } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
@@ -12,16 +12,16 @@ import {
 } from './chapterNavigation'
 import { directingError } from './common'
 import { SceneObjectPreparation } from './SceneObjectPreparation'
-import { SequenceDetails } from './SequenceDetails'
 import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
 import { WorkbenchDivisionStep } from './WorkbenchDivisionStep'
 import { useWorkspaceDraftStatus, WorkspaceDrafts } from './WorkspaceDrafts'
 import './workbench-management.css'
 
 type ProductionStep = Exclude<WorkbenchManagementStep, 'division'>
-const steps: { id: ProductionStep; label: string }[] = [
-  { id: 'objects', label: '对象与参考' },
-  { id: 'storyboard', label: '分镜与画布' },
+const steps: { id: WorkbenchManagementStep; label: string }[] = [
+  { id: 'division', label: '场次划分' },
+  { id: 'objects', label: '对象参考' },
+  { id: 'storyboard', label: '分镜画布' },
 ]
 
 function sceneNotices(scene: WorkbenchSceneSummary): string[] {
@@ -78,17 +78,19 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [overview, setOverview] = useState<ChapterWorkbenchManagement>()
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
-  const [divisionRevision, setDivisionRevision] = useState(0)
+  const [divisionRevision] = useState(0)
   const [divisionView, setDivisionView] = useState('source')
-  const [editingMetadata, setEditingMetadata] = useState(false)
   const sidebarKey = managementBrowseKey(projectId, chapterId, '', 'sidebar')
   const [historyOpen, setHistoryOpen] = useState<boolean | undefined>(() => readManagementBrowse(sidebarKey).history)
   const [sceneQuery, setSceneQuery] = useState(() => readManagementBrowse(sidebarKey).query ?? '')
   const sceneScroll = useRef(readManagementBrowse(sidebarKey).top ?? 0)
   useEffect(() => () => { saveManagementBrowse(sidebarKey, { query: sceneQuery, history: historyOpen, top: sceneScroll.current }) }, [sidebarKey, sceneQuery, historyOpen])
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  useEffect(() => { setNavigationOpen(false) }, [params])
   const [storyboardActions, setStoryboardActions] = useState<HTMLDivElement | null>(null)
   const [objectActions, setObjectActions] = useState<HTMLDivElement | null>(null)
+  const navigationToggle = useRef<HTMLButtonElement>(null)
   const sceneToggle = useRef<HTMLButtonElement>(null)
   const divisionButton = useRef<HTMLButtonElement>(null)
   const regionHeading = useRef<HTMLHeadingElement>(null)
@@ -99,6 +101,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [retiredSelection, setRetiredSelection] = useState<string>()
   const drafts = useWorkspaceDraftStatus()
   const desktop = Grid.useBreakpoint().lg
+  const compact = !Grid.useBreakpoint().md
   const explicitId = params.get('sequence')
   const explicitStep = managementStep(params.get('step'))
   const remembered = readChapterBrowse(projectId, chapterId)
@@ -227,7 +230,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     query={sceneQuery} setQuery={setSceneQuery} scrollTop={sceneScroll}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
       if (id === selected?.id && id === explicitId) closeDrawer()
-      else select(id, step)
+      else { select(id, step); closeDrawer() }
     }} />
   const retiredNotice = retired && (division || !explicitId) && <Alert type="info" showIcon
     message={`原场次“${retired.title}”已转入历史`} action={<div className="management-steps">
@@ -239,17 +242,32 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     setRevision(value => value + 1)
   }}>重试</Button>} />
   const returnToChapters = () => drafts.transition(() => navigate(`/projects/${projectId}?tab=chapters`, { state: { chapterReturn: chapterId } }))
-  const openDivision = <Button ref={divisionButton} onClick={() => {
-    if (selected && !historical) reviewSource()
-    else select(undefined, 'division')
-  }}>场次划分</Button>
 
   const sourceNotice = selected?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，仍使用本场已确认摘录。"
     action={!historical && <Button size="small" onClick={() => reviewSource()}>前往核对场次范围</Button>} />
   const preparationNotice = selected?.preparation_stale && !historical && step !== 'objects' && <Alert type="warning" showIcon
     message="对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。"
     action={<Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />
+  const activeStep = division ? 'division' : step
+  const navigation = <nav className="management-flow-links" aria-label="制作步骤">
+    <strong title={overview?.title}>{overview?.title ?? '工作台管理'}</strong>
+    {steps.map(({ id, label }, index) => {
+      const tasks = current.flatMap(scene => id === 'objects' ? [scene.object_task] : id === 'storyboard' ? [scene.storyboard_task] : [])
+      const failed = tasks.some(task => task?.status === 'failed')
+      const running = tasks.some(task => task?.status === 'queued' || task?.status === 'running')
+      const changed = current.some(scene => id === 'objects' ? scene.preparation_stale : scene.source_changed)
+      const content = id === 'division' ? !!current.length : current.some(scene => id === 'objects' ? scene.has_object_preparation : scene.canvas_count > 0)
+      const status = !overview ? '正在读取' : failed ? '有任务失败' : running ? '有任务处理中' : changed ? '有依据需要核对' : content ? '已有内容' : '尚无内容'
+      const Icon = failed || changed ? ExclamationCircleOutlined : running ? ClockCircleOutlined : content ? FolderOpenOutlined : MinusCircleOutlined
+      return <Button key={id} type="text" aria-current={activeStep === id ? 'step' : undefined}
+        onClick={() => { if (activeStep !== id) drafts.transition(() => select(selected?.id, id)) }}>
+        <span>{index + 1}</span><span>{label}</span><Tooltip title={`本章：${status}`}><span tabIndex={0} aria-label={`本章${label}：${status}`}><Icon /></span></Tooltip>
+      </Button>
+    })}
+  </nav>
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
+    {desktop ? <aside className="management-flow-sidebar">{navigation}</aside> : <div className="management-flow-trigger"><Button ref={navigationToggle} aria-expanded={navigationOpen} aria-label="制作步骤" icon={<MenuOutlined />} onClick={() => setNavigationOpen(true)}>制作步骤</Button><Drawer afterOpenChange={open => { if (!open) navigationToggle.current?.focus({ preventScroll: true }) }} aria-label="制作步骤" title="制作步骤" placement="left" open={navigationOpen} onClose={() => setNavigationOpen(false)}>{navigation}</Drawer></div>}
+    <div className="management-flow-content">
     {state?.chapterCompositionRetired === true && <Alert type="info" showIcon
       message="章节组合已停用，可在工作台管理中继续准备场次。" />}
     {!overview && loadError}
@@ -288,36 +306,20 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
         }} />
     </WorkspaceScrollPanel></>}
     {overview && !division && <div className="management-body">
-      {desktop && <aside className="management-sidebar" aria-label="本章场次">
-        <div className="management-sidebar-heading">
-          <h2>本章场次</h2>
-          {openDivision}
-        </div>
-        {list}
-      </aside>}
       <div className="management-content">
         <PageToolbar className="management-toolbar">
           <div className="management-identity">
             <Button type="text" icon={<ArrowLeftOutlined />} title="返回章节列表" aria-label="返回章节列表" onClick={returnToChapters} />
-            {selected && <div className="management-scene-heading">
-              <h2 title={selected.title} id="management-current-scene" ref={regionHeading} tabIndex={-1}>{selected.title}</h2>
-              {historical && <span className="management-scene-meta">历史场次</span>}
-              {!historical && <Button type="text" icon={<EditOutlined />} aria-label="编辑场次名称与顺序"
-                onClick={() => drafts.transition(() => setEditingMetadata(true))} />}
-            </div>}
-            {!desktop && <div className="management-mobile-navigation">
-              <Button ref={sceneToggle} icon={<MenuOutlined />} aria-expanded={drawerOpen}
-                onClick={() => setDrawerOpen(true)}>切换场次</Button>
-              {openDivision}
-            </div>}
+            <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{step === 'objects' ? '对象参考' : '分镜画布'}</h2>
           </div>
-          {selected && <nav className="management-steps" aria-label="工作台步骤">
-            {steps.map(({ id, label }) => <Button key={id} aria-current={step === id ? 'step' : undefined}
-              type="text" onClick={() => { if (step !== id) select(selected.id, id) }}>{label}</Button>)}
-          </nav>}
           {selected && step === 'objects' && <div className="management-object-actions" ref={setObjectActions} />}
           {selected && step === 'storyboard' && <div className="management-storyboard-actions" ref={setStoryboardActions} />}
         </PageToolbar>
+        <div className="management-scene-picker">
+          {compact ? <Select aria-label="选择场次" value={selected?.id} showSearch optionFilterProp="label" options={[...current, ...(historical && selected ? [selected] : [])].map(scene => ({ value: scene.id, label: `${scene.position + 1}. ${scene.title}` }))} onChange={id => drafts.transition(() => select(id, step))} /> : <div className="management-scene-tabs" role="group" aria-label="选择场次">{current.map(scene => <Button key={scene.id} type="text" aria-pressed={selected?.id === scene.id} title={scene.title} onClick={() => { if (selected?.id !== scene.id) drafts.transition(() => select(scene.id, step)) }}>{scene.position + 1}. {scene.title}</Button>)}</div>}
+          <Button ref={sceneToggle} type="text" onClick={() => setDrawerOpen(true)}>全部场次⌄</Button>
+          {historical && <span>历史场次：{selected?.title}</span>}
+        </div>
         <WorkspaceScrollPanel ref={readingPanel} className="management-panel">
           {loadError}
           {retiredNotice}
@@ -331,7 +333,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
             </div>
             {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
               editable={!historical && !!selected.source_excerpt.trim()}
-              management={{ host: objectActions, onContinue: () => select(selected.id, 'storyboard'),
+              management={{ host: objectActions,
                 onChange: () => setRevision(value => value + 1), candidateTaskId: params.get('objectTask'),
                 clearCandidateTask: () => setParams(previous => {
                   const next = new URLSearchParams(previous)
@@ -352,21 +354,11 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           </section>}
         </WorkspaceScrollPanel>
       </div>
-      {!desktop && <Drawer afterOpenChange={open => { if (!open) sceneToggle.current?.focus({ preventScroll: true }) }} title="本章场次" placement="left" width="min(320px, 100vw)" open={drawerOpen}
+      {<Drawer afterOpenChange={open => { if (!open) sceneToggle.current?.focus({ preventScroll: true }) }} aria-label="本章场次" title="本章场次" placement="left" width="min(320px, 100vw)" open={drawerOpen}
         styles={{ body: { display: 'flex', flexDirection: 'column' } }}
         onClose={closeDrawer}>{list}</Drawer>}
-      {editingMetadata && selected && !historical && <SequenceDetails key={selected.id}
-        {...{ projectId, chapterId }} sequenceId={selected.id} onClose={() => setEditingMetadata(false)}
-        onSaved={() => {
-          setEditingMetadata(false)
-          setDivisionRevision(value => value + 1)
-          setRevision(value => value + 1)
-        }}
-        onRange={() => {
-          setEditingMetadata(false)
-          reviewSource()
-        }} />}
     </div>}
+    </div>
   </WorkspaceLayout>
 }
 

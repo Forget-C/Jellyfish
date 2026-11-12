@@ -73,6 +73,7 @@ try {
   const card = name => list.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) })
   const ordering = () => list.getByRole('heading').allTextContents()
   await page.goto(location)
+  await page.getByRole("img", { name: "画布默认封面" }).first().waitFor({ timeout: 5000 })
   await card('新分镜方案').getByText(/正在提取分镜|分镜排队中/).waitFor()
   assert.deepEqual(await ordering(), ['新分镜方案', '旧空白方案'])
   const search = page.getByRole('textbox', { name: '搜索画布' })
@@ -126,7 +127,7 @@ try {
 
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: '切换场次' }).waitFor()
+  await page.getByRole('button', { name: '全部场次⌄' }).waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: join(output, 'mobile.png') })
   await card('新分镜方案').getByRole('button', { name: '新分镜方案', exact: true }).press('Enter')

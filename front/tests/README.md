@@ -172,7 +172,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 
 ### 章节场次入口与连续划场
 
-`node --test front/tests/chapterNavigation.test.mjs` 验证场次建议入口及新旧路由。运行 `pnpm --dir front run test:browser workbench-management`、`workbench-division` 和 `scene-canvas-legacy-routes` 验证管理步骤、划分与历史、窄屏场次抽屉、旧入口重定向与仍受支持的旧宿主。`scene-storyboard-media` 从章节列表贯通划分、对象参考、后台分镜、画布编辑保存和明确单卡执行。
+`node --test front/tests/chapterNavigation.test.mjs` 验证场次建议入口及新旧路由。运行 `pnpm --dir front run test:browser workbench-management`、`workbench-division` 和 `scene-canvas-legacy-routes` 验证管理步骤、划分与历史、窄屏步骤导航与场次选择、旧入口重定向与仍受支持的旧宿主。`scene-storyboard-media` 从章节列表贯通划分、对象参考、后台分镜、画布编辑保存和明确单卡执行。
 
 ### 工作台统一版本
 
@@ -361,4 +361,4 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 
 管理文件页由file-management回归覆盖六列、渐进检索96条上限／继续检索、筛选重置和刷新保护；managed-files-performance检查240／1200／5000条下的挂载数量及JS堆和帧间隔。与项目文件共享网格和箭头变更时同时运行project-files。JS堆不代表浏览器全部图片或进程内存，元信息仍随加载累积。
 
-工作台管理布局与入口调整由 `workbench-management`、`workbench-canvas-cards`、`scene-object-preparation` 回归：固定划分工具栏、画布名称进入与候选采用区分、列表搜索返回恢复、当前正文复用资产详情及未保存保护。`workbench-division`、`workbench-canvas-creation`、`workbench-storyboard-retry` 补查原有草稿、提交和恢复行为。浏览器使用隔离后端及受控供应商，不代表真实供应商生成质量已验收。
+工作台管理布局与入口调整由 `workbench-management`、`workbench-canvas-cards`、`scene-object-preparation` 回归：216px步骤导航、正文场次切换与历史分组、组合筛选及保存后焦点、固定划分工具栏、默认封面与真实创建时间、画布名称进入与候选采用区分、列表搜索返回恢复、当前正文复用资产详情及未保存保护。`workbench-division`、`workbench-canvas-creation`、`workbench-storyboard-retry` 补查原有草稿、提交和恢复行为。浏览器使用隔离后端及受控供应商，不代表真实供应商生成质量已验收。

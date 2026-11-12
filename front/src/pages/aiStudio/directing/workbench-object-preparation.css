@@ -75,3 +75,9 @@
 .management-object-card h4 small { font-size: 12px; font-weight: 400; color: var(--app-muted); }
 .management-object-card .management-reference-frame { background: #eaf0f8; }
 .management-object-card .management-reference-frame:empty::after { content: '未选参考图'; display: grid; place-items: center; height: 100%; color: var(--app-muted); font-size: 12px; }
+.management-accessible-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.management-object-card .management-reference-frame { aspect-ratio: auto; height: 160px; grid-row: 1; }
+.management-association-control { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.management-association-control > .ant-select { flex: 1; min-width: 0; }
+.management-object-filters .ant-segmented { font-size: 13px; }
+@media(max-width:767px) { .management-object-filters { gap: 8px; } .management-object-filters .ant-segmented { max-width:100%; overflow-x:auto; } }

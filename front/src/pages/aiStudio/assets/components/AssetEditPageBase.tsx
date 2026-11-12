@@ -107,6 +107,7 @@ export type AssetEditPageBaseProps<TAsset extends BaseAsset, TImage extends Base
   assetDisplayName: string
   backTo: string
   embedded?: boolean
+  backLabel?: string
   localDetail?: boolean
   renderToolbar?: (title: ReactNode, actions: ReactNode) => ReactNode
   relationType: string
@@ -176,6 +177,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   backTo,
   embedded = false,
   localDetail = false,
+  backLabel,
   renderToolbar,
   relationType,
   getAsset,
@@ -946,7 +948,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           </Button>
         </div>
   )
-  const toolbarTitle = <><Button type="text" aria-label={`返回${assetDisplayName}资产`} icon={<ArrowLeftOutlined />} onClick={returnFromAsset} /><span className="asset-detail-title" title={asset?.name}>{asset?.name ?? `${assetDisplayName}档案`}</span><Tag>{assetDisplayName}</Tag></>
+  const toolbarTitle = <><Button type="text" aria-label={backLabel ?? `返回${assetDisplayName}资产`} icon={<ArrowLeftOutlined />} onClick={returnFromAsset} /><span className="asset-detail-title" title={asset?.name}>{asset?.name ?? `${assetDisplayName}档案`}</span><Tag>{assetDisplayName}</Tag></>
   const DossierRoot = libraryDetail ? WorkspaceLayout : 'div'
   const DossierBody = libraryDetail ? WorkspaceScrollPanel : 'div'
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Badge, Button as MainButton, Card, Checkbox, Dropdown, Empty, Image, Input, Modal, Select, Space, Spin, Typography } from 'antd'
+import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Empty, Grid, Image, Input, Modal, Select, Space, Spin, Typography } from 'antd'
 import { CheckOutlined, MoreOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, StudioFilesService } from '../../../services/generated'
 import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
@@ -20,7 +20,7 @@ type Scope = { projectId: string; chapterId: string; sequenceId: string }
 const kinds = { character: '角色', scene: '场所', prop: '道具' } as const
 type ObjectChoice = { objectId: string; assetId?: string; imageFileId?: string }
 type ManagementActions = {
-  host: HTMLDivElement | null; onContinue: () => void; onChange: () => void;
+  host: HTMLDivElement | null; onChange: () => void;
   candidateTaskId: string | null; clearCandidateTask: () => void;
 }
 const referenceLabels = { unassociated: '尚未关联资产', missing: '未选参考图', ready: '已选参考图', unavailable: '关联或图片不可用' }
@@ -51,6 +51,7 @@ function ReferenceImage({ name, fileId }: { name: string; fileId?: string }) {
 export function SceneObjectPreparation({ projectId, chapterId, sequenceId, editable, management }: Scope & {
   editable: boolean; management?: ManagementActions;
 }) {
+  const compact = !Grid.useBreakpoint().md
   const [data, setData] = useState<SceneObjectsRead>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -65,8 +66,13 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const reviewTaskId = management?.candidateTaskId ?? localReview
   const browseKey = managementBrowseKey(projectId, chapterId, sequenceId, 'objects')
   const [kindFilter, setKindFilter] = useState<keyof typeof kinds | 'all'>(() => management ? readManagementBrowse(browseKey).kind ?? 'all' : 'all')
-  const [unpreparedOnly, setUnpreparedOnly] = useState(() => management ? readManagementBrowse(browseKey).unprepared ?? false : false)
-  useEffect(() => { if (management) saveManagementBrowse(browseKey, { kind: kindFilter, unprepared: unpreparedOnly }) }, [browseKey, kindFilter, unpreparedOnly, management])
+
+  const [association, setAssociation] = useState(() => readManagementBrowse(browseKey).association ?? 'all')
+  const [reference, setReference] = useState(() => readManagementBrowse(browseKey).reference ?? 'all')
+  const filterControl = useRef<HTMLDivElement>(null)
+  const filterFocus = useRef<{ id: string; index: number }>()
+
+  useEffect(() => { if (management) saveManagementBrowse(browseKey, { kind: kindFilter }) }, [browseKey, kindFilter, management])
   const lastRead = useRef<SceneObjectsRead>()
   const summaryChanged = useRef(management?.onChange)
   summaryChanged.current = management?.onChange
@@ -143,6 +149,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
 
   const choose = async (objectId: string, assetId?: string, imageFileId?: string) => {
     if (!data || !editable) return
+    filterFocus.current = { id: objectId, index: filtered.findIndex(object => object.id === objectId) }
     const response = await StudioDirectingService.directingSceneObjectChoose({ ...scope, objectId,
       requestBody: { expected_revision: data.revision, asset_id: assetId ?? null, image_file_id: imageFileId ?? null },
     })
@@ -212,10 +219,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }
 
   const listHeading = useRef<HTMLHeadingElement>(null)
-  const assetOrigin = useRef<{ panel: HTMLElement | null; top: number; objectId: string }>({ panel: null, top: 0, objectId: '' })
+  const assetOrigin = useRef<{ panel: HTMLElement | null; top: number; objectId: string; trigger?: HTMLElement }>({ panel: null, top: 0, objectId: '' })
   const openAsset = (asset: AssetSummary, objectId: string) => {
     const panel = document.activeElement?.closest<HTMLElement>('.management-panel') ?? document.querySelector<HTMLElement>('.management-workspace .management-panel')
-    assetOrigin.current = { panel, top: panel?.scrollTop ?? 0, objectId }
+    assetOrigin.current = { panel, top: panel?.scrollTop ?? 0, objectId, trigger: document.activeElement instanceof HTMLElement ? document.activeElement : undefined }
     setAssetEditor(asset)
     if (management && panel) panel.scrollTop = 0
   }
@@ -223,11 +230,11 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     await read()
     setAssetEditor(undefined)
     requestAnimationFrame(() => {
-      const { panel, top, objectId } = assetOrigin.current
+      const { panel, top, objectId, trigger: originTrigger } = assetOrigin.current
       if (!panel?.isConnected) return
       panel.scrollTop = top
       const trigger = panel.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(objectId)}"] button[aria-label="对象更多操作"]`)
-      ;(trigger ?? listHeading.current)?.focus({ preventScroll: true })
+      ;(originTrigger?.isConnected && originTrigger.closest('[data-management-object]') ? originTrigger : trigger ?? filterControl.current?.querySelector<HTMLElement>('button, input, [tabindex="0"]') ?? document.getElementById('management-current-scene'))?.focus({ preventScroll: true })
     })
   }, [read])
   const action = data?.task?.status === 'failed' || data?.task?.status === 'cancelled' ? '重试提取对象'
@@ -238,9 +245,21 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const extractionLabel = pendingRequest ? '核实提取请求' : action
   const candidateTask = !pendingRequest ? data?.candidate_task_id : undefined
   const retryRead = () => void read()
+  const associated = (object: SceneObjectRead) => !!object.asset_id && !!data?.assets.some(asset => asset.id === object.asset_id && asset.kind === object.kind)
   const filtered = (data?.objects ?? []).filter(object => !management ||
-    (kindFilter === 'all' || object.kind === kindFilter) && (!unpreparedOnly || object.reference_state !== 'ready' ||
-      !!object.asset_id && !data?.assets.some(asset => asset.id === object.asset_id && asset.kind === object.kind)))
+    (association === 'all' || association === 'associated' && associated(object) || association === 'unassociated' && !object.asset_id || association === 'unavailable' && !!object.asset_id && !associated(object)) &&
+    (reference === 'all' || reference === 'missing' && !object.image_file_id || reference === 'ready' && object.reference_state === 'ready' || reference === 'unavailable' && object.reference_state === 'unavailable') &&
+    (kindFilter === 'all' || object.kind === kindFilter))
+  useEffect(() => {
+    saveManagementBrowse(browseKey, { association, reference })
+    const previous = filterFocus.current
+    if (!saving && previous && !filtered.some(object => object.id === previous.id)) {
+      const rows = document.querySelectorAll<HTMLElement>('.management-object-preparation [data-management-object]')
+      const target = rows[previous.index]?.querySelector<HTMLElement>('.management-object-asset input')
+      ;(target ?? filterControl.current?.querySelector<HTMLElement>('button, input, [tabindex="0"]'))?.focus({ preventScroll: true })
+    }
+    if (!saving) filterFocus.current = undefined
+  }, [association, reference, browseKey, filtered, saving])
   const choiceErrorOnCard = choiceError && filtered.some(object => object.id === choiceError.objectId)
   const pendingChoice = choiceError?.retry
   const retryChoice = pendingChoice && <MainButton size="small" disabled={disabled} onClick={() => void save(
@@ -248,13 +267,12 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const AssetModal = management ? Modal : WorkbenchModal
   return <><section hidden={!!management && !!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>
-      <h3 ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
+      <h3 className="management-accessible-heading" ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
       {management.host && !assetEditor && createPortal(<>
         <MainButton type="primary" loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
           onClick={() => candidateTask ? setLocalReview(candidateTask) : void extract()}>
           {candidateTask ? '核对对象差异' : extractionLabel}
         </MainButton>
-        <MainButton type="text" onClick={management.onContinue}>{editable ? '继续到分镜与画布' : '查看本场画布'}</MainButton>
         {candidateTask && <Dropdown trigger={['click']} menu={{ items: [
           { key: 'extract', label: action, disabled: extractionDisabled, onClick: () => void extract() },
         ] }}><MainButton type="text" icon={<MoreOutlined />} aria-label="对象步骤更多操作" /></Dropdown>}
@@ -263,7 +281,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       <h2 id="scene-object-preparation-title">场次对象与参考</h2>
       <Button variant="primary" loading={submitting} disabled={extractionDisabled} onClick={() => void extract()}>{extractionLabel}</Button>
     </div>}
-    <p>参考图可留空，各画布采用后独立管理。</p>
+    {!management && <p>参考图可留空，各画布采用后独立管理。</p>}
     {loading && <Spin aria-label="正在读取对象准备" />}
     {(error || choiceError && !choiceErrorOnCard) && <Alert type="error" showIcon message={error || choiceError?.message} action={management
       ? <Space wrap>
@@ -285,19 +303,21 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {data && !data.objects.length && !error && (management
       ? <p>{data.revision ? '本场未提取到对象，可以继续分镜。' : '尚未提取对象，可提取后准备参考，也可直接继续。'}</p>
       : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.revision ? '本场未提取到对象' : '尚未提取对象'} />)}
-    {management && !!data?.objects.length && <div className="management-object-filters">
-      <Select aria-label="对象类型" value={kindFilter} onChange={setKindFilter} options={[
-        { value: 'all', label: '全部类型' }, ...Object.entries(kinds).map(([value, label]) => ({ value, label })),
-      ]} />
-      <Checkbox checked={unpreparedOnly} onChange={event => setUnpreparedOnly(event.target.checked)}>仅看未准备参考</Checkbox>
-      {!filtered.length && <span>没有匹配的对象</span>}
+    {management && !!data?.objects.length && <div ref={filterControl} className="management-object-filters">
+      {compact ? <Select aria-label="对象类型" value={kindFilter} onChange={setKindFilter} options={[{value:'all',label:'全部类型'},...Object.entries(kinds).map(([value,label])=>({value,label}))]} /> : <Segmented aria-label="对象类型" value={kindFilter} onChange={value => setKindFilter(value as typeof kindFilter)} options={[{ value: 'all', label: '全部' }, ...Object.entries(kinds).map(([value, label]) => ({ value, label }))]} />}
+      <Select aria-label="关联状态" value={association} onChange={setAssociation} options={[{value:'all',label:'全部关联状态'},{value:'unassociated',label:'未关联'},{value:'associated',label:'已关联'},{value:'unavailable',label:'关联不可用'}]} />
+      <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => { setReference(key) }, items: [{key:'all',label:'全部参考状态'},{key:'missing',label:'未选参考图'},{key:'ready',label:'已选参考图'},{key:'unavailable',label:'参考图不可用'}] }}><MainButton type="text" aria-label="参考筛选">参考筛选{reference !== 'all' ? ' · 已筛选' : ''}</MainButton></Dropdown>
+      <span>{filtered.length} 个对象</span>
+      {!filtered.length && <MainButton type="text" onClick={() => { setKindFilter('all'); setAssociation('all'); setReference('all') }}>清除筛选</MainButton>}
+      <span title="参考图可留空，各画布采用后独立管理。" tabIndex={0}>ⓘ</span>
     </div>}
-    {(Object.keys(kinds) as Array<keyof typeof kinds>).map(kind => {
-      const rows = filtered.filter(object => object.kind === kind)
+    {(management ? ['all' as const] : Object.keys(kinds) as Array<keyof typeof kinds>).map(group => {
+      const rows = group === 'all' ? filtered : filtered.filter(object => object.kind === group)
       if (!rows.length) return null
-      return <section key={kind} className={management ? 'management-object-kind' : 'scene-object-kind'} aria-label={kinds[kind]}>
-        <h3>{kinds[kind]}</h3>
+      return <section key={group} className={management ? 'management-object-kind' : 'scene-object-kind'} aria-label={group === 'all' ? '场次对象' : kinds[group]}>
+        {group !== 'all' && <h3>{kinds[group]}</h3>}
         <ul className={management ? 'management-card-grid' : 'scene-object-list'}>{rows.map(object => {
+          const kind = object.kind
           const asset = data?.assets.find(item => item.kind === kind && item.id === object.asset_id)
           const options = (data?.assets ?? []).filter(item => item.kind === kind).map(item => ({
             value: item.id, label: item.name + (item.id === object.suggested_asset_id ? '（提取建议）' : ''),
@@ -305,7 +325,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           if (object.asset_id && !asset) options.push({ value: object.asset_id, label: '关联资产不可用' })
           const images = asset?.image_file_ids ?? []
           const assetSelect = <Select aria-label="关联资产" allowClear placeholder="关联已有资产" value={object.asset_id ?? undefined}
-            disabled={disabled} options={options} onChange={id => void save(object.id, id)} />
+            disabled={disabled} options={options} onChange={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; void save(object.id, id) }} />
           const referenceFileId = object.reference_state === 'ready' ? object.image_file_id ?? undefined : undefined
           const openCreate = () => {
             setCreateError(''); setDraft({ object, name: object.name, description: '', requestId: crypto.randomUUID(), attempted: false })
@@ -341,7 +361,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                     <small>出处：{object.excerpt}</small>
                   </details>
                   <div className="management-object-asset">
-                    {assetSelect}
+                    <div className="management-association-control">{assetSelect}{asset && <MainButton type="text" aria-label={`查看${asset.name}资产`} onClick={() => openAsset(asset, object.id)}>↗</MainButton>}</div>
                     {!object.asset_id && <Typography.Text type="secondary">尚未关联资产</Typography.Text>}
                     {assetUnavailable && <Badge status="warning" text="关联资产不可用，请更换或解除关联" />}
                   </div>
@@ -413,7 +433,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   </section>
   {management && assetEditor && <section className="management-inline-asset" aria-label="本场资产详情">
     <AssetEditPageBase key={assetEditor.id} assetId={assetEditor.id} {...assetAdapters[assetEditor.kind]} localDetail
-      backTo="本场资产" onNavigate={closeAsset}
+      backTo="本场资产" backLabel="返回对象参考" onNavigate={closeAsset}
       renderToolbar={(title, actions) => <PageToolbar className="management-asset-toolbar" title={title}>{actions}</PageToolbar>} />
   </section>}
   </>

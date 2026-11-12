@@ -64,7 +64,7 @@ try {
   const start = page.getByRole('button', { name: '生成新分镜画布', exact: true })
   const form = page.getByRole('region', { name: '生成新分镜画布配置' })
   const name = form.getByRole('textbox', { name: '画布名称' })
-  const openDivision = page.getByRole('button', { name: '场次划分', exact: true })
+  const openDivision = page.getByRole('navigation', { name: '制作步骤' }).getByRole('button', { name: /场次划分/ })
   const returnToProduction = page.getByRole('button', { name: '返回场次制作', exact: true })
   const list = page.getByRole('list', { name: '本场画布' })
 
@@ -97,7 +97,7 @@ try {
   await form.getByText('后门的阿同等待。', { exact: false }).waitFor()
   await page.screenshot({ path: join(output, 'configuration.png') })
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: '切换场次' }).waitFor()
+  await page.getByRole('button', { name: '全部场次⌄' }).waitFor()
   await page.screenshot({ path: join(output, 'configuration-mobile.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 1366, height: 900 })
   let original

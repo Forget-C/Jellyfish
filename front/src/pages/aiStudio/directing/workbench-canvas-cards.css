@@ -86,3 +86,7 @@
 .management-canvas-markers .ant-tag { margin: 0; background: transparent; border: 0; color: inherit; }
 @media (max-width: 575px) { .management-workspace .management-card-grid { grid-template-columns: minmax(0, 1fr); } }
 .management-workspace .management-card-grid > li > .management-canvas-surface { height: 100%; }
+.management-workspace .management-canvas-cover { height:160px; margin:-16px -16px 12px; border-radius:12px 12px 0 0; display:grid; place-items:center; color:#5679a6; font-size:32px; background:linear-gradient(125deg,#e4edfb,#edf3fa); position:relative; overflow:hidden; }
+.management-canvas-cover::before { content:''; position:absolute; width:120px; height:72px; border-radius:12px; background:#fff5; transform:rotate(-9deg); }
+.management-canvas-cover .anticon { z-index:1; }
+.management-canvas-metadata { display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; color:var(--app-muted); font-size:12px; }

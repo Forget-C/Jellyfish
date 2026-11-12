@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRightOutlined, MoreOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, MoreOutlined, PictureOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Space, Spin, Tag, message } from 'antd'
 import type { InputRef } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -224,6 +224,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
 
         return <li key={canvas.id} data-canvas-id={canvas.id} ref={located ? targetElement : undefined} tabIndex={located ? -1 : undefined}>
           <Card size="small" bordered={false} className={canvas.id === created || located ? 'management-canvas-surface management-canvas-created' : 'management-canvas-surface'}>
+            <div className="management-canvas-cover" role="img" aria-label="画布默认封面"><PictureOutlined aria-hidden /></div>
             <div className="management-canvas-card-heading">
               <h4>{canOpenStoryboardCanvas(canvas) ? <Button type="link" className="management-canvas-name" onClick={() => openCanvas(canvas.id)} title={canvas.name}>{canvas.name}<ArrowRightOutlined aria-hidden /></Button> : <span title={canvas.name}>{canvas.name}</span>}</h4>
               <Dropdown trigger={['click']} open={menuOpen === canvas.id} onOpenChange={open => setMenuOpen(open ? canvas.id : undefined)} menu={{ items: [
@@ -241,22 +242,18 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
               </Dropdown>
             </div>
             <div className="management-canvas-status">
-              {failed && taskStatus}
-              {canvas.source_changed && <Tag color="warning">原文已变化</Tag>}
-              {candidateId && <Tag color={canvas.storyboard_review_required ? 'warning' : 'success'}>
-                {currentTaskIsCandidate && (task?.review_state === 'conflict' || task?.review_state === 'warning')
-                  ? taskLabel(task) : canvas.storyboard_review_required ? '需要核对' : '分镜已就绪'}
-              </Tag>}
-              {task?.review_state === 'warning' && task.task_id === adoptedId && <Tag color="warning">{taskLabel(task)}</Tag>}
-              {!failed && taskStatus}
-              {adoptedId && <Tag color="success" title={`采用任务 ${adoptedId}`}>当前已采用</Tag>}
+              {adoptedId ? <Tag color="success">当前已采用</Tag> : canOpenStoryboardCanvas(canvas) ? <Tag>可打开</Tag> : <Tag>{candidateId ? '待采用' : '尚不可打开'}</Tag>}
+              {failed || activeTask(task) ? taskStatus : candidateId ? <Tag color={canvas.storyboard_review_required ? 'warning' : 'success'}>{currentTaskIsCandidate && (task?.review_state === 'conflict' || task?.review_state === 'warning') ? taskLabel(task) : canvas.storyboard_review_required ? '需要核对' : '分镜已就绪'}</Tag>
+                : canvas.source_changed ? <Tag color="warning">原文已变化</Tag> : task?.review_state === 'warning' ? <Tag color="warning">{taskLabel(task)}</Tag> : taskStatus}
             </div>
+            {canvas.source_changed && (failed || activeTask(task) || candidateId) && <details className="management-canvas-other"><summary>其他提示</summary><span>原文已变化</span></details>}
+            <div className="management-canvas-metadata"><span title="镜头数量暂不可用">— 镜头</span><time dateTime={canvas.created_at}>创建于 {new Date(canvas.created_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</time></div>
             <div className="management-canvas-markers">
               {canvas.id === recentCanvas && <Tag>最近打开</Tag>}
               {located && <Tag color="processing">当前定位</Tag>}
               {canvas.id === created && <Tag color="processing">刚创建</Tag>}
             </div>
-            {task?.status === 'failed' && task.error && <Button type="link" style={{ whiteSpace: 'normal', height: 'auto', textAlign: 'left' }} className="management-canvas-error" onClick={() => setReviewCanvas(canvas.id)}>提取未完成，查看原因与处理建议</Button>}
+
             <div className="management-canvas-actions">
               {(candidateId || task && task.task_id !== adoptedId) && <Button type="link" onClick={() => { setQuickEntry(!canvas.storyboard_review_required); setReviewCanvas(canvas.id) }}>
                 {candidateId ? canvas.storyboard_review_required ? '核对分镜' : '查看并采用分镜' : activeTask(task) ? '查看提取进度' : task?.status === 'failed' || task?.status === 'cancelled' ? '处理提取问题' : '查看任务结果'}
