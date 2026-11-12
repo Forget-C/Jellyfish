@@ -5,6 +5,11 @@ import { sameSpan, sourceSlice } from './sourceSelection'
 export type DraftMember = Omit<DivisionMember, 'span'> & { span?: SourceSpan; suggested_excerpt?: string }
 export type ChapterDivisionDraft = Omit<DivisionDraft, 'members'> & { members: DraftMember[] }
 
+/** 已定位场次按原文起点排列；待定位场次稳定保留在末尾。 */
+export function orderedDivisionMembers(members: DraftMember[]) {
+  return [...members].sort((a, b) => (a.span?.start ?? Infinity) - (b.span?.start ?? Infinity))
+}
+
 /** 本地可保留待定位范围；正式契约仅在整章校验通过后生成。 */
 export function initialDivision(chapter: ChapterSequences): ChapterDivisionDraft {
   return { source_version: chapter.source_version,
@@ -48,11 +53,11 @@ export function divisionRequest(draft: ChapterDivisionDraft, raw: string): Divis
       throw new Error(`场次「${member.title}」需要有效的连续原文范围`)
     }
   }
-  const ordered = [...draft.members].sort((left, right) => left.span!.start - right.span!.start)
+  const ordered = orderedDivisionMembers(draft.members)
   for (let index = 1; index < ordered.length; index++) {
     if (ordered[index].span!.start < ordered[index - 1].span!.end) throw new Error(`场次「${ordered[index - 1].title}」与「${ordered[index].title}」范围重叠`)
   }
-  return { ...draft, members: draft.members.map(({ suggested_excerpt: _excerpt, ...member }) => ({ ...member, title: member.title.trim(), span: member.span! })) }
+  return { ...draft, members: ordered.map(({ suggested_excerpt: _excerpt, ...member }) => ({ ...member, title: member.title.trim(), span: member.span! })) }
 }
 
 /** AI 始终载入同一编辑器；重复摘录保持待定位，不猜测身份。 */

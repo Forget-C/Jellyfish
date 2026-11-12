@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { ArrowLeftOutlined, FolderOpenOutlined, ClockCircleOutlined, ExclamationCircleOutlined, MinusCircleOutlined, MenuOutlined } from '@ant-design/icons'
-import { Alert, Button, Drawer, Empty, Grid, Input, Select, Spin, Tooltip } from 'antd'
+import { Alert, message, Button, Drawer, Empty, Grid, Input, Select, Spin, Tooltip } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
@@ -79,7 +79,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const [divisionRevision] = useState(0)
-  const [divisionView, setDivisionView] = useState('source')
   const sidebarKey = managementBrowseKey(projectId, chapterId, '', 'sidebar')
   const [historyOpen, setHistoryOpen] = useState<boolean | undefined>(() => readManagementBrowse(sidebarKey).history)
   const [sceneQuery, setSceneQuery] = useState(() => readManagementBrowse(sidebarKey).query ?? '')
@@ -96,7 +95,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const regionHeading = useRef<HTMLHeadingElement>(null)
   const previousDivision = useRef<boolean>()
   const [divisionActions, setDivisionActions] = useState<HTMLDivElement | null>(null)
-  const [savedDivision, setSavedDivision] = useState<{ id: string; count: number }>()
+  const [notifications, messageContext] = message.useMessage()
   const [updatingDivision, setUpdatingDivision] = useState(false)
   const [retiredSelection, setRetiredSelection] = useState<string>()
   const drafts = useWorkspaceDraftStatus()
@@ -156,7 +155,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       setRetiredSelection(undefined)
       saveChapterBrowse(projectId, chapterId, { managementSequence: selected.id, managementStep: step })
     }
-    if (!division) setSavedDivision(undefined)
   }, [projectId, chapterId, division, selected, historical, step, retired, remembered.managementSequence])
 
   const select = (sequenceId: string | undefined, nextStep: WorkbenchManagementStep, returnTo?: string) => {
@@ -268,6 +266,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   return <WorkspaceLayout className="management-workspace" aria-label="工作台管理">
     {desktop ? <aside className="management-flow-sidebar">{navigation}</aside> : <div className="management-flow-trigger"><Button ref={navigationToggle} aria-expanded={navigationOpen} aria-label="制作步骤" icon={<MenuOutlined />} onClick={() => setNavigationOpen(true)}>制作步骤</Button><Drawer afterOpenChange={open => { if (!open) navigationToggle.current?.focus({ preventScroll: true }) }} aria-label="制作步骤" title="制作步骤" placement="left" open={navigationOpen} onClose={() => setNavigationOpen(false)}>{navigation}</Drawer></div>}
     <div className="management-flow-content">
+    {messageContext}
     {state?.chapterCompositionRetired === true && <Alert type="info" showIcon
       message="章节组合已停用，可在工作台管理中继续准备场次。" />}
     {!overview && loadError}
@@ -288,18 +287,16 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       {current.some(scene => scene.source_changed) && <Alert type="warning" showIcon message="章节原文已变化，请核对场次范围。" />}
       {!current.length && <p>保存场次划分后即可进入场次制作。</p>}
       {!current.length && !!history.length && <Button onClick={() => select(undefined, 'storyboard')}>查看历史场次</Button>}
-      {savedDivision && <Alert type="success" showIcon message={`已保存，共 ${savedDivision.count} 个场次`} />}
       <WorkbenchDivisionStep {...{ projectId, chapterId }} sequenceId={divisionTarget} refreshKey={divisionRevision}
-        actionHost={divisionActions} mobileView={divisionView} onMobileView={setDivisionView}
+        actionHost={divisionActions}
         targetTask={params.get('divisionTask')}
         onCloseTask={() => setParams(previous => {
           const next = new URLSearchParams(previous)
           next.delete('divisionTask')
           return next
         }, { replace: true, state: { ...state, directingContextSync: true } })}
-        onSourceSaved={() => setRevision(value => value + 1)}
-        onChanged={(id, count) => {
-          setSavedDivision({ id, count })
+        onChanged={(_id, count) => {
+          void notifications.success({ key: 'division-save', content: `已保存，共 ${count} 个场次` })
           setUpdatingDivision(true)
           setRevision(value => value + 1)
           if (!drafts.pendingNavigation && !explicitStep) select(divisionTarget, 'division')

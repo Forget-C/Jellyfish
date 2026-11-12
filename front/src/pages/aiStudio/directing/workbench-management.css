@@ -52,12 +52,7 @@
   background: var(--app-background);
 }
 .management-workspace .management-division .chapter-source-text { max-width: 70ch; }
-@media (min-width: 768px) {
-  .management-division .chapter-division-layout {
-    grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) minmax(180px, 220px);
-    gap: 12px;
-  }
-}
+
 
 .management-workspace { color: #263244; }
 .management-workspace .management-sidebar { font-size: 13px; }
@@ -115,18 +110,17 @@
 .management-workspace .management-division { margin-top:0; }
 .management-division .chapter-division-save { position:sticky; top:0; z-index:2; display:flex; justify-content:flex-end; background:var(--app-background); padding:8px 0; }
 .management-division .chapter-division-toolbar { position:static !important; }
-.management-division .chapter-division-layout { grid-template-columns:minmax(220px,240px) minmax(0,1fr) minmax(300px,340px); gap:20px; }
-.management-division .chapter-division-layout.with-editor-drawer { grid-template-columns:220px minmax(0,1fr); }
+.management-division .chapter-division-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:20px; }
+.management-division .chapter-division-layout.with-editor-drawer { grid-template-columns:minmax(0,1fr); }
 .management-division .chapter-source-text { margin-inline:auto; }
-.management-division .chapter-division-members > .ant-btn { border:0; box-shadow:none; border-radius:8px; background:transparent; }
-.management-division .chapter-division-members > .ant-btn[aria-pressed=true] { background:var(--app-selected); color:var(--app-accent); }
+:is(.management-division, .management-division-drawer) .chapter-division-members > .ant-btn { border:0; box-shadow:none; border-radius:8px; background:transparent; }
+:is(.management-division, .management-division-drawer) .chapter-division-members > .ant-btn[aria-pressed=true] { background:var(--app-selected); color:var(--app-accent); }
 .management-division h3 { font-size:14px; }
-@media(max-width:767px) { .management-division .chapter-division-layout { display:block; } }
 
 .management-division .chapter-source-reader { border:0; border-radius:12px; background:#fff; }
 .management-workspace .management-panel > section { border-radius:12px; background:#fff; padding:16px; }
 
-.management-division-drawer .chapter-division-editor { max-height:none; overflow:visible; padding:0; }
+.management-division-drawer .chapter-division-list { max-height:none; overflow:visible; padding:0; }
 .management-division-drawer .ant-drawer-title { font-size:16px; font-weight:600; }
 .management-division-drawer h3 { font-size:14px; }
 
@@ -178,3 +172,19 @@
 @media(max-width:1023px) { .app-workspace.management-workspace { flex-direction: column; } }
 
 .management-scene-picker > .ant-select { min-width: 0; flex: 1; }
+
+:is(.management-division, .management-division-drawer) .chapter-division-member { margin-bottom:8px; }
+:is(.management-division, .management-division-drawer) .chapter-division-member > .ant-btn { width:100%; text-align:left; border:0; box-shadow:none; background:transparent; overflow:hidden; text-overflow:ellipsis; }
+:is(.management-division, .management-division-drawer) .chapter-division-member > .ant-btn[aria-pressed=true] { background:var(--app-selected, #e4edfb); color:var(--app-accent, #245fc5); }
+:is(.management-division, .management-division-drawer) .chapter-division-member .ant-space { padding:8px; }
+.management-division .chapter-division-list { overflow-y:auto; overflow-x:hidden; }
+.management-division .chapter-source-reader { display:block; }
+.management-division-version { font-size:13px; color:var(--app-muted); }
+.management-division-action-host { flex:1; }
+.chapter-division-save { display:flex; width:100%; justify-content:flex-end; }
+.chapter-division-save > .ant-space-item:first-child { margin-right:auto; }
+
+:is(.management-division, .management-division-heading, .management-division-drawer) .ant-btn { font-size:13px; height:32px; border-radius:8px; }
+@media (max-width:767px) {
+  :is(.management-division, .management-division-heading, .management-division-drawer) .ant-btn { min-height:36px; }
+}

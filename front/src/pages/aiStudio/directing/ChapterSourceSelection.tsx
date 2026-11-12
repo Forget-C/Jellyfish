@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Space } from 'antd'
 import type { SourceSpan } from '../../../services/generated'
 import { readChapterBrowse, saveChapterBrowse } from './chapterNavigation'
@@ -7,9 +7,10 @@ import { readSourceSelection, textareaSpan } from './sourceSelection'
 export type SourceMark = { id: string; label: string; span: SourceSpan; candidate?: boolean }
 
 /** 只读原文与原生选区共用真实文本；边界标签用装饰层呈现，不进入复制或偏移。 */
-export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, focusId, onSelect, onScene, readOnly = false }: {
+export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, focusId, onSelect, onScene, actions, readOnly = false }: {
   projectId: string; chapterId: string; raw: string; marks: SourceMark[]; span?: SourceSpan; focusId?: string
   onSelect: (span: SourceSpan) => void; onScene: (id: string) => void
+  actions?: ReactNode
   readOnly?: boolean
 }) {
   const root = useRef<HTMLDivElement>(null)
@@ -63,6 +64,7 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
       <strong>完整章节原文</strong>
       <Button onClick={() => setNative(value => !value)}>{native ? '返回范围高亮' : '键盘/触屏选区'}</Button>
     </Space>
+    {actions}
     <p className="text-gray-500">{readOnly ? '正在只读查看历史原文和场次范围。' : '框选连续原文后确认范围。浅蓝为已划分，虚线为 AI 候选，橙色为当前选区；红色表示重叠。'}</p>
     {native ? <><p>正文只读。使用方向键及 Shift 选择，或长按文本拖动选区手柄。</p>
       <textarea ref={plain} aria-label="键盘或触屏选择原文" className="chapter-source-native" readOnly value={raw} onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onKeyDown={event => {

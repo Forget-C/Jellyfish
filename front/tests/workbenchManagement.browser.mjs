@@ -72,7 +72,7 @@ try {
   assert.equal(Math.round((await page.locator('.management-flow-sidebar').boundingBox()).width), 216)
   await steps.getByRole('button', { name: /1\s*场次划分/ }).click()
   await page.getByRole('heading', { name: '本章场次划分' }).waitFor()
-  await page.locator('.management-division-heading').getByRole('button', { name: '保存新版本', exact: true }).waitFor()
+  await page.locator('.management-division-heading').getByRole('button', { name: '保存为新版本', exact: true }).waitFor()
   await steps.getByRole('button', { name: /2\s*对象参考/ }).click()
   await page.getByRole('group', { name: '选择场次' }).getByRole('button', { name: /后院/ }).click()
   assert.equal(new URL(page.url()).searchParams.get('sequence'), second.id)
