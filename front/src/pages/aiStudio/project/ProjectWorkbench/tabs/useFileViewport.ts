@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 /** Keep only nearby rows mounted inside the existing workspace scroll panel. */
 export function useFileViewport(root: RefObject<HTMLDivElement>, count: number) {
   const grid = useRef<HTMLDivElement>(null)
-  const [view, setView] = useState({ start: 0, end: 6, columns: 6, stride: 270, remaining: 0, blocked: false, hintOffset: 0 })
+  const [view, setView] = useState({ start: 0, end: 6, columns: 6, stride: 270, remaining: 0, blocked: false })
   const [scrolling, setScrolling] = useState(false)
   useEffect(() => {
     const panel = root.current?.closest('.project-workbench-content') as HTMLElement | null
@@ -21,15 +21,13 @@ export function useFileViewport(root: RefObject<HTMLDivElement>, count: number) 
       const start = Math.max(0, Math.floor(top / stride) - 2)
       const end = Math.ceil((top + panel.clientHeight) / stride) + 2
       const bounds = panel.getBoundingClientRect()
-      const size = matchMedia('(pointer: coarse)').matches ? 44 : 36
-      let hintOffset = 0
-      const overlaps = () => Array.from(element.querySelectorAll('button, input')).some(element => {
+      const size = 44
+      const overlaps = () => Array.from(element.querySelectorAll('button:not(.project-resource-cover), input')).some(element => {
         const rect = element.getBoundingClientRect()
-        return rect.right > bounds.right - 20 - size && rect.left < bounds.right - 20 && rect.bottom > bounds.bottom - 20 - hintOffset - size && rect.top < bounds.bottom - 20 - hintOffset
+        return rect.right > bounds.right - 20 - size && rect.left < bounds.right - 20 && rect.bottom > bounds.bottom - 20 - size && rect.top < bounds.bottom - 20
       })
-      while (hintOffset < 144 && overlaps()) hintOffset += 48
       const blocked = overlaps()
-      setView({ start, end, columns, stride, blocked, hintOffset, remaining: panel.scrollHeight - panel.clientHeight - panel.scrollTop })
+      setView({ start, end, columns, stride, blocked, remaining: panel.scrollHeight - panel.clientHeight - panel.scrollTop })
     }
     const scroll = () => {
       setScrolling(true)

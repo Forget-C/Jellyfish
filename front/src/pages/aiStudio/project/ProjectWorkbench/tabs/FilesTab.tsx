@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Empty, Modal, Select, Space, Spin, Tag, Tooltip } from 'antd'
-import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined, DownOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StudioFilesService } from '../../../../../services/generated'
 import type { FileRead } from '../../../../../services/generated'
@@ -266,9 +266,9 @@ export function FilesTab() {
         </div>
       </div>
 
-      <button type="button" style={{ bottom: 20 + viewport.hintOffset }} aria-label="向下浏览文件" className={`project-files-scroll-hint ${!hintUsed ? 'is-breathing' : ''}`} hidden={!hintVisible && !hintFocused}
+      <button type="button" aria-label="向下浏览文件" className={`project-files-scroll-hint ${!hintUsed ? 'is-breathing' : ''}`} hidden={!hintVisible && !hintFocused}
         onFocus={() => setHintFocused(true)} onBlur={() => setHintFocused(false)} onAnimationEnd={() => setHintUsed(true)}
-        onClick={() => { setHintUsed(true); const panel = pageRoot.current?.closest('.project-workbench-content'); panel?.scrollBy({ top: panel.clientHeight * 0.75, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }) }}><DownOutlined /></button>
+        onClick={() => { setHintUsed(true); const panel = pageRoot.current?.closest('.project-workbench-content'); panel?.scrollBy({ top: panel.clientHeight * 0.75, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }) }}><svg viewBox="0 0 24 36" aria-hidden="true" focusable="false"><path d="M8 0h8v2H8z M8 5h8v4H8z M8 12h8v12h8L12 36 0 24h8z" /></svg></button>
       <Modal
         className="project-resource-dialog"
         focusTriggerAfterClose={false}
