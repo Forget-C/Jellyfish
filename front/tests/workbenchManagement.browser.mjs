@@ -79,6 +79,9 @@ try {
   const firstSceneBox = await page.getByRole('group', { name: '选择场次' }).getByRole('button').first().boundingBox()
   assert.equal(Math.round(firstSceneBox.x - titleBox.x - titleBox.width), 24, '标题到首场次间距与资产库一致')
   const titleHeight = (await page.locator('.management-toolbar').boundingBox()).height
+  assert.equal(titleHeight, 52, '标题行遵循资产库52px基准')
+  assert.equal((await page.locator('.management-browse-toolbar').boundingBox()).height, 52, '筛选行遵循资产库52px基准')
+  assert.equal(await page.locator('.management-content > .management-panel').evaluate(el => getComputedStyle(el).paddingTop), '0px', '内容不叠加顶部留白')
   await steps.getByRole('button', { name: /场次划分/ }).click()
   await page.getByRole('heading', { name: '场次划分', exact: true }).waitFor()
   assert.equal((await page.locator('.management-division-heading').boundingBox()).height, titleHeight, 'step toolbars have matching height')

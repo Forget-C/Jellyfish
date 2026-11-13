@@ -191,7 +191,7 @@
 .management-chapter-heading { display:flex; align-items:center; gap:4px; min-width:0; min-height:40px; margin-bottom:4px; }
 .management-chapter-heading > .ant-btn { flex-shrink:0; width:32px; height:32px; }
 .management-chapter-heading > strong { min-width:0; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.app-shell .management-workspace .app-page-toolbar:is(.management-toolbar,.management-division-heading) { min-height:56px; padding:10px 20px; gap:8px; }
+.app-shell .management-workspace .app-page-toolbar:is(.management-toolbar,.management-division-heading) { min-height:52px; padding:8px 20px; gap:8px; }
 .management-workspace :is(.management-identity,.management-division-heading) h2 { margin:0; font-size:16px; font-weight:600; line-height:24px; }
 .management-flow-links > .ant-btn > .anticon { font-size:16px; }
 .management-flow-trigger { display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -241,7 +241,7 @@
 .management-workspace .management-title-scenes > .ant-btn { padding-inline: 12px; border-radius: 6px; min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .management-title-scenes > .ant-dropdown-trigger { flex-shrink: 0; max-width: 220px; }
 .management-title-scenes > .ant-btn[aria-pressed=true] { background: var(--app-selected); color: var(--app-accent); }
-.management-browse-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 20px 12px; flex: 0 0 auto; }
+.management-browse-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 20px; flex: 0 0 auto; }
 .management-filter-host { min-width: 0; flex: 1; }
 .management-browse-toolbar :is(.management-object-actions,.management-storyboard-actions) { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .management-browse-toolbar .ant-btn { height: 32px; font-size: 13px; border-radius: 8px; }
@@ -276,3 +276,8 @@
 .management-scene-popup .management-scene-notice[data-tone=warning] { color: #8a5610; }
 
 .management-workspace .management-toolbar .management-identity { margin-inline-end: 12px; flex-shrink: 0; }
+
+.management-workspace .management-content > .management-panel { padding-top: 0; }
+.management-workspace .management-object-kind { margin-block-start: 0; }
+.management-workspace .management-scene-notices:not(:empty) { margin-bottom: 12px; }
+.management-workspace .management-scene-notices .ant-alert { margin-top: 0; }
