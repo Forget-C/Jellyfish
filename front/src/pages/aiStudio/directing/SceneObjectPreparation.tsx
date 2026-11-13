@@ -20,7 +20,7 @@ type Scope = { projectId: string; chapterId: string; sequenceId: string }
 const kinds = { character: '角色', scene: '场所', prop: '道具' } as const
 type ObjectChoice = { objectId: string; assetId?: string; imageFileId?: string }
 type ManagementActions = {
-  host: HTMLDivElement | null; onChange: () => void;
+  host: HTMLDivElement | null; filterHost: HTMLDivElement | null; onChange: () => void;
   candidateTaskId: string | null; clearCandidateTask: () => void;
 }
 const referenceLabels = { unassociated: '尚未关联资产', missing: '未选参考图', ready: '已选参考图', unavailable: '关联或图片不可用' }
@@ -51,7 +51,16 @@ function ReferenceImage({ name, fileId }: { name: string; fileId?: string }) {
 export function SceneObjectPreparation({ projectId, chapterId, sequenceId, editable, management }: Scope & {
   editable: boolean; management?: ManagementActions;
 }) {
-  const compact = !Grid.useBreakpoint().md
+  const mobile = !Grid.useBreakpoint().md
+  const [filterWidth, setFilterWidth] = useState(0)
+  useEffect(() => {
+    const host = management?.filterHost
+    if (!host) return
+    const observer = new ResizeObserver(([entry]) => setFilterWidth(entry.contentRect.width))
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [management?.filterHost])
+  const compact = mobile || (!!management && filterWidth < 620)
   const [data, setData] = useState<SceneObjectsRead>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -303,14 +312,14 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {data && !data.objects.length && !error && (management
       ? <p>{data.revision ? '本场未提取到对象，可以继续分镜。' : '尚未提取对象，可提取后准备参考，也可直接继续。'}</p>
       : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.revision ? '本场未提取到对象' : '尚未提取对象'} />)}
-    {management && !!data?.objects.length && <div ref={filterControl} className="management-object-filters">
-      {compact ? <Select aria-label="对象类型" value={kindFilter} onChange={setKindFilter} options={[{value:'all',label:'全部类型'},...Object.entries(kinds).map(([value,label])=>({value,label}))]} /> : <Segmented aria-label="对象类型" value={kindFilter} onChange={value => setKindFilter(value as typeof kindFilter)} options={[{ value: 'all', label: '全部' }, ...Object.entries(kinds).map(([value, label]) => ({ value, label }))]} />}
-      <Select aria-label="关联状态" value={association} onChange={setAssociation} options={[{value:'all',label:'全部关联状态'},{value:'unassociated',label:'未关联'},{value:'associated',label:'已关联'},{value:'unavailable',label:'关联不可用'}]} />
-      <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => { setReference(key) }, items: [{key:'all',label:'全部参考状态'},{key:'missing',label:'未选参考图'},{key:'ready',label:'已选参考图'},{key:'unavailable',label:'参考图不可用'}] }}><MainButton type="text" aria-label="参考筛选">参考筛选{reference !== 'all' ? ' · 已筛选' : ''}</MainButton></Dropdown>
-      <span>{filtered.length} 个对象</span>
-      {!filtered.length && <MainButton type="text" onClick={() => { setKindFilter('all'); setAssociation('all'); setReference('all') }}>清除筛选</MainButton>}
+    {management?.filterHost && createPortal(<div ref={filterControl} className="management-object-filters">
+      {compact ? <Select disabled={!data?.objects.length} aria-label="对象类型" value={kindFilter} onChange={setKindFilter} options={[{value:'all',label:'全部类型'},...Object.entries(kinds).map(([value,label])=>({value,label}))]} /> : <Segmented disabled={!data?.objects.length} aria-label="对象类型" value={kindFilter} onChange={value => setKindFilter(value as typeof kindFilter)} options={[{ value: 'all', label: '全部' }, ...Object.entries(kinds).map(([value, label]) => ({ value, label }))]} />}
+      <Select disabled={!data?.objects.length} aria-label="关联状态" value={association} onChange={setAssociation} options={[{value:'all',label:'全部关联状态'},{value:'unassociated',label:'未关联'},{value:'associated',label:'已关联'},{value:'unavailable',label:'关联不可用'}]} />
+      <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => { setReference(key) }, items: [{key:'all',label:'全部参考状态'},{key:'missing',label:'未选参考图'},{key:'ready',label:'已选参考图'},{key:'unavailable',label:'参考图不可用'}] }}><MainButton disabled={!data?.objects.length} type="text" aria-label="参考筛选">参考筛选{reference !== 'all' ? ' · 已筛选' : ''}</MainButton></Dropdown>
+      <span>{data ? `${filtered.length} 个对象` : '对象数量未确认'}</span>
+      {!!data?.objects.length && !filtered.length && <MainButton type="text" onClick={() => { setKindFilter('all'); setAssociation('all'); setReference('all') }}>清除筛选</MainButton>}
       <span title="参考图可留空，各画布采用后独立管理。" tabIndex={0}><InfoCircleOutlined aria-hidden /></span>
-    </div>}
+    </div>, management.filterHost)}
     {(management ? ['all' as const] : Object.keys(kinds) as Array<keyof typeof kinds>).map(group => {
       const rows = group === 'all' ? filtered : filtered.filter(object => object.kind === group)
       if (!rows.length) return null

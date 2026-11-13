@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRightOutlined, MoreOutlined, PictureOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Descriptions, Dropdown, Empty, Input, Modal, Space, Spin, Tag, message } from 'antd'
@@ -36,9 +37,9 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
-export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost,
+export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost, filterHost,
   targetCanvas, targetTask, onCloseTask, onChange, onReviewSource }: Scope & {
-  historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
+  filterHost: HTMLDivElement | null; historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
   targetCanvas?: string | null; targetTask?: string | null; onCloseTask: (canvasId?: string) => void
   onReviewSource: (canvasId?: string) => void
 }) {
@@ -197,11 +198,11 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
       setRevision(value => value + 1)
       onChange()
     }} />
-    <div className="management-canvas-toolbar">
+    {filterHost && createPortal(<div className="management-canvas-toolbar">
       <span id="management-canvas-list-title" className="management-list-count">{canvases ? `${canvases.length} 张画布` : '画布数量未确认'}</span>
-      {!!canvases?.length && <Input ref={searchInput} aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
+      {<Input disabled={!canvases?.length} ref={searchInput} aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
         onChange={event => setQuery(event.target.value)} />}
-    </div>
+    </div>, filterHost)}
     {error && <Alert showIcon type="error" message={error} action={<Button size="small"
       onClick={() => setRevision(value => value + 1)}>重试读取画布</Button>} />}
     {(linked?.error || mismatched || invalidCanvas) && <Alert showIcon type="warning"

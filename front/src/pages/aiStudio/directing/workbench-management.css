@@ -236,3 +236,32 @@
 @media(max-width:767px) { .chapter-source-actions .ant-input { min-height:36px; } }
 
 .division-operation-review .ant-modal-body { max-height:calc(100dvh - 240px); overflow-y:auto; scrollbar-gutter:stable; }
+
+.management-title-scenes { display: flex; flex: 1; min-width: 0; justify-content: flex-end; align-items: center; gap: 4px; }
+.management-title-scenes > .ant-btn { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.management-title-scenes > .ant-dropdown-trigger { flex-shrink: 0; max-width: 220px; }
+.management-title-scenes > .ant-btn[aria-pressed=true] { background: var(--app-selected); color: var(--app-accent); }
+.management-browse-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 20px 12px; flex: 0 0 auto; }
+.management-filter-host { min-width: 0; flex: 1; }
+.management-browse-toolbar :is(.management-object-actions,.management-storyboard-actions) { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.management-browse-toolbar .ant-btn { height: 32px; font-size: 13px; border-radius: 8px; }
+.management-browse-toolbar :is(.management-object-filters,.management-canvas-toolbar) { margin: 0; padding: 0; flex-wrap: wrap; }
+.management-content:has(.management-inline-asset) > .management-browse-toolbar { display: none; }
+.management-scene-popup { width: min(360px, calc(100vw - 32px)); padding: 12px; background: var(--app-surface, #fff); border-radius: 12px; box-shadow: 0 8px 28px #243b6026; }
+.management-scene-popup .management-scene-list { max-height: min(400px, calc(100dvh - 180px)); overflow-y: auto; }
+.management-scene-popup .management-scene-meta { display: none; }
+.management-scene-popup .management-scene-row { width: 100%; border: 0; border-radius: 8px; background: transparent; text-align: left; padding: 8px; color: var(--app-text); }
+.management-scene-popup .management-scene-row[aria-pressed=true] { background: var(--app-selected, #e4edfb); color: var(--app-accent); }
+.management-scene-popup .management-scene-row[aria-pressed=true]::after { content: '✓'; margin-left: auto; }
+@media (max-width: 767px) {
+  .management-browse-toolbar { padding-inline: 16px; flex-wrap: wrap; }
+  .management-filter-host { flex-basis: 100%; }
+  .management-browse-toolbar :is(.management-object-actions,.management-storyboard-actions) { margin-left: auto; }
+  .management-browse-toolbar .ant-btn { min-height: 36px; height: auto; }
+  .management-title-scenes > .ant-dropdown-trigger { max-width: min(220px, 48vw); }
+}
+.app-shell .management-workspace .management-toolbar { flex-direction: row; align-items: center; }
+.management-scene-popup .management-scene-title { font-size: 13px; font-weight: 400; }
+.management-browse-toolbar .management-canvas-toolbar { justify-content: flex-start; flex-direction: row-reverse; }
+.management-browse-toolbar .management-canvas-toolbar .management-list-count { margin-right: auto; }
+.management-browse-toolbar .management-object-filters { font-size: 13px; }
