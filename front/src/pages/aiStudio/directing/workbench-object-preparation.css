@@ -99,3 +99,7 @@
 .management-object-description-content { max-height: 50dvh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media(max-width:767px) { .management-object-body { padding: 12px; } }
 .management-reference-failed { display: flex; align-items: center; justify-content: center; gap: 8px; height: 100%; }
+
+.management-workspace .management-object-preparation .management-card-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 228px), 1fr)); }
+.management-object-association-row > .ant-btn:last-child { flex-shrink: 0; }
+@media(max-width:767px) { .management-workspace .management-object-preparation .management-card-grid { grid-template-columns: minmax(0, 1fr); } }
