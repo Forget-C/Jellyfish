@@ -229,3 +229,8 @@
 @media(max-width:767px) { .chapter-scene-name-row > button[aria-label="编辑场次名称"] { opacity:1; } }
 
 @media(max-width:767px) { .chapter-scene-name-row > .ant-input { min-height:36px; } }
+
+.chapter-source-actions > .ant-space-item > .ant-input { width:180px; max-width:100%; }
+.division-operation-impact { margin-block:12px; padding:12px; border-radius:8px; background:var(--app-background,#f3f6fb); }
+.division-operation-impact p { white-space:pre-wrap; overflow-wrap:anywhere; max-height:160px; overflow-y:auto; margin-block:8px; }
+@media(max-width:767px) { .chapter-source-actions .ant-input { min-height:36px; } }

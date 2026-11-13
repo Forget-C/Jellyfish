@@ -58,7 +58,7 @@ try {
   await page.getByRole('button', { name: '拆分当前场次', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '确认拆分', exact: true }).isDisabled(), false, 'entering split retains the selected position')
   await page.getByRole('button', { name: '确认拆分', exact: true }).click()
-  await page.getByRole('dialog', { name: '拆分场次', exact: true }).getByRole('button', { name: '确认拆分', exact: true }).click()
+  await page.getByRole('dialog', { name: '确认拆分场次', exact: true }).getByRole('button', { name: '确认拆分', exact: true }).click()
   await page.getByRole('button', { name: '保存为新版本', exact: true }).click()
   const preview = page.getByRole('dialog', { name: '划分变更预览', exact: true })
   await preview.getByRole('checkbox', { name: /核对拆分/ }).check()

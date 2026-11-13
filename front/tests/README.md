@@ -370,3 +370,5 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 `workbench-division` 同时覆盖双图标模式与选区恢复、名称原位编辑/空名/Esc、临时创建与取消、未完成阶段跨场次和整页保护、确认创建后的真实保存，以及窄屏关闭抽屉保留编辑。共享 `WorkspaceDrafts` 的保存阻断字段还需回归工作台导航和画布配置保护。
 
 `manual-split` 为单场拆分的独立闭环回归：先选字后进入拆分，检查入口与断点保留、确认身份、保存新版本和刷新后的两场原文。它复用4386／8386端口，不与 `workbench-division` 或 `workbench-canvas-creation` 并行运行。
+
+`division-assignment` 使用既有隔离后端验证编辑区创建、抽取影响确认与取消、并入、撤销、保存及窄屏输入保留；与 `manual-split`、`workbench-division`、`workbench-canvas-creation` 共用4386／8386端口，必须顺序运行。`divisionOperations.test.mjs` 覆盖连续性、身份、空白残段和多次分配的结果。

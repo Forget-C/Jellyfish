@@ -8,10 +8,10 @@ import { readSourceSelection, textareaSpan } from './sourceSelection'
 export type SourceMark = { id: string; label: string; span: SourceSpan; candidate?: boolean }
 
 /** 只读原文与原生选区共用真实文本；边界标签用装饰层呈现，不进入复制或偏移。 */
-export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, pendingSpan, focusId, onSelect, onScene, actions, readOnly = false }: {
+export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, pendingSpan, focusId, onSelect, onScene, actions, preserveFocusScroll = false, readOnly = false }: {
   projectId: string; chapterId: string; raw: string; marks: SourceMark[]; span?: SourceSpan; pendingSpan?: SourceSpan; focusId?: string
-  onSelect: (span: SourceSpan) => void; onScene: (id: string) => void
-  actions?: ReactNode
+  onSelect: (span?: SourceSpan) => void; onScene: (id: string) => void
+  actions?: ReactNode; preserveFocusScroll?: boolean
   readOnly?: boolean
 }) {
   const modeName = useId()
@@ -32,7 +32,7 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
   useEffect(() => {
     const read = () => {
       if (readOnly || !root.current || dragging.current) return
-      const value = readSourceSelection(root.current)
+      const value = readSourceSelection(root.current, true)
       if (value) {
         // 高亮切分会重建文本节点；先结束原生选区，避免 DOM 重排反向改写已确认的范围。
         document.getSelection()?.removeAllRanges()
@@ -41,7 +41,7 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
       }
       return false
     }
-    const release = () => { const wasDragging = dragging.current; dragging.current = false; selectedByPointer.current = !!read() && wasDragging }
+    const release = () => { const wasDragging = dragging.current; dragging.current = false; selectedByPointer.current = !!read() && wasDragging; if (wasDragging && !selectedByPointer.current && !readOnly) selected.current(undefined) }
     document.addEventListener('selectionchange', read)
     document.addEventListener('pointerup', release)
     return () => { document.removeEventListener('selectionchange', read); document.removeEventListener('pointerup', release) }
@@ -49,11 +49,11 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
   useEffect(() => {
     if (lastFocus.current === focusId) return
     lastFocus.current = focusId
-    if (focusId && root.current) {
+    if (focusId && root.current && !preserveFocusScroll) {
       const element = [...root.current.querySelectorAll<HTMLElement>('[data-mark-id]')].find(node => node.dataset.markId === focusId)
       element?.scrollIntoView({ block: 'center' })
     }
-  }, [focusId, raw, marks.length, native])
+  }, [focusId, raw, marks.length, native, preserveFocusScroll])
   useLayoutEffect(() => {
     const element = native ? plain.current : root.current
     if (element) element.scrollTop = scrollTop.current
@@ -64,6 +64,14 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
       plain.current?.setSelectionRange(chars.slice(0, pendingSpan?.start ?? span?.start ?? 0).join('').replace(/\r\n?/g, '\n').length, chars.slice(0, pendingSpan?.end ?? pendingSpan?.start ?? span?.start ?? 0).join('').replace(/\r\n?/g, '\n').length)
     }
   }, [native, raw, focusId])
+  const previousPending = useRef(pendingSpan)
+  useLayoutEffect(() => {
+    if (!pendingSpan && previousPending.current && plain.current) {
+      const input = plain.current
+      input.setSelectionRange(input.selectionStart, input.selectionStart)
+    }
+    previousPending.current = pendingSpan
+  }, [pendingSpan])
   const rememberScroll = (value: number) => { scrollTop.current = value; saveChapterBrowse(projectId, chapterId, { sourceTop: value }) }
   return <section className="chapter-source-reader" aria-label="完整章节原文">
     <div className="chapter-source-reader-tools">
@@ -95,11 +103,11 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
         if (event.key === 'End') { const lineEnd = input.value.indexOf('\n', focus); next = event.metaKey || event.ctrlKey || lineEnd < 0 ? input.value.length : lineEnd }
         const start = event.shiftKey ? Math.min(anchor, next) : next, end = event.shiftKey ? Math.max(anchor, next) : next
         input.setSelectionRange(start, end, next < anchor ? 'backward' : 'forward')
-        const value = textareaSpan(raw, start, end)
-        if (value && !readOnly) onSelect(value)
+        const value = textareaSpan(raw, start, end, true)
+        if (!readOnly) onSelect(value)
       }} onSelect={event => {
-        const input = event.currentTarget, value = textareaSpan(raw, input.selectionStart, input.selectionEnd)
-        if (value && !readOnly) onSelect(value)
+        const input = event.currentTarget, value = textareaSpan(raw, input.selectionStart, input.selectionEnd, true)
+        if (!readOnly && (value || document.activeElement === input)) onSelect(value)
       }} /></> : <div ref={root} className="chapter-source-text" onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onPointerDown={() => { dragging.current = true }} onClick={event => {
         if (selectedByPointer.current) { selectedByPointer.current = false; return }
         if (!document.getSelection()?.isCollapsed) return
