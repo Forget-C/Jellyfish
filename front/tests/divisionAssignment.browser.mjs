@@ -177,6 +177,28 @@ try {
   await unresolved.getByRole('button', { name: '继续调整' }).click()
   await reader.getByRole('button', { name: '取消新建', exact: true }).click()
   await page.unroute('**/directing/chapters/' + gapChapter)
+  // The legacy identity Select must not treat its option argument as a cache override.
+  await page.route('**/directing/chapters/' + gapChapter, async route => {
+    const response = await route.fetch()
+    const value = await response.json()
+    value.data.sequences.forEach(row => { row.source_changed = true })
+    await route.fulfill({ response, json: value })
+  })
+  await page.reload()
+  await page.getByText('核对来源与关联', { exact: true }).click()
+  const changeIdentity = async () => {
+    await page.getByRole('combobox', { name: '保留场次身份', exact: true }).press('ArrowDown')
+    await page.locator('.ant-select-dropdown:visible').getByText('新增场次', { exact: true }).click()
+  }
+  await changeIdentity()
+  const identityReview = page.getByRole('dialog', { name: '确认关联变更', exact: true })
+  await identityReview.getByRole('textbox', { name: /结果名称/ }).fill('关联临时名称')
+  await identityReview.getByRole('button', { name: '继续调整' }).click()
+  await changeIdentity()
+  assert.equal(await identityReview.getByRole('textbox', { name: /结果名称/ }).inputValue(), '关联临时名称')
+  await identityReview.getByRole('button', { name: '继续调整' }).click()
+  await reader.getByRole('button', { name: '取消本次操作', exact: true }).click()
+  await page.unroute('**/directing/chapters/' + gapChapter)
   await page.setViewportSize({ width: 390, height: 844 })
   await reader.getByRole('button', { name: '新建场次', exact: true }).click()
   await reader.getByRole('textbox', { name: '新场次名称' }).fill('窄屏临时名称')

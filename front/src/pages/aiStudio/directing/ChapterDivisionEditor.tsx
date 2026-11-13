@@ -214,7 +214,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
         {!!matches.length && <Select aria-label="原文出现位置" placeholder="选择原文位置" value={matches.some(item => sameSpan(item, current.span)) ? current.span?.start : undefined}
           style={{ width: '100%' }} options={matches.map((item, index) => ({ value: item.start, label: `第 ${index + 1} 次出现 · ${sourceSlice(chapter.raw_text, item)}` }))} onChange={start => applySpan(matches.find(item => item.start === start)!)} />}
         <Select aria-label="保留场次身份" style={{ width: '100%' }} value={current.sequence_id || ''}
-          options={[{ value: '', label: '新增场次' }, ...identities.filter(row => draft.baseline.some(item => item.sequence_id === row.id) || restoredBaseline.some(item => item.sequence_id === row.id)).map(row => ({ value: row.id, label: `沿用：${row.title}`, disabled: draft.members.some(other => other.key !== current.key && other.sequence_id === row.id) }))]} onChange={retainIdentity} />
+          options={[{ value: '', label: '新增场次' }, ...identities.filter(row => draft.baseline.some(item => item.sequence_id === row.id) || restoredBaseline.some(item => item.sequence_id === row.id)).map(row => ({ value: row.id, label: `沿用：${row.title}`, disabled: draft.members.some(other => other.key !== current.key && other.sequence_id === row.id) }))]} onChange={id => retainIdentity(id)} />
       </details>}</>} />
       {!drawerMode && editorPanel}
 
