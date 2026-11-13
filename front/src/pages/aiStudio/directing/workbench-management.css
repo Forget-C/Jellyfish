@@ -250,8 +250,8 @@
 .management-scene-popup { width: min(360px, calc(100vw - 32px)); padding: 12px; background: var(--app-surface, #fff); border-radius: 12px; box-shadow: 0 8px 28px #243b6026; }
 .management-scene-popup .management-scene-list { max-height: min(400px, calc(100dvh - 180px)); overflow-y: auto; }
 .management-scene-popup .management-scene-meta { display: none; }
-.management-scene-popup .management-scene-row { width: 100%; border: 0; border-radius: 8px; background: transparent; text-align: left; padding: 8px; color: var(--app-text); }
-.management-scene-popup .management-scene-row[aria-pressed=true] { background: var(--app-selected, #e4edfb); color: var(--app-accent); }
+.management-scene-popup .management-scene-row { width: 100%; border: 0; border-radius: 8px; background: transparent; text-align: left; padding: 8px; color: var(--app-text, #263244); }
+.management-scene-popup .management-scene-row[aria-pressed=true] { background: var(--app-selected, #e4edfb); color: var(--app-accent, #245fc5); }
 .management-scene-popup .management-scene-row[aria-pressed=true]::after { content: '✓'; margin-left: auto; }
 @media (max-width: 767px) {
   .management-browse-toolbar { padding-inline: 16px; flex-wrap: wrap; }
@@ -265,3 +265,12 @@
 .management-browse-toolbar .management-canvas-toolbar { justify-content: flex-start; flex-direction: row-reverse; }
 .management-browse-toolbar .management-canvas-toolbar .management-list-count { margin-right: auto; }
 .management-browse-toolbar .management-object-filters { font-size: 13px; }
+.management-scene-popup { color: var(--app-text, #263244); font-size: 13px; }
+.management-scene-popup .management-scenes { list-style: none; margin: 8px 0; padding: 0; }
+.management-scene-popup .management-scene-row { display: flex; align-items: center; gap: 8px; color: var(--app-text, #263244); cursor: pointer; overflow-wrap: anywhere; }
+.management-scene-popup .management-scene-row:hover { background: var(--app-background, #f0f5fc); }
+.management-scene-popup .management-scene-row[aria-pressed=true] { color: var(--app-accent, #245fc5); }
+.management-scene-popup :is(button,input):focus-visible { outline: 2px solid var(--app-accent, #245fc5); outline-offset: 2px; }
+.management-scene-popup .management-scene-notice { font-size: 12px; color: #536174; }
+.management-scene-popup .management-scene-notice[data-tone=error] { color: #b42318; }
+.management-scene-popup .management-scene-notice[data-tone=warning] { color: #8a5610; }

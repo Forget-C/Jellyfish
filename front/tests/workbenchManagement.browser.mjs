@@ -91,6 +91,8 @@ try {
   assert.deepEqual(await page.locator('.management-panel').boundingBox(), contentBefore, '浮层不挤压内容')
   const sceneDrawer = page.getByRole('dialog', { name: '本章场次' })
   await sceneDrawer.waitFor()
+  assert.equal(await sceneDrawer.locator('ul').first().evaluate(el => getComputedStyle(el).listStyleType), 'none')
+  await page.screenshot({ path: join(output, 'scene-popup.png'), animations: 'disabled' })
   if (await sceneDrawer.getByRole('button', { name: '查看历史场次' }).count()) await sceneDrawer.getByRole('button', { name: '查看历史场次' }).click()
   await sceneDrawer.getByRole('button', { name: /旧码头/ }).click()
   await sceneDrawer.waitFor({ state: 'hidden' })

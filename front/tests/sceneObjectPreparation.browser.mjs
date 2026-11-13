@@ -296,7 +296,7 @@ try {
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
   await page.getByText(/^本场未提取到对象/).waitFor()
   if (await page.getByRole('button', { name: '制作步骤', exact: true }).count()) await page.getByRole('button', { name: '制作步骤', exact: true }).click()
-  await page.getByRole('navigation', { name: '制作步骤' }).getByRole('button', { name: /3\s*分镜画布/ }).click()
+  await page.getByRole('navigation', { name: '制作步骤' }).getByRole('button', { name: /分镜画布/ }).click()
   await page.waitForURL(url => url.searchParams.get('step') === 'storyboard')
 
   const chapterPath = scenes.slice(0, -'/sequences'.length)

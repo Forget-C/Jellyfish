@@ -127,7 +127,7 @@ try {
 
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: '全部场次' }).waitFor()
+  await page.getByRole('group', { name: '选择场次' }).getByRole('button').waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: join(output, 'mobile.png') })
   await card('新分镜方案').getByRole('button', { name: '新分镜方案', exact: true }).press('Enter')
