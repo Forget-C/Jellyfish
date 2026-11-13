@@ -13,6 +13,7 @@ import { RunHistory } from './RunHistory'
 import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
 import { CheckArchive } from './CheckArchive'
 import { StoryboardReviewFindings } from '../directing/SceneStoryboardReview'
+import { CanvasAppearancePicker } from '../directing/ui/CanvasAppearancePicker'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { WorkbenchDetailsProvider } from '../directing/ui/WorkbenchDetails'
@@ -169,7 +170,7 @@ export function GenerationCanvasWorkspace({
       disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
       onChange={event => change({ ...document, name: event.target.value })} />,
   }
-  return <WorkbenchTheme><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
+  return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
     <header className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await editor.requestLeave()) back.onClick() }} />
@@ -188,6 +189,7 @@ export function GenerationCanvasWorkspace({
         {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}
+        <CanvasAppearancePicker compact />
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
           <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>

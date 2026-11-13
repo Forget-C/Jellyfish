@@ -1,6 +1,7 @@
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../components'
 import { Form, Input, Select, Radio, Button, message } from 'antd'
 import { appearances, useAppStore } from '../store/useAppStore'
+import { CanvasAppearancePicker } from './aiStudio/directing/ui/CanvasAppearancePicker'
 import { AppearancePreview } from '../layouts/AppearancePreview'
 import { useTranslation } from 'react-i18next'
 
@@ -65,6 +66,8 @@ const Settings: React.FC = () => {
             </Radio.Group>
           </div>
         </Form.Item>
+
+        <Form.Item label={t('layout:canvasAppearance.label')}><CanvasAppearancePicker /></Form.Item>
 
         <Form.Item>
           <Button type="primary" htmlType="submit">

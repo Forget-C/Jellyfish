@@ -22,12 +22,17 @@ try {
   page.setDefaultTimeout(8000)
   const errors = []
   const workspace = makeWorkspace()
+  let sceneUnavailable = false
   const installFixtures = async target => {
     target.on('pageerror', error => errors.push(error.message))
     await target.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
     await target.route('**/api/**', route => {
       const { pathname } = new URL(route.request().url())
       const respond = data => route.fulfill({ json: { code: 200, data } })
+      if (pathname.endsWith('/sequences/s1/canvases')) return respond({ sequence: workspace.sequence, canvases: sceneUnavailable ? [] : [{ id: 'storyboard-appearance', name: '分镜配色验收', can_open: true }] })
+      if (pathname.endsWith('/generation-canvases/p1/storyboard-appearance')) return respond({ id: 'storyboard-appearance', project_id: 'p1', revision: 0, document: { id: 'storyboard-appearance', project_id: 'p1', name: '分镜配色验收', cards: [], edges: [], input_order: {} } })
+      if (pathname.endsWith('/catalog')) return respond({ cards: [], connection_policies: [] })
+      if (pathname.endsWith('/runtime')) return respond({ cursor: 0, runs: [], nodes: [] })
       if (pathname.endsWith('/directing/sequences/s1')) return respond(workspace)
       if (pathname.endsWith('/versions') || pathname.includes('/generation-canvases/')) return respond([])
       return respond({ items: [], next_cursor: null })
@@ -41,7 +46,7 @@ try {
   const solidBackground = { backgroundColor: 'rgb(247, 248, 251)', backgroundImage: 'none', color: 'rgb(38, 50, 68)' }
   const canvases = [
     ['/projects/p1/generation-canvas', '生成画布工作台'],
-    ['/projects/p1/chapters/ch1/sequences/s1', '场次画布工作台'],
+    ['/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=storyboard-appearance', '生成画布工作台'],
   ]
   const canvasColors = async (path, label) => {
     await page.goto(`${origin}${path}`)
@@ -124,12 +129,64 @@ try {
 
   for (const [index, [path, label]] of canvases.entries()) {
     const colors = await canvasColors(path, label)
-    assert.deepEqual(colors, originalCanvasColors[index])
-    assert.equal(colors.canvas.backgroundColor, 'rgb(13, 13, 13)')
-    assert.notEqual(colors.overlay.backgroundColor, 'rgb(255, 255, 255)')
+    assert.deepEqual(colors.canvas, solidBackground, 'default follows the current site appearance')
+    assert.notDeepEqual(colors.canvas, originalCanvasColors[index].canvas)
+    assert.equal(colors.overlay.backgroundColor, 'rgb(237, 242, 248)', 'task portal follows light theme')
+    const picker = page.getByRole('button', { name: '画布配色', exact: true })
+    const choose = async name => {
+      await picker.press('Enter')
+      const option = page.getByRole('menuitemradio', { name, exact: true })
+      await option.waitFor()
+      await option.click()
+      await option.waitFor({ state: 'hidden' })
+    }
+    await choose('经典深色')
+    const dark = await canvasColors(path, label)
+    assert.equal(dark.canvas.backgroundColor, 'rgb(13, 13, 13)')
+    assert.equal(dark.canvas.color, 'rgb(229, 229, 229)')
+    assert.equal(dark.overlay.backgroundColor, 'rgb(36, 36, 36)')
+    await choose('雾蓝微渐变')
+    const light = await canvasColors(path, label)
+    assert.match(light.canvas.backgroundImage, /linear-gradient/)
+    assert.equal(light.canvas.color, 'rgb(38, 50, 68)')
+    await page.reload()
+    await picker.waitFor()
+    await picker.press('Enter')
+    assert.equal(await page.getByRole('menuitemradio', { name: '雾蓝微渐变', exact: true }).getAttribute('aria-checked'), 'true')
+    await page.keyboard.press('Escape')
+    await choose('雾蓝纯色')
+    assert.deepEqual((await canvasColors(path, label)).canvas, solidBackground)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await picker.press('Enter')
+    const palette = page.getByRole('menu')
+    await palette.waitFor()
+    await page.waitForFunction(() => {
+      const option = [...document.querySelectorAll('[role="menuitemradio"]')].find(element => element.getClientRects().length)
+      if (!option) return false
+      const box = option.getBoundingClientRect(), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+      return !!hit && option.contains(hit)
+    })
+    const bounds = await palette.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390, 'palette fits narrow viewport')
+    await page.screenshot({ path: `${output}/canvas-palette-${index}-390.png`, animations: 'disabled' })
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await choose('跟随主站')
   }
 
+  sceneUnavailable = true
+  await page.goto(`${origin}${canvases[1][0]}`)
+  await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
+  assert.equal(await page.locator('.workbench-ui').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(247, 248, 251)', 'storyboard unavailable state follows the same appearance')
+  sceneUnavailable = false
   await page.goto(`${origin}/settings`)
+  const canvasSettings = page.getByRole('radiogroup', { name: '画布配色', exact: true })
+  await canvasSettings.getByRole('radio', { name: '经典深色', exact: true }).check()
+  await nickname.fill('画布切换不提交表单')
+  await canvasSettings.getByRole('radio', { name: '雾蓝纯色', exact: true }).check()
+  assert.equal(await nickname.inputValue(), '画布切换不提交表单')
+  await page.reload()
+  assert.equal(await canvasSettings.getByRole('radio', { name: '雾蓝纯色', exact: true }).isChecked(), true)
   await page.setViewportSize({ width: 375, height: 812 })
   await account.press('Enter')
   await solidMenu.waitFor()
@@ -144,9 +201,11 @@ try {
 
   const fallback = await browser.newPage({ locale: 'zh-CN' })
   await installFixtures(fallback)
-  await fallback.addInitScript(() => localStorage.setItem('jellyfish_appearance', 'unsupported'))
+  await fallback.addInitScript(() => { localStorage.setItem('jellyfish_appearance', 'unsupported'); localStorage.setItem('jellyfish_canvas_appearance', 'unsupported') })
   await fallback.goto(origin)
   assert.deepEqual(await background(fallback), initial)
+  await fallback.goto(`${origin}/settings`)
+  assert.equal(await fallback.getByRole('radiogroup', { name: '画布配色' }).getByRole('radio', { name: '跟随主站', exact: true }).isChecked(), true)
   await fallback.close()
 
   const blocked = await browser.newPage({ locale: 'zh-CN' })
@@ -155,14 +214,16 @@ try {
     for (const method of ['getItem', 'setItem']) {
       const original = Storage.prototype[method]
       Storage.prototype[method] = function (key, ...args) {
-        if (key === 'jellyfish_appearance') throw new DOMException('Appearance storage disabled', 'SecurityError')
+        if (key === 'jellyfish_appearance' || key === 'jellyfish_canvas_appearance') throw new DOMException('Appearance storage disabled', 'SecurityError')
         return original.call(this, key, ...args)
       }
     }
   })
   await blocked.goto(`${origin}/settings`)
   assert.deepEqual(await background(blocked), initial)
-  await blocked.getByRole('radio', { name: '雾蓝纯色' }).check()
+  await blocked.getByRole('radiogroup', { name: '画布配色' }).getByRole('radio', { name: '经典深色' }).check()
+  assert.equal(await blocked.getByRole('radiogroup', { name: '画布配色' }).getByRole('radio', { name: '经典深色' }).isChecked(), true)
+  await blocked.getByRole('radiogroup', { name: '外观', exact: true }).getByRole('radio', { name: '雾蓝纯色' }).check()
   assert.deepEqual(await background(blocked), solidBackground)
   await blocked.getByRole('link', { name: '首页', exact: true }).click()
   await blocked.waitForURL(`${origin}/`)

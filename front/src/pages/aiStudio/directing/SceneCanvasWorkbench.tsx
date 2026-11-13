@@ -121,8 +121,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         </>
       }} />
   }
-  return <WorkbenchTheme>
-    <WorkspaceLayout className="workbench-ui" aria-label="工作台画布">
+  return <WorkbenchTheme adaptive>
+    <WorkspaceLayout className="workbench-ui storyboard-canvas-fallback" aria-label="工作台画布">
       <PageToolbar title="工作台画布">
         <Space wrap><Button onClick={() => management()}>返回工作台管理</Button><TaskCenter workbench /></Space>
       </PageToolbar>

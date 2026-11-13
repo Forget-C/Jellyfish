@@ -9,6 +9,13 @@
     "mist": "Mist Blue Gradient",
     "solid": "Mist Blue Solid"
   },
+  "canvasAppearance": {
+    "label": "Canvas appearance",
+    "follow": "Follow site",
+    "dark": "Classic dark",
+    "mist": "Mist Blue Gradient",
+    "solid": "Mist Blue Solid"
+},
   "menu": {
     "home": "Home",
     "projects": "Projects",

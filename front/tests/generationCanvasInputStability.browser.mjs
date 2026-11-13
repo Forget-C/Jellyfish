@@ -67,6 +67,21 @@ try {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const geometry = () => input.evaluate(element => { const b = element.getBoundingClientRect(); return { top: b.top, height: b.height } })
     const before = await geometry()
+    const draft = '配色切换期间保留正在编辑的内容。'
+    await input.fill(draft)
+    const world = page.locator('.generation-world')
+    const transform = await world.evaluate(element => element.style.transform)
+    const selected = await page.locator('[data-card-id="model"]').getAttribute('data-selected')
+    for (const [appearance, expected] of [['经典深色', 'rgb(32, 36, 39)'], ['雾蓝纯色', 'rgb(255, 255, 255)'], ['雾蓝微渐变', 'rgb(255, 255, 255)']]) {
+      await page.getByRole('button', { name: '画布配色', exact: true }).click()
+      await page.getByRole('menuitemradio', { name: appearance, exact: true }).click()
+      assert.equal(await input.innerText(), draft, 'palette switch preserves current editor input')
+      assert.equal(await world.evaluate(element => element.style.transform), transform, 'palette switch preserves viewport')
+      assert.equal(await page.locator('[data-card-id="model"]').getAttribute('data-selected'), selected)
+      assert.equal(await editor.evaluate(element => getComputedStyle(element).backgroundColor), expected, 'body-mounted editor follows palette')
+      assert.deepEqual(await geometry(), before, 'palette switch preserves editor geometry')
+      await page.screenshot({ path: join(output, `palette-${appearance}.png`), animations: 'disabled' })
+    }
     hold = true
     await input.fill('连续编辑时保持输入框位置与高度稳定。')
     await pending

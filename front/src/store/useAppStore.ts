@@ -13,6 +13,16 @@ function readAppearance(): Appearance {
   }
 }
 
+export const canvasAppearances = ['follow', 'dark', 'mist', 'solid'] as const
+export type CanvasAppearance = typeof canvasAppearances[number]
+const canvasAppearanceStorageKey = 'jellyfish_canvas_appearance'
+function readCanvasAppearance(): CanvasAppearance {
+  try {
+    const value = localStorage.getItem(canvasAppearanceStorageKey)
+    return canvasAppearances.includes(value as CanvasAppearance) ? value as CanvasAppearance : 'follow'
+  } catch { return 'follow' }
+}
+
 interface UserInfo {
   name: string
   role: string
@@ -21,6 +31,8 @@ interface UserInfo {
 interface AppState {
   user: UserInfo
   language: SupportedLanguage
+  canvasAppearance: CanvasAppearance
+  setCanvasAppearance: (value: CanvasAppearance) => void
   appearance: Appearance
   setUser: (user: Partial<UserInfo>) => void
   setLanguage: (lang: SupportedLanguage) => void
@@ -34,6 +46,11 @@ export const useAppStore = create<AppState>((set) => ({
   },
   language: 'zh-CN',
   appearance: readAppearance(),
+  canvasAppearance: readCanvasAppearance(),
+  setCanvasAppearance: (canvasAppearance) => {
+    set({ canvasAppearance })
+    try { localStorage.setItem(canvasAppearanceStorageKey, canvasAppearance) } catch { /* 当前会话保留内存偏好。 */ }
+  },
   setUser: (user) =>
     set((state) => ({
       user: {
