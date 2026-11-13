@@ -29,7 +29,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
   const [nameError, setNameError] = useState('')
   const composing = useRef(false)
   const [review, setReview] = useState<{ plan: DivisionPlan; action: DivisionAssignment; title: string; splitKey?: string; baseline: ChapterDivisionDraft }>()
-  const reviewCache = useRef<typeof review>()
+  const [reviewCache, setReviewCache] = useState<typeof review>()
   const resultNames = useRef(new Map<string, string>())
   const keepResultNames = (plan: DivisionPlan): DivisionPlan => ({ ...plan, draft: { ...plan.draft, members: plan.draft.members.map(row => ({ ...row, title: resultNames.current.get(`${row.span?.start}:${row.span?.end}`) ?? row.title })) } })
   const [undo, setUndo] = useState<{ draft: ChapterDivisionDraft; activeId?: string }>()
@@ -55,10 +55,10 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
   const old = identities.find(row => row.id === current?.sequence_id)
   const excerpt = current?.suggested_excerpt || old?.source_text
   const matches = excerpt ? excerptMatches(chapter.raw_text, excerpt) : []
-  const resetInteraction = () => { setPhase(undefined); setNewName(''); setRename(undefined); setNameError(''); setSelection(undefined); setReview(undefined); reviewCache.current = undefined; resultNames.current.clear() }
+  const resetInteraction = () => { setPhase(undefined); setNewName(''); setRename(undefined); setNameError(''); setSelection(undefined); setReview(undefined); setReviewCache(undefined); resultNames.current.clear() }
   const nameInvalid = !!rename && !rename.value.trim()
-  const blocked = review || phase || selection ? '请先确认或取消当前操作' : nameInvalid ? '请补全场次名称' : undefined
-  const interactionDirty = !!review || !!selection || !!newName || !!rename && rename.value !== rename.original
+  const blocked = review || reviewCache || phase || selection ? '请先确认或取消当前操作' : nameInvalid ? '请补全场次名称' : undefined
+  const interactionDirty = !!review || !!reviewCache || !!selection || !!newName || !!rename && rename.value !== rename.original
   useEffect(() => { onInteractionChange?.({ dirty: interactionDirty, blocked }) }, [onInteractionChange, interactionDirty, blocked, selection, newName, rename])
   const prepareName = () => {
     if (nameInvalid) { setNameError('请输入场次名称'); return undefined }
@@ -79,13 +79,13 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
   }, discard: resetInteraction }
   const transition = (action: () => void) => {
     if (!interactionDirty) { resetInteraction(); action(); return }
-    if (phase || selection || nameInvalid) Modal.confirm({ title: '放弃本次操作？', content: '此前已确认的本章草稿保持不变。', okText: '放弃本次操作', cancelText: '继续当前操作', onOk: () => { resetInteraction(); action() } })
+    if (reviewCache || phase || selection || nameInvalid) Modal.confirm({ title: '放弃本次操作？', content: '此前已确认的本章草稿保持不变。', okText: '放弃本次操作', cancelText: '继续当前操作', onOk: () => { resetInteraction(); action() } })
     else if (finishName()) { resetInteraction(); action() }
   }
   const selectScene = (key: string) => { if (key !== activeId) transition(() => { preservePosition.current = false; onActive(key) }) }
   const beginPhase = (value: 'create' | 'split' | 'range') => {
     const begin = () => { setPhase(value); setNewName(''); setOperationError('') }
-    if (nameInvalid) transition(begin)
+    if (nameInvalid || reviewCache) transition(begin)
     else if (!rename || finishName()) begin()
   }
   const beginCreate = () => beginPhase('create')
@@ -93,13 +93,14 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
     setUndo({ draft: inputDraft, activeId }); preservePosition.current = true
     onChange(plan.draft); resetInteraction(); onActive(plan.activeKey); void message.success('已更新本章草稿')
   }
-  const propose = (action: DivisionAssignment, title: string, splitKey?: string) => {
+  const propose = (action: DivisionAssignment, title: string, splitKey?: string, replaceCache = false) => {
     if (readOnly || busy || review) return
     try {
-      const cached = reviewCache.current
+      const cached = replaceCache ? undefined : reviewCache
       const sameAction = (value: DivisionAssignment) => JSON.stringify([value.mode, value.span, value.targetKey, value.edge, value.title])
       if (cached?.baseline === inputDraft && sameAction(cached.action) === sameAction(action)) { setReview(cached); return }
-      reviewCache.current = undefined; resultNames.current.clear()
+      if (cached) { transition(() => propose(action, title, splitKey, true)); return }
+      setReviewCache(undefined); resultNames.current.clear()
       const plan = planDivisionAssignment(draft, chapter.raw_text, action)
       if (!plan.changed) { void message.info('范围未变化'); resetInteraction(); return }
       setOperationError('')
@@ -110,8 +111,12 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
   const applySpan = (span: SourceSpan) => {
     if (current) propose({ mode: 'range', targetKey: current.key, span, key: crypto.randomUUID() }, '确认范围调整')
   }
-  const retainIdentity = (id: string) => {
+  const retainIdentity = (id: string, replaceCache = false) => {
     if (!current) return
+    if (!replaceCache && reviewCache?.baseline === inputDraft && reviewCache.title === '确认关联变更' && reviewCache.plan.draft.members.find(row => row.key === current.key)?.sequence_id === (id || undefined)) { setReview(reviewCache); return }
+    if (reviewCache && !replaceCache) { transition(() => retainIdentity(id, true)); return }
+    setReviewCache(undefined)
+    resultNames.current.clear()
     const members = draft.members.map(row => row.key === current.key ? { ...row, sequence_id: id || undefined,
       reconfirm_source: row.reconfirm_source || identities.find(old => old.id === id)?.source_changed || undefined } : row)
     const retained = new Set(members.map(row => row.sequence_id))
@@ -145,6 +150,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
       else if (phase === 'range' && selection) applySpan(selection)
     }}>{primary}</Button>
     {phase ? <Button onClick={resetInteraction}>取消{phase === 'create' ? '新建' : phase === 'split' ? '拆分' : '范围调整'}</Button> : <>
+      {reviewCache && <Tooltip title="继续当前操作"><Button aria-label="继续当前操作" icon={<EditOutlined aria-hidden />} onClick={() => setReview(reviewCache)} /></Tooltip>}
       <Dropdown trigger={['click']} menu={{ items: selection ? [
         { key: 'before', label: targets?.before ? `并入前场 · ${targets.before.title}` : '并入前场（无连续目标）', disabled: !targets?.before, onClick: () => append(targets!.before!.key, 'before') },
         { key: 'after', label: targets?.after ? `并入后场 · ${targets.after.title}` : '并入后场（无连续目标）', disabled: !targets?.after, onClick: () => append(targets!.after!.key, 'after') },
@@ -154,7 +160,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
         const available = !!current?.span && !!neighbor?.span && (direction < 0 ? neighbor.span.end === current.span.start : current.span.end === neighbor.span.start)
         return { key: String(direction), label: available ? `与${direction < 0 ? '前' : '后'}场合并 · ${neighbor!.title}` : `与${direction < 0 ? '前' : '后'}场合并（无连续目标）`, disabled: !available, onClick: () => mergeScene(direction) }
       }) }}><Tooltip title="并入／合并场次"><Button aria-label="并入／合并场次" icon={<MergeCellsOutlined aria-hidden />} /></Tooltip></Dropdown>
-      {selection && <Tooltip title="取消选区"><Button aria-label="取消选区" icon={<CloseOutlined aria-hidden />} onClick={resetInteraction} /></Tooltip>}
+      {(selection || reviewCache) && <Tooltip title="取消本次操作"><Button aria-label="取消本次操作" icon={<CloseOutlined aria-hidden />} onClick={resetInteraction} /></Tooltip>}
       <Tooltip title="拆分当前场次"><Button aria-label="拆分当前场次" icon={<ScissorOutlined aria-hidden />} disabled={!current?.span} onClick={() => beginPhase('split')} /></Tooltip>
       <Tooltip title={current?.span ? '调整范围' : '重新定位'}><Button aria-label={current?.span ? '调整范围' : '重新定位'} icon={<SelectOutlined aria-hidden />} disabled={!current} onClick={() => beginPhase('range')} /></Tooltip>
       <Tooltip title="撤销上一步"><Button aria-label="撤销上一步" icon={<UndoOutlined aria-hidden />} disabled={!undo} onClick={() => transition(() => { if (undo) { preservePosition.current = true; onChange(undo.draft); onActive(undo.activeId); setUndo(undefined) } })} /></Tooltip>
@@ -220,7 +226,7 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
           if (row.title !== review.plan.draft.members.find(old => old.key === row.key)?.title) resultNames.current.set(`${row.span?.start}:${row.span?.end}`, row.title)
         }
         setReview({ ...review, plan })
-      }} onCancel={() => { reviewCache.current = review; setReview(undefined) }} onRetain={(key, after) => {
+      }} onCancel={() => { setReviewCache(review); setReview(undefined) }} onRetain={(key, after) => {
         if (review.splitKey) {
           const original = draft.members.find(row => row.key === key)!
           const plan = planDivisionAssignment(draft, chapter.raw_text, review.action)
