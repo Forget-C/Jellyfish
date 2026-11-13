@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Drawer, Empty, Grid, Image, Input, Modal, Select, Space, Spin, message } from 'antd'
-import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined, SwapOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, StudioFilesService } from '../../../services/generated'
 import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
 import { AssetEditPageBase } from '../assets/components/AssetEditPageBase'
@@ -373,8 +373,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
             const referenceMenu = [...currentUpload, ...imageOptions, { key: 'upload', label: '上传参考图', onClick: openUpload }]
             const cardActions = [{ key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) }, { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction, ...(object.image_file_id ? [{ key: 'clear-reference', label: '清除参考图', disabled: assetUnavailable,
               onClick: () => void save(object.id, object.asset_id ?? undefined) }] : [])]
-            const referenceButton = <MainButton disabled={disabled || assetUnavailable} loading={savingObject === object.id}
-              onClick={images.length ? undefined : openUpload}>{referenceAction}</MainButton>
+            const referenceButton = <MainButton size="small" type="text" className="management-reference-action" aria-label={referenceAction} icon={object.image_file_id ? <SwapOutlined /> : images.length ? <PictureOutlined /> : <UploadOutlined />} disabled={disabled || assetUnavailable} loading={savingObject === object.id}
+              onClick={images.length ? undefined : openUpload}>{object.image_file_id ? '更换' : images.length ? '选择' : '上传'}</MainButton>
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
@@ -385,6 +385,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                         <MainButton type="text" icon={<MoreOutlined />} aria-label="对象更多操作" disabled={disabled} />
                       </Dropdown>
                     </div>
+                    <div className="management-object-excerpt" title={object.excerpt || '暂无出处'} tabIndex={0}><span>出处</span><span>{object.excerpt || '暂无出处'}</span></div>
                     <ObjectAssociationEditor open={associationObject === object.id} onClose={() => {
                       setAssociationObject(undefined)
                       document.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(object.id)}"] button[aria-label="对象更多操作"]`)?.focus({ preventScroll: true })
