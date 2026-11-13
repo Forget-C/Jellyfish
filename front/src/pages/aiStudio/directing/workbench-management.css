@@ -237,7 +237,7 @@
 
 .division-operation-review .ant-modal-body { max-height:calc(100dvh - 240px); overflow-y:auto; scrollbar-gutter:stable; }
 
-.management-title-scenes { display: flex; flex: 1; min-width: 0; justify-content: flex-end; align-items: center; gap: 4px; }
+.management-title-scenes { display: flex; flex: 1; min-width: 0; justify-content: flex-start; align-items: center; gap: 4px; }
 .management-title-scenes > .ant-btn { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .management-title-scenes > .ant-dropdown-trigger { flex-shrink: 0; max-width: 220px; }
 .management-title-scenes > .ant-btn[aria-pressed=true] { background: var(--app-selected); color: var(--app-accent); }

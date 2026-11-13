@@ -75,6 +75,9 @@ try {
   assert.equal(await page.getByRole('heading', { name: '对象参考', exact: true }).evaluate(el => getComputedStyle(el).fontSize), '16px')
   assert.equal(await page.locator('.management-toolbar').getByRole('group', { name: '选择场次' }).count(), 1, '场次切换与标题同排')
   await page.locator('.management-browse-toolbar').getByRole('button', { name: '提取对象', exact: true }).waitFor()
+  const titleBox = await page.locator('.management-identity').boundingBox()
+  const firstSceneBox = await page.getByRole('group', { name: '选择场次' }).getByRole('button').first().boundingBox()
+  assert.ok(firstSceneBox.x - titleBox.x - titleBox.width <= 20, '场次选择紧跟标题左侧聚合')
   const titleHeight = (await page.locator('.management-toolbar').boundingBox()).height
   await steps.getByRole('button', { name: /场次划分/ }).click()
   await page.getByRole('heading', { name: '场次划分', exact: true }).waitFor()
