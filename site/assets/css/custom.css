@@ -310,3 +310,12 @@ body { background: var(--jf-bg); color: var(--jf-text); }
 .jf-panel-kicker { font-size: 12px; color: var(--jf-muted); margin-bottom: 10px; }
 
 @media (min-width: 1280px) { .jf-static-toc { display: block; } }
+
+.jf-placements { display: grid; grid-template-columns: 2fr 1fr; gap: 22px; }
+.jf-placement { padding: 28px; border: 1px dashed var(--jf-line); border-radius: 12px; background: var(--jf-surface); }
+.jf-placement h2 { margin: 14px 0; font-size: 24px; }
+.jf-placement p { color: var(--jf-muted); line-height: 1.8; }
+@media (max-width: 768px) {
+  .jf-placements { grid-template-columns: 1fr; }
+  .jf-placement { padding: 24px; }
+}

@@ -1,9 +1,12 @@
 {{ define "main" }}
+  {{/* Hextra mobile navigation requires its sidebar even on a custom homepage. */}}
+  {{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
   <div id="content" class="jf-home">
     {{ partial "home-hero.html" . }}
     {{ partial "home-showcase.html" . }}
     {{ partial "home-workflow.html" . }}
     {{ partial "home-projects.html" . }}
+    {{ partial "home-placements.html" . }}
     {{ partial "home-community.html" . }}
     {{ partial "home-cta.html" . }}
   </div>

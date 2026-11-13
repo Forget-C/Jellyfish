@@ -1,0 +1,9 @@
+<section class="jf-section jf-placements" aria-label="广告与赞助">
+  {{ range site.Data.homepage.placements }}
+    <div class="jf-placement" role="group" aria-label="{{ .label }}">
+      <div class="jf-kicker">{{ .label }}</div>
+      <h2>{{ .title }}</h2>
+      <p>{{ .description }}</p>
+    </div>
+  {{ end }}
+</section>
