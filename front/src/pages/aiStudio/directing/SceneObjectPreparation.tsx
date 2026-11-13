@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Drawer, Empty, Grid, Image, Input, Modal, Select, Space, Spin, message } from 'antd'
-import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, PictureOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined, SwapOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, StudioFilesService } from '../../../services/generated'
 import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
 import { AssetEditPageBase } from '../assets/components/AssetEditPageBase'
@@ -31,12 +31,14 @@ function activeTask(data?: SceneObjectsRead) {
   return data?.task?.status === 'queued' || data?.task?.status === 'running'
 }
 
-function ReferenceImage({ name, fileId }: { name: string; fileId?: string }) {
+function ReferenceImage({ name, fileId, unavailable }: { name: string; fileId?: string; unavailable?: boolean }) {
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   return <>
     <div className="management-reference-frame">
+      {unavailable && <div className="management-reference-failed">参考图不可用</div>}
+      {failed && <div role="status" className="management-reference-failed"><Badge status="warning" text="图片加载失败" /><MainButton type="text" icon={<ReloadOutlined />} aria-label="重试参考图" onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
       {fileId && !failed && <button type="button" aria-label={`预览${name}参考图`} onClick={event => {
         // 预览浮层通过 portal 挂载，关闭操作不会重新触发卡面预览。
         if (event.currentTarget.contains(event.target as Node)) setPreviewOpen(true)
@@ -45,7 +47,7 @@ function ReferenceImage({ name, fileId }: { name: string; fileId?: string }) {
           preview={{ visible: previewOpen, onVisibleChange: setPreviewOpen, mask: false }} />
       </button>}
     </div>
-    {failed && <div role="status"><Badge status="warning" text="图片加载失败" /><MainButton type="text" icon={<ReloadOutlined />} aria-label="重试参考图" onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
+
   </>
 }
 
@@ -69,6 +71,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [submitting, setSubmitting] = useState(false)
   const [savingObject, setSavingObject] = useState<string>()
   const saving = !!savingObject
+  const [associationObject, setAssociationObject] = useState<string>()
   const [descriptionObject, setDescriptionObject] = useState<SceneObjectRead>()
   const [assetEditor, setAssetEditor] = useState<AssetSummary>()
   const [draft, setDraft] = useState<{ object: SceneObjectRead; name: string; description: string; requestId: string; attempted: boolean }>()
@@ -285,7 +288,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }
   const descriptionContent = descriptionObject && <div className="management-object-description-content"><p>{descriptionObject.description || '未填写描述'}</p><p>出处：{descriptionObject.excerpt || '暂无出处'}</p></div>
   return <>
-    {compact ? <Drawer title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
+    {compact ? <Drawer aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
       : <Modal title="描述与出处" open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
     <section hidden={!!management && !!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>
@@ -363,37 +366,39 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
             }))
             const assetUnavailable = !!object.asset_id && !asset
             const imageUnavailable = object.image_file_id && object.reference_state === 'unavailable'
-            const referenceStatus = imageUnavailable ? '参考图不可用' : referenceFileId ? '已选参考图' : '未绑定参考图'
             const referenceAction = object.image_file_id ? '更换参考图' : images.length ? '选择参考图' : '上传参考图'
             const currentUpload = referenceFileId && !images.includes(referenceFileId) ? [{ key: 'current-upload', disabled: true,
               label: <span className="management-reference-option"><img alt="" src={buildFileDownloadUrl(referenceFileId)} />当前已选参考图</span>,
             }] : []
             const referenceMenu = [...currentUpload, ...imageOptions, { key: 'upload', label: '上传参考图', onClick: openUpload }]
-            const cardActions = [{ key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction, ...(object.image_file_id ? [{ key: 'clear-reference', label: '清除参考图', disabled: assetUnavailable,
+            const cardActions = [{ key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) }, { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction, ...(object.image_file_id ? [{ key: 'clear-reference', label: '清除参考图', disabled: assetUnavailable,
               onClick: () => void save(object.id, object.asset_id ?? undefined) }] : [])]
-            const referenceButton = <MainButton disabled={disabled || assetUnavailable} loading={savingObject === object.id}
-              onClick={images.length ? undefined : openUpload}>{referenceAction}</MainButton>
+            const referenceButton = <MainButton size="small" type="text" className="management-reference-action" aria-label={referenceAction} icon={object.image_file_id ? <SwapOutlined /> : images.length ? <PictureOutlined /> : <UploadOutlined />} disabled={disabled || assetUnavailable} loading={savingObject === object.id}
+              onClick={images.length ? undefined : openUpload}>{object.image_file_id ? '更换' : images.length ? '选择' : '上传'}</MainButton>
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
-                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} />
+                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} />
                   <div className="management-object-body">
                     <div className="management-object-title-row"><h4 title={object.name}>{object.name}</h4><small>{kinds[kind]}</small>
                       <Dropdown autoFocus trigger={['click']} disabled={disabled} menu={{ items: cardActions }}>
                         <MainButton type="text" icon={<MoreOutlined />} aria-label="对象更多操作" disabled={disabled} />
                       </Dropdown>
                     </div>
-                    <div className="management-object-association-row"><LinkOutlined aria-hidden />
-                      {asset ? <MainButton type="link" title={asset.name} onClick={() => openAsset(asset, object.id)} aria-label={`查看${asset.name}资产`}>{asset.name}<ArrowRightOutlined /></MainButton>
-                        : <span>{assetUnavailable ? '关联资产不可用，请更换或解除关联' : '尚未关联资产'}</span>}
-                      <ObjectAssociationEditor assetId={object.asset_id} hasReference={!!object.image_file_id} disabled={disabled} options={options}
-                        onSave={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; return save(object.id, id) }} />
-                    </div>
-                    <div className="management-object-reference">
-                      <span className="management-object-reference-status">{imageUnavailable ? <Badge status="warning" text={referenceStatus} /> : <><PictureOutlined aria-hidden /> {referenceStatus}</>}</span>
-                      {images.length ? <Dropdown autoFocus trigger={['click']} disabled={disabled}
-                        menu={{ items: referenceMenu }}>{referenceButton}</Dropdown> : referenceButton}
-                    </div>
+                    <div className="management-object-excerpt" title={object.excerpt || '暂无出处'} tabIndex={0}><span>出处</span><span>{object.excerpt || '暂无出处'}</span></div>
+                    <ObjectAssociationEditor open={associationObject === object.id} onClose={() => {
+                      setAssociationObject(undefined)
+                      document.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(object.id)}"] button[aria-label="对象更多操作"]`)?.focus({ preventScroll: true })
+                    }} assetId={object.asset_id} hasReference={!!object.image_file_id} disabled={disabled} options={options}
+                      onSave={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; return save(object.id, id) }}
+                      anchor={<div className="management-object-association-row"><LinkOutlined aria-hidden />
+                        {asset ? <MainButton type="link" title={asset.name} onClick={() => openAsset(asset, object.id)} aria-label={`查看${asset.name}资产`}>{asset.name}<ArrowRightOutlined /></MainButton>
+                          : <span>{assetUnavailable ? '关联资产不可用，请更换或解除关联' : '尚未关联资产'}</span>}
+                        {images.length ? <Dropdown autoFocus trigger={['click']} disabled={disabled}
+                          menu={{ items: referenceMenu }}>{referenceButton}</Dropdown> : referenceButton}
+                      </div>} />
+                    {imageUnavailable && <Badge status="warning" text="参考图不可用" />}
+
                   </div>
                   {choiceError?.objectId === object.id && <Alert type="error" showIcon message={choiceError.message}
                     description={retryChoice} />}
