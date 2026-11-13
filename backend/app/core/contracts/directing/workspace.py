@@ -287,7 +287,7 @@ class AssetReferenceImage(Contract):
 
     file_id: Identity
     view_angle: str
-    source_kind: Literal['character', 'actor', 'scene', 'prop']
+    source_kind: Literal['character', 'scene', 'prop']
     source_id: Identity
     slot_id: int
 

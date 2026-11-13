@@ -152,27 +152,16 @@ class SceneObjectService(SceneCanvasService):
             raise HTTPException(404, 'Object not found in scene')
         from app.models.studio import Project
         await self.db.scalar(select(Project).where(Project.id == self.project_id).with_for_update())
-        if body.actor_id:
-            if candidate.kind != 'character' or body.asset_id:
-                raise ValueError('只有人物对象可以选用演员，且不能同时选择其他角色')
-            from app.services.directing.object_assets import select_actor
-            body = body.model_copy(update={'asset_id': await select_actor(
-                self.db, self.project_id, sequence_id, candidate, body.actor_id)})
-        if body.asset_id and candidate.kind in {'scene', 'prop'}:
-            from app.schemas.studio.project_assets import ProjectAssetLinkCreate
-            from app.services.studio.project_assets import create_project_asset_link
-            await create_project_asset_link(self.db, entity_type=candidate.kind,
-                body=ProjectAssetLinkCreate(project_id=self.project_id, asset_id=body.asset_id))
         asset = next((item for item in await self.assets() if item.kind == candidate.kind and item.id == body.asset_id), None)
         if body.asset_id and not asset:
             raise ValueError('所选资产不属于当前项目或类型不符')
         if body.auto_select_image and asset:
-            images = [image for image in asset.reference_images if not body.actor_id or image.source_kind == 'actor']
-            selected = next((image for image in images if image.view_angle == 'FRONT'), next(iter(images), None))
+            selected = next(iter(asset.reference_images), None)
             from app.core.contracts.directing.scene_objects import ObjectReferenceSource
-            source = ObjectReferenceSource(kind='actor', asset_id=body.actor_id) if body.actor_id else (
-                ObjectReferenceSource(kind=selected.source_kind, asset_id=selected.source_id) if selected else None)
+            source = ObjectReferenceSource(kind=selected.source_kind, asset_id=selected.source_id) if selected else None
             body = body.model_copy(update={'image_file_id': selected.file_id if selected else None, 'reference_source': source})
+        if body.image_file_id and not body.asset_id:
+            raise ValueError('请先创建对象或明确选择已有项目对象')
         if body.image_file_id and not (asset and body.image_file_id in asset.image_file_ids):
             uploads = await self._uploads(chapter_id, sequence_id, [candidate])
             if (candidate.id, body.image_file_id) not in uploads:
@@ -190,11 +179,9 @@ class SceneObjectService(SceneCanvasService):
         if source is None and body.asset_id == candidate.asset_id and body.image_file_id is None:
             source = candidate.reference_source
         if source and asset:
-            allowed = (source.kind == asset.kind and source.asset_id == asset.id) or (
-                asset.kind == 'character' and source.kind == 'actor' and source.asset_id == asset.actor_id) or (
-                source == candidate.reference_source and body.asset_id == candidate.asset_id)
+            allowed = source.kind == asset.kind and source.asset_id == asset.id
             if not allowed:
-                raise ValueError('图片来源不属于所选对象资产或其演员')
+                raise ValueError('图片来源不属于所选对象资产')
             if body.image_file_id and not any(image.file_id == body.image_file_id and
                     image.source_kind == source.kind and image.source_id == source.asset_id for image in asset.reference_images):
                 if body.image_file_id != candidate.image_file_id or source != candidate.reference_source:

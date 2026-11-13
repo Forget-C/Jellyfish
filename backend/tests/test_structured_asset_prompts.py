@@ -25,7 +25,8 @@ async def asset_db(monkeypatch):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with async_sessionmaker(engine, expire_on_commit=False)() as db:
-        db.add(Actor(id="actor", name="小林", age_appearance="约30岁", hair="黑色短发", supplementary_info="左眉疤痕", style=ProjectStyle.real_people_city))
+        db.add(Actor(id="actor", name="小林", age_appearance="约30岁", hair="黑色短发", supplementary_info="左眉疤痕", style=ProjectStyle.real_people_city,
+                     references=[{"file_id": "front", "role": "identity"}]))
         db.add_all([FileItem(id=key, name=key, type=FileType.image, storage_key=key + ".png") for key in ("front", "replacement")])
         await db.flush()
         db.add_all([

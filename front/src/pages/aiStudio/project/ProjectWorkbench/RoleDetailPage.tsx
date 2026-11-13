@@ -14,7 +14,7 @@ export default function RoleDetailPage() {
   }
 
   return (
-    <AssetEditPageBase<any, any>
+    <AssetEditPageBase
       key={characterId}
       assetId={characterId}
       {...adapter}

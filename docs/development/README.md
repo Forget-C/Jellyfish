@@ -49,6 +49,7 @@
 - [声音设计与生成职责](adr/0004-sound-design-and-generation-responsibilities.md)
 - [场次工作台与自由生成共享画布基础](adr/0005-shared-canvas-foundation.md)
 - [项目角色身份与共享资产复用](adr/0006-project-character-and-shared-assets.md)
+- [项目专属资源与独立入库副本（完整方案已最终确认，尚未实施）](adr/0007-project-resource-ownership-and-library-copies.md)
 
 ## 开发与维护指南
 

@@ -63,13 +63,15 @@ async def create_project_asset_link(
 ) -> Any:
     """创建或补全项目-章节-资产关联。"""
     spec = _link_spec(entity_type)
-    await require_entity(
+    asset = await require_entity(
         db,
         spec["asset_model"],
         body.asset_id,
         detail=spec["not_found"],
         status_code=400,
     )
+    if asset.project_id is not None and asset.project_id != body.project_id:
+        raise HTTPException(status_code=400, detail="不能关联其他项目的专属资源")
     row = await upsert_project_link(
         db,
         model=spec["model"],
@@ -92,6 +94,9 @@ async def delete_project_asset_link(
     row = await db.get(spec["model"], link_id)
     if row is None:
         return
+    asset = await db.get(spec["asset_model"], getattr(row, spec["field"]))
+    if asset is not None and asset.project_id is not None:
+        raise HTTPException(status_code=400, detail="项目专属对象不能取消自身归属，请使用删除对象")
     await delete_if_exists(db, spec["model"], link_id)
 
 

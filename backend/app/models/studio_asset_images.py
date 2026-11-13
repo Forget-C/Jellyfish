@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -8,7 +8,13 @@ from app.models.base import TimestampMixin
 from app.models.types import AssetQualityLevel, AssetViewAngle
 
 
-class CharacterImage(Base, TimestampMixin):
+class ImagePrimaryMixin:
+    """对象图片的显式主图标记；写入时由服务串行维护唯一主图。"""
+
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class CharacterImage(ImagePrimaryMixin, Base, TimestampMixin):
     """角色图片（多角度/多精度）。归属角色；同一角色下至多一张 is_primary=True。
 
     应用层保证：
@@ -49,28 +55,14 @@ class CharacterImage(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="宽（px）")
     height: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="高（px）")
     format: Mapped[str] = mapped_column(String(32), nullable=True, default="png", comment="格式")
-    is_primary: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        comment="是否主图；应用层需保证同一角色下至多一张主图",
-    )
     prompt_overrides: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict, comment="此图片的展示提示词变量覆盖")
     version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="槽位 CAS 版本")
 
     character: Mapped["Character"] = relationship(back_populates="images")
 
-    __table_args__ = (
-        UniqueConstraint(
-            "character_id",
-            "quality_level",
-            "view_angle",
-            name="uq_character_images_quality_angle",
-        ),
-    )
 
 
-class ActorImage(Base, TimestampMixin):
+class ActorImage(ImagePrimaryMixin, Base, TimestampMixin):
     """演员形象/立绘多角度图片。
 
     应用层保证：
@@ -121,12 +113,9 @@ class ActorImage(Base, TimestampMixin):
 
     actor: Mapped["Actor"] = relationship(back_populates="images")
 
-    __table_args__ = (
-        UniqueConstraint("actor_id", "quality_level", "view_angle", name="uq_actor_images_quality_angle"),
-    )
 
 
-class SceneImage(Base, TimestampMixin):
+class SceneImage(ImagePrimaryMixin, Base, TimestampMixin):
     """场景多角度图片。
 
     应用层保证：
@@ -172,12 +161,9 @@ class SceneImage(Base, TimestampMixin):
 
     scene: Mapped["Scene"] = relationship(back_populates="images")
 
-    __table_args__ = (
-        UniqueConstraint("scene_id", "quality_level", "view_angle", name="uq_scene_images_quality_angle"),
-    )
 
 
-class PropImage(Base, TimestampMixin):
+class PropImage(ImagePrimaryMixin, Base, TimestampMixin):
     """道具多角度图片。
 
     应用层保证：
@@ -221,12 +207,9 @@ class PropImage(Base, TimestampMixin):
 
     prop: Mapped["Prop"] = relationship(back_populates="images")
 
-    __table_args__ = (
-        UniqueConstraint("prop_id", "quality_level", "view_angle", name="uq_prop_images_quality_angle"),
-    )
 
 
-class CostumeImage(Base, TimestampMixin):
+class CostumeImage(ImagePrimaryMixin, Base, TimestampMixin):
     """服装多角度图片。
 
     应用层保证：
@@ -270,14 +253,6 @@ class CostumeImage(Base, TimestampMixin):
 
     costume: Mapped["Costume"] = relationship(back_populates="images")
 
-    __table_args__ = (
-        UniqueConstraint(
-            "costume_id",
-            "quality_level",
-            "view_angle",
-            name="uq_costume_images_quality_angle",
-        ),
-    )
 
 
 __all__ = [

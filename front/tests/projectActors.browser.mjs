@@ -16,6 +16,7 @@ const actors = [
   { id: 'actor-broken', name: '失败图片演员', thumbnail: '/api/broken' },
   { id: 'actor-new', name: '待关联演员' },
 ]
+for (const actor of actors) Object.assign(actor,{project_id:null,visual_style:'现实',style:'真人都市'})
 let links = actors.slice(0,3).map((a,i) => ({ id: i+1, project_id: 'actors-project', actor_id: a.id }))
 let unlinkAttempts = 0
 try {
@@ -62,9 +63,9 @@ try {
   const nameLink=page.getByRole('button',{name:actors[0].name,exact:true})
   const originalUrl=page.url()
   await nameLink.click()
-  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+  await page.getByRole('link',{name:'在资产库编辑 ↗',exact:true}).waitFor()
   assert.equal(page.url(),originalUrl)
-  await page.getByRole('button',{name:'返回演员资产',exact:true}).click()
+  await page.getByRole('button',{name:'关闭',exact:true}).click()
   await nameLink.waitFor()
 
   for(const appearance of ['雾蓝微渐变','雾蓝纯色']) {
@@ -88,12 +89,12 @@ try {
   await page.getByRole('button',{name:'待关联演员',exact:true}).waitFor()
   assert.ok(links.some(l=>l.actor_id==='actor-new'))
   await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'编辑',exact:true}).waitFor()
+  await page.getByRole('menuitem',{name:'编辑共享资产 ↗',exact:true}).waitFor()
   await page.keyboard.press('Escape')
-  await page.getByRole('menuitem',{name:'编辑',exact:true}).waitFor({state:'hidden'})
+  await page.getByRole('menuitem',{name:'编辑共享资产 ↗',exact:true}).waitFor({state:'hidden'})
   await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
   await page.getByRole('menuitem',{name:'取消关联',exact:true}).click()
-  const confirm=page.getByRole('dialog').filter({hasText:'仅移除此演员与当前项目的关联'})
+  const confirm=page.getByRole('dialog').filter({hasText:'仅移除项目关联，不删除资产库中的共享对象'})
   await confirm.getByRole('button',{name:'取消关联',exact:true}).click()
   await page.getByText('取消关联失败',{exact:true}).waitFor()
   assert.equal(await confirm.isVisible(),true)
@@ -116,8 +117,11 @@ try {
   await libraryCard.getByText('未填写简介',{exact:true}).waitFor()
   await page.goto('http://127.0.0.1:4542/projects/actors-project?tab=actors')
   await page.getByRole('button',{name:'待关联演员更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'编辑',exact:true}).click()
-  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+  const popupPromise=page.waitForEvent('popup')
+  await page.getByRole('menuitem',{name:'编辑共享资产 ↗',exact:true}).click()
+  const popup=await popupPromise
+  await popup.waitForURL('**/assets/actors/actor-new/edit')
   assert.equal(page.url(),originalUrl)
+  await popup.close()
   console.log(JSON.stringify({output,passed:true}))
 } finally { await cleanup() }

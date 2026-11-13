@@ -405,7 +405,7 @@ if __name__ == '__main__':
             """只替换外部对象存储 I/O，保留真实文件路由及服务。"""
             path = object_path(key)
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data.read())
+            path.write_bytes(data if isinstance(data, bytes) else data.read())
 
         def readable_path(key, operation):
             path = object_path(key)

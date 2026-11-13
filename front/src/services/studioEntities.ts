@@ -4,9 +4,10 @@ import type { ActorCreate, CharacterCreate, SceneCreate, PropCreate, CostumeCrea
 type EntityType = 'actor' | 'character' | 'scene' | 'prop' | 'costume'
 
 export const StudioEntitiesApi = {
-  list(entityType: EntityType, params: { q?: string | null; page?: number; pageSize?: number; order?: string | null; isDesc?: boolean }) {
+  list(entityType: EntityType, params: { projectId?: string; q?: string | null; page?: number; pageSize?: number; order?: string | null; isDesc?: boolean }) {
     return StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({
       entityType,
+      projectId: params.projectId,
       q: params.q ?? null,
       page: params.page ?? 1,
       pageSize: params.pageSize ?? 10,

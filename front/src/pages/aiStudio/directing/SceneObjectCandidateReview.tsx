@@ -100,7 +100,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
       <Changes label="移除" objects={preview.removed} note={object => choiceLabel(object) ? `本场${choiceLabel(object)}将移除` : ''} />
       <Changes label="修改" objects={preview.modified} note={object => object.description} />
       <Changes label="保留人工选择" objects={preview.retained_choices} note={object => `保留${choiceLabel(object)}`} />
-      <p>确认后整批更新本场对象准备。项目资产仍可在资产库使用。</p>
+      <p>确认后整批更新本场对象准备。项目对象与已关联资产仍保留在项目资源中。</p>
     </>}
   </Modal>
 }

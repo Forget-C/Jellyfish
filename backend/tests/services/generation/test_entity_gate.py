@@ -29,7 +29,7 @@ class _AssetImageSession:
 
         self.frame = SimpleNamespace(actor_id=actor_id)
 
-    async def get(self, model: object, identifier: int) -> object | None:
+    async def get(self, model: object, identifier: int, **_kwargs) -> object | None:
         """仅响应门禁对指定帧槽位的读取。"""
 
         if model is ActorImage and identifier == 12:

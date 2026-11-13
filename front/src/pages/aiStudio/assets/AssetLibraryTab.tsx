@@ -4,9 +4,9 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
-import { ActorEntityFormModal } from './components/ActorEntityFormModal'
+import { directingError } from '../directing/common'
+import { ResourceEditorDrawer } from './components/ResourceEditorDrawer'
 import { AssetImageCard, type LibraryAsset, type LibraryAssetType } from './components/AssetImageCard'
-import { StudioAssetTypeFormModal, type StudioAssetLike } from './components/StudioAssetTypeFormModal'
 
 export const assetLibraryTypes = {
   actor: { label: '演员', route: 'actors' },
@@ -35,6 +35,7 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
   const [deleteTarget, setDeleteTarget] = useState<LibraryAsset>()
   const [deleting, setDeleting] = useState(false)
   const [deleteFailed, setDeleteFailed] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const deleteInFlight = useRef(false)
 
   const reload = useCallback(() => setRevision(value => value + 1), [])
@@ -110,7 +111,8 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
       message.success(`已删除${label}`)
       if (page > 1 && result?.assets.length === 1) setPage(page - 1)
       else reload()
-    } catch {
+    } catch (cause) {
+      setDeleteError(directingError(cause))
       setDeleteFailed(true)
     } finally {
       deleteInFlight.current = false
@@ -152,27 +154,14 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
       </div>}
     </WorkspaceScrollPanel>
 
-    {assetType === 'actor'
-      ? <ActorEntityFormModal open={createOpen} editing={null} onCancel={closeCreate} onSuccess={refreshCreated} />
-      : <StudioAssetTypeFormModal open={createOpen} label={label} entityType={assetType} editing={null}
-        createAsset={async payload => {
-          const response = await StudioEntitiesApi.create(assetType, payload)
-          if (!response.data) throw new Error('创建资产失败')
-          return response.data as StudioAssetLike
-        }}
-        updateAsset={async (id, payload) => {
-          const response = await StudioEntitiesApi.update(assetType, id, payload)
-          if (!response.data) throw new Error('更新资产失败')
-          return response.data as StudioAssetLike
-        }}
-        onCancel={closeCreate} seedCreateForm={createSeed}
-        onSeedConsumed={() => setCreateSeed(undefined)} onSaved={refreshCreated} />}
+    <ResourceEditorDrawer key={assetType} open={createOpen} kind={assetType} seed={createSeed}
+      onClose={closeCreate} onSaved={async () => { refreshCreated() }} />
     <Modal title={deleteTarget ? `删除${label}「${deleteTarget.name}」？` : undefined} open={Boolean(deleteTarget)} className="asset-library-delete"
       okText="删除" cancelText="取消" okButtonProps={{ danger: true }} confirmLoading={deleting}
       cancelButtonProps={{ disabled: deleting }} closable={!deleting} keyboard={!deleting} maskClosable={!deleting}
       onCancel={() => { if (!deleteInFlight.current) setDeleteTarget(undefined) }} onOk={() => void deleteAsset()}>
       <p>删除后无法恢复。已关联的资产仍受现有引用限制。</p>
-      {deleteFailed && <Alert type="error" message={`删除${label}失败，请重试`} />}
+      {deleteFailed && <Alert type="error" message={deleteError || `删除${label}失败，请重试`} />}
     </Modal>
   </>
 }

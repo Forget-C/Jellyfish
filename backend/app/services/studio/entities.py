@@ -57,10 +57,12 @@ class StudioEntitiesService:
         is_desc: bool,
         page: int,
         page_size: int,
+        project_id: str | None = None,
     ) -> tuple[list[dict[str, object]], int]:
         return await list_entities_paginated(
             self._db,
             entity_type=entity_type,
+            project_id=project_id,
             q=q,
             style=style,
             visual_style=visual_style,

@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ActorCreate } from '../models/ActorCreate';
 import type { ActorUpdate } from '../models/ActorUpdate';
+import type { AdoptReferenceMainRequest } from '../models/AdoptReferenceMainRequest';
 import type { ApiResponse_dict_str__Any__ } from '../models/ApiResponse_dict_str__Any__';
 import type { ApiResponse_EntityNameExistenceCheckResponse_ } from '../models/ApiResponse_EntityNameExistenceCheckResponse_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
@@ -13,6 +14,7 @@ import type { CharacterUpdate } from '../models/CharacterUpdate';
 import type { CostumeCreate } from '../models/CostumeCreate';
 import type { CostumeUpdate } from '../models/CostumeUpdate';
 import type { EntityNameExistenceCheckRequest } from '../models/EntityNameExistenceCheckRequest';
+import type { LibraryCopyRequest } from '../models/LibraryCopyRequest';
 import type { PropCreate } from '../models/PropCreate';
 import type { PropUpdate } from '../models/PropUpdate';
 import type { SceneCreate } from '../models/SceneCreate';
@@ -21,6 +23,62 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class StudioEntitiesService {
+    /**
+     * 采用参考图的独立副本作为对象主图
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static adoptEntityReferenceMainApiV1StudioEntitiesEntityTypeEntityIdAdoptReferenceMainPost({
+        entityType,
+        entityId,
+        requestBody,
+    }: {
+        entityType: string,
+        entityId: string,
+        requestBody: AdoptReferenceMainRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/entities/{entity_type}/{entity_id}/adopt-reference-main',
+            path: {
+                'entity_type': entityType,
+                'entity_id': entityId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 将项目对象独立复制到资产库
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static publishEntityToLibraryApiV1StudioEntitiesEntityTypeEntityIdPublishToLibraryPost({
+        entityType,
+        entityId,
+        requestBody,
+    }: {
+        entityType: string,
+        entityId: string,
+        requestBody: LibraryCopyRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/entities/{entity_type}/{entity_id}/publish-to-library',
+            path: {
+                'entity_type': entityType,
+                'entity_id': entityId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * 批量检测资产名称是否存在（模糊匹配，不分页）
      * @returns ApiResponse_EntityNameExistenceCheckResponse_ Successful Response
@@ -48,6 +106,7 @@ export class StudioEntitiesService {
      */
     public static listEntitiesApiV1StudioEntitiesEntityTypeGet({
         entityType,
+        projectId,
         q,
         style,
         visualStyle,
@@ -57,6 +116,10 @@ export class StudioEntitiesService {
         pageSize = 10,
     }: {
         entityType: string,
+        /**
+         * 所属项目；不传时仅查询共享资产
+         */
+        projectId?: (string | null),
         /**
          * 关键字，过滤 name/description
          */
@@ -81,6 +144,7 @@ export class StudioEntitiesService {
                 'entity_type': entityType,
             },
             query: {
+                'project_id': projectId,
                 'q': q,
                 'style': style,
                 'visual_style': visualStyle,

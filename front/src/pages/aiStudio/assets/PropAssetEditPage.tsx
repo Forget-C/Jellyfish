@@ -13,7 +13,7 @@ export default function PropAssetEditPage() {
   const backTo = decodeAssetEditReturnTo(searchParams.get('returnTo'), adapter.backTo)
 
   return (
-    <AssetEditPageBase<any, any>
+    <AssetEditPageBase
       key={propId}
       assetId={propId}
       onNavigate={onNavigate}

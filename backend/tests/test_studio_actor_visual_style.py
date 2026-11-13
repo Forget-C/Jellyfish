@@ -108,8 +108,6 @@ def test_character_create_and_read_visual_style() -> None:
         name="Character 1",
         description="",
         visual_style=ProjectVisualStyle.anime,
-        actor_id=None,
-        costume_id=None,
     )
     assert created.visual_style == ProjectVisualStyle.anime
 
@@ -119,8 +117,6 @@ def test_character_create_and_read_visual_style() -> None:
         name="Character 1",
         description="",
         visual_style=ProjectVisualStyle.anime,
-        actor_id=None,
-        costume_id=None,
         thumbnail="",
     )
     assert read_payload.visual_style == ProjectVisualStyle.anime
@@ -128,12 +124,9 @@ def test_character_create_and_read_visual_style() -> None:
 
 def test_character_update_accepts_visual_style() -> None:
     payload = CharacterUpdate(
-        project_id=None,
         name=None,
         description=None,
         visual_style=ProjectVisualStyle.live_action,
-        actor_id=None,
-        costume_id=None,
     )
     assert payload.visual_style == ProjectVisualStyle.live_action
 

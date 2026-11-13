@@ -41,6 +41,18 @@ class GenerationEntityGate:
     async def validate(self, db: AsyncSession, command: GenerationCommand) -> ResolvedGenerationSnapshot:
         """校验生成输入；画布沿用私有固定配置，其他媒体配置由提交器补齐。"""
         await self._validate_target(db, command)
+        if command.request.asset_references is not None:
+            if command.target.kind != GenerationTargetKind.asset_image_slot:
+                raise HTTPException(400, "对象参考仅适用于对象图片生成")
+            spec = entity_spec(command.target.asset_type)
+            asset = await db.get(spec.model, command.target.entity_id)
+            references = command.request.asset_references
+            actual = {ref.file_id for ref in _iter_media(command.request.media)}
+            if {ref.file_id for ref in references} != actual:
+                raise HTTPException(400, "对象参考与实际生成图片不一致")
+            from app.services.studio.resource_references import validate_resource_references
+            await validate_resource_references(db, command.target.asset_type, asset.project_id,
+                [ref.model_dump(exclude_none=True) for ref in references])
         frozen = None
         if command.target.kind == GenerationTargetKind.canvas_node:
             from app.models.generation_canvas import CanvasRunNode
@@ -66,6 +78,7 @@ class GenerationEntityGate:
             operation_input=command.request.operation_input,
             execution_prompt=command.request.execution_prompt,
             asset_prompt_audit=command.request.asset_prompt_audit,
+            asset_references=command.request.asset_references,
         )
 
     async def _resolve_model(self, db: AsyncSession, command: GenerationCommand) -> Model:
@@ -152,6 +165,9 @@ class GenerationEntityGate:
         except ValueError:
             return False
         spec = entity_spec(asset_type)
+        parent = await db.get(spec.model, entity_id, with_for_update=True)
+        if getattr(parent, "source_character_id", None):
+            raise HTTPException(status_code=403, detail="从角色转化的演员只能被引用")
         row = await db.get(spec.image_model, numeric_id)
         return row is not None and getattr(row, spec.id_field) == entity_id
 

@@ -115,5 +115,5 @@ export function WorkspaceWriteBoundary({ busy, children }: { busy: boolean; chil
 
 export function useWorkspaceDraftStatus() {
   const context = useContext(Context)
-  return { names: context?.dirtyNames || [], pendingNavigation: context?.pendingNavigation || false, resolve: () => context?.request({ action: () => {} }), transition: (action: () => void) => context ? context.request({ action }) : action() }
+  return { managed: !!context, names: context?.dirtyNames || [], pendingNavigation: context?.pendingNavigation || false, resolve: () => context?.request({ action: () => {} }), transition: (action: () => void) => context ? context.request({ action }) : action() }
 }

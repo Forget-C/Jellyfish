@@ -2,7 +2,8 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.models.types import AssetViewAngle
 
 AssetReferenceRole = Literal["identity", "costume", "prop", "layout", "style", "design"]
 DISPLAY_FIELDS = frozenset({
@@ -17,6 +18,18 @@ class AssetPromptReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_id: str = Field(min_length=1)
     role: AssetReferenceRole
+    source_kind: Literal["actor", "character", "scene", "prop", "costume"] | None = None
+    source_id: str | None = Field(None, min_length=1)
+    source_image_id: int | None = Field(None, ge=1)
+    view_angle: AssetViewAngle | None = None
+
+    @model_validator(mode="after")
+    def require_concrete_source_image(self):
+        """对象来源须明确到图片行，上传参考则不伪造来源对象。"""
+        source = (self.source_kind, self.source_id, self.source_image_id)
+        if any(value is not None for value in source) and not all(value is not None for value in source):
+            raise ValueError("对象参考必须同时提供来源类别、对象和具体图片")
+        return self
 
 
 class AssetPromptOptions(BaseModel):

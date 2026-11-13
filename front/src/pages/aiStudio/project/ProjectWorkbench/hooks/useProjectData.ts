@@ -140,6 +140,7 @@ export function useProjectCharacters(projectId: string | undefined) {
     setLoading(true)
     try {
       const res = await StudioEntitiesApi.list('character', {
+        projectId,
         page: 1,
         pageSize: 100,
         q: null,

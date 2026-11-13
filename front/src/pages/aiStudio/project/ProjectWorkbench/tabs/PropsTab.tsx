@@ -1,3 +1,4 @@
+import { directingError } from '../../../directing/common'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, SkinOutlined, TagOutlined } from '@ant-design/icons'
@@ -7,13 +8,18 @@ import type { ProjectCostumeLinkRead, ProjectPropLinkRead } from '../../../../..
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
-import { StudioAssetTypeFormModal } from '../../../assets/components/StudioAssetTypeFormModal'
+import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
+import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
+import { resourceAssetUrl } from '../../../assets/components/ResourceEditorDrawer'
+import { Tag } from 'antd'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
 
 type AssetKind = 'prop' | 'costume'
 
 type AssetItemLike = {
+  project_id?: string | null
+  library_copy_id?: string | null
   id: string
   name: string
   description?: string | null
@@ -212,18 +218,24 @@ function LinkedAssetTab({
                   imageAlt={asset?.name ?? '资源信息暂不可用'}
                   placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
-                    { key: 'edit', label: '编辑', onClick: () => openDetail(assetId) },
-                    { key: 'unlink', label: '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
+                    { key: 'edit', label: asset?.project_id === null ? '编辑共享资产 ↗' : '编辑', onClick: () => asset?.project_id === null ? window.open(resourceAssetUrl(kind, assetId), '_blank', 'noopener,noreferrer') : openDetail(assetId) },
+                    { key: 'unlink', label: asset?.project_id ? '删除项目对象' : '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
                       Modal.confirm({
                         className: 'project-resource-dialog',
-                        title: `取消关联「${asset?.name ?? '资源信息暂不可用'}」？`,
-                        content: '仅移除此资源与当前项目的关联，不会删除资产库中的资源。',
-                        okText: '取消关联', cancelText: '取消', okButtonProps: { danger: true },
-                        onOk: () => handleUnlink(l),
+                        title: `${asset?.project_id ? '删除项目对象' : '取消关联'}「${asset?.name ?? '资源信息暂不可用'}」？`,
+                        content: asset?.project_id ? '删除此项目对象及其图片关联，已入库的独立副本继续保留。' : '仅移除项目关联，不删除资产库中的共享对象。',
+                        okText: asset?.project_id ? '删除项目对象' : '取消关联', cancelText: '取消', okButtonProps: { danger: true },
+                        onOk: async () => {
+                          if (asset?.project_id) {
+                            try { await StudioEntitiesApi.remove(kind, assetId); await loadLinks() }
+                            catch (cause) { message.error(directingError(cause)); throw cause }
+                          }
+                          else await handleUnlink(l)
+                        },
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${asset?.name ?? '资源信息暂不可用'}更多操作`} /></Dropdown>}
-                  meta={<><div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div></>}
+                  meta={<><Tag>{asset?.project_id === undefined ? '归属未确认' : asset.project_id ? '项目专属' : '共享资产'}</Tag>{asset && <ResourcePublishButton kind={kind} asset={asset} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}
@@ -245,29 +257,8 @@ function LinkedAssetTab({
         )}
 
 
-      <StudioAssetTypeFormModal
-        open={createModalOpen}
-        label={kind === 'prop' ? '道具' : '服装'}
-        entityType={kind}
-        editing={null}
-        linkProjectId={projectId}
-        createAsset={async (payload) => {
-          const entity = kind === 'prop' ? 'prop' : 'costume'
-          const res = await StudioEntitiesApi.create(entity, payload as Record<string, unknown>)
-          if (!res.data) throw new Error(`empty ${entity}`)
-          return res.data as AssetItemLike
-        }}
-        updateAsset={async (id, payload) => {
-          const entity = kind === 'prop' ? 'prop' : 'costume'
-          const res = await StudioEntitiesApi.update(entity, id, payload as Record<string, unknown>)
-          if (!res.data) throw new Error(`empty ${entity}`)
-          return res.data as AssetItemLike
-        }}
-        onCancel={() => setCreateModalOpen(false)}
-        onSaved={async () => {
-          await loadLinks()
-        }}
-      />
+      <ResourceEditorDrawer open={createModalOpen} kind={kind} projectId={projectId}
+        onClose={() => setCreateModalOpen(false)} onSaved={loadLinks} />
 
       <Modal
         className="project-resource-dialog"

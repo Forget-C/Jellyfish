@@ -2,33 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from jinja2 import Environment, TemplateError, meta
 from pydantic import Field
-from sqlalchemy import select
 
 from app.core.contracts.asset_prompts import AssetPromptOptions, AssetPromptReference, DISPLAY_FIELDS, validate_display_overrides
 from app.services.studio.generation.asset_image.prompt_rules import ASSET_TEMPLATE, PURPOSES, DISPLAY_DEFAULTS, resolve_prompt_references
-
-from app.models.studio import (
-    Actor,
-    ActorImage,
-    AssetViewAngle,
-    Character,
-    CharacterPropLink,
-    Costume,
-    CostumeImage,
-    Prop,
-    PropImage,
-    Scene,
-    SceneImage,
-)
-from app.services.common import entity_not_found
 from app.services.studio.generation.shared.types import GenerationBaseDraft
-from app.services.studio.image_task_references import (
-    pick_front_ref_file_id,
-    pick_ordered_ref_file_ids,
-)
+
 from app.services.studio.image_task_validation import (
     validate_actor_image,
     validate_asset_image_and_relation_type,
@@ -143,211 +124,56 @@ def _resolve_edit_options(options: AssetPromptOptions, image_row: Any) -> AssetP
     return options.model_copy(update={"references": references})
 
 
-async def _resolve_front_ref(
-    db,
-    *,
-    image_model,
-    parent_field_name: str,
-    parent_id: str,
-    preferred_quality_level: str | None,
-) -> list[str]:
-    """选择同资产正面图作为派生视角的默认参考。"""
-    file_id = await pick_front_ref_file_id(
-        db,
-        image_model=image_model,
-        parent_field_name=parent_field_name,
-        parent_id=parent_id,
-        preferred_quality_level=preferred_quality_level,
-    )
-    return [file_id] if file_id else []
-
-
-async def build_actor_image_base_draft(
-    db,
-    *,
-    actor_id: str,
-    image_id: int | None,
-    options: AssetPromptOptions | None = None,
-) -> AssetImageBaseDraft:
-    """读取资产与最终参考图，再生成可审计的完整提示词。"""
-    options = options or AssetPromptOptions()
-    actor = await db.get(Actor, actor_id)
-    if actor is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("Actor"))
-    image_row = await validate_actor_image(db, actor_id=actor_id, image_id=image_id)
-    refs = []
-    if not is_front_view(image_row.view_angle):
-        refs = await _resolve_front_ref(
-            db,
-            image_model=ActorImage,
-            parent_field_name="actor_id",
-            parent_id=actor_id,
-            preferred_quality_level=image_row.quality_level,
-        )
-    options = _resolve_edit_options(options, image_row)
-    refs, reference_instruction = await resolve_prompt_references(
-        db, options.references if options.references is not None else [AssetPromptReference(file_id=file_id, role="identity") for file_id in refs],
-    )
-    prompt, template_id, template_version, merged_variables = await _build_asset_prompt(
-        db,
-        relation_type="actor_image",
-        name=actor.name,
-        description=actor.description,
-        tags=actor.tags,
-        visual_style=actor.visual_style,
-        style=actor.style,
-        image_row=image_row,
-        template_id=actor.prompt_template_id,
-        reference_instruction=reference_instruction,
-        options=options,
-    )
-    return AssetImageBaseDraft(
-        entity_type="actor",
-        entity_id=actor_id,
-        image_id=image_row.id,
-        relation_type="actor_image",
-        relation_entity_id=str(image_row.id),
-        prompt=prompt,
-        default_images=refs,
-        template_id=template_id,
-        template_version=template_version,
-        merged_variables=merged_variables,
-    )
-
-
-async def build_asset_image_base_draft(
-    db,
-    *,
-    asset_type: str,
-    asset_id: str,
-    image_id: int | None,
-    options: AssetPromptOptions | None = None,
-) -> AssetImageBaseDraft:
-    """读取资产与最终参考图，再生成可审计的完整提示词。"""
-    options = options or AssetPromptOptions()
-    relation_entity_id, relation_type = await validate_asset_image_and_relation_type(
-        db,
-        asset_type=asset_type,
-        asset_id=asset_id,
-        image_id=image_id,
-    )
-    asset_type_norm = asset_type.strip().lower()
-    refs: list[str] = []
-    if asset_type_norm == "prop":
-        asset = await db.get(Prop, asset_id)
-        image_row = await db.get(PropImage, relation_entity_id)
-        image_model = PropImage
-        parent_field_name = "prop_id"
-    elif asset_type_norm == "scene":
-        asset = await db.get(Scene, asset_id)
-        image_row = await db.get(SceneImage, relation_entity_id)
-        image_model = SceneImage
-        parent_field_name = "scene_id"
+async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_id, options=None):
+    """五类对象均使用自身设定与明确参考，不读取来源对象的文字或组合。"""
+    from app.services.studio.entity_specs import entity_spec
+    from app.services.studio.resource_references import validate_resource_references
+    spec = entity_spec(entity_type)
+    asset = await db.get(spec.model, entity_id)
+    if asset is None:
+        raise HTTPException(404, "对象不存在")
+    if getattr(asset, "source_character_id", None):
+        raise HTTPException(403, "从角色转化的演员只能被引用")
+    if entity_type == "actor":
+        image = await validate_actor_image(db, actor_id=entity_id, image_id=image_id)
+    elif entity_type == "character":
+        image = await validate_character_image(db, character_id=entity_id, image_id=image_id)
     else:
-        asset = await db.get(Costume, asset_id)
-        image_row = await db.get(CostumeImage, relation_entity_id)
-        image_model = CostumeImage
-        parent_field_name = "costume_id"
-    if asset is None or image_row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("AssetImage"))
-    if not is_front_view(image_row.view_angle):
-        refs = await _resolve_front_ref(
-            db,
-            image_model=image_model,
-            parent_field_name=parent_field_name,
-            parent_id=asset_id,
-            preferred_quality_level=image_row.quality_level,
-        )
-    role = {"scene": "layout", "costume": "costume", "prop": "prop"}[asset_type_norm]
-    options = _resolve_edit_options(options, image_row)
-    refs, reference_instruction = await resolve_prompt_references(
-        db, options.references if options.references is not None else [AssetPromptReference(file_id=file_id, role=role) for file_id in refs],
+        slot, _ = await validate_asset_image_and_relation_type(db, asset_type=entity_type,
+                                                             asset_id=entity_id, image_id=image_id)
+        image = await db.get(spec.image_model, slot)
+    options = _resolve_edit_options(options or AssetPromptOptions(), image)
+    references = options.references
+    if references is None:
+        references = [AssetPromptReference.model_validate(value) for value in asset.references]
+    await validate_resource_references(db, entity_type, asset.project_id,
+        [reference.model_dump(exclude_none=True) for reference in references])
+    refs, instruction = await resolve_prompt_references(db, references)
+    prompt, template_id, template_version, variables = await _build_asset_prompt(
+        db, relation_type=f"{entity_type}_image", name=asset.name, description=asset.description,
+        tags=getattr(asset, "tags", None), visual_style=asset.visual_style, style=asset.style,
+        image_row=image, template_id=getattr(asset, "prompt_template_id", None),
+        reference_instruction=instruction, options=options,
     )
-    prompt, template_id, template_version, merged_variables = await _build_asset_prompt(
-        db,
-        relation_type=relation_type,
-        name=asset.name,
-        description=asset.description,
-        tags=asset.tags,
-        visual_style=asset.visual_style,
-        style=asset.style,
-        image_row=image_row,
-        template_id=asset.prompt_template_id,
-        reference_instruction=reference_instruction,
-        options=options,
-    )
-    return AssetImageBaseDraft(
-        entity_type=asset_type.strip().lower(),
-        entity_id=asset_id,
-        image_id=relation_entity_id,
-        relation_type=relation_type,
-        relation_entity_id=str(relation_entity_id),
-        prompt=prompt,
-        default_images=refs,
-        template_id=template_id,
-        template_version=template_version,
-        merged_variables=merged_variables,
-    )
+    return AssetImageBaseDraft(entity_type=entity_type, entity_id=entity_id, image_id=image.id,
+        relation_type=f"{entity_type}_image", relation_entity_id=str(image.id), prompt=prompt,
+        default_images=refs, template_id=template_id, template_version=template_version,
+        merged_variables=variables)
 
 
-async def build_character_image_base_draft(
-    db,
-    *,
-    character_id: str,
-    image_id: int | None,
-    options: AssetPromptOptions | None = None,
-) -> AssetImageBaseDraft:
-    """读取资产与最终参考图，再生成可审计的完整提示词。"""
-    options = options or AssetPromptOptions()
-    character = await db.get(Character, character_id)
-    if character is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("Character"))
-    image_row = await validate_character_image(db, character_id=character_id, image_id=image_id)
-    references: list[AssetPromptReference] = []
-    descriptions = ["角色语境：" + character.description] if character.description else []
-    sources = []
-    if character.actor_id:
-        sources.append((Actor, ActorImage, "actor_id", character.actor_id, "identity", "演员设定"))
-    if character.costume_id:
-        sources.append((Costume, CostumeImage, "costume_id", character.costume_id, "costume", "服装设定"))
-    links = (await db.execute(select(CharacterPropLink).where(CharacterPropLink.character_id == character_id).order_by(CharacterPropLink.index))).scalars().all()
-    sources.extend((Prop, PropImage, "prop_id", link.prop_id, "prop", "道具设定") for link in links)
-    for model, image_model, parent_field, parent_id, role, label in sources:
-        asset = await db.get(model, parent_id)
-        if asset:
-            descriptions.append(f"{label}（{asset.name}）：{asset.description}")
-        file_ids = await pick_ordered_ref_file_ids(
-            db, image_model=image_model, parent_field_name=parent_field,
-            parent_id=parent_id, view_angles=(AssetViewAngle.front, AssetViewAngle.left, AssetViewAngle.right, AssetViewAngle.back),
-        )
-        references.extend(AssetPromptReference(file_id=file_id, role=role) for file_id in file_ids)
-    options = _resolve_edit_options(options, image_row)
-    refs, reference_instruction = await resolve_prompt_references(
-        db, options.references if options.references is not None else references,
-    )
-    prompt, template_id, template_version, merged_variables = await _build_asset_prompt(
-        db,
-        relation_type="character_image",
-        name=character.name,
-        description="\n".join(descriptions),
-        tags=None,
-        visual_style=character.visual_style,
-        style=character.style,
-        image_row=image_row,
-        # Character 组合资产当前没有独立模板绑定字段；使用该类别默认模板。
-        template_id=None,
-        reference_instruction=reference_instruction,
-        options=options,
-    )
-    return AssetImageBaseDraft(
-        entity_type="character",
-        entity_id=character_id,
-        image_id=image_row.id,
-        relation_type="character_image",
-        relation_entity_id=str(image_row.id),
-        prompt=prompt,
-        default_images=refs,
-        template_id=template_id,
-        template_version=template_version,
-        merged_variables=merged_variables,
-    )
+async def build_actor_image_base_draft(db, *, actor_id, image_id, options=None):
+    """构建演员图片输入。"""
+    return await build_resource_image_base_draft(db, entity_type="actor", entity_id=actor_id,
+                                                image_id=image_id, options=options)
+
+
+async def build_asset_image_base_draft(db, *, asset_type, asset_id, image_id, options=None):
+    """构建场所、道具或服装图片输入。"""
+    return await build_resource_image_base_draft(db, entity_type=asset_type, entity_id=asset_id,
+                                                image_id=image_id, options=options)
+
+
+async def build_character_image_base_draft(db, *, character_id, image_id, options=None):
+    """构建项目角色图片输入。"""
+    return await build_resource_image_base_draft(db, entity_type="character", entity_id=character_id,
+                                                image_id=image_id, options=options)

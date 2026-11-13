@@ -2,12 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetPromptReference } from './AssetPromptReference';
 import type { ProjectStyle } from './ProjectStyle';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 /**
- * 创建角色组合，拒绝未声明的字段。
+ * 创建项目角色及明确图片参考，拒绝未声明的字段。
  */
 export type CharacterCreate = {
+    references?: Array<AssetPromptReference>;
     /**
      * 角色 ID
      */
@@ -32,14 +34,7 @@ export type CharacterCreate = {
      * 画面表现形式（现实/动漫等）
      */
     visual_style?: ProjectVisualStyle;
-    /**
-     * 演员 ID（可空；用于仅导入角色文案但不关联演员时）
-     */
-    actor_id?: (string | null);
-    /**
-     * 服装 ID（可空）
-     */
-    costume_id?: (string | null);
+    adopt_reference?: (AssetPromptReference | null);
     /**
      * 可选：章节 ID
      */

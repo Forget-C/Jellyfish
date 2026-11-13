@@ -8,7 +8,6 @@ import type { ObjectReferenceSource } from './ObjectReferenceSource';
  */
 export type SceneObjectChoice = {
     expected_revision: number;
-    actor_id?: (string | null);
     auto_select_image?: boolean;
     asset_id?: (string | null);
     image_file_id?: (string | null);

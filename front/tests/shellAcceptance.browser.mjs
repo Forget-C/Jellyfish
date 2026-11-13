@@ -54,7 +54,7 @@ try {
     if (path.endsWith('/directing/chapters/ch1')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [workspace.sequence], task_ids: [] })
     if (path.endsWith('/s1/feedback')) return respond({ active_cut_revision_id: 'c-active', current_review_id: null, reviews: [], repairs: [], knowledge: [] })
     if (path.endsWith('/s1/continuity')) return respond({ active_cut_revision_id: 'c-active', frames: [], seams: [], units: [] })
-    if (/\/entities\/[^/]+\/a1$/.test(path)) { if (request.method() === 'PATCH') Object.assign(asset, request.postDataJSON()); return respond(asset) }
+    if (/\/entities\/[^/]+\/a1$/.test(path)) { if (request.method() === 'PATCH') Object.assign(asset, request.postDataJSON()); return respond({...asset,project_id:path.includes('/character/')?'p1':null}) }
     if (/\/entities\/[^/]+$/.test(path)) return respond(list([asset]))
     if (path.endsWith('/images')) return respond(list([{ id: 1, view_angle: 'FRONT', file_id: 'test-image', width: 192, height: 288, format: 'svg' }]))
     if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实', '动漫'], styles: ['现实主义'] })
@@ -166,8 +166,9 @@ try {
     console.log('Asset save', path)
     const name = page.getByRole('textbox', { name: '名称', exact: true })
     await name.fill('保存后的档案名称')
-    await page.getByRole('button', { name: '保存资产', exact: true }).click()
-    await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+    await page.getByRole('button', { name: '保存设定', exact: true }).click()
+    await page.waitForFunction(() => !document.querySelector('.resource-editor-drawer .ant-btn-loading'))
+    assert.equal(asset.name,'保存后的档案名称')
     const generation = page.getByRole('button', { name: /重新生成|生成图片/ }).first()
     await generation.scrollIntoViewIfNeeded()
     assert.equal(await generation.evaluate(element => {
@@ -178,11 +179,12 @@ try {
     asset.name = '旧信档案'
   }
   await visit('/assets/actors/a1/edit')
-  await page.getByRole('button', { name: '放大当前视角图片', exact: true }).click()
-  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor()
+  await page.getByRole('button', { name: '放大正面图片 1', exact: true }).click()
+  await page.locator('.ant-image-preview-wrap').waitFor()
+  await page.waitForFunction(()=>document.activeElement?.closest('.ant-image-preview-wrap'))
   await snapshot('asset-image-preview')
   await page.keyboard.press('Escape')
-  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor({ state: 'hidden' })
+  await page.locator('.ant-image-preview-wrap').waitFor({ state: 'hidden' })
   await visit('/models')
   await page.getByRole('cell', { name: 'openai', exact: true }).click()
   await snapshot('provider-details')

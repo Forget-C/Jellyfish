@@ -55,7 +55,10 @@ try {
     const match = path.match(/\/entities\/(actor|scene|prop|costume)(?:\/([^/]+))?(\/images)?$/)
     if (match) {
       const [, type, id, images] = match
-      if (images) return list([{ id: 19, view_angle: 'FRONT', file_id: records[type].find(asset => asset.id === id)?.thumbnail }])
+      if (images) {
+        const picture={ id: 19, view_angle: 'FRONT', file_id: records[type].find(asset => asset.id === id)?.thumbnail }
+        return request.method()==='POST' ? respond({...picture,...request.postDataJSON()}) : list([picture])
+      }
       if (id && request.method() === 'DELETE') {
         deleteCount++
         if (failDelete) return route.fulfill({ status: 409, json: { detail: '仍有关联引用' } })
@@ -127,7 +130,7 @@ try {
   await page.getByTitle('1', { exact: true }).click()
   await card('服装竖图').getByRole('link', { name: '服装竖图' }).click()
   await page.waitForURL('**/assets/costumes/costume-tall/edit')
-  await page.goBack()
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('tab') === 'costume')
 
   await page.getByRole('tab', { name: '演员', exact: true }).click()
@@ -180,7 +183,7 @@ try {
   await confirm.getByText(/删除后无法恢复/).waitFor()
   assert.equal(deleteCount, 0)
   await confirm.getByRole('button', { name: /^删\s*除$/ }).click()
-  await page.getByText('删除演员失败，请重试', { exact: true }).waitFor()
+  await page.getByText('仍有关联引用', { exact: true }).waitFor()
   await confirm.waitFor()
   await missingActor.waitFor()
   failDelete = false
@@ -234,6 +237,7 @@ try {
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') })
   console.log('Browser evidence:', output)
+  console.error(await page?.locator('body').innerText())
   throw error
 } finally {
   releaseGeneration()

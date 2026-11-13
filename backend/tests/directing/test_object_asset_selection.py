@@ -2,7 +2,6 @@
 import pytest
 
 from app.models.directing import Sequence
-from app.models.studio import Prop
 from tests.directing.test_api import client_for
 from tests.directing.test_store import database
 
@@ -23,146 +22,96 @@ async def prepared_scene(client, sessions, kind='prop'):
 
 
 @pytest.mark.asyncio
-async def test_select_library_prop_links_project_and_unbinding_keeps_resource(tmp_path):
+async def test_extraction_does_not_create_resources_and_only_project_objects_can_be_reused(tmp_path):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add(Prop(id='sword', name='长剑', style='真人都市'))
         endpoint = await prepared_scene(client, sessions)
-        assets_url = '/api/v1/studio/projects/p1/directing/assets'
-        assert (await client.get(assets_url)).json()['data'] == []
+        resources = '/api/v1/studio/projects/p1/directing/assets'
+        assert (await client.get(resources)).json()['data'] == []
+        created = await client.post('/api/v1/studio/entities/prop', json={
+            'id': 'sword', 'name': '长剑', 'supplementary_info': '原始稳定设定'})
+        assert created.status_code == 201, created.text
+        unlinked = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword'})
+        assert unlinked.status_code == 422
+        linked = await client.post('/api/v1/studio/project-assets/prop', json={'project_id': 'p1', 'asset_id': 'sword'})
+        assert linked.status_code == 201
         chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword'})
         assert chosen.status_code == 200, chosen.text
         assert chosen.json()['data']['objects'][0]['asset_id'] == 'sword'
-        assert [asset['id'] for asset in (await client.get(assets_url)).json()['data']] == ['sword']
         cleared = await client.put(endpoint + '/object1', json={'expected_revision': 2})
-        assert cleared.status_code == 200, cleared.text
-        assert [asset['id'] for asset in (await client.get(assets_url)).json()['data']] == ['sword']
-        invalid = await client.put(endpoint + '/object1', json={'expected_revision': 3, 'asset_id': 'missing'})
-        assert invalid.status_code == 400
+        assert cleared.status_code == 200
+        assert [asset['id'] for asset in (await client.get(resources)).json()['data']] == ['sword']
+        unchanged = await client.get('/api/v1/studio/entities/prop/sword')
+        assert unchanged.json()['data']['supplementary_info'] == '原始稳定设定'
 
 
 @pytest.mark.asyncio
-async def test_actor_selection_creates_stable_project_role_and_uses_existing_front_image(tmp_path):
-    from app.models.studio import Actor, ActorImage, FileItem
+async def test_character_is_explicitly_created_and_reference_main_is_independent(tmp_path, monkeypatch):
+    from app.core import storage
+    async def download(**kwargs):
+        return b'independent actor bytes'
+    async def upload(**kwargs):
+        return None
+    monkeypatch.setattr(storage, 'download_file', download)
+    monkeypatch.setattr(storage, 'upload_file', upload)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add(Actor(id='actor', name='青年演员', style='真人都市'))
-            db.add(FileItem(id='side', name='侧面', type='image', storage_key='side.png'))
-            await db.flush()
-            db.add_all([ActorImage(actor_id='actor', file_id='image1', view_angle='FRONT'),
-                        ActorImage(actor_id='actor', file_id='side', view_angle='LEFT')])
         endpoint = await prepared_scene(client, sessions, 'character')
-        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'actor_id': 'actor', 'auto_select_image': True})
-        assert chosen.status_code == 200, chosen.text
-        data = chosen.json()['data']
-        role = data['objects'][0]
-        assert role['asset_id'] != 'actor' and role['image_file_id'] == 'image1'
-        assert role['reference_state'] == 'ready'
-        asset = next(item for item in data['assets'] if item['id'] == role['asset_id'])
-        assert asset['actor_id'] == 'actor'
-        assert {(image['file_id'], image['view_angle']) for image in asset['reference_images']} == {('image1', 'FRONT'), ('side', 'LEFT')}
-        side = await client.put(endpoint + '/object1', json={'expected_revision': 2, 'asset_id': role['asset_id'], 'image_file_id': 'side'})
-        assert side.status_code == 200, side.text
-        assert (await client.get(endpoint)).json()['data']['objects'][0]['image_file_id'] == 'side'
-        again = await client.put(endpoint + '/object1', json={'expected_revision': 3, 'actor_id': 'actor', 'auto_select_image': True})
-        assert again.status_code == 200, again.text
-        assert again.json()['data']['objects'][0]['asset_id'] == role['asset_id']
-        assert len([item for item in again.json()['data']['assets'] if item['kind'] == 'character']) == 1
-        cleared = await client.put(endpoint + '/object1', json={'expected_revision': 4, 'asset_id': role['asset_id']})
-        assert cleared.status_code == 200, cleared.text
-        assert cleared.json()['data']['objects'][0]['reference_source'] == {'kind': 'actor', 'asset_id': 'actor'}
-        invalid = await client.put(endpoint + '/object1', json={'expected_revision': 5, 'asset_id': role['asset_id'], 'image_file_id': 'video1'})
-        assert invalid.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_role_composition_saves_library_assets_and_rejects_stale_or_invalid_changes(tmp_path):
-    from app.models.studio import Actor, Costume, Character
-    async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add_all([Actor(id='actor', name='演员', style='真人都市'),
-                Costume(id='coat', name='长袍', style='真人都市'), Prop(id='sword', name='剑', style='真人都市'),
-                Character(id='role', project_id='p1', name='张三', style='真人都市')])
-        url = '/api/v1/studio/projects/p1/directing/characters/role/composition'
-        response = await client.get(url)
-        assert response.status_code == 200, response.text
-        previous = response.json()['data']
-        command = {'expected_revision': previous['revision'], 'actor_id': 'actor', 'costume_id': 'coat', 'prop_ids': ['sword']}
-        saved = await client.put(url, json=command)
-        assert saved.status_code == 200, saved.text
-        current = saved.json()['data']
-        assert (current['actor_id'], current['costume_id'], current['prop_ids']) == ('actor', 'coat', ['sword'])
-        assert (await client.put(url, json=command)).json() == saved.json()
-        assert (await client.put(url, json={**command, 'actor_id': None})).status_code == 409
-        assert (await client.get(url.replace('/p1/', '/p2/'))).status_code == 404
-        invalid = await client.put(url, json={**command, 'expected_revision': current['revision'], 'prop_ids': ['missing']})
-        assert invalid.status_code == 400
-        assert (await client.get(url)).json()['data'] == current
-
-
-@pytest.mark.asyncio
-async def test_selected_actor_file_survives_slot_replacement_without_changing_choice(tmp_path):
-    from app.models.studio import Actor, ActorImage, FileItem
-    async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add(Actor(id='actor', name='演员', style='真人都市'))
-            await db.flush()
-            db.add(ActorImage(actor_id='actor', file_id='image1', view_angle='FRONT'))
-        endpoint = await prepared_scene(client, sessions, 'character')
-        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'actor_id': 'actor', 'auto_select_image': True})
-        assert chosen.status_code == 200, chosen.text
-        async with sessions.begin() as db:
-            db.add(FileItem(id='replacement', name='新图', type='image', storage_key='new.png'))
-            await db.flush()
-            from sqlalchemy import select
-            slot = await db.scalar(select(ActorImage).where(ActorImage.actor_id == 'actor'))
-            slot.file_id = 'replacement'
-        current = (await client.get(endpoint)).json()['data']['objects'][0]
-        assert current['image_file_id'] == 'image1' and current['reference_state'] == 'ready'
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('angle,expected', [('LEFT', 'image1'), (None, None)])
-async def test_actor_without_front_uses_available_angle_or_leaves_reference_empty(tmp_path, angle, expected):
-    from app.models.studio import Actor, ActorImage
-    async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add(Actor(id='actor', name='演员', style='真人都市'))
-            await db.flush()
-            if angle:
-                db.add(ActorImage(actor_id='actor', file_id='image1', view_angle=angle))
-        endpoint = await prepared_scene(client, sessions, 'character')
-        response = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'actor_id': 'actor', 'auto_select_image': True})
-        assert response.status_code == 200, response.text
-        assert response.json()['data']['objects'][0]['image_file_id'] == expected
-
-
-@pytest.mark.asyncio
-async def test_invalid_image_rolls_back_library_association_and_rejects_actor_for_prop(tmp_path):
-    from app.models.studio import Actor
-    async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add_all([Prop(id='sword', name='长剑', style='真人都市'), Actor(id='actor', name='演员', style='真人都市')])
-        endpoint = await prepared_scene(client, sessions)
-        response = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword', 'image_file_id': 'video1'})
-        assert response.status_code == 422
         assert (await client.get('/api/v1/studio/projects/p1/directing/assets')).json()['data'] == []
-        response = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'actor_id': 'actor'})
-        assert response.status_code == 422
-        assert (await client.get(endpoint)).json()['data']['revision'] == 1
+        actor = await client.post('/api/v1/studio/entities/actor', json={'id': 'actor', 'name': '青年演员'})
+        assert actor.status_code == 201
+        picture = await client.post('/api/v1/studio/entities/actor/actor/images', json={'file_id': 'image1', 'view_angle': 'LEFT'})
+        assert picture.status_code == 201
+        reference = {'file_id': 'image1', 'role': 'identity', 'source_kind': 'actor', 'source_id': 'actor', 'source_image_id': picture.json()['data']['id'], 'view_angle': 'LEFT'}
+        role = await client.post('/api/v1/studio/entities/character', json={
+            'id': 'role', 'project_id': 'p1', 'name': '张三', 'description': '角色自己的设定',
+            'references': [reference], 'adopt_reference': reference})
+        assert role.status_code == 201, role.text
+        images = (await client.get('/api/v1/studio/entities/character/role/images')).json()['data']['items']
+        main = next(image for image in images if image['is_primary'])
+        assert main['file_id'] != 'image1' and main['view_angle'] == 'LEFT'
+        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'role', 'auto_select_image': True})
+        assert chosen.status_code == 200, chosen.text
+        current = chosen.json()['data']['objects'][0]
+        assert current['asset_id'] == 'role' and current['image_file_id'] == main['file_id']
+        assert current['reference_source'] == {'kind': 'character', 'asset_id': 'role'}
+        assert current['reference_state'] == 'ready'
+        actor_image_id = picture.json()['data']['id']
+        await client.patch(f'/api/v1/studio/entities/actor/actor/images/{actor_image_id}', json={'file_id': None})
+        retained = (await client.get(endpoint)).json()['data']['objects'][0]
+        assert retained['image_file_id'] == main['file_id'] and retained['reference_state'] == 'ready'
 
 
 @pytest.mark.asyncio
-async def test_concurrent_role_composition_writes_cannot_overwrite_the_same_revision(tmp_path):
-    import asyncio
-    from app.models.studio import Actor, Character
+async def test_default_scene_reference_uses_main_at_any_angle_and_keeps_concrete_choice(tmp_path):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add_all([Actor(id='one', name='演员一', style='真人都市'), Actor(id='two', name='演员二', style='真人都市'),
-                Character(id='role', name='张三', project_id='p1', style='真人都市')])
-        url = '/api/v1/studio/projects/p1/directing/characters/role/composition'
-        revision = (await client.get(url)).json()['data']['revision']
-        responses = await asyncio.gather(*[client.put(url, json={'expected_revision': revision, 'actor_id': actor}) for actor in ['one', 'two']])
-        assert sorted(response.status_code for response in responses) == [200, 409]
-        winner = next(response for response in responses if response.status_code == 200).json()['data']
-        assert (await client.get(url)).json()['data'] == winner
+        endpoint = await prepared_scene(client, sessions)
+        created = await client.post('/api/v1/studio/entities/prop', json={'id': 'sword', 'project_id': 'p1', 'name': '长剑'})
+        assert created.status_code == 201
+        picture = await client.post('/api/v1/studio/entities/prop/sword/images', json={'file_id': 'image1', 'view_angle': 'TOP'})
+        assert picture.status_code == 201
+        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword', 'auto_select_image': True})
+        assert chosen.status_code == 200, chosen.text
+        assert chosen.json()['data']['objects'][0]['image_file_id'] == 'image1'
+        other = await client.post('/api/v1/studio/entities/prop/sword/images', json={'file_id': 'image1', 'view_angle': 'BACK', 'is_primary': True})
+        assert other.status_code == 201
+        assert (await client.get(endpoint)).json()['data']['objects'][0]['image_file_id'] == 'image1'
+        stale = await client.put(endpoint + '/object1', json={'expected_revision': 1})
+        assert stale.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_uncreated_candidate_cannot_use_upload_or_legacy_actor_selection(tmp_path):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        endpoint = await prepared_scene(client, sessions, 'character')
+        uploaded = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'image_file_id': 'image1'})
+        assert uploaded.status_code == 422
+        legacy = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'actor_id': 'actor'})
+        assert legacy.status_code == 422
+        assert (await client.get('/api/v1/studio/projects/p1/directing/assets')).json()['data'] == []
+
+
+@pytest.mark.asyncio
+async def test_old_actor_composition_endpoint_is_removed(tmp_path):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        created = await client.post('/api/v1/studio/entities/character', json={'id': 'role', 'project_id': 'p1', 'name': '张三'})
+        assert created.status_code == 201
+        assert (await client.get('/api/v1/studio/projects/p1/directing/characters/role/composition')).status_code == 404

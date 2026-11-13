@@ -241,21 +241,18 @@ class WorkspaceService(DirectingStore):
 
         result = []
         queries = [("character", select(Character).where(Character.project_id == self.project_id)),
-            ("scene", select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id).distinct()),
-            ("prop", select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id).distinct())]
+            ("scene", select(Scene).where(or_(Scene.project_id == self.project_id,
+                Scene.project_id.is_(None) & Scene.id.in_(select(ProjectSceneLink.scene_id).where(ProjectSceneLink.project_id == self.project_id))))),
+            ("prop", select(Prop).where(or_(Prop.project_id == self.project_id,
+                Prop.project_id.is_(None) & Prop.id.in_(select(ProjectPropLink.prop_id).where(ProjectPropLink.project_id == self.project_id)))))]
         for kind, query in queries:
             rows = list(await self.db.scalars(query))
             grouped = await reference_images(self.db, kind, [row.id for row in rows])
-            actors = await reference_images(self.db, 'actor', list({row.actor_id for row in rows if row.actor_id})) if kind == 'character' else {}
             for row in rows:
                 images, unavailable = grouped[row.id]
-                if kind == 'character' and row.actor_id:
-                    actor_images, actor_unavailable = actors[row.actor_id]
-                    images.extend(actor_images)
-                    unavailable += actor_unavailable
                 result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or '',
-                    actor_id=row.actor_id if kind == 'character' else None, reference_images=images,
-                    image_file_ids=list(dict.fromkeys(image.file_id for image in images)), unavailable_image_count=unavailable))
+                    reference_images=images, image_file_ids=list(dict.fromkeys(image.file_id for image in images)),
+                    unavailable_image_count=unavailable))
         return result
 
     async def create_asset(self, sequence_id, body):

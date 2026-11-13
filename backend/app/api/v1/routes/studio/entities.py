@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, Field
 
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
@@ -16,8 +17,43 @@ from app.schemas.studio.entity_existence import (
 from app.schemas.studio.cast import ActorCreate, ActorUpdate, CharacterCreate, CharacterUpdate
 from app.schemas.studio.assets import SceneCreate, SceneUpdate, PropCreate, PropUpdate, CostumeCreate, CostumeUpdate
 from app.services.studio.entities import StudioEntitiesService
+from app.core.contracts.asset_prompts import AssetPromptReference
 
 router = APIRouter()
+
+
+class LibraryCopyRequest(BaseModel):
+    """独立入库时允许单独指定副本名称。"""
+
+    name: str | None = Field(None, min_length=1, max_length=255)
+
+
+class AdoptReferenceMainRequest(BaseModel):
+    """明确采用一张参考图片作为独立主图。"""
+
+    reference: AssetPromptReference
+
+
+@router.post("/{entity_type}/{entity_id}/adopt-reference-main", response_model=ApiResponse[dict[str, Any]],
+             summary="采用参考图的独立副本作为对象主图")
+async def adopt_entity_reference_main(
+    entity_type: str, entity_id: str, body: AdoptReferenceMainRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    from app.services.studio.resource_image_copies import adopt_reference_main
+    return success_response(await adopt_reference_main(db, entity_type=entity_type, entity_id=entity_id,
+        reference=body.reference.model_dump(exclude_none=True)))
+
+
+@router.post("/{entity_type}/{entity_id}/publish-to-library", response_model=ApiResponse[dict[str, Any]],
+             status_code=status.HTTP_201_CREATED, summary="将项目对象独立复制到资产库")
+async def publish_entity_to_library(
+    entity_type: str, entity_id: str, body: LibraryCopyRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    from app.services.studio.library_copies import publish_to_library
+    payload = await publish_to_library(db, entity_type=entity_type, entity_id=entity_id, name=body.name)
+    return created_response(payload)
 
 
 @router.post(
@@ -45,6 +81,7 @@ async def check_entity_names_existence(
 async def list_entities(
     entity_type: str,
     db: AsyncSession = Depends(get_db),
+    project_id: str | None = Query(None, description="所属项目；不传时仅查询共享资产"),
     q: str | None = Query(None, description="关键字，过滤 name/description"),
     style: str | None = Query(None, description="题材/风格（单值）"),
     visual_style: str | None = Query(None, description="画面表现形式（单值：真人/动漫）"),
@@ -56,6 +93,7 @@ async def list_entities(
     service = StudioEntitiesService(db)
     payload, total = await service.list_entities(
         entity_type=entity_type,
+        project_id=project_id,
         q=q,
         style=style,
         visual_style=visual_style,

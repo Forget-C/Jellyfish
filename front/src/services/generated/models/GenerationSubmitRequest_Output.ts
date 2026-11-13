@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AssetPromptAudit } from './AssetPromptAudit';
+import type { AssetPromptReference } from './AssetPromptReference';
 import type { ImageGenerationOperationInput } from './ImageGenerationOperationInput';
 import type { ImageMediaInput } from './ImageMediaInput';
 import type { ScriptOperationInput } from './ScriptOperationInput';
@@ -18,5 +19,6 @@ export type GenerationSubmitRequest_Output = {
     media?: (ImageMediaInput | VideoMediaInput_Output | null);
     render_id?: (string | null);
     asset_prompt_audit?: (AssetPromptAudit | null);
+    asset_references?: (Array<AssetPromptReference> | null);
     operation_input: (TextChatInput | ScriptOperationInput | ImageGenerationOperationInput | VideoGenerationOperationInput);
 };

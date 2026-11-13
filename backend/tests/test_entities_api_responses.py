@@ -55,6 +55,9 @@ class _FakeEntityDB:
         if isinstance(obj, Actor):
             self.actors.pop(obj.id, None)
 
+    async def scalar(self, _statement):
+        return None
+
     async def execute(self, *_args, **_kwargs):
         return _FakeResult([])
 

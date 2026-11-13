@@ -30,76 +30,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/assets/ActorAssetEditPage.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "40dd2adf289810dcd00b1304e65f71b7fceb2d685fe31744286743408fa34332",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/assets/assetAdapters.ts",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "3bcd131f2d721b1bdaf6a85e65b4fe748014bf395379b658757270e159a69c67",
-      "count": 10
-    },
-    {
-      "file": "src/pages/aiStudio/assets/assetAdapters.ts",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "a58cc83e2b2c8045d22684027ec5913761475b0f857479afdaef2067c8578c34",
-      "count": 5
-    },
-    {
-      "file": "src/pages/aiStudio/assets/assetAdapters.ts",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "f6f7ab888b4fdb34d077b4c9ddc214b3b69383e4037de8249d98a3ff9ae8823b",
-      "count": 10
-    },
-    {
-      "file": "src/pages/aiStudio/assets/components/AssetEditPageBase.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "5afe94d5908053156b841aeca0702382b432362d90be257608b80db11abd1fd4",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/components/AssetReferencePicker.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "5474515dd5b5f6d8f9322e351dcf89f3537c001854bccedce64f920abf985a9f",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/components/StudioAssetTypeFormModal.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "a508025a55f7033b87dee91abae8db7597782a825a76c1ea7bfa146232b75869",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/assets/CostumeAssetEditPage.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "40dd2adf289810dcd00b1304e65f71b7fceb2d685fe31744286743408fa34332",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/assets/PropAssetEditPage.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "40dd2adf289810dcd00b1304e65f71b7fceb2d685fe31744286743408fa34332",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/assets/SceneAssetEditPage.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "40dd2adf289810dcd00b1304e65f71b7fceb2d685fe31744286743408fa34332",
-      "count": 2
-    },
-    {
       "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorModal.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -1232,13 +1162,6 @@
       "severity": 1,
       "fingerprint": "4dc99bc682a0933c9a10c841bedcf4b1e478ff3d5d3d7b9d2135b45ebfb16f05",
       "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/project/ProjectWorkbench/RoleDetailPage.tsx",
-      "rule": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "fingerprint": "40dd2adf289810dcd00b1304e65f71b7fceb2d685fe31744286743408fa34332",
-      "count": 2
     },
     {
       "file": "src/services/http.ts",

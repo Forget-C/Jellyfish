@@ -2,18 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetPromptReference } from './AssetPromptReference';
 import type { ProjectStyle } from './ProjectStyle';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 /**
- * 更新角色组合，避免分类设定被错误吞掉。
+ * 更新角色自身设定和明确参考，拒绝未知分类字段。
  */
 export type CharacterUpdate = {
-    project_id?: (string | null);
+    references?: Array<AssetPromptReference>;
     name?: (string | null);
     description?: (string | null);
     style?: (ProjectStyle | null);
     visual_style?: (ProjectVisualStyle | null);
-    actor_id?: (string | null);
-    costume_id?: (string | null);
 };
 

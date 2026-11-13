@@ -1,8 +1,9 @@
 import { Alert, Button, Modal, Space } from 'antd'
 import { useCallback, useRef, useState } from 'react'
-import { useBeforeUnload, useBlocker } from 'react-router-dom'
+import { useBeforeUnload, useBlocker, type Blocker } from 'react-router-dom'
 
 type Props = {
+  navigationManaged?: boolean
   closeRequested?: boolean
   onContinue?: () => void
   onClose?: () => void | Promise<void>
@@ -17,38 +18,31 @@ type Props = {
 }
 
 /** 独立资产详情注册路由保护，内嵌档案继续由工作台统一管理。 */
-export function AssetDetailLeaveGuard({ closeRequested = false, onContinue, onClose, dirty, busy, detecting, canCancelDetection, cancellingDetection, partialSave, save, cancelDetection }: Props) {
+function AssetLeaveDialog({ closeRequested = false, onContinue, onClose, dirty, busy, detecting, canCancelDetection, cancellingDetection, partialSave, save, cancelDetection, blocker }: Props & { blocker?: Blocker }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const lock = useRef(false)
   const continueButton = useRef<HTMLButtonElement>(null)
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search)
-    && (dirty || busy || detecting || partialSave),
-  )
-  useBeforeUnload(useCallback(event => {
-    if (dirty || busy || detecting || partialSave) { event.preventDefault(); event.returnValue = '' }
-  }, [dirty, busy, detecting, partialSave]))
   const stay = () => {
     if (lock.current || busy) return
     setError('')
-    if (blocker.state === 'blocked') blocker.reset()
+    if (blocker?.state === 'blocked') blocker.reset()
     onContinue?.()
   }
   const leave = async (saveFirst: boolean) => {
-    if ((!closeRequested && blocker.state !== 'blocked') || lock.current || busy || detecting) return
+    if ((!closeRequested && blocker?.state !== 'blocked') || lock.current || busy || detecting) return
     lock.current = true
     setSubmitting(true)
     setError('')
     try {
       if (saveFirst && !await save()) { setError('保存未完整完成，请处理页面提示后重试。'); return }
-      if (blocker.state === 'blocked') blocker.proceed()
+      if (blocker?.state === 'blocked') blocker.proceed()
       else await onClose?.()
     } catch { setError('保存失败，编辑内容已保留。') }
     finally { lock.current = false; setSubmitting(false) }
   }
   return <Modal title={busy ? '当前操作尚未完成' : detecting ? '智能检测进行中' : '离开资产详情'}
-    open={closeRequested || blocker.state === 'blocked'} zIndex={2100} maskClosable={false}
+    open={closeRequested || blocker?.state === 'blocked'} zIndex={2100} maskClosable={false}
     closable={!busy && !submitting} keyboard={!busy && !submitting} onCancel={stay}
     afterOpenChange={open => { if (open) continueButton.current?.focus() }}
     footer={<Space wrap>
@@ -69,4 +63,21 @@ export function AssetDetailLeaveGuard({ closeRequested = false, onContinue, onCl
     {partialSave && <Alert type="warning" message="档案已保存，图片视角准备未完成。离开不会撤销已保存的档案。" />}
     {error && <Alert type="error" message={error} />}
   </Modal>
+}
+
+
+function StandaloneAssetLeaveGuard(props: Props) {
+  const { dirty, busy, detecting, partialSave } = props
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search)
+    && (dirty || busy || detecting || partialSave),
+  )
+  useBeforeUnload(useCallback(event => {
+    if (dirty || busy || detecting || partialSave) { event.preventDefault(); event.returnValue = '' }
+  }, [dirty, busy, detecting, partialSave]))
+  return <AssetLeaveDialog {...props} blocker={blocker} />
+}
+
+export function AssetDetailLeaveGuard(props: Props) {
+  return props.navigationManaged ? <AssetLeaveDialog {...props} /> : <StandaloneAssetLeaveGuard {...props} />
 }

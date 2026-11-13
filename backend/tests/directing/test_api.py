@@ -54,6 +54,10 @@ async def client_for(sessions):
     app.include_router(router, prefix="/api/v1/studio")
     app.include_router(task_router, prefix="/api/v1/film")
     app.include_router(file_router, prefix="/api/v1/studio/files")
+    from app.api.v1.routes.studio.entities import router as entity_router
+    from app.api.v1.routes.studio.project_assets import router as project_asset_router
+    app.include_router(entity_router, prefix="/api/v1/studio/entities")
+    app.include_router(project_asset_router, prefix="/api/v1/studio/project-assets")
     app.include_router(canvas_router, prefix="/api/v1/studio/generation-canvases")
     from app.api.v1.routes.studio.chapters import router as chapter_router
     app.include_router(chapter_router, prefix="/api/v1/studio/chapters")

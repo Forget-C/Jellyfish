@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Dropdown, Modal, Spin, message } from 'antd'
+import { Alert, Button, Dropdown, Modal, Spin, Tag, message } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { FilmService } from '../../../../services/generated'
+import { FilmService, StudioEntitiesService, type AssetPromptReference } from '../../../../services/generated'
 import { useTaskUiStore } from '../../components/taskUiStore'
 import './project-resource-card.css'
 import { assetAdapters } from '../assetAdapters'
@@ -12,6 +12,7 @@ type AssetImage = {
   id: number
   view_angle?: string | null
   file_id?: string | null
+  is_primary?: boolean
 }
 
 export type LibraryAsset = {
@@ -20,6 +21,8 @@ export type LibraryAsset = {
   description?: string | null
   tags?: string[] | null
   thumbnail?: string | null
+  source_character_id?: string | null
+  references?: AssetPromptReference[]
 }
 
 export type LibraryAssetType = 'actor' | 'scene' | 'prop' | 'costume'
@@ -30,7 +33,7 @@ const ANGLE_LABELS: Record<string, string> = {
 }
 
 function preferredImage(images: AssetImage[]) {
-  return images.find(image => image.view_angle === 'FRONT' && image.file_id) ?? images.find(image => image.file_id)
+  return images.find(image => image.is_primary && image.file_id) ?? images.find(image => image.view_angle === 'FRONT' && image.file_id) ?? images.find(image => image.file_id)
 }
 
 /** 资产库卡片将预览、编辑和生成分别绑定到明确入口，档案和项目卡片由各自组件负责。 */
@@ -121,19 +124,16 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
 
   const generate = async () => {
     const { assetGenerations, setAssetGeneration } = useTaskUiStore.getState()
-    if (assetGenerations[generationKey] || hasActiveTask) return
+    if (asset.source_character_id || assetGenerations[generationKey] || hasActiveTask) return
     setAssetGeneration(generationKey, { status: 'submitting' })
     try {
-      let slots: AssetImage[] = await adapter.listImages(asset.id)
-      let target = slots.find(image => image.view_angle === 'FRONT') ?? slots[0]
-      if (!target) {
-        await adapter.createImageSlot(asset.id, 'FRONT')
-        slots = await adapter.listImages(asset.id)
-        target = slots.find(image => image.view_angle === 'FRONT') ?? slots[0]
-      }
-      if (!target) throw new Error('无法创建正面图片槽位')
+      const response = await StudioEntitiesService.createEntityImageApiV1StudioEntitiesEntityTypeEntityIdImagesPost({
+        entityType: assetType, entityId: asset.id, requestBody: { view_angle: 'FRONT' },
+      })
+      const target = response.data as AssetImage | undefined
+      if (!target) throw new Error('无法创建正面图片记录')
       const draft = await adapter.renderPrompt(asset.id, target.id)
-      const id = await adapter.createGenerationTask(asset.id, target.id, draft)
+      const id = await adapter.createGenerationTask(asset.id, target.id, { ...draft, references: asset.references })
       if (!id) throw new Error('未创建生成任务')
       setAssetGeneration(generationKey, { status: 'submitted', taskId: id })
       message.success(`已创建${label}图片生成任务`)
@@ -167,12 +167,13 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
             <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
           </Dropdown>
         </div>
+        <Tag>{asset.source_character_id ? '从角色转化 · 只读' : '共享资产'}</Tag>
         <p className="asset-library-description" title={description}>{description || '未填写简介'}</p>
         <div className="asset-library-card-actions">
-          <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
+          {!asset.source_character_id && <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
             aria-label={generateLabel} loading={generating} disabled={generating} onClick={() => void generate()}>
             {generateLabel}
-          </Button>
+          </Button>}
           {taskReadFailed && <span role="status">状态读取失败，正在重试</span>}
 
         </div>

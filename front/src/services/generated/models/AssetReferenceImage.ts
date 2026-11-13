@@ -8,7 +8,7 @@
 export type AssetReferenceImage = {
     file_id: string;
     view_angle: string;
-    source_kind: 'character' | 'actor' | 'scene' | 'prop';
+    source_kind: 'character' | 'scene' | 'prop';
     source_id: string;
     slot_id: number;
 };

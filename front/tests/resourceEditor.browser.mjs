@@ -1,0 +1,136 @@
+import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
+import { chromium } from 'playwright'
+import { createServer } from 'vite'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
+
+const root = fileURLToPath(new URL('..', import.meta.url))
+process.chdir(root)
+const output = await browserOutput('jellyfish-resource-editor-')
+const server = await createServer({ root, cacheDir: output + '/vite-cache', server: { host: '127.0.0.1', port: 4921, strictPort: true } })
+let browser
+const cleanup = browserCleanup(() => ({ browser, server }))
+try {
+  await server.listen()
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
+  page.setDefaultTimeout(7000)
+  const errors = []
+  page.on('pageerror', error => { errors.push(error.message); console.error(error.message) })
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
+  let created
+  const images = []
+  let generationCalls = 0
+  let candidateMode = false
+  let publishedName
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    const respond = data => route.fulfill({ json: { code: 200, message: 'success', data } })
+    const list = items => respond({ items, pagination: { total: items.length, page: 1, page_size: 100 } })
+    if (/\/files\/(generated|candidate)\/download$/.test(path)) return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="320"><rect width="100%" height="100%" fill="#7596b5"/></svg>' })
+    if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实', '动漫'], styles: ['真人都市'] })
+    if (path.endsWith('/generation-prompts/assets/draft/render')) return respond({
+      render_id: 'draft-render', execution_prompt: '预览柔光展示', variables_snapshot: {}, recommended_media: { references: [] },
+    })
+    if (path.endsWith('/entities/actor')) {
+      if (route.request().method() === 'POST') {
+        created = { ...route.request().postDataJSON(), project_id: null }
+        return respond(created)
+      }
+      return list(created ? [created] : [])
+    }
+    if (created && path.endsWith(`/entities/actor/${created.id}`)) return respond(created)
+    if (path.endsWith('/publish-to-library')) {
+      publishedName = route.request().postDataJSON().name
+      created.library_copy_id = 'library-copy'
+      return respond({ id: 'library-copy', name: publishedName, project_id: null })
+    }
+    if (created && path.endsWith(`/entities/actor/${created.id}/images`)) {
+      if (route.request().method() === 'POST') {
+        const image = { id: images.length + 1, ...route.request().postDataJSON() }
+        images.push(image)
+        return respond(image)
+      }
+      return list(images)
+    }
+    if (path.includes('/generation-prompts/assets/actor/')) return respond({ render_id: 'saved-render', execution_prompt: '当前对象生成提示词', variables_snapshot: {}, recommended_media: { references: [] } })
+    if (path.includes('/generation-tasks/actors/')) { generationCalls++; candidateMode = !!route.request().postDataJSON().operation_input.save_as_candidate; return respond({ task_id: 'generated-task' }) }
+    if (path.endsWith('/film/tasks/outputs')) return respond({ items: [{ task_id: 'generated-task', ordinal: 1, file_id: 'candidate' }], next_cursor: null })
+    if (path.endsWith('/film/tasks/generated-task/status')) {
+      if (!candidateMode) Object.assign(images.at(-1), { file_id: 'generated', is_primary: true })
+      return respond({ task_id: 'generated-task', status: 'succeeded', progress: 100 })
+    }
+    return list([])
+  })
+  await page.goto('http://127.0.0.1:4921/assets?tab=actor')
+  await page.getByRole('button', { name: '新建演员', exact: true }).first().click()
+  const drawer = page.getByRole('dialog', { name: '新建演员' })
+  await drawer.waitFor()
+  assert.equal(await drawer.evaluate(node => node.classList.contains('ant-drawer-content')), true)
+  await drawer.getByRole('textbox', { name: '名称', exact: true }).fill('新建演员草稿')
+  await page.getByRole('link',{name:'模型管理',exact:true}).click()
+  const routeGuard=page.getByRole('dialog',{name:'离开资产详情',exact:true})
+  await routeGuard.getByRole('button',{name:'继续编辑',exact:true}).click()
+  assert.equal(new URL(page.url()).pathname,'/assets')
+  assert.equal(created,undefined)
+  await drawer.getByRole('button', { name: '选择参考主体', exact: true }).click()
+  await drawer.getByRole('button', { name: '取消', exact: true }).click()
+  assert.equal(created, undefined)
+  await drawer.getByRole('button', { name: '生成设置', exact: true }).click()
+  const backAngle=drawer.getByRole('checkbox', { name: '背面', exact: true })
+  await backAngle.click()
+  await page.waitForFunction(() => [...document.querySelectorAll('input[value=BACK]')].some(input=>input.checked))
+  await drawer.getByRole('button', { name: '取消', exact: true }).click()
+  assert.equal(await drawer.getByRole('checkbox', { name: '背面', exact: true }).isChecked(), false)
+  await drawer.getByRole('button', { name: '生成设置', exact: true }).click()
+  await drawer.getByRole('textbox', { name: '本次附加要求', exact: true }).fill('柔光展示')
+  await drawer.getByRole('button', { name: '预览提示词', exact: true }).click()
+  await page.getByRole('textbox', { name: '最终提示词', exact: true }).waitFor()
+  assert.equal(await page.getByRole('textbox', { name: '最终提示词', exact: true }).inputValue(), '预览柔光展示')
+  assert.equal(created, undefined)
+  await drawer.getByRole('button', { name: '应用并返回', exact: true }).click()
+  await drawer.getByRole('button', { name: '仅创建', exact: true }).click()
+  await page.getByRole('dialog', { name: '新建演员草稿' }).waitFor()
+  assert.equal(created.name, '新建演员草稿')
+  const detail = page.getByRole('dialog', { name: '新建演员草稿' })
+  await detail.getByRole('button', { name: '生成图片', exact: true }).click()
+  await detail.getByRole('img', { name: '正面图片 1', exact: true }).waitFor()
+  assert.equal(generationCalls, 1)
+  assert.equal(images.length, 1)
+  await detail.getByRole('button', { name: '局部修改正面图片 1', exact: true }).click()
+  await detail.getByRole('textbox', { name: '修改要求', exact: true }).fill('将背景改为浅灰')
+  await detail.getByRole('button', { name: '应用并返回', exact: true }).click()
+  await detail.getByRole('button', { name: '生成修改候选', exact: true }).click()
+  await detail.getByRole('button', { name: '加入视角文件夹', exact: true }).waitFor()
+  assert.equal(images.length, 1)
+  await detail.getByRole('button', { name: '加入视角文件夹', exact: true }).click()
+  await detail.getByRole('img', { name: '正面图片 2', exact: true }).waitFor()
+  assert.equal(images[0].file_id, 'generated')
+  assert.equal(images[0].is_primary, true)
+  await detail.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '新建演员', exact: true }).first().click()
+  const secondDraft = page.getByRole('dialog', { name: '新建演员', exact: true })
+  await secondDraft.getByRole('textbox', { name: '名称', exact: true }).fill('采用主体的演员')
+  await secondDraft.getByRole('button', { name: '选择参考主体', exact: true }).click()
+  await secondDraft.getByRole('button', { name: '选择参考演员 新建演员草稿', exact: true }).click()
+  await secondDraft.getByRole('button', { name: '使用所选图片', exact: true }).click()
+  await secondDraft.getByRole('button', { name: '仅创建', exact: true }).click()
+  await secondDraft.getByRole('button', { name: '采用并创建', exact: true }).waitFor()
+  assert.equal(created.name, '新建演员草稿')
+  await secondDraft.getByRole('button', { name: '采用并创建', exact: true }).click()
+  await page.getByRole('dialog', { name: '采用主体的演员', exact: true }).waitFor()
+  assert.equal(created.adopt_reference.file_id, 'generated')
+  created.project_id = 'project-a'
+  await page.goto(`http://127.0.0.1:4921/assets/actors/${created.id}/edit`)
+  const privateDetail = page.getByRole('dialog', { name: '采用主体的演员', exact: true })
+  await privateDetail.getByRole('button', { name: '进入资产库', exact: true }).click()
+  await privateDetail.getByRole('textbox', { name: '副本名称', exact: true }).fill('独立库中演员')
+  await privateDetail.getByRole('button', { name: '确认入库', exact: true }).click()
+  await privateDetail.getByRole('link', { name: '查看库中资产', exact: true }).waitFor()
+  assert.equal(publishedName, '独立库中演员')
+  assert.equal(created.name, '采用主体的演员')
+  assert.deepEqual(errors, [])
+  await page.screenshot({ path: output + '/resource-editor-desktop.png' })
+} finally {
+  await cleanup()
+}

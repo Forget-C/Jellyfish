@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetPromptReference } from './AssetPromptReference';
 import type { ProjectStyle } from './ProjectStyle';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 /**
@@ -64,8 +65,10 @@ export type ActorCreate = {
      * 发型发色
      */
     hair?: (string | null);
+    adopt_reference?: (AssetPromptReference | null);
+    references?: Array<AssetPromptReference>;
     /**
-     * 可选：创建成功后写入 project_actor_links（与演员创建同一事务）
+     * 所属项目；不传时创建共享资产
      */
     project_id?: (string | null);
     /**

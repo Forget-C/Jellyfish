@@ -373,4 +373,6 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 
 `division-assignment` 使用既有隔离后端验证编辑区创建、抽取影响确认与取消、并入、撤销、保存及窄屏输入保留；与 `manual-split`、`workbench-division`、`workbench-canvas-creation` 共用4386／8386端口，必须顺序运行。`divisionOperations.test.mjs` 覆盖连续性、身份、空白残段和多次分配的结果。
 
-`object-asset-selection` 使用隔离后端验证工作台直接选用演员、默认正面与缺图角度、手动选图的刷新保留，以及共享角色组合保存不覆盖本场参考；纳入 `workbench` 套件。
+`object-asset-selection` 使用隔离后端验证提取只发现对象、取消不创建、共用新建与主体独立复制、场次具体文件稳定及明确复用已有项目对象；纳入 `workbench` 套件。
+
+`resource-editor` 纳入 `management-ui`，通过浏览器验证共用抽屉、草稿预览无写入、设置应用／取消、主体采用、普通生成、局部修改候选与独立入库。`asset-detail` 覆盖保存／离开保护、检测取消、历史追加、只读类型及多视口；项目演员、角色和其他资源回归覆盖新标签页编辑及关联／删除恢复。

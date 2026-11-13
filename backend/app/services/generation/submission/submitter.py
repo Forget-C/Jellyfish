@@ -96,4 +96,11 @@ class GenerationSubmitter:
             expected_target_version=snapshot.expected_version_id, provider_id=provider_id,
             execution_mode=mode, inputs=inputs, project_id=source.project_id if source else None, retry_of_task_id=retry_of_task_id,
         )
+        if command.request.asset_references is not None:
+            from app.services.studio.entity_specs import entity_spec
+            from app.services.studio.resource_references import validate_resource_references
+            spec = entity_spec(command.target.asset_type)
+            asset = await db.get(spec.model, command.target.entity_id)
+            await validate_resource_references(db, command.target.asset_type, asset.project_id,
+                [ref.model_dump(exclude_none=True) for ref in command.request.asset_references], link=True)
         return GenerationAccepted(task_id=task.id)
