@@ -98,3 +98,4 @@
 .object-association-editor .ant-select { width: 100%; }
 .management-object-description-content { max-height: 50dvh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media(max-width:767px) { .management-object-body { padding: 12px; } }
+.management-reference-failed { display: flex; align-items: center; justify-content: center; gap: 8px; height: 100%; }

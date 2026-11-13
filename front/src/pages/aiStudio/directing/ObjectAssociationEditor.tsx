@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Drawer, Grid, Modal, Popover, Select } from 'antd'
 import { EditOutlined, LinkOutlined } from '@ant-design/icons'
 
@@ -15,6 +15,16 @@ export function ObjectAssociationEditor({ assetId, hasReference, disabled, optio
   const [failed, setFailed] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || pending || confirming) return
+      event.preventDefault(); event.stopPropagation()
+      setOpen(false); trigger.current?.focus({ preventScroll: true })
+    }
+    document.addEventListener('keydown', escape, true)
+    return () => document.removeEventListener('keydown', escape, true)
+  }, [open, pending, confirming])
   const close = () => { if (!pending && !confirming) { setOpen(false); trigger.current?.focus({ preventScroll: true }) } }
   const submit = async (id?: string) => {
     setPending(true); setFailed(false)
@@ -24,22 +34,22 @@ export function ObjectAssociationEditor({ assetId, hasReference, disabled, optio
     } finally { setPending(false) }
   }
   const select = (id?: string) => {
-    setValue(id)
+    setValue(id); setFailed(false)
     if (id === (assetId ?? undefined)) return
     if (hasReference) setConfirming(true)
     else void submit(id)
   }
-  const content = <div className="object-association-editor">
+  const content = <div className="object-association-editor" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close() } }}>
     <Select aria-label="关联资产" showSearch optionFilterProp="label" allowClear placeholder="搜索并选择资产"
       value={value} options={options} disabled={pending || disabled} onChange={select} />
     {failed && <Button disabled={pending} onClick={() => void submit(value)}>重试关联</Button>}
   </div>
   const button = <Button ref={trigger} type="text" icon={assetId ? <EditOutlined /> : <LinkOutlined />} aria-label="编辑关联资产"
-    disabled={disabled} onClick={() => { setValue(assetId ?? undefined); setFailed(false); setOpen(true) }} />
+    disabled={disabled} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close() } }} onClick={() => { if (open) { close(); return } setValue(assetId ?? undefined); setFailed(false); setOpen(true) }} />
   return <>
     {mobile ? button : <Popover trigger="click" placement="bottomLeft" open={open} title="关联资产" content={content}
-      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close() } }} onOpenChange={next => { if (!next) close() }} getPopupContainer={element => element.closest('.app-shell') as HTMLElement ?? document.body}>{button}</Popover>}
-    {mobile && <Drawer title="关联资产" placement="bottom" height="min(360px, 80dvh)" open={open}
+      onOpenChange={next => { if (!next) close() }}>{button}</Popover>}
+    {mobile && <Drawer aria-label="关联资产" title="关联资产" placement="bottom" height="min(360px, 80dvh)" open={open}
       closable={!pending} maskClosable={!pending} keyboard={!pending} onClose={close}>{content}</Drawer>}
     <Modal title="确认修改关联" open={confirming} okText="确认修改" cancelText="保留原关联"
       onCancel={() => { setConfirming(false); setValue(assetId ?? undefined) }}

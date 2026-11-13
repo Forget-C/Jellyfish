@@ -31,12 +31,14 @@ function activeTask(data?: SceneObjectsRead) {
   return data?.task?.status === 'queued' || data?.task?.status === 'running'
 }
 
-function ReferenceImage({ name, fileId }: { name: string; fileId?: string }) {
+function ReferenceImage({ name, fileId, unavailable }: { name: string; fileId?: string; unavailable?: boolean }) {
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   return <>
     <div className="management-reference-frame">
+      {unavailable && <div className="management-reference-failed">参考图不可用</div>}
+      {failed && <div role="status" className="management-reference-failed"><Badge status="warning" text="图片加载失败" /><MainButton type="text" icon={<ReloadOutlined />} aria-label="重试参考图" onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
       {fileId && !failed && <button type="button" aria-label={`预览${name}参考图`} onClick={event => {
         // 预览浮层通过 portal 挂载，关闭操作不会重新触发卡面预览。
         if (event.currentTarget.contains(event.target as Node)) setPreviewOpen(true)
@@ -45,7 +47,7 @@ function ReferenceImage({ name, fileId }: { name: string; fileId?: string }) {
           preview={{ visible: previewOpen, onVisibleChange: setPreviewOpen, mask: false }} />
       </button>}
     </div>
-    {failed && <div role="status"><Badge status="warning" text="图片加载失败" /><MainButton type="text" icon={<ReloadOutlined />} aria-label="重试参考图" onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
+
   </>
 }
 
@@ -285,7 +287,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }
   const descriptionContent = descriptionObject && <div className="management-object-description-content"><p>{descriptionObject.description || '未填写描述'}</p><p>出处：{descriptionObject.excerpt || '暂无出处'}</p></div>
   return <>
-    {compact ? <Drawer title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
+    {compact ? <Drawer aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
       : <Modal title="描述与出处" open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
     <section hidden={!!management && !!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>
@@ -376,7 +378,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
-                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} />
+                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} />
                   <div className="management-object-body">
                     <div className="management-object-title-row"><h4 title={object.name}>{object.name}</h4><small>{kinds[kind]}</small>
                       <Dropdown autoFocus trigger={['click']} disabled={disabled} menu={{ items: cardActions }}>
