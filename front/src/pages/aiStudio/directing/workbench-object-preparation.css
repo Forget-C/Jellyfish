@@ -81,3 +81,20 @@
 .management-association-control > .ant-select { flex: 1; min-width: 0; }
 .management-object-filters .ant-segmented { font-size: 13px; }
 @media(max-width:767px) { .management-object-filters { gap: 8px; } .management-object-filters .ant-segmented { max-width:100%; overflow-x:auto; } }
+
+.management-object-preparation .management-object-card { overflow: hidden; }
+.management-object-preparation .management-object-card > .ant-card-body { padding: 0; gap: 0; }
+.management-object-card .management-reference-frame { border-radius: 0; }
+.management-object-body { display: grid; gap: 8px; padding: 16px; min-width: 0; }
+.management-object-title-row, .management-object-association-row { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 28px; }
+.management-object-title-row h4 { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.management-object-title-row small { color: #536174; font-size: 12px; }
+.management-object-association-row > :nth-child(2) { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.management-object-association-row > .ant-btn-link { padding: 0; text-align: left; height: auto; }
+.management-object-reference { justify-content: space-between; flex-wrap: nowrap; }
+.management-object-reference-status { min-width: 0; font-size: 12px; color: #536174; }
+.management-object-reference > .ant-btn { flex-shrink: 0; }
+.object-association-editor { width: min(280px, calc(100vw - 64px)); display: grid; gap: 8px; }
+.object-association-editor .ant-select { width: 100%; }
+.management-object-description-content { max-height: 50dvh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media(max-width:767px) { .management-object-body { padding: 12px; } }
