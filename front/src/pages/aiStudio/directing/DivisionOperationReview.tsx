@@ -11,34 +11,38 @@ export function DivisionOperationReview({ projectId, chapterId, raw, before, pla
   projectId: string; chapterId: string; raw: string; before: ChapterDivisionDraft; plan: DivisionPlan; title: string; splitKey?: string
   onRetain: (key: string, after: boolean) => void; onChange: (plan: DivisionPlan) => void; onCancel: () => void; onConfirm: () => void
 }) {
+  const [validated, setValidated] = useState<ChapterDivisionDraft>()
   const [checking, setChecking] = useState(true)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     let live = true
-    setError(''); setNote(''); setChecking(true)
+    setError(''); setNote(''); setChecking(true); setValidated(undefined)
+    if (plan.draft.members.some(row => !row.title.trim())) { setError('请输入全部结果名称'); setChecking(false); return }
     let value
-    try { value = divisionRequest(plan.draft, raw) } catch (cause) {
-      const incomplete = plan.draft.members.some(row => !row.span)
-      if (incomplete) setNote('本章还有待定位场次；本次先加入草稿，完成定位后保存时仍需核对服务器限制。')
-      else setError(cause instanceof Error ? cause.message : '候选划分无效')
-      setChecking(false); return
-    }
+    try {
+      divisionRequest({ ...plan.draft, members: plan.draft.members.filter(row => row.span) }, raw)
+      if (plan.draft.members.some(row => !row.span)) {
+        setNote('本章还有待定位场次；本次先加入草稿，完成定位后保存时仍需核对服务器限制。')
+        setValidated(plan.draft); setChecking(false); return
+      }
+      value = divisionRequest(plan.draft, raw)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '候选划分无效'); setChecking(false); return }
     const request = StudioDirectingService.directingPreviewDivision({ projectId, chapterId, requestBody: value })
     void request.then(response => {
       if (!live) return
       if (!response.data) setError('没有取得校验结果，请重试')
-      else setError(response.data.blockers.join('；'))
+      else { setError(response.data.blockers.join('；')); if (!response.data.blockers.length) setValidated(plan.draft) }
     }).catch(cause => { if (live) setError(cause instanceof Error ? cause.message : '校验失败，请重试') })
       .finally(() => { if (live) setChecking(false) })
     return () => { live = false; request?.cancel() }
   }, [projectId, chapterId, plan.draft, raw, retry])
   const changed = plan.draft.members.filter(row => !before.members.some(old => JSON.stringify(old) === JSON.stringify(row)))
   const exited = before.members.filter(row => !plan.draft.members.some(next => next.key === row.key))
-  return <Modal title={title} open width={760} onCancel={onCancel} footer={<Space wrap>
+  return <Modal className="division-operation-review" title={title} open width={760} onCancel={onCancel} footer={<Space wrap>
     <Button onClick={onCancel}>继续调整</Button>
-    <Button type="primary" loading={checking} disabled={!!error} onClick={onConfirm}>确认加入草稿</Button>
+    <Button type="primary" loading={checking} disabled={!!error || validated !== plan.draft} onClick={onConfirm}>确认加入草稿</Button>
   </Space>}>
     <p>核对范围及关联去向；确认后仍需在顶部保存为新版本。退出场次的历史成果保留，不会自动迁移。</p>
     {[...plan.fragmented, ...before.members.filter(row => row.key === splitKey)].filter(row => row.sequence_id).map(row => <div key={row.key}>
