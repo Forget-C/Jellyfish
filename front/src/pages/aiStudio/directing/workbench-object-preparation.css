@@ -116,3 +116,7 @@
 .management-object-preparation .management-object-title-row > .ant-btn { width: 24px; }
 .management-object-preparation .management-object-association-row > .ant-btn-link { padding: 0; }
 @media(max-width:767px) { .management-object-preparation .management-object-body .ant-btn { min-height: 36px; height: auto; } .management-object-preparation .management-object-title-row > .ant-btn { width: 36px; } }
+
+.management-reference-angle { position: absolute; bottom: 8px; left: 8px; z-index: 1; display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 6px; }
+
+.management-object-card .management-reference-frame { position: relative; }

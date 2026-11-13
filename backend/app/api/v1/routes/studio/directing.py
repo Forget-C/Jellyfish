@@ -21,7 +21,7 @@ from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.directing.scene_canvas import SceneCanvasService
 from app.core.contracts.directing.scene_objects import (
     ObjectExtractionRequest, SceneObjectCandidateApplication, SceneObjectCandidateReceipt, SceneObjectCandidateReview,
-    SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead,
+    SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead, CharacterComposition, CharacterCompositionWrite,
 )
 from app.services.directing.scene_objects import SceneObjectService
 from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionReceiptDetail, DivisionVersionDetail
@@ -635,6 +635,23 @@ async def generate_visual(project_id: str, sequence_id: str, body: VisualRequest
     """提交基于已确认设计的验证图，产物保留为候选。"""
     task = await _call(ProductionService(db, project_id).generate_visual(sequence_id, body))
     return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get("/characters/{character_id}/composition", response_model=ApiResponse[CharacterComposition],
+            operation_id="directing_character_composition")
+async def read_character_composition(project_id: str, character_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """读取项目角色的共享演员、服装和道具组合。"""
+    from app.services.directing.object_assets import character_composition
+    return success_response(await _call(character_composition(db, project_id, character_id)))
+
+
+@router.put("/characters/{character_id}/composition", response_model=ApiResponse[CharacterComposition],
+            operation_id="directing_save_character_composition")
+async def save_character_composition(project_id: str, character_id: str, body: CharacterCompositionWrite,
+                                     db: AsyncSession = Depends(get_db, scope="function")):
+    """保存共享组合并关联所选资产，不生成图片或替换场次参考。"""
+    from app.services.directing.object_assets import character_composition
+    return success_response(await _call(character_composition(db, project_id, character_id, body)))
 
 
 @router.get("/assets", response_model=ApiResponse[list[AssetSummary]], operation_id="directing_assets")

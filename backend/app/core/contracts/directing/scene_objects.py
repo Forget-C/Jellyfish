@@ -32,6 +32,13 @@ class SceneObjectExtraction(Contract):
     objects: list[ExtractedSceneObject] = Field(max_length=100)
 
 
+class ObjectReferenceSource(Contract):
+    """图片实际来源身份；角度切换沿该来源，不隐式采用其他来源图片。"""
+
+    kind: Literal['character', 'actor', 'scene', 'prop']
+    asset_id: Identity
+
+
 class SceneObjectCandidate(Contract):
     """服务端建立对象身份，并独立保存用户的关联与图片选择。"""
 
@@ -44,6 +51,7 @@ class SceneObjectCandidate(Contract):
     suggested_asset_id: Identity | None = None
     asset_id: Identity | None = None
     image_file_id: Identity | None = None
+    reference_source: ObjectReferenceSource | None = None
 
 
 class SceneObjectRead(SceneObjectCandidate):
@@ -56,8 +64,11 @@ class SceneObjectChoice(Contract):
     """在同一准备修订上保存明确选择。省略图片表示当前不选。"""
 
     expected_revision: int = Field(gt=0)
+    actor_id: Identity | None = None
+    auto_select_image: bool = False
     asset_id: Identity | None = None
     image_file_id: Identity | None = None
+    reference_source: ObjectReferenceSource | None = None
 
 
 class SceneObjectTaskRead(Contract):
@@ -118,3 +129,21 @@ class SceneObjectCandidateReview(Contract):
     removed: list[SceneObjectCandidate]
     modified: list[SceneObjectCandidate]
     retained_choices: list[SceneObjectCandidate]
+
+
+class CharacterComposition(Contract):
+    """项目角色的共享组合及并发核对标识。"""
+
+    revision: str
+    actor_id: Identity | None = None
+    costume_id: Identity | None = None
+    prop_ids: list[Identity] = Field(default_factory=list, max_length=100)
+
+
+class CharacterCompositionWrite(Contract):
+    """明确替换共享组合，所选共享资产同时纳入项目。"""
+
+    expected_revision: str = Field(min_length=64, max_length=64)
+    actor_id: Identity | None = None
+    costume_id: Identity | None = None
+    prop_ids: list[Identity] = Field(default_factory=list, max_length=100)

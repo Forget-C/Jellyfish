@@ -236,33 +236,26 @@ class WorkspaceService(DirectingStore):
     async def assets(self):
         """列出当前项目已关联资产，供场次工作单显式选择。"""
         from app.core.contracts.directing.workspace import AssetSummary
-        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink, CharacterImage, SceneImage, PropImage, FileItem
+        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+        from app.services.directing.object_assets import reference_images
 
         result = []
         queries = [("character", select(Character).where(Character.project_id == self.project_id)),
             ("scene", select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id).distinct()),
             ("prop", select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id).distinct())]
-        image_models = {'character': (CharacterImage, CharacterImage.character_id),
-                        'scene': (SceneImage, SceneImage.scene_id), 'prop': (PropImage, PropImage.prop_id)}
         for kind, query in queries:
             rows = list(await self.db.scalars(query))
-            if not rows:
-                continue
-            image_model, owner = image_models[kind]
-            images = list(await self.db.execute(select(owner, image_model.file_id, FileItem).outerjoin(
-                FileItem, FileItem.id == image_model.file_id).where(owner.in_([row.id for row in rows]))))
+            grouped = await reference_images(self.db, kind, [row.id for row in rows])
+            actors = await reference_images(self.db, 'actor', list({row.actor_id for row in rows if row.actor_id})) if kind == 'character' else {}
             for row in rows:
-                files = set()
-                unavailable = 0
-                for asset_id, file_id, file in images:
-                    if asset_id != row.id or not file_id:
-                        continue
-                    if file is not None and file.type == 'image' and file.delete_requested_at is None and file.deleted_at is None:
-                        files.add(file_id)
-                    else:
-                        unavailable += 1
-                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or "",
-                                          image_file_ids=sorted(files), unavailable_image_count=unavailable))
+                images, unavailable = grouped[row.id]
+                if kind == 'character' and row.actor_id:
+                    actor_images, actor_unavailable = actors[row.actor_id]
+                    images.extend(actor_images)
+                    unavailable += actor_unavailable
+                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or '',
+                    actor_id=row.actor_id if kind == 'character' else None, reference_images=images,
+                    image_file_ids=list(dict.fromkeys(image.file_id for image in images)), unavailable_image_count=unavailable))
         return result
 
     async def create_asset(self, sequence_id, body):

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetReferenceImage } from './AssetReferenceImage';
 /**
  * 场次可复用的项目资产身份，不复制本场调度状态到资产。
  */
@@ -12,4 +13,6 @@ export type AssetSummary = {
     description: string;
     image_file_ids?: Array<string>;
     unavailable_image_count?: number;
+    actor_id?: (string | null);
+    reference_images?: Array<AssetReferenceImage>;
 };

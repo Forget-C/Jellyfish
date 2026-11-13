@@ -282,6 +282,16 @@ class VisualRequest(Contract):
     ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
 
 
+class AssetReferenceImage(Contract):
+    """可选参考的具体文件、原始资产与视角；不根据文件排序猜测视角。"""
+
+    file_id: Identity
+    view_angle: str
+    source_kind: Literal['character', 'actor', 'scene', 'prop']
+    source_id: Identity
+    slot_id: int
+
+
 class AssetSummary(Contract):
     """场次可复用的项目资产身份，不复制本场调度状态到资产。"""
 
@@ -291,6 +301,8 @@ class AssetSummary(Contract):
     description: str
     image_file_ids: list[Identity] = Field(default_factory=list)
     unavailable_image_count: int = Field(default=0, ge=0)
+    actor_id: Identity | None = None
+    reference_images: list[AssetReferenceImage] = Field(default_factory=list)
 
 
 class AssetCreateRequest(Contract):

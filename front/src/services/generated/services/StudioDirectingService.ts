@@ -11,6 +11,7 @@ import type { ApiResponse_ChapterDeliveriesRead_ } from '../models/ApiResponse_C
 import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_ChapterWorkbenchManagement_ } from '../models/ApiResponse_ChapterWorkbenchManagement_';
+import type { ApiResponse_CharacterComposition_ } from '../models/ApiResponse_CharacterComposition_';
 import type { ApiResponse_CompileResult_ } from '../models/ApiResponse_CompileResult_';
 import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
 import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
@@ -84,6 +85,7 @@ import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
 import type { ApplyReviewRevisionRequest } from '../models/ApplyReviewRevisionRequest';
 import type { AssetCreateRequest } from '../models/AssetCreateRequest';
 import type { BatchPrepare } from '../models/BatchPrepare';
+import type { CharacterCompositionWrite } from '../models/CharacterCompositionWrite';
 import type { CompileRequest } from '../models/CompileRequest';
 import type { CutFrameRequest } from '../models/CutFrameRequest';
 import type { DivisionDraft } from '../models/DivisionDraft';
@@ -2446,6 +2448,60 @@ export class StudioDirectingService {
             path: {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Read Character Composition
+     * 读取项目角色的共享演员、服装和道具组合。
+     * @returns ApiResponse_CharacterComposition_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCharacterComposition({
+        projectId,
+        characterId,
+    }: {
+        projectId: string,
+        characterId: string,
+    }): CancelablePromise<ApiResponse_CharacterComposition_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/characters/{character_id}/composition',
+            path: {
+                'project_id': projectId,
+                'character_id': characterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Character Composition
+     * 保存共享组合并关联所选资产，不生成图片或替换场次参考。
+     * @returns ApiResponse_CharacterComposition_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSaveCharacterComposition({
+        projectId,
+        characterId,
+        requestBody,
+    }: {
+        projectId: string,
+        characterId: string,
+        requestBody: CharacterCompositionWrite,
+    }): CancelablePromise<ApiResponse_CharacterComposition_> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/studio/projects/{project_id}/directing/characters/{character_id}/composition',
+            path: {
+                'project_id': projectId,
+                'character_id': characterId,
             },
             body: requestBody,
             mediaType: 'application/json',

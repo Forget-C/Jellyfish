@@ -48,6 +48,7 @@
 - [生成画布检查卡的范围与职责](adr/0003-generation-canvas-check-cards.md)
 - [声音设计与生成职责](adr/0004-sound-design-and-generation-responsibilities.md)
 - [场次工作台与自由生成共享画布基础](adr/0005-shared-canvas-foundation.md)
+- [项目角色身份与共享资产复用](adr/0006-project-character-and-shared-assets.md)
 
 ## 开发与维护指南
 

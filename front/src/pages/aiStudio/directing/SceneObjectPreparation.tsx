@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Drawer, Empty, Grid, Image, Input, Modal, Select, Space, Spin, message } from 'antd'
 import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined, SwapOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, StudioFilesService } from '../../../services/generated'
-import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
+import type { AssetSummary, SceneObjectRead, SceneObjectsRead, ObjectReferenceSource } from '../../../services/generated'
 import { AssetEditPageBase } from '../assets/components/AssetEditPageBase'
 import { assetAdapters } from '../assets/assetAdapters'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -15,15 +15,17 @@ import { directingError } from './common'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchModal } from './ui/WorkbenchModal'
 import { ObjectAssociationEditor } from './ObjectAssociationEditor'
+import { CharacterCompositionEditor } from './CharacterCompositionEditor'
 import './workbench-object-preparation.css'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 const kinds = { character: '角色', scene: '场所', prop: '道具' } as const
-type ObjectChoice = { objectId: string; assetId?: string; imageFileId?: string }
+type ObjectChoice = { objectId: string; assetId?: string; imageFileId?: string; actorId?: string; source?: ObjectReferenceSource }
 type ManagementActions = {
   host: HTMLDivElement | null; filterHost: HTMLDivElement | null; onChange: () => void;
   candidateTaskId: string | null; clearCandidateTask: () => void;
 }
+const angleLabels: Record<string, string> = { FRONT: '正面', LEFT: '左侧', RIGHT: '右侧', BACK: '背面' }
 const referenceLabels = { unassociated: '尚未关联资产', missing: '未选参考图', ready: '已选参考图', unavailable: '关联或图片不可用' }
 const assetModalStyles = { body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } } as const
 
@@ -31,12 +33,13 @@ function activeTask(data?: SceneObjectsRead) {
   return data?.task?.status === 'queued' || data?.task?.status === 'running'
 }
 
-function ReferenceImage({ name, fileId, unavailable }: { name: string; fileId?: string; unavailable?: boolean }) {
+function ReferenceImage({ name, fileId, unavailable, controls }: { name: string; fileId?: string; unavailable?: boolean; controls?: ReactNode }) {
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   return <>
     <div className="management-reference-frame">
+      {controls && <div className="management-reference-angle">{controls}</div>}
       {unavailable && <div className="management-reference-failed">参考图不可用</div>}
       {failed && <div role="status" className="management-reference-failed"><Badge status="warning" text="图片加载失败" /><MainButton type="text" icon={<ReloadOutlined />} aria-label="重试参考图" onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
       {fileId && !failed && <button type="button" aria-label={`预览${name}参考图`} onClick={event => {
@@ -71,6 +74,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [submitting, setSubmitting] = useState(false)
   const [savingObject, setSavingObject] = useState<string>()
   const saving = !!savingObject
+  const [compositionId, setCompositionId] = useState<string>()
+  const [angles, setAngles] = useState<Record<string, string>>({})
   const [associationObject, setAssociationObject] = useState<string>()
   const [descriptionObject, setDescriptionObject] = useState<SceneObjectRead>()
   const [assetEditor, setAssetEditor] = useState<AssetSummary>()
@@ -162,15 +167,19 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     } finally { setSubmitting(false) }
   }
 
-  const choose = async (objectId: string, assetId?: string, imageFileId?: string) => {
+  const choose = async (objectId: string, assetId?: string, imageFileId?: string, actorId?: string, source?: ObjectReferenceSource) => {
     if (!data || !editable) return
     filterFocus.current = { id: objectId, index: filtered.findIndex(object => object.id === objectId) }
     const response = await StudioDirectingService.directingSceneObjectChoose({ ...scope, objectId,
-      requestBody: { expected_revision: data.revision, asset_id: assetId ?? null, image_file_id: imageFileId ?? null },
+      requestBody: { expected_revision: data.revision, asset_id: assetId ?? null,
+        actor_id: actorId ?? null, auto_select_image: !!actorId, reference_source: source, image_file_id: imageFileId ?? null },
     })
     if (!response.data) throw new Error('保存结果待核实，请刷新对象准备')
     loadVersion.current++
     accept(response.data)
+    if (actorId || (data.objects.find(object => object.id === objectId)?.asset_id ?? undefined) !== assetId) {
+      setAngles(previous => { const next = { ...previous }; delete next[objectId]; return next })
+    }
   }
   const reportChoiceError = (objectId: string, message: string, retry?: ObjectChoice) => {
     if (management) setChoiceError({ objectId, message, retry })
@@ -183,17 +192,21 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     let retry: ObjectChoice | undefined
     if (management && recoverable) {
       const selected = latest?.objects.find(object => object.id === choice.objectId)
-      if (selected && (selected.asset_id ?? undefined) === choice.assetId &&
-          (selected.image_file_id ?? undefined) === choice.imageFileId) return
+      const role = choice.actorId ? latest?.assets.find(asset => asset.id === selected?.asset_id && asset.actor_id === choice.actorId) : undefined
+      const actorImages = role?.reference_images?.filter(image => image.source_kind === 'actor') ?? []
+      const expectedImage = choice.actorId ? actorImages.find(image => image.view_angle === 'FRONT')?.file_id ?? actorImages[0]?.file_id : choice.imageFileId
+      if (selected && (choice.actorId ? !!role : (selected.asset_id ?? undefined) === choice.assetId) &&
+          (selected.image_file_id ?? undefined) === expectedImage && (!choice.source ||
+            selected.reference_source?.kind === choice.source.kind && selected.reference_source.asset_id === choice.source.asset_id)) return
       if (!latest || selected) retry = choice
     }
     reportChoiceError(choice.objectId, directingError(cause), retry)
   }
-  const save = async (objectId: string, assetId?: string, imageFileId?: string) => {
+  const save = async (objectId: string, assetId?: string, imageFileId?: string, actorId?: string, source?: ObjectReferenceSource) => {
     if (!editable || saving) return false
     setSavingObject(objectId); setChoiceError(undefined)
-    try { await choose(objectId, assetId, imageFileId); return true }
-    catch (cause) { await recoverChoice(cause, { objectId, assetId, imageFileId }); return false }
+    try { await choose(objectId, assetId, imageFileId, actorId, source); return true }
+    catch (cause) { await recoverChoice(cause, { objectId, assetId, imageFileId, actorId, source }); return false }
     finally { setSavingObject(undefined) }
   }
 
@@ -279,7 +292,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const choiceErrorOnCard = choiceError && filtered.some(object => object.id === choiceError.objectId)
   const pendingChoice = choiceError?.retry
   const retryChoice = pendingChoice && <MainButton size="small" disabled={disabled} onClick={() => void save(
-    pendingChoice.objectId, pendingChoice.assetId, pendingChoice.imageFileId)}>核对后重试选择</MainButton>
+    pendingChoice.objectId, pendingChoice.assetId, pendingChoice.imageFileId, pendingChoice.actorId, pendingChoice.source)}>核对后重试选择</MainButton>
   const AssetModal = management ? Modal : WorkbenchModal
   const closeDescription = () => {
     const id = descriptionObject?.id
@@ -288,6 +301,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }
   const descriptionContent = descriptionObject && <div className="management-object-description-content"><p>{descriptionObject.description || '未填写描述'}</p><p>出处：{descriptionObject.excerpt || '暂无出处'}</p></div>
   return <>
+    {compositionId && <CharacterCompositionEditor projectId={projectId} characterId={compositionId} onClose={() => setCompositionId(undefined)} onSaved={read} />}
     {compact ? <Drawer aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
       : <Modal title="描述与出处" open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
     <section hidden={!!management && !!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
@@ -349,6 +363,20 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           }))
           if (object.asset_id && !asset) options.push({ value: object.asset_id, label: '关联资产不可用' })
           const images = asset?.image_file_ids ?? []
+          const referenceImages = asset?.reference_images ?? []
+          const selectedImage = referenceImages.find(image => image.file_id === object.image_file_id)
+          const source = object.reference_source ?? (selectedImage ? { kind: selectedImage.source_kind, asset_id: selectedImage.source_id } : undefined)
+          const angleImages = source ? referenceImages.filter(image => image.source_kind === source.kind && image.source_id === source.asset_id) : referenceImages
+          const angle = angles[object.id] ?? selectedImage?.view_angle ?? 'FRONT'
+          const anglePicker = asset && referenceImages.length > 0 && <>
+            <Select aria-label="参考视角" size="small" value={angle} disabled={disabled} style={{ width: 90 }}
+              options={Object.entries(angleLabels).map(([value, label]) => ({ value, label }))}
+              onChange={value => {
+                const image = angleImages.find(item => item.view_angle === value)
+                void save(object.id, asset.id, image?.file_id, undefined, source).then(saved => { if (saved) setAngles(previous => ({ ...previous, [object.id]: value })) })
+              }} />
+            {!object.image_file_id && !angleImages.some(image => image.view_angle === angle) && <small>暂无{angleLabels[angle]}图</small>}
+          </>
           const assetSelect = <Select aria-label="关联资产" allowClear placeholder="关联已有资产" value={object.asset_id ?? undefined}
             disabled={disabled} options={options} onChange={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; void save(object.id, id) }} />
           const referenceFileId = object.reference_state === 'ready' ? object.image_file_id ?? undefined : undefined
@@ -359,11 +387,15 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           const assetAction = asset ? { key: 'prepare', label: '准备图片', onClick: () => openAsset(asset, object.id) }
             : { key: 'create', label: '新建并关联', onClick: openCreate }
           if (management) {
-            const imageOptions = images.map((id, index) => ({ key: `file:${id}`,
-              label: <span className="management-reference-option"><img alt="" src={buildFileDownloadUrl(id)} />
-                <span>参考图 {index + 1}</span>{id === object.image_file_id && <CheckOutlined aria-label="当前已选" />}</span>,
-              onClick: () => void save(object.id, asset?.id, id),
-            }))
+            const imageOptions = images.map((id, index) => {
+              const image = referenceImages.find(item => item.file_id === id)
+              const label = image ? ` · ${angleLabels[image.view_angle] ?? '其他角度'} · ${image.source_kind === 'actor' ? '演员图' : '资产图'}` : ''
+              return { key: `file:${id}`,
+                label: <span className="management-reference-option"><img alt="" src={buildFileDownloadUrl(id)} />
+                  <span>参考图 {index + 1}{label}</span>{id === object.image_file_id && <CheckOutlined aria-label="当前已选" />}</span>,
+                onClick: () => void save(object.id, asset?.id, id, undefined, image ? { kind: image.source_kind, asset_id: image.source_id } : undefined),
+              }
+            })
             const assetUnavailable = !!object.asset_id && !asset
             const imageUnavailable = object.image_file_id && object.reference_state === 'unavailable'
             const referenceAction = object.image_file_id ? '更换参考图' : images.length ? '选择参考图' : '上传参考图'
@@ -371,14 +403,14 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
               label: <span className="management-reference-option"><img alt="" src={buildFileDownloadUrl(referenceFileId)} />当前已选参考图</span>,
             }] : []
             const referenceMenu = [...currentUpload, ...imageOptions, { key: 'upload', label: '上传参考图', onClick: openUpload }]
-            const cardActions = [{ key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) }, { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction, ...(object.image_file_id ? [{ key: 'clear-reference', label: '清除参考图', disabled: assetUnavailable,
+            const cardActions = [...(asset?.kind === 'character' ? [{ key: 'composition', label: '编辑角色组合', onClick: () => setCompositionId(asset.id) }] : []), { key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) }, { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction, ...(object.image_file_id ? [{ key: 'clear-reference', label: '清除参考图', disabled: assetUnavailable,
               onClick: () => void save(object.id, object.asset_id ?? undefined) }] : [])]
             const referenceButton = <MainButton size="small" type="text" className="management-reference-action" aria-label={referenceAction} icon={object.image_file_id ? <SwapOutlined /> : images.length ? <PictureOutlined /> : <UploadOutlined />} disabled={disabled || assetUnavailable} loading={savingObject === object.id}
               onClick={images.length ? undefined : openUpload}>{object.image_file_id ? '更换' : images.length ? '选择' : '上传'}</MainButton>
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
-                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} />
+                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} controls={anglePicker} />
                   <div className="management-object-body">
                     <div className="management-object-title-row"><h4 title={object.name}>{object.name}</h4><small>{kinds[kind]}</small>
                       <Dropdown autoFocus trigger={['click']} disabled={disabled} menu={{ items: cardActions }}>
@@ -389,8 +421,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                     <ObjectAssociationEditor open={associationObject === object.id} onClose={() => {
                       setAssociationObject(undefined)
                       document.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(object.id)}"] button[aria-label="对象更多操作"]`)?.focus({ preventScroll: true })
-                    }} assetId={object.asset_id} hasReference={!!object.image_file_id} disabled={disabled} options={options}
-                      onSave={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; return save(object.id, id) }}
+                    }} kind={kind} assetId={object.asset_id} hasReference={!!object.image_file_id} disabled={disabled} options={options}
+                      onSave={(id, actorId) => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; return save(object.id, id, undefined, actorId) }}
                       anchor={<div className="management-object-association-row"><LinkOutlined aria-hidden />
                         {asset ? <MainButton type="link" title={asset.name} onClick={() => openAsset(asset, object.id)} aria-label={`查看${asset.name}资产`}>{asset.name}<ArrowRightOutlined /></MainButton>
                           : <span>{assetUnavailable ? '关联资产不可用，请更换或解除关联' : '尚未关联资产'}</span>}
@@ -415,6 +447,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
               </div>
               <div className="scene-object-choices">
                 {assetSelect}
+                {anglePicker}
+                {asset?.kind === 'character' && <Button disabled={disabled} onClick={() => setCompositionId(asset.id)}>编辑角色组合</Button>}
                 {asset && <Select aria-label="选择参考图" allowClear placeholder="选择参考图" disabled={disabled || !images.length}
                   value={images.includes(object.image_file_id ?? '') ? object.image_file_id ?? undefined : undefined}
                   options={images.map((id, index) => ({ value: id, label: `参考图 ${index + 1}` }))}
