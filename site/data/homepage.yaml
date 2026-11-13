@@ -1,78 +1,37 @@
 hero:
-  title: "Jellyfish AI 短剧工厂"
-  subtitle: "面向短剧生产的 AI 工作台，从剧本拆解到分镜、资产、生成与剪辑，一站完成。"
-  primary:
-    text: "查看文档"
-    link: "docs/"
-  secondary:
-    text: "访问 GitHub"
-    link: "https://github.com/Forget-C/Jellyfish"
-
-features:
-  - title: "一致性资产管理"
-    description: "统一角色、场景、道具与服装，减少 AI 生成中的风格漂移。"
-  - title: "工业化创作流程"
-    description: "从脚本处理、分镜编辑到任务生成与剪辑，形成完整工作流。"
-  - title: "分镜级精细控制"
-    description: "支持镜头语言、对白、帧图、提示词与关联资产的细粒度编辑。"
-  - title: "多模型与 Agent 协同"
-    description: "统一管理不同供应商模型，并用 Agent 工作流承接 AI 能力。"
-
-scenarios:
-  - eyebrow: "Studio"
-    title: "AI 影视工作室"
-    description: "适合把角色、场景、镜头和生成流程做成团队可复用的生产资产。"
-  - eyebrow: "Creator"
-    title: "短剧内容创作者"
-    description: "适合需要把脚本、分镜和素材组织起来，而不是只靠零散提示词创作的人。"
-  - eyebrow: "Team"
-    title: "品牌与内容团队"
-    description: "适合把剧情化视频生产流程工具化，减少多人协作时的信息断层。"
-  - eyebrow: "Lab"
-    title: "AI 产品验证"
-    description: "适合希望快速验证短剧工作流、Agent 编排和模型接入能力的团队。"
-
-highlights:
-  - label: "工作台主轴"
-    value: "项目 → 章节 → 场次"
-  - label: "场次创作"
-    value: "导演设计、拍摄、审片与剪辑"
-  - label: "独立生成"
-    value: "文本、图片与视频模型"
-  - label: "本地部署"
-    value: "Compose 拉起前后端、MySQL、RustFS"
-
+  title: "让故事，走向画面。"
+  subtitle: "Jellyfish AI 短剧创作工作台，从剧本、资产到生成与剪辑。"
+showcase:
+  - title: "剧本与分镜"
+    screen: "导演设计 / 第一场"
+    description: "把章节变成场次，逐步组织镜头设计。"
+    labels: ["镜头 01 · 远景", "镜头 02 · 中景", "镜头 03 · 特写"]
+  - title: "角色与资产"
+    screen: "资产资料 / 雾海来信"
+    description: "集中维护角色、场景与参考素材。"
+    labels: ["角色 · 林夏", "场景 · 海边站台", "道具 · 旧信封"]
+  - title: "生成与审片"
+    screen: "候选素材 / 第一场"
+    description: "查看生成候选，人工决定采用片段。"
+    labels: ["候选 A · 待审查", "候选 B · 待审查", "候选 C · 待审查"]
+  - title: "剪辑与导出"
+    screen: "剪辑画布 / 第一场"
+    description: "组织已采用片段，交付章节或导出整场视频。"
+    labels: ["已选片段 01", "已选片段 02", "已选片段 03"]
 workflow:
-  title: "一条龙的短剧生产流程"
-  steps:
-    - "剧本输入"
-    - "章节划分场次"
-    - "导演设计与资产准备"
-    - "准备单元与拍摄"
-    - "审片与人工采用"
-    - "剪辑、交付与导出"
-
-screenshots:
-  title: "核心界面预览"
-  items:
-    - title: "项目概览"
-      image: "images/screenshots/project.png"
-      alt: "Jellyfish 项目概览"
-    - title: "资产管理"
-      image: "images/screenshots/assets.png"
-      alt: "Jellyfish 资产管理"
-
-cta:
-  title: "开始使用 Jellyfish"
-  description: "获取项目，按部署说明启动应用，再跟随使用指南完成创作。"
-  primary:
-    text: "安装说明"
-    link: "docs/getting-started/installation/"
-  secondary:
-    text: "Docker 部署"
-    link: "docs/getting-started/docker/"
-
-quickstart:
-  title: "快速开始"
-  command: "docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build"
-  note: "首次部署前，请按部署说明准备配置。已有部署应保留现有配置和数据卷。"
+  - title: "构思"
+    subtitle: "组织故事与镜头"
+    description: "从章节原文开始，确认场次与导演设计。"
+  - title: "制作"
+    subtitle: "准备资产，生成候选"
+    description: "把角色、场景与参考素材带进创作。"
+  - title: "完成"
+    subtitle: "人工审片，剪辑导出"
+    description: "选用合适的片段，组织最终画面。"
+projects:
+  - title: "山海之间"
+    genre: "古风"
+  - title: "未寄出的信"
+    genre: "都市"
+  - title: "第七次日出"
+    genre: "科幻"

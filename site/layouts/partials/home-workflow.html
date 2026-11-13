@@ -1,17 +1,8 @@
-{{ $workflow := site.Data.homepage.workflow }}
-<section class="jf-section">
-  <div class="jf-heading">
-    <div class="jf-kicker">Workflow</div>
-    <h2>{{ $workflow.title }}</h2>
-    <p class="jf-lead">把离散的脚本、资产、生成和剪辑操作收束到统一工作台中。</p>
-  </div>
-  <div class="jf-step-grid">
-      {{ range $index, $step := $workflow.steps }}
-        <div class="jf-step">
-          <span class="jf-step-index">{{ add $index 1 }}</span>
-          <strong>{{ $step }}</strong>
-          <p class="jf-card-copy">围绕当前阶段沉淀上下文，减少信息在流程中的断裂。</p>
-        </div>
-      {{ end }}
-  </div>
+<section class="jf-section jf-workflow" aria-labelledby="workflow-title">
+  <div class="jf-heading"><div class="jf-kicker">创作，有章可循</div><h2 id="workflow-title">一条连贯的短剧制作流程。</h2></div>
+  <ol class="jf-process">
+    {{ range $index, $step := site.Data.homepage.workflow }}
+      <li><div class="jf-kicker">0{{ add $index 1 }} / {{ .title }}</div><h3>{{ .subtitle }}</h3><p>{{ .description }}</p></li>
+    {{ end }}
+  </ol>
 </section>

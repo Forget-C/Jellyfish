@@ -1,10 +1,12 @@
 {{ define "main" }}
   <div id="content" class="jf-home">
     {{ partial "home-hero.html" . }}
-    {{ partial "home-features.html" . }}
+    {{ partial "home-showcase.html" . }}
     {{ partial "home-workflow.html" . }}
-    {{ partial "home-scenarios.html" . }}
-    {{ partial "home-screenshots.html" . }}
+    {{ partial "home-projects.html" . }}
+    {{ partial "home-community.html" . }}
     {{ partial "home-cta.html" . }}
   </div>
+  {{ $script := resources.Get "js/home-showcase.js" | minify | fingerprint }}
+  <script src="{{ $script.RelPermalink }}" defer></script>
 {{ end }}
