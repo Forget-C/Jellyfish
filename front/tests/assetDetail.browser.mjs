@@ -19,6 +19,9 @@ slots.character = [{id:1,view_angle:'FRONT',file_id:'portrait'}]
 let failSave = false, failSlot = false, failImages = false, failAsset = false, missingAsset = false
 let failHistory = false, adoptions = 0
 let generationStatus, statusReads = 0, generationCalls = 0
+let submittedModel, submittedReferences
+  const submittedAngles=[]
+  let partialGeneration=false
 let patches = 0, posts = 0
 let detectionStatus, cancelFails = true, cancelRequested = false, cancelCalls = 0
 try {
@@ -27,7 +30,7 @@ try {
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(7000)
   const errors = []
-  page.on('pageerror', error => errors.push(error.message))
+  page.on('pageerror', error => {errors.push(error.message); console.error(error.message)})
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname
@@ -62,6 +65,13 @@ try {
       if (generationStatus === 'succeeded') slots.actor[0].file_id = 'new-portrait'
       return respond({ items: generationStatus ? [{ task_id: 'generated', status: generationStatus, stage: '', task_kind: 'image', title: '图片生成', source: { kind: 'actor', id: 'a1', title: '演员' }, target_type: 'actor_image_slot', target_id: '1', created_at_ts: 1, updated_at_ts: 2 }] : [], next_cursor: null })
     }
+    if (path.endsWith('/model-settings')) return respond({default_image_model_id:'default-image'})
+    if (path.endsWith('/llm/models')) return list([{id:'default-image',name:'默认图片模型',category:'image'}, {id:'alternate-image',name:'备选图片模型',category:'image'}])
+    if (path.endsWith('/llm/models/default-image')) return respond({id:'default-image',name:'默认图片模型'})
+    if (path.endsWith('/generation-prompts/assets/draft/render')) return respond({render_id:'draft', execution_prompt:'演员草稿预览',variables_snapshot:{},recommended_media:{references:[]}})
+    if (/generation-tasks\/actors\/a1\/slots\/\d+\/tasks$/.test(path)) { submittedModel=request.postDataJSON().model_id; submittedReferences=request.postDataJSON().asset_references; const slot=slots.actor.find(row=>String(row.id)===path.split('/').at(-2)); submittedAngles.push(slot.view_angle); return partialGeneration && slot.view_angle==='FRONT' ? respond({task_id:'partial-front'}) : fail() }
+    if (path.endsWith('/film/tasks/partial-front/status')) return respond({task_id:'partial-front',status:'succeeded'})
+    if (/generation-prompts\/assets\/actor\/a1\/slots\/\d+\/render$/.test(path)) return respond({render_id:'final',execution_prompt:'演员生成提示词',variables_snapshot:{},recommended_media:{references:[]}})
     if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实', '动漫'], styles: ['真人都市'] })
     if (path.endsWith('/entities/actor/a1/images/1') && request.method() === 'PATCH') {
       adoptions++
@@ -97,6 +107,7 @@ try {
   await page.goto(origin + '/assets/actors/a1/edit')
   const name = page.getByRole('textbox', { name: '名称', exact: true })
   await name.waitFor()
+  assert.equal(await page.locator('.actor-picture-row').count(), 4)
   const save = page.getByRole('button', { name: '保存设定', exact: true })
   const enlarge=page.getByRole('button',{name:'放大正面图片 1',exact:true})
   await enlarge.and(page.locator(':enabled')).waitFor()
@@ -121,11 +132,14 @@ try {
   await save.click()
   await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
   assert.equal(assets.actor.name, '修改后的演员')
-  await page.getByRole('tab', { name: '侧面', exact: true }).first().click()
-  await page.getByText('当前视角暂无图片', { exact: true }).first().waitFor()
+  await page.getByRole('region', { name: '侧面图片集合', exact: true }).getByText('暂无图片').waitFor()
   // Cancellation acknowledgement is not terminal, and failed cancellation remains retryable.
   await name.fill('检测时未保存的名称')
-  await page.getByRole('button', { name: '智能检测', exact: true }).click()
+  await page.getByRole('button', { name: '智能检测与结果', exact: true }).click()
+  await page.getByRole('dialog',{name:'智能检测',exact:true}).getByRole('button',{name:'智能检测',exact:true}).click()
+  await page.setViewportSize({width:1024,height:768})
+  await page.setViewportSize({width:1440,height:900})
+  await page.getByRole('dialog',{name:'智能检测',exact:true}).getByRole('button',{name:'完成',exact:true}).click()
   await page.getByRole('button', { name: '返回', exact: true }).click()
   const detecting = page.getByRole('dialog', { name: '智能检测进行中', exact: true })
   await detecting.getByRole('button', { name: '取消检测', exact: true }).click()
@@ -143,15 +157,54 @@ try {
   await page.goto(origin + '/assets/actors/a1/edit')
   await name.waitFor()
   failHistory = true
-  await page.getByRole('button', { name: '图片历史', exact: true }).first().click()
-  await page.getByText('读取候选图片失败，请从图片历史重试', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '更多正面图片', exact: true }).click()
+  await page.getByRole('button', { name: '查看图片 1 的候选', exact: true }).click()
+  await page.getByRole('dialog',{name:'图片集合'}).getByText('读取候选图片失败，请重试查看候选', {exact:true}).waitFor()
   failHistory = false
-  await page.getByRole('button', { name: '图片历史', exact: true }).first().click()
+  await page.getByRole('button', { name: '查看图片 1 的候选', exact: true }).click()
   await page.getByRole('button', { name: '加入视角文件夹', exact: true }).waitFor()
   const original = slots.actor[0].file_id
   await page.getByRole('button', { name: '加入视角文件夹', exact: true }).click()
   assert.equal(slots.actor[0].file_id, original, '历史采用追加图片，保留原图')
   assert.equal(posts, 1)
+  await page.getByRole('dialog',{name:'图片集合'}).getByRole('button',{name:'关闭',exact:true}).click()
+  const layoutSize=await page.locator('.resource-editor-body').evaluate(node=>({height:node.clientHeight,scroll:node.scrollHeight}))
+  assert.ok(layoutSize.scroll<=layoutSize.height+1,'standard desktop actor content fits without scrolling')
+  assert.equal(await page.getByText('共享资产',{exact:true}).count(),0)
+  await page.getByRole('button',{name:'生成图片',exact:true}).click()
+  const generationModal=page.getByRole('dialog',{name:'生成演员图片',exact:true})
+  await generationModal.getByRole('combobox',{name:'图片模型'}).press('ArrowDown')
+  await page.getByText('备选图片模型',{exact:true}).click()
+  await generationModal.getByRole('textbox',{name:'本次附加要求'}).fill('仅本次柔光')
+  await generationModal.getByRole('button',{name:'取消',exact:true}).click()
+  await page.getByRole('button',{name:'生成图片',exact:true}).click()
+  assert.equal(await generationModal.getByRole('textbox',{name:'本次附加要求'}).inputValue(),'仅本次柔光')
+  await generationModal.getByText('备选图片模型',{exact:true}).waitFor()
+  await generationModal.getByRole('checkbox',{name:'正面',exact:true}).evaluate(node => { if (node.checked) node.click() })
+  await generationModal.getByRole('button',{name:'生成',exact:true}).click()
+  await generationModal.getByText(/生成提交失败/).waitFor()
+  assert.deepEqual(submittedAngles,['FRONT'],'empty selection generates front')
+  assert.equal(submittedModel,'alternate-image')
+  assert.deepEqual(submittedReferences,[])
+  assert.equal(assets.actor.additional_instruction,undefined,'generation configuration never writes to actor facts')
+  partialGeneration=true
+  submittedAngles.length=0
+  await generationModal.getByRole('checkbox',{name:'正面',exact:true}).evaluate(node => { if (!node.checked) node.click() })
+  await generationModal.getByRole('checkbox',{name:'背面',exact:true}).evaluate(node => { if (!node.checked) node.click() })
+  await generationModal.getByRole('button',{name:'生成',exact:true}).click()
+  await generationModal.getByRole('alert').filter({hasText:'背面：'}).waitFor()
+  await generationModal.getByRole('button',{name:'生成',exact:true}).and(page.locator(':enabled')).waitFor()
+  await Promise.all([page.waitForResponse(response=>response.url().includes('/generation-tasks/actors/') && response.status()===503), generationModal.getByRole('button',{name:'生成',exact:true}).click()])
+  assert.deepEqual(submittedAngles,['FRONT','BACK','BACK'],'retry never duplicates accepted front')
+
+  await generationModal.getByRole('button',{name:'取消',exact:true}).click()
+
+  await page.reload()
+  await name.and(page.locator(':enabled')).waitFor()
+  await page.getByRole('button',{name:'生成图片',exact:true}).click()
+  assert.equal(await generationModal.getByRole('textbox',{name:'本次附加要求'}).inputValue(),'')
+  await generationModal.getByText('默认图片模型',{exact:true}).waitFor()
+  await generationModal.getByRole('button',{name:'取消',exact:true}).click()
   // Initial read failure is explicit and recoverable.
   failAsset = true
   await page.goto(origin + '/assets/props/a1/edit')
@@ -175,7 +228,7 @@ try {
       assert.equal(layout.overflow, false, type + ' horizontal overflow')
       assert.equal(await page.locator('.resource-editor-drawer').count(),0,'详情在页面正文，无抽屉及遮罩')
       assert.equal(layout.titleSize, '16px')
-      if (width < 768) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
+      if (width < 768 || type === 'actor' && (width < 1200 || height < 740)) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).waitFor()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).evaluate(image => image.decode())
       await page.screenshot({ path: output + '/' + type + '-' + width + '.png' })

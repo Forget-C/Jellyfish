@@ -6,6 +6,7 @@ import { useAppStore } from '../../../../store/useAppStore'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 
 type Props = {
+  className?: string
   id: string; open: boolean; drawer: boolean; inline?: boolean; title: string; backLabel: string
   onClose: () => void; actions: ReactNode; children: ReactNode
   actionsRef?: (node: HTMLDivElement | null) => void
@@ -13,7 +14,7 @@ type Props = {
 }
 
 /** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
-export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef }: Props) {
+export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className }: Props) {
   const appearance = useAppStore(state => state.appearance)
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
   const [body, setBody] = useState<HTMLElement | null>(null)
@@ -89,7 +90,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     {renderToolbar ? renderToolbar(toolbar) : <PageToolbar>{toolbar}</PageToolbar>}
     <div className="resource-editor-body">{children}</div>
   </section>
-  return <WorkspaceLayout onKeyDown={escape} id={id} aria-label={title} className="resource-editor-page">
+  return <WorkspaceLayout onKeyDown={escape} id={id} aria-label={title} className={`resource-editor-page ${className ?? ''}`}>
     <PageToolbar>{toolbar}</PageToolbar>
     <WorkspaceScrollPanel className="resource-editor-body">{children}</WorkspaceScrollPanel>
   </WorkspaceLayout>
