@@ -156,7 +156,7 @@ try {
       assert.ok(Math.abs(rect.y+rect.height-height)<1)
     }
     await page.setViewportSize({width:1440,height:900})
-    await create.getByRole('button',{name:/^取\s*消$/}).click()
+    await create.getByRole('button',{name:'返回',exact:true}).click()
     await create.waitFor({state:'hidden'})
     await page.unroute('**/api/**')
   }

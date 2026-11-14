@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Image, Input, Pagination, Select, Space, Spin, Upload } from 'antd'
 import { StudioEntitiesService, StudioFilesService, type AssetPromptReference } from '../../../../services/generated'
@@ -11,7 +12,8 @@ const labels = { actor: '演员', character: '角色', scene: '场所', prop: '�
 const angleLabels: Record<string, string> = { FRONT: '正面', LEFT: '侧面', RIGHT: '右侧', TOP: '俯视', BACK: '背面', THREE_QUARTER: '3/4 侧面', DETAIL: '细节' }
 
 /** 在当前抽屉中选来源及具体图片，提交前始终使用独立的临时选择。 */
-export function ResourceReferencePage({ kind, projectId, purpose, value, onApply, onCancel }: {
+export function ResourceReferencePage({ kind, projectId, purpose, value, onApply, onCancel, toolbarTarget }: {
+  toolbarTarget?: HTMLElement | null
   kind: ResourceKind; projectId?: string | null; purpose: 'subject' | 'costume' | 'prop'
   value: AssetPromptReference[]; onApply: (value: AssetPromptReference[]) => void; onCancel: () => void
 }) {
@@ -63,7 +65,7 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
   }
   return <div className="resource-editor-fields">
     <Space wrap>
-      <Button onClick={onCancel}>返回</Button>
+      {!toolbarTarget && <Button onClick={onCancel}>返回</Button>}
       <Select aria-label="参考来源范围" value={scope} options={[
         ...(projectId ? [{ value: 'project', label: '项目资源' }] : []), { value: 'library', label: '资产库' },
       ]} onChange={next => { setScope(next); setPage(1); if (next === 'library' && sourceKind === 'character') setSourceKind('actor') }} />
@@ -99,6 +101,6 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
         })}</div></>}
     </Spin>
     <p>已选择 {selected.filter(belongs).length} 张图片；点击使用后回填草稿。</p>
-    <Space><Button aria-label="取消" onClick={onCancel}>取消</Button><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>
+    {toolbarTarget ? createPortal(<Space><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>, toolbarTarget) : <Space><Button aria-label="取消" onClick={onCancel}>取消</Button><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>}
   </div>
 }

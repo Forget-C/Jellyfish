@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeftOutlined, CloseOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
 import { useAppStore } from '../../../../store/useAppStore'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
@@ -8,11 +8,12 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../
 type Props = {
   id: string; open: boolean; drawer: boolean; inline?: boolean; title: string; backLabel: string
   onClose: () => void; actions: ReactNode; children: ReactNode
+  actionsRef?: (node: HTMLDivElement | null) => void
   renderToolbar?: (children: ReactNode) => ReactNode
 }
 
 /** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
-export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar }: Props) {
+export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef }: Props) {
   const appearance = useAppStore(state => state.appearance)
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
   const [body, setBody] = useState<HTMLElement | null>(null)
@@ -59,6 +60,11 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
   useEffect(() => {
     if (drawer && open && positioned) panel.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
   }, [drawer, open, positioned])
+  const toolbar = <>
+    <div className="resource-editor-page-heading"><Button type="text" icon={<ArrowLeftOutlined />} aria-label={backLabel} onClick={onClose}>{backLabel}</Button>
+      <h1 className="app-page-title" title={title}>{title}</h1></div>
+    <div ref={actionsRef} className="resource-editor-page-actions">{actions}</div>
+  </>
   if (drawer) return <><span ref={anchor} hidden />{open && bounds && createPortal(
     <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${bounds.x > 0 ? '' : ' resource-editor-no-side'}`}
       style={{ top: bounds.y, left: bounds.x, width: bounds.width, height: bounds.height, maxWidth: `calc(100vw - ${bounds.x}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
@@ -70,21 +76,12 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
             event.stopPropagation()
             onClose()
           }}>
-          <div className="ant-drawer-header"><div className="ant-drawer-header-title">
-            <Button type="text" className="ant-drawer-close" icon={<CloseOutlined />} aria-label="关闭面板" onClick={onClose} />
-            <div className="ant-drawer-title">{title}</div>
-          </div></div>
+          <PageToolbar>{toolbar}</PageToolbar>
           <div className="ant-drawer-body"><div className="resource-editor-drawer-content" ref={captureBody}>{children}</div></div>
-          <div className="ant-drawer-footer">{actions}</div>
         </div>
       </div>
     </div>, document.body)}</>
   if (!open) return null
-  const toolbar = <>
-    <div className="resource-editor-page-heading"><Button type="text" icon={<ArrowLeftOutlined />} aria-label={backLabel} onClick={onClose}>{backLabel}</Button>
-      <h1 className="app-page-title" title={title}>{title}</h1></div>
-    <div className="resource-editor-page-actions">{actions}</div>
-  </>
   const escape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape' && backLabel !== '返回' && !event.defaultPrevented) { event.stopPropagation(); onClose() }
   }

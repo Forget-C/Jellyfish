@@ -358,6 +358,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     } catch (cause) { setError(directingError(cause)) }
     finally { setBusy(false) }
   }
+  const [referenceToolbar, setReferenceToolbar] = useState<HTMLDivElement | null>(null)
   const closeEditor = () => {
     const id = resource?.id
     onClose()
@@ -449,21 +450,20 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   </div>
   return <>
     <ResourceEditorFrame id={drawerId} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title}
-      backLabel={page === 'editor' ? '返回' : '返回对象'} onClose={close}
-      actions={page === 'references' ? null : <Space wrap>{page === 'publish' ? <><Button onClick={() => setPage('editor')}>返回编辑</Button>
+      backLabel={page === 'editor' ? '返回' : '返回对象'} onClose={close} actionsRef={setReferenceToolbar}
+      actions={page === 'references' ? null : <Space wrap>{page === 'publish' ? <>{!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
         <Button type="primary" loading={busy} disabled={!publishName.trim() || kind === 'character' && !images.some(image => image.is_primary && image.file_id)} onClick={() => void publish()}>确认入库</Button>
-      </> : readOnly ? <>{isDrawer && <Button aria-label="关闭" onClick={close}>关闭</Button>}
+      </> : readOnly ? <>
         {!resource?.source_character_id && resource?.project_id === null && resource && <Button target="_blank" rel="noopener noreferrer" href={`/assets/${kind === 'actor' ? 'actors' : kind === 'scene' ? 'scenes' : kind === 'prop' ? 'props' : 'costumes'}/${resource.id}/edit`}>在资产库编辑 ↗</Button>}
       </> : page === 'adopt' ? <>
-        <Button onClick={() => setPage('editor')}>返回编辑</Button>
+        {!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
         <Button loading={busy} onClick={() => void (!assetId ? saveAndClose() : save())}>{resource ? '保存不采用' : '仅创建不采用'}</Button>
         <Button type="primary" loading={busy} disabled={adoptionIndex === undefined} onClick={() => void (!assetId ? saveAndClose(subjectImages[adoptionIndex!]) : save(subjectImages[adoptionIndex!]))}>{resource ? '采用为主图' : '采用并创建'}</Button>
       </> : page === 'generation' ? <>
-        <Button aria-label="取消" onClick={() => setPage('editor')}>取消</Button>
+        {!isDrawer && <Button aria-label="取消" onClick={() => setPage('editor')}>取消</Button>}
         <Button type="primary" onClick={() => { setGeneration(editingGeneration); setSelectedAngles(editingAngles); setPage('editor') }}>应用并返回</Button>
       </> : <>
-        {isDrawer && <Button aria-label={resource || assetId ? '关闭' : '取消'} onClick={close}>{resource || assetId ? '关闭' : '取消'}</Button>}
-        {assetId && <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置</Button>}
+        <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置{!assetId && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
         <Button loading={busy} disabled={generating || analysisBusy || loadFailed} onClick={createOnly}>{resource || assetId ? '保存设定' : '仅创建'}</Button>
         <Button aria-label={generation.mode === 'edit' ? dirty ? '保存并生成修改候选' : '生成修改候选' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'} type="primary" loading={generating} disabled={busy || analysisBusy || loadFailed || !!activeTasks.length} onClick={() => void generate()}>{generation.mode === 'edit' ? dirty ? '保存并生成修改候选' : '生成修改候选' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'}{generation.mode !== 'edit' && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
       </>}</Space>}>
@@ -482,7 +482,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       </div> : page === 'adopt' ? <div className="resource-editor-fields"><h3>是否使用参考主体作为主图？</h3><p>选择一张图片后将复制为当前对象的独立主图；当前已有图片继续保留。</p>
         <div className="resource-reference-grid">{subjectImages.map((reference, index) => <Button className="resource-reference-tile" key={`${reference.file_id}:${index}`} aria-pressed={adoptionIndex === index}
           onClick={() => setAdoptionIndex(index)}><Image preview={false} src={buildFileDownloadUrl(reference.file_id)} alt={`参考主体图片 ${index + 1}`} />{reference.view_angle ? angleLabel(reference.view_angle) : '未标注视角（采用时归入正面）'} · 图片 {index + 1}</Button>)}</div>
-      </div> : page === 'references' ? <ResourceReferencePage kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
+      </div> : page === 'references' ? <ResourceReferencePage toolbarTarget={referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
         value={pickerReturn === 'generation' ? editingGeneration.references ?? references : references}
         onCancel={() => setPage(pickerReturn)} onApply={next => {
           if (pickerReturn === 'generation') setEditingGeneration(value => ({ ...value, references: next })); else setReferences(next)
@@ -516,7 +516,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
             { key: 'style', label: `风格 · ${visualStyle} · ${style}`, children: <ProjectVisualStyleAndStyleFields disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} /> },
             { key: 'references', label: `参考图片 · ${references.length ? `${references.length} 张` : '未选择'}`, children: referenceSection() },
           ]} />
-          <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置 · {(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}</Button>
+
           {resource && <><Link to={kind === 'character' ? `/projects/${encodeURIComponent(resource.project_id ?? projectId!)}/roles/${encodeURIComponent(resource.id)}/edit` : resourceAssetUrl(kind, resource.id)}>查看完整详情</Link>{pictures}</>}
         </div> : !mobile ? <div className="resource-editor-desktop"><div>{settings}<h3>参考</h3>{referenceSection()}</div><div>{pictures}</div></div>
         : <Tabs className="resource-editor-mobile" activeKey={section} onChange={next => {

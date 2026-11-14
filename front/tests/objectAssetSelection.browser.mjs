@@ -80,7 +80,7 @@ try {
   const draft = page.getByRole('dialog', { name: '新建角色', exact: true })
   await draft.getByRole('textbox', { name: '名称', exact: true }).waitFor()
   assert.equal(await draft.getByRole('textbox', { name: '名称', exact: true }).inputValue(), '阿同')
-  await draft.getByRole('button', { name: '取消', exact: true }).click()
+  await draft.getByRole('button', { name: '返回', exact: true }).click()
   assert.equal((await request(`${studio}/entities/character?project_id=${project}`)).items.length, 1)
   await front.getByRole('button', { name: '对象更多操作' }).click()
   await page.getByRole('menuitem', { name: '新建并关联', exact: true }).click()
