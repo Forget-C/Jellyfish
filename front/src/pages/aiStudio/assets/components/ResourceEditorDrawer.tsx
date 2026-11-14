@@ -370,10 +370,10 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     } finally { generationLock.current = false; setGenerating(false) }
   }
   const setPrimary = async (image: Picture) => {
-    if (!resource || dirty || busy || generating || readOnly || analysisBusy) return
+    if (!resource || dirty || busy || generating || readOnly || analysisBusy) return false
     setBusy(true); setImageError('')
-    try { await StudioEntitiesApi.updateImage(kind, resource.id, image.id, { is_primary: true }); await reloadImages(resource.id) }
-    catch { setImageError('设置主图失败，原主图已保留，请重试') }
+    try { await StudioEntitiesApi.updateImage(kind, resource.id, image.id, { is_primary: true }); await reloadImages(resource.id); return true }
+    catch { setImageError('设置主图失败，原主图已保留，请重试'); return false }
     finally { setBusy(false) }
   }
   const publish = async () => {
@@ -529,8 +529,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     onApply={(nextFacts, nextDescription) => { setFacts(nextFacts); setDescription(nextDescription) }} onState={onAnalysisState} />
   const actorFields = readOnly ? <div className="actor-readonly-settings">{settings}<Button onClick={() => setActorReadonlyOpen(true)}>查看完整设定</Button></div> : <ActorFields name={name} onName={setName} facts={facts} onFacts={setFacts} description={description} onDescription={setDescription}
     disabled={busy || generating || analysisBusy || loadFailed} onAnalysis={() => setActorAnalysisOpen(true)} styles={<ProjectVisualStyleAndStyleFields layout="horizontal" disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />} />
-  const actorPictures = <ActorPictures images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
-    onPrimary={image => void setPrimary(image)} onEdit={image => { actorAcceptedAngles.current.clear(); setEditingImage(image); setEditingGeneration({ mode: 'edit', references: [{ file_id: image.file_id!, role: 'design' }], edit_instruction: '' }); setShowPreview(true); setPage('generation') }}
+  const actorPictures = <ActorPictures actorId={assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
+    onPrimary={setPrimary} onEdit={image => { actorAcceptedAngles.current.clear(); setEditingImage(image); setEditingGeneration({ mode: 'edit', references: [{ file_id: image.file_id!, role: 'design' }], edit_instruction: '' }); setShowPreview(true); setPage('generation') }}
     onHistory={image => resource && void loadCandidates(resource.id, image.id, image.view_angle as Angle, image.file_id ?? undefined)}
     feedback={imageError && <Alert type="error" message={imageError} action={resource && <Button onClick={() => void reloadImages(resource.id)}>重试读取图片</Button>} />}
     candidates={angle => <>{imageError && <Alert type="error" message={imageError} />}{candidates.filter(candidate => candidate.angle === angle && !images.some(image => image.file_id === candidate.fileId)).map(candidate => <div key={candidate.fileId}>

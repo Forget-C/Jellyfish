@@ -22,6 +22,7 @@ let generationStatus, statusReads = 0, generationCalls = 0
 let submittedModel, submittedReferences
   const submittedAngles=[]
   let partialGeneration=false
+let parameterMode='none'
 let patches = 0, posts = 0
 let detectionStatus, cancelFails = true, cancelRequested = false, cancelCalls = 0
 try {
@@ -72,6 +73,13 @@ try {
     if (/generation-tasks\/actors\/a1\/slots\/\d+\/tasks$/.test(path)) { submittedModel=request.postDataJSON().model_id; submittedReferences=request.postDataJSON().asset_references; const slot=slots.actor.find(row=>String(row.id)===path.split('/').at(-2)); submittedAngles.push(slot.view_angle); return partialGeneration && slot.view_angle==='FRONT' ? respond({task_id:'partial-front'}) : fail() }
     if (path.endsWith('/film/tasks/partial-front/status')) return respond({task_id:'partial-front',status:'succeeded'})
     if (/generation-prompts\/assets\/actor\/a1\/slots\/\d+\/render$/.test(path)) return respond({render_id:'final',execution_prompt:'演员生成提示词',variables_snapshot:{},recommended_media:{references:[]}})
+    if (path.includes('/tasks/actor-images/')) {
+      if(parameterMode==='failure') return fail()
+      if(parameterMode==='none') return respond(null)
+      const id=Number(path.split('/').at(-2))
+      if(id===1) await new Promise(resolve=>setTimeout(resolve,250))
+      return respond({task_id:'history-'+id,created_at_ts:1700000000,model_name:'历史模型 '+id,view_angle:'正面',reference_count:2,parameters:{lighting_instruction:'当时柔光'},execution_prompt:'历史提示词 '+id})
+    }
     if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实', '动漫'], styles: ['真人都市'] })
     if (path.endsWith('/entities/actor/a1/images/1') && request.method() === 'PATCH') {
       adoptions++
@@ -107,16 +115,11 @@ try {
   await page.goto(origin + '/assets/actors/a1/edit')
   const name = page.getByRole('textbox', { name: '名称', exact: true })
   await name.waitFor()
-  assert.equal(await page.locator('.actor-picture-row').count(), 4)
+  assert.equal(await page.locator('.actor-feature-image').count(), 1)
   const save = page.getByRole('button', { name: '保存设定', exact: true })
-  const enlarge=page.getByRole('button',{name:'放大正面图片 1',exact:true})
-  await enlarge.and(page.locator(':enabled')).waitFor()
-  await enlarge.focus()
-  await page.keyboard.press('Enter')
-  await page.locator('.ant-image-preview-wrap').waitFor()
-  await page.waitForFunction(()=>document.activeElement?.closest('.ant-image-preview-wrap'))
-  await page.keyboard.press('Escape')
-  await page.locator('.ant-image-preview-wrap').waitFor({state:'hidden'})
+  await page.getByRole('button',{name:'查看多角度图片',exact:true}).click()
+  await page.getByRole('dialog',{name:'图片集合',exact:true}).waitFor()
+  await page.getByRole('dialog',{name:'图片集合',exact:true}).getByRole('button',{name:'关闭',exact:true}).click()
   await name.fill('修改后的演员')
   await page.getByRole('button', { name: '返回', exact: true }).click()
   const leave = page.getByRole('dialog', { name: '离开资产详情', exact: true })
@@ -132,7 +135,7 @@ try {
   await save.click()
   await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
   assert.equal(assets.actor.name, '修改后的演员')
-  await page.getByRole('region', { name: '侧面图片集合', exact: true }).getByText('暂无图片').waitFor()
+  assert.equal(await page.getByRole('button',{name:'预览侧面图片 1',exact:true}).count(),0)
   // Cancellation acknowledgement is not terminal, and failed cancellation remains retryable.
   await name.fill('检测时未保存的名称')
   await page.getByRole('button', { name: '智能检测与结果', exact: true }).click()
@@ -157,7 +160,8 @@ try {
   await page.goto(origin + '/assets/actors/a1/edit')
   await name.waitFor()
   failHistory = true
-  await page.getByRole('button', { name: '更多正面图片', exact: true }).click()
+  await page.getByRole('button', { name: '查看全部', exact: true }).click()
+  await page.getByRole('dialog',{name:'图片集合',exact:true}).getByRole('tab',{name:'正面',exact:true}).click()
   await page.getByRole('button', { name: '查看图片 1 的候选', exact: true }).click()
   await page.getByRole('dialog',{name:'图片集合'}).getByText('读取候选图片失败，请重试查看候选', {exact:true}).waitFor()
   failHistory = false
@@ -167,7 +171,44 @@ try {
   await page.getByRole('button', { name: '加入视角文件夹', exact: true }).click()
   assert.equal(slots.actor[0].file_id, original, '历史采用追加图片，保留原图')
   assert.equal(posts, 1)
+  await page.getByRole('dialog',{name:'图片集合',exact:true}).getByRole('button',{name:'关闭',exact:true}).click()
+  assert.equal(await page.getByRole('button',{name:'预览正面图片 1',exact:true}).getAttribute('aria-pressed'),'true','new image does not interrupt existing preview without a primary')
+  const adoptionsBeforePreview=adoptions
+  const primaryFlagsBeforePreview=slots.actor.map(image=>image.is_primary)
+  await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
+  assert.equal(adoptions,adoptionsBeforePreview,'preview selection never persists primary identity')
+  assert.deepEqual(slots.actor.map(image=>image.is_primary),primaryFlagsBeforePreview)
+  await page.getByRole('button',{name:'查看全部',exact:true}).click()
+
   await page.getByRole('dialog',{name:'图片集合'}).getByRole('button',{name:'关闭',exact:true}).click()
+  await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
+  await page.getByRole('button',{name:'查看全部',exact:true}).click()
+  await page.getByRole('dialog',{name:'图片集合'}).getByRole('button',{name:'设为主图正面图片 2',exact:true}).click()
+  await page.getByRole('dialog',{name:'图片集合'}).getByText('主图',{exact:true}).waitFor()
+  await page.getByRole('dialog',{name:'图片集合'}).getByRole('button',{name:'关闭',exact:true}).click()
+  assert.equal(await page.getByRole('button',{name:'预览正面图片 1',exact:true}).getAttribute('aria-pressed'),'true','explicit primary update selects the new primary')
+  parameterMode='present'
+  await page.reload()
+  await name.and(page.locator(':enabled')).waitFor()
+  await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
+  await page.getByText('模型：历史模型 2',{exact:true}).waitFor()
+  await Promise.all([page.waitForRequest(request=>request.url().endsWith('/actor-images/a1/1/parameters')), page.getByRole('button',{name:'预览正面图片 1',exact:true}).click()])
+  await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
+  await page.getByText('模型：历史模型 2',{exact:true}).waitFor()
+  await page.waitForTimeout(300)
+  assert.equal(await page.getByText('模型：历史模型 1',{exact:true}).count(),0,'late response from previous image never replaces selected image metadata')
+  await page.getByRole('button',{name:'查看参数',exact:true}).click()
+  assert.equal(await page.getByRole('textbox',{name:'历史提示词',exact:true}).inputValue(),'历史提示词 2')
+  await page.getByRole('dialog',{name:'本图已保存的生成参数',exact:true}).getByRole('button',{name:'关闭',exact:true}).click()
+  parameterMode='failure'
+  await page.getByRole('button',{name:'预览正面图片 1',exact:true}).click()
+  await page.getByText('读取本图生成记录失败',{exact:true}).waitFor()
+  parameterMode='present'
+  await page.getByRole('button',{name:'重试记录',exact:true}).click()
+  await page.getByText('模型：历史模型 1',{exact:true}).waitFor()
+  parameterMode='none'
+  await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
+  await page.getByText('模型：历史模型 1',{exact:true}).waitFor({state:'hidden'})
   const layoutSize=await page.locator('.resource-editor-body').evaluate(node=>({height:node.clientHeight,scroll:node.scrollHeight}))
   assert.ok(layoutSize.scroll<=layoutSize.height+1,'standard desktop actor content fits without scrolling')
   assert.equal(await page.getByText('共享资产',{exact:true}).count(),0)
@@ -214,7 +255,7 @@ try {
   await page.getByRole('button', { name: '重试读取对象', exact: true }).click()
   await name.and(page.locator(':enabled')).waitFor()
   for (const [type, path] of types) {
-    for (const [width, height, theme] of [[1440, 900, 'mist'], [1366, 600, 'solid'], [1024, 768, 'solid'], [600, 812, 'mist'], [375, 812, 'solid']]) {
+    for (const [width, height, theme] of [[1440, 900, 'mist'], [1366,768,'solid'], [1200,740,'solid'], [1366, 600, 'solid'], [1024, 768, 'solid'], [600, 812, 'mist'], [375, 812, 'solid']]) {
       await page.setViewportSize({ width, height })
       await page.evaluate(value => localStorage.setItem('jellyfish_appearance', value), theme)
       await page.goto(origin + '/assets/' + path + '/a1/edit')
@@ -226,9 +267,11 @@ try {
         titleSize: getComputedStyle(document.querySelector('.resource-editor-page-heading .app-page-title')).fontSize,
       }))
       assert.equal(layout.overflow, false, type + ' horizontal overflow')
+      if(type==='actor' && width>=1200 && height>=740) assert.ok(await dialog.locator('.resource-editor-body').evaluate(node=>node.scrollHeight<=node.clientHeight+1),'actor desktop fits vertically')
       assert.equal(await page.locator('.resource-editor-drawer').count(),0,'详情在页面正文，无抽屉及遮罩')
       assert.equal(layout.titleSize, '16px')
       if (width < 768 || type === 'actor' && (width < 1200 || height < 740)) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
+      if(type==='actor') await dialog.getByRole('button',{name:/^预览正面图片/}).first().click()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).waitFor()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).evaluate(image => image.decode())
       await page.screenshot({ path: output + '/' + type + '-' + width + '.png' })

@@ -1,4 +1,4 @@
-.actor-detail-layout { display:grid; grid-template-columns:minmax(350px, 2fr) minmax(0, 3fr); gap:20px; height:100%; min-height:0; }
+.actor-detail-layout { display:grid; grid-template-columns:minmax(350px, 11fr) minmax(0, 9fr); gap:20px; height:100%; min-height:0; }
 .actor-detail-layout > section { padding:16px; border-radius:12px; background:white; min-width:0; min-height:0; }
 .actor-fields { display:grid; gap:12px; }
 .actor-fields label { display:grid; gap:4px; min-width:0; }
@@ -9,10 +9,6 @@
 .actor-pictures { display:flex; flex-direction:column; height:100%; min-height:0; }
 .actor-picture-heading { display:flex; align-items:center; justify-content:space-between; flex:none; height:32px; }
 .actor-picture-heading h2 { margin:0; font-size:14px; font-weight:600; }
-.actor-picture-rows { flex:1; display:grid; grid-template-rows:repeat(4,minmax(0,1fr)); min-height:0; }
-.actor-picture-row { display:grid; grid-template-columns:40px minmax(0,1fr); gap:4px 8px; align-content:center; border-bottom:1px solid #f0f3f8; min-height:0; }
-.actor-picture-row > strong { font-size:13px; align-self:center; }
-.actor-picture-strip { display:flex; gap:8px; align-items:center; min-width:0; }
 .actor-picture-card { width:112px; flex:none; min-width:0; }
 .actor-picture-card .ant-image { display:block; height:clamp(56px,9vh,100px); width:100%; }
 .actor-picture-card .ant-image-img { height:100%; width:100%; object-fit:contain; }
@@ -21,9 +17,7 @@
 .actor-picture-card > div:first-child > .ant-btn:focus-visible { opacity:1; }
 .actor-picture-actions { display:flex; align-items:center; height:24px; justify-content:center; white-space:nowrap; }
 .actor-picture-actions .ant-tag { margin:0; font-size:11px; }
-.actor-more { flex:none; padding-inline:4px; font-size:12px; }
 .actor-empty { flex:1; color:#667085; }
-.actor-row-status { grid-column:2; font-size:12px; line-height:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .actor-generate-action { flex:none; text-align:right; padding-top:12px; }
 .actor-gallery { display:flex; flex-wrap:wrap; gap:16px; padding-block:16px; }
 .actor-detail-page > .resource-editor-body { overflow-y:hidden; }
@@ -32,7 +26,7 @@
  .actor-detail-page > .resource-editor-body { overflow-y:auto; }
  .actor-detail-layout { display:block; height:auto; }
  .actor-detail-layout > section { min-height:580px; }
- .actor-picture-rows { min-height:500px; }
+ .actor-pictures { min-height:580px; }
 }
 @media (max-width:767px) { .actor-generation-display { grid-template-columns:1fr; } }
 
@@ -44,3 +38,26 @@
 .actor-readonly-settings dd { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0 0 8px; }
 .actor-readonly-settings p { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 @media (max-width:1199px), (max-height:739px) { .actor-detail-tabs .actor-fields { padding:16px; background:white; border-radius:12px; } }
+
+.actor-long-field { grid-column:1 / -1; }
+.actor-fields { gap:10px; }
+.actor-facts-grid { gap:8px 12px; }
+.actor-feature-image { flex:1; min-height:100px; display:flex; align-items:center; justify-content:center; background:#f6f8fb; border-radius:8px; overflow:hidden; }
+.actor-feature-trigger { border:0; padding:12px; background:transparent; width:100%; height:100%; min-height:0; cursor:zoom-in; }
+.actor-feature-trigger .ant-image { display:block; height:100%; width:100%; }
+.actor-feature-trigger .ant-image-img { width:100%; height:100%; object-fit:contain; }
+.actor-feature-trigger:focus-visible,.actor-thumbnails button:focus-visible { outline:2px solid #245fc5; outline-offset:-2px; }
+.actor-preview-caption { display:flex; align-items:center; gap:8px; flex:none; min-height:28px; font-size:12px; }
+.actor-thumbnails { display:flex; gap:8px; overflow-x:auto; flex:none; padding:4px 0 8px; }
+.actor-thumbnails button { border:1px solid #e5eaf0; border-radius:6px; background:white; flex:0 0 68px; padding:4px; cursor:pointer; }
+.actor-thumbnails button[aria-pressed='true'] { border-color:#245fc5; background:#edf3fc; }
+.actor-thumbnails img { width:58px; height:60px; object-fit:contain; }
+.actor-thumbnails span { display:block; font-size:11px; white-space:nowrap; }
+.actor-image-parameters { flex:none; font-size:12px; padding:6px 0; border-top:1px solid #f0f3f8; }
+.actor-image-parameters > .ant-space { display:flex; }
+.actor-image-parameters .ant-btn { font-size:12px; padding:0; }
+.actor-task-summary { flex:none; font-size:12px; }
+@media (min-width:1200px) and (min-height:850px) {
+ .actor-fields > label:has(textarea) textarea { height:110px; }
+ .actor-long-field textarea { height:72px; }
+}

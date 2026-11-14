@@ -16,7 +16,7 @@ from app.models.task import Task, TaskOutput
 from app.services.task_sources import resolve_task_sources
 from app.services.task_service import AUTO_CHECK_DISPATCH
 from app.models.studio_prompts_files_timeline import FileItem
-from app.schemas.task import TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead
+from app.schemas.task import TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead, ActorImageParametersRead
 
 
 # 列表不加载大输入、文本结果、供应商响应或错误正文。
@@ -120,6 +120,40 @@ class TaskQueries:
             last = rows[limit - 1]
             next_cursor = urlsafe_b64encode(json.dumps([last.created_at.isoformat(), last.id]).encode()).decode()
         return TaskPageRead(items=items, next_cursor=next_cursor)
+
+    async def actor_image_parameters(self, actor_id: str, image_id: int) -> ActorImageParametersRead | None:
+        """只读关联当前文件与同演员来源任务，不以当前模型或槽位参数补全历史。"""
+        from app.models.studio import ActorImage  # pylint: disable=import-outside-toplevel
+
+        image = await self.db.get(ActorImage, image_id)
+        if image is None or image.actor_id != actor_id:
+            raise HTTPException(status_code=404, detail="Actor image not found")
+        if not image.file_id:
+            return None
+        task = await self.db.scalar(select(Task).join(TaskOutput, TaskOutput.task_id == Task.id).where(
+            TaskOutput.file_id == image.file_id, Task.kind == "image_generation",
+            Task.target_type == "actor_image_slot",
+            Task.input_snapshot["target_parent_id"].as_string() == actor_id,
+        ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
+        if task is None:
+            return None
+        snapshot = task.input_snapshot or {}
+        audit = snapshot.get("asset_prompt_audit")
+        audit = audit if isinstance(audit, dict) else {}
+        variables = audit.get("variables")
+        variables = variables if isinstance(variables, dict) else {}
+        keys = {"framing_instruction", "background_instruction", "lighting_instruction", "visible_detail_instruction",
+                "negative_prompt", "additional_instruction", "edit_instruction", "preserve_instruction"}
+        parameters = {key: value for key, value in variables.items() if key in keys and isinstance(value, str) and value}
+        references = audit.get("reference_file_ids")
+        return ActorImageParametersRead(
+            task_id=task.id, created_at_ts=timestamp(task.created_at),
+            model_name=snapshot.get("model_name") if isinstance(snapshot.get("model_name"), str) else None,
+            view_angle=variables.get("view_angle") if isinstance(variables.get("view_angle"), str) else None,
+            reference_count=len(references) if isinstance(references, list) else None,
+            execution_prompt=snapshot.get("execution_prompt") if isinstance(snapshot.get("execution_prompt"), str) else None,
+            parameters=parameters,
+        )
 
     async def outputs(
         self, *, target_type: str, target_id: str, cursor: str | None = None, limit: int = 100,

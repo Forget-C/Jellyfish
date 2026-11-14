@@ -7,6 +7,7 @@ import type { ApiResponse_TaskOutputPageRead_ } from '../models/ApiResponse_Task
 import type { ApiResponse_TaskPageRead_ } from '../models/ApiResponse_TaskPageRead_';
 import type { ApiResponse_TaskResultRead_ } from '../models/ApiResponse_TaskResultRead_';
 import type { ApiResponse_TaskStatusRead_ } from '../models/ApiResponse_TaskStatusRead_';
+import type { ApiResponse_Union_ActorImageParametersRead__NoneType__ } from '../models/ApiResponse_Union_ActorImageParametersRead__NoneType__';
 import type { TaskCancelRequest } from '../models/TaskCancelRequest';
 import type { TaskStatus } from '../models/TaskStatus';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -87,6 +88,31 @@ export class FilmService {
                 'target_id': targetId,
                 'cursor': cursor,
                 'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 读取演员图片已有生成参数
+     * 缺少来源返回空，不创建或补齐参数。
+     * @returns ApiResponse_Union_ActorImageParametersRead__NoneType__ Successful Response
+     * @throws ApiError
+     */
+    public static getActorImageParametersApiV1FilmTasksActorImagesActorIdImageIdParametersGet({
+        actorId,
+        imageId,
+    }: {
+        actorId: string,
+        imageId: number,
+    }): CancelablePromise<ApiResponse_Union_ActorImageParametersRead__NoneType__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/film/tasks/actor-images/{actor_id}/{image_id}/parameters',
+            path: {
+                'actor_id': actorId,
+                'image_id': imageId,
             },
             errors: {
                 422: `Validation Error`,

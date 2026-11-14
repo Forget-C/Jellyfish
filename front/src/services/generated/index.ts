@@ -11,6 +11,7 @@ export type { AcceptanceCriterionCard } from './models/AcceptanceCriterionCard';
 export type { AcceptanceCriterionFields } from './models/AcceptanceCriterionFields';
 export type { ActivityDesignFields } from './models/ActivityDesignFields';
 export type { ActorCreate } from './models/ActorCreate';
+export type { ActorImageParametersRead } from './models/ActorImageParametersRead';
 export type { ActorUpdate } from './models/ActorUpdate';
 export type { ActualCoverage_Input } from './models/ActualCoverage_Input';
 export type { ActualCoverage_Output } from './models/ActualCoverage_Output';
@@ -158,6 +159,7 @@ export type { ApiResponse_TaskPageRead_ } from './models/ApiResponse_TaskPageRea
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
+export type { ApiResponse_Union_ActorImageParametersRead__NoneType__ } from './models/ApiResponse_Union_ActorImageParametersRead__NoneType__';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
 export type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from './models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 export type { ApiResponse_UnitCanvasGraph_ } from './models/ApiResponse_UnitCanvasGraph_';

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.task import TaskStatus
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.task import TaskCancelRead, TaskCancelRequest, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputPageRead
+from app.schemas.task import TaskCancelRead, TaskCancelRequest, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputPageRead, ActorImageParametersRead
 from app.services.task_queries import TaskQueries, timestamp
 from app.services.task_service import TaskService
 
@@ -47,6 +47,14 @@ async def list_task_outputs(
     return success_response(await TaskQueries(db).outputs(
         target_type=target_type, target_id=target_id, cursor=cursor, limit=limit,
     ))
+
+
+@router.get("/tasks/actor-images/{actor_id}/{image_id}/parameters", response_model=ApiResponse[ActorImageParametersRead | None], summary="读取演员图片已有生成参数")
+async def get_actor_image_parameters(
+    actor_id: str, image_id: int, db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ActorImageParametersRead | None]:
+    """缺少来源返回空，不创建或补齐参数。"""
+    return success_response(await TaskQueries(db).actor_image_parameters(actor_id, image_id))
 
 
 @router.get("/tasks/{task_id}/status", response_model=ApiResponse[TaskStatusRead], summary="查询任务状态与进度")
