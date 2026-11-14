@@ -46,6 +46,7 @@ export function SceneAssets({ projectId, sequenceId, design, onChange, assets, l
     setCreating(true)
   }
   const selectedTarget = input.target === 'location' ? rows.find(row => row.key === 'location') : rows.find(row => row.participantId === input.target && (!row.kind || row.kind === input.kind))
+  if (detail) return <ResourceEditorDrawer inline open kind={detail.kind} projectId={projectId} assetId={detail.id} onClose={closeDetail} onSaved={onRetry} />
   return <Card title="本场所需资产" extra={<Space><Select aria-label="新资产类型" value={input.kind} options={kinds} onChange={kind => setInput(current => ({...current,kind}))} /><Button onClick={() => { setInput(current => ({...current,target: '', name: '', description: ''})); setCreating(true) }}>仅创建项目资产</Button></Space>}>
     <Space direction="vertical" className="w-full">
       {loadError ? <Alert type="error" message="资产列表加载失败，关联数量暂未核实" description={loadError} action={<Button onClick={onRetry}>重试加载资产</Button>} /> : !assets ? <Typography.Text>正在核实资产关联…</Typography.Text> : <Typography.Text>已关联 {summary.total} 项 · 角色 {summary.counts.character} · 场所 {summary.counts.scene} · 道具 {summary.counts.prop}</Typography.Text>}
@@ -76,7 +77,6 @@ export function SceneAssets({ projectId, sequenceId, design, onChange, assets, l
       setCreated({ asset })
       onRetry()
     }} />}
-    {detail && <ResourceEditorDrawer open kind={detail.kind} projectId={projectId} assetId={detail.id} onClose={closeDetail} onSaved={onRetry} />}
 
   </Card>
 }

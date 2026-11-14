@@ -1,7 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { AssetEditPageBase } from '../../assets/components/AssetEditPageBase'
 import { assetAdapters } from '../../assets/assetAdapters'
+import { ProjectContentToolbar } from './ProjectContentToolbar'
 import './project-asset-detail.css'
+
+const renderToolbar = (children: ReactNode) => <ProjectContentToolbar>{children}</ProjectContentToolbar>
 
 const localList = '当前项目资源列表'
 
@@ -32,7 +35,7 @@ export function useProjectAssetDetail(kind: keyof typeof assetAdapters, refresh:
   }, [])
   const detailView = assetId ? <div className="project-asset-detail-view">
     <AssetEditPageBase key={`${kind}:${assetId}`} {...assetAdapters[kind]} assetId={assetId}
-      backTo={localList} onNavigate={closeDetail} />
+      renderToolbar={renderToolbar} backTo={localList} onNavigate={closeDetail} />
   </div> : null
   return { openDetail, detailView }
 }

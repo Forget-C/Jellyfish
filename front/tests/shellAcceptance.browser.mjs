@@ -167,7 +167,7 @@ try {
     const name = page.getByRole('textbox', { name: '名称', exact: true })
     await name.fill('保存后的档案名称')
     await page.getByRole('button', { name: '保存设定', exact: true }).click()
-    await page.waitForFunction(() => !document.querySelector('.resource-editor-drawer .ant-btn-loading'))
+    await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
     assert.equal(asset.name,'保存后的档案名称')
     const generation = page.getByRole('button', { name: /重新生成|生成图片/ }).first()
     await generation.scrollIntoViewIfNeeded()

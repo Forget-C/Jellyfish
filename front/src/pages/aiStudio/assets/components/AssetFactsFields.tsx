@@ -37,7 +37,7 @@ export const ASSET_FIELDS: Record<StructuredAssetType, { key: AssetFieldName; la
 }
 
 // 档案头只放简短的识别属性，长描述保留在下方分类设定中。
-const OVERVIEW_FIELDS: Record<StructuredAssetType, AssetFieldName[]> = {
+export const OVERVIEW_FIELDS: Record<StructuredAssetType, AssetFieldName[]> = {
   actor: ['age_appearance', 'gender'],
   scene: ['scene_type'],
   prop: ['prop_type', 'size_description'],

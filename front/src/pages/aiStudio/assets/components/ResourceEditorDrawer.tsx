@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import type { InputRef } from 'antd'
-import { Alert, Button, Collapse, Drawer, Input, Image, Checkbox, Tag, Space, Tabs } from 'antd'
+import { Alert, Button, Collapse, Input, Image, Checkbox, Tag, Space, Tabs } from 'antd'
 import { LlmService, FilmService, StudioProjectsService, StudioEntitiesService, StudioGenerationPromptsService, type AssetViewAngle, type DraftAssetPromptRenderBody, type RenderedPromptSnapshot, type AssetPromptReference, type AssetImagePromptRenderBody, type TaskOutputHistoryRead } from '../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../services/studioEntities'
 import { ProjectVisualStyleAndStyleFields } from '../../project/ProjectVisualStyleAndStyleFields'
 import { useProjectStyleOptions } from '../../project/useProjectStyleOptions'
 import { AssetDetailLeaveGuard } from './AssetDetailLeaveGuard'
-import { ASSET_FIELDS, AssetFactsFields, pickAssetFacts, type AssetFacts } from './AssetFactsFields'
+import { ASSET_FIELDS, OVERVIEW_FIELDS, AssetFactsFields, pickAssetFacts, type AssetFacts } from './AssetFactsFields'
 import { ResourceReferencePage } from './ResourceReferencePage'
 import { buildFileDownloadUrl } from '../utils'
 import { readResourceImages } from '../resourceImages'
@@ -16,6 +17,7 @@ import { directingError } from '../../directing/common'
 import { ResourceAnalysis } from './ResourceAnalysis'
 import { useTaskUiStore } from '../../components/taskUiStore'
 import { ResourceImage } from './ResourceImage'
+import { ResourceEditorFrame } from './ResourceEditorFrame'
 import './resourceEditor.css'
 
 export type ResourceKind = 'actor' | 'character' | 'scene' | 'prop' | 'costume'
@@ -31,13 +33,14 @@ type Picture = { id: number; file_id?: string | null; view_angle?: string; is_pr
 type GenerationState = { taskId?: string; status: string; error?: string; slotId?: number; candidate?: boolean; originalFile?: string }
 export type Resource = AssetFacts & { id: string; name: string; description?: string; references?: AssetPromptReference[]; project_id?: string | null; source_character_id?: string | null; library_copy_id?: string | null }
 type Props = {
+  inline?: boolean; renderToolbar?: (children: ReactNode) => ReactNode
   open: boolean; kind: ResourceKind; projectId?: string; assetId?: string; initialPage?: 'editor' | 'publish'
   seed?: { name?: string; description?: string; visual_style?: '现实' | '动漫'; style?: string }
   onClose: () => void; onSaved?: (resource: Resource) => void | Promise<void>
 }
 
 /** 新建和详情共用对象草稿，生成设置只保留在本次打开的编辑器内。 */
-export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onClose, onSaved, initialPage = 'editor' }: Props) {
+export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onClose, onSaved, initialPage = 'editor', inline, renderToolbar }: Props) {
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px)')
@@ -60,7 +63,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const nameInput = useRef<InputRef>(null)
   const sectionScroll = useRef<Record<string, number>>({})
   const [section, setSection] = useState('settings')
-  const [page, setPage] = useState<'editor' | 'generation' | 'references' | 'adopt' | 'publish'>('editor')
+  const [page, setPage] = useState<'editor' | 'generation' | 'references' | 'adopt' | 'publish'>(initialPage)
+  const isDrawer = !assetId || initialPage === 'publish' && page === 'publish'
   const [references, setReferences] = useState<AssetPromptReference[]>([])
   const [purpose, setPurpose] = useState<'subject' | 'costume' | 'prop'>('subject')
   const [pickerReturn, setPickerReturn] = useState<'editor' | 'generation'>('editor')
@@ -375,13 +379,14 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     {description && <p style={{ whiteSpace: 'pre-wrap' }}>{description}</p>}<p>{visualStyle} · {style}</p>
   </div> : <div className="resource-editor-fields">
     <label>名称<Input ref={nameInput} disabled={busy || generating || analysisBusy || loadFailed} aria-label="名称" value={name} onChange={event => setName(event.target.value)} /></label>
-    {kind !== 'character' && <AssetFactsFields type={kind} disabled={busy || generating || analysisBusy || loadFailed} value={facts} onChange={setFacts} supplementaryInfo={description} />}
+    {kind !== 'character' && <AssetFactsFields section={!assetId ? 'overview' : 'all'} type={kind} disabled={busy || generating || analysisBusy || loadFailed} value={facts} onChange={setFacts} supplementaryInfo={description} />}
     <label>{kind === 'character' ? '角色设定' : '补充信息'}<Input.TextArea disabled={busy || generating || analysisBusy || loadFailed} aria-label={kind === 'character' ? '角色设定' : '补充信息'} rows={4}
       maxLength={8000} value={description} onChange={event => setDescription(event.target.value)} /></label>
     {resource && kind !== 'character' && <ResourceAnalysis kind={kind} id={resource.id} name={name} facts={facts} supplement={description} disabled={busy || generating}
       onApply={(nextFacts, nextDescription) => { setFacts(nextFacts); setDescription(nextDescription) }} onState={onAnalysisState} />}
-    <ProjectVisualStyleAndStyleFields disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options}
-      onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />
+    {!assetId && kind !== 'character' && <Collapse ghost items={[{ key: 'details', label: `详细设定 · ${ASSET_FIELDS[kind].filter(field => !OVERVIEW_FIELDS[kind].includes(field.key) && facts[field.key]?.trim()).length} 项已填写`, children: <AssetFactsFields section="details" type={kind} disabled={busy || generating || analysisBusy || loadFailed} value={facts} onChange={setFacts} supplementaryInfo={description} /> }]} />}
+    {assetId && <ProjectVisualStyleAndStyleFields disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options}
+      onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />}
   </div>
   const referenceSection = (temporary = false) => {
     const current = temporary ? editingGeneration.references ?? references : references
@@ -402,10 +407,14 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     }}>不生成，采用主体图片</Button>}{temporary && <Button onClick={() => setEditingGeneration(value => ({ ...value, references: undefined }))}>恢复对象参考</Button>}</div>
   }
   const subjectImages = references.filter(reference => !['costume', 'prop'].includes(reference.role))
+  const saveAndClose = async (reference?: AssetPromptReference) => {
+    if (await save(reference)) onClose()
+  }
   const createOnly = () => {
     if (subjectImages.length && (!resource || JSON.stringify(references) !== JSON.stringify(JSON.parse(baseline || '{}').references ?? []))) {
       setAdoptionIndex(subjectImages.length === 1 ? 0 : undefined); setPage('adopt')
-    } else void save()
+    } else if (!assetId) void saveAndClose()
+    else void save()
   }
   const folderAngles = [...new Set([...angles.map(angle => angle.value), ...images.map(image => image.view_angle ?? 'FRONT')])]
   const angleLabel = (angle: string) => angles.find(value => value.value === angle)?.label ?? ({ RIGHT: '右侧', THREE_QUARTER: '3/4 侧面', DETAIL: '细节' } as Record<string, string>)[angle] ?? angle
@@ -439,25 +448,22 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     </div>)}
   </div>
   return <>
-    <Drawer id={drawerId} rootClassName="resource-editor-drawer" width="100%" title={title}
-      afterOpenChange={visible => { if (visible) document.getElementById(drawerId)?.setAttribute('aria-label', title) }} open={open} onClose={event => {
-        if (event.type === 'keydown' && [...document.querySelectorAll<HTMLElement>('.ant-image-preview-wrap')].some(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')) return
-        close()
-      }}
-      footer={page === 'references' ? null : <Space wrap>{page === 'publish' ? <><Button onClick={() => setPage('editor')}>返回编辑</Button>
+    <ResourceEditorFrame id={drawerId} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title}
+      backLabel={page === 'editor' ? '返回' : '返回对象'} onClose={close}
+      actions={page === 'references' ? null : <Space wrap>{page === 'publish' ? <><Button onClick={() => setPage('editor')}>返回编辑</Button>
         <Button type="primary" loading={busy} disabled={!publishName.trim() || kind === 'character' && !images.some(image => image.is_primary && image.file_id)} onClick={() => void publish()}>确认入库</Button>
-      </> : readOnly ? <><Button aria-label="关闭" onClick={close}>关闭</Button>
+      </> : readOnly ? <>{isDrawer && <Button aria-label="关闭" onClick={close}>关闭</Button>}
         {!resource?.source_character_id && resource?.project_id === null && resource && <Button target="_blank" rel="noopener noreferrer" href={`/assets/${kind === 'actor' ? 'actors' : kind === 'scene' ? 'scenes' : kind === 'prop' ? 'props' : 'costumes'}/${resource.id}/edit`}>在资产库编辑 ↗</Button>}
       </> : page === 'adopt' ? <>
         <Button onClick={() => setPage('editor')}>返回编辑</Button>
-        <Button loading={busy} onClick={() => void save()}>{resource ? '保存不采用' : '仅创建不采用'}</Button>
-        <Button type="primary" loading={busy} disabled={adoptionIndex === undefined} onClick={() => void save(subjectImages[adoptionIndex!])}>{resource ? '采用为主图' : '采用并创建'}</Button>
+        <Button loading={busy} onClick={() => void (!assetId ? saveAndClose() : save())}>{resource ? '保存不采用' : '仅创建不采用'}</Button>
+        <Button type="primary" loading={busy} disabled={adoptionIndex === undefined} onClick={() => void (!assetId ? saveAndClose(subjectImages[adoptionIndex!]) : save(subjectImages[adoptionIndex!]))}>{resource ? '采用为主图' : '采用并创建'}</Button>
       </> : page === 'generation' ? <>
         <Button aria-label="取消" onClick={() => setPage('editor')}>取消</Button>
         <Button type="primary" onClick={() => { setGeneration(editingGeneration); setSelectedAngles(editingAngles); setPage('editor') }}>应用并返回</Button>
       </> : <>
-        <Button aria-label={resource || assetId ? '关闭' : '取消'} onClick={close}>{resource || assetId ? '关闭' : '取消'}</Button>
-        <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置</Button>
+        {isDrawer && <Button aria-label={resource || assetId ? '关闭' : '取消'} onClick={close}>{resource || assetId ? '关闭' : '取消'}</Button>}
+        {assetId && <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置</Button>}
         <Button loading={busy} disabled={generating || analysisBusy || loadFailed} onClick={createOnly}>{resource || assetId ? '保存设定' : '仅创建'}</Button>
         <Button aria-label={generation.mode === 'edit' ? dirty ? '保存并生成修改候选' : '生成修改候选' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'} type="primary" loading={generating} disabled={busy || analysisBusy || loadFailed || !!activeTasks.length} onClick={() => void generate()}>{generation.mode === 'edit' ? dirty ? '保存并生成修改候选' : '生成修改候选' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'}{generation.mode !== 'edit' && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
       </>}</Space>}>
@@ -505,9 +511,17 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         <p>默认图片模型：{modelName}。生成设置在关闭对象后恢复默认。{modelName === '读取失败' && <Button onClick={() => setModelRetry(value => value + 1)}>重试模型信息</Button>}</p>
       </div> : <>
         {Object.keys(generation).length > 0 && <Alert type="info" message="已应用生成设置" action={<Button onClick={() => { setGeneration({}); setSelectedAngles(['FRONT']) }}>恢复默认</Button>} />}
-        {!mobile ? <div className="resource-editor-desktop"><div>{settings}<h3>参考</h3>{referenceSection()}</div><div>{pictures}</div></div>
+        {!assetId ? <div className="resource-create-content">{settings}
+          <Collapse ghost items={[
+            { key: 'style', label: `风格 · ${visualStyle} · ${style}`, children: <ProjectVisualStyleAndStyleFields disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} /> },
+            { key: 'references', label: `参考图片 · ${references.length ? `${references.length} 张` : '未选择'}`, children: referenceSection() },
+          ]} />
+          <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置 · {(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}</Button>
+          {resource && <><Link to={kind === 'character' ? `/projects/${encodeURIComponent(resource.project_id ?? projectId!)}/roles/${encodeURIComponent(resource.id)}/edit` : resourceAssetUrl(kind, resource.id)}>查看完整详情</Link>{pictures}</>}
+        </div> : !mobile ? <div className="resource-editor-desktop"><div>{settings}<h3>参考</h3>{referenceSection()}</div><div>{pictures}</div></div>
         : <Tabs className="resource-editor-mobile" activeKey={section} onChange={next => {
-          const body = document.getElementById(drawerId)?.querySelector('.ant-drawer-body')
+          const content = document.getElementById(drawerId)?.querySelector('.resource-editor-body, .ant-drawer-body')
+          const body = content?.closest('.project-workbench-content, .management-panel') ?? content
           if (body) sectionScroll.current[section] = body.scrollTop
           setSection(next)
           requestAnimationFrame(() => { if (body) body.scrollTop = sectionScroll.current[next] ?? 0 })
@@ -515,7 +529,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
           { key: 'settings', label: '设定', children: settings }, { key: 'references', label: '参考', children: referenceSection() }, { key: 'images', label: '图片', children: pictures },
         ]} />}
       </>}
-    </Drawer>
+    </ResourceEditorFrame>
     {open && <AssetDetailLeaveGuard navigationManaged={draftHost.managed} dirty={dirty} busy={busy || generating} detecting={analysisBusy} canCancelDetection={analysisBusy && !analysisCancelling} cancellingDetection={analysisCancelling} partialSave={false}
       closeRequested={closeRequested} onContinue={() => setCloseRequested(false)} onClose={closeEditor} save={save} cancelDetection={() => analysisCancel.current()} />}
   </>

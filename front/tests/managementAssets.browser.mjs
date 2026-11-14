@@ -130,7 +130,7 @@ try {
   await page.getByTitle('1', { exact: true }).click()
   await card('服装竖图').getByRole('link', { name: '服装竖图' }).click()
   await page.waitForURL('**/assets/costumes/costume-tall/edit')
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('tab') === 'costume')
 
   await page.getByRole('tab', { name: '演员', exact: true }).click()

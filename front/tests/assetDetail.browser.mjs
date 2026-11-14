@@ -107,7 +107,7 @@ try {
   await page.keyboard.press('Escape')
   await page.locator('.ant-image-preview-wrap').waitFor({state:'hidden'})
   await name.fill('修改后的演员')
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   const leave = page.getByRole('dialog', { name: '离开资产详情', exact: true })
   await leave.getByRole('button', { name: '继续编辑', exact: true }).and(page.locator(':focus')).waitFor()
   await page.keyboard.press('Escape')
@@ -119,14 +119,14 @@ try {
   assert.equal(await name.inputValue(), '修改后的演员')
   failSave = false
   await save.click()
-  await page.waitForFunction(() => !document.querySelector('.resource-editor-drawer .ant-btn-loading'))
+  await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
   assert.equal(assets.actor.name, '修改后的演员')
   await page.getByRole('tab', { name: '侧面', exact: true }).first().click()
   await page.getByText('当前视角暂无图片', { exact: true }).first().waitFor()
   // Cancellation acknowledgement is not terminal, and failed cancellation remains retryable.
   await name.fill('检测时未保存的名称')
   await page.getByRole('button', { name: '智能检测', exact: true }).click()
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   const detecting = page.getByRole('dialog', { name: '智能检测进行中', exact: true })
   await detecting.getByRole('button', { name: '取消检测', exact: true }).click()
   await detecting.getByText('取消检测失败，请重试或继续等待。', { exact: true }).waitFor()
@@ -138,7 +138,7 @@ try {
   await leave.waitFor()
   await leave.getByRole('button', { name: '继续编辑', exact: true }).click()
   assert.equal(cancelCalls, 2)
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await leave.getByRole('button', { name: '放弃修改并离开', exact: true }).click()
   await page.goto(origin + '/assets/actors/a1/edit')
   await name.waitFor()
@@ -166,25 +166,21 @@ try {
       await page.evaluate(value => localStorage.setItem('jellyfish_appearance', value), theme)
       await page.goto(origin + '/assets/' + path + '/a1/edit')
       await name.and(page.locator(':enabled')).waitFor()
-      const dialog = page.getByRole('dialog', { name: assets[type].name, exact: true })
-      await page.waitForFunction(expected => {
-        const node=document.querySelector('.resource-editor-drawer .ant-drawer-content')
-        return node && Math.abs(node.getBoundingClientRect().x-expected)<1
-      }, width >= 1024 ? 216 : 0)
+      const dialog = page.getByRole('region', { name: assets[type].name, exact: true })
       const layout = await dialog.evaluate(node => ({
         x: node.getBoundingClientRect().x,
         overflow: node.scrollWidth > node.clientWidth + 1 || document.documentElement.scrollWidth > innerWidth + 1,
-        titleSize: getComputedStyle(node.parentElement.querySelector('.ant-drawer-title')).fontSize,
+        titleSize: getComputedStyle(document.querySelector('.resource-editor-page-heading .app-page-title')).fontSize,
       }))
       assert.equal(layout.overflow, false, type + ' horizontal overflow')
-      assert.ok(Math.abs(layout.x - (width >= 1024 ? 216 : 0)) <= 1, '抽屉不覆盖桌面左侧菜单')
+      assert.equal(await page.locator('.resource-editor-drawer').count(),0,'详情在页面正文，无抽屉及遮罩')
       assert.equal(layout.titleSize, '16px')
       if (width < 768) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).waitFor()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).evaluate(image => image.decode())
       await page.screenshot({ path: output + '/' + type + '-' + width + '.png' })
-      await dialog.getByRole('button', { name: '关闭', exact: true }).scrollIntoViewIfNeeded()
-      assert.equal(await dialog.getByRole('button', { name: '关闭', exact: true }).isVisible(), true)
+      await dialog.getByRole('button', { name: '返回', exact: true }).scrollIntoViewIfNeeded()
+      assert.equal(await dialog.getByRole('button', { name: '返回', exact: true }).isVisible(), true)
     }
   }
   assets.actor.source_character_id = 'converted-role'
@@ -194,5 +190,5 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '名称', exact: true }).count(), 0)
   assert.equal(await page.getByRole('button', { name: '生成图片', exact: true }).count(), 0)
   assert.deepEqual(errors, [])
-  console.log('PASS drawer detail, save/leave recovery, analysis cancellation, history append, readonly and responsive layout')
+  console.log('PASS page detail, save/leave recovery, analysis cancellation, history append, readonly and responsive layout')
 } finally { await cleanup() }

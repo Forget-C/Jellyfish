@@ -280,7 +280,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   return <>
     {compact ? <Drawer aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
       : <Modal title="描述与出处" open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
-    <section hidden={!!management && !!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
+    <section hidden={!!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>
       <h3 className="management-accessible-heading" ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
       {management.host && !assetEditor && createPortal(<>
@@ -318,7 +318,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {data && !data.objects.length && !error && (management
       ? <p>{data.revision ? '本场未提取到对象，可以继续分镜。' : '尚未提取对象，可提取后准备参考，也可直接继续。'}</p>
       : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.revision ? '本场未提取到对象' : '尚未提取对象'} />)}
-    {management?.filterHost && createPortal(<div ref={filterControl} className="management-object-filters">
+    {management?.filterHost && !assetEditor && createPortal(<div ref={filterControl} className="management-object-filters">
       {compact ? <Select disabled={!data?.objects.length} aria-label="对象类型" value={kindFilter} onChange={setKindFilter} options={[{value:'all',label:'全部类型'},...Object.entries(kinds).map(([value,label])=>({value,label}))]} /> : <Segmented disabled={!data?.objects.length} aria-label="对象类型" value={kindFilter} onChange={value => setKindFilter(value as typeof kindFilter)} options={[{ value: 'all', label: '全部' }, ...Object.entries(kinds).map(([value, label]) => ({ value, label }))]} />}
       <Select disabled={!data?.objects.length} aria-label="关联状态" value={association} onChange={setAssociation} options={[{value:'all',label:'全部关联状态'},{value:'unassociated',label:'未关联'},{value:'associated',label:'已关联'},{value:'unavailable',label:'关联不可用'}]} />
       <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => { setReference(key) }, items: [{key:'all',label:'全部参考状态'},{key:'missing',label:'未选参考图'},{key:'ready',label:'已选参考图'},{key:'unavailable',label:'参考图不可用'}] }}><MainButton disabled={!data?.objects.length} type="text" aria-label="参考筛选">参考筛选{reference !== 'all' ? ' · 已筛选' : ''}</MainButton></Dropdown>
@@ -452,8 +452,8 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         const current = lastRead.current?.objects.find(object => object.id === draft.object.id)
         if (current?.asset_id !== resource.id && !await save(draft.object.id, resource.id)) throw new Error('对象已保存，场次关联尚未完成，请重试')
       }} />}
-    {assetEditor && <ResourceEditorDrawer open kind={assetEditor.kind} assetId={assetEditor.id} projectId={projectId}
-      onClose={() => void closeAsset()} onSaved={async () => { await read() }} />}
-  </section>
+    </section>
+    {assetEditor && <div className="management-inline-asset"><ResourceEditorDrawer inline open kind={assetEditor.kind} assetId={assetEditor.id} projectId={projectId}
+      onClose={() => void closeAsset()} onSaved={async () => { await read() }} /></div>}
   </>
 }

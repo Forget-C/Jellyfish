@@ -65,7 +65,7 @@ try {
   await nameLink.click()
   await page.getByRole('link',{name:'在资产库编辑 ↗',exact:true}).waitFor()
   assert.equal(page.url(),originalUrl)
-  await page.getByRole('button',{name:'关闭',exact:true}).click()
+  await page.getByRole('button',{name:'返回',exact:true}).click()
   await nameLink.waitFor()
 
   for(const appearance of ['雾蓝微渐变','雾蓝纯色']) {
