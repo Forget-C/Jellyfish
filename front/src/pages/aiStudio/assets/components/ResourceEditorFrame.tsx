@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Button, Drawer } from 'antd'
+import { useAppStore } from '../../../../store/useAppStore'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
 
 /** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
 export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar }: Props) {
+  const appearance = useAppStore(state => state.appearance)
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
   const [body, setBody] = useState<HTMLElement | null>(null)
   const captureBody = useCallback((node: HTMLDivElement | null) => setBody(node?.parentElement ?? null), [])
@@ -24,7 +26,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     update()
     return () => { observer.disconnect(); body.removeEventListener('scroll', update) }
   }, [drawer, open, body])
-  if (drawer) return <Drawer id={id} rootClassName={`resource-editor-drawer${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}`} width="100%" title={title}
+  if (drawer) return <Drawer id={id} rootClassName={`resource-editor-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}`} width="100%" title={title}
     afterOpenChange={visible => {
       if (!visible) { setScrollEdges({ top: false, bottom: false }); return }
       const node = document.getElementById(id)

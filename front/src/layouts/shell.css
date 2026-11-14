@@ -3,11 +3,12 @@
   --app-border: #e5eaf0;
 }
 
-:is(.app-shell, .app-appearance-swatch) {
+:is(.app-shell, .app-appearance-swatch, .resource-editor-drawer) {
   --app-page-background: linear-gradient(125deg, #f0f5fc, #f7f8fb);
 }
 
-:is(.app-shell, .app-appearance-swatch)[data-appearance='solid'] {
+:is(.app-shell, .app-appearance-swatch)[data-appearance='solid'],
+.resource-editor-drawer.resource-editor-appearance-solid {
   --app-page-background: #f7f8fb;
 }
 

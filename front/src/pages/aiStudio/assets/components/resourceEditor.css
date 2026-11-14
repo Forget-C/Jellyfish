@@ -32,10 +32,8 @@
   .resource-editor-body { padding: 16px; }
 }
 
-.resource-editor-drawer .ant-drawer-content { border-radius: 0; background: #f7f9fc; }
-@supports (backdrop-filter: blur(16px)) {
-  .resource-editor-drawer .ant-drawer-content { background: rgb(247 249 252 / 97%); backdrop-filter: blur(16px); }
-}
+/* 与页面共用背景定义；整张视口渐变在右边缘对齐，避免抽屉内重启渐变。 */
+.resource-editor-drawer .ant-drawer-content { border-radius: 0; background: var(--app-page-background); background-size: 100vw 100dvh; background-position: right top; background-repeat: no-repeat; }
 .resource-editor-drawer .ant-drawer-content-wrapper { box-shadow: -4px 0 16px rgb(38 50 68 / 5%); }
 .resource-editor-drawer .ant-drawer-header,
 .resource-editor-drawer .ant-drawer-footer { background: transparent; border-color: transparent; padding: 20px 40px; }
@@ -44,8 +42,8 @@
 .resource-editor-drawer .ant-drawer-header-title,
 .resource-editor-drawer .ant-drawer-footer > .ant-space,
 .resource-editor-drawer-content { width: 100%; max-width: 880px; margin-inline: auto; box-sizing: border-box; }
-@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
-  .resource-editor-drawer .ant-drawer-content { background: Canvas; backdrop-filter: none; }
+@media (forced-colors: active) {
+  .resource-editor-drawer .ant-drawer-content { background: Canvas; }
 }
 .resource-editor-drawer .ant-drawer-body { padding: 28px 40px; }
 .resource-editor-drawer .ant-drawer-footer > .ant-space { display: flex; justify-content: flex-end; }
@@ -66,3 +64,7 @@
 
 .resource-editor-drawer .ant-drawer-header-title { flex-direction: row-reverse; }
 .resource-editor-drawer .ant-drawer-close { margin-inline-end: 0; margin-inline-start: 12px; }
+
+@media (max-width: 1023px) {
+  .resource-editor-drawer .ant-drawer-content-wrapper { box-shadow: none; }
+}
