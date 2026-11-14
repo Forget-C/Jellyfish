@@ -72,6 +72,17 @@ try {
   const bounds = await drawer.boundingBox()
   assert.equal(bounds.x, 216)
   assert.equal(bounds.width, 1224)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await drawer.evaluate(node => node.querySelector('button').click())
+  const exit = await page.locator('.resource-editor-drawer .ant-drawer-content-wrapper').evaluate(node => ({
+    running: node.getAnimations().some(animation => animation.playState === 'running'),
+    inert: node.querySelector('[role="dialog"]').inert,
+  }))
+  assert.equal(exit.running, true)
+  assert.equal(exit.inert, true)
+  await page.locator('.resource-editor-drawer').waitFor({ state: 'hidden' })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+
   for (const [width, height, theme] of [[1440,900,'mist'],[1366,768,'solid'],[1024,768,'mist'],[1023,768,'solid'],[768,812,'mist'],[767,812,'solid'],[375,812,'solid']]) {
     await page.setViewportSize({width,height})
     await page.evaluate(value => { localStorage.setItem('jellyfish_appearance',value) },theme)

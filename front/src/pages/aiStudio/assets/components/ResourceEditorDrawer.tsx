@@ -359,8 +359,22 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     finally { setBusy(false) }
   }
   const [referenceToolbar, setReferenceToolbar] = useState<HTMLDivElement | null>(null)
-  const closeEditor = () => {
+  const closing = useRef(false)
+  const closeEditor = async () => {
+    if (closing.current) return
     const id = resource?.id
+    const content = document.getElementById(drawerId)
+    const wrapper = isDrawer ? content?.closest<HTMLElement>('.ant-drawer-content-wrapper') : null
+    if (wrapper && content && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      closing.current = true
+      content.inert = true
+      try {
+        await wrapper.animate([{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(24px)', opacity: 0 }],
+          { duration: 180, easing: 'ease-in', fill: 'forwards' }).finished
+      } catch { /* 路由切换会卸载面板并取消动画。 */ }
+      finally { closing.current = false; content.inert = false }
+      if (!wrapper.isConnected) return
+    }
     onClose()
     if (id) requestAnimationFrame(() => requestAnimationFrame(() => {
       const target = document.querySelector<HTMLElement>(`[data-project-asset-id="${CSS.escape(id)}"], a[href="${resourceAssetUrl(kind, id)}"]`)
@@ -409,7 +423,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   }
   const subjectImages = references.filter(reference => !['costume', 'prop'].includes(reference.role))
   const saveAndClose = async (reference?: AssetPromptReference) => {
-    if (await save(reference)) onClose()
+    if (await save(reference)) await closeEditor()
   }
   const createOnly = () => {
     if (subjectImages.length && (!resource || JSON.stringify(references) !== JSON.stringify(JSON.parse(baseline || '{}').references ?? []))) {
