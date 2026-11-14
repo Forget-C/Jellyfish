@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Image, Input, Modal, Space, Tag, Tooltip, Tabs } from 'antd'
-import { CheckCircleOutlined, EditOutlined, StarOutlined } from '@ant-design/icons'
+import { Button, Image, Input, Modal, Tag, Tooltip, Tabs } from 'antd'
+import { AppstoreOutlined, CheckCircleOutlined, EditOutlined, StarOutlined } from '@ant-design/icons'
 import { ASSET_FIELDS, type AssetFacts } from './AssetFactsFields'
 import { ResourceImage } from './ResourceImage'
 import { buildFileDownloadUrl } from '../utils'
@@ -36,11 +36,11 @@ export function ActorFields({ name, onName, facts, onFacts, description, onDescr
 }
 
 /** 默认主图、手动预览与主图身份分离；全部图片操作集中在多视角集合中。 */
-export function ActorPictures({ actorId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, onHistory, candidates, feedback, status, onGenerate }: {
+export function ActorPictures({ actorId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, candidates, feedback, status, onGenerate }: {
   actorId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
   savingViewDefault?: number
   onViewDefault: (image: Picture) => Promise<void>
-  onPrimary: (image: Picture) => Promise<boolean>; onEdit: (image: Picture) => void; onHistory: (image: Picture) => void
+  onPrimary: (image: Picture) => Promise<boolean>; onEdit: (image: Picture) => void
   candidates: (angle: string) => ReactNode; feedback: ReactNode; status: (angle: string) => ReactNode; onGenerate: () => void
 }) {
   const [selectedId, setSelectedId] = useState<number>()
@@ -65,7 +65,7 @@ export function ActorPictures({ actorId, images, disabled, primaryDisabled, read
   const other = [...new Set(images.map(image => image.view_angle ?? 'FRONT'))].filter(angle => !views.some(([value]) => value === angle))
   const available = [...views.map(([value, label]) => ({ value, label })), ...other.map(value => ({ value, label: ({ RIGHT: '右侧', DETAIL: '细节', THREE_QUARTER: '3/4侧面' } as Record<string, string>)[value] ?? value }))]
   return <div className="actor-pictures">
-    <div className="actor-picture-heading"><h2>图片</h2><Button type="link" onClick={() => setGallery(selected?.view_angle ?? 'FRONT')}>查看全部</Button></div>
+    <div className="actor-picture-heading"><h2>图片</h2></div>
     {feedback}
     <div className="actor-feature-image">
       {selected ? <button className="actor-feature-trigger" aria-label="查看多角度图片" onClick={() => setGallery(selected.view_angle ?? 'FRONT')}>
@@ -73,16 +73,17 @@ export function ActorPictures({ actorId, images, disabled, primaryDisabled, read
       </button> : <span className="actor-empty">暂无图片，生成后在这里预览</span>}
     </div>
     {selected && <div className="actor-preview-caption"><span>{angleLabel(selected.view_angle ?? 'FRONT')} · 当前预览</span>{selected.is_primary && <Tag>主图</Tag>}{selected.is_view_default && <Tag>视角默认</Tag>}</div>}
-    <div className="actor-thumbnails" role="group" aria-label="多视角缩略图">{ordered.map(image => <button key={image.id} aria-label={`预览${angleLabel(image.view_angle ?? 'FRONT')}图片 ${image.id}`} aria-pressed={selected?.id === image.id} onClick={() => setSelectedId(image.id)}>
+    <div className="actor-thumbnail-row"><div className="actor-thumbnails" role="group" aria-label="多视角缩略图">{ordered.map(image => <button key={image.id} aria-label={`预览${angleLabel(image.view_angle ?? 'FRONT')}图片 ${image.id}`} aria-pressed={selected?.id === image.id} onClick={() => setSelectedId(image.id)}>
       <img src={buildFileDownloadUrl(image.file_id!)!} alt="" /><span>{angleLabel(image.view_angle ?? 'FRONT')}{image.is_view_default ? ' · 默认' : image.is_primary ? ' · 主图' : ''}</span>
     </button>)}</div>
+      {ordered.length > 0 && <Button className="actor-view-all" type="text" icon={<AppstoreOutlined aria-hidden="true" />} onClick={() => setGallery(selected?.view_angle ?? 'FRONT')}>查看全部（{ordered.length}）</Button>}
+    </div>
     {selected && <ActorImageParameters key={`${actorId}:${selected.id}:${selected.file_id}`} actorId={actorId} imageId={selected.id} />}
     <div className="actor-task-summary">{views.map(([angle, label]) => <div key={angle} role="status">{status(angle) && <><span>{label}：</span>{status(angle)}</>}</div>)}</div>
     {!readOnly && <div className="actor-generate-action"><Button type="primary" disabled={disabled} onClick={onGenerate}>生成图片</Button></div>}
     <Modal title="图片集合" open={!!gallery} width={900} onCancel={() => setGallery(undefined)} footer={<Button aria-label="关闭" onClick={() => setGallery(undefined)}>关闭</Button>}>
       <Tabs activeKey={gallery} onChange={setGallery} items={available.map(({ value, label }) => ({ key: value, label, children: <>
         <div className="actor-gallery">{sorted(value).map((image, index) => card(image, index, label))}</div>
-        {!readOnly && <Space wrap>{sorted(value).map(image => <Button key={image.id} onClick={() => onHistory(image)}>查看图片 {image.id} 的候选</Button>)}</Space>}
         {candidates(value)}
       </> }))} />
     </Modal>

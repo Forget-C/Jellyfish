@@ -48,7 +48,9 @@
 .actor-feature-trigger .ant-image-img { width:100%; height:100%; object-fit:contain; }
 .actor-feature-trigger:focus-visible,.actor-thumbnails button:focus-visible { outline:2px solid #245fc5; outline-offset:-2px; }
 .actor-preview-caption { display:flex; align-items:center; gap:8px; flex:none; min-height:28px; font-size:12px; }
-.actor-thumbnails { display:flex; gap:8px; overflow-x:auto; flex:none; padding:4px 0 8px; }
+.actor-thumbnail-row { display:flex; align-items:center; gap:8px; flex:none; min-width:0; }
+.actor-view-all.ant-btn { flex:none; white-space:nowrap; padding-inline:8px; font-size:12px; }
+.actor-thumbnails { display:flex; gap:8px; overflow-x:auto; flex:1; min-width:0; padding:4px 0 8px; }
 .actor-thumbnails button { border:1px solid #e5eaf0; border-radius:6px; background:white; flex:0 0 68px; padding:4px; cursor:pointer; }
 .actor-thumbnails button[aria-pressed='true'] { border-color:#245fc5; background:#edf3fc; }
 .actor-thumbnails img { width:58px; height:60px; object-fit:contain; }
