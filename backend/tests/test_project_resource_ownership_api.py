@@ -205,6 +205,8 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
             assert preview.status_code == 200, preview.text
             before_submit = await client.get(f"/api/v1/studio/entities/{kind}", params={"project_id": "project-a"})
             assert "shared-actor" not in [item["id"] for item in before_submit.json()["data"]["items"]]
+            fresh = await client.post(f"/api/v1/studio/entities/{kind}/private-actor/images", json={"view_angle": "FRONT"})
+            slot_id = fresh.json()["data"]["id"]
             task_path = f"actors/private-actor" if kind == "actor" else f"assets/{kind}/private-actor"
             submitted = await client.post(f"/api/v1/studio/generation-tasks/{task_path}/slots/{slot_id}/tasks", json={
                 "model_id": "test-image-model", "execution_prompt": preview.json()["data"]["execution_prompt"],
@@ -212,6 +214,11 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
                 "operation_input": {"kind": "image_generation"},
             })
             assert submitted.status_code == 201, submitted.text
+            duplicate = await client.post(f"/api/v1/studio/generation-tasks/{task_path}/slots/{slot_id}/tasks", json={
+                "model_id": "test-image-model", "execution_prompt": "重复提交",
+                "operation_input": {"kind": "image_generation"},
+            })
+            assert duplicate.status_code == 409, duplicate.text
             after_submit = await client.get(f"/api/v1/studio/entities/{kind}", params={"project_id": "project-a"})
             assert "shared-actor" in [item["id"] for item in after_submit.json()["data"]["items"]]
             if kind == "actor":

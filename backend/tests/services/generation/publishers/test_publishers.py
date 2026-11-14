@@ -26,11 +26,14 @@ class RecordingSession:
 
     async def get(self, model, file_id, **kwargs):
         """模拟可用文件；真实文件删除与采用冲突另由数据库集成测试验证。"""
-        return SimpleNamespace(id=file_id, file_id="existing", is_primary=False, delete_requested_at=None, deleted_at=None)
+        return SimpleNamespace(id=file_id, file_id="existing", is_primary=False, is_view_default=False, view_angle="FRONT", delete_requested_at=None, deleted_at=None)
 
     async def scalar(self, _statement):
         """对象存在且已有另一张主图，本组用例只观察槽位 CAS。"""
         return 1
+
+    async def scalars(self, _statement):
+        return []
 
     async def flush(self):
         return None

@@ -290,6 +290,7 @@ class AssetReferenceImage(Contract):
     source_kind: Literal['character', 'scene', 'prop']
     source_id: Identity
     slot_id: int
+    is_view_default: bool = False
 
 
 class AssetSummary(Contract):

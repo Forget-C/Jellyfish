@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_order, paginate
+from app.models.studio import FileItem
 from app.services.common import entity_not_found
 from app.services.studio.files import require_available_file
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
@@ -73,6 +74,7 @@ async def create_entity_image(
     await db.refresh(obj)
 
     await maintain_primary_image(db, spec, entity_id, obj)
+    await maintain_view_defaults(db, spec, entity_id, obj)
 
     return spec.image_read_model.model_validate(obj).model_dump()
 
@@ -95,6 +97,14 @@ async def update_entity_image(
     if obj is None or getattr(obj, spec.id_field) != entity_id:
         raise HTTPException(status_code=404, detail=entity_not_found(spec.image_model.__name__))
 
+    if "view_angle" in body and body["view_angle"] != obj.view_angle:
+        raise HTTPException(422, "图片视角创建后不可修改")
+    if "is_view_default" in body and body["is_view_default"] is not True:
+        raise HTTPException(422, "请选择另一张图片作为视角默认图")
+    if body.get("is_view_default") and not body.get("file_id", obj.file_id):
+        raise HTTPException(422, "空图片不能设为视角默认图")
+    if body.get("is_view_default"):
+        await require_available_file(db, file_id=body.get("file_id", obj.file_id), expected_type="image")
     update_data = _parse_image_body(spec.image_update_model, body).model_dump(exclude_unset=True)
     if update_data.get("file_id") is not None:
         await require_available_file(db, file_id=update_data["file_id"], expected_type="image")
@@ -107,6 +117,7 @@ async def update_entity_image(
     await db.refresh(obj)
 
     await maintain_primary_image(db, spec, entity_id, obj)
+    await maintain_view_defaults(db, spec, entity_id, obj)
 
     return spec.image_read_model.model_validate(obj).model_dump()
 
@@ -128,6 +139,7 @@ async def delete_entity_image(
     await db.delete(obj)
     await db.flush()
     await maintain_primary_image(db, spec, entity_id, None)
+    await maintain_view_defaults(db, spec, entity_id)
 
 
 async def maintain_primary_image(db, spec, entity_id, image=None):
@@ -165,3 +177,29 @@ def _parse_image_body(schema, body):
         details = [{"loc": ["body", *item["loc"]], "msg": item["msg"], "type": item["type"]}
                    for item in error.errors(include_context=False)]
         raise HTTPException(422, details) from error
+
+
+async def maintain_view_defaults(db, spec, entity_id, image=None):
+    """在父对象锁内维护每个视角的默认图；仅首次入图或明确设置时改变选择。"""
+    model = spec.image_model
+    owner = getattr(model, spec.id_field)
+    rows = list(await db.scalars(select(model).where(owner == entity_id)
+                                .order_by(model.created_at, model.id)))
+    available = set(await db.scalars(select(FileItem.id).where(
+        FileItem.id.in_([row.file_id for row in rows if row.file_id]),
+        FileItem.type == "image", FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None),
+    )))
+    defaults = {}
+    for row in rows:
+        if row.file_id not in available:
+            row.is_view_default = False
+        elif row.is_view_default:
+            defaults.setdefault(row.view_angle, row)
+    if image is not None and image.file_id in available and image.is_view_default:
+        defaults[image.view_angle] = image
+    for row in rows:
+        if row.file_id in available:
+            defaults.setdefault(row.view_angle, row)
+    for row in rows:
+        row.is_view_default = defaults.get(row.view_angle) is row
+    await db.flush()

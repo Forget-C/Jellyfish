@@ -7,7 +7,7 @@ from app.services.studio.entity_specs import entity_spec
 
 
 async def reference_images(db, kind, asset_ids):
-    """批量读取真实视角；同角度最后一个槽位与资产详情展示一致。"""
+    """批量读取真实视角；显式返回视角默认标记，避免调用方依赖排序选图。"""
     from app.models.studio import FileItem
     spec = entity_spec(kind)
     model = spec.image_model
@@ -23,5 +23,5 @@ async def reference_images(db, kind, asset_ids):
             result[asset_id] = (images, unavailable + 1)
             continue
         images.append(AssetReferenceImage(file_id=file.id, view_angle=slot.view_angle,
-            source_kind=kind, source_id=asset_id, slot_id=slot.id))
+            source_kind=kind, source_id=asset_id, slot_id=slot.id, is_view_default=slot.is_view_default))
     return result

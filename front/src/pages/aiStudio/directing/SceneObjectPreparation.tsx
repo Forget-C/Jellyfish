@@ -348,7 +348,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
             <Select aria-label="参考视角" size="small" value={angle} disabled={disabled} style={{ width: 90 }}
               options={Object.entries(angleLabels).map(([value, label]) => ({ value, label }))}
               onChange={value => {
-                const image = angleImages.find(item => item.view_angle === value)
+                const image = angleImages.find(item => item.view_angle === value && item.is_view_default)
                 void save(object.id, asset.id, image?.file_id, source).then(saved => { if (saved) setAngles(previous => ({ ...previous, [object.id]: value })) })
               }} />
             {!object.image_file_id && !angleImages.some(image => image.view_angle === angle) && <small>暂无{angleLabels[angle]}图</small>}

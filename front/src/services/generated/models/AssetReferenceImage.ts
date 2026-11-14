@@ -11,4 +11,5 @@ export type AssetReferenceImage = {
     source_kind: 'character' | 'scene' | 'prop';
     source_id: string;
     slot_id: number;
+    is_view_default?: boolean;
 };

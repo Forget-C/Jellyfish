@@ -11,6 +11,8 @@ from app.models.types import AssetQualityLevel, AssetViewAngle
 class ImagePrimaryMixin:
     """对象图片的显式主图标记；写入时由服务串行维护唯一主图。"""
 
+    is_view_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.task import Task
 
 from app.core.contracts.generation import (
     FrozenGenerationConfig,
@@ -149,6 +151,17 @@ class GenerationEntityGate:
                 entity_id=target.entity_id,
                 asset_type=target.asset_type,
             )
+            if exists:
+                if getattr(command.request.operation_input, "save_as_candidate", False):
+                    raise HTTPException(422, "对象生成直接新增图片，不支持新的候选生成")
+                spec = entity_spec(target.asset_type)
+                row = await db.get(spec.image_model, int(target.slot_id))
+                previous = await db.scalar(select(Task.id).where(
+                    Task.target_type == f"{target.asset_type}_image_slot",
+                    Task.target_id == str(target.slot_id),
+                ).limit(1))
+                if row.file_id or previous is not None:
+                    raise HTTPException(409, "每次生成必须使用新的空图片记录")
         elif target.kind == GenerationTargetKind.script_processing:
             exists = bool(target.entity_id)
         if exists and target.kind in (GenerationTargetKind.directing_image, GenerationTargetKind.directing_unit):

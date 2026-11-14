@@ -2,7 +2,7 @@ import { StudioEntitiesService, type AssetViewAngle } from '../../../services/ge
 import type { ResourceKind } from './components/ResourceEditorDrawer'
 
 export type ResourcePicture = {
-  id: number; file_id?: string | null; view_angle?: AssetViewAngle; is_primary?: boolean
+  id: number; file_id?: string | null; view_angle?: AssetViewAngle; is_primary?: boolean; is_view_default?: boolean
 }
 
 /** 文件夹和来源选图共用完整图片集合，主图不能因落在下一页而丢失。 */

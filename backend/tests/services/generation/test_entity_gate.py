@@ -27,7 +27,11 @@ class _AssetImageSession:
     def __init__(self, *, actor_id: str) -> None:
         """以指定所属资产构造一个可读取的资产图片槽位。"""
 
-        self.frame = SimpleNamespace(actor_id=actor_id)
+        self.frame = SimpleNamespace(actor_id=actor_id, file_id=None)
+
+    async def scalar(self, _statement):
+        """该空槽位未被任何任务受理。"""
+        return None
 
     async def get(self, model: object, identifier: int, **_kwargs) -> object | None:
         """仅响应门禁对指定帧槽位的读取。"""

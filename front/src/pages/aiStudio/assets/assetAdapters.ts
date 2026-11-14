@@ -5,7 +5,7 @@ type ImageGenerationPayload = { modelId?: string; prompt: string; images: string
 
 type AdapterConfig = {
   missingAssetIdText: string; backTo: string; relationType: string
-  listImages: (id: string) => Promise<{ id: number; view_angle?: string | null; file_id?: string | null; is_primary?: boolean }[]>
+  listImages: (id: string) => Promise<{ id: number; view_angle?: string | null; file_id?: string | null; is_primary?: boolean; is_view_default?: boolean }[]>
   renderPrompt: (id: string, imageId: number, options?: AssetImagePromptRenderBody) => ReturnType<typeof renderAssetImagePrompt>
   createGenerationTask: (id: string, imageId: number, payload: ImageGenerationPayload) => Promise<string | null>
 }

@@ -99,12 +99,17 @@ try {
   const selectedFile = selected.image_file_id
   const roleImage = await uploadImage('role.png')
   await request(`${studio}/entities/character/${roleId}/images`, 'POST', { view_angle: 'LEFT', file_id: roleImage, is_primary: true })
+  const newerRoleImage = await uploadImage('role-newer.png')
+  const newerRoleRecord = await request(`${studio}/entities/character/${roleId}/images`, 'POST', {view_angle:'LEFT',file_id:newerRoleImage,is_primary:true})
+  assert.equal(newerRoleRecord.is_view_default,false)
   await page.reload()
   assert.equal((await read()).objects[0].image_file_id, selectedFile, '已明确选择的场次文件不随主图变化')
   await front.getByRole('combobox', { name: '参考视角' }).press('ArrowDown')
   await Promise.all([page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/objects/')),
     page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('左侧', { exact: true }).click()])
-  assert.equal((await read()).objects[0].image_file_id, roleImage)
+  assert.equal((await read()).objects[0].image_file_id, roleImage,'按视角使用默认图，独立于更新的对象主图')
+  await request(`${studio}/entities/character/${roleId}/images/${newerRoleRecord.id}`, 'PATCH', {is_view_default:true})
+  assert.equal((await read()).objects[0].image_file_id,roleImage,'更换视角默认图不改变已经保存的场次图片')
   await back.getByRole('button', { name: '对象更多操作' }).click()
   await page.getByRole('menuitem', { name: '修改关联资产', exact: true }).click()
   await page.getByRole('combobox', { name: '使用已有项目对象' }).click()
@@ -112,7 +117,7 @@ try {
   await back.getByRole('img', { name: '阿同已选参考图', exact: true }).waitFor()
   selected = (await read()).objects[1]
   assert.equal(selected.asset_id, roleId)
-  assert.equal(selected.image_file_id, roleImage, '明确复用已有项目对象时默认采用主图')
+  assert.equal(selected.image_file_id, newerRoleImage, '明确复用已有项目对象时默认采用主图')
   assert.equal((await request(`${studio}/entities/character?project_id=${project}`)).items.length, 2)
   assert.deepEqual((await request(canvasUrl)).cards, canvasBefore.cards, '对象创建不修改已有画布')
   const frame = await front.locator('.management-reference-frame').boundingBox()

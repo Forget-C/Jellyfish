@@ -47,11 +47,12 @@ class AssetImagePublisher(GenerationResultPublisher):
         parent_field = getattr(model, spec.id_field)
         result = await db.execute(
             update(model)
-            .where(model.id == numeric_slot_id, parent_field == snapshot.canonical_target.entity_id, model.version_id == expected_version_id)
+            .where(model.id == numeric_slot_id, parent_field == snapshot.canonical_target.entity_id, model.version_id == expected_version_id, model.file_id.is_(None))
             .values(file_id=file_id, version_id=model.version_id + 1)
         )
         if result.rowcount:
-            from app.services.studio.entity_images import maintain_primary_image
+            from app.services.studio.entity_images import maintain_primary_image, maintain_view_defaults
             image = await db.get(model, numeric_slot_id, populate_existing=True)
             await maintain_primary_image(db, spec, snapshot.canonical_target.entity_id, image)
+            await maintain_view_defaults(db, spec, snapshot.canonical_target.entity_id, image)
         return bool(result.rowcount)

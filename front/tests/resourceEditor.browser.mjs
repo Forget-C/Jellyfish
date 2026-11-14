@@ -57,7 +57,7 @@ try {
     if (path.includes('/generation-tasks/actors/')) { generationCalls++; candidateMode = !!route.request().postDataJSON().operation_input.save_as_candidate; return respond({ task_id: 'generated-task' }) }
     if (path.endsWith('/film/tasks/outputs')) return respond({ items: [{ task_id: 'generated-task', ordinal: 1, file_id: 'candidate' }], next_cursor: null })
     if (path.endsWith('/film/tasks/generated-task/status')) {
-      if (!candidateMode) Object.assign(images.at(-1), { file_id: 'generated', is_primary: true })
+      if (!candidateMode) Object.assign(images.at(-1), { file_id: generationCalls > 1 ? 'candidate' : 'generated', is_primary: images.length === 1, is_view_default: images.length === 1 })
       return respond({ task_id: 'generated-task', status: 'succeeded', progress: 100 })
     }
     return list([])
@@ -184,10 +184,10 @@ try {
   await detail.getByRole('button', { name: '局部修改正面图片 1', exact: true }).click()
   await detail.getByRole('textbox', { name: '修改要求', exact: true }).fill('将背景改为浅灰')
   await detail.getByRole('button', { name: '应用并返回', exact: true }).click()
-  await detail.getByRole('button', { name: '生成修改候选', exact: true }).click()
-  await detail.getByRole('button', { name: '加入视角文件夹', exact: true }).waitFor()
-  assert.equal(images.length, 1)
-  await detail.getByRole('button', { name: '加入视角文件夹', exact: true }).click()
+  await detail.getByRole('button', { name: '生成修改图片', exact: true }).click()
+  assert.equal(images.length, 2)
+  assert.equal(candidateMode, false)
+  assert.equal(images[1].view_angle, images[0].view_angle)
   await detail.getByRole('img', { name: '正面图片 2', exact: true }).waitFor()
   assert.equal(images[0].file_id, 'generated')
   assert.equal(images[0].is_primary, true)

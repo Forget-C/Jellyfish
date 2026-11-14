@@ -16,6 +16,7 @@ class ActorImageRead(BaseModel):
     actor_id: str
     quality_level: AssetQualityLevel = AssetQualityLevel.low
     view_angle: AssetViewAngle = AssetViewAngle.front
+    is_view_default: bool = False
     is_primary: bool = False
     file_id: str | None = None
     width: int | None = None
@@ -29,6 +30,7 @@ class ActorImageCreate(BaseModel):
 
     quality_level: AssetQualityLevel = AssetQualityLevel.low
     view_angle: AssetViewAngle = AssetViewAngle.front
+    is_view_default: bool = False
     is_primary: bool = False
     file_id: str | None = None
     width: int | None = None
@@ -47,6 +49,7 @@ class ActorImageCreate(BaseModel):
 class ActorImageUpdate(BaseModel):
     """局部更新演员图片槽位；覆盖仅作用于当前图片。"""
 
+    is_view_default: bool = False
     is_primary: bool = False
     quality_level: AssetQualityLevel | None = None
     view_angle: AssetViewAngle | None = None

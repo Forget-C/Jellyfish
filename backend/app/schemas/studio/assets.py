@@ -82,6 +82,7 @@ class AssetImageBase(BaseModel):
     id: int = Field(..., description="图片行 ID")
     quality_level: AssetQualityLevel = Field(AssetQualityLevel.low, description="精度等级")
     view_angle: AssetViewAngle = Field(AssetViewAngle.front, description="视角")
+    is_view_default: bool = False
     is_primary: bool = False
     file_id: str | None = Field(None, description="关联的 FileItem ID（可空，支持先创建槽位后填充）")
     width: int | None = Field(None, description="宽(px)")
@@ -91,6 +92,7 @@ class AssetImageBase(BaseModel):
 
 
 class AssetImageCreate(BaseModel):
+    is_view_default: bool = False
     is_primary: bool = False
     quality_level: AssetQualityLevel = AssetQualityLevel.low
     view_angle: AssetViewAngle = AssetViewAngle.front
@@ -109,6 +111,7 @@ class AssetImageCreate(BaseModel):
 
 
 class AssetImageUpdate(BaseModel):
+    is_view_default: bool = False
     is_primary: bool = False
     quality_level: AssetQualityLevel | None = None
     view_angle: AssetViewAngle | None = None

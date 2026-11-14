@@ -17,6 +17,7 @@ const slots = Object.fromEntries(types.map(([type]) => [type, [{ id: 1, view_ang
 assets.character = { id:'a1', name:'项目角色档案', description:'角色简介', visual_style:'现实', style:'真人都市' }
 slots.character = [{id:1,view_angle:'FRONT',file_id:'portrait'}]
 let failSave = false, failSlot = false, failImages = false, failAsset = false, missingAsset = false
+let failDefault = false, completeEdit = false, editTarget
 let failHistory = false, adoptions = 0
 let generationStatus, statusReads = 0, generationCalls = 0
 let submittedModel, submittedReferences
@@ -70,7 +71,7 @@ try {
     if (path.endsWith('/llm/models')) return list([{id:'default-image',name:'默认图片模型',category:'image'}, {id:'alternate-image',name:'备选图片模型',category:'image'}])
     if (path.endsWith('/llm/models/default-image')) return respond({id:'default-image',name:'默认图片模型'})
     if (path.endsWith('/generation-prompts/assets/draft/render')) return respond({render_id:'draft', execution_prompt:'演员草稿预览',variables_snapshot:{},recommended_media:{references:[]}})
-    if (/generation-tasks\/actors\/a1\/slots\/\d+\/tasks$/.test(path)) { submittedModel=request.postDataJSON().model_id; submittedReferences=request.postDataJSON().asset_references; const slot=slots.actor.find(row=>String(row.id)===path.split('/').at(-2)); submittedAngles.push(slot.view_angle); return partialGeneration && slot.view_angle==='FRONT' ? respond({task_id:'partial-front'}) : fail() }
+    if (/generation-tasks\/actors\/a1\/slots\/\d+\/tasks$/.test(path)) { submittedModel=request.postDataJSON().model_id; submittedReferences=request.postDataJSON().asset_references; const slot=slots.actor.find(row=>String(row.id)===path.split('/').at(-2)); submittedAngles.push(slot.view_angle); if(completeEdit) { editTarget=slot; assert.equal(request.postDataJSON().operation_input.save_as_candidate,false); slot.file_id='history'; return respond({task_id:'edited'}) }; return partialGeneration && slot.view_angle==='FRONT' ? respond({task_id:'partial-front'}) : fail() }
     if (path.endsWith('/film/tasks/partial-front/status')) return respond({task_id:'partial-front',status:'succeeded'})
     if (/generation-prompts\/assets\/actor\/a1\/slots\/\d+\/render$/.test(path)) return respond({render_id:'final',execution_prompt:'演员生成提示词',variables_snapshot:{},recommended_media:{references:[]}})
     if (path.includes('/tasks/actor-images/')) {
@@ -80,7 +81,14 @@ try {
       if(id===1) await new Promise(resolve=>setTimeout(resolve,250))
       return respond({task_id:'history-'+id,created_at_ts:1700000000,model_name:'历史模型 '+id,view_angle:'正面',reference_count:2,parameters:{lighting_instruction:'当时柔光'},execution_prompt:'历史提示词 '+id})
     }
+    if (path.endsWith('/film/tasks/edited/status')) return respond({task_id:'edited', status:'succeeded'})
     if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实', '动漫'], styles: ['真人都市'] })
+    if (/\/entities\/actor\/a1\/images\/\d+$/.test(path) && request.method() === 'PATCH' && request.postDataJSON().is_view_default) {
+      if(failDefault) return fail()
+      const row=slots.actor.find(image=>String(image.id)===path.split('/').at(-1))
+      slots.actor.filter(image=>image.view_angle===row.view_angle).forEach(image=>image.is_view_default=image.id===row.id)
+      return respond(row)
+    }
     if (path.endsWith('/entities/actor/a1/images/1') && request.method() === 'PATCH') {
       adoptions++
       Object.assign(slots.actor[0], request.postDataJSON())
@@ -279,6 +287,36 @@ try {
       assert.equal(await dialog.getByRole('button', { name: '返回', exact: true }).isVisible(), true)
     }
   }
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto(origin + '/assets/actors/a1/edit')
+  await name.and(page.locator(':enabled')).waitFor()
+  const initialPreview = await page.getByRole('button',{name:/^预览.*图片/}).filter({has: page.locator('img')}).evaluateAll(nodes=>nodes.find(node=>node.getAttribute('aria-pressed')==='true')?.getAttribute('aria-label'))
+  await page.getByRole('button',{name:'查看全部',exact:true}).click()
+  const collection=page.getByRole('dialog',{name:'图片集合',exact:true})
+  await collection.getByRole('tab',{name:'正面',exact:true}).click()
+  failDefault=true
+  await collection.getByRole('button',{name:'设为正面默认图 2',exact:true}).click()
+  await collection.getByText('设置视角默认图未能确认，请重新读取图片后重试',{exact:true}).waitFor()
+  failDefault=false
+  await collection.getByRole('button',{name:'设为正面默认图 2',exact:true}).click()
+  await collection.getByText('视角默认',{exact:true}).waitFor()
+  assert.equal(await collection.locator('.actor-picture-actions').evaluateAll(rows=>rows.every(row=>row.scrollWidth<=row.clientWidth+1)),true,'image state and icon actions fit the card')
+  await collection.screenshot({path:output+'/actor-view-default.png'})
+  await collection.getByRole('button',{name:'关闭',exact:true}).click()
+  assert.equal(await page.getByRole('button',{name:/^预览.*图片/}).first().getAttribute('aria-label'),'预览正面图片 2')
+  assert.equal(await page.getByRole('button',{name:initialPreview,exact:true}).getAttribute('aria-pressed'),'true','default setting preserves preview')
+  await page.getByRole('button',{name:'查看全部',exact:true}).click()
+  const beforeEdit=slots.actor.map(image=>({...image}))
+  await collection.getByRole('button',{name:'局部修改正面图片 1',exact:true}).click()
+  const editModal=page.getByRole('dialog',{name:'局部修改图片',exact:true})
+  await editModal.getByRole('textbox',{name:'修改要求',exact:true}).fill('调整背景')
+  completeEdit=true
+  await editModal.getByRole('button',{name:'生成',exact:true}).click()
+  await editModal.waitFor({state:'hidden'})
+  assert.equal(slots.actor.length,beforeEdit.length+1,'local edit creates exactly one new record')
+  assert.equal(editTarget.view_angle,'FRONT')
+  assert.deepEqual(slots.actor.slice(0,beforeEdit.length),beforeEdit,'local edit preserves all source records and defaults')
+  await page.getByRole('button',{name:`预览正面图片 ${editTarget.id}`,exact:true}).waitFor()
   assets.actor.source_character_id = 'converted-role'
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(origin + '/assets/actors/a1/edit')

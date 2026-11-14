@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app.core import storage
 from app.models.studio import FileItem
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
-from app.services.studio.entity_images import maintain_primary_image
+from app.services.studio.entity_images import maintain_primary_image, maintain_view_defaults
 from app.services.studio.files import require_available_file
 from app.services.studio.resource_references import validate_resource_references
 
@@ -69,4 +69,5 @@ async def adopt_reference_main(db, *, entity_type, entity_id, reference):
         await db.flush()
     image.is_primary = True
     await maintain_primary_image(db, spec, entity_id, image)
+    await maintain_view_defaults(db, spec, entity_id, image)
     return spec.image_read_model.model_validate(image).model_dump()

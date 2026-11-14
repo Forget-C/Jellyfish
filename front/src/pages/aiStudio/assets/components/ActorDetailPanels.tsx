@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Image, Input, Modal, Space, Tag, Tooltip, Tabs } from 'antd'
-import { EditOutlined, StarOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, EditOutlined, StarOutlined } from '@ant-design/icons'
 import { ASSET_FIELDS, type AssetFacts } from './AssetFactsFields'
 import { ResourceImage } from './ResourceImage'
 import { buildFileDownloadUrl } from '../utils'
 import { ActorImageParameters } from './ActorImageParameters'
 import './actorDetail.css'
 
-type Picture = { id: number; file_id?: string | null; view_angle?: string; is_primary?: boolean }
+type Picture = { id: number; file_id?: string | null; view_angle?: string; is_primary?: boolean; is_view_default?: boolean }
 const views = [['FRONT', '正面'], ['LEFT', '侧面'], ['TOP', '俯视'], ['BACK', '背面']] as const
 
 /** 固定高度的演员设定；长内容与检测结果通过显式展开保留完整编辑能力。 */
@@ -36,24 +36,28 @@ export function ActorFields({ name, onName, facts, onFacts, description, onDescr
 }
 
 /** 默认主图、手动预览与主图身份分离；全部图片操作集中在多视角集合中。 */
-export function ActorPictures({ actorId, images, disabled, primaryDisabled, readOnly, onPrimary, onEdit, onHistory, candidates, feedback, status, onGenerate }: {
+export function ActorPictures({ actorId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, onHistory, candidates, feedback, status, onGenerate }: {
   actorId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
+  savingViewDefault?: number
+  onViewDefault: (image: Picture) => Promise<void>
   onPrimary: (image: Picture) => Promise<boolean>; onEdit: (image: Picture) => void; onHistory: (image: Picture) => void
   candidates: (angle: string) => ReactNode; feedback: ReactNode; status: (angle: string) => ReactNode; onGenerate: () => void
 }) {
   const [selectedId, setSelectedId] = useState<number>()
   const [gallery, setGallery] = useState<string>()
   const primaryId = images.find(image => image.is_primary && image.file_id)?.id
-  const ordered = useMemo(() => images.filter(image => image.file_id).sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary) || b.id - a.id), [images])
+  const rank = (angle?: string) => { const index = views.findIndex(([value]) => value === angle); return index < 0 ? views.length : index }
+  const ordered = useMemo(() => images.filter(image => image.file_id).sort((a, b) => Number(!!b.is_view_default) - Number(!!a.is_view_default) || (a.is_view_default && b.is_view_default ? rank(a.view_angle) - rank(b.view_angle) : 0) || b.id - a.id), [images])
   useEffect(() => {
-    if (selectedId === undefined || !ordered.some(image => image.id === selectedId)) setSelectedId(ordered[0]?.id)
-  }, [ordered, selectedId])
+    if (selectedId === undefined || !ordered.some(image => image.id === selectedId)) setSelectedId(primaryId ?? [...ordered].sort((a, b) => b.id - a.id)[0]?.id)
+  }, [ordered, selectedId, primaryId])
   const selected = ordered.find(image => image.id === selectedId) ?? ordered.find(image => image.id === primaryId) ?? ordered[0]
   const angleLabel = (angle: string) => ({ FRONT: '正面', LEFT: '侧面', TOP: '俯视', BACK: '背面', RIGHT: '右侧', DETAIL: '细节', THREE_QUARTER: '3/4侧面' } as Record<string, string>)[angle] ?? angle
-  const sorted = (angle: string) => images.filter(image => image.file_id && (image.view_angle ?? 'FRONT') === angle).sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary) || b.id - a.id)
+  const sorted = (angle: string) => images.filter(image => image.file_id && (image.view_angle ?? 'FRONT') === angle).sort((a, b) => Number(!!b.is_view_default) - Number(!!a.is_view_default) || b.id - a.id)
   const card = (image: Picture, index: number, label: string) => <div key={image.id} className="actor-picture-card">
     <ResourceImage src={buildFileDownloadUrl(image.file_id!)!} alt={`${label}图片 ${index + 1}`} />
-    <div className="actor-picture-actions">{image.is_primary && <Tag>主图</Tag>}{!readOnly && <>
+    <div className="actor-picture-actions">{image.is_primary && <Tag>主图</Tag>}{image.is_view_default && <Tag>视角默认</Tag>}{!readOnly && <>
+      {!image.is_view_default && <Tooltip title={`设为${label}默认图`}><Button type="text" size="small" aria-label={`设为${label}默认图 ${image.id}`} icon={<CheckCircleOutlined />} loading={savingViewDefault === image.id} disabled={primaryDisabled} onClick={() => void onViewDefault(image)} /></Tooltip>}
       {!image.is_primary && <Tooltip title="设为主图"><Button type="text" size="small" aria-label={`设为主图${label}图片 ${index + 1}`} icon={<StarOutlined />} disabled={primaryDisabled} onClick={async () => { if (await onPrimary(image)) setSelectedId(image.id) }} /></Tooltip>}
       <Tooltip title="局部修改"><Button type="text" size="small" aria-label={`局部修改${label}图片 ${index + 1}`} icon={<EditOutlined />} disabled={disabled} onClick={() => { setGallery(undefined); onEdit(image) }} /></Tooltip>
     </>}</div>
@@ -68,9 +72,9 @@ export function ActorPictures({ actorId, images, disabled, primaryDisabled, read
         <Image key={selected.file_id} preview={false} src={buildFileDownloadUrl(selected.file_id!)} alt={`${angleLabel(selected.view_angle ?? 'FRONT')}图片 ${sorted(selected.view_angle ?? 'FRONT').findIndex(image => image.id === selected.id) + 1}`} />
       </button> : <span className="actor-empty">暂无图片，生成后在这里预览</span>}
     </div>
-    {selected && <div className="actor-preview-caption"><span>{angleLabel(selected.view_angle ?? 'FRONT')} · 当前预览</span>{selected.is_primary && <Tag>主图</Tag>}</div>}
+    {selected && <div className="actor-preview-caption"><span>{angleLabel(selected.view_angle ?? 'FRONT')} · 当前预览</span>{selected.is_primary && <Tag>主图</Tag>}{selected.is_view_default && <Tag>视角默认</Tag>}</div>}
     <div className="actor-thumbnails" role="group" aria-label="多视角缩略图">{ordered.map(image => <button key={image.id} aria-label={`预览${angleLabel(image.view_angle ?? 'FRONT')}图片 ${image.id}`} aria-pressed={selected?.id === image.id} onClick={() => setSelectedId(image.id)}>
-      <img src={buildFileDownloadUrl(image.file_id!)!} alt="" /><span>{angleLabel(image.view_angle ?? 'FRONT')}{image.is_primary ? ' · 主图' : ''}</span>
+      <img src={buildFileDownloadUrl(image.file_id!)!} alt="" /><span>{angleLabel(image.view_angle ?? 'FRONT')}{image.is_view_default ? ' · 默认' : image.is_primary ? ' · 主图' : ''}</span>
     </button>)}</div>
     {selected && <ActorImageParameters key={`${actorId}:${selected.id}:${selected.file_id}`} actorId={actorId} imageId={selected.id} />}
     <div className="actor-task-summary">{views.map(([angle, label]) => <div key={angle} role="status">{status(angle) && <><span>{label}：</span>{status(angle)}</>}</div>)}</div>

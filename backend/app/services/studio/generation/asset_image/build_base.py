@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import HTTPException
 from jinja2 import Environment, TemplateError, meta
 from pydantic import Field
+from sqlalchemy import select
 
 from app.core.contracts.asset_prompts import AssetPromptOptions, AssetPromptReference, DISPLAY_FIELDS, validate_display_overrides
 from app.services.studio.generation.asset_image.prompt_rules import ASSET_TEMPLATE, PURPOSES, DISPLAY_DEFAULTS, resolve_prompt_references
@@ -94,7 +95,7 @@ async def _build_asset_prompt(
     if options.mode == "edit":
         if not options.edit_instruction.strip():
             raise HTTPException(status_code=400, detail="请说明要修改的对象和目标效果")
-        variables["purpose"] = "局部修改参考图。仅改变：" + options.edit_instruction + "。保持：" + (options.preserve_instruction or "其余主体身份、服装、物体结构、构图和背景") + "。结果作为候选，等待用户采用。"
+        variables["purpose"] = "局部修改参考图。仅改变：" + options.edit_instruction + "。保持：" + (options.preserve_instruction or "其余主体身份、服装、物体结构、构图和背景") + "。结果新增到原视角文件夹，保留原图。"
     content = template.content if template else ASSET_TEMPLATE
     try:
         used = meta.find_undeclared_variables(Environment().parse(content))
@@ -144,6 +145,14 @@ async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_i
         image = await db.get(spec.image_model, slot)
     options = _resolve_edit_options(options or AssetPromptOptions(), image)
     references = options.references
+    if options.mode == "edit" and not image.file_id:
+        source = await db.scalar(select(spec.image_model.id).where(
+            getattr(spec.image_model, spec.id_field) == entity_id,
+            spec.image_model.file_id == references[0].file_id,
+            spec.image_model.view_angle == image.view_angle,
+        ).limit(1))
+        if source is None:
+            raise HTTPException(422, "局部修改必须继承当前对象源图片的视角")
     if references is None:
         references = [AssetPromptReference.model_validate(value) for value in asset.references]
     await validate_resource_references(db, entity_type, asset.project_id,

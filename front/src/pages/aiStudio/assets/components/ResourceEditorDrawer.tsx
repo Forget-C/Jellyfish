@@ -30,7 +30,7 @@ const displayFields = [
   ['visible_detail_instruction', '细节强调'], ['negative_prompt', '排除内容'],
 ] as const
 
-type Picture = { id: number; file_id?: string | null; view_angle?: string; is_primary?: boolean }
+type Picture = { id: number; file_id?: string | null; view_angle?: string; is_primary?: boolean; is_view_default?: boolean }
 type GenerationState = { taskId?: string; status: string; error?: string; slotId?: number; candidate?: boolean; originalFile?: string }
 export type Resource = AssetFacts & { id: string; name: string; description?: string; references?: AssetPromptReference[]; project_id?: string | null; source_character_id?: string | null; library_copy_id?: string | null }
 type Props = {
@@ -352,17 +352,17 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       for (const angle of selected) {
         setTasks(current => ({ ...current, [angle]: { status: 'submitting' } }))
         try {
-          const slot = editing ? undefined : await StudioEntitiesApi.createImage(kind, target.id, { view_angle: angle })
-          const slotId = editing ? editingImage!.id : Number(slot?.data?.id)
+          const slot = await StudioEntitiesApi.createImage(kind, target.id, { view_angle: angle })
+          const slotId = Number(slot?.data?.id)
           if (!slotId) throw new Error('图片记录创建失败')
           const adapter = assetAdapters[kind]
           const rendered = await adapter.renderPrompt(target.id, slotId, config)
           const taskId = await adapter.createGenerationTask(target.id, slotId, { ...rendered,
-            modelId: actorDetail ? selectedModel : undefined, references: config.references ?? references, saveAsCandidate: editing })
+            modelId: actorDetail ? selectedModel : undefined, references: config.references ?? references, saveAsCandidate: false })
           if (!taskId) throw new Error('任务未受理')
           accepted++
           if (actorDetail) actorAcceptedAngles.current.add(angle)
-          setTasks(current => ({ ...current, [angle]: { taskId, slotId, status: 'queued', candidate: editing, originalFile: editingImage?.file_id ?? undefined } }))
+          setTasks(current => ({ ...current, [angle]: { taskId, slotId, status: 'queued', candidate: false, originalFile: editingImage?.file_id ?? undefined } }))
         } catch { setTasks(current => ({ ...current, [angle]: { status: 'failed', error: '生成提交失败，设定已保存，可单独重试' } })) }
       }
       await reloadImages(target.id)
@@ -375,6 +375,21 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     try { await StudioEntitiesApi.updateImage(kind, resource.id, image.id, { is_primary: true }); await reloadImages(resource.id); return true }
     catch { setImageError('设置主图失败，原主图已保留，请重试'); return false }
     finally { setBusy(false) }
+  }
+  const [savingViewDefault, setSavingViewDefault] = useState<number>()
+  const setViewDefault = async (image: Picture) => {
+    if (!resource || dirty || busy || generating || readOnly || analysisBusy) return
+    const epoch = loadEpoch.current
+    setBusy(true); setSavingViewDefault(image.id); setImageError('')
+    try {
+      await StudioEntitiesService.updateEntityImageApiV1StudioEntitiesEntityTypeEntityIdImagesImageIdPatch({
+        entityType: kind, entityId: resource.id, imageId: image.id, requestBody: { is_view_default: true },
+      })
+      if (epoch !== loadEpoch.current) return
+      setImages(current => current.map(item => item.view_angle === image.view_angle ? { ...item, is_view_default: item.id === image.id } : item))
+      try { const rows = await readResourceImages(kind, resource.id); if (epoch === loadEpoch.current) setImages(rows) } catch { if (epoch === loadEpoch.current) setImageError('已保存视角默认图，图片列表刷新失败，请重试读取') }
+    } catch { if (epoch === loadEpoch.current) setImageError('设置视角默认图未能确认，请重新读取图片后重试') }
+    finally { if (epoch === loadEpoch.current) { setBusy(false); setSavingViewDefault(undefined) } }
   }
   const publish = async () => {
     if (!resource?.project_id || busy || dirty) return
@@ -467,11 +482,12 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const pictures = <div className="resource-editor-fields">
     {imageError && <Alert type="error" message={imageError} action={resource && <Button onClick={() => void reloadImages(resource.id)}>重试读取图片</Button>} />}
     <Tabs activeKey={browsingAngle} onChange={setBrowsingAngle} items={folderAngles.map(angle => ({ key: angle, label: angleLabel(angle),
-      children: <div className="resource-reference-grid">{images.filter(image => image.view_angle === angle && image.file_id).map((image, index) => <div key={image.id}>
+      children: <div className="resource-reference-grid">{images.filter(image => image.view_angle === angle && image.file_id).sort((a, b) => Number(!!b.is_view_default) - Number(!!a.is_view_default) || b.id - a.id).map((image, index) => <div key={image.id}>
         <ResourceImage key={image.file_id} src={buildFileDownloadUrl(image.file_id!)!} alt={`${angleLabel(angle)}图片 ${index + 1}`} />
         {!readOnly && <Space wrap><Button aria-label={`局部修改${angleLabel(angle)}图片 ${index + 1}`} disabled={busy || generating || analysisBusy || loadFailed} onClick={() => {
           setEditingImage(image); setEditingGeneration({ ...generation, mode: 'edit', references: [{ file_id: image.file_id!, role: 'design' }], edit_instruction: '' }); setPage('generation')
         }}>局部修改</Button><Button onClick={() => resource && void loadCandidates(resource.id, image.id, angle as Angle, image.file_id!)}>图片历史</Button></Space>}
+        {image.is_view_default ? <Tag>视角默认</Tag> : !readOnly && <Button loading={savingViewDefault === image.id} disabled={dirty || busy || generating || analysisBusy} onClick={() => void setViewDefault(image)}>设为{angleLabel(angle)}默认图</Button>}
         {image.is_primary ? <Tag>主图</Tag> : !readOnly && <Button disabled={dirty || busy || generating} onClick={() => void setPrimary(image)}>设为主图</Button>}
       </div>)}{!images.some(image => image.view_angle === angle && image.file_id) && <p>当前视角暂无图片</p>}</div>,
     }))} />
@@ -486,7 +502,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         } catch { setImageError('采用候选失败，请重试') } finally { setBusy(false) }
       }}>加入视角文件夹</Button>
     </Space></div>)}
-    {dirty && resource && <p>对象设定尚未保存，请先保存再更换主图。</p>}
+    {dirty && resource && <p>对象设定尚未保存，请先保存再调整图片选择。</p>}
     {!readOnly && <div role="group" aria-label="本次生成角度">本次生成角度<Checkbox.Group options={[...angles]} value={selectedAngles} onChange={values => setSelectedAngles(values as Angle[])} /></div>}
     {!selectedAngles.length && <p>未选择角度，默认生成正面。</p>}
     {Object.entries(tasks).map(([angle, task]) => task && <div key={angle} role="status">{angleLabel(angle)} · {task.status === 'queued' ? '排队中' : task.status === 'running' ? '生成中' : task.status === 'submitting' ? '正在提交' : task.status === 'succeeded' ? '生成成功' : '生成失败'}
@@ -529,7 +545,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     onApply={(nextFacts, nextDescription) => { setFacts(nextFacts); setDescription(nextDescription) }} onState={onAnalysisState} />
   const actorFields = readOnly ? <div className="actor-readonly-settings">{settings}<Button onClick={() => setActorReadonlyOpen(true)}>查看完整设定</Button></div> : <ActorFields name={name} onName={setName} facts={facts} onFacts={setFacts} description={description} onDescription={setDescription}
     disabled={busy || generating || analysisBusy || loadFailed} onAnalysis={() => setActorAnalysisOpen(true)} styles={<ProjectVisualStyleAndStyleFields layout="horizontal" disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />} />
-  const actorPictures = <ActorPictures actorId={assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
+  const actorPictures = <ActorPictures savingViewDefault={savingViewDefault} onViewDefault={setViewDefault} actorId={assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
     onPrimary={setPrimary} onEdit={image => { actorAcceptedAngles.current.clear(); setEditingImage(image); setEditingGeneration({ mode: 'edit', references: [{ file_id: image.file_id!, role: 'design' }], edit_instruction: '' }); setShowPreview(true); setPage('generation') }}
     onHistory={image => resource && void loadCandidates(resource.id, image.id, image.view_angle as Angle, image.file_id ?? undefined)}
     feedback={imageError && <Alert type="error" message={imageError} action={resource && <Button onClick={() => void reloadImages(resource.id)}>重试读取图片</Button>} />}
@@ -556,7 +572,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       </> : <>
         <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setEditingGeneration(generation); setEditingAngles(selectedAngles); setPage('generation') }}>生成设置{!assetId && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
         <Button loading={busy} disabled={generating || analysisBusy || loadFailed} onClick={createOnly}>{resource || assetId ? '保存设定' : '仅创建'}</Button>
-        <Button aria-label={generation.mode === 'edit' ? dirty ? '保存并生成修改候选' : '生成修改候选' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'} type="primary" loading={generating} disabled={busy || analysisBusy || loadFailed || !!activeTasks.length} onClick={() => void generate()}>{generation.mode === 'edit' ? dirty ? '保存并生成修改候选' : '生成修改候选' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'}{generation.mode !== 'edit' && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
+        <Button aria-label={generation.mode === 'edit' ? dirty ? '保存并生成修改图片' : '生成修改图片' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'} type="primary" loading={generating} disabled={busy || analysisBusy || loadFailed || !!activeTasks.length} onClick={() => void generate()}>{generation.mode === 'edit' ? dirty ? '保存并生成修改图片' : '生成修改图片' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'}{generation.mode !== 'edit' && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
       </>}</Space>}>
       {(!actorDetail || readOnly) && <p><Tag>{resource?.source_character_id ? '从角色转化 · 只读' : resource ? resource.project_id ? '项目专属' : '共享资产' : projectId ? '项目专属' : '共享资产'}</Tag></p>}
       {resource?.project_id && page !== 'publish' && <Space wrap>
