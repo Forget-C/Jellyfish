@@ -120,6 +120,34 @@ export class FilmService {
         });
     }
     /**
+     * 读取资产图片已有生成参数
+     * 仅返回已有来源快照，类别与图片归属由服务校验。
+     * @returns ApiResponse_Union_ActorImageParametersRead__NoneType__ Successful Response
+     * @throws ApiError
+     */
+    public static getAssetImageParametersApiV1FilmTasksAssetImagesEntityTypeEntityIdImageIdParametersGet({
+        entityType,
+        entityId,
+        imageId,
+    }: {
+        entityType: string,
+        entityId: string,
+        imageId: number,
+    }): CancelablePromise<ApiResponse_Union_ActorImageParametersRead__NoneType__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/film/tasks/asset-images/{entity_type}/{entity_id}/{image_id}/parameters',
+            path: {
+                'entity_type': entityType,
+                'entity_id': entityId,
+                'image_id': imageId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * 查询任务状态与进度
      * 直接返回主表轻量状态。
      * @returns ApiResponse_TaskStatusRead_ Successful Response

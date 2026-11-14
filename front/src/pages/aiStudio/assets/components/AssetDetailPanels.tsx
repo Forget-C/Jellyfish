@@ -1,28 +1,28 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Image, Input, Modal, Tag, Tooltip, Tabs } from 'antd'
 import { AppstoreOutlined, CheckCircleOutlined, EditOutlined, StarOutlined } from '@ant-design/icons'
-import { ASSET_FIELDS, type AssetFacts } from './AssetFactsFields'
+import { ASSET_FIELDS, type AssetFacts, type StructuredAssetType } from './AssetFactsFields'
 import { ResourceImage } from './ResourceImage'
 import { buildFileDownloadUrl } from '../utils'
-import { ActorImageParameters } from './ActorImageParameters'
+import { AssetImageParameters } from './AssetImageParameters'
 import './actorDetail.css'
 
 type Picture = { id: number; file_id?: string | null; view_angle?: string; is_primary?: boolean; is_view_default?: boolean }
 const views = [['FRONT', '正面'], ['LEFT', '侧面'], ['TOP', '俯视'], ['BACK', '背面']] as const
 
-/** 固定高度的演员设定；长内容与检测结果通过显式展开保留完整编辑能力。 */
-export function ActorFields({ name, onName, facts, onFacts, description, onDescription, styles, onAnalysis, disabled }: {
-  name: string; onName: (value: string) => void; facts: AssetFacts; onFacts: (value: AssetFacts) => void
+/** 固定高度的分类资产设定；长内容与检测结果通过显式展开保留完整编辑能力。 */
+export function AssetFields({ type, name, onName, facts, onFacts, description, onDescription, styles, onAnalysis, disabled }: {
+  type: StructuredAssetType; name: string; onName: (value: string) => void; facts: AssetFacts; onFacts: (value: AssetFacts) => void
   description: string; onDescription: (value: string) => void; styles: ReactNode; onAnalysis: () => void; disabled: boolean
 }) {
   const [expanded, setExpanded] = useState<string>()
-  const field = ASSET_FIELDS.actor.find(item => item.key === expanded)
+  const field = ASSET_FIELDS[type].find(item => item.key === expanded)
   const label = field?.label ?? '补充信息'
   return <div className="actor-fields">
     <label>名称<Input aria-label="名称" value={name} onChange={event => onName(event.target.value)} disabled={disabled} /></label>
-    <div className="actor-facts-grid">{[...ASSET_FIELDS.actor].sort((a, b) => a.maxLength - b.maxLength).map(item => <label key={item.key} className={item.maxLength > 200 ? 'actor-long-field' : undefined}>
+    <div className="actor-facts-grid">{[...ASSET_FIELDS[type]].sort((a, b) => a.maxLength - b.maxLength).map(item => <label key={item.key} className={(type === 'actor' ? item.maxLength > 200 : item.fullWidth || ['scene_type', 'costume_type'].includes(item.key)) ? 'actor-long-field' : undefined}>
       <span>{item.label}<Button type="text" size="small" aria-label={`展开${item.label}`} icon={<EditOutlined />} disabled={disabled} onClick={() => setExpanded(item.key)} /></span>
-      {item.maxLength > 200 ? <Input.TextArea aria-label={item.label} rows={2} maxLength={item.maxLength} value={facts[item.key] ?? ''} disabled={disabled} onChange={event => onFacts({ ...facts, [item.key]: event.target.value })} /> : <Input aria-label={item.label} maxLength={item.maxLength} value={facts[item.key] ?? ''} disabled={disabled} onChange={event => onFacts({ ...facts, [item.key]: event.target.value })} />}
+      {item.maxLength > 200 ? <Input.TextArea aria-label={item.label} rows={type === 'actor' || item.fullWidth ? 2 : 1} maxLength={item.maxLength} value={facts[item.key] ?? ''} disabled={disabled} onChange={event => onFacts({ ...facts, [item.key]: event.target.value })} /> : <Input aria-label={item.label} maxLength={item.maxLength} value={facts[item.key] ?? ''} disabled={disabled} onChange={event => onFacts({ ...facts, [item.key]: event.target.value })} />}
     </label>)}</div>
     <label><span>补充信息<Button type="text" size="small" aria-label="展开补充信息" icon={<EditOutlined />} disabled={disabled} onClick={() => setExpanded('supplement')} /></span>
       <Input.TextArea aria-label="补充信息" rows={2} maxLength={8000} value={description} disabled={disabled} onChange={event => onDescription(event.target.value)} /></label>
@@ -36,8 +36,8 @@ export function ActorFields({ name, onName, facts, onFacts, description, onDescr
 }
 
 /** 默认主图、手动预览与主图身份分离；全部图片操作集中在多视角集合中。 */
-export function ActorPictures({ actorId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, candidates, feedback, status, onGenerate }: {
-  actorId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
+export function AssetPictures({ type, assetId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, candidates, feedback, status, onGenerate }: {
+  type: StructuredAssetType; assetId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
   savingViewDefault?: number
   onViewDefault: (image: Picture) => Promise<void>
   onPrimary: (image: Picture) => Promise<boolean>; onEdit: (image: Picture) => void
@@ -78,7 +78,7 @@ export function ActorPictures({ actorId, images, disabled, primaryDisabled, read
     </button>)}</div>
       {ordered.length > 0 && <Button className="actor-view-all" type="text" icon={<AppstoreOutlined aria-hidden="true" />} onClick={() => setGallery(selected?.view_angle ?? 'FRONT')}>查看全部（{ordered.length}）</Button>}
     </div>
-    {selected && <ActorImageParameters key={`${actorId}:${selected.id}:${selected.file_id}`} actorId={actorId} imageId={selected.id} />}
+    {selected && <AssetImageParameters type={type} key={`${assetId}:${selected.id}:${selected.file_id}`} assetId={assetId} imageId={selected.id} />}
     <div className="actor-task-summary">{views.map(([angle, label]) => <div key={angle} role="status">{status(angle) && <><span>{label}：</span>{status(angle)}</>}</div>)}</div>
     {!readOnly && <div className="actor-generate-action"><Button type="primary" disabled={disabled} onClick={onGenerate}>生成图片</Button></div>}
     <Modal title="图片集合" open={!!gallery} width={900} onCancel={() => setGallery(undefined)} footer={<Button aria-label="关闭" onClick={() => setGallery(undefined)}>关闭</Button>}>
@@ -88,4 +88,10 @@ export function ActorPictures({ actorId, images, disabled, primaryDisabled, read
       </> }))} />
     </Modal>
   </div>
+}
+
+/** 四类资产共用布局；小屏与矮屏允许在独立页签中滚动。 */
+export function AssetDetailLayout({ compact, fields, pictures }: { compact: boolean; fields: ReactNode; pictures: ReactNode }) {
+  return compact ? <Tabs className="actor-detail-tabs" items={[{ key: 'settings', label: '设定', children: fields }, { key: 'images', label: '图片', children: pictures }]} />
+    : <div className="actor-detail-layout"><section>{fields}</section><section>{pictures}</section></div>
 }

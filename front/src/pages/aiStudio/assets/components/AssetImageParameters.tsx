@@ -5,7 +5,7 @@ import { FilmService, type ActorImageParametersRead } from '../../../../services
 const labels: Record<string, string> = { framing_instruction: '构图', background_instruction: '背景', lighting_instruction: '灯光', visible_detail_instruction: '细节强调', negative_prompt: '排除内容', additional_instruction: '附加要求', edit_instruction: '修改要求', preserve_instruction: '保持内容' }
 
 /** 只展示当前图片对应的已保存快照；切图卸载后丢弃旧响应，不拿当前配置补全历史。 */
-export function ActorImageParameters({ actorId, imageId }: { actorId: string; imageId: number }) {
+export function AssetImageParameters({ type, assetId, imageId }: { type: string; assetId: string; imageId: number }) {
   const [data, setData] = useState<ActorImageParametersRead | null>()
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
@@ -13,10 +13,10 @@ export function ActorImageParameters({ actorId, imageId }: { actorId: string; im
   useEffect(() => {
     let active = true
     setData(undefined); setFailed(false)
-    const request = FilmService.getActorImageParametersApiV1FilmTasksActorImagesActorIdImageIdParametersGet({ actorId, imageId })
+    const request = FilmService.getAssetImageParametersApiV1FilmTasksAssetImagesEntityTypeEntityIdImageIdParametersGet({ entityType: type, entityId: assetId, imageId })
     void request.then(response => { if (active) setData(response.data ?? null) }).catch(() => { if (active) setFailed(true) })
     return () => { active = false; request.cancel() }
-  }, [actorId, imageId, retry])
+  }, [type, assetId, imageId, retry])
   if (failed) return <Alert type="error" message="读取本图生成记录失败" action={<Button onClick={() => setRetry(value => value + 1)}>重试记录</Button>} />
   if (data === undefined) return <span role="status">正在读取生成记录…</span>
   if (data === null) return null

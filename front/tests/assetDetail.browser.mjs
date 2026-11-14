@@ -70,11 +70,13 @@ try {
     if (path.endsWith('/model-settings')) return respond({default_image_model_id:'default-image'})
     if (path.endsWith('/llm/models')) return list([{id:'default-image',name:'默认图片模型',category:'image'}, {id:'alternate-image',name:'备选图片模型',category:'image'}])
     if (path.endsWith('/llm/models/default-image')) return respond({id:'default-image',name:'默认图片模型'})
+    if (/generation-prompts\/assets\/(scene|prop|costume)\/a1\/slots\/\d+\/render$/.test(path)) return respond({render_id:'typed',execution_prompt:'分类生成提示词',variables_snapshot:{},recommended_media:{references:[]}})
+    if (/generation-tasks\/assets\/(scene|prop|costume)\/a1\/slots\/\d+\/tasks$/.test(path)) { submittedModel=request.postDataJSON().model_id; return fail() }
     if (path.endsWith('/generation-prompts/assets/draft/render')) return respond({render_id:'draft', execution_prompt:'演员草稿预览',variables_snapshot:{},recommended_media:{references:[]}})
     if (/generation-tasks\/actors\/a1\/slots\/\d+\/tasks$/.test(path)) { submittedModel=request.postDataJSON().model_id; submittedReferences=request.postDataJSON().asset_references; const slot=slots.actor.find(row=>String(row.id)===path.split('/').at(-2)); submittedAngles.push(slot.view_angle); if(completeEdit) { editTarget=slot; assert.equal(request.postDataJSON().operation_input.save_as_candidate,false); slot.file_id='history'; return respond({task_id:'edited'}) }; return partialGeneration && slot.view_angle==='FRONT' ? respond({task_id:'partial-front'}) : fail() }
     if (path.endsWith('/film/tasks/partial-front/status')) return respond({task_id:'partial-front',status:'succeeded'})
     if (/generation-prompts\/assets\/actor\/a1\/slots\/\d+\/render$/.test(path)) return respond({render_id:'final',execution_prompt:'演员生成提示词',variables_snapshot:{},recommended_media:{references:[]}})
-    if (path.includes('/tasks/actor-images/')) {
+    if ((path.includes('/tasks/actor-images/') || path.includes('/tasks/asset-images/'))) {
       if(parameterMode==='failure') return fail()
       if(parameterMode==='none') return respond(null)
       const id=Number(path.split('/').at(-2))
@@ -119,6 +121,28 @@ try {
     if (path.endsWith('/film/tasks/outputs')) return respond({ items: [{ task_id: 'old', ordinal: 1, file_id: 'history' }], next_cursor: null })
     return list([])
   })
+  for (const [type, plural, label] of types.slice(1)) {
+    await page.goto(origin + `/assets/${plural}/a1/edit`)
+    await page.getByRole('textbox', { name: '名称', exact: true }).waitFor()
+    await page.locator('.actor-feature-image').waitFor()
+    await page.getByRole('button', { name: '生成图片', exact: true }).click()
+    const modal = page.getByRole('dialog', { name: `生成${label}图片`, exact: true })
+    await modal.waitFor()
+    await modal.getByRole('combobox', { name: '图片模型' }).waitFor()
+    await modal.getByRole('textbox', { name: '本次附加要求', exact: true }).fill('仅本次生成')
+    await modal.getByRole('combobox', { name: '图片模型' }).press('ArrowDown')
+    await page.getByText('备选图片模型', { exact: true }).click()
+    await modal.getByRole('button', { name: '取消', exact: true }).click()
+    await page.getByRole('button', { name: '生成图片', exact: true }).click()
+    assert.equal(await modal.getByRole('textbox', { name: '本次附加要求', exact: true }).inputValue(), '仅本次生成')
+    await modal.getByRole('button', { name: '生成', exact: true }).click()
+    await modal.getByRole('alert').filter({hasText:'生成提交失败'}).first().waitFor()
+    assert.equal(submittedModel, 'alternate-image')
+    assert.equal(assets[type].additional_instruction, undefined)
+    await modal.getByRole('button', { name: '取消', exact: true }).click()
+    slots[type] = slots[type].filter(image => image.file_id)
+
+  }
   await page.goto(origin + '/assets/actors/a1/edit')
   const name = page.getByRole('textbox', { name: '名称', exact: true })
   await name.waitFor()
@@ -193,7 +217,7 @@ try {
   await name.and(page.locator(':enabled')).waitFor()
   await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
   await page.getByText('模型：历史模型 2',{exact:true}).waitFor()
-  await Promise.all([page.waitForRequest(request=>request.url().endsWith('/actor-images/a1/1/parameters')), page.getByRole('button',{name:'预览正面图片 1',exact:true}).click()])
+  await Promise.all([page.waitForRequest(request=>request.url().endsWith('/asset-images/actor/a1/1/parameters')), page.getByRole('button',{name:'预览正面图片 1',exact:true}).click()])
   await page.getByRole('button',{name:'预览正面图片 2',exact:true}).click()
   await page.getByText('模型：历史模型 2',{exact:true}).waitFor()
   await page.waitForTimeout(300)
@@ -272,13 +296,13 @@ try {
         titleSize: getComputedStyle(document.querySelector('.resource-editor-page-heading .app-page-title')).fontSize,
       }))
       assert.equal(layout.overflow, false, type + ' horizontal overflow')
-      if(type==='actor' && width>=1200 && height>=740) assert.ok(await dialog.locator('.resource-editor-body').evaluate(node=>node.scrollHeight<=node.clientHeight+1),'actor desktop fits vertically')
+      if(width>=1200 && height>=740) assert.ok(await dialog.locator('.resource-editor-body').evaluate(node=>node.scrollHeight<=node.clientHeight+1),`${type} ${width}x${height} desktop fits vertically` )
       assert.equal(await page.locator('.resource-editor-drawer').count(),0,'详情在页面正文，无抽屉及遮罩')
       assert.equal(layout.titleSize, '16px')
-      if (width < 768 || type === 'actor' && (width < 1200 || height < 740)) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
-      if(type==='actor') {
+      if (width < 1200 || height < 740) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
+      {
         const viewAll = dialog.getByRole('button',{name:/^查看全部/})
-        assert.equal(await viewAll.textContent(),`查看全部（${slots.actor.filter(image=>image.file_id).length}）`)
+        assert.equal(await viewAll.textContent(),`查看全部（${slots[type].filter(image=>image.file_id).length}）`)
         const row = dialog.locator('.actor-thumbnail-row')
         await dialog.locator('.actor-feature-image img').evaluate(image=>image.decode())
         const before = await viewAll.boundingBox()
@@ -288,11 +312,12 @@ try {
         await viewAll.click()
         await page.getByRole('dialog',{name:'图片集合',exact:true}).waitFor()
         await page.getByRole('dialog',{name:'图片集合',exact:true}).getByRole('button',{name:'关闭',exact:true}).click()
+        await page.getByRole('dialog',{name:'图片集合',exact:true}).waitFor({state:'hidden'})
       }
       if(type==='actor') await dialog.getByRole('button',{name:/^预览正面图片/}).first().click()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).waitFor()
       await dialog.getByRole('img', { name: '正面图片 1', exact: true }).evaluate(image => image.decode())
-      await page.screenshot({ path: output + '/' + type + '-' + width + '.png' })
+      await page.screenshot({ path: output + '/' + type + '-' + width + '-' + height + '.png' })
       await dialog.getByRole('button', { name: '返回', exact: true }).scrollIntoViewIfNeeded()
       assert.equal(await dialog.getByRole('button', { name: '返回', exact: true }).isVisible(), true)
     }

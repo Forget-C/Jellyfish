@@ -122,18 +122,25 @@ class TaskQueries:
         return TaskPageRead(items=items, next_cursor=next_cursor)
 
     async def actor_image_parameters(self, actor_id: str, image_id: int) -> ActorImageParametersRead | None:
-        """只读关联当前文件与同演员来源任务，不以当前模型或槽位参数补全历史。"""
-        from app.models.studio import ActorImage  # pylint: disable=import-outside-toplevel
+        """兼容演员专用入口。"""
+        return await self.asset_image_parameters("actor", actor_id, image_id)
 
-        image = await self.db.get(ActorImage, image_id)
-        if image is None or image.actor_id != actor_id:
-            raise HTTPException(status_code=404, detail="Actor image not found")
+    async def asset_image_parameters(self, entity_type: str, entity_id: str, image_id: int) -> ActorImageParametersRead | None:
+        """只读匹配同类别、同对象的当前文件来源，不补齐历史参数。"""
+        from app.services.studio.entity_specs import entity_spec  # pylint: disable=import-outside-toplevel
+
+        if entity_type not in {"actor", "scene", "prop", "costume"}:
+            raise HTTPException(status_code=422, detail="Unsupported asset type")
+        spec = entity_spec(entity_type)
+        image = await self.db.get(spec.image_model, image_id)
+        if image is None or getattr(image, spec.id_field) != entity_id:
+            raise HTTPException(status_code=404, detail="Asset image not found")
         if not image.file_id:
             return None
         task = await self.db.scalar(select(Task).join(TaskOutput, TaskOutput.task_id == Task.id).where(
             TaskOutput.file_id == image.file_id, Task.kind == "image_generation",
-            Task.target_type == "actor_image_slot",
-            Task.input_snapshot["target_parent_id"].as_string() == actor_id,
+            Task.target_type == f"{entity_type}_image_slot",
+            Task.input_snapshot["target_parent_id"].as_string() == entity_id,
         ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
         if task is None:
             return None

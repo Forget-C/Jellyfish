@@ -57,6 +57,14 @@ async def get_actor_image_parameters(
     return success_response(await TaskQueries(db).actor_image_parameters(actor_id, image_id))
 
 
+@router.get("/tasks/asset-images/{entity_type}/{entity_id}/{image_id}/parameters", response_model=ApiResponse[ActorImageParametersRead | None], summary="读取资产图片已有生成参数")
+async def get_asset_image_parameters(
+    entity_type: str, entity_id: str, image_id: int, db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ActorImageParametersRead | None]:
+    """仅返回已有来源快照，类别与图片归属由服务校验。"""
+    return success_response(await TaskQueries(db).asset_image_parameters(entity_type, entity_id, image_id))
+
+
 @router.get("/tasks/{task_id}/status", response_model=ApiResponse[TaskStatusRead], summary="查询任务状态与进度")
 async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> ApiResponse[TaskStatusRead]:
     """直接返回主表轻量状态。"""
