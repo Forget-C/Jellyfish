@@ -13,7 +13,7 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })
   page.setDefaultTimeout(10000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   for(const [kind,tab,label] of [['scene','scenes','场所'],['prop','props','道具'],['costume','costumes','服装']]) {
@@ -143,6 +143,19 @@ try {
     await page.getByRole('button',{name:/新建/}).click()
     const create=page.getByRole('dialog',{name:kind==='scene'?'新建场景':`新建${label}`,exact:true})
     await create.waitFor()
+    for (const [width,height] of [[1440,900],[1023,768],[375,768]]) {
+      await page.setViewportSize({width,height})
+      await page.waitForFunction(() => {
+        const panel=document.querySelector('.resource-editor-drawer .ant-drawer-content')?.getBoundingClientRect()
+        const toolbar=document.querySelector('.project-content-toolbar')?.getBoundingClientRect()
+        return panel && toolbar && Math.abs(panel.y-toolbar.y)<1 && Math.abs(panel.width-toolbar.width)<1
+      })
+      const rect=await create.boundingBox()
+      const toolbar=await page.locator('.project-content-toolbar').boundingBox()
+      assert.ok(Math.abs(rect.x-toolbar.x)<1)
+      assert.ok(Math.abs(rect.y+rect.height-height)<1)
+    }
+    await page.setViewportSize({width:1440,height:900})
     await create.getByRole('button',{name:/^取\s*消$/}).click()
     await create.waitFor({state:'hidden'})
     await page.unroute('**/api/**')

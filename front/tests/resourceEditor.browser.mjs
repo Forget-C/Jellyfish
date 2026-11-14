@@ -13,7 +13,7 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', reducedMotion: 'reduce' })
   page.setDefaultTimeout(7000)
   const errors = []
   page.on('pageerror', error => { errors.push(error.message); console.error(error.message) })
@@ -85,8 +85,9 @@ try {
     })
     assert.equal(layout.overflow,false)
     assert.equal(layout.width, width - (width >= 1024 ? 216 : 0))
-    assert.equal(layout.y,0)
-    assert.equal(layout.height,height)
+    const region = await page.locator('.management-content').boundingBox()
+    assert.equal(layout.y,region.y)
+    assert.equal(layout.height,region.height)
     assert.ok(layout.contentWidth <= 880)
     assert.equal(layout.aligned,true)
     const surface = await drawer.evaluate(node => {
@@ -99,7 +100,7 @@ try {
     assert.equal(surface.blur,'none')
     assert.equal(surface.opacity,'1')
     assert.equal(surface.size,`${width}px ${height}px`)
-    assert.equal(surface.position,'100% 0%')
+    assert.equal(surface.position,`100% -${layout.y}px`)
     if (width < 1024) assert.equal(surface.shadow,'none')
     else assert.notEqual(surface.shadow,'none')
     const action = await drawer.getByRole('button',{name:'仅创建',exact:true}).boundingBox()
@@ -118,8 +119,20 @@ try {
   await scrollBody.evaluate(node => { node.scrollTop = 0 })
   await drawer.getByText('详细设定 · 0 项已填写', {exact:true}).click()
   await page.waitForFunction(() => !document.querySelector('.resource-editor-scrolled'))
-  await drawer.getByText('参考图片 · 未选择', { exact: true }).click()
   await drawer.getByRole('textbox', { name: '名称', exact: true }).fill('新建演员草稿')
+  await drawer.getByRole('button', { name: /^创建并生成/ }).focus()
+  let navigationReached = false
+  for (let index = 0; index < 20; index++) {
+    await page.keyboard.press('Tab')
+    if (await page.locator('.app-topbar :focus').count()) { navigationReached = true; break }
+  }
+  assert.ok(navigationReached, 'Tab can leave the panel and reach global navigation')
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitemradio', { name: '雾蓝微渐变' }).click()
+  await drawer.waitFor()
+  assert.equal(await drawer.getAttribute('aria-modal'), 'false')
+  assert.equal(await drawer.getByRole('textbox', { name: '名称', exact: true }).inputValue(), '新建演员草稿')
+  await drawer.getByText('参考图片 · 未选择' , { exact: true }).click()
   await page.getByRole('link',{name:'模型管理',exact:true}).click()
   const routeGuard=page.getByRole('dialog',{name:'离开资产详情',exact:true})
   await routeGuard.getByRole('button',{name:'继续编辑',exact:true}).click()

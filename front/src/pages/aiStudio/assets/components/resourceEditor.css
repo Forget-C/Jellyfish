@@ -1,5 +1,13 @@
-.resource-editor-drawer.ant-drawer { left: 216px; }
-.resource-editor-drawer .ant-drawer-mask { background: rgb(34 54 74 / 14%); }
+.resource-editor-drawer.ant-drawer { position: fixed; z-index: 100; pointer-events: auto; color: #263244; font-size: 14px; line-height: 1.5715; }
+.resource-editor-drawer .ant-drawer-content-wrapper { height: 100%; width: 100%; }
+.resource-editor-drawer .ant-drawer-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.resource-editor-drawer .ant-drawer-header, .resource-editor-drawer .ant-drawer-footer { flex: none; }
+.resource-editor-drawer .ant-drawer-header-title { display: flex; align-items: center; }
+.resource-editor-drawer .ant-drawer-title { flex: 1; font-weight: 600; }
+.resource-editor-drawer .ant-drawer-body { flex: 1; min-height: 0; overflow-y: auto; }
+.resource-editor-drawer .ant-drawer-content-wrapper { animation: resource-editor-enter 180ms ease-out; }
+@keyframes resource-editor-enter { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .resource-editor-drawer .ant-drawer-content-wrapper { animation: none; } }
 .resource-editor-drawer .ant-drawer-body { background: transparent; }
 .resource-editor-desktop { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.2fr); gap: 24px; }
 .resource-editor-fields { display: grid; gap: 16px; }
@@ -10,7 +18,6 @@
 .resource-reference-tile.ant-btn { display: flex; flex-direction: column; align-items: center; height: auto; white-space: normal; padding: 8px; }
 .resource-reference-tile img { width: 100%; max-height: 180px; object-fit: contain; }
 .resource-reference-tile[aria-pressed="true"] { outline: 2px solid #567a9c; }
-@media (max-width: 1023px) { .resource-editor-drawer.ant-drawer { left: 0; } }
 @media (max-width: 767px) { .resource-editor-desktop { display: none; } .resource-editor-mobile { display: block; } }
 .resource-editor-drawer .ant-drawer-title { font-size: 16px; overflow-wrap: anywhere; }
 .resource-editor-drawer .ant-drawer-footer { flex-shrink: 0; }
@@ -65,6 +72,4 @@
 .resource-editor-drawer .ant-drawer-header-title { flex-direction: row-reverse; }
 .resource-editor-drawer .ant-drawer-close { margin-inline-end: 0; margin-inline-start: 12px; }
 
-@media (max-width: 1023px) {
-  .resource-editor-drawer .ant-drawer-content-wrapper { box-shadow: none; }
-}
+.resource-editor-drawer.resource-editor-no-side .ant-drawer-content-wrapper { box-shadow: none; }
