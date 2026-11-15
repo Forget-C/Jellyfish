@@ -2,26 +2,17 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from langchain_core.language_models.chat_models import BaseChatModel
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chains.agents import CharacterPortraitAnalysisAgent, CostumeInfoAnalysisAgent, ConsistencyCheckerAgent, PropInfoAnalysisAgent, SceneInfoAnalysisAgent
-from app.schemas.skills.script_processing import ScriptConsistencyCheckResult
-from app.dependencies import get_db, get_llm
+from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
-from app.core.contracts.asset_analysis import CharacterPortraitAnalysisResult
-from app.core.contracts.asset_analysis import CostumeInfoAnalysisResult
-from app.core.contracts.asset_analysis import PropInfoAnalysisResult
-from app.core.contracts.asset_analysis import SceneInfoAnalysisResult
 from app.services.script_processing_tasks import create_consistency_task, create_costume_info_task, create_character_portrait_task, create_prop_info_task, create_scene_info_task, create_script_optimization_task, create_script_simplification_task, pick_consistency_relation_entity_id, pick_analysis_relation_entity_id
 from app.api.v1.routes.film.common import AsyncTaskCreateRead
 
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/script-processing", tags=["script-processing"])
 
@@ -66,39 +57,6 @@ async def check_consistency_async(
             relation_entity_id=task_info.relation_entity_id,
         )
     )
-
-
-@router.post(
-    "/check-consistency",
-    response_model=ApiResponse[ScriptConsistencyCheckResult],
-    summary="检查角色混淆一致性（基于原文）",
-    description="检测同一角色在不同段落/镜头被赋予不同身份/行为主体导致混淆，并给出修改建议。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 check-consistency-async。"
-)
-async def check_consistency(
-    request: ScriptConsistencyCheckRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[ScriptConsistencyCheckResult]:
-    """
-    检查实体定义与分镜内容的一致性。
-    
-    请求体：
-    - script_text: 完整剧本文本
-    
-    返回：ScriptConsistencyCheckResult
-    - issues: 角色混淆问题列表（含 description/suggestion/affected_lines）
-    - has_issues: 是否发现问题
-    - summary: 总结（可选）
-    """
-    try:
-        agent = ConsistencyCheckerAgent(llm)
-        result = agent.extract(script_text=request.script_text)
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Consistency checking failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check consistency: {str(e)}"
-        )
 
 
 # ============================================================================
@@ -151,31 +109,6 @@ async def analyze_character_portrait_async(
     )
 
 
-@router.post(
-    "/analyze-character-portrait",
-    response_model=ApiResponse[CharacterPortraitAnalysisResult],
-    summary="分析人物画像缺失信息",
-    description="根据原文人物上下文与人物描述，判断缺少哪些关键信息，并给出优化后的人物画像描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-character-portrait-async。",
-)
-async def analyze_character_portrait(
-    request: CharacterPortraitAnalysisRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[CharacterPortraitAnalysisResult]:
-    try:
-        agent = CharacterPortraitAnalysisAgent(llm)
-        result = agent.analyze_character_description(
-            character_context=request.character_context,
-            character_description=request.character_description,
-        )
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Character portrait analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze character portrait: {str(e)}",
-        )
-
-
 # ============================================================================
 # 5c. PropInfoAnalysisAgent - 道具信息缺失分析
 # ============================================================================
@@ -224,31 +157,6 @@ async def analyze_prop_info_async(
             relation_entity_id=task_info.relation_entity_id,
         )
     )
-
-
-@router.post(
-    "/analyze-prop-info",
-    response_model=ApiResponse[PropInfoAnalysisResult],
-    summary="分析道具信息缺失项",
-    description="根据原文道具上下文与道具描述，判断缺少哪些关键信息，并给出优化后的可生成道具描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-prop-info-async。",
-)
-async def analyze_prop_info(
-    request: PropInfoAnalysisRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[PropInfoAnalysisResult]:
-    try:
-        agent = PropInfoAnalysisAgent(llm)
-        result = agent.analyze_prop_description(
-            prop_context=request.prop_context,
-            prop_description=request.prop_description,
-        )
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Prop info analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze prop info: {str(e)}",
-        )
 
 
 # ============================================================================
@@ -301,31 +209,6 @@ async def analyze_scene_info_async(
     )
 
 
-@router.post(
-    "/analyze-scene-info",
-    response_model=ApiResponse[SceneInfoAnalysisResult],
-    summary="分析场景信息缺失项",
-    description="根据原文场景上下文与场景描述，判断缺少哪些关键信息，并给出优化后的可生成场景描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-scene-info-async。",
-)
-async def analyze_scene_info(
-    request: SceneInfoAnalysisRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[SceneInfoAnalysisResult]:
-    try:
-        agent = SceneInfoAnalysisAgent(llm)
-        result = agent.analyze_scene_description(
-            scene_context=request.scene_context,
-            scene_description=request.scene_description,
-        )
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Scene info analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze scene info: {str(e)}",
-        )
-
-
 # ============================================================================
 # 5e. CostumeInfoAnalysisAgent - 服装信息缺失分析
 # ============================================================================
@@ -374,31 +257,6 @@ async def analyze_costume_info_async(
             relation_entity_id=task_info.relation_entity_id,
         )
     )
-
-
-@router.post(
-    "/analyze-costume-info",
-    response_model=ApiResponse[CostumeInfoAnalysisResult],
-    summary="分析服装信息缺失项",
-    description="根据原文服装上下文与服装描述，判断缺少哪些关键信息，并给出优化后的可生成服装描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-costume-info-async。",
-)
-async def analyze_costume_info(
-    request: CostumeInfoAnalysisRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[CostumeInfoAnalysisResult]:
-    try:
-        agent = CostumeInfoAnalysisAgent(llm)
-        result = agent.analyze_costume_description(
-            costume_context=request.costume_context,
-            costume_description=request.costume_description,
-        )
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Costume info analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze costume info: {str(e)}",
-        )
 
 
 # ============================================================================

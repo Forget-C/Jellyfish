@@ -53,7 +53,7 @@ async def test_asset_image_saved_parameters_are_read_only_and_match_output(kind,
             assert response.status_code == 200
             if kind == "actor":
                 legacy = await client.get("/api/v1/film/tasks/actor-images/a/1/parameters")
-                assert legacy.json() == response.json()
+                assert legacy.status_code == 404
             assert (await client.get("/api/v1/film/tasks/asset-images/unsupported/a/1/parameters")).status_code == 422
             data = response.json()["data"]
             assert data["model_name"] == "当时的模型"

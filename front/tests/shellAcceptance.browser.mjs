@@ -222,9 +222,8 @@ try {
   }
   for (const mode of ['text', 'image', 'video']) {
     await visit(`/${mode}-lab?mode=${mode}&keep=1`)
-    await page.waitForURL(url => url.pathname === '/lab')
-    assert.equal(new URL(page.url()).searchParams.get('keep'), '1')
-    assert.equal(new URL(page.url()).searchParams.get('mode'), mode)
+    await page.getByText('404', { exact: true }).waitFor()
+    assert.equal(new URL(page.url()).pathname, `/${mode}-lab`)
     interactions.push(`legacy-${mode}`)
   }
   if (!process.env.SHELL_LAB_REGRESSION_ONLY) {

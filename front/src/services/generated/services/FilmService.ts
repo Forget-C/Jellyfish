@@ -95,31 +95,6 @@ export class FilmService {
         });
     }
     /**
-     * 读取演员图片已有生成参数
-     * 缺少来源返回空，不创建或补齐参数。
-     * @returns ApiResponse_Union_ActorImageParametersRead__NoneType__ Successful Response
-     * @throws ApiError
-     */
-    public static getActorImageParametersApiV1FilmTasksActorImagesActorIdImageIdParametersGet({
-        actorId,
-        imageId,
-    }: {
-        actorId: string,
-        imageId: number,
-    }): CancelablePromise<ApiResponse_Union_ActorImageParametersRead__NoneType__> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/film/tasks/actor-images/{actor_id}/{image_id}/parameters',
-            path: {
-                'actor_id': actorId,
-                'image_id': imageId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * 读取资产图片已有生成参数
      * 仅返回已有来源快照，类别与图片归属由服务校验。
      * @returns ApiResponse_Union_ActorImageParametersRead__NoneType__ Successful Response

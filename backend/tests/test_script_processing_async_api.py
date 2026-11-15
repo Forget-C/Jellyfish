@@ -235,3 +235,11 @@ def test_script_optimization_and_simplification_sync_routes_are_not_public(clien
 
     assert optimize_response.status_code == 404
     assert simplify_response.status_code == 404
+
+
+def test_retired_synchronous_analysis_routes_are_absent():
+    retired = {
+        '/api/v1/script-processing/' + name
+        for name in ('check-consistency', 'analyze-character-portrait', 'analyze-prop-info', 'analyze-scene-info', 'analyze-costume-info')
+    }
+    assert retired.isdisjoint(app.openapi()['paths'])

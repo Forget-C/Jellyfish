@@ -121,10 +121,6 @@ class TaskQueries:
             next_cursor = urlsafe_b64encode(json.dumps([last.created_at.isoformat(), last.id]).encode()).decode()
         return TaskPageRead(items=items, next_cursor=next_cursor)
 
-    async def actor_image_parameters(self, actor_id: str, image_id: int) -> ActorImageParametersRead | None:
-        """兼容演员专用入口。"""
-        return await self.asset_image_parameters("actor", actor_id, image_id)
-
     async def asset_image_parameters(self, entity_type: str, entity_id: str, image_id: int) -> ActorImageParametersRead | None:
         """只读匹配同类别、同对象的当前文件来源，不补齐历史参数。"""
         from app.services.studio.entity_specs import entity_spec  # pylint: disable=import-outside-toplevel

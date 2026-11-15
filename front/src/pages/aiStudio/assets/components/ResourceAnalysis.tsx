@@ -1,6 +1,7 @@
+import type { AssetFieldSuggestion } from './assetAnalysisResult'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Card, Space, Tag } from 'antd'
-import { FilmService, ScriptProcessingService, type AssetFieldSuggestion } from '../../../../services/generated'
+import { FilmService, ScriptProcessingService } from '../../../../services/generated'
 import { useCancelableRelationTask } from '../../project/ProjectWorkbench/relationTasks'
 import { handleTaskResultSafely } from '../../components/taskResultHelpers'
 import { ASSET_FIELDS, previewAssetDescription, type AssetFacts, type AssetFieldName, type StructuredAssetType } from './AssetFactsFields'

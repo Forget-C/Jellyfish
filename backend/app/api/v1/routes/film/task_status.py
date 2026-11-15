@@ -49,14 +49,6 @@ async def list_task_outputs(
     ))
 
 
-@router.get("/tasks/actor-images/{actor_id}/{image_id}/parameters", response_model=ApiResponse[ActorImageParametersRead | None], summary="读取演员图片已有生成参数")
-async def get_actor_image_parameters(
-    actor_id: str, image_id: int, db: AsyncSession = Depends(get_db),
-) -> ApiResponse[ActorImageParametersRead | None]:
-    """缺少来源返回空，不创建或补齐参数。"""
-    return success_response(await TaskQueries(db).actor_image_parameters(actor_id, image_id))
-
-
 @router.get("/tasks/asset-images/{entity_type}/{entity_id}/{image_id}/parameters", response_model=ApiResponse[ActorImageParametersRead | None], summary="读取资产图片已有生成参数")
 async def get_asset_image_parameters(
     entity_type: str, entity_id: str, image_id: int, db: AsyncSession = Depends(get_db),

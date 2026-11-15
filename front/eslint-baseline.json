@@ -1052,13 +1052,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/SequenceWorkspacePage.tsx",
-      "rule": "no-extra-semi",
-      "severity": 2,
-      "fingerprint": "2cf6d8bfed79195f677521f6ecb44df4d167e7c7050d25e56dddd229ef69239e",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/ShootCandidates.tsx",
       "rule": "eqeqeq",
       "severity": 2,

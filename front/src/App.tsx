@@ -30,14 +30,6 @@ import { GenerationCanvasRoute } from './pages/aiStudio/generationCanvas/Generat
 import { generationCanvasLocation } from './pages/aiStudio/generationCanvas/navigation'
 import './App.css'
 
-/** 兼容旧实验室地址，并保留原 URL 的会话定位参数。 */
-function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
-  const location = useLocation()
-  const params = new URLSearchParams(location.search)
-  if (!params.get('session')) params.set('mode', mode)
-  return <Navigate to={`/lab?${params.toString()}`} replace />
-}
-
 /** 旧画布与章节抽屉链接在初始化项目页之前重定向。 */
 function ProjectEntry() {
   const location = useLocation()
@@ -84,9 +76,6 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="models" element={<ModelManagement />} />
           </Route>
           <Route path="lab" element={<ExperimentLabPage />} />
-          <Route path="text-lab" element={<LegacyLabRedirect mode="text" />} />
-          <Route path="image-lab" element={<LegacyLabRedirect mode="image" />} />
-          <Route path="video-lab" element={<LegacyLabRedirect mode="video" />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

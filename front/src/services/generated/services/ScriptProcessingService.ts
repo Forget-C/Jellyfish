@@ -3,11 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_AsyncTaskCreateRead_ } from '../models/ApiResponse_AsyncTaskCreateRead_';
-import type { ApiResponse_CharacterPortraitAnalysisResult_ } from '../models/ApiResponse_CharacterPortraitAnalysisResult_';
-import type { ApiResponse_CostumeInfoAnalysisResult_ } from '../models/ApiResponse_CostumeInfoAnalysisResult_';
-import type { ApiResponse_PropInfoAnalysisResult_ } from '../models/ApiResponse_PropInfoAnalysisResult_';
-import type { ApiResponse_SceneInfoAnalysisResult_ } from '../models/ApiResponse_SceneInfoAnalysisResult_';
-import type { ApiResponse_ScriptConsistencyCheckResult_ } from '../models/ApiResponse_ScriptConsistencyCheckResult_';
 import type { CharacterPortraitAnalysisRequest } from '../models/CharacterPortraitAnalysisRequest';
 import type { CostumeInfoAnalysisRequest } from '../models/CostumeInfoAnalysisRequest';
 import type { PropInfoAnalysisRequest } from '../models/PropInfoAnalysisRequest';
@@ -41,27 +36,6 @@ export class ScriptProcessingService {
         });
     }
     /**
-     * 检查角色混淆一致性（基于原文）
-     * 检测同一角色在不同段落/镜头被赋予不同身份/行为主体导致混淆，并给出修改建议。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 check-consistency-async。
-     * @returns ApiResponse_ScriptConsistencyCheckResult_ Successful Response
-     * @throws ApiError
-     */
-    public static checkConsistencyApiV1ScriptProcessingCheckConsistencyPost({
-        requestBody,
-    }: {
-        requestBody: ScriptConsistencyCheckRequest,
-    }): CancelablePromise<ApiResponse_ScriptConsistencyCheckResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/check-consistency',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * 异步分析人物画像缺失信息
      * 创建人物画像分析任务并立即返回 task_id；前端可通过任务状态接口轮询。
      * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
@@ -75,27 +49,6 @@ export class ScriptProcessingService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/script-processing/analyze-character-portrait-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 分析人物画像缺失信息
-     * 根据原文人物上下文与人物描述，判断缺少哪些关键信息，并给出优化后的人物画像描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-character-portrait-async。
-     * @returns ApiResponse_CharacterPortraitAnalysisResult_ Successful Response
-     * @throws ApiError
-     */
-    public static analyzeCharacterPortraitApiV1ScriptProcessingAnalyzeCharacterPortraitPost({
-        requestBody,
-    }: {
-        requestBody: CharacterPortraitAnalysisRequest,
-    }): CancelablePromise<ApiResponse_CharacterPortraitAnalysisResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/analyze-character-portrait',
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -125,27 +78,6 @@ export class ScriptProcessingService {
         });
     }
     /**
-     * 分析道具信息缺失项
-     * 根据原文道具上下文与道具描述，判断缺少哪些关键信息，并给出优化后的可生成道具描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-prop-info-async。
-     * @returns ApiResponse_PropInfoAnalysisResult_ Successful Response
-     * @throws ApiError
-     */
-    public static analyzePropInfoApiV1ScriptProcessingAnalyzePropInfoPost({
-        requestBody,
-    }: {
-        requestBody: PropInfoAnalysisRequest,
-    }): CancelablePromise<ApiResponse_PropInfoAnalysisResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/analyze-prop-info',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * 异步分析场景信息缺失项
      * 创建场景信息分析任务并立即返回 task_id；前端可通过任务状态接口轮询。
      * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
@@ -167,27 +99,6 @@ export class ScriptProcessingService {
         });
     }
     /**
-     * 分析场景信息缺失项
-     * 根据原文场景上下文与场景描述，判断缺少哪些关键信息，并给出优化后的可生成场景描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-scene-info-async。
-     * @returns ApiResponse_SceneInfoAnalysisResult_ Successful Response
-     * @throws ApiError
-     */
-    public static analyzeSceneInfoApiV1ScriptProcessingAnalyzeSceneInfoPost({
-        requestBody,
-    }: {
-        requestBody: SceneInfoAnalysisRequest,
-    }): CancelablePromise<ApiResponse_SceneInfoAnalysisResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/analyze-scene-info',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * 异步分析服装信息缺失项
      * 创建服装信息分析任务并立即返回 task_id；前端可通过任务状态接口轮询。
      * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
@@ -201,27 +112,6 @@ export class ScriptProcessingService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/script-processing/analyze-costume-info-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 分析服装信息缺失项
-     * 根据原文服装上下文与服装描述，判断缺少哪些关键信息，并给出优化后的可生成服装描述。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 analyze-costume-info-async。
-     * @returns ApiResponse_CostumeInfoAnalysisResult_ Successful Response
-     * @throws ApiError
-     */
-    public static analyzeCostumeInfoApiV1ScriptProcessingAnalyzeCostumeInfoPost({
-        requestBody,
-    }: {
-        requestBody: CostumeInfoAnalysisRequest,
-    }): CancelablePromise<ApiResponse_CostumeInfoAnalysisResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/analyze-costume-info',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

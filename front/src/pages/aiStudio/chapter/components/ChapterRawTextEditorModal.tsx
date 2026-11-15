@@ -11,7 +11,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { ScriptProcessingService, StudioChaptersService } from '../../../../services/generated'
-import type { ScriptConsistencyCheckResult } from '../../../../services/generated'
+import type { ScriptConsistencyCheckResult } from './scriptConsistencyResult'
 import {
   CONSISTENCY_CHECK_RELATION_TYPE,
   SCRIPT_OPTIMIZATION_RELATION_TYPE,
