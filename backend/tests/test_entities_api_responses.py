@@ -41,6 +41,8 @@ class _FakeEntityDB:
             # 该数据库替身不执行 SQLAlchemy 的 INSERT 默认值。
             if obj.origin is None:
                 obj.origin = "created"
+            if obj.details_editable is None:
+                obj.details_editable = False
             self.actors[obj.id] = obj
         else:
             self.actor_images.append(obj)
