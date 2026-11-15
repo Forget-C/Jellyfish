@@ -1,17 +1,16 @@
+import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 图片实验室模态。
  *
  * 该组件只处理图片生成特有的输入、异步任务和结果呈现；会话选择及页面布局由
  * ExperimentLabPage 统一维护，从而避免图片实验室继续作为独立页面存在。
  */
-import { useRef, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { message } from 'antd'
 import {
-  StudioFilesService,
   StudioGenerationTasksService,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
-  type FileRead,
   type TaskOutputRead,
 } from '../../../../services/generated'
 import { buildFileDownloadUrl } from '../../assets/utils'
@@ -114,8 +113,7 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
  * 首次创建会话后，页面壳回写会话 ID；正式任务消息由历史 Hook 接管。
  */
 export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: ImageExperimentModeProps) {
-  const [files, setFiles] = useState<FileRead[]>([])
-  const [libraryState, setLibraryState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('image')
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
   const {
@@ -129,31 +127,12 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
   const persistedMessages = history.messages.map(toImageLabMessage)
-  const { reads, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh)
-  const messages = persistedMessages.map((item) => {
-    const result = item.taskId ? reads[item.taskId]?.result : undefined
-    if (!result) return item
+  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh, (item, result) => {
     const resultUrls = result.status === 'succeeded' ? extractImageUrls(result.generation_delivery ?? result.result, result.outputs) : []
-    return {
-      ...item, status: result.status, progress: result.progress, error: result.error,
-      resultUrls: resultUrls.length ? resultUrls : item.resultUrls,
-    }
+    return { ...item, resultUrls: resultUrls.length ? resultUrls : item.resultUrls }
   })
-  const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
 
-  const loadLibrary = useCallback(async () => {
-    setLibraryState('loading')
-    try {
-      const response = await StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
-      const images = (response.data?.items ?? []).filter(file => file.type === 'image')
-      // 保留列表读取期间新上传的文件。
-      setFiles(current => [...new Map([...images, ...current].map(file => [file.id, file])).values()])
-      setLibraryState('ready')
-    } catch {
-      setLibraryState('failed')
-    }
-  }, [])
-  useEffect(() => { void loadLibrary() }, [loadLibrary])
+  const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
 
   const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('image', id => {
     setModelId(current => current ?? id)
@@ -218,7 +197,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
           key={item.id}
           footer={isUser ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
           identity={isUser ? '你' : '图片生成'}
-          status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={reads[item.taskId]?.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
+          status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
           tone={isUser ? 'user' : 'assistant'}
         >
             {isUser || item.content !== '图片生成任务已提交，正在等待生成结果。' ? item.content : null}
@@ -240,7 +219,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         files={files}
         libraryState={libraryState}
         onRetryLibrary={() => void loadLibrary()}
-        onUploaded={file => setFiles(current => [file, ...current.filter(item => item.id !== file.id)])}
+        onUploaded={onUploaded}
         disabled={disabled}
       />}
     >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片；Shift + Enter 换行" label="图片提示词" disabled={disabled} submitOnEnter onSubmit={() => void handleSubmit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>

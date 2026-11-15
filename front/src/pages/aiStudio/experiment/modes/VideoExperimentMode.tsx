@@ -1,17 +1,16 @@
+import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 视频实验室模态组件。
  *
  * 页面壳负责会话选择和布局；本组件只保留视频特有的帧输入、异步任务轮询和结果展示。
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Select, Tag, message } from 'antd'
 import {
   LlmService,
-  StudioFilesService,
   StudioGenerationTasksService,
   type ExperimentMessageRead,
-  type FileRead,
   type VideoGenerationOptionsRead,
 } from '../../../../services/generated'
 import { ExperimentSubmissionFeedback } from '../components/ExperimentSubmissionFeedback'
@@ -103,7 +102,7 @@ type VideoExperimentModeProps = {
 /** 组合视频模态的输入、历史和任务轮询，并交给统一实验室页面壳渲染。 */
 export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: VideoExperimentModeProps) {
   const history = useExperimentHistory(sessionId)
-  const [files, setFiles] = useState<FileRead[]>([])
+  const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('video')
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
   const {
@@ -116,37 +115,18 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [capability, setCapability] = useState<VideoGenerationOptionsRead>()
   const [capabilityState, setCapabilityState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const capabilityRequest = useRef(0)
-  const [libraryState, setLibraryState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, ratio, frameFileIds, subjectReferences])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
 
-  const loadLibrary = useCallback(async () => {
-    setLibraryState('loading')
-    try {
-      const response = await StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
-      const media = (response.data?.items ?? []).filter(file => file.type === 'image' || file.type === 'video')
-      // 列表返回期间新上传的文件仍保留在资料库。
-      setFiles(current => [...new Map([...media, ...current].map(file => [file.id, file])).values()])
-      setLibraryState('ready')
-    } catch {
-      setLibraryState('failed')
-    }
-  }, [])
-  useEffect(() => { void loadLibrary() }, [loadLibrary])
 
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const persistedMessages = history.messages.map(toVideoMessage)
-  const { reads, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh)
-  const messages = persistedMessages.map((item) => {
-    const result = item.taskId ? reads[item.taskId]?.result : undefined
-    if (!result) return item
-    return {
-      ...item, status: result.status, progress: result.progress, error: result.error,
-      videoUrl: result.status === 'succeeded' ? extractVideoUrl(result.generation_delivery ?? result.result) ?? item.videoUrl : item.videoUrl,
-    }
-  })
+  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh, (item, result) => ({
+    ...item,
+    videoUrl: result.status === 'succeeded' ? extractVideoUrl(result.generation_delivery ?? result.result) ?? item.videoUrl : item.videoUrl,
+  }))
 
   const references = { frames: frameFileIds, subjects: subjectReferences }
   const referenceIssues = videoReferenceIssues(references, capability)
@@ -249,7 +229,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         key={item.id}
         footer={isUser ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
         identity={isUser ? '你' : '视频生成'}
-        status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={reads[item.taskId]?.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
+        status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
         tone={isUser ? 'user' : 'assistant'}
       >
           {isUser || item.content !== '视频生成任务已提交，正在等待生成结果。' ? item.content : null}
@@ -280,7 +260,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       files={files}
       libraryState={libraryState}
       onRetryLibrary={() => void loadLibrary()}
-      onUploaded={file => setFiles(current => [file, ...current.filter(item => item.id !== file.id)])}
+      onUploaded={onUploaded}
       capability={capability}
       disabled={disabled}
     />

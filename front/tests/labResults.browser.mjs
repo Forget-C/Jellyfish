@@ -37,6 +37,7 @@ const portraitVideo = Buffer.from([
 ].join(''), 'base64')
 const fixtureImage = (width, height, color) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${color}"/></svg>`
 let imageStatus = 'unavailable'
+let videoStatus = 'unavailable'
 const imagePrompt = item('image-prompt', 'image-history', 'user', '图片实验原始提示词', 1)
 const imageTask = item('image-task', 'image-history', 'task', '图片生成任务已提交，正在等待生成结果。', 2, {
   task_id: 'image-run', status: 'queued',
@@ -104,8 +105,13 @@ try {
     }
     if (url.pathname.endsWith('/video-history/messages')) {
       return respond([item('video-result', 'video-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
-        task_id: 'video-run', status: 'succeeded', payload: { result: { url: '/canvas-presets/pan.mp4' } },
+        task_id: 'video-run', status: videoStatus === 'succeeded' ? 'succeeded' : 'queued', payload: { result: { url: '/canvas-presets/pan.mp4' } },
       })])
+    }
+    if (url.pathname.endsWith('/film/tasks/video-run/result')) {
+      if (videoStatus === 'unavailable') return route.fulfill({ status: 503 })
+      return respond({ task_id: 'video-run', status: videoStatus, progress: 42,
+        result: videoStatus === 'succeeded' ? { url: '/canvas-presets/pan.mp4' } : undefined })
     }
     if (url.pathname.endsWith('/film/tasks/image-run/result')) {
       if (imageStatus === 'unavailable') return route.fulfill({ status: 503, json: { detail: '状态服务暂不可用' } })
@@ -163,6 +169,12 @@ try {
   await firstPreview.and(page.locator(':focus')).waitFor()
 
   await page.goto(origin + '/lab?session=video-history')
+  await history.getByText('状态暂不可用', { exact: true }).waitFor()
+  videoStatus = 'running'
+  await history.getByRole('button', { name: '重试读取状态' }).click()
+  await history.getByText('生成中 42%', { exact: true }).waitFor()
+  videoStatus = 'succeeded'
+  await history.getByText('已完成', { exact: true }).waitFor()
   const videoPreview = history.getByRole('button', { name: '播放视频' })
   await videoPreview.waitFor()
   const listVideo = videoPreview.locator('video')
