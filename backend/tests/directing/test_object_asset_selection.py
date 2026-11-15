@@ -1,4 +1,4 @@
-"""对象选用的公开接口验证共享资产关联与人物身份。"""
+"""对象选用的公开接口验证项目独立对象与人物身份。"""
 import pytest
 
 from app.models.directing import Sequence
@@ -33,13 +33,17 @@ async def test_extraction_does_not_create_resources_and_only_project_objects_can
         unlinked = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword'})
         assert unlinked.status_code == 422
         linked = await client.post('/api/v1/studio/project-assets/prop', json={'project_id': 'p1', 'asset_id': 'sword'})
-        assert linked.status_code == 201
-        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword'})
+        assert linked.status_code == 400
+        assert (await client.get(resources)).json()['data'] == []
+        private = await client.post('/api/v1/studio/entities/prop', json={
+            'id': 'project-sword', 'name': '长剑', 'project_id': 'p1', 'supplementary_info': '项目独立设定'})
+        assert private.status_code == 201
+        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'project-sword'})
         assert chosen.status_code == 200, chosen.text
-        assert chosen.json()['data']['objects'][0]['asset_id'] == 'sword'
+        assert chosen.json()['data']['objects'][0]['asset_id'] == 'project-sword'
         cleared = await client.put(endpoint + '/object1', json={'expected_revision': 2})
         assert cleared.status_code == 200
-        assert [asset['id'] for asset in (await client.get(resources)).json()['data']] == ['sword']
+        assert [asset['id'] for asset in (await client.get(resources)).json()['data']] == ['project-sword']
         unchanged = await client.get('/api/v1/studio/entities/prop/sword')
         assert unchanged.json()['data']['supplementary_info'] == '原始稳定设定'
 

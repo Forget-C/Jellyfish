@@ -27,7 +27,7 @@ async def client(monkeypatch):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     from app.models.studio import Actor
     async with sessions() as db:
-        db.add(Actor(id="legacy", name="旧转化演员", style="真人都市", age_appearance="历史年龄", source_character_id="old-role"))
+        db.add(Actor(id="legacy", name="旧转化演员", style="国漫", visual_style="动漫", age_appearance="历史年龄", source_character_id="old-role"))
         await db.commit()
     async def database():
         async with sessions() as db:
@@ -144,6 +144,10 @@ async def test_legacy_permissions_and_image_source_rename_validation(client):
     rendered = await client.post(path, json={"visual_style": "动漫", "style": "国漫"})
     assert rendered.status_code == 200, rendered.text
     assert "历史年龄" not in rendered.json()["data"]["execution_prompt"]
+    defaults = await client.post(path, json={})
+    assert defaults.status_code == 200, defaults.text
+    assert defaults.json()["data"]["variables_snapshot"]["style"] == "真人都市"
+    assert defaults.json()["data"]["variables_snapshot"]["visual_style"] == "现实"
     assert (await client.post(path, json={"references": []})).status_code == 422
     opened = await client.patch("/api/v1/studio/entities/actor/legacy", json={"details_editable": True, "age_appearance": "30岁"})
     assert opened.status_code == 200, opened.text
@@ -235,3 +239,16 @@ async def test_mysql_concurrent_same_upload_request_returns_one_object():
         async with sessions.begin() as db:
             await db.execute(delete(FileItem).where(FileItem.id == identity))
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["actor", "scene", "prop", "costume"])
+async def test_project_link_requires_an_independent_project_object(client, kind):
+    assert (await client.post("/api/v1/studio/projects", json={"id": "p", "name": "项目", "style": "真人都市"})).status_code == 201
+    assert (await client.post(f"/api/v1/studio/entities/{kind}", json={"id": "library", "name": "库中原件"})).status_code == 201
+    linked = await client.post(f"/api/v1/studio/project-assets/{kind}", json={"project_id": "p", "asset_id": "library"})
+    assert linked.status_code == 400, linked.text
+    assert (await client.post(f"/api/v1/studio/entities/{kind}", json={"id": "private", "name": "项目对象", "project_id": "p"})).status_code == 201
+    private_link = await client.post(f"/api/v1/studio/project-assets/{kind}", json={"project_id": "p", "asset_id": "private"})
+    assert private_link.status_code == 201
+    assert (await client.delete(f"/api/v1/studio/project-assets/{kind}/{private_link.json()['data']['id']}")).status_code == 404

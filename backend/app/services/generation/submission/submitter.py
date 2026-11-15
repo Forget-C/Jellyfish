@@ -102,5 +102,5 @@ class GenerationSubmitter:
             spec = entity_spec(command.target.asset_type)
             asset = await db.get(spec.model, command.target.entity_id)
             await validate_resource_references(db, command.target.asset_type, asset.project_id,
-                [ref.model_dump(exclude_none=True) for ref in command.request.asset_references], link=False)
+                [ref.model_dump(exclude_none=True) for ref in command.request.asset_references])
         return GenerationAccepted(task_id=task.id)

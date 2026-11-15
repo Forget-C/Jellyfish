@@ -18,7 +18,7 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   for(const [kind,tab,label] of [['actor','actors','演员'],['character','roles','角色'],['scene','scenes','场所'],['prop','props','道具'],['costume','costumes','服装']]) {
     const assets=[{id:'one',name:`${label}长名称测试`,description:'真实简介',thumbnail:'/api/cover'}, {id:'missing',name:`无图${label}`}, {id:'new',name:`新增${label}`},{id:'broken',name:`失效${label}`,thumbnail:'/api/broken'}]
-    for (const asset of assets) Object.assign(asset, {project_id: kind === 'character' || asset.id === 'one' ? 'resources' : null, visual_style: '现实', style: '真人都市', references: []})
+    for (const asset of assets) Object.assign(asset, {project_id: 'resources', visual_style: '现实', style: '真人都市', references: []})
     let failAssetSave=false, submittedModel
     const imageRows=[{id:1,file_id:'pic',view_angle:'FRONT',is_primary:true,is_view_default:true}]
     let links=[assets[0],assets[1],assets[2],assets[3]].map((a,i)=>({id:i+1,project_id:'resources',[kind+'_id']:a.id})), attempts=0
@@ -39,14 +39,11 @@ try {
         if(req.method()==='POST') {links.push({id:4,project_id:'resources',[kind+'_id']:req.postDataJSON().asset_id});return respond(links.at(-1))}
         return respond({items:links,pagination:{total:links.length}})
       }
-      if(path.includes('/project-assets/'+kind+'/')) {
-        attempts++
-        if(attempts===1)return route.fulfill({status:503,json:{detail:'取消关联失败'}})
-        links=links.filter(l=>l.id!==Number(path.split('/').at(-1)));return respond({})
-      }
+      if(path.includes('/project-assets/'+kind+'/'))throw new Error('Legacy unlink API must not be called')
       if(path.endsWith('/entities/'+kind))return respond({items:assets,pagination:{total:assets.length}})
       const asset=assets.find(a=>path.endsWith('/entities/'+kind+'/'+a.id))
       if(asset){
+        if(req.method()==='DELETE') { attempts++; if(attempts===1)return route.fulfill({status:503,json:{detail:'删除失败'}}); links=links.filter(l=>l[kind+'_id']!==asset.id);return respond({}) }
         if(req.method()==='PATCH') { if(failAssetSave)return route.fulfill({status:503,json:{detail:'保存失败'}});Object.assign(asset,req.postDataJSON()) }
         return respond(asset)
       }
@@ -152,25 +149,20 @@ try {
       await page.unroute('**/api/**'); continue
     }
     await page.getByRole('button',{name:assets[1].name+'更多操作',exact:true}).click()
-    await page.getByRole('menuitem',{name:'取消关联',exact:true}).click()
-    const confirm=page.getByRole('dialog').filter({hasText:'仅移除'})
-    await confirm.getByRole('button',{name:'取消关联',exact:true}).click()
-    await page.getByText('取消关联失败',{exact:true}).waitFor();assert.equal(await confirm.isVisible(),true)
-    await confirm.getByRole('button',{name:'取消关联',exact:true}).click();await confirm.waitFor({state:'hidden'});await page.getByRole('button',{name:assets[1].name,exact:true}).waitFor({state:'hidden'})
+    await page.getByRole('menuitem',{name:'删除项目对象',exact:true}).click()
+    const confirm=page.getByRole('dialog').filter({hasText:'删除此项目对象'})
+    await confirm.getByRole('button',{name:'删除项目对象',exact:true}).click()
+    await page.getByText('删除失败',{exact:true}).waitFor();assert.equal(await confirm.isVisible(),true)
+    await confirm.getByRole('button',{name:'删除项目对象',exact:true}).click();await confirm.waitFor({state:'hidden'});await page.getByRole('button',{name:assets[1].name,exact:true}).waitFor({state:'hidden'})
     assert.equal(attempts,2)
+    assets[2].project_id=null
     await page.getByRole('button',{name:assets[2].name,exact:true}).click()
-    const shared=page.getByRole('region',{name:assets[2].name,exact:true})
-    const editShared=page.getByRole('link',{name:'在资产库编辑 ↗',exact:true})
-    await editShared.waitFor()
-    assert.equal(await editShared.getAttribute('target'),'_blank')
-    assert.equal(await shared.getByRole('textbox',{name:'名称',exact:true}).count(),0)
-    assert.equal(await page.getByRole('button',{name:'生成图片',exact:true}).count(),0)
-    await page.getByRole('button',{name:/^查看全部/}).click()
-    const collection=page.getByRole('dialog',{name:'图片集合',exact:true})
-    assert.equal(await collection.getByRole('button',{name:/设为|局部修改/}).count(),0)
-    await collection.getByRole('button',{name:'关闭',exact:true}).click()
-    await collection.waitFor({state:'hidden'})
+    await page.getByText('请先导入独立项目副本',{exact:true}).waitFor()
+    assert.equal(await page.getByRole('link',{name:'在资产库编辑 ↗',exact:true}).count(),0)
+    assert.equal(await page.getByRole('textbox',{name:'名称',exact:true}).isDisabled(),true)
+    assert.equal(await page.getByRole('button',{name:'生成图片',exact:true}).isDisabled(),true)
     await page.getByRole('button',{name:'返回',exact:true}).click()
+    assets[2].project_id='resources'
     if(kind==='prop') {
       assets.push(...Array.from({length:14},(_,i)=>({id:`extra-${i}`,name:`道具分页${i}`,description:'分页资源', project_id:'resources',visual_style:'现实',style:'真人都市'})))
       links=assets.map((asset,i)=>({id:i+1,project_id:'resources',[kind+'_id']:asset.id}))

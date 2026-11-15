@@ -28,7 +28,7 @@ from app.core.contracts.directing.scene_version import (
 )
 from app.models.directing import SceneVersionRecord, SceneUnitIdentityRecord, InstructionBasisRecord, SceneVideoExecution, SceneTakeRecord, SceneTakeReviewRecord, SceneEndFrameRecord, SceneCopyOrigin
 from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
-from app.models.studio import Project, Chapter, Character, FileUsage, ProjectSceneLink, ProjectPropLink
+from app.models.studio import Project, Chapter, Character, FileUsage, Scene, Prop
 from app.models.task import Task, TaskOutput
 from app.models.llm import Model
 from app.models.types import FileUsageKind
@@ -1030,7 +1030,7 @@ class DirectingStore:
 
         目录失效不取消已有文件选择；文件归属、权限与媒体校验仍由调用方执行。
         """
-        from app.models.studio import Scene, Prop, CharacterImage, SceneImage, PropImage
+        from app.models.studio import CharacterImage, SceneImage, PropImage
 
         same_design = (isinstance(plan, SceneVersionContent) and isinstance(previous, SceneVersionContent)) or (
             previous is not None and getattr(previous, "design_revision_id", None) == getattr(plan, "design_revision_id", None))
@@ -1051,12 +1051,7 @@ class DirectingStore:
                     continue
                 model, image_model, owner = models[origin.kind]
                 asset = await self.db.get(model, origin.id)
-                if origin.kind == "character":
-                    in_project = asset and asset.project_id == self.project_id
-                else:
-                    link = ProjectSceneLink if origin.kind == "scene" else ProjectPropLink
-                    in_project = await self.db.scalar(select(link.id).where(link.project_id == self.project_id,
-                        getattr(link, origin.kind + "_id") == origin.id))
+                in_project = asset and asset.project_id == self.project_id
                 if not asset or not in_project or asset.name != origin.name:
                     raise ValueError("资产来源与当前项目或名称不符")
                 if binding.media_kind != "image" or not await self.db.scalar(select(image_model.id).where(
@@ -1084,14 +1079,14 @@ class DirectingStore:
                     Character.id == participant.character_id, Character.project_id == self.project_id,
                 )):
                     raise ValueError("character not linked to project")
-                if participant.prop_id and (old is None or old.prop_id != participant.prop_id) and not await self.db.scalar(select(ProjectPropLink.id).where(
-                    ProjectPropLink.prop_id == participant.prop_id, ProjectPropLink.project_id == self.project_id,
+                if participant.prop_id and (old is None or old.prop_id != participant.prop_id) and not await self.db.scalar(select(Prop.id).where(
+                    Prop.id == participant.prop_id, Prop.project_id == self.project_id,
                 )):
-                    raise ValueError("prop not linked to project")
-            if content.direction.location_asset_id and (previous_design is None or previous_design.direction.location_asset_id != content.direction.location_asset_id) and not await self.db.scalar(select(ProjectSceneLink.id).where(
-                ProjectSceneLink.scene_id == content.direction.location_asset_id, ProjectSceneLink.project_id == self.project_id,
+                    raise ValueError("prop does not belong to project")
+            if content.direction.location_asset_id and (previous_design is None or previous_design.direction.location_asset_id != content.direction.location_asset_id) and not await self.db.scalar(select(Scene.id).where(
+                Scene.id == content.direction.location_asset_id, Scene.project_id == self.project_id,
             )):
-                raise ValueError("location not linked to project")
+                raise ValueError("location does not belong to project")
         elif isinstance(content, ProductionPlan):
             design = await dependency(content.design_revision_id, "design")
             shots = {r.id: r for r in design.direction.shots}

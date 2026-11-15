@@ -248,9 +248,7 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
                 )
                 assert rejected_generation.status_code == 409, rejected_generation.text
                 linked = await client.post("/api/v1/studio/project-assets/actor", json={"project_id": "project-a", "asset_id": actor_id})
-                assert linked.status_code == 201, linked.text
-                blocked_delete = await client.delete(f"/api/v1/studio/entities/actor/{actor_id}")
-                assert blocked_delete.status_code == 409, blocked_delete.text
+                assert linked.status_code == 400, linked.text
                 await client.patch("/api/v1/studio/entities/actor/shared-actor", json={"supplementary_info": "不应继承的演员文字"})
                 role_references = [{"file_id": file_id, "role": "identity", "source_kind": "actor", "source_id": "shared-actor", "source_image_id": shared_image.json()["data"]["id"]}]
                 for source_kind in ("costume", "prop"):
@@ -276,7 +274,6 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
                 assert "角色原始设定" in prompt
                 assert "不应继承" not in prompt
                 assert all(purpose in prompt for purpose in ("身份参考", "服装参考", "道具参考"))
-                await client.delete(f"/api/v1/studio/project-assets/actor/{linked.json()['data']['id']}")
                 deleted_copy = await client.delete(f"/api/v1/studio/entities/ACTOR/{actor_id}")
                 assert deleted_copy.status_code == 200, deleted_copy.text
                 original_role = await client.get("/api/v1/studio/entities/character/role-a")

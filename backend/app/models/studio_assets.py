@@ -207,7 +207,7 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
 
     说明：
     - 使用 ActorImage（旧） 的字段集合，作为“演员形象/立绘资产”的主表。
-    - project_id 表达直接归属；共享演员通过项目关联纳入项目资源。
+    - project_id 表达直接归属；库中演员通过独立导入成为项目副本。
     """
 
     __tablename__ = "actors"

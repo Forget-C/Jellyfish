@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -56,16 +56,7 @@ async def list_entities_paginated(
     entity_type_norm = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type_norm)
     stmt = select(spec.model)
-    if project_id is not None and entity_type_norm in LINK_MODEL_BY_ENTITY:
-        link_model, field = LINK_MODEL_BY_ENTITY[entity_type_norm]
-        linked = select(link_model.id).where(
-            link_model.project_id == project_id,
-            getattr(link_model, field) == spec.model.id,
-        ).exists()
-        stmt = stmt.where(or_(spec.model.project_id == project_id,
-                              (spec.model.project_id.is_(None) & linked)))
-    else:
-        stmt = stmt.where(spec.model.project_id == project_id)
+    stmt = stmt.where(spec.model.project_id == project_id)
     stmt = apply_keyword_filter(stmt, q=q, fields=[spec.model.name, spec.model.description])
     if style:
         stmt = stmt.where(spec.model.origin == "created", getattr(spec.model, "style") == style)
@@ -142,7 +133,7 @@ async def create_entity(
                 raise HTTPException(status_code=400, detail="Chapter does not belong to the same project")
 
     from app.services.studio.resource_references import validate_resource_references
-    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []), link=False)
+    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []))
     obj = spec.model(**data)
     db.add(obj)
     await flush_resource(db)
@@ -235,7 +226,7 @@ async def update_entity(
         update_data["name"] = name.strip()
     if "references" in update_data:
         from app.services.studio.resource_references import validate_resource_references
-        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"], link=False)
+        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"])
 
     for key, value in update_data.items():
         setattr(obj, key, value)
@@ -262,10 +253,6 @@ async def delete_entity(
     if obj is None:
         return
     if getattr(obj, "source_character_id", None) or (obj.origin != "created" and obj.project_id is None):
-        link_model, link_field = LINK_MODEL_BY_ENTITY[entity_type]
-        linked = await db.scalar(select(link_model.id).where(getattr(link_model, link_field) == entity_id).limit(1))
-        if linked is not None:
-            raise HTTPException(409, "资源仍被项目关联，请先解除关联")
         for kind in ("actor", "character", "scene", "prop", "costume"):
             model = entity_spec(kind).model
             configurations = await db.scalars(select(model.references))

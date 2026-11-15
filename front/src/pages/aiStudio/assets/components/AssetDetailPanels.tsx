@@ -38,8 +38,8 @@ export function AssetFields({ type, name, onName, facts, onFacts, description, o
 }
 
 /** 默认主图、手动预览与主图身份分离；全部图片操作集中在多视角集合中。 */
-export function AssetPictures({ type, assetId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, candidates, feedback, status, onGenerate }: {
-  type: StructuredAssetType | 'character'; assetId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
+export function AssetPictures({ type, assetId, images, disabled, primaryDisabled, savingViewDefault, onViewDefault, onPrimary, onEdit, candidates, feedback, status, onGenerate }: {
+  type: StructuredAssetType | 'character'; assetId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean
   savingViewDefault?: number
   onViewDefault: (image: Picture) => Promise<void>
   onPrimary: (image: Picture) => Promise<boolean>; onEdit: (image: Picture) => void
@@ -58,11 +58,11 @@ export function AssetPictures({ type, assetId, images, disabled, primaryDisabled
   const sorted = (angle: string) => images.filter(image => image.file_id && (image.view_angle ?? 'FRONT') === angle).sort((a, b) => Number(!!b.is_view_default) - Number(!!a.is_view_default) || b.id - a.id)
   const card = (image: Picture, index: number, label: string) => <div key={image.id} className="actor-picture-card">
     <ResourceImage src={buildFileDownloadUrl(image.file_id!)!} alt={`${label}图片 ${index + 1}`} />
-    <div className="actor-picture-actions">{image.is_primary && <Tag>主图</Tag>}{image.is_view_default && <Tag>视角默认</Tag>}{!readOnly && <>
+    <div className="actor-picture-actions">{image.is_primary && <Tag>主图</Tag>}{image.is_view_default && <Tag>视角默认</Tag>}
       {!image.is_view_default && <Tooltip title={`设为${label}默认图`}><Button type="text" size="small" aria-label={`设为${label}默认图 ${image.id}`} icon={<CheckCircleOutlined />} loading={savingViewDefault === image.id} disabled={primaryDisabled} onClick={() => void onViewDefault(image)} /></Tooltip>}
       {!image.is_primary && <Tooltip title="设为主图"><Button type="text" size="small" aria-label={`设为主图${label}图片 ${index + 1}`} icon={<StarOutlined />} disabled={primaryDisabled} onClick={async () => { if (await onPrimary(image)) setSelectedId(image.id) }} /></Tooltip>}
       <Tooltip title="局部修改"><Button type="text" size="small" aria-label={`局部修改${label}图片 ${index + 1}`} icon={<EditOutlined />} disabled={disabled} onClick={() => { setGallery(undefined); onEdit(image) }} /></Tooltip>
-    </>}</div>
+    </div>
   </div>
   const other = [...new Set(images.map(image => image.view_angle ?? 'FRONT'))].filter(angle => !views.some(([value]) => value === angle))
   const available = [...views.map(([value, label]) => ({ value, label })), ...other.map(value => ({ value, label: ({ RIGHT: '右侧', DETAIL: '细节', THREE_QUARTER: '3/4侧面' } as Record<string, string>)[value] ?? value }))]
@@ -82,7 +82,7 @@ export function AssetPictures({ type, assetId, images, disabled, primaryDisabled
     </div>
     {selected && <AssetImageParameters type={type} key={`${assetId}:${selected.id}:${selected.file_id}`} assetId={assetId} imageId={selected.id} />}
     <div className="actor-task-summary">{views.map(([angle, label]) => <div key={angle} role="status">{status(angle) && <><span>{label}：</span>{status(angle)}</>}</div>)}</div>
-    {!readOnly && <div className="actor-generate-action"><Button type="primary" disabled={disabled} onClick={onGenerate}>生成图片</Button></div>}
+    {<div className="actor-generate-action"><Button type="primary" disabled={disabled} onClick={onGenerate}>生成图片</Button></div>}
     <Modal title="图片集合" open={!!gallery} width={900} onCancel={() => setGallery(undefined)} footer={<Button aria-label="关闭" onClick={() => setGallery(undefined)}>关闭</Button>}>
       <Tabs activeKey={gallery} onChange={setGallery} items={available.map(({ value, label }) => ({ key: value, label, children: <>
         <div className="actor-gallery">{sorted(value).map((image, index) => card(image, index, label))}</div>

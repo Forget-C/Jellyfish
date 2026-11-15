@@ -10,10 +10,10 @@ from app.models.studio import (
     Chapter,
     FileItem,
     FileUsage,
-    ProjectActorLink,
-    ProjectCostumeLink,
-    ProjectPropLink,
-    ProjectSceneLink,
+    Actor,
+    Costume,
+    Prop,
+    Scene,
 )
 from app.models.types import FileUsageKind
 
@@ -180,22 +180,22 @@ async def list_files_by_scope_paginated(
 
 
 async def first_project_id_for_scene(session: AsyncSession, scene_id: str) -> str | None:
-    stmt = select(ProjectSceneLink.project_id).where(ProjectSceneLink.scene_id == scene_id).limit(1)
+    stmt = select(Scene.project_id).where(Scene.id == scene_id)
     return (await session.execute(stmt)).scalars().first()
 
 
 async def first_project_id_for_prop(session: AsyncSession, prop_id: str) -> str | None:
-    stmt = select(ProjectPropLink.project_id).where(ProjectPropLink.prop_id == prop_id).limit(1)
+    stmt = select(Prop.project_id).where(Prop.id == prop_id)
     return (await session.execute(stmt)).scalars().first()
 
 
 async def first_project_id_for_costume(session: AsyncSession, costume_id: str) -> str | None:
-    stmt = select(ProjectCostumeLink.project_id).where(ProjectCostumeLink.costume_id == costume_id).limit(1)
+    stmt = select(Costume.project_id).where(Costume.id == costume_id)
     return (await session.execute(stmt)).scalars().first()
 
 
 async def first_project_id_for_actor(session: AsyncSession, actor_id: str) -> str | None:
-    stmt = select(ProjectActorLink.project_id).where(ProjectActorLink.actor_id == actor_id).limit(1)
+    stmt = select(Actor.project_id).where(Actor.id == actor_id)
     return (await session.execute(stmt)).scalars().first()
 
 

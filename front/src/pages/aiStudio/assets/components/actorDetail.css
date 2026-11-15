@@ -35,9 +35,6 @@
 .actor-detail-page > .resource-editor-body > :not(.actor-detail-layout):not(.actor-detail-tabs) { flex:none; }
 .actor-detail-page .actor-detail-layout { flex:1; height:auto; }
 .actor-detail-tabs { flex:1; min-height:0; }
-.actor-readonly-settings dl { margin:0; }
-.actor-readonly-settings dd { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0 0 8px; }
-.actor-readonly-settings p { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 @media (max-width:1199px), (max-height:739px) { .actor-detail-tabs .actor-fields { padding:16px; background:white; border-radius:12px; } }
 
 .actor-long-field { grid-column:1 / -1; }

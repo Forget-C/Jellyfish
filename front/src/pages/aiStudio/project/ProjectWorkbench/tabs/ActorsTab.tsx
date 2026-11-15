@@ -10,7 +10,6 @@ import { useProjectCharacters } from '../hooks/useProjectData'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
-import { resourceAssetUrl } from '../../../assets/components/ResourceEditorDrawer'
 import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
@@ -33,7 +32,6 @@ export function ActorsTab() {
 
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [linkedActors, setLinkedActors] = useState<Record<string, ActorLike>>({})
-  const [unlinkingId, setUnlinkingId] = useState<number | null>(null)
   const [links, setLinks] = useState<ProjectActorLinkRead[]>([])
   const [linksLoading, setLinksLoading] = useState(false)
 
@@ -85,19 +83,6 @@ export function ActorsTab() {
   }, [projectId])
 
 
-  const handleUnlinkActor = async (link: ProjectActorLinkRead) => {
-    setUnlinkingId(link.id)
-    try {
-      await StudioProjectAssetsService.deleteProjectActorLinkApiV1StudioProjectAssetsActorLinkIdDelete({ linkId: link.id })
-      message.success('已取消关联')
-      await loadLinks()
-    } catch {
-      message.error('取消关联失败')
-      throw new Error('取消关联失败')
-    } finally {
-      setUnlinkingId(null)
-    }
-  }
 
   const linkedByActorId = useMemo(() => new Map(Object.values(linkedActors).map(actor => [actor.id, actor])), [linkedActors])
 
@@ -132,24 +117,21 @@ export function ActorsTab() {
                   imageAlt={a?.name ?? '演员信息暂不可用'}
                   placeholder={<><UserOutlined aria-hidden />暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
-                    { key: 'edit', label: a?.source_character_id ? '查看资产' : a?.project_id === null ? '编辑共享资产 ↗' : '编辑', onClick: () => a?.project_id === null ? window.open(resourceAssetUrl('actor', l.actor_id), '_blank', 'noopener,noreferrer') : openDetail(l.actor_id) },
-                    { key: 'unlink', label: a?.project_id ? '删除项目对象' : '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
+                    { key: 'edit', label: '编辑', onClick: () => openDetail(l.actor_id) },
+                    { key: 'delete', label: '删除项目对象', danger: true, disabled: !a, onClick: () => {
                       Modal.confirm({
                         className: 'project-resource-dialog',
-                        title: `${a?.project_id ? '删除项目对象' : '取消关联'}「${a?.name ?? '此演员'}」？`,
-                        content: a?.project_id ? '删除此项目对象及其图片关联，已入库的独立副本继续保留。' : '仅移除项目关联，不删除资产库中的共享对象。',
-                        okText: a?.project_id ? '删除项目对象' : '取消关联', cancelText: '取消', okButtonProps: { danger: true },
+                        title: `删除项目对象「${a?.name ?? '此演员'}」？`,
+                        content: '删除此项目对象及其图片关联，已入库的独立副本继续保留。',
+                        okText: '删除项目对象', cancelText: '取消', okButtonProps: { danger: true },
                         onOk: async () => {
-                          if (a?.project_id) {
-                            try { await StudioEntitiesApi.remove('actor', l.actor_id); await loadLinks() }
-                            catch (cause) { message.error(directingError(cause)); throw cause }
-                          }
-                          else await handleUnlinkActor(l)
+                          try { await StudioEntitiesApi.remove('actor', l.actor_id); await loadLinks() }
+                          catch (cause) { message.error(directingError(cause)); throw cause }
                         },
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${a?.name ?? '演员'}更多操作`} /></Dropdown>}
-                  meta={<><Tag>{a?.source_character_id ? '从角色转化' : a?.project_id ? '项目专属' : '共享资产'}</Tag>
+                  meta={<><Tag>{a?.source_character_id ? '从角色转化' : '项目专属'}</Tag>
                   {a && <ResourcePublishButton kind="actor" asset={a} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{a?.description?.trim() || '未填写简介'}</div></>}
                 />
               )

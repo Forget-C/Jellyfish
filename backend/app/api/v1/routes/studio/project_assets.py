@@ -5,10 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.services.studio.project_assets import (
     create_project_asset_link as create_project_asset_link_service,
-    delete_project_asset_link as delete_project_asset_link_service,
     list_project_asset_links_paginated,
 )
-from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response
+from app.schemas.common import ApiResponse, PaginatedData, created_response
 from app.schemas.studio.project_assets import (
     ProjectActorLinkRead, ProjectAssetLinkCreate, ProjectCostumeLinkRead,
     ProjectPropLinkRead, ProjectSceneLinkRead,
@@ -51,7 +50,7 @@ async def list_project_entity_links(
     "/actor",
     response_model=ApiResponse[ProjectActorLinkRead],
     status_code=status.HTTP_201_CREATED,
-    summary="创建项目-章节-演员关联",
+    summary="创建本项目专属对象-章节-演员关联",
 )
 async def create_project_actor_link(
     body: ProjectAssetLinkCreate,
@@ -62,24 +61,13 @@ async def create_project_actor_link(
 
 
 
-@router.delete(
-    "/actor/{link_id}",
-    response_model=ApiResponse[None],
-    summary="删除项目-章节-演员关联",
-)
-async def delete_project_actor_link(
-    link_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse[None]:
-    await delete_project_asset_link_service(db, entity_type="actor", link_id=link_id)
-    return empty_response()
 
 
 @router.post(
     "/scene",
     response_model=ApiResponse[ProjectSceneLinkRead],
     status_code=status.HTTP_201_CREATED,
-    summary="创建项目-章节-场景关联",
+    summary="创建本项目专属对象-章节-场景关联",
 )
 async def create_project_scene_link(
     body: ProjectAssetLinkCreate,
@@ -90,24 +78,13 @@ async def create_project_scene_link(
 
 
 
-@router.delete(
-    "/scene/{link_id}",
-    response_model=ApiResponse[None],
-    summary="删除项目-章节-场景关联",
-)
-async def delete_project_scene_link(
-    link_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse[None]:
-    await delete_project_asset_link_service(db, entity_type="scene", link_id=link_id)
-    return empty_response()
 
 
 @router.post(
     "/prop",
     response_model=ApiResponse[ProjectPropLinkRead],
     status_code=status.HTTP_201_CREATED,
-    summary="创建项目-章节-道具关联",
+    summary="创建本项目专属对象-章节-道具关联",
 )
 async def create_project_prop_link(
     body: ProjectAssetLinkCreate,
@@ -118,24 +95,13 @@ async def create_project_prop_link(
 
 
 
-@router.delete(
-    "/prop/{link_id}",
-    response_model=ApiResponse[None],
-    summary="删除项目-章节-道具关联",
-)
-async def delete_project_prop_link(
-    link_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse[None]:
-    await delete_project_asset_link_service(db, entity_type="prop", link_id=link_id)
-    return empty_response()
 
 
 @router.post(
     "/costume",
     response_model=ApiResponse[ProjectCostumeLinkRead],
     status_code=status.HTTP_201_CREATED,
-    summary="创建项目-章节-服装关联",
+    summary="创建本项目专属对象-章节-服装关联",
 )
 async def create_project_costume_link(
     body: ProjectAssetLinkCreate,
@@ -143,16 +109,3 @@ async def create_project_costume_link(
 ) -> ApiResponse[ProjectCostumeLinkRead]:
     obj = await create_project_asset_link_service(db, entity_type="costume", body=body)
     return created_response(ProjectCostumeLinkRead.model_validate(obj))
-
-
-@router.delete(
-    "/costume/{link_id}",
-    response_model=ApiResponse[None],
-    summary="删除项目-章节-服装关联",
-)
-async def delete_project_costume_link(
-    link_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResponse[None]:
-    await delete_project_asset_link_service(db, entity_type="costume", link_id=link_id)
-    return empty_response()

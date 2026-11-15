@@ -636,8 +636,8 @@ async def test_default_preference_changes_preserve_instruction_and_preflight(tmp
             await db.flush()
             db.add_all([Model(id='text', name='gpt-test', category='text', provider_id='provider', params={}),
                         Model(id='video', name='test-video-model', category='video', provider_id='provider', params={}),
-                        Scene(id='default', name='默认场所', style='真人都市'),
-                        Scene(id='chosen', name='本次场所', style='真人都市')])
+                        Scene(id='default', project_id='p1', name='默认场所', style='真人都市'),
+                        Scene(id='chosen', project_id='p1', name='本次场所', style='真人都市')])
             await db.flush()
             db.add_all([ProjectSceneLink(project_id='p1', scene_id=key) for key in ['default', 'chosen']])
             db.add(SceneImage(id=901, scene_id='chosen', file_id='image1'))

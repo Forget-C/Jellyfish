@@ -7,8 +7,8 @@ from app.services.studio.entity_specs import entity_spec
 from app.services.studio.files import require_available_file
 
 
-async def validate_resource_references(db, kind, project_id, references, *, link=False):
-    """校验明确图片来源；仅保存配置或任务受理后允许补齐项目关联。"""
+async def validate_resource_references(db, kind, project_id, references):
+    """校验明确图片来源；选择参考不创建资产或项目关联。"""
     subjects, costumes = set(), set()
     allowed_roles = {
         "actor": {"identity", "design", "style"},
@@ -56,10 +56,5 @@ async def validate_resource_references(db, kind, project_id, references, *, link
         image = await db.scalar(query.limit(1))
         if image is None:
             raise HTTPException(400, "参考图片不属于所选对象")
-        if link and project_id is not None and source.project_id is None:
-            from app.schemas.studio.project_assets import ProjectAssetLinkCreate
-            from app.services.studio.project_assets import create_project_asset_link
-            await create_project_asset_link(db, entity_type=source_kind,
-                body=ProjectAssetLinkCreate(project_id=project_id, asset_id=source_id))
     if len(subjects) > 1 or len(costumes) > 1:
         raise HTTPException(400, "最多选择一个参考主体和一项参考服装")

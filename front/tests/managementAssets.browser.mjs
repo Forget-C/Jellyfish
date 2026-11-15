@@ -23,6 +23,7 @@ const records = Object.fromEntries(types.map(([type, label]) => [type, [
 records.costume.push(...Array.from({ length: 9 }, (_, index) => ({ id: `costume-page-${index + 1}`, name: `服装分页 ${index + 1}` })))
 let failRead, failDelete = true, generationStatus = 'running', generationCount = 0, deleteCount = 0
 const promptRequests = []
+let lastPromptReferences
 let releaseGeneration
 const holdGeneration = new Promise(resolve => { releaseGeneration = resolve })
 const box = async locator => {
@@ -77,6 +78,7 @@ try {
     }
     if (path.endsWith('/generation-prompts/assets/actor/actor-missing/slots/19/render')) {
       promptRequests.push(path)
+      lastPromptReferences = request.postDataJSON().references
       return respond({ render_id: 'render-asset', template_id: 'tpl', template_version: 1, variables_snapshot: {}, execution_prompt: '画一个演员', recommended_media: { references: [] } })
     }
     if (path.endsWith('/generation-tasks/actors/actor-missing/slots/19/tasks')) {
@@ -159,6 +161,15 @@ try {
   await missingActor.getByRole('button', { name: '重新生成', exact: true }).click()
   await page.getByText('演员图片生成失败', { exact: true }).waitFor()
   assert.equal(generationCount, 2)
+  records.actor.find(asset => asset.id === 'actor-missing').source_character_id = 'source-role'
+  await page.getByRole('button', { name: '刷新', exact: true }).click()
+  await missingActor.getByText('从角色转化 · 详情只读', { exact: true }).waitFor()
+  await missingActor.getByRole('button', { name: '重新生成', exact: true }).click()
+  await missingActor.getByRole('button', { name: '生成中', exact: true }).waitFor()
+  await missingActor.getByRole('button', { name: '重新生成', exact: true }).waitFor()
+  assert.equal(generationCount, 3)
+  assert.deepEqual(lastPromptReferences, [{ file_id: 'wide', role: 'design' }])
+
 
   const search = page.getByRole('textbox', { name: '搜索演员' })
   await search.fill('缺图')

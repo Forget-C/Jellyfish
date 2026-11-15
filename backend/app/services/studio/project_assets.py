@@ -12,7 +12,7 @@ from app.api.utils import apply_order, paginate
 from app.models.studio import Actor, Costume, ProjectActorLink, ProjectCostumeLink, ProjectPropLink, ProjectSceneLink, Prop, Scene
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio.project_assets import ProjectAssetLinkCreate, ProjectActorLinkRead, ProjectCostumeLinkRead, ProjectPropLinkRead, ProjectSceneLinkRead
-from app.services.common import delete_if_exists, entity_not_found, invalid_choice, require_entity
+from app.services.common import entity_not_found, invalid_choice, require_entity
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
 from app.services.studio.entity_thumbnails import resolve_thumbnails
 from app.utils.project_links import upsert_project_link
@@ -61,7 +61,7 @@ async def create_project_asset_link(
     entity_type: str,
     body: ProjectAssetLinkCreate,
 ) -> Any:
-    """创建或补全项目-章节-资产关联。"""
+    """仅关联本项目专属对象与章节；库中来源必须先创建独立副本。"""
     spec = _link_spec(entity_type)
     asset = await require_entity(
         db,
@@ -70,7 +70,9 @@ async def create_project_asset_link(
         detail=spec["not_found"],
         status_code=400,
     )
-    if asset.project_id is not None and asset.project_id != body.project_id:
+    if asset.project_id is None:
+        raise HTTPException(status_code=400, detail="请从资产库导入独立项目副本，不再支持共享关联")
+    if asset.project_id != body.project_id:
         raise HTTPException(status_code=400, detail="不能关联其他项目的专属资源")
     row = await upsert_project_link(
         db,
@@ -81,23 +83,6 @@ async def create_project_asset_link(
         chapter_id=body.chapter_id,
     )
     return row
-
-
-async def delete_project_asset_link(
-    db: AsyncSession,
-    *,
-    entity_type: str,
-    link_id: int,
-) -> None:
-    """删除项目-章节-资产关联。"""
-    spec = _link_spec(entity_type)
-    row = await db.get(spec["model"], link_id)
-    if row is None:
-        return
-    asset = await db.get(spec["asset_model"], getattr(row, spec["field"]))
-    if asset is not None and asset.project_id is not None:
-        raise HTTPException(status_code=400, detail="项目专属对象不能取消自身归属，请使用删除对象")
-    await delete_if_exists(db, spec["model"], link_id)
 
 
 async def list_project_asset_links_paginated(
@@ -118,7 +103,8 @@ async def list_project_asset_links_paginated(
     model = spec["model"]
     field_name = spec["field"]
 
-    stmt = select(model)
+    asset_model = spec["asset_model"]
+    stmt = select(model).join(asset_model, getattr(model, field_name) == asset_model.id).where(asset_model.project_id == model.project_id)
     if project_id is not None:
         stmt = stmt.where(model.project_id == project_id)
     if chapter_id is not None:

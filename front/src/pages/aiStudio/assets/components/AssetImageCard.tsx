@@ -125,7 +125,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
 
   const generate = async () => {
     const { assetGenerations, setAssetGeneration } = useTaskUiStore.getState()
-    if (asset.source_character_id || assetGenerations[generationKey] || hasActiveTask) return
+    if (assetGenerations[generationKey] || hasActiveTask) return
     setAssetGeneration(generationKey, { status: 'submitting' })
     try {
       const response = await StudioEntitiesService.createEntityImageApiV1StudioEntitiesEntityTypeEntityIdImagesPost({
@@ -133,8 +133,13 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
       })
       const target = response.data as AssetImage | undefined
       if (!target) throw new Error('无法创建正面图片记录')
-      const draft = await adapter.renderPrompt(asset.id, target.id)
-      const id = await adapter.createGenerationTask(asset.id, target.id, { ...draft, references: asset.references })
+      let references = asset.references
+      if (asset.source_character_id) {
+        const source = preferredImage((await adapter.listImages(asset.id)).filter(image => image.file_id))
+        references = source?.file_id ? [{ file_id: source.file_id, role: 'design' }] : []
+      }
+      const draft = await adapter.renderPrompt(asset.id, target.id, asset.source_character_id ? { references } : undefined)
+      const id = await adapter.createGenerationTask(asset.id, target.id, { ...draft, references })
       if (!id) throw new Error('未创建生成任务')
       setAssetGeneration(generationKey, { status: 'submitted', taskId: id })
       message.success(`已创建${label}图片生成任务`)
@@ -171,10 +176,10 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
         <Tag>{asset.source_character_id ? asset.details_editable ? '从角色转化' : '从角色转化 · 详情只读' : '共享资产'}</Tag>
         <p className="asset-library-description" title={description}>{description || '未填写简介'}</p>
         <div className="asset-library-card-actions">
-          {!asset.source_character_id && <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
+          <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
             aria-label={generateLabel} loading={generating} disabled={generating} onClick={() => void generate()}>
             {generateLabel}
-          </Button>}
+          </Button>
           {taskReadFailed && <span role="status">状态读取失败，正在重试</span>}
 
         </div>

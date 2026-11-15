@@ -629,7 +629,7 @@ async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp
 
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add(Scene(id='location', name='原场所', style='真人都市'))
+            db.add(Scene(id='location', project_id='p1', name='原场所', style='真人都市'))
             await db.flush()
             db.add(ProjectSceneLink(project_id='p1', scene_id='location'))
             db.add(SceneImage(id=777, scene_id='location', file_id='image1'))
@@ -676,7 +676,7 @@ async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp
         collection = next(node for node in graph['nodes'] if node['kind'] == 'unit_references'
                           and any(binding['id'] == 'reference' for binding in node['bindings']))
         preview = next(item for item in collection['previews'] if item['binding_id'] == 'reference')
-        assert preview['source_status'] == 'unavailable'
+        assert preview['source_status'] == ('unavailable' if source_loss == 'deleted' else 'available')
         assert collection['previews'][0]['status'] == 'available'
         assert collection['previews'][0]['media_url'] == '/api/v1/studio/files/image1/download'
         for change in ['reference-id', 'unit-id', 'extra-reference', 'origin-name', 'file-id', 'selection-source']:
@@ -760,8 +760,8 @@ async def test_stale_defaults_are_retained_but_new_invalid_defaults_rejected(tmp
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add_all([Character(id='default-person', project_id='p1', name='原人物', style='真人都市'),
-                        Scene(id='default-place', name='原场所', style='真人都市'),
-                        Prop(id='default-prop', name='原物件', style='真人都市')])
+                        Scene(id='default-place', project_id='p1', name='原场所', style='真人都市'),
+                        Prop(id='default-prop', project_id='p1', name='原物件', style='真人都市')])
             await db.flush()
             db.add_all([ProjectSceneLink(project_id='p1', scene_id='default-place'),
                         ProjectPropLink(project_id='p1', prop_id='default-prop')])
@@ -778,6 +778,8 @@ async def test_stale_defaults_are_retained_but_new_invalid_defaults_rejected(tmp
             await db.execute(delete(Character).where(Character.id == 'default-person'))
             await db.execute(delete(ProjectSceneLink).where(ProjectSceneLink.scene_id == 'default-place'))
             await db.execute(delete(ProjectPropLink).where(ProjectPropLink.prop_id == 'default-prop'))
+            await db.execute(delete(Scene).where(Scene.id == 'default-place'))
+            await db.execute(delete(Prop).where(Prop.id == 'default-prop'))
         content['output_aspect_ratio'] = '9:16'
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content})
         assert saved.status_code == 200, saved.text

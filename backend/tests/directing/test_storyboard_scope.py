@@ -264,7 +264,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             (await db.get(Chapter, 'ch1')).raw_text = original
             db.add_all([Provider(id='rain-text', name='openai', base_url='https://fixture.test/v1', api_key='test'),
                         Provider(id='rain-video', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
-                        Prop(id='parked-van', name='白色面包车', style='真人都市')])
+                        Prop(id='parked-van', project_id='p1', name='白色面包车', style='真人都市')])
             await db.flush()
             db.add_all([Model(id='rain-text-model', name='text', category='text', provider_id='rain-text'),
                         Model(id='rain-video-model', name='viduq2', category='video', provider_id='rain-video'),

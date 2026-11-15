@@ -11,7 +11,6 @@ import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
-import { resourceAssetUrl } from '../../../assets/components/ResourceEditorDrawer'
 import { Tag } from 'antd'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
@@ -37,7 +36,6 @@ function LinkedAssetTab({
   const navigate = useNavigate()
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [unlinkingId, setUnlinkingId] = useState<number | null>(null)
 
   const [links, setLinks] = useState<(ProjectPropLinkRead | ProjectCostumeLinkRead)[]>([])
   const [assetsById, setAssetsById] = useState<Record<string, AssetItemLike>>({})
@@ -105,23 +103,6 @@ function LinkedAssetTab({
 
 
 
-  const handleUnlink = async (link: ProjectPropLinkRead | ProjectCostumeLinkRead) => {
-    setUnlinkingId(link.id)
-    try {
-      if ('prop_id' in link) {
-        await StudioProjectAssetsService.deleteProjectPropLinkApiV1StudioProjectAssetsPropLinkIdDelete({ linkId: link.id })
-      } else {
-        await StudioProjectAssetsService.deleteProjectCostumeLinkApiV1StudioProjectAssetsCostumeLinkIdDelete({ linkId: link.id })
-      }
-      message.success('已取消关联')
-      await loadLinks()
-    } catch {
-      message.error('取消关联失败')
-      throw new Error('取消关联失败')
-    } finally {
-      setUnlinkingId(null)
-    }
-  }
 
   const { openDetail, detailView } = useProjectAssetDetail(kind, loadLinks)
   if (detailView) return detailView
@@ -154,24 +135,21 @@ function LinkedAssetTab({
                   imageAlt={asset?.name ?? '资源信息暂不可用'}
                   placeholder={<>{kind === 'prop' ? <TagOutlined aria-hidden /> : <SkinOutlined aria-hidden />}暂无封面</>}
                   extra={<Dropdown trigger={['click']} menu={{ items: [
-                    { key: 'edit', label: asset?.project_id === null ? '编辑共享资产 ↗' : '编辑', onClick: () => asset?.project_id === null ? window.open(resourceAssetUrl(kind, assetId), '_blank', 'noopener,noreferrer') : openDetail(assetId) },
-                    { key: 'unlink', label: asset?.project_id ? '删除项目对象' : '取消关联', danger: true, disabled: unlinkingId === l.id, onClick: () => {
+                    { key: 'edit', label: '编辑', onClick: () => openDetail(assetId) },
+                    { key: 'delete', label: '删除项目对象', danger: true, disabled: !asset, onClick: () => {
                       Modal.confirm({
                         className: 'project-resource-dialog',
-                        title: `${asset?.project_id ? '删除项目对象' : '取消关联'}「${asset?.name ?? '资源信息暂不可用'}」？`,
-                        content: asset?.project_id ? '删除此项目对象及其图片关联，已入库的独立副本继续保留。' : '仅移除项目关联，不删除资产库中的共享对象。',
-                        okText: asset?.project_id ? '删除项目对象' : '取消关联', cancelText: '取消', okButtonProps: { danger: true },
+                        title: `删除项目对象「${asset?.name ?? '资源信息暂不可用'}」？`,
+                        content: '删除此项目对象及其图片关联，已入库的独立副本继续保留。',
+                        okText: '删除项目对象', cancelText: '取消', okButtonProps: { danger: true },
                         onOk: async () => {
-                          if (asset?.project_id) {
-                            try { await StudioEntitiesApi.remove(kind, assetId); await loadLinks() }
-                            catch (cause) { message.error(directingError(cause)); throw cause }
-                          }
-                          else await handleUnlink(l)
+                          try { await StudioEntitiesApi.remove(kind, assetId); await loadLinks() }
+                          catch (cause) { message.error(directingError(cause)); throw cause }
                         },
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${asset?.name ?? '资源信息暂不可用'}更多操作`} /></Dropdown>}
-                  meta={<><Tag>{asset?.project_id === undefined ? '归属未确认' : asset.project_id ? '项目专属' : '共享资产'}</Tag>{asset && <ResourcePublishButton kind={kind} asset={asset} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div></>}
+                  meta={<><Tag>项目专属</Tag>{asset && <ResourcePublishButton kind={kind} asset={asset} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}

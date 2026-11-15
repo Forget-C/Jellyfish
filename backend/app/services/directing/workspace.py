@@ -234,17 +234,14 @@ class WorkspaceService(DirectingStore):
             file_id=file.id, media_range={"source_in_ms": at_ms, "source_out_ms": at_ms + 1}))
 
     async def assets(self):
-        """列出当前项目已关联资产，供场次工作单显式选择。"""
+        """列出当前项目直接拥有的对象，供场次工作单显式选择。"""
         from app.core.contracts.directing.workspace import AssetSummary
-        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+        from app.models.studio import Character, Scene, Prop
         from app.services.directing.object_assets import reference_images
 
         result = []
-        queries = [("character", select(Character).where(Character.project_id == self.project_id)),
-            ("scene", select(Scene).where(or_(Scene.project_id == self.project_id,
-                Scene.project_id.is_(None) & Scene.id.in_(select(ProjectSceneLink.scene_id).where(ProjectSceneLink.project_id == self.project_id))))),
-            ("prop", select(Prop).where(or_(Prop.project_id == self.project_id,
-                Prop.project_id.is_(None) & Prop.id.in_(select(ProjectPropLink.prop_id).where(ProjectPropLink.project_id == self.project_id)))))]
+        queries = [(kind, select(model).where(model.project_id == self.project_id))
+                   for kind, model in [('character', Character), ('scene', Scene), ('prop', Prop)]]
         for kind, query in queries:
             rows = list(await self.db.scalars(query))
             grouped = await reference_images(self.db, kind, [row.id for row in rows])

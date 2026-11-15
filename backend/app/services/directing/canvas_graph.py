@@ -17,7 +17,7 @@ from app.core.contracts.directing.relationship_graph import SceneRelationshipGra
 from app.core.contracts.directing.style import StyleRule
 from app.services.directing.unit_video_inputs import VideoUnitModel, read_video_unit_model
 from app.models.llm import Model
-from app.models.studio import Character, FileItem, FileUsage, ProjectPropLink, ProjectSceneLink, Prop, Scene
+from app.models.studio import Character, FileItem, FileUsage, Prop, Scene
 
 if TYPE_CHECKING:
     from app.core.contracts.directing.scene_version import SceneVersionContent
@@ -106,9 +106,8 @@ class CanvasReadContext:
         location_name = None
         asset_id = content.design.direction.location_asset_id
         if asset_id:
-            location_name = await db.scalar(select(Scene.name).join(
-                ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(
-                    Scene.id == asset_id, ProjectSceneLink.project_id == project_id))
+            location_name = await db.scalar(select(Scene.name).where(
+                Scene.id == asset_id, Scene.project_id == project_id))
         model_ids = {unit.model_id for unit in content.units if unit.model_id}
         models = list(await db.scalars(select(Model).where(
             Model.id.in_(model_ids), Model.category == 'video'))) if model_ids else []
@@ -136,16 +135,11 @@ class CanvasReadContext:
         origins = {(binding.asset_origin.kind, binding.asset_origin.id)
                    for unit in content.units for binding in unit.references if binding.asset_origin}
         available_sources = set()
-        for kind, model, link in [('character', Character, None), ('scene', Scene, ProjectSceneLink),
-                                  ('prop', Prop, ProjectPropLink)]:
+        for kind, model in [('character', Character), ('scene', Scene), ('prop', Prop)]:
             ids = {identity for source_kind, identity in origins if source_kind == kind}
             if not ids:
                 continue
-            query = select(model.id).where(model.id.in_(ids))
-            if link is None:
-                query = query.where(model.project_id == project_id)
-            else:
-                query = query.join(link, getattr(link, kind + '_id') == model.id).where(link.project_id == project_id)
+            query = select(model.id).where(model.id.in_(ids), model.project_id == project_id)
             available_sources.update((kind, identity) for identity in await db.scalars(query))
         return cls(version_id, revision, content, relationships, location_name,
                    model_names, model_inputs, model_input_errors, style_rules, style_issues, files, available_sources, await dependency_loader())

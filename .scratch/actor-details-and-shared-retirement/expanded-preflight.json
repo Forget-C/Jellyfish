@@ -1,0 +1,414 @@
+{
+  "read_only": true,
+  "ready_to_apply": false,
+  "approved_counts": {
+    "directing_actions": 16,
+    "directing_cut_frames": 10,
+    "directing_cut_take_references": 13,
+    "directing_repair_plans": 1,
+    "directing_revision_dependencies": 62,
+    "directing_revisions": 42,
+    "directing_seam_reviews": 1,
+    "directing_takes": 5,
+    "generation_canvas_current_outputs": 6,
+    "generation_canvas_events": 14,
+    "generation_canvas_result_sets": 6,
+    "generation_canvas_run_nodes": 6,
+    "generation_canvas_save_receipts": 1,
+    "task_inputs": 20,
+    "tasks": 39
+  },
+  "expanded_counts": {
+    "directing_actions": 16,
+    "directing_cut_frames": 10,
+    "directing_cut_take_references": 13,
+    "directing_repair_plans": 1,
+    "directing_revision_dependencies": 67,
+    "directing_revisions": 51,
+    "directing_seam_reviews": 1,
+    "directing_takes": 5,
+    "generation_canvas_current_outputs": 6,
+    "generation_canvas_events": 42,
+    "generation_canvas_result_sets": 6,
+    "generation_canvas_run_nodes": 6,
+    "generation_canvas_save_receipts": 1,
+    "task_inputs": 21,
+    "tasks": 44,
+    "directing_active_cuts": 3,
+    "task_outputs": 5
+  },
+  "additional_history": {
+    "directing_revision_dependencies": [
+      {
+        "revision_id": "92fb41ca9fc349b4a837939198abb4dd",
+        "dependency_id": "d3d5d32258a6498d86d0e4e77490de42"
+      },
+      {
+        "revision_id": "c5ebf6a87f1144dcab7b7348525591da",
+        "dependency_id": "88c543a211ac4290aaacc546a24b2805"
+      },
+      {
+        "revision_id": "ce22c026d7ac4b8fb04ed8ca42e219d1",
+        "dependency_id": "88c543a211ac4290aaacc546a24b2805"
+      },
+      {
+        "revision_id": "ddba7a799b6d47cdb035654f59334ce7",
+        "dependency_id": "dadc6f90092448f19b26194f3f543b7c"
+      },
+      {
+        "revision_id": "f56f3492ab3e409c96e65eb5e5e142a7",
+        "dependency_id": "53f1d141e53d42d9b1b0ae4200f119d3"
+      }
+    ],
+    "directing_revisions": [
+      {
+        "id": "53f1d141e53d42d9b1b0ae4200f119d3"
+      },
+      {
+        "id": "88c543a211ac4290aaacc546a24b2805"
+      },
+      {
+        "id": "92fb41ca9fc349b4a837939198abb4dd"
+      },
+      {
+        "id": "c5ebf6a87f1144dcab7b7348525591da"
+      },
+      {
+        "id": "ce22c026d7ac4b8fb04ed8ca42e219d1"
+      },
+      {
+        "id": "d3d5d32258a6498d86d0e4e77490de42"
+      },
+      {
+        "id": "dadc6f90092448f19b26194f3f543b7c"
+      },
+      {
+        "id": "ddba7a799b6d47cdb035654f59334ce7"
+      },
+      {
+        "id": "f56f3492ab3e409c96e65eb5e5e142a7"
+      }
+    ],
+    "generation_canvas_events": [
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 25
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 26
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 27
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 28
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 29
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 30
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 31
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 32
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 33
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 34
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 35
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 36
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 37
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 38
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 41
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 42
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 43
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 44
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 45
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 46
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 47
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 48
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 49
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 50
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 51
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 52
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 53
+      },
+      {
+        "canvas_id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+        "cursor": 54
+      }
+    ],
+    "task_inputs": [
+      {
+        "task_id": "95d193ec3a664e9a8a453459a7d64a25",
+        "role_path": "frames.first",
+        "ordinal": 0
+      }
+    ],
+    "tasks": [
+      {
+        "id": "42b427c43aed4f50936bb60bafe22464"
+      },
+      {
+        "id": "95d193ec3a664e9a8a453459a7d64a25"
+      },
+      {
+        "id": "98a85fb5d3ab4400a12228b6b534d9d6"
+      },
+      {
+        "id": "f77b96e908ad4c38b72716d06099edce"
+      },
+      {
+        "id": "f9423a055f50480aa1be87f2078e554a"
+      }
+    ],
+    "directing_active_cuts": [
+      {
+        "sequence_id": "bef7241d94174e829480cb5eafae6af4"
+      },
+      {
+        "sequence_id": "cfd562253deb491795dce76c60179848"
+      },
+      {
+        "sequence_id": "d76cd716f9ea4e9b94dc4c569942fa99"
+      }
+    ],
+    "task_outputs": [
+      {
+        "task_id": "42b427c43aed4f50936bb60bafe22464",
+        "ordinal": 0
+      },
+      {
+        "task_id": "95d193ec3a664e9a8a453459a7d64a25",
+        "ordinal": 0
+      },
+      {
+        "task_id": "98a85fb5d3ab4400a12228b6b534d9d6",
+        "ordinal": 0
+      },
+      {
+        "task_id": "f77b96e908ad4c38b72716d06099edce",
+        "ordinal": 0
+      },
+      {
+        "task_id": "f9423a055f50480aa1be87f2078e554a",
+        "ordinal": 0
+      }
+    ]
+  },
+  "current_history_references": [
+    {
+      "table": "directing_scene_versions",
+      "pk": {
+        "id": "59791d073efc4a46bc7860dc95e0b270"
+      },
+      "paths": {
+        "content": [
+          ".unit_design_task_id"
+        ]
+      }
+    },
+    {
+      "table": "generation_canvases",
+      "pk": {
+        "id": "d8a7eccaeecc4a999d0b143b4650cebe"
+      },
+      "paths": {
+        "document": [
+          ".storyboard.task_id"
+        ]
+      }
+    }
+  ],
+  "missing_approved_rows": [],
+  "active_tasks": [],
+  "source_drift": [],
+  "name_conflicts": [],
+  "unclassified_references": [],
+  "release_file_usages": [
+    {
+      "id": 38
+    },
+    {
+      "id": 50
+    },
+    {
+      "id": 51
+    },
+    {
+      "id": 52
+    },
+    {
+      "id": 53
+    },
+    {
+      "id": 54
+    },
+    {
+      "id": 55
+    },
+    {
+      "id": 56
+    },
+    {
+      "id": 57
+    },
+    {
+      "id": 58
+    },
+    {
+      "id": 59
+    },
+    {
+      "id": 60
+    },
+    {
+      "id": 61
+    },
+    {
+      "id": 62
+    },
+    {
+      "id": 63
+    },
+    {
+      "id": 64
+    },
+    {
+      "id": 85
+    },
+    {
+      "id": 86
+    },
+    {
+      "id": 87
+    },
+    {
+      "id": 92
+    },
+    {
+      "id": 93
+    },
+    {
+      "id": 94
+    },
+    {
+      "id": 95
+    },
+    {
+      "id": 96
+    },
+    {
+      "id": 97
+    },
+    {
+      "id": 98
+    },
+    {
+      "id": 99
+    },
+    {
+      "id": 100
+    },
+    {
+      "id": 823
+    },
+    {
+      "id": 824
+    },
+    {
+      "id": 825
+    },
+    {
+      "id": 2472
+    },
+    {
+      "id": 2473
+    },
+    {
+      "id": 2474
+    },
+    {
+      "id": 2483
+    },
+    {
+      "id": 2484
+    },
+    {
+      "id": 2485
+    },
+    {
+      "id": 2486
+    },
+    {
+      "id": 2487
+    }
+  ],
+  "reason": "Read-only report; execution requires the separately reviewed exact-plan command and adoption policy.",
+  "approval_sha256": "62bb29f7d9e1d16491a292258488039dc1e747768606e32572859680a6458ba7"
+}
