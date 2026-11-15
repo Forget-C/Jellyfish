@@ -180,7 +180,7 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
             invalid_reference = await client.patch(f"/api/v1/studio/entities/{kind}/{copy['id']}", json={
                 "references": [{**reference, "file_id": file_id, "source_id": "private-actor"}],
             })
-            assert invalid_reference.status_code == 400, invalid_reference.text
+            assert invalid_reference.status_code == 403, invalid_reference.text
             adopted = await client.post(f"/api/v1/studio/entities/{kind.upper()}/private-actor/adopt-reference-main", json={"reference": reference})
             assert adopted.status_code == 200, adopted.text
             assert adopted.json()["data"]["file_id"] != copied_file
@@ -220,7 +220,7 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
             })
             assert duplicate.status_code == 409, duplicate.text
             after_submit = await client.get(f"/api/v1/studio/entities/{kind}", params={"project_id": "project-a"})
-            assert "shared-actor" in [item["id"] for item in after_submit.json()["data"]["items"]]
+            assert "shared-actor" not in [item["id"] for item in after_submit.json()["data"]["items"]]
             if kind == "actor":
                 role = await client.post("/api/v1/studio/entities/character", json={
                     "id": "role-a", "project_id": "project-a", "name": "故事角色",
@@ -228,24 +228,25 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
                 })
                 assert role.status_code == 201, role.text
                 missing = await client.post("/api/v1/studio/entities/character/role-a/publish-to-library", json={})
-                assert missing.status_code == 400, missing.text
+                assert missing.status_code == 422, missing.text
                 role_image = await client.post("/api/v1/studio/entities/character/role-a/images", json={"file_id": file_id})
                 assert role_image.status_code == 201, role_image.text
                 converted = await client.post("/api/v1/studio/entities/CHARACTER/role-a/publish-to-library", json={})
                 assert converted.status_code == 201, converted.text
                 actor_id = converted.json()["data"]["id"]
-                assert converted.json()["data"]["source_character_id"] == "role-a"
+                assert converted.json()["data"]["source_id"] == "role-a"
+                assert converted.json()["data"]["origin"] == "project"
                 rejected = await client.patch(f"/api/v1/studio/entities/actor/{actor_id}", json={"hair": "新发型"})
                 assert rejected.status_code == 403, rejected.text
                 rejected_image = await client.post(f"/api/v1/studio/entities/actor/{actor_id}/images", json={"file_id": file_id})
-                assert rejected_image.status_code == 403, rejected_image.text
+                assert rejected_image.status_code == 201, rejected_image.text
                 converted_images = await client.get(f"/api/v1/studio/entities/actor/{actor_id}/images")
                 converted_slot = converted_images.json()["data"]["items"][0]["id"]
                 rejected_generation = await client.post(
                     f"/api/v1/studio/generation-tasks/actors/{actor_id}/slots/{converted_slot}/tasks",
                     json={"execution_prompt": "尝试修改只读资产", "operation_input": {"kind": "image_generation"}},
                 )
-                assert rejected_generation.status_code == 403, rejected_generation.text
+                assert rejected_generation.status_code == 409, rejected_generation.text
                 linked = await client.post("/api/v1/studio/project-assets/actor", json={"project_id": "project-a", "asset_id": actor_id})
                 assert linked.status_code == 201, linked.text
                 blocked_delete = await client.delete(f"/api/v1/studio/entities/actor/{actor_id}")

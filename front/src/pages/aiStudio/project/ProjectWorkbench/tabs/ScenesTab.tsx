@@ -1,13 +1,14 @@
 import { directingError } from '../../../directing/common'
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Dropdown, Empty, Input, Modal, Space, message, Pagination } from 'antd'
-import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, EnvironmentOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Empty, Modal, Space, message, Pagination } from 'antd'
+import { ArrowRightOutlined, MoreOutlined, PlusOutlined, EnvironmentOutlined } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectSceneLinkRead } from '../../../../../services/generated'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
+import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
 import { resourceAssetUrl } from '../../../assets/components/ResourceEditorDrawer'
@@ -33,11 +34,6 @@ export function ScenesTab() {
   const [scenesById, setScenesById] = useState<Record<string, SceneLike>>({})
 
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [linkModalOpen, setLinkModalOpen] = useState(false)
-  const [scenes, setScenes] = useState<SceneLike[]>([])
-  const [scenesLoading, setScenesLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [linkingId, setLinkingId] = useState<string | null>(null)
   const [unlinkingId, setUnlinkingId] = useState<number | null>(null)
 
   const [page, setPage] = useState(1)
@@ -91,38 +87,13 @@ export function ScenesTab() {
     }
   }
 
-  const loadScenes = async (searchQuery?: string) => {
-    setScenesLoading(true)
-    try {
-      const q = (searchQuery !== undefined ? searchQuery : search).trim()
-      const res = await StudioEntitiesApi.list('scene', {
-        q: q ? q : null,
-        order: 'updated_at',
-        isDesc: true,
-        page: 1,
-        pageSize: 100,
-      })
-      setScenes((res.data?.items ?? []) as SceneLike[])
-    } catch {
-      message.error('加载场景失败')
-      setScenes([])
-    } finally {
-      setScenesLoading(false)
-    }
-  }
 
   useEffect(() => {
     void loadLinks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  useEffect(() => {
-    if (linkModalOpen) void loadScenes('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkModalOpen])
 
-  const linkedSceneIdSet = useMemo(() => new Set(links.map((l) => l.scene_id)), [links])
-  const availableScenes = useMemo(() => scenes.filter((s) => !linkedSceneIdSet.has(s.id)), [scenes, linkedSceneIdSet])
 
   const toThumbUrl = (thumbnail?: string) => {
     const url = resolveAssetUrl(thumbnail)
@@ -132,22 +103,6 @@ export function ScenesTab() {
     return undefined
   }
 
-  const handleLinkScene = async (scene: SceneLike) => {
-    if (!projectId || linkingId) return
-    setLinkingId(scene.id)
-    try {
-      await StudioProjectAssetsService.createProjectSceneLinkApiV1StudioProjectAssetsScenePost({
-        requestBody: { project_id: projectId, chapter_id: null, asset_id: scene.id },
-      })
-      message.success(`已关联场景「${scene.name}」到项目`)
-      setLinkModalOpen(false)
-      await loadLinks()
-    } catch {
-      message.error('关联失败')
-    } finally {
-      setLinkingId(null)
-    }
-  }
 
   const handleUnlinkScene = async (link: ProjectSceneLinkRead) => {
     setUnlinkingId(link.id)
@@ -173,13 +128,12 @@ export function ScenesTab() {
       <ProjectContentToolbar>
         <h1 className="app-page-title">项目场景</h1>
         <Space wrap>
-          <Button type="primary" icon={<LinkOutlined />} onClick={() => { setSearch(''); setLinkModalOpen(true) }}>从资产库关联</Button>
-          <Button icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>新建</Button>
+          <ResourceCreateButton kind={'scene'} projectId={projectId} onCreate={() => setCreateModalOpen(true)} onCreated={loadLinks}><Button aria-label="新建" type="primary" icon={<PlusOutlined aria-hidden />}>新建</Button></ResourceCreateButton>
           <Button type="link" onClick={() => navigate('/assets?tab=scene')}>查看资产库</Button>
         </Space>
       </ProjectContentToolbar>
         {links.length === 0 && !linksLoading ? (
-          <Empty description="暂无项目场景，可从资产库关联场景到本项目" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty description="暂无项目场景，可新建或从资产库导入" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <div className="space-y-3">
             <div className="project-resource-grid">
@@ -237,62 +191,6 @@ export function ScenesTab() {
       <ResourceEditorDrawer open={createModalOpen} kind="scene" projectId={projectId}
         onClose={() => setCreateModalOpen(false)} onSaved={loadLinks} />
 
-      <Modal
-        className="project-resource-dialog"
-        title="从资产库关联场景"
-        open={linkModalOpen}
-        onCancel={() => { if (!linkingId) setLinkModalOpen(false) }}
-        closable={!linkingId} keyboard={!linkingId} maskClosable={!linkingId}
-        footer={null}
-        width={560}
-      >
-        <div className="mb-3">
-          <Input.Search
-            placeholder="搜索场景名称"
-            allowClear
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onSearch={(value) => loadScenes(value)}
-          />
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto">
-          {scenesLoading ? (
-            <div className="py-8 text-center text-gray-500">加载中...</div>
-          ) : availableScenes.length === 0 ? (
-            <Empty description={scenes.length === 0 ? '暂无场景，请先在资产管理中创建场景' : '当前项目已关联全部搜索结果'} />
-          ) : (
-            <div className="space-y-2">
-              {availableScenes.map((scene) => (
-                <div
-                  key={scene.id}
-                  className="flex items-center justify-between gap-3 rounded border border-gray-200 p-2 hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {toThumbUrl(scene.thumbnail) ? (
-                      <img
-                        src={toThumbUrl(scene.thumbnail)}
-                        alt=""
-                        className="w-10 h-10 rounded object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
-                        —
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{scene.name}</div>
-                      {scene.description && <div className="text-xs text-gray-500 truncate">{scene.description}</div>}
-                    </div>
-                  </div>
-                  <Button type="primary" size="small" disabled={!!linkingId} loading={linkingId === scene.id} onClick={() => handleLinkScene(scene)}>
-                    关联到项目
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
     </div>
   )
 }

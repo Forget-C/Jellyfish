@@ -6,6 +6,7 @@ import { useProjectCharacters } from '../hooks/useProjectData'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
+import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
@@ -61,7 +62,7 @@ export function RolesTab() {
     <div className="project-resource-page project-role-page">
       <ProjectContentToolbar>
         <h1 className="app-page-title">项目角色</h1>
-        <Button ref={createTrigger} aria-label="新建角色" type="primary" icon={<PlusOutlined />} onClick={() => { setCreateSeed(undefined); setCreateOpen(true) }}>新建角色</Button>
+        <ResourceCreateButton kind="character" projectId={projectId} onCreate={() => { setCreateSeed(undefined); setCreateOpen(true) }} onCreated={refresh}><Button ref={createTrigger} aria-label="新建角色" type="primary" icon={<PlusOutlined />}>新建角色</Button></ResourceCreateButton>
       </ProjectContentToolbar>
         {characters.length === 0 && !loading ? (
           <Empty description="暂无项目角色" image={Empty.PRESENTED_IMAGE_SIMPLE} />

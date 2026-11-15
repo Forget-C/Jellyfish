@@ -451,6 +451,7 @@ export type { ImageGenerationOptionsRead } from './models/ImageGenerationOptions
 export type { ImageMediaInput } from './models/ImageMediaInput';
 export type { ImageModelCard } from './models/ImageModelCard';
 export type { ImageModelConfig } from './models/ImageModelConfig';
+export type { ImageSourceRequest } from './models/ImageSourceRequest';
 export type { ImmutableFactCard } from './models/ImmutableFactCard';
 export type { ImmutableFactFields } from './models/ImmutableFactFields';
 export type { InFrameActivityCard } from './models/InFrameActivityCard';
@@ -829,6 +830,7 @@ export type { UnitScopeProjection_Input } from './models/UnitScopeProjection_Inp
 export type { UnitScopeProjection_Output } from './models/UnitScopeProjection_Output';
 export type { UnitScopeUse_Input } from './models/UnitScopeUse_Input';
 export type { UnitScopeUse_Output } from './models/UnitScopeUse_Output';
+export type { UploadedAssetImage } from './models/UploadedAssetImage';
 export type { ValidationError } from './models/ValidationError';
 export type { VersionRequest } from './models/VersionRequest';
 export type { VideoContentCard } from './models/VideoContentCard';

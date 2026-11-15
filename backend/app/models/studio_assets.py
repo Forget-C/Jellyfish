@@ -22,6 +22,11 @@ class StructuredAssetMixin:
         String(64), Computed("coalesce(project_id, '')", persisted=False),
     )
 
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="created", server_default="created")
+    source_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     references: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     library_copy_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
@@ -261,6 +266,11 @@ class Character(Base, TimestampMixin):
     """
 
     __tablename__ = "characters"
+
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="created", server_default="created")
+    source_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     references: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     library_copy_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

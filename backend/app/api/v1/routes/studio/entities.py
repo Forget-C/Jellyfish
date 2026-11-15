@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
@@ -20,6 +20,42 @@ from app.services.studio.entities import StudioEntitiesService
 from app.core.contracts.asset_prompts import AssetPromptReference
 
 router = APIRouter()
+
+
+class UploadedAssetImage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    file_id: str = Field(min_length=1)
+    view_angle: str = Field(pattern="^(FRONT|LEFT|TOP|BACK)$")
+
+
+class ImageSourceRequest(BaseModel):
+    """客户端身份用于重试；来源和权限只能由服务端决定。"""
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    project_id: str | None = Field(None, min_length=1, max_length=64)
+    source_id: str | None = Field(None, min_length=1, max_length=64)
+    images: list[UploadedAssetImage] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def trim_name(cls, value):
+        if not value.strip():
+            raise ValueError("名称不能为空")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def require_one_source(self):
+        if bool(self.source_id) == bool(self.images):
+            raise ValueError("请选择来源或至少上传一张图片")
+        return self
+
+
+@router.post("/{entity_type}/image-source", response_model=ApiResponse[dict[str, Any]], status_code=201,
+             summary="从上传图片或资产库创建独立图片来源对象")
+async def create_image_source_entity(entity_type: str, body: ImageSourceRequest, db: AsyncSession = Depends(get_db)):
+    from app.services.studio.image_sources import create_image_source
+    return created_response(await create_image_source(db, entity_type=entity_type, request=body))
 
 
 class LibraryCopyRequest(BaseModel):

@@ -1,13 +1,11 @@
 """项目专属对象的独立入库副本。"""
 
-from copy import deepcopy
 from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.studio.resource_image_copies import copy_image_file
 from app.services.studio.entity_crud import flush_resource, get_entity
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
 
@@ -27,13 +25,6 @@ async def publish_to_library(
     target_spec = entity_spec(target_type)
     if source.library_copy_id:
         return await get_entity(db, entity_type=target_type, entity_id=source.library_copy_id)
-    if entity_type == "character":
-        main = await db.scalar(select(spec.image_model.id).where(
-            spec.image_model.character_id == source.id,
-            spec.image_model.is_primary.is_(True), spec.image_model.file_id.is_not(None),
-        ))
-        if main is None:
-            raise HTTPException(400, "角色入库前需要有效主图")
     copy_name = (name if name is not None else source.name).strip()
     if not copy_name:
         raise HTTPException(422, "副本名称不能为空")
@@ -42,27 +33,14 @@ async def publish_to_library(
     ))
     if duplicate:
         raise HTTPException(409, "资产库中已存在同名对象，请修改副本名称")
-    excluded = {"id", "project_id", "name_scope", "library_copy_id", "created_at", "updated_at", "references"}
-    values = {column.key: deepcopy(getattr(source, column.key))
-              for column in spec.model.__table__.columns if column.key not in excluded}
-    values.update(id=uuid4().hex, name=copy_name, project_id=None)
-    if entity_type == "character":
-        values = {"id": values["id"], "name": copy_name, "project_id": None,
-                  "source_character_id": source.id, "supplementary_info": source.description,
-                  "style": source.style, "visual_style": source.visual_style}
-    target = target_spec.model(**values)
+    from app.services.studio.image_sources import source_images, copy_images
+    images = await source_images(db, spec, source.id)
+    if not images:
+        raise HTTPException(422, "入库前需要至少一张有效图片")
+    target = target_spec.model(id=uuid4().hex, name=copy_name, project_id=None,
+                               style="真人都市", visual_style="现实", origin="project", source_kind=entity_type, source_id=source.id)
     db.add(target)
     source.library_copy_id = target.id
     await flush_resource(db)
-    images = await db.scalars(select(spec.image_model).where(
-        getattr(spec.image_model, spec.id_field) == source.id,
-        spec.image_model.file_id.is_not(None),
-    ))
-    for image in images:
-        file = await copy_image_file(db, file_id=image.file_id)
-        fields = {column.key: deepcopy(getattr(image, column.key))
-                  for column in spec.image_model.__table__.columns
-                  if column.key not in {"id", spec.id_field, "file_id", "created_at", "updated_at", "version_id"}}
-        db.add(target_spec.image_model(**{target_spec.id_field: target.id, "file_id": file.id, **fields}))
-    await db.flush()
+    await copy_images(db, source_rows=images, target_spec=target_spec, target_id=target.id)
     return await get_entity(db, entity_type=target_type, entity_id=target.id)

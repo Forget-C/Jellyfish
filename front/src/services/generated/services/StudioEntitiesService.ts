@@ -14,6 +14,7 @@ import type { CharacterUpdate } from '../models/CharacterUpdate';
 import type { CostumeCreate } from '../models/CostumeCreate';
 import type { CostumeUpdate } from '../models/CostumeUpdate';
 import type { EntityNameExistenceCheckRequest } from '../models/EntityNameExistenceCheckRequest';
+import type { ImageSourceRequest } from '../models/ImageSourceRequest';
 import type { LibraryCopyRequest } from '../models/LibraryCopyRequest';
 import type { PropCreate } from '../models/PropCreate';
 import type { PropUpdate } from '../models/PropUpdate';
@@ -23,6 +24,31 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class StudioEntitiesService {
+    /**
+     * 从上传图片或资产库创建独立图片来源对象
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static createImageSourceEntityApiV1StudioEntitiesEntityTypeImageSourcePost({
+        entityType,
+        requestBody,
+    }: {
+        entityType: string,
+        requestBody: ImageSourceRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/entities/{entity_type}/image-source',
+            path: {
+                'entity_type': entityType,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * 采用参考图的独立副本作为对象主图
      * @returns ApiResponse_dict_str__Any__ Successful Response

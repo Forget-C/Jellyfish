@@ -62,8 +62,26 @@ class ActorUpdate(ActorFields):
     visual_style: ProjectVisualStyle | None = None
 
 
-class ActorRead(ActorFields, ActorBase):
+class SourceInfo(BaseModel):
+    """对象来源只由创建工作流写入。"""
+    origin: str = "created"
+    source_kind: str | None = None
+    source_id: str | None = None
+
+    @model_validator(mode="after")
+    def omit_image_source_style(self):
+        """兼容旧表非空风格列，但不能将内部默认值投影为图片来源的基础事实。"""
+        if self.origin != "created" and hasattr(self, "style"):
+            setattr(self, "style", None)
+            setattr(self, "visual_style", None)
+        return self
+
+
+class ActorRead(SourceInfo, ActorFields, ActorBase):
     """返回演员设定及后端派生的完整描述。"""
+
+    style: ProjectStyle | None = None
+    visual_style: ProjectVisualStyle | None = None
 
     references: list[AssetPromptReference] = Field(default_factory=list)
 
@@ -125,7 +143,10 @@ class CharacterUpdate(BaseModel):
     visual_style: ProjectVisualStyle | None = None
 
 
-class CharacterRead(CharacterBase):
+class CharacterRead(SourceInfo, CharacterBase):
+    style: ProjectStyle | None = None
+    visual_style: ProjectVisualStyle | None = None
+
     library_copy_id: str | None = None
     model_config = ConfigDict(from_attributes=True)
 

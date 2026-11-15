@@ -122,6 +122,7 @@ try {
   await nameLink.waitFor({state:'hidden'})
   assert.equal(attempts,2)
   await page.getByRole('button',{name:'新建角色',exact:true}).click()
+  await page.getByRole('button',{name:/^填写设定/}).click()
   const create=page.getByRole('dialog',{name:'新建角色',exact:true})
   await create.getByRole('textbox',{name:'名称',exact:true}).fill('新角色')
   assert.equal(await create.getByRole('combobox',{name:'关联演员',exact:true}).count(),0)

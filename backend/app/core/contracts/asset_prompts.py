@@ -3,7 +3,7 @@
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from app.models.types import AssetViewAngle
+from app.models.types import AssetViewAngle, ProjectStyle, ProjectVisualStyle
 
 AssetReferenceRole = Literal["identity", "costume", "prop", "layout", "style", "design"]
 DISPLAY_FIELDS = frozenset({
@@ -33,9 +33,11 @@ class AssetPromptReference(BaseModel):
 
 
 class AssetPromptOptions(BaseModel):
-    """单次生图的展示设置，不允许覆盖资产身份、风格和槽位视角。"""
+    """单次生图设置；临时风格仅用于图片来源对象，不覆盖档案或槽位视角。"""
 
     model_config = ConfigDict(extra="forbid")
+    style: ProjectStyle | None = None
+    visual_style: ProjectVisualStyle | None = None
     mode: Literal["generate", "edit"] = "generate"
     edit_instruction: str = Field("", max_length=2000, description="局部修改的对象和目标效果")
     preserve_instruction: str = Field("", max_length=2000, description="局部修改时明确保持的内容")

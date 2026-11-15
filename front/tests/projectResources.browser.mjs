@@ -21,7 +21,7 @@ try {
     for (const asset of assets) Object.assign(asset, {project_id: kind === 'character' || asset.id === 'one' ? 'resources' : null, visual_style: '现实', style: '真人都市', references: []})
     let failAssetSave=false, submittedModel
     const imageRows=[{id:1,file_id:'pic',view_angle:'FRONT',is_primary:true,is_view_default:true}]
-    let links=[assets[0],assets[1],assets[3]].map((a,i)=>({id:i+1,project_id:'resources',[kind+'_id']:a.id})), attempts=0
+    let links=[assets[0],assets[1],assets[2],assets[3]].map((a,i)=>({id:i+1,project_id:'resources',[kind+'_id']:a.id})), attempts=0
     await page.route('**/api/**',async route=>{
       const req=route.request(),path=new URL(req.url()).pathname
       const respond=data=>route.fulfill({json:{success:true,data}})
@@ -151,10 +151,6 @@ try {
       await page.getByRole('textbox',{name:'角色设定',exact:true}).waitFor()
       await page.unroute('**/api/**'); continue
     }
-    await page.getByRole('button',{name:/从资产库关联/}).click()
-    const associate=page.getByRole('dialog').filter({hasText:'从资产库关联'})
-    await associate.getByRole('button',{name:'关联到项目',exact:true}).click();await associate.waitFor({state:'hidden'})
-    await page.getByRole('button',{name:assets[2].name,exact:true}).waitFor()
     await page.getByRole('button',{name:assets[1].name+'更多操作',exact:true}).click()
     await page.getByRole('menuitem',{name:'取消关联',exact:true}).click()
     const confirm=page.getByRole('dialog').filter({hasText:'仅移除'})
@@ -198,6 +194,7 @@ try {
     await page.goto(`http://127.0.0.1:4546/projects/resources?tab=${tab}`)
     await page.getByText(/暂无项目/).waitFor()
     await page.getByRole('button',{name:/新建/}).click()
+    await page.getByRole('button',{name:/^填写设定/}).click()
     const create=page.getByRole('dialog',{name:kind==='scene'?'新建场景':`新建${label}`,exact:true})
     await create.waitFor()
     for (const [width,height] of [[1440,900],[1023,768],[375,768]]) {

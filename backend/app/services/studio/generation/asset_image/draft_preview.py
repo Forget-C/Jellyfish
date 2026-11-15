@@ -10,7 +10,7 @@ from app.core.contracts.media import ImageMediaInput, MediaReference
 from app.services.generation.prompts.types import PromptRendererName, RenderedPromptSnapshot
 from app.services.studio.entity_specs import entity_spec
 from app.services.studio.resource_references import validate_resource_references
-from app.services.studio.generation.asset_image.build_base import _build_asset_prompt, _resolve_edit_options
+from app.services.studio.generation.asset_image.build_base import _build_asset_prompt, _resolve_edit_options, resolve_source_options
 from app.services.studio.generation.asset_image.prompt_rules import resolve_prompt_references
 
 
@@ -24,6 +24,12 @@ async def render_draft_preview(db, *, entity_type, resource, view_angle, options
         # 草稿覆盖事实，模板依据仍与正式提交保持一致。
         if getattr(saved, "source_character_id", None):
             raise HTTPException(403, "从角色转化的演员只能被引用")
+        if saved.origin != "created":
+            # 名称可在草稿中编辑；其余事实来自保存值，且预览不得修改 ORM 对象。
+            asset = SimpleNamespace(id=saved.id, name=values["name"], description=saved.description,
+                origin=saved.origin, project_id=saved.project_id, references=saved.references,
+                style=saved.style, visual_style=saved.visual_style, tags=getattr(saved, "tags", None),
+                prompt_template_id=getattr(saved, "prompt_template_id", None))
         asset.prompt_template_id = getattr(saved, "prompt_template_id", None)
         asset.project_id = saved.project_id
     image = SimpleNamespace(view_angle=view_angle, prompt_overrides={}, file_id=None)
@@ -31,7 +37,7 @@ async def render_draft_preview(db, *, entity_type, resource, view_angle, options
         image = await db.get(spec.image_model, image_id)
         if image is None or getattr(image, spec.id_field) != asset.id or image.view_angle != view_angle:
             raise HTTPException(400, "预览图片不属于当前对象和角度")
-    options = _resolve_edit_options(options, image)
+    options = await resolve_source_options(db, entity_type, asset, _resolve_edit_options(options, image))
     references = options.references
     if references is None:
         references = [AssetPromptReference.model_validate(value) for value in values.get("references", [])]
@@ -40,7 +46,7 @@ async def render_draft_preview(db, *, entity_type, resource, view_angle, options
     files, instruction = await resolve_prompt_references(db, references)
     prompt, template_id, version, variables = await _build_asset_prompt(db,
         relation_type=f"{entity_type}_image", name=asset.name, description=asset.description,
-        tags=getattr(asset, "tags", None), visual_style=asset.visual_style, style=asset.style,
+        tags=getattr(asset, "tags", None), visual_style=options.visual_style or asset.visual_style, style=options.style or asset.style,
         image_row=image,
         template_id=getattr(asset, "prompt_template_id", None),
         reference_instruction=instruction, options=options)

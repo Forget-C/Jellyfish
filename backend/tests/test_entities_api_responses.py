@@ -38,6 +38,9 @@ class _FakeEntityDB:
 
     def add(self, obj: object) -> None:
         if isinstance(obj, Actor):
+            # 该数据库替身不执行 SQLAlchemy 的 INSERT 默认值。
+            if obj.origin is None:
+                obj.origin = "created"
             self.actors[obj.id] = obj
         else:
             self.actor_images.append(obj)
@@ -117,6 +120,7 @@ def test_get_actor_entity_not_found_returns_api_response(client: TestClient) -> 
 def test_delete_actor_entity_returns_empty_envelope(client: TestClient) -> None:
     db = _FakeEntityDB()
     actor = Actor(
+        origin="created",
         id="actor-1",
         name="演员一",
         supplementary_info="",

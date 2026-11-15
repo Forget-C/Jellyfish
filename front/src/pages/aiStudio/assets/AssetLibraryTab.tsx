@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import { directingError } from '../directing/common'
+import { ResourceCreateButton } from './components/ResourceCreateButton'
 import { ResourceEditorDrawer } from './components/ResourceEditorDrawer'
 import { AssetImageCard, type LibraryAsset, type LibraryAssetType } from './components/AssetImageCard'
 
@@ -128,8 +129,7 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
         <Button aria-label="刷新" icon={<ReloadOutlined aria-hidden="true" />} loading={loading && Boolean(result)} onClick={reload}>刷新</Button>
         {result && <span className="management-count">{result.total === undefined ? `已加载 ${result.assets.length} 项` : `共 ${result.total} 项`}</span>}
       </div>
-      <Button className="management-primary" type="primary" icon={<PlusOutlined aria-hidden="true" />}
-        onClick={() => setCreateOpen(true)}>新建{label}</Button>
+      <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button className="management-primary" type="primary" icon={<PlusOutlined aria-hidden="true" />}>新建{label}</Button></ResourceCreateButton>
     </PageToolbar>
     <WorkspaceScrollPanel className="management-panel">
       {failed && <Alert type="error" showIcon message={result ? '刷新资产失败，保留已显示的数据' : `读取${label}资产失败`}
@@ -146,7 +146,7 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
           onDelete={() => { setDeleteFailed(false); setDeleteTarget(asset) }} />)}
       </div> : !failed && !loading && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query ? '无匹配资产' : `暂无${label}资产`}>
         {query ? <Button onClick={() => { setSearch(''); searchAssets('') }}>清除搜索</Button>
-          : <Button type="primary" onClick={() => setCreateOpen(true)}>新建{label}</Button>}
+          : <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button type="primary">新建{label}</Button></ResourceCreateButton>}
       </Empty>)}
       {result?.total !== undefined && result.total > pageSize && <div className="asset-library-pagination">
         <Pagination current={page} pageSize={pageSize} total={result.total} showSizeChanger={false}

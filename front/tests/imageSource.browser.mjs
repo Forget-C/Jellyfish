@@ -1,0 +1,129 @@
+import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
+import { chromium } from 'playwright'
+import { createServer } from 'vite'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
+const root=fileURLToPath(new URL('..',import.meta.url))
+const output=await browserOutput('jellyfish-image-source-')
+const server=await createServer({root,cacheDir:output+'/cache',server:{host:'127.0.0.1',port:4933,strictPort:true}})
+let browser
+const cleanup=browserCleanup(()=>({browser,server}))
+const kinds=[['actor','actors','演员'],['scene','scenes','场景'],['prop','props','道具'],['costume','costumes','服装']]
+try {
+ await server.listen()
+ browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL})
+ const page=await browser.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'})
+ await page.addInitScript(()=>{window.__ENV={BACKEND_URL:location.origin}})
+ page.setDefaultTimeout(7000)
+ const errors=[];page.on('pageerror',error=>errors.push(error.message))
+ const assets={}, images={}, requests=[]
+ let uploads=0, failUpload=true, failCreate=true, lastPatch
+ await page.route('**/api/**',async route=>{
+  const req=route.request(),path=new URL(req.url()).pathname
+  const respond=data=>route.fulfill({json:{success:true,data}})
+  const list=items=>respond({items,pagination:{total:items.length,page:1,page_size:100}})
+  if(path.endsWith('/projects/p'))return respond({id:'p',name:'项目',style:'真人科幻',visual_style:'现实'})
+  if(path.endsWith('/model-settings'))return respond({default_image_model_id:'model'})
+  if(path.endsWith('/llm/models'))return list([{id:'model',name:'默认图片模型',category:'image'}])
+  if(path.endsWith('/generation-prompts/assets/draft/render'))return respond({render_id:'preview',execution_prompt:'图片来源提示词',variables_snapshot:{},recommended_media:{references:[]}})
+  if(path.includes('/tasks/asset-images/'))return respond(null)
+  if(path.endsWith('/files/upload')) {
+   if(failUpload){failUpload=false;return route.fulfill({status:503,json:{detail:'上传失败'}})}
+   return respond({id:'upload-'+(++uploads)})
+  }
+  if(/\/files\/[^/]+\/download$/.test(path))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="240" height="480"><rect width="240" height="480" fill="#718ba7"/></svg>'})
+  const create=path.match(/\/entities\/(actor|character|scene|prop|costume)\/image-source$/)
+  if(create) {
+   requests.push(req.postDataJSON())
+   if(failCreate){failCreate=false;return route.fulfill({status:503,json:{detail:'创建失败'}})}
+   const kind=create[1],body=req.postDataJSON()
+   assets[kind]={...body,origin:body.source_id?'library':'upload',style:'真人都市',visual_style:'现实',references:[]}
+   images[kind]=(body.images??[{file_id:'imported',view_angle:'LEFT'}]).map((image,index)=>({id:index+1,...image,is_primary:index===0,is_view_default:index===0||image.view_angle==='FRONT'}))
+   return respond(assets[kind])
+  }
+  const entity=path.match(/\/entities\/(actor|character|scene|prop|costume)(?:\/([^/]+))?(\/images)?$/)
+  if(entity){const[,kind,id,pictures]=entity
+   if(pictures)return list(id==='library-one'?[{id:1,file_id:'library-file',view_angle:'FRONT',is_primary:true,is_view_default:true}]:images[kind]??[])
+   if(!id){const project=new URL(req.url()).searchParams.get('project_id');return list(project?(assets[kind]?.project_id?[assets[kind]]:[]):[{id:'library-one',name:'可导入资源',project_id:null,style:'真人都市',visual_style:'现实'},...(assets[kind]&&!assets[kind].project_id?[assets[kind]]:[])])}
+   if(req.method()==='PATCH'){lastPatch=req.postDataJSON();Object.assign(assets[kind],lastPatch)}
+   return respond(assets[kind]??{id,name:'可导入资源',project_id:null,style:'真人都市',visual_style:'现实'})
+  }
+  if(path.includes('/project-assets/')){const kind=path.split('/').at(-1);return list(assets[kind]?.project_id?[{id:1,project_id:'p',[kind+'_id']:assets[kind].id}]:[])}
+  return list([])
+ })
+ for(const[kind,plural,label]of kinds) {
+  await page.goto(`http://127.0.0.1:4933/assets?tab=${kind}`)
+  const create=page.getByRole('button',{name:`新建${label}`,exact:true}).first()
+  await create.click()
+  await page.getByRole('button',{name:/^上传图片/}).waitFor()
+  assert.equal(await page.getByRole('dialog').count(),0)
+  if(kind==='actor')await page.screenshot({path:output+'/creation-choices.png',animations:'disabled'})
+  await page.keyboard.press('Escape')
+  await page.getByRole('button',{name:/^上传图片/}).waitFor({state:'hidden'})
+  await create.click();await page.getByRole('button',{name:/^上传图片/}).click()
+  const form=page.getByRole('dialog',{name:'上传图片创建',exact:true})
+  await form.getByRole('textbox',{name:'名称',exact:true}).fill(`上传${label}`)
+  if(kind==='actor'){await form.getByRole('button',{name:'返回',exact:true}).click();const guard=page.getByRole('dialog',{name:'离开资产详情',exact:true});await guard.getByRole('button',{name:'继续编辑',exact:true}).click();await guard.waitFor({state:'hidden'});assert.equal(await form.getByRole('textbox',{name:'名称',exact:true}).inputValue(),'上传演员')}
+  await form.locator('input[type=file]').setInputFiles([{name:'first.png',mimeType:'image/png',buffer:Buffer.from('one')},{name:'second.png',mimeType:'image/png',buffer:Buffer.from('two')}])
+  if(kind==='actor')await form.getByRole('button',{name:'重试上传',exact:true}).click()
+  await form.getByRole('img',{name:'first.png',exact:true}).waitFor()
+  await form.getByRole('combobox',{name:'图片1视角',exact:true}).press('ArrowDown')
+  await page.getByText('侧面',{exact:true}).last().click()
+  const before=requests.length
+  await form.getByRole('button',{name:'创建',exact:true}).click()
+  if(kind==='actor') {
+   await form.getByText('创建失败',{exact:false}).waitFor()
+   assert.equal(await form.getByRole('textbox',{name:'名称',exact:true}).inputValue(),`上传${label}`)
+   await form.getByRole('button',{name:'创建',exact:true}).click()
+   assert.equal(requests[before].id,requests[before+1].id)
+  }
+  await form.waitFor({state:'hidden'})
+  assert.deepEqual(requests.at(-1).images.map(image=>image.view_angle),['LEFT','FRONT'])
+  await page.goto(`http://127.0.0.1:4933/assets/${plural}/${assets[kind].id}/edit`)
+  await page.getByText('上传',{exact:true}).waitFor()
+  assert.equal(await page.getByRole('textbox',{name:'补充信息',exact:true}).isDisabled(),true)
+  const name=page.getByRole('textbox',{name:'名称',exact:true})
+  await name.fill(`改名${label}`);await page.getByRole('button',{name:'保存设定',exact:true}).click()
+  await page.getByRole('heading',{name:`改名${label}`,exact:true}).waitFor()
+  assert.deepEqual(Object.keys(lastPatch),['name'])
+  if(kind==='actor')await page.screenshot({path:output+'/uploaded-detail.png',animations:'disabled'})
+  await page.getByRole('button',{name:'生成图片',exact:true}).click()
+  const modal=page.getByRole('dialog',{name:`生成${label}图片`,exact:true})
+  await modal.getByRole('combobox',{name:'视觉风格',exact:true}).waitFor()
+  await modal.getByRole('combobox',{name:'图片模型',exact:true}).waitFor()
+  assert.equal(await modal.getByRole('img').count()>0,true,'生成默认显示主图参考')
+  if(kind==='actor')await page.screenshot({path:output+'/image-generation-config.png',animations:'disabled'})
+  await modal.getByRole('textbox',{name:'本次附加要求',exact:true}).fill('保留会话')
+  await modal.getByRole('button',{name:'取消',exact:true}).click();await modal.waitFor({state:'hidden'})
+  await page.getByRole('button',{name:'生成图片',exact:true}).click()
+  assert.equal(await modal.getByRole('textbox',{name:'本次附加要求',exact:true}).inputValue(),'保留会话')
+  await modal.getByRole('button',{name:'取消',exact:true}).click();await modal.waitFor({state:'hidden'})
+ }
+ for(const[kind,tab,label]of [...kinds.map(([kind,plural,label])=>[kind,plural,label]),['character','roles','角色']]) {
+  await page.goto(`http://127.0.0.1:4933/projects/p?tab=${tab}`)
+  await page.getByRole('button',{name:kind==='character'?'新建角色':'新建',exact:true}).first().click()
+  await page.getByRole('button',{name:/^从资产库导入/}).click()
+  const form=page.getByRole('dialog',{name:'从资产库导入',exact:true})
+  await form.getByRole('combobox',{name:'来源资产',exact:true}).press('ArrowDown')
+  await page.getByText('可导入资源',{exact:true}).last().click()
+  await form.getByRole('img',{name:'来源图片 1',exact:true}).waitFor()
+  await form.getByRole('textbox',{name:'名称',exact:true}).fill(`导入${label}`)
+  await page.setViewportSize({width:375,height:812})
+  await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth+1)
+  await page.screenshot({path:output+`/import-${kind}-mobile.png`,animations:'disabled'})
+  await form.getByRole('button',{name:'导入',exact:true}).click();await form.waitFor({state:'hidden'})
+  assert.equal(requests.at(-1).project_id,'p');assert.equal(requests.at(-1).source_id,'library-one')
+  await page.getByRole('button',{name:`导入${label}`,exact:true}).click()
+  await page.getByText('资产库导入',{exact:true}).waitFor()
+  assert.equal(await page.getByRole('textbox',{name:kind==='character'?'角色设定':'补充信息',exact:true}).isDisabled(),true)
+  await page.screenshot({path:output+`/imported-${kind}-mobile.png`,animations:'disabled'})
+  await page.getByRole('button',{name:'返回',exact:true}).click()
+  await page.setViewportSize({width:1440,height:900})
+ }
+ assert.deepEqual(errors,[])
+ console.log('PASS library uploads, source fields, model/configuration and five project import entries',output)
+} catch(error) {
+ console.log('EVIDENCE',output)
+ for(const p of browser.contexts()[0].pages()){console.log((await p.locator('body').innerText()).slice(-9000));await p.screenshot({path:output+'/failure.png'})}
+ throw error
+} finally {await cleanup()}

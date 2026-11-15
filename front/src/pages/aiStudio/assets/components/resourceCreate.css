@@ -1,0 +1,8 @@
+.resource-create-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; width:min(360px,calc(100vw - 48px)); }
+.resource-create-choices > button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:20px 12px; border:1px solid #e5eaf0; border-radius:8px; background:white; cursor:pointer; color:#263244; }
+.resource-create-choices > button:hover { background:#f2f6fc; border-color:#9db6dc; }
+.resource-create-choices > button:focus-visible { outline:2px solid #245fc5; outline-offset:2px; }
+.resource-create-choices > button > span:last-child { color:#667085; font-size:12px; }
+.resource-upload-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.resource-upload-row img { object-fit:contain; }
+@media(max-width:479px) { .resource-create-choices { grid-template-columns:1fr; } }

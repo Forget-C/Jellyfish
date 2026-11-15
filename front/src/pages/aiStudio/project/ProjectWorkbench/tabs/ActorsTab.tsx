@@ -1,7 +1,7 @@
 import { directingError } from '../../../directing/common'
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Dropdown, Empty, Image, Input, Modal, Space, Tag, message, Pagination } from 'antd'
-import { ArrowRightOutlined, MoreOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Empty, Modal, Space, Tag, message, Pagination } from 'antd'
+import { ArrowRightOutlined, MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectActorLinkRead } from '../../../../../services/generated'
@@ -11,6 +11,7 @@ import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
 import { resourceAssetUrl } from '../../../assets/components/ResourceEditorDrawer'
+import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
@@ -31,20 +32,11 @@ export function ActorsTab() {
   useProjectCharacters(projectId)
 
   const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [linkedActors, setLinkedActors] = useState<Record<string, ActorLike>>({})
-  const [actors, setActors] = useState<ActorLike[]>([])
-  const [actorsLoading, setActorsLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [linkingId, setLinkingId] = useState<string | null>(null)
   const [unlinkingId, setUnlinkingId] = useState<number | null>(null)
   const [links, setLinks] = useState<ProjectActorLinkRead[]>([])
   const [linksLoading, setLinksLoading] = useState(false)
 
-  const linkedActorIdSet = useMemo(
-    () => new Set(links.map((l) => l.actor_id).filter(Boolean) as string[]),
-    [links],
-  )
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(12)
@@ -85,61 +77,13 @@ export function ActorsTab() {
     }
   }
 
-  const loadActors = async (searchQuery?: string) => {
-    setActorsLoading(true)
-    try {
-      const q = searchQuery !== undefined ? searchQuery : search
-      const res = await StudioEntitiesApi.list('actor', {
-        page: 1,
-        pageSize: 100,
-        q: q?.trim() || undefined,
-        order: 'updated_at',
-        isDesc: true,
-      })
-      setActors((res.data?.items ?? []) as ActorLike[])
-    } catch {
-      message.error('加载演员失败')
-      setActors([])
-    } finally {
-      setActorsLoading(false)
-    }
-  }
 
-  useEffect(() => {
-    if (linkModalOpen) void loadActors('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkModalOpen])
 
   useEffect(() => {
     void loadLinks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  const handleLinkActor = async (actor: ActorLike) => {
-    if (!projectId || linkingId) return
-    setLinkingId(actor.id)
-    try {
-      await StudioProjectAssetsService.createProjectActorLinkApiV1StudioProjectAssetsActorPost({
-        requestBody: {
-          project_id: projectId,
-          chapter_id: null,
-
-          asset_id: actor.id,
-        },
-      })
-      message.success(`已关联演员「${actor.name}」到项目`)
-      setLinkModalOpen(false)
-      await loadLinks()
-    } catch (e: unknown) {
-      const msg =
-        e && typeof e === 'object' && 'body' in e && typeof (e as { body?: { detail?: string } }).body?.detail === 'string'
-          ? (e as { body: { detail: string } }).body.detail
-          : '关联失败'
-      message.error(msg)
-    } finally {
-      setLinkingId(null)
-    }
-  }
 
   const handleUnlinkActor = async (link: ProjectActorLinkRead) => {
     setUnlinkingId(link.id)
@@ -157,12 +101,8 @@ export function ActorsTab() {
 
   const linkedByActorId = useMemo(() => new Map(Object.values(linkedActors).map(actor => [actor.id, actor])), [linkedActors])
 
-  const availableActors = useMemo(
-    () => actors.filter((a) => !linkedActorIdSet.has(a.id)),
-    [actors, linkedActorIdSet],
-  )
 
-  const { openDetail, detailView } = useProjectAssetDetail('actor', async () => { await loadLinks(); await loadActors('') })
+  const { openDetail, detailView } = useProjectAssetDetail('actor', loadLinks)
   if (detailView) return detailView
 
   if (!projectId) return null
@@ -172,13 +112,12 @@ export function ActorsTab() {
       <ProjectContentToolbar>
         <h1 className="app-page-title">项目演员</h1>
         <Space wrap>
-          <Button type="primary" icon={<LinkOutlined />} onClick={() => { setSearch(''); setLinkModalOpen(true) }}>从资产库关联</Button>
-          <Button icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>新建</Button>
+          <ResourceCreateButton kind={'actor'} projectId={projectId} onCreate={() => setCreateModalOpen(true)} onCreated={loadLinks}><Button aria-label="新建" type="primary" icon={<PlusOutlined aria-hidden />}>新建</Button></ResourceCreateButton>
           <Button type="link" onClick={() => navigate('/assets')}>查看资产库</Button>
         </Space>
       </ProjectContentToolbar>
         {links.length === 0 && !linksLoading ? (
-          <Empty description="暂无项目演员，可从资产库关联演员到本项目" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty description="暂无项目演员，可新建或从资产库导入" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <div className="space-y-3">
             <div className="project-resource-grid">
@@ -236,70 +175,6 @@ export function ActorsTab() {
       <ResourceEditorDrawer open={createModalOpen} kind="actor" projectId={projectId}
         onClose={() => setCreateModalOpen(false)} onSaved={loadLinks} />
 
-      <Modal
-        className="project-resource-dialog"
-        title="从资产库关联演员"
-        open={linkModalOpen}
-        onCancel={() => { if (!linkingId) setLinkModalOpen(false) }}
-        closable={!linkingId} keyboard={!linkingId} maskClosable={!linkingId}
-        footer={null}
-        width={560}
-      >
-        <div className="mb-3">
-          <Input.Search
-            placeholder="搜索演员名称"
-            allowClear
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onSearch={(value) => loadActors(value)}
-          />
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto">
-          {actorsLoading ? (
-            <div className="py-8 text-center text-gray-500">加载中...</div>
-          ) : availableActors.length === 0 ? (
-            <Empty description={actors.length === 0 ? '暂无演员，请先在资产管理中创建演员' : '当前项目已关联全部搜索结果'} />
-          ) : (
-            <div className="space-y-2">
-              {availableActors.map((actor) => (
-                <div
-                  key={actor.id}
-                  className="flex items-center justify-between gap-3 rounded border border-gray-200 p-2 hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {resolveAssetUrl(actor.thumbnail) ? (
-                      <Image
-                        src={resolveAssetUrl(actor.thumbnail)}
-                        alt=""
-                        width={40}
-                        height={40}
-                        style={{ objectFit: 'cover', borderRadius: 4 }}
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
-                        <UserOutlined />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{actor.name}</div>
-                      {actor.description && <div className="text-xs text-gray-500 truncate">{actor.description}</div>}
-                    </div>
-                  </div>
-                  <Button
-                    type="primary"
-                    size="small"
-                    disabled={!!linkingId}
-                    loading={linkingId === actor.id}
-                    onClick={() => handleLinkActor(actor)}
-                  >
-                    关联到项目
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
     </div>
   )
 }

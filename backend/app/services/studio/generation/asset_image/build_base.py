@@ -125,6 +125,29 @@ def _resolve_edit_options(options: AssetPromptOptions, image_row: Any) -> AssetP
     return options.model_copy(update={"references": references})
 
 
+async def resolve_source_options(db, entity_type, asset, options):
+    """图片来源必须有主体参考，风格属于单次生成而非不可编辑的档案。"""
+    if (asset.origin or "created") == "created":
+        if options.style is not None or options.visual_style is not None:
+            raise HTTPException(422, "设定创建对象的风格由档案维护")
+        return options
+    from app.services.studio.entity_specs import entity_spec  # pylint: disable=import-outside-toplevel
+    from app.models.studio import Project  # pylint: disable=import-outside-toplevel
+    spec = entity_spec(entity_type)
+    references = options.references
+    if references is None:
+        main = await db.scalar(select(spec.image_model).where(
+            getattr(spec.image_model, spec.id_field) == asset.id,
+            spec.image_model.is_primary.is_(True), spec.image_model.file_id.is_not(None)))
+        references = [AssetPromptReference(file_id=main.file_id, role="design")] if main else []
+    if not any(ref.role not in {"costume", "prop", "style"} for ref in references):
+        raise HTTPException(422, "请选择有效主体参考图")
+    project = await db.get(Project, asset.project_id) if asset.project_id else None
+    return options.model_copy(update={"references": references,
+        "style": options.style or (project.style if project else asset.style),
+        "visual_style": options.visual_style or (project.visual_style if project else asset.visual_style)})
+
+
 async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_id, options=None):
     """五类对象均使用自身设定与明确参考，不读取来源对象的文字或组合。"""
     from app.services.studio.entity_specs import entity_spec
@@ -143,7 +166,7 @@ async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_i
         slot, _ = await validate_asset_image_and_relation_type(db, asset_type=entity_type,
                                                              asset_id=entity_id, image_id=image_id)
         image = await db.get(spec.image_model, slot)
-    options = _resolve_edit_options(options or AssetPromptOptions(), image)
+    options = await resolve_source_options(db, entity_type, asset, _resolve_edit_options(options or AssetPromptOptions(), image))
     references = options.references
     if options.mode == "edit" and not image.file_id:
         source = await db.scalar(select(spec.image_model.id).where(
@@ -160,7 +183,7 @@ async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_i
     refs, instruction = await resolve_prompt_references(db, references)
     prompt, template_id, template_version, variables = await _build_asset_prompt(
         db, relation_type=f"{entity_type}_image", name=asset.name, description=asset.description,
-        tags=getattr(asset, "tags", None), visual_style=asset.visual_style, style=asset.style,
+        tags=getattr(asset, "tags", None), visual_style=options.visual_style or asset.visual_style, style=options.style or asset.style,
         image_row=image, template_id=getattr(asset, "prompt_template_id", None),
         reference_instruction=instruction, options=options,
     )

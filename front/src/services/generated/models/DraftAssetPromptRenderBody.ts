@@ -7,12 +7,16 @@ import type { AssetPromptReference } from './AssetPromptReference';
 import type { AssetViewAngle } from './AssetViewAngle';
 import type { CharacterCreate } from './CharacterCreate';
 import type { CostumeCreate } from './CostumeCreate';
+import type { ProjectStyle } from './ProjectStyle';
+import type { ProjectVisualStyle } from './ProjectVisualStyle';
 import type { PropCreate } from './PropCreate';
 import type { SceneCreate } from './SceneCreate';
 /**
  * 仅预览本地对象草稿，不创建对象、图片或任务。
  */
 export type DraftAssetPromptRenderBody = {
+    style?: (ProjectStyle | null);
+    visual_style?: (ProjectVisualStyle | null);
     mode?: 'generate' | 'edit';
     /**
      * 局部修改的对象和目标效果

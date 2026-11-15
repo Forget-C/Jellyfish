@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
-from app.models.studio import Chapter, Project, ProjectActorLink
+from app.models.studio import Chapter, Project
 from app.services.common import entity_already_exists, entity_not_found
 from app.services.studio.entity_specs import DEFAULT_VIEW_ANGLES, LINK_MODEL_BY_ENTITY, entity_spec, normalize_entity_type
 from app.services.studio.entity_thumbnails import resolve_thumbnails
@@ -23,6 +23,7 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
     """返回分类字段和派生摘要，供通用资产列表及编辑页复用。"""
     return {
         "id": obj.id,
+        "origin": obj.origin, "source_kind": obj.source_kind, "source_id": obj.source_id,
         "project_id": obj.project_id,
         "library_copy_id": obj.library_copy_id,
         "references": obj.references,
@@ -33,8 +34,8 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
         "tags": obj.tags or [],
         "prompt_template_id": obj.prompt_template_id,
         "view_count": obj.view_count,
-        "style": obj.style,
-        "visual_style": obj.visual_style,
+        "style": obj.style if obj.origin == "created" else None,
+        "visual_style": obj.visual_style if obj.origin == "created" else None,
         "thumbnail": thumbnail,
     }
 
@@ -67,9 +68,9 @@ async def list_entities_paginated(
         stmt = stmt.where(spec.model.project_id == project_id)
     stmt = apply_keyword_filter(stmt, q=q, fields=[spec.model.name, spec.model.description])
     if style:
-        stmt = stmt.where(getattr(spec.model, "style") == style)
+        stmt = stmt.where(spec.model.origin == "created", getattr(spec.model, "style") == style)
     if visual_style:
-        stmt = stmt.where(getattr(spec.model, "visual_style") == visual_style)
+        stmt = stmt.where(spec.model.origin == "created", getattr(spec.model, "visual_style") == visual_style)
     stmt = apply_order(
         stmt,
         model=spec.model,
@@ -141,7 +142,7 @@ async def create_entity(
                 raise HTTPException(status_code=400, detail="Chapter does not belong to the same project")
 
     from app.services.studio.resource_references import validate_resource_references
-    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []), link=True)
+    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []), link=False)
     obj = spec.model(**data)
     db.add(obj)
     await flush_resource(db)
@@ -221,9 +222,16 @@ async def update_entity(
         raise HTTPException(403, "从角色转化的演员只能被引用")
 
     update_data = spec.update_model.model_validate(body).model_dump(exclude_unset=True)
+    if obj.origin != "created" and set(update_data) - {"name"}:
+        raise HTTPException(403, "图片来源对象仅允许修改名称")
+    if obj.origin != "created" and "name" in update_data:
+        name = update_data["name"]
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 255:
+            raise HTTPException(422, "名称不能为空且不能超过255字符")
+        update_data["name"] = name.strip()
     if "references" in update_data:
         from app.services.studio.resource_references import validate_resource_references
-        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"], link=True)
+        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"], link=False)
 
     for key, value in update_data.items():
         setattr(obj, key, value)
@@ -249,14 +257,15 @@ async def delete_entity(
     obj = await db.get(spec.model, entity_id)
     if obj is None:
         return
-    if getattr(obj, "source_character_id", None):
-        linked = await db.scalar(select(ProjectActorLink.id).where(ProjectActorLink.actor_id == entity_id).limit(1))
+    if getattr(obj, "source_character_id", None) or (obj.origin != "created" and obj.project_id is None):
+        link_model, link_field = LINK_MODEL_BY_ENTITY[entity_type]
+        linked = await db.scalar(select(link_model.id).where(getattr(link_model, link_field) == entity_id).limit(1))
         if linked is not None:
-            raise HTTPException(409, "演员仍被项目关联，请先解除关联")
+            raise HTTPException(409, "资源仍被项目关联，请先解除关联")
         for kind in ("actor", "character", "scene", "prop", "costume"):
             model = entity_spec(kind).model
             configurations = await db.scalars(select(model.references))
-            if any(reference.get("source_kind") == "actor" and reference.get("source_id") == entity_id
+            if any(reference.get("source_kind") == entity_type and reference.get("source_id") == entity_id
                    for references in configurations for reference in references):
                 raise HTTPException(409, "演员仍被对象直接参考，请先解除参考")
     if obj.project_id is None:

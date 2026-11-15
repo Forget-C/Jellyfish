@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "image-source": { "file": "imageSource.browser.mjs", "ports": [4933], "timeoutMs": 180000 },
     "resource-editor": { "file": "resourceEditor.browser.mjs", "ports": [4921], "timeoutMs": 180000 },
     "object-asset-selection": { "file": "objectAssetSelection.browser.mjs", "ports": [8268, 4268], "timeoutMs": 120000 },
     "managed-files-performance": { "file": "managedFilesPerformance.browser.mjs", "ports": [4546], "timeoutMs": 600000 },
@@ -193,7 +194,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "management-ui": ["resource-editor","asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
+    "management-ui": ["resource-editor","image-source","asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
     "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "project-chapters-ui", "project-actors", "project-roles", "project-resources", "project-files", "project-settings", "management-navigation", "lab-navigation", "legacy-labs"],
 
     "lab-ui": ["lab-composer", "lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
