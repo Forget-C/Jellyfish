@@ -1,16 +1,15 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'vite'
+import { browserCleanup, browserOutput } from './browser-runtime.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url)); process.chdir(root)
 const port = Number(process.env.CHAPTER_EDITOR_PORT || 4205)
 const server = await createServer({ root, server: { host: '127.0.0.1', port, strictPort: true, open: false } })
-const evidence = await mkdtemp(join(tmpdir(), 'jellyfish-chapter-list-'))
+const evidence = await browserOutput('jellyfish-chapter-list-')
 const chapters = Array.from({ length: 105 }, (_, i) => ({ id: `ch${i + 1}`, project_id: 'p1', index: i + 1, title: `章节 ${i + 1}`, raw_text: '她推开门。', condensed_text: '推门。', sequence_count: i === 0 ? 2 : 0, status: 'draft' }))
 delete chapters[104].sequence_count
 chapters[2].raw_text = ''
@@ -18,6 +17,7 @@ const writes = [], requests = [], errors = []
 const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: "她推开门。优化后的原文。" } }
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
+const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen(); browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } }); page.setDefaultTimeout(10000)
@@ -278,4 +278,4 @@ try {
   assert.deepEqual(errors, [])
   console.log(`Chapter list/editor passed: pagination, lazy reads, save paths, failure recovery, count integrity, keyboard and four sizes. Evidence: ${evidence}`)
 } catch (error) { await page?.screenshot({ path: join(evidence, 'failure.png'), fullPage: true }); console.error('Evidence:', evidence); console.error(await page?.locator('body').innerText()); console.error(errors); throw error }
-finally { await browser?.close(); await server.close() }
+finally { await cleanup() }

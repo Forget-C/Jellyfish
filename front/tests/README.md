@@ -21,7 +21,15 @@ pnpm --dir front run test:browser
 
 `test:workbench-ui` 还登记了 `unit-design` 和 `instruction-preparation`：验证 AI 明确应用后未保存卡片、保存失败恢复、当前编辑投影，以及顶部准备清单的定位和独立生成门禁。
 
-`test:unit` 运行全部纯逻辑及公开 CLI 回归。`test:browser` 先调用现有 preflight，再运行清单中的用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
+`test:unit` 运行全部纯逻辑及公开 CLI 回归，也执行浏览器清单检查及其正反例。可从项目根目录单独运行 `node front/tests/check-browser-manifest.mjs`；`--manifest <文件>` 用于检查独立夹具，扫描范围为清单所在目录及子目录。
+
+`browser-suites.json` 的 `cases` 登记文件、端口和超时，`suites` 的并集决定默认 `all` 执行范围。每个 `*.browser.mjs` 必须登记，或在 `excludedFiles` 按精确相对路径填写非空理由；已登记但不在任何套件中的用例，必须在 `nonDefaultCases` 按用例名说明原因。检查会拒绝失效引用、重复登记、登记与排除冲突、空理由及无说明的套件不可达。排除项不是通配模式，不提供自动刷新命令。
+
+本批冻结了 65 个未登记文件和 10 个已登记但套件不可达的存量项，逐项注明“接入状态尚未核验”，不表示废弃或已被替代，也不据此扩大 CI 执行范围。新增文件应登记并接入适用套件；确需排除时必须人工说明具体理由。核验存量后应逐项接入或修订原因，移除失效豁免。
+
+现有 CI 的 `test:unit` 阶段检查清单，通过后浏览器阶段运行默认 `all`；`workbench` 已包含 `chapter-list-editor` 和 `source-provenance`。无需新增 CI 作业或改变全局时间预算。
+
+`test:browser` 先调用现有 preflight，再运行清单中的用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
 
 ```bash
 pnpm --dir front run test:workbench-ui
@@ -54,7 +62,7 @@ pnpm --dir front run test:browser -- --list
 
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 
-章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），通过隔离接口覆盖分页搜索、滚动恢复、未知场次数量、章节编辑、保存失败、创建及归属校验。工作台管理、划分和旧路由通过 `pnpm --dir front run test:browser workbench` 中的真实浏览器用例验证。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。当前契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
+章节列表与编辑器使用 `pnpm --dir front run test:browser chapter-list-editor`（默认 4205 端口），通过隔离接口覆盖分页搜索、滚动恢复、未知场次数量、章节编辑、保存失败、创建及归属校验。工作台管理、划分和旧路由通过 `pnpm --dir front run test:browser workbench` 中的真实浏览器用例验证。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。当前契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
 ```bash
 node front/tests/workspaceUsage.browser.mjs
@@ -117,9 +125,9 @@ B5 响应式回归使用 1440×900、1024×768、768×1024、375×812，检查�
 
 - `node --test front/tests/designWorkspace.test.mjs front/tests/sourceResolver.test.mjs`：范围、过滤编排、合法关联、完整来源身份去重、合批与失败重试。
 - `node front/tests/workspaceRefinement.browser.mjs`：12镜头范围/视图/选择联动、节点布局与聚焦恢复、合法关联添加/解除、缺失引用修复、间接边定位、一对多试拍回跳、试拍筛选/滚动恢复及窄屏布局。
-- `node front/tests/sourceProvenance.browser.mjs`：五类来源、历史原文与模型名称、失败重试、只读历史、返回保留编辑、迟到响应隔离。使用隔离接口与ffmpeg合成媒体，验证读取失败后重试、真实入点播放和出点暂停；不验证生成内容质量。
+- `pnpm --dir front run test:browser source-provenance`：五类来源、历史原文与模型名称、失败重试、只读历史、返回保留编辑、迟到响应隔离。使用现有隔离后端生成场次版本与画布投影，在 HTTP 边界模拟来源响应，并用 ffmpeg 合成媒体验证读取失败后重试、真实入点播放和出点暂停；不验证生成内容质量。
 
-浏览器命令沿用上文 Playwright `NODE_PATH` 配置，各自启动4192/4193端口。测试结果和截图输出到独立临时目录。`workspaceDesignViews`另覆盖1/12/60/200镜头、表格/分镜滚动与版本隔离；`workspaceCut`核对精确片段、筛选、缩放及时间线重载恢复。
+直接运行的 `workspaceRefinement` 沿用上文 Playwright `NODE_PATH` 配置，使用 4192 端口并输出到独立临时目录；`source-provenance` 使用前端 4193、隔离后端 8193 端口，沿用统一入口的浏览器配置，证据写入 `front/test-results/browser-*/source-provenance` 或指定的 `--output` 目录。`workspaceDesignViews`另覆盖1/12/60/200镜头、表格/分镜滚动与版本隔离；`workspaceCut`核对精确片段、筛选、缩放及时间线重载恢复。
 
 
 ### D阶段镜头视图与全场关系总览
