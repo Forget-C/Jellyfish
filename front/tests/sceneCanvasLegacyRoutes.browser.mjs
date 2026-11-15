@@ -80,7 +80,8 @@ try {
   await page.waitForURL(url => url.pathname === managementPath)
   await page.goto(prep)
   await page.waitForURL(url => url.pathname === managementPath && url.searchParams.get('sequence') === sequence.id)
-  await newHost.getByRole('heading', { name: '本场画布', exact: true }).waitFor()
+  await newHost.getByText('本场尚无画布，可生成新分镜画布开始设计', { exact: true }).waitFor()
+  await newHost.getByRole('button', { name: '生成新分镜画布', exact: true }).waitFor()
   assert.equal(await newHost.getByRole('button', { name: '场次更多操作', exact: true }).count(), 0)
   assert.deepEqual(versionReads, [])
   await page.goto(`${prep}?version=${first.id}&canvas=edit`)
@@ -105,7 +106,7 @@ try {
     await page.goto(link)
     await page.waitForURL(url => url.pathname === managementPath && !url.searchParams.has('panel'))
     await retired.waitFor()
-    await management.getByRole('heading', { name: sequence.title, exact: true }).waitFor()
+    await management.getByRole('button', { name: `1. ${sequence.title}`, exact: true }).waitFor()
     assert.equal(await management.getByRole('button', { name: '按场次顺序播放', exact: true }).count(), 0)
   }
   await page.goto(chapterPage.replace('/projects/' + project, '/projects/wrong-project') + '&panel=assembly')

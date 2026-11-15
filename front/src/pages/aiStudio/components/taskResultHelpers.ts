@@ -54,9 +54,3 @@ export async function handleTaskResultSafely(
     return null
   }
 }
-
-export function createTaskSettledReloader(...handlers: Array<() => Promise<void> | void>) {
-  return async () => {
-    await Promise.all(handlers.map((handler) => Promise.resolve(handler())))
-  }
-}
