@@ -63,3 +63,14 @@
  .actor-fields > label:has(textarea) textarea { height:110px; }
  .actor-long-field textarea { height:72px; }
 }
+
+.resource-editor-inline.actor-detail-page > .resource-editor-body { box-sizing:border-box; min-height:0; }
+.character-fields { height:100%; grid-template-rows:auto minmax(0,1fr) auto; }
+.character-description textarea { height:100% !important; }
+.actor-detail-tabs .character-fields { min-height:500px; }
+
+.actor-detail-tabs .actor-fields { padding:16px; background:white; border-radius:12px; }
+.actor-detail-tabs .actor-pictures { min-height:580px; }
+
+.character-description { grid-template-rows:auto minmax(0,1fr); min-height:0; }
+.character-description textarea { min-height:0; }

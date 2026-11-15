@@ -37,7 +37,7 @@ export function AssetFields({ type, name, onName, facts, onFacts, description, o
 
 /** 默认主图、手动预览与主图身份分离；全部图片操作集中在多视角集合中。 */
 export function AssetPictures({ type, assetId, images, disabled, primaryDisabled, readOnly, savingViewDefault, onViewDefault, onPrimary, onEdit, candidates, feedback, status, onGenerate }: {
-  type: StructuredAssetType; assetId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
+  type: StructuredAssetType | 'character'; assetId: string; images: Picture[]; disabled: boolean; primaryDisabled: boolean; readOnly: boolean
   savingViewDefault?: number
   onViewDefault: (image: Picture) => Promise<void>
   onPrimary: (image: Picture) => Promise<boolean>; onEdit: (image: Picture) => void
@@ -94,4 +94,20 @@ export function AssetPictures({ type, assetId, images, disabled, primaryDisabled
 export function AssetDetailLayout({ compact, fields, pictures }: { compact: boolean; fields: ReactNode; pictures: ReactNode }) {
   return compact ? <Tabs className="actor-detail-tabs" items={[{ key: 'settings', label: '设定', children: fields }, { key: 'images', label: '图片', children: pictures }]} />
     : <div className="actor-detail-layout"><section>{fields}</section><section>{pictures}</section></div>
+}
+
+/** 角色只维护自身设定，不借用演员结构化外观字段。 */
+export function CharacterFields({ name, onName, description, onDescription, styles, disabled }: {
+  name: string; onName: (value: string) => void; description: string; onDescription: (value: string) => void; styles: ReactNode; disabled: boolean
+}) {
+  const [expanded, setExpanded] = useState(false)
+  return <div className="actor-fields character-fields">
+    <label>名称<Input aria-label="名称" value={name} onChange={event => onName(event.target.value)} disabled={disabled} /></label>
+    <label className="character-description"><span>角色设定<Button type="text" size="small" aria-label="展开角色设定" icon={<EditOutlined />} onClick={() => setExpanded(true)} disabled={disabled} /></span>
+      <Input.TextArea aria-label="角色设定" value={description} onChange={event => onDescription(event.target.value)} disabled={disabled} rows={12} /></label>
+    <div className="actor-style-fields">{styles}</div>
+    <Modal title="角色设定" open={expanded} onCancel={() => setExpanded(false)} footer={<Button onClick={() => setExpanded(false)}>完成</Button>}>
+      <Input.TextArea aria-label="完整角色设定" rows={12} value={description} onChange={event => onDescription(event.target.value)} disabled={disabled} />
+    </Modal>
+  </div>
 }

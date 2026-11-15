@@ -8,12 +8,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.db import Base
 from app.dependencies import get_db
 from app.main import app
-from app.models.studio import Actor, ActorImage, Scene, SceneImage, Prop, PropImage, Costume, CostumeImage
+from app.models.studio import Actor, ActorImage, Scene, SceneImage, Prop, PropImage, Costume, CostumeImage, Character, CharacterImage
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.task import Task, TaskOutput
 
 
-@pytest.mark.parametrize("kind,parent,image_model", [("actor", Actor, ActorImage), ("scene", Scene, SceneImage), ("prop", Prop, PropImage), ("costume", Costume, CostumeImage)])
+@pytest.mark.parametrize("kind,parent,image_model", [("character", Character, CharacterImage), ("actor", Actor, ActorImage), ("scene", Scene, SceneImage), ("prop", Prop, PropImage), ("costume", Costume, CostumeImage)])
 @pytest.mark.asyncio
 async def test_asset_image_saved_parameters_are_read_only_and_match_output(kind, parent, image_model):
     """按当前文件关联同类对象的来源任务，错误归属及上传不猜参数。"""
@@ -30,7 +30,7 @@ async def test_asset_image_saved_parameters_are_read_only_and_match_output(kind,
     app.dependency_overrides[get_db] = test_db
     try:
         async with sessions() as db:
-            db.add_all([parent(id="a", name="演员", style="realistic"), parent(id="other", name="其他演员", style="realistic"),
+            db.add_all([parent(id="a", name="演员", style="realistic", **({"project_id": "p"} if kind == "character" else {})), parent(id="other", name="其他演员", style="realistic", **({"project_id": "p"} if kind == "character" else {})),
                         FileItem(id="generated", name="图片", type="image", storage_key="image"),
                         FileItem(id="upload", name="上传", type="image", storage_key="upload")])
             await db.flush()
@@ -54,7 +54,7 @@ async def test_asset_image_saved_parameters_are_read_only_and_match_output(kind,
             if kind == "actor":
                 legacy = await client.get("/api/v1/film/tasks/actor-images/a/1/parameters")
                 assert legacy.json() == response.json()
-            assert (await client.get("/api/v1/film/tasks/asset-images/character/a/1/parameters")).status_code == 422
+            assert (await client.get("/api/v1/film/tasks/asset-images/unsupported/a/1/parameters")).status_code == 422
             data = response.json()["data"]
             assert data["model_name"] == "当时的模型"
             assert data["view_angle"] == "正面"

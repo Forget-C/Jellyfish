@@ -19,7 +19,7 @@ import { useTaskUiStore } from '../../components/taskUiStore'
 import { ResourceImage } from './ResourceImage'
 import { ResourceEditorFrame } from './ResourceEditorFrame'
 import { AssetGenerationDialog } from './AssetGenerationDialog'
-import { AssetFields, AssetPictures, AssetDetailLayout } from './AssetDetailPanels'
+import { AssetFields, AssetPictures, AssetDetailLayout, CharacterFields } from './AssetDetailPanels'
 import './resourceEditor.css'
 
 export type ResourceKind = 'actor' | 'character' | 'scene' | 'prop' | 'costume'
@@ -67,9 +67,28 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const [section, setSection] = useState('settings')
   const [page, setPage] = useState<'editor' | 'generation' | 'references' | 'adopt' | 'publish'>(initialPage)
   const isDrawer = !assetId || initialPage === 'publish' && page === 'publish'
-  const libraryDetail = kind !== 'character' && !!assetId && !resource?.project_id && !projectId && !inline && !renderToolbar && initialPage === 'editor'
+  const drawerId = useId()
+  const fullDetail = !!assetId && !inline && initialPage === 'editor'
   const [detailCompact, setDetailCompact] = useState(() => window.matchMedia('(max-width:1199px), (max-height:739px)').matches)
-  useEffect(() => { const query = window.matchMedia('(max-width:1199px), (max-height:739px)'); const update = () => setDetailCompact(query.matches); query.addEventListener('change', update); return () => query.removeEventListener('change', update) }, [])
+  useEffect(() => {
+    if (!fullDetail || !open || page === 'publish') return
+    const body = document.getElementById(drawerId)?.querySelector<HTMLElement>('.resource-editor-body')
+    if (!body) return
+    const container = body.closest<HTMLElement>('.project-workbench-content')
+    const update = () => {
+      if (container) {
+        const available = Math.max(0, container.getBoundingClientRect().bottom - body.getBoundingClientRect().top - parseFloat(getComputedStyle(container).paddingBottom))
+        body.style.height = `${available}px`
+        setDetailCompact(container.clientWidth < 960 || available < 600)
+      } else setDetailCompact(window.innerWidth < 1200 || window.innerHeight < 740)
+    }
+    const observer = new ResizeObserver(update)
+    observer.observe(container ?? document.documentElement)
+    const toolbar = document.querySelector('.project-content-toolbar')
+    if (toolbar) observer.observe(toolbar)
+    window.addEventListener('resize', update); update()
+    return () => { observer.disconnect(); window.removeEventListener('resize', update); body.style.height = '' }
+  }, [fullDetail, open, drawerId, assetId, kind, page])
   const [imageModels, setImageModels] = useState<{id:string;name:string}[]>([])
   const [selectedModel, setSelectedModel] = useState<string>()
   const [modelsFailed, setModelsFailed] = useState(false)
@@ -85,7 +104,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const normalGenerationConfig = useRef<AssetImagePromptRenderBody>({})
   const [editingGeneration, setEditingGeneration] = useState<AssetImagePromptRenderBody>({})
   const [editingAngles, setEditingAngles] = useState<Angle[]>(['FRONT'])
-  useEffect(() => { if (libraryDetail && editingGeneration.mode !== 'edit') normalGenerationConfig.current = editingGeneration }, [libraryDetail, editingGeneration])
+  useEffect(() => { if (fullDetail && editingGeneration.mode !== 'edit') normalGenerationConfig.current = editingGeneration }, [fullDetail, editingGeneration])
   const loadEpoch = useRef(0)
   const [selectedAngles, setSelectedAngles] = useState<Angle[]>(['FRONT'])
   const [modelName, setModelName] = useState('读取中')
@@ -117,7 +136,6 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const [closeRequested, setCloseRequested] = useState(false)
   const lock = useRef(false)
   const draftId = useRef(crypto.randomUUID())
-  const drawerId = useId()
   const title = resource?.name ?? (assetId ? `${labels[kind]}详情` : `新建${labels[kind]}`)
   // 当前 rc-drawer 版本不透传 aria-label，给实际 dialog 补齐可访问名称。
   useEffect(() => { document.getElementById(drawerId)?.setAttribute('aria-label', title) }, [drawerId, title])
@@ -157,14 +175,14 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     return () => { active = false }
   }, [open, page, modelRetry])
   useEffect(() => {
-    if (!libraryDetail || !open) return
+    if (!fullDetail || !open) return
     let active = true
     setSelectedModel(undefined); setImageModels([]); setModelsFailed(false)
     void Promise.all([LlmService.getModelSettingsApiV1LlmModelSettingsGet(), LlmService.listModelsApiV1LlmModelsGet({ category: 'image', page: 1, pageSize: 100 })])
       .then(([settings, models]) => { if (active) { setImageModels(models.data?.items ?? []); setSelectedModel(settings.data?.default_image_model_id ?? undefined) } })
       .catch(() => { if (active) setModelsFailed(true) })
     return () => { active = false }
-  }, [libraryDetail, open, kind, assetId, modelRetry])
+  }, [fullDetail, open, projectId, kind, assetId, modelRetry])
   const serialized = JSON.stringify(payload)
   const dirty = !!baseline && serialized !== baseline
 
@@ -300,8 +318,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       setImageError('')
       setCandidates(current => [...current, ...entries.filter(entry => !current.some(candidate => candidate.fileId === entry.file_id))
         .map(entry => ({ fileId: entry.file_id!, angle, originalFile }))])
-    } catch { setImageError(libraryDetail ? '读取候选图片失败，请重试查看候选' : '读取候选图片失败，请从图片历史重试') }
-  }, [kind, libraryDetail])
+    } catch { setImageError(fullDetail ? '读取候选图片失败，请重试查看候选' : '读取候选图片失败，请从图片历史重试') }
+  }, [kind, fullDetail])
   const taskState = useRef(tasks)
   taskState.current = tasks
   const activeTasks = Object.entries(tasks).filter(([, task]) => task?.taskId && ['queued', 'running'].includes(task.status))
@@ -348,7 +366,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       const editing = config.mode === 'edit'
       if (editing && (!editingImage?.file_id || !config.edit_instruction?.trim())) { setError('请选择一张图片并填写修改要求'); return }
       const desired = editing ? [editingImage!.view_angle as Angle] : requested?.length ? requested : requested ? ['FRONT'] as Angle[] : selectedAngles.length ? selectedAngles : ['FRONT'] as Angle[]
-      const selected = libraryDetail ? desired.filter(angle => !acceptedAngles.current.has(angle)) : desired
+      const selected = fullDetail ? desired.filter(angle => !acceptedAngles.current.has(angle)) : desired
       let accepted = 0
       for (const angle of selected) {
         setTasks(current => ({ ...current, [angle]: { status: 'submitting' } }))
@@ -359,15 +377,15 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
           const adapter = assetAdapters[kind]
           const rendered = await adapter.renderPrompt(target.id, slotId, config)
           const taskId = await adapter.createGenerationTask(target.id, slotId, { ...rendered,
-            modelId: libraryDetail ? selectedModel : undefined, references: config.references ?? references, saveAsCandidate: false })
+            modelId: fullDetail ? selectedModel : undefined, references: config.references ?? references, saveAsCandidate: false })
           if (!taskId) throw new Error('任务未受理')
           accepted++
-          if (libraryDetail) acceptedAngles.current.add(angle)
+          if (fullDetail) acceptedAngles.current.add(angle)
           setTasks(current => ({ ...current, [angle]: { taskId, slotId, status: 'queued', candidate: false, originalFile: editingImage?.file_id ?? undefined } }))
         } catch { setTasks(current => ({ ...current, [angle]: { status: 'failed', error: '生成提交失败，设定已保存，可单独重试' } })) }
       }
       await reloadImages(target.id)
-      if (libraryDetail && accepted === selected.length) setPage('editor')
+      if (fullDetail && accepted === selected.length) setPage('editor')
     } finally { generationLock.current = false; setGenerating(false) }
   }
   const setPrimary = async (image: Picture) => {
@@ -510,7 +528,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       {task.error && <span>{task.error}</span>}{task.status === 'failed' && <Button disabled={generating} onClick={() => void generate([angle as Angle])}>重试{angleLabel(angle)}</Button>}
     </div>)}
   </div>
-  const referencePicker = <ResourceReferencePage toolbarTarget={libraryDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
+  const referencePicker = <ResourceReferencePage toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
         value={pickerReturn === 'generation' ? editingGeneration.references ?? references : references}
         onCancel={() => setPage(pickerReturn)} onApply={next => {
           if (pickerReturn === 'generation') setEditingGeneration(value => ({ ...value, references: next })); else setReferences(next)
@@ -522,7 +540,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
           onChange={event => setEditingGeneration(value => ({ ...value, preserve_instruction: event.target.value }))} /></label></>}
         <label>本次附加要求<Input.TextArea aria-label="本次附加要求" value={editingGeneration.additional_instruction ?? ''} rows={4}
           onChange={event => setEditingGeneration(value => ({ ...value, additional_instruction: event.target.value }))} /></label>
-        <Collapse items={[{ key: 'display', label: '展示设置', children: <div className={libraryDetail ? 'actor-generation-display' : undefined}>{displayFields.map(([key, label]) => <label key={key}>{label}
+        <Collapse items={[{ key: 'display', label: '展示设置', children: <div className={fullDetail ? 'actor-generation-display' : undefined}>{displayFields.map(([key, label]) => <label key={key}>{label}
           <Input.TextArea aria-label={label} value={editingGeneration[key] ?? ''} onChange={event => setEditingGeneration(value => ({ ...value, [key]: event.target.value }))} />
         </label>)}</div> }]} />
         {editingGeneration.mode !== 'edit' && <><h3>临时参考</h3>{referenceSection(true)}</>}
@@ -537,27 +555,27 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
             children: <Input.TextArea aria-label="最终提示词" readOnly value={snapshot.execution_prompt} rows={10} />,
           }))} />}
         </>}
-        {!libraryDetail && <p>默认图片模型：{modelName}。生成设置在关闭对象后恢复默认。{modelName === '读取失败' && <Button onClick={() => setModelRetry(value => value + 1)}>重试模型信息</Button>}</p>}
-        {libraryDetail && <label>图片模型<Select className="w-full" aria-label="图片模型" value={selectedModel} options={imageModels.map(model => ({ value: model.id, label: model.name }))} onChange={setSelectedModel} /></label>}
-        {libraryDetail && modelsFailed && <Alert type="error" message="读取图片模型失败" action={<Button onClick={() => setModelRetry(value => value + 1)}>重试模型列表</Button>} />}
+        {!fullDetail && <p>默认图片模型：{modelName}。生成设置在关闭对象后恢复默认。{modelName === '读取失败' && <Button onClick={() => setModelRetry(value => value + 1)}>重试模型信息</Button>}</p>}
+        {fullDetail && <label>图片模型<Select className="w-full" aria-label="图片模型" value={selectedModel} options={imageModels.map(model => ({ value: model.id, label: model.name }))} onChange={setSelectedModel} /></label>}
+        {fullDetail && modelsFailed && <Alert type="error" message="读取图片模型失败" action={<Button onClick={() => setModelRetry(value => value + 1)}>重试模型列表</Button>} />}
       </div>
   const openGeneration = () => { acceptedAngles.current.clear(); setEditingImage(undefined); setEditingGeneration({ ...normalGenerationConfig.current, mode: undefined }); setShowPreview(true); setPage('generation') }
   const analysis = <ResourceAnalysis kind={kind === 'character' ? 'actor' : kind} id={resource?.id ?? ''} name={name} facts={facts} supplement={description} disabled={busy || generating}
     onApply={(nextFacts, nextDescription) => { setFacts(nextFacts); setDescription(nextDescription) }} onState={onAnalysisState} />
-  const detailFields = readOnly ? <div className="actor-readonly-settings">{settings}<Button onClick={() => setReadonlyOpen(true)}>查看完整设定</Button></div> : <AssetFields key={`${kind}:${assetId}`} type={kind === 'character' ? 'actor' : kind} name={name} onName={setName} facts={facts} onFacts={setFacts} description={description} onDescription={setDescription}
+  const detailFields = readOnly ? <div className="actor-readonly-settings">{settings}<Button onClick={() => setReadonlyOpen(true)}>查看完整设定</Button></div> : kind === 'character' ? <CharacterFields key={`${projectId}:${kind}:${assetId}`} name={name} onName={setName} description={description} onDescription={setDescription} disabled={busy || generating || analysisBusy || loadFailed} styles={<ProjectVisualStyleAndStyleFields layout="horizontal" disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />} /> : <AssetFields key={`${projectId}:${kind}:${assetId}`} type={kind} name={name} onName={setName} facts={facts} onFacts={setFacts} description={description} onDescription={setDescription}
     disabled={busy || generating || analysisBusy || loadFailed} onAnalysis={() => setAnalysisOpen(true)} styles={<ProjectVisualStyleAndStyleFields layout="horizontal" disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />} />
-  const detailPictures = <AssetPictures key={`${kind}:${assetId}`} type={kind === 'character' ? 'actor' : kind} savingViewDefault={savingViewDefault} onViewDefault={setViewDefault} assetId={assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
+  const detailPictures = <AssetPictures key={`${projectId}:${kind}:${assetId}`} type={kind} savingViewDefault={savingViewDefault} onViewDefault={setViewDefault} assetId={assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
     onPrimary={setPrimary} onEdit={image => { acceptedAngles.current.clear(); setEditingImage(image); setEditingGeneration({ mode: 'edit', references: [{ file_id: image.file_id!, role: 'design' }], edit_instruction: '' }); setShowPreview(true); setPage('generation') }}
     feedback={imageError && <Alert type="error" message={imageError} action={resource && <Button onClick={() => void reloadImages(resource.id)}>重试读取图片</Button>} />}
     candidates={angle => <>{imageError && <Alert type="error" message={imageError} />}{candidates.filter(candidate => candidate.angle === angle && !images.some(image => image.file_id === candidate.fileId)).map(candidate => <div key={candidate.fileId}>
       <Image width={112} src={buildFileDownloadUrl(candidate.fileId)} alt="待采用候选" /><Button disabled={busy || readOnly} onClick={async () => { if (!resource) return; setBusy(true); try { await StudioEntitiesApi.createImage(kind, resource.id, { file_id: candidate.fileId, view_angle: candidate.angle }); await reloadImages(resource.id) } catch { setImageError('采用候选失败，请重试') } finally { setBusy(false) } }}>加入视角文件夹</Button>
     </div>)}</>}
-    status={angle => { const task = tasks[angle as Angle]; return task ? <>{task.error ?? ({ queued: '排队中', running: '生成中', submitting: '正在提交', succeeded: '生成成功', failed: '生成失败', cancelled: '已取消' } as Record<string,string>)[task.status]}{task.status === 'failed' && <Button size="small" onClick={() => { acceptedAngles.current.delete(angle as Angle); void generate([angle as Angle], editingGeneration) }}>重试</Button>}</> : null }} onGenerate={openGeneration} />
+    status={angle => { const task = tasks[angle as Angle]; return task ? <>{task.error ?? ({ queued: '排队中', running: '生成中', submitting: '正在提交', succeeded: '生成成功', failed: '生成失败', cancelled: '已取消' } as Record<string,string>)[task.status]}{task.status === 'failed' && !readOnly && <Button size="small" onClick={() => { acceptedAngles.current.delete(angle as Angle); void generate([angle as Angle], editingGeneration) }}>重试</Button>}</> : null }} onGenerate={openGeneration} />
   const detailBody = <AssetDetailLayout compact={detailCompact} fields={detailFields} pictures={detailPictures} />
   return <>
-    <ResourceEditorFrame id={drawerId} className={libraryDetail ? 'actor-detail-page' : undefined} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title}
-      backLabel={libraryDetail || page === 'editor' ? '返回' : '返回对象'} onClose={libraryDetail ? () => { if (busy || generating || analysisBusy || dirty) setCloseRequested(true); else void closeEditor() } : close} actionsRef={setReferenceToolbar}
-      actions={libraryDetail ? readOnly ? null : <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => void save()}>保存设定</Button> : page === 'references' ? null : <Space wrap>{page === 'publish' ? <>{!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
+    <ResourceEditorFrame id={drawerId} className={fullDetail && page !== 'publish' ? 'actor-detail-page' : undefined} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title} titleExtra={fullDetail && projectId ? <Tag>{resource?.source_character_id ? '从角色转化 · 只读' : readOnly ? '共享资产 · 只读' : '项目专属'}</Tag> : undefined}
+      backLabel={fullDetail && page !== 'publish' || page === 'editor' ? '返回' : '返回对象'} onClose={fullDetail && page !== 'publish' ? () => { if (busy || generating || analysisBusy || dirty) setCloseRequested(true); else void closeEditor() } : close} actionsRef={setReferenceToolbar}
+      actions={fullDetail && page !== 'publish' ? <Space>{readOnly ? !resource?.source_character_id && resource?.project_id === null && <Button target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.id)}>在资产库编辑 ↗</Button> : <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => void save()}>保存设定</Button>}{resource?.project_id && (resource.library_copy_id ? <Button type="link" target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.library_copy_id)}>查看库中资产</Button> : <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => { setPublishName(resource.name); setPage('publish') }}>进入资产库</Button>)}</Space> : page === 'references' ? null : <Space wrap>{page === 'publish' ? <>{!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
         <Button type="primary" loading={busy} disabled={!publishName.trim() || kind === 'character' && !images.some(image => image.is_primary && image.file_id)} onClick={() => void publish()}>确认入库</Button>
       </> : readOnly ? <>
         {!resource?.source_character_id && resource?.project_id === null && resource && <Button target="_blank" rel="noopener noreferrer" href={`/assets/${kind === 'actor' ? 'actors' : kind === 'scene' ? 'scenes' : kind === 'prop' ? 'props' : 'costumes'}/${resource.id}/edit`}>在资产库编辑 ↗</Button>}
@@ -573,14 +591,14 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         <Button loading={busy} disabled={generating || analysisBusy || loadFailed} onClick={createOnly}>{resource || assetId ? '保存设定' : '仅创建'}</Button>
         <Button aria-label={generation.mode === 'edit' ? dirty ? '保存并生成修改图片' : '生成修改图片' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'} type="primary" loading={generating} disabled={busy || analysisBusy || loadFailed || !!activeTasks.length} onClick={() => void generate()}>{generation.mode === 'edit' ? dirty ? '保存并生成修改图片' : '生成修改图片' : !resource ? '创建并生成' : dirty ? '保存并生成' : '生成图片'}{generation.mode !== 'edit' && ` · ${(selectedAngles.length ? selectedAngles : ['FRONT']).map(angleLabel).join('、')}`}</Button>
       </>}</Space>}>
-      {(!libraryDetail || readOnly) && <p><Tag>{resource?.source_character_id ? '从角色转化 · 只读' : resource ? resource.project_id ? '项目专属' : '共享资产' : projectId ? '项目专属' : '共享资产'}</Tag></p>}
-      {resource?.project_id && page !== 'publish' && <Space wrap>
+      {(!fullDetail || readOnly && !projectId) && <p><Tag>{resource?.source_character_id ? '从角色转化 · 只读' : resource ? resource.project_id ? '项目专属' : '共享资产' : projectId ? '项目专属' : '共享资产'}</Tag></p>}
+      {!fullDetail && resource?.project_id && page !== 'publish' && <Space wrap>
         {resource.library_copy_id ? <Button type="link" target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.library_copy_id)}>查看库中资产</Button>
           : <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => { setPublishName(resource.name); setPage('publish') }}>进入资产库</Button>}
         {dirty && <span>保存设定后可进入资产库。</span>}
       </Space>}
       {error && <Alert type="error" showIcon message={error} action={loadFailed && <Button onClick={() => setLoadRetry(value => value + 1)}>重试读取对象</Button>} />}
-      {libraryDetail ? detailBody : page === 'publish' ? <div className="resource-editor-fields"><h3>进入资产库 · 独立副本</h3>
+      {fullDetail && page !== 'publish' ? detailBody : page === 'publish' ? <div className="resource-editor-fields"><h3>进入资产库 · 独立副本</h3>
         <label>副本名称<Input aria-label="副本名称" maxLength={255} value={publishName} onChange={event => setPublishName(event.target.value)} /></label>
         <p>原项目对象保留，副本后续分别维护。将复制已保存资料和文件夹内全部图片，保留主图选择。</p>
         {kind === 'character' && <Alert type="info" message="角色将转化为演员，标注从角色转化，入库后只读。角色入库前须有有效主图。" />}
@@ -609,9 +627,9 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         ]} />}
       </>}
     </ResourceEditorFrame>
-    {libraryDetail && <><Modal title="智能检测" forceRender open={analysisOpen} onCancel={() => setAnalysisOpen(false)} footer={<Button aria-label="完成" onClick={() => setAnalysisOpen(false)}>完成</Button>}>{analysis}</Modal>
+    {fullDetail && <><Modal title="智能检测" forceRender open={analysisOpen} onCancel={() => setAnalysisOpen(false)} footer={<Button aria-label="完成" onClick={() => setAnalysisOpen(false)}>完成</Button>}>{analysis}</Modal>
       <Modal title={`完整${labels[kind]}设定`} open={readonlyOpen} onCancel={() => setReadonlyOpen(false)} footer={null}>{settings}</Modal></>}
-    {libraryDetail && <AssetGenerationDialog label={labels[kind]} references={page === 'references'} editing={editingGeneration.mode === 'edit'} open={page === 'generation' || page === 'references'} generating={generating} dirty={dirty}
+    {fullDetail && <AssetGenerationDialog label={labels[kind]} references={page === 'references'} editing={editingGeneration.mode === 'edit'} open={page === 'generation' || page === 'references'} generating={generating} dirty={dirty}
       disabled={busy || analysisBusy || loadFailed || !selectedModel || !imageModels.some(model => model.id === selectedModel) || !!activeTasks.length}
       onCancel={() => setPage('editor')} onGenerate={() => void generate(editingAngles, editingGeneration)}>
       {error && <Alert type="error" message={error} />}{page === 'references' ? referencePicker : generationPanel}

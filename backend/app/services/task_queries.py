@@ -129,7 +129,7 @@ class TaskQueries:
         """只读匹配同类别、同对象的当前文件来源，不补齐历史参数。"""
         from app.services.studio.entity_specs import entity_spec  # pylint: disable=import-outside-toplevel
 
-        if entity_type not in {"actor", "scene", "prop", "costume"}:
+        if entity_type not in {"actor", "character", "scene", "prop", "costume"}:
             raise HTTPException(status_code=422, detail="Unsupported asset type")
         spec = entity_spec(entity_type)
         image = await self.db.get(spec.image_model, image_id)
