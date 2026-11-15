@@ -67,7 +67,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
   }, [drawer, open, positioned])
   const toolbar = <>
     <div className="resource-editor-page-heading"><Button type="text" icon={<ArrowLeftOutlined />} aria-label={backLabel} onClick={onClose}>{backLabel}</Button>
-      <h1 className="app-page-title" title={title}>{title}</h1>{titleExtra}</div>
+      {titleExtra}<h1 className="app-page-title" title={title}>{title}</h1></div>
     <div ref={actionsRef} className="resource-editor-page-actions">{actions}</div>
   </>
   if (drawer) return <><span ref={anchor} hidden />{open && bounds && createPortal(

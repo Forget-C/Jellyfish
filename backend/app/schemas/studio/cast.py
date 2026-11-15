@@ -54,6 +54,7 @@ class ActorUpdate(ActorFields):
 
     references: list[AssetPromptReference] = Field(default_factory=list)
 
+    details_editable: bool | None = None
     name: str | None = None
     tags: list[str] | None = None
     prompt_template_id: str | None = None
@@ -71,7 +72,7 @@ class SourceInfo(BaseModel):
     @model_validator(mode="after")
     def omit_image_source_style(self):
         """兼容旧表非空风格列，但不能将内部默认值投影为图片来源的基础事实。"""
-        if self.origin != "created" and hasattr(self, "style"):
+        if self.origin != "created" and not getattr(self, "details_editable", False) and hasattr(self, "style"):
             setattr(self, "style", None)
             setattr(self, "visual_style", None)
         return self
@@ -87,6 +88,7 @@ class ActorRead(SourceInfo, ActorFields, ActorBase):
 
     library_copy_id: str | None = None
     source_character_id: str | None = None
+    details_editable: bool = False
     project_id: str | None = Field(None, description="所属项目；空值表示共享资产")
     description: str = Field("", description="只读完整描述")
     model_config = ConfigDict(from_attributes=True)

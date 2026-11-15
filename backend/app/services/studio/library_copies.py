@@ -39,6 +39,8 @@ async def publish_to_library(
         raise HTTPException(422, "入库前需要至少一张有效图片")
     target = target_spec.model(id=uuid4().hex, name=copy_name, project_id=None,
                                style="真人都市", visual_style="现实", origin="project", source_kind=entity_type, source_id=source.id)
+    if entity_type == "character":
+        target.source_character_id = source.id
     db.add(target)
     source.library_copy_id = target.id
     await flush_resource(db)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Computed, case, func, literal, JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Computed, case, func, literal, JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -212,7 +212,8 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
 
     __tablename__ = "actors"
 
-    source_character_id: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="角色转化来源；非空时只读")
+    details_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    source_character_id: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="角色转化来源")
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")

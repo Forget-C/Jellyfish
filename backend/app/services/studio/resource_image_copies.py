@@ -42,8 +42,6 @@ async def adopt_reference_main(db, *, entity_type, entity_id, reference):
     target = await db.scalar(select(spec.model).where(spec.model.id == entity_id).with_for_update())
     if target is None:
         raise HTTPException(404, "对象不存在")
-    if getattr(target, "source_character_id", None):
-        raise HTTPException(403, "从角色转化的演员只能被引用")
     await validate_resource_references(db, entity_type, target.project_id, [reference])
     copy_id = uuid5(NAMESPACE_URL, f"object-main:{entity_type}:{entity_id}:{reference['file_id']}").hex
     file = await copy_image_file(db, file_id=reference["file_id"], copy_id=copy_id)

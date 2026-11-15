@@ -149,7 +149,7 @@ export function ActorsTab() {
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${a?.name ?? '演员'}更多操作`} /></Dropdown>}
-                  meta={<><Tag>{a?.source_character_id ? '从角色转化 · 只读' : a?.project_id ? '项目专属' : '共享资产'}</Tag>
+                  meta={<><Tag>{a?.source_character_id ? '从角色转化' : a?.project_id ? '项目专属' : '共享资产'}</Tag>
                   {a && <ResourcePublishButton kind="actor" asset={a} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{a?.description?.trim() || '未填写简介'}</div></>}
                 />
               )

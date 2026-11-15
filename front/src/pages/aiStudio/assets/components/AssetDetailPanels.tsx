@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Image, Input, Modal, Tag, Tooltip, Tabs } from 'antd'
-import { AppstoreOutlined, CheckCircleOutlined, EditOutlined, PictureOutlined, StarOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, CheckCircleOutlined, EditOutlined, EyeOutlined, PictureOutlined, StarOutlined } from '@ant-design/icons'
 import { ASSET_FIELDS, type AssetFacts, type StructuredAssetType } from './AssetFactsFields'
 import { ResourceImage } from './ResourceImage'
 import { buildFileDownloadUrl } from '../utils'
@@ -11,7 +11,8 @@ type Picture = { id: number; file_id?: string | null; view_angle?: string; is_pr
 const views = [['FRONT', '正面'], ['LEFT', '侧面'], ['TOP', '俯视'], ['BACK', '背面']] as const
 
 /** 固定高度的分类资产设定；长内容与检测结果通过显式展开保留完整编辑能力。 */
-export function AssetFields({ type, name, onName, facts, onFacts, description, onDescription, styles, onAnalysis, disabled, factsReadOnly = false }: {
+export function AssetFields({ type, name, onName, facts, onFacts, description, onDescription, styles, onAnalysis, analysisBusy, analysisCancelling, analysisCompleted, analysisError, onCancelAnalysis, disabled, factsReadOnly = false }: {
+  analysisError?: string; analysisCancelling?: boolean; analysisBusy?: boolean; analysisCompleted?: boolean; onCancelAnalysis?: () => void
   type: StructuredAssetType; name: string; onName: (value: string) => void; facts: AssetFacts; onFacts: (value: AssetFacts) => void
   description: string; onDescription: (value: string) => void; factsReadOnly?: boolean; styles: ReactNode; onAnalysis?: () => void; disabled: boolean
 }) {
@@ -21,16 +22,17 @@ export function AssetFields({ type, name, onName, facts, onFacts, description, o
   return <div className="actor-fields">
     <label>名称<Input aria-label="名称" value={name} onChange={event => onName(event.target.value)} disabled={disabled} /></label>
     <div className="actor-facts-grid">{[...ASSET_FIELDS[type]].sort((a, b) => a.maxLength - b.maxLength).map(item => <label key={item.key} className={(type === 'actor' ? item.maxLength > 200 : item.fullWidth || ['scene_type', 'costume_type'].includes(item.key)) ? 'actor-long-field' : undefined}>
-      <span>{item.label}{!factsReadOnly && <Button type="text" size="small" aria-label={`展开${item.label}`} icon={<EditOutlined />} disabled={disabled} onClick={() => setExpanded(item.key)} />}</span>
+      <span>{item.label}{<Button type="text" size="small" aria-label={`展开${item.label}`} icon={factsReadOnly || disabled ? <EyeOutlined /> : <EditOutlined />} onClick={() => setExpanded(item.key)} />}</span>
       {item.maxLength > 200 ? <Input.TextArea aria-label={item.label} rows={type === 'actor' || item.fullWidth ? 2 : 1} maxLength={item.maxLength} value={facts[item.key] ?? ''} disabled={disabled || factsReadOnly} placeholder={factsReadOnly ? '未提供' : undefined} onChange={event => onFacts({ ...facts, [item.key]: event.target.value })} /> : <Input aria-label={item.label} maxLength={item.maxLength} value={facts[item.key] ?? ''} disabled={disabled || factsReadOnly} placeholder={factsReadOnly ? '未提供' : undefined} onChange={event => onFacts({ ...facts, [item.key]: event.target.value })} />}
     </label>)}</div>
-    <label><span>补充信息{!factsReadOnly && <Button type="text" size="small" aria-label="展开补充信息" icon={<EditOutlined />} disabled={disabled} onClick={() => setExpanded('supplement')} />}</span>
+    <label><span>补充信息{<Button type="text" size="small" aria-label="展开补充信息" icon={factsReadOnly || disabled ? <EyeOutlined /> : <EditOutlined />} onClick={() => setExpanded('supplement')} />}</span>
       <Input.TextArea aria-label="补充信息" rows={2} maxLength={8000} value={description} disabled={disabled || factsReadOnly} placeholder={factsReadOnly ? '未提供' : undefined} onChange={event => onDescription(event.target.value)} /></label>
     <div className="actor-style-fields">{styles}</div>
-    {!factsReadOnly && onAnalysis && <Button onClick={onAnalysis}>智能检测与结果</Button>}
+    {factsReadOnly && <small>详情暂不可编辑，不影响图片管理与参考生成。</small>}
+    {!factsReadOnly && onAnalysis && <div><Button loading={analysisBusy} disabled={analysisBusy || disabled || type === 'actor' && !Object.values(facts).some(value => value?.trim()) && !description.trim()} onClick={onAnalysis}>{type !== 'actor' ? '智能检测与结果' : analysisCancelling ? '等待取消确认' : analysisBusy ? '检测中…' : analysisError ? '检测失败，查看详情' : analysisCompleted ? '查看检测结果' : '智能检测'}</Button>{analysisBusy && <Button disabled={analysisCancelling} onClick={onCancelAnalysis}>取消检测</Button>}{type === 'actor' && <small>{analysisError || '检查文字设定，不核对图片一致性'}</small>}</div>}
     <Modal title={expanded === 'analysis' ? '智能检测' : label} open={!!expanded && expanded !== 'analysis'} onCancel={() => setExpanded(undefined)} footer={<Button aria-label="完成" onClick={() => setExpanded(undefined)}>完成</Button>}>
       {expanded !== 'analysis' && <Input.TextArea aria-label={`完整${label}`} rows={10} maxLength={field?.maxLength ?? 8000} value={field ? facts[field.key] ?? '' : description}
-        onChange={event => field ? onFacts({ ...facts, [field.key]: event.target.value }) : onDescription(event.target.value)} disabled={disabled} />}
+        onChange={event => field ? onFacts({ ...facts, [field.key]: event.target.value }) : onDescription(event.target.value)} readOnly={disabled || factsReadOnly} />}
     </Modal>
   </div>
 }

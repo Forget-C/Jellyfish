@@ -62,9 +62,6 @@ async def create_entity_image(
     if parent is None:
         raise HTTPException(status_code=404, detail=entity_not_found(spec.model.__name__))
 
-    if getattr(parent, "source_character_id", None):
-        raise HTTPException(403, "从角色转化的演员只能被引用")
-
     parsed = _parse_image_body(spec.image_create_model, body).model_dump()
     if parsed.get("file_id") is not None:
         await require_available_file(db, file_id=parsed["file_id"], expected_type="image")
@@ -90,9 +87,7 @@ async def update_entity_image(
     """保存实体图片，锁定新增文件引用以避免采用正在删除的内容。"""
     entity_type_norm = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type_norm)
-    parent = await db.scalar(select(spec.model).where(spec.model.id == entity_id).with_for_update())
-    if getattr(parent, "source_character_id", None):
-        raise HTTPException(403, "从角色转化的演员只能被引用")
+    await db.scalar(select(spec.model).where(spec.model.id == entity_id).with_for_update())
     obj = await db.get(spec.image_model, image_id)
     if obj is None or getattr(obj, spec.id_field) != entity_id:
         raise HTTPException(status_code=404, detail=entity_not_found(spec.image_model.__name__))
@@ -130,9 +125,7 @@ async def delete_entity_image(
     image_id: int,
 ) -> None:
     spec = entity_spec(entity_type)
-    parent = await db.scalar(select(spec.model).where(spec.model.id == entity_id).with_for_update())
-    if getattr(parent, "source_character_id", None):
-        raise HTTPException(403, "从角色转化的演员只能被引用")
+    await db.scalar(select(spec.model).where(spec.model.id == entity_id).with_for_update())
     obj = await db.get(spec.image_model, image_id)
     if obj is None or getattr(obj, spec.id_field) != entity_id:
         return

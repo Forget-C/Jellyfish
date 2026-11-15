@@ -178,9 +178,7 @@ class GenerationEntityGate:
         except ValueError:
             return False
         spec = entity_spec(asset_type)
-        parent = await db.get(spec.model, entity_id, with_for_update=True)
-        if getattr(parent, "source_character_id", None):
-            raise HTTPException(status_code=403, detail="从角色转化的演员只能被引用")
+        await db.get(spec.model, entity_id, with_for_update=True)
         row = await db.get(spec.image_model, numeric_id)
         return row is not None and getattr(row, spec.id_field) == entity_id
 

@@ -22,14 +22,15 @@ async def render_draft_preview(db, *, entity_type, resource, view_angle, options
     saved = await db.get(spec.model, asset.id)
     if saved is not None:
         # 草稿覆盖事实，模板依据仍与正式提交保持一致。
-        if getattr(saved, "source_character_id", None):
-            raise HTTPException(403, "从角色转化的演员只能被引用")
-        if saved.origin != "created":
+        if not getattr(saved, "details_editable", False) and (saved.origin != "created" or getattr(saved, "source_character_id", None)):
             # 名称可在草稿中编辑；其余事实来自保存值，且预览不得修改 ORM 对象。
             asset = SimpleNamespace(id=saved.id, name=values["name"], description=saved.description,
                 origin=saved.origin, project_id=saved.project_id, references=saved.references,
+                source_character_id=getattr(saved, "source_character_id", None), details_editable=getattr(saved, "details_editable", False),
                 style=saved.style, visual_style=saved.visual_style, tags=getattr(saved, "tags", None),
                 prompt_template_id=getattr(saved, "prompt_template_id", None))
+        asset.details_editable = getattr(saved, "details_editable", False)
+        asset.source_character_id = getattr(saved, "source_character_id", None)
         asset.prompt_template_id = getattr(saved, "prompt_template_id", None)
         asset.project_id = saved.project_id
     image = SimpleNamespace(view_angle=view_angle, prompt_overrides={}, file_id=None)
@@ -45,7 +46,7 @@ async def render_draft_preview(db, *, entity_type, resource, view_angle, options
         [reference.model_dump(exclude_none=True) for reference in references])
     files, instruction = await resolve_prompt_references(db, references)
     prompt, template_id, version, variables = await _build_asset_prompt(db,
-        relation_type=f"{entity_type}_image", name=asset.name, description=asset.description,
+        relation_type=f"{entity_type}_image", name=asset.name, description="" if getattr(asset, "source_character_id", None) and not asset.details_editable else asset.description,
         tags=getattr(asset, "tags", None), visual_style=options.visual_style or asset.visual_style, style=options.style or asset.style,
         image_row=image,
         template_id=getattr(asset, "prompt_template_id", None),

@@ -38,6 +38,7 @@ export type ActorUpdate = {
      */
     hair?: (string | null);
     references?: Array<AssetPromptReference>;
+    details_editable?: (boolean | null);
     name?: (string | null);
     tags?: (Array<string> | null);
     prompt_template_id?: (string | null);

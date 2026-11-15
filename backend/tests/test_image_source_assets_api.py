@@ -27,7 +27,7 @@ async def client(monkeypatch):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     from app.models.studio import Actor
     async with sessions() as db:
-        db.add(Actor(id="legacy", name="旧转化演员", style="真人都市", source_character_id="old-role"))
+        db.add(Actor(id="legacy", name="旧转化演员", style="真人都市", age_appearance="历史年龄", source_character_id="old-role"))
         await db.commit()
     async def database():
         async with sessions() as db:
@@ -61,6 +61,8 @@ async def test_upload_name_only_and_default_order(client, kind):
     data = response.json()["data"]
     assert data["origin"] == "upload" and data["description"] == ""
     assert data["style"] is None and data["visual_style"] is None
+    if kind == "actor":
+        assert (await client.patch("/api/v1/studio/entities/actor/upload", json={"details_editable": True})).status_code == 422
     assert (await client.post(f"/api/v1/studio/entities/{kind}/image-source", json=body)).json()["data"]["id"] == "upload"
     assert (await client.patch(f"/api/v1/studio/entities/{kind}/upload", json={"supplementary_info": "禁止"})).status_code == 403
     assert (await client.patch(f"/api/v1/studio/entities/{kind}/upload", json={"name": "允许改名"})).status_code == 200
@@ -134,7 +136,24 @@ async def test_invalid_upload_and_request_conflict(client):
 async def test_legacy_permissions_and_image_source_rename_validation(client):
     assert (await client.get("/api/v1/studio/entities/actor/legacy")).json()["data"]["origin"] == "created"
     assert (await client.patch("/api/v1/studio/entities/actor/legacy", json={"name": "不能改"})).status_code == 403
-    assert (await client.post("/api/v1/studio/entities/actor/legacy/images", json={"view_angle": "FRONT"})).status_code == 403
+    assert (await client.post("/api/v1/studio/entities/actor/legacy/images", json={"view_angle": "FRONT"})).status_code == 201
+    uploaded = await client.post("/api/v1/studio/files/upload", files={"file": ("actor.png", b"pixels", "image/png")})
+    file_id = uploaded.json()["data"]["id"]
+    image = await client.post("/api/v1/studio/entities/actor/legacy/images", json={"file_id": file_id, "view_angle": "FRONT", "is_primary": True})
+    path = f"/api/v1/studio/generation-prompts/assets/actor/legacy/slots/{image.json()['data']['id']}/render"
+    rendered = await client.post(path, json={"visual_style": "动漫", "style": "国漫"})
+    assert rendered.status_code == 200, rendered.text
+    assert "历史年龄" not in rendered.json()["data"]["execution_prompt"]
+    assert (await client.post(path, json={"references": []})).status_code == 422
+    opened = await client.patch("/api/v1/studio/entities/actor/legacy", json={"details_editable": True, "age_appearance": "30岁"})
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["data"]["details_editable"] is True
+    assert opened.json()["data"]["source_character_id"] == "old-role"
+    rendered = await client.post(path, json={"references": [{"file_id": file_id, "role": "identity"}]})
+    assert rendered.status_code == 200, rendered.text
+    assert "30岁" in rendered.json()["data"]["execution_prompt"]
+    assert (await client.patch("/api/v1/studio/entities/actor/legacy", json={"age_appearance": "35岁"})).status_code == 200
+    assert (await client.patch("/api/v1/studio/entities/actor/legacy", json={"details_editable": False})).status_code == 422
 
 
 def test_origin_migration_preserves_existing_facts():

@@ -127,7 +127,7 @@ def _resolve_edit_options(options: AssetPromptOptions, image_row: Any) -> AssetP
 
 async def resolve_source_options(db, entity_type, asset, options):
     """图片来源必须有主体参考，风格属于单次生成而非不可编辑的档案。"""
-    if (asset.origin or "created") == "created":
+    if ((asset.origin or "created") == "created" and not getattr(asset, "source_character_id", None)) or getattr(asset, "details_editable", False):
         if options.style is not None or options.visual_style is not None:
             raise HTTPException(422, "设定创建对象的风格由档案维护")
         return options
@@ -156,8 +156,6 @@ async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_i
     asset = await db.get(spec.model, entity_id)
     if asset is None:
         raise HTTPException(404, "对象不存在")
-    if getattr(asset, "source_character_id", None):
-        raise HTTPException(403, "从角色转化的演员只能被引用")
     if entity_type == "actor":
         image = await validate_actor_image(db, actor_id=entity_id, image_id=image_id)
     elif entity_type == "character":
@@ -182,7 +180,7 @@ async def build_resource_image_base_draft(db, *, entity_type, entity_id, image_i
         [reference.model_dump(exclude_none=True) for reference in references])
     refs, instruction = await resolve_prompt_references(db, references)
     prompt, template_id, template_version, variables = await _build_asset_prompt(
-        db, relation_type=f"{entity_type}_image", name=asset.name, description=asset.description,
+        db, relation_type=f"{entity_type}_image", name=asset.name, description="" if getattr(asset, "source_character_id", None) and not asset.details_editable else asset.description,
         tags=getattr(asset, "tags", None), visual_style=options.visual_style or asset.visual_style, style=options.style or asset.style,
         image_row=image, template_id=getattr(asset, "prompt_template_id", None),
         reference_instruction=instruction, options=options,

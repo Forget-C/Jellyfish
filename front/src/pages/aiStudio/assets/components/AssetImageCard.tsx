@@ -21,6 +21,7 @@ export type LibraryAsset = {
   description?: string | null
   tags?: string[] | null
   thumbnail?: string | null
+  details_editable?: boolean
   source_character_id?: string | null
   references?: AssetPromptReference[]
 }
@@ -167,7 +168,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
             <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
           </Dropdown>
         </div>
-        <Tag>{asset.source_character_id ? '从角色转化 · 只读' : '共享资产'}</Tag>
+        <Tag>{asset.source_character_id ? asset.details_editable ? '从角色转化' : '从角色转化 · 详情只读' : '共享资产'}</Tag>
         <p className="asset-library-description" title={description}>{description || '未填写简介'}</p>
         <div className="asset-library-card-actions">
           {!asset.source_character_id && <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}

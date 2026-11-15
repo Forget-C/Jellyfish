@@ -218,11 +218,15 @@ async def update_entity(
     if obj is None:
         raise HTTPException(status_code=404, detail=entity_not_found(spec.model.__name__))
 
-    if getattr(obj, "source_character_id", None):
-        raise HTTPException(403, "从角色转化的演员只能被引用")
-
     update_data = spec.update_model.model_validate(body).model_dump(exclude_unset=True)
-    if obj.origin != "created" and set(update_data) - {"name"}:
+    opening = update_data.pop("details_editable", None)
+    if opening is not None and (opening is not True or entity_type_norm != "actor" or not obj.source_character_id):
+        raise HTTPException(422, "详情开放后不能重新锁定")
+    if getattr(obj, "source_character_id", None) and not obj.details_editable and opening is not True:
+        raise HTTPException(403, "请先确认开放演员详情")
+    if opening is True:
+        obj.details_editable = True
+    if obj.origin != "created" and not getattr(obj, "details_editable", False) and set(update_data) - {"name"}:
         raise HTTPException(403, "图片来源对象仅允许修改名称")
     if obj.origin != "created" and "name" in update_data:
         name = update_data["name"]
