@@ -268,7 +268,6 @@
     "workspaceInstructionContent.browser.mjs": "存量未登记；本批保留现状，接入状态尚未核验。",
     "workspaceInstructionLifecycle.browser.mjs": "存量未登记；本批保留现状，接入状态尚未核验。",
     "workspaceJourney.browser.mjs": "存量未登记；本批保留现状，接入状态尚未核验。",
-    "workspaceLayout.browser.mjs": "旧宿主入口及定位已失配；步骤滚动、刷新、旧格式恢复和窄屏回焦尚未证明由现行测试完整承接，暂留待迁移。",
     "workspaceProduction.browser.mjs": "存量未登记；本批保留现状，接入状态尚未核验。",
     "workspaceProductionGraph.browser.mjs": "存量未登记；本批保留现状，接入状态尚未核验。",
     "workspaceReferenceModal.browser.mjs": "存量未登记；本批保留现状，接入状态尚未核验。",
