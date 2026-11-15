@@ -25,19 +25,19 @@ from app.services.directing.existing_storyboard_check import STORYBOARD_CHECK_KI
 from app.services.directing.scene_objects import SceneObjectService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.storyboard_application import plan_application
-from app.services.directing.storyboard_continuity_choices import visual_continuity_state
 from app.services.directing.storyboard_stack_review import review_stack_changes
 from app.services.generation_canvas.errors import diagnostic
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, StoryboardAssembly
-from app.services.directing.storyboard_review import require_storyboard_review, review_state
+from app.services.directing.storyboard_review import review_state
 from app.services.directing.storyboard_review_basis import (
-    active_risks, canvas_review_fingerprint, capture_review_basis, evidence_digest, risk_basis,
+    canvas_review_fingerprint, capture_review_basis, evidence_digest, risk_basis,
 )
 from app.services.directing.storyboard_repair import repair_fields
 from app.services.directing.storyboard_reference_cleanup import card_name
 from app.services.generation_canvas.catalog import CARD_TITLES
 from app.services.generation_canvas.capabilities import model_capability
-from app.services.generation_canvas.document_save import fixed_source_state, prepare_document
+from app.services.generation_canvas.document_save import prepare_document
+from app.services.directing.storyboard_save import StoryboardSaveEvidence, applied_risks
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -623,12 +623,8 @@ class SceneStoryboardService(SceneObjectService):
         diff.continuity_review = continuity
         if preview:
             return diff
-        risks = self._confirmed_risks(task, canvas.id, body, continuity)
-        if task.kind == STORYBOARD_CHECK_KIND:
-            if not continuity or body.review_token != continuity.token or (not diff.modified and not risks):
-                raise diagnostic('STORYBOARD_REVIEW_REQUIRED', '请核对本次检查的修正或风险后应用',
-                                 {'canvas_id': canvas.id}, status=409)
-            document.storyboard.continuity_check_task_id = task.id
+        evidence = StoryboardSaveEvidence.confirm(task, current, document, body, continuity,
+                                                   has_changes=bool(diff.modified))
         if diff.manual_stacks:
             stack = diff.manual_stacks[0]
             raise diagnostic('STACK_READ_ONLY', f'请先手动解除堆叠「{stack.name}」，再核对提取差异', {'group_id': stack.id})
@@ -638,10 +634,7 @@ class SceneStoryboardService(SceneObjectService):
         document.groups = [group for group in document.groups if group.id not in affected]
         return await store.save_scene_application(canvas,
             CanvasSave(request_id=request_id, expected_revision=body.expected_revision, document=document.model_dump()),
-            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(),
-            scene_sources=fixed_source_state(document),
-            source_history={'before': self._history_state(current), 'after': self._history_state(document)},
-            accepted_risks=risks if task.kind == STORYBOARD_CHECK_KIND else risks or None)
+            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), evidence=evidence)
 
     async def plan_extraction(self, task: Task, current: CanvasDocument, candidate: CanvasDocument,
                               body: StoryboardApplication) -> tuple[CanvasDocument, StoryboardDiff]:
@@ -688,7 +681,7 @@ class SceneStoryboardService(SceneObjectService):
         if reextract:
             # The merged plan can mask a new edit to a card selected for overwrite.
             stale = not basis or basis['all'] != latest['all'] or result.get('reviewed_plan_fingerprint') != planned_fingerprint
-        active, _ = await self._applied_risks(current)
+        active, _ = await applied_risks(self.db, current)
         draft = SceneStoryboard.model_validate(result['review_draft']) if result.get('review_draft') else None
         protected = {origin.semantic_key for origin in current.storyboard.origins.values()
                      if origin.manually_edited} if current.storyboard else set()
@@ -708,42 +701,6 @@ class SceneStoryboardService(SceneObjectService):
         return StoryboardContinuityDiff(token=token, stale=stale, conflicts=list(choices.values()),
                                        can_review_plan=reextract and stale and bool(draft))
 
-    async def _applied_risks(self, document: CanvasDocument) -> tuple[set[str], bool]:
-        """Read trusted application evidence, never client-supplied acceptance flags."""
-        if not document.storyboard:
-            return set(), False
-        task_id = document.storyboard.continuity_check_task_id or document.storyboard.task_id
-        receipt = await self.db.get(CanvasSaveReceipt, (document.id, 'storyboard:' + task_id))
-        risks = receipt.response.get('review_history', {}).get('risks', []) if receipt else []
-        active = active_risks(document, risks)
-        return active, bool(risks and len(active) != len(risks))
-
-    @staticmethod
-    def _confirmed_risks(task: Task, canvas_id: str, body: StoryboardApplication,
-                         review: StoryboardContinuityDiff | None) -> list[dict]:
-        """Only the compared findings and their exact semantic basis can be accepted."""
-        if review and review.stale:
-            raise diagnostic('STORYBOARD_REVIEW_STALE', '相关分镜内容已变化，请重新审查', {'canvas_id': canvas_id}, status=409)
-        if not review or not review.conflicts:
-            require_storyboard_review(task, canvas_id)
-            return []
-        ids = {choice.id for choice in review.conflicts}
-        explicit = set(body.accepted_conflict_ids)
-        carried = {choice.id for choice in review.conflicts if choice.previously_accepted}
-        if (body.review_token != review.token or len(explicit) != len(body.accepted_conflict_ids)
-                or explicit | carried != ids):
-            raise diagnostic('STORYBOARD_REVIEW_REQUIRED', '请逐项确认本次分镜的设计冲突', {'canvas_id': canvas_id}, status=409)
-        return [{'id': choice.id, 'shot_ids': choice.issue.shot_ids} for choice in review.conflicts]
-
-    @staticmethod
-    def _history_state(document: CanvasDocument) -> dict:
-        state = {'sources': fixed_source_state(document), 'task_id': document.storyboard.task_id if document.storyboard else None}
-        if continuity := visual_continuity_state(document):
-            state['visual_continuity'] = continuity
-        if document.storyboard and document.storyboard.continuity_check_task_id:
-            state['continuity_check_task_id'] = document.storyboard.continuity_check_task_id
-        return state
-
     async def restore_storyboard(self, chapter_id: str, sequence_id: str, task_id: str,
                                  body: StoryboardRestore) -> CanvasRead:
         """Restore a fixed source only across a real application and its exact evidence."""
@@ -757,22 +714,13 @@ class SceneStoryboardService(SceneObjectService):
             return CanvasRead.model_validate(replay['scene_canvas'])
         if canvas.revision != body.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '画布已更新，请重新读取后核对', {'canvas_id': canvas.id}, status=409)
-        receipt = await self.db.get(CanvasSaveReceipt, (canvas.id, 'storyboard:' + task.id))
-        history = receipt.response.get('source_history') if receipt else None
-        from_side, to_side = ('after', 'before') if body.direction == 'undo' else ('before', 'after')
         current = CanvasDocument.model_validate(canvas.document)
         document = CanvasDocument.model_validate(body.document)
-        if canvas.sequence_id != sequence_id or not history or self._history_state(current) != history[from_side] or (
-                self._history_state(document) != history[to_side]):
-            raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对整批操作的原文与提取依据', {'canvas_id': canvas.id})
-        evidence = receipt.response.get('review_history')
-        if evidence and (canvas_review_fingerprint(current, full=True) != evidence[from_side]
-                         or canvas_review_fingerprint(document, full=True) != evidence[to_side]):
-            raise diagnostic('INVALID_STORYBOARD_RESTORE', '无法核对原风险确认对应的设计内容', {'canvas_id': canvas.id})
+        evidence = await StoryboardSaveEvidence.restore(self.db, canvas, sequence_id, task.id,
+                                                        current, document, body.direction)
         return await store.save_scene_application(canvas,
             CanvasSave(request_id=body.request_id, expected_revision=body.expected_revision, document=document.model_dump()),
-            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), scene_sources=history[to_side]['sources'],
-            restored_continuity=frozenset(history[to_side].get('visual_continuity', {})))
+            digest, chapter_version=sha256(chapter.raw_text.encode()).hexdigest(), evidence=evidence)
 
     async def _storyboard_read(self, task: Task) -> StoryboardTaskRead:
         canvas_id = task.input_snapshot['canvas_id']
@@ -797,7 +745,7 @@ class SceneStoryboardService(SceneObjectService):
         saved_check = task.kind == STORYBOARD_CHECK_KIND
         active_check = applied.storyboard.continuity_check_task_id if applied.storyboard else None
         if active_check == task.id or (not active_check and applied.storyboard and applied.storyboard.task_id == task.id):
-            accepted, stale = await self._applied_risks(applied)
+            accepted, stale = await applied_risks(self.db, applied)
             if stale or accepted:
                 summary['review_state'] = 'stale' if stale else 'accepted'
         if saved_check:
