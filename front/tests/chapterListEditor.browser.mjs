@@ -15,7 +15,7 @@ const chapters = Array.from({ length: 105 }, (_, i) => ({ id: `ch${i + 1}`, proj
 delete chapters[104].sequence_count
 chapters[2].raw_text = ''
 const writes = [], requests = [], errors = []
-const taskResults = { check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: "她推开门。优化后的原文。" } }
+const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: "她推开门。优化后的原文。" } }
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
 try {
@@ -29,7 +29,8 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (path.endsWith('/script-processing/check-consistency-async')) return respond({ task_id: 'check', status: 'queued' })
     if (path.endsWith('/script-processing/optimize-script-async')) return respond({ task_id: 'optimize', status: 'queued' })
-    const taskPath = path.match(/\/film\/tasks\/(check|optimize)\/(status|result)$/)
+    if (path.endsWith('/script-processing/simplify-script-async')) return respond({ task_id: 'simplify', status: 'queued' })
+    const taskPath = path.match(/\/film\/tasks\/(check|optimize|simplify)\/(status|result)$/)
     if (taskPath) return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, result: taskResults[taskPath[1]] })
     if (path.endsWith('/projects/p1')) return respond({ id: 'p1', name: '章节管理测试', stats: {} })
     if (path.endsWith('/chapters')) {
@@ -89,8 +90,8 @@ try {
   assert.equal(requests.some(row => /overview|assembly|sequences/.test(row.path)), false)
   const row = title => page.locator('.ant-table-row').filter({ has: page.getByRole('button', { name: title, exact: true }) })
   await row('1. 章节 1 · 编辑章节').getByRole('button', { name: '工作台管理', exact: true }).waitFor()
-  await row('2. 章节 2 · 编辑章节').getByRole('button', { name: '工作台管理', exact: true }).waitFor()
-  await row('3. 章节 3 · 编辑章节').getByRole('button', { name: '工作台管理', exact: true }).waitFor()
+  await row('2. 章节 2 · 编辑章节').getByRole('button', { name: '划分场次', exact: true }).waitFor()
+  await row('3. 章节 3 · 编辑章节').getByRole('button', { name: '编辑原文', exact: true }).waitFor()
   assert.equal(await page.locator('.ant-drawer-open').count(), 0)
   await page.getByRole('button', { name: '10. 章节 10 · 编辑章节', exact: true }).scrollIntoViewIfNeeded()
   const tableTop = await page.locator('.app-workspace-scroll').evaluate(element => element.scrollTop)
@@ -128,6 +129,18 @@ try {
   await page.getByText('章节已保存', { exact: true }).first().waitFor()
   await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
   assert.deepEqual(writes.at(-1), { condensed_text: '开门。' })
+  await editor.getByRole('button', { name: '对比模式', exact: true }).click()
+  assert.equal(await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).inputValue(), '开门。')
+  await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('模式往返原文。')
+  await editor.getByRole('button', { name: '智能精简', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="对比精简内容"]')?.value === '智能精简内容。')
+  assert.equal(await editor.getByRole('textbox', { name: '对比原文', exact: true }).inputValue(), '模式往返原文。')
+  await editor.getByRole('button', { name: '对比模式', exact: true }).click()
+  assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '模式往返原文。')
+  await editor.getByRole('button', { name: '查看精简', exact: true }).click()
+  assert.equal(await editor.getByRole('textbox', { name: '精简内容', exact: true }).inputValue(), '智能精简内容。')
+  await editor.getByRole('textbox', { name: '精简内容', exact: true }).fill('开门。')
+
   await editor.getByRole('button', { name: '回到原文', exact: true }).click()
   await editor.getByRole('textbox', { name: '章节原文', exact: true }).fill('她推开门！')
   const beforeRaw = writes.length
@@ -177,13 +190,32 @@ try {
   await guard.getByRole('button', { name: '保存后继续', exact: true }).click()
   await editor.waitFor({ state: 'hidden' })
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门。新的一天！' })
+  await page.getByRole('textbox', { name: '搜索章节', exact: true }).fill('')
+  await page.getByRole('button', { name: '1. 第一章重命名 · 编辑章节', exact: true }).click()
+  await editor.getByRole('button', { name: '智能精简', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="精简内容"]')?.value === '智能精简内容。')
+  await editor.getByRole('button', { name: '对比模式', exact: true }).click()
+  await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('待放弃原文')
+  await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).fill('待放弃精简')
+  const beforeDiscard = writes.length
+  await editor.getByRole('button', { name: /^关\s*闭$/ }).click()
+  await guard.getByRole('button', { name: '放弃修改并继续', exact: true }).click()
+  await editor.waitFor({ state: 'hidden' })
+  assert.equal(writes.length, beforeDiscard)
+  await page.getByRole('button', { name: '1. 第一章重命名 · 编辑章节', exact: true }).click()
+  await editor.getByRole('textbox', { name: '章节原文', exact: true }).waitFor()
+  assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '她推开门。新的一天！')
+  await editor.getByRole('button', { name: '查看精简', exact: true }).click()
+  assert.equal(await editor.getByRole('textbox', { name: '精简内容', exact: true }).inputValue(), '新的一天。')
+  assert.equal(await editor.getByRole('button', { name: /^保\s*存$/ }).isDisabled(), true)
+  await editor.getByRole('button', { name: /^关\s*闭$/ }).click()
   // A patch response without sequence_count must not overwrite the reliable count with zero.
   await page.getByRole('textbox', { name: '搜索章节', exact: true }).fill('')
   const firstChapter = row('1. 第一章重命名 · 编辑章节')
   await firstChapter.getByRole('cell', { name: '2 场', exact: true }).waitFor()
   await firstChapter.getByRole('button', { name: '工作台管理', exact: true }).click()
   await page.getByText('章节原文已变化，仍使用本场已确认摘录。', { exact: true }).waitFor()
-  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
+  await page.getByRole('button', { name: '返回章节列表', exact: true }).click()
   await page.getByRole('button', { name: '2. 章节 2 · 编辑章节', exact: true }).click()
   await editor.getByRole('textbox', { name: '章节原文', exact: true }).fill('零场章节的新原文')
   await save()

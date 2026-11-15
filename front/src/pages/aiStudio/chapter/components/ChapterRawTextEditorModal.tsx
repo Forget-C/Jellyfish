@@ -73,9 +73,6 @@ export function ChapterRawTextEditorModal({
   const [condensedText, setCondensedText] = useState('')
   const [savedRawText, setSavedRawText] = useState('')
   const [savedCondensedText, setSavedCondensedText] = useState('')
-  const [editorText, setEditorText] = useState('')
-  const [compareRaw, setCompareRaw] = useState('')
-  const [compareCondensed, setCompareCondensed] = useState('')
   const [consistencyResult, setConsistencyResult] = useState<ScriptConsistencyCheckResult | null>(null)
 
   const applyConsistencyTaskResult = useCallback(async (taskId: string) => {
@@ -112,12 +109,7 @@ export function ChapterRawTextEditorModal({
           return
         }
         setCondensedText(simplified)
-        if (mode === 'compare') {
-          setCompareCondensed(simplified)
-        } else {
-          setMode('condensed')
-          setEditorText(simplified)
-        }
+        if (mode !== 'compare') setMode('condensed')
         message.success('智能精简完成')
       },
       onFailed: (errorMessage) => {
@@ -141,9 +133,7 @@ export function ChapterRawTextEditorModal({
           return
         }
         setRawText(optimized)
-        setEditorText(optimized)
         setMode('raw')
-        setCompareRaw(optimized)
         message.success('一键优化完成')
       },
       onFailed: (errorMessage) => {
@@ -194,6 +184,7 @@ export function ChapterRawTextEditorModal({
       : [],
   )
 
+  const editorText = mode === 'condensed' ? condensedText : rawText
   const plainWordCount = useMemo(() => editorText.trim().length, [editorText])
   const paragraphCount = useMemo(() => editorText.split(/\n\s*\n/).filter((p) => p.trim()).length, [editorText])
   const actionsLoading =
@@ -223,9 +214,6 @@ export function ChapterRawTextEditorModal({
         setSavedRawText(nextRaw)
         setSavedCondensedText(nextCondensed)
         setMode('raw')
-        setEditorText(nextRaw)
-        setCompareRaw(nextRaw)
-        setCompareCondensed(nextCondensed)
         setConsistencyResult(null)
       })
       .catch(cause => {
@@ -427,7 +415,6 @@ export function ChapterRawTextEditorModal({
 
   const handleBackToRaw = () => {
     setMode('raw')
-    setEditorText(rawText)
   }
 
   const handleViewCondensed = () => {
@@ -436,39 +423,36 @@ export function ChapterRawTextEditorModal({
       return
     }
     setMode('condensed')
-    setEditorText(condensedText)
   }
 
-  const nextRaw = mode === 'compare' ? compareRaw : rawText
-  const nextCondensed = mode === 'compare' ? compareCondensed : condensedText
-  const rawChanged = nextRaw !== savedRawText
-  const hasUnsavedChanges = chapterTitle.trim() !== savedTitle || rawChanged || nextCondensed !== savedCondensedText
+  const rawChanged = rawText !== savedRawText
+  const hasUnsavedChanges = chapterTitle.trim() !== savedTitle || rawChanged || condensedText !== savedCondensedText
   const impact = rawChanged && !!sequenceCount
     ? `修改章节原文不会自动更新已有场次的划分和原文范围。本章已有 ${sequenceCount} 个场次，保存后需要重新核对。已有设计和素材保留，继续试拍前还需核对相关设计与计划依据。`
     : undefined
-  useEffect(() => { setConfirmRaw(undefined) }, [nextRaw])
+  useEffect(() => { setConfirmRaw(undefined) }, [rawText])
 
   /** 所有视图共用变更判断；离开确认会展示同一影响说明，保存不会更新任何场次。 */
   const handleSave = async (confirmed = false): Promise<boolean> => {
     if (!chapterId || actionsLoading || sequenceCount === undefined) return false
     if (!hasUnsavedChanges) return true
     if (!chapterTitle.trim()) { setSaveError('请输入章节名称'); return false }
-    if (impact && !confirmed) { setConfirmRaw(nextRaw); return false }
+    if (impact && !confirmed) { setConfirmRaw(rawText); return false }
     setSaving(true); setSaveError('')
     try {
       await StudioChaptersService.updateChapterApiV1StudioChaptersChapterIdPatch({ chapterId, requestBody: {
         ...(chapterTitle.trim() !== savedTitle ? { title: chapterTitle.trim() } : {}),
-        ...(rawChanged ? { raw_text: nextRaw } : {}),
-        ...(nextCondensed !== savedCondensedText ? { condensed_text: nextCondensed } : {}),
+        ...(rawChanged ? { raw_text: rawText } : {}),
+        ...(condensedText !== savedCondensedText ? { condensed_text: condensedText } : {}),
       } })
       flushSync(() => {
         setChapterTitle(chapterTitle.trim()); setSavedTitle(chapterTitle.trim())
-        setRawText(nextRaw); setSavedRawText(nextRaw)
-        setCondensedText(nextCondensed); setSavedCondensedText(nextCondensed)
+        setRawText(rawText); setSavedRawText(rawText)
+        setCondensedText(condensedText); setSavedCondensedText(condensedText)
         setConfirmRaw(undefined); setSaving(false)
         if (rawChanged && sequenceCount > 0) setNeedsReview(true)
       })
-      onSaved?.({ title: chapterTitle.trim(), rawText: nextRaw, condensedText: nextCondensed })
+      onSaved?.({ title: chapterTitle.trim(), rawText: rawText, condensedText: condensedText })
       message.success('章节已保存')
       return true
     } catch (cause) { setSaveError(directingError(cause)); return false }
@@ -478,9 +462,7 @@ export function ChapterRawTextEditorModal({
     busy: saving || extracting || checkingConsistency || optimizingScript || !!simplifyTask || !!optimizeTask || !!consistencyTask,
     saveWarning: impact, save: () => handleSave(true), discard: () => {
       flushSync(() => {
-        setChapterTitle(savedTitle); setRawText(savedRawText); setCondensedText(savedCondensedText)
-        setCompareRaw(savedRawText); setCompareCondensed(savedCondensedText)
-        setEditorText(mode === 'condensed' ? savedCondensedText : savedRawText); setConfirmRaw(undefined)
+        setChapterTitle(savedTitle); setRawText(savedRawText); setCondensedText(savedCondensedText); setConfirmRaw(undefined)
       })
     } })
   const handleRequestClose = () => guard(onClose)
@@ -580,17 +562,7 @@ export function ChapterRawTextEditorModal({
                 loading={actionsLoading}
                 disabled={actionsLoading}
                 type={mode === 'compare' ? 'primary' : 'default'}
-                onClick={() => {
-                  if (mode === 'compare') {
-                    setRawText(compareRaw); setCondensedText(compareCondensed)
-                    setMode('raw')
-                    setEditorText(compareRaw)
-                    return
-                  }
-                  setCompareRaw(rawText)
-                  setCompareCondensed(condensedText)
-                  setMode('compare')
-                }}
+                onClick={() => setMode(mode === 'compare' ? 'raw' : 'compare')}
               >
                 对比模式
               </Button>
@@ -619,7 +591,7 @@ export function ChapterRawTextEditorModal({
         {loadError && <Alert type="error" showIcon message={loadError} action={<Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />}
         {saveError && <Alert type="error" showIcon message={saveError} />}
         {!loading && !loadError && <label>章节名称<Input autoFocus aria-label="章节名称" value={chapterTitle} disabled={actionsLoading} onChange={event => setChapterTitle(event.target.value)} style={{ marginBottom: 12 }} /></label>}
-        {confirmRaw === nextRaw && impact && <Alert type="warning" showIcon message={impact} action={<Space wrap>
+        {confirmRaw === rawText && impact && <Alert type="warning" showIcon message={impact} action={<Space wrap>
           <Button disabled={saving} onClick={() => setConfirmRaw(undefined)}>继续编辑</Button>
           <Button type="primary" loading={saving} onClick={() => void handleSave(true)}>确认保存原文</Button>
         </Space>} style={{ marginBottom: 12 }} />}
@@ -634,8 +606,8 @@ export function ChapterRawTextEditorModal({
               <div className="text-xs text-gray-500 mb-2">原文</div>
               <Input.TextArea
                 aria-label="对比原文"
-                value={compareRaw}
-                onChange={(e) => { setCompareRaw(e.target.value); setRawText(e.target.value) }}
+                value={rawText}
+                onChange={event => setRawText(event.target.value)}
                 rows={14}
                 disabled={actionsLoading}
                 style={{ resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
@@ -645,8 +617,8 @@ export function ChapterRawTextEditorModal({
               <div className="text-xs text-gray-500 mb-2">精简内容</div>
               <Input.TextArea
                 aria-label="对比精简内容"
-                value={compareCondensed}
-                onChange={(e) => { setCompareCondensed(e.target.value); setCondensedText(e.target.value) }}
+                value={condensedText}
+                onChange={event => setCondensedText(event.target.value)}
                 rows={14}
                 disabled={actionsLoading}
                 style={{ resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
@@ -660,7 +632,6 @@ export function ChapterRawTextEditorModal({
               value={editorText}
               onChange={(e) => {
                 const v = e.target.value
-                setEditorText(v)
                 if (mode === 'raw') setRawText(v)
                 if (mode === 'condensed') setCondensedText(v)
               }}
