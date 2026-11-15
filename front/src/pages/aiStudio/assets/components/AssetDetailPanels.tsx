@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Image, Input, Modal, Tag, Tooltip, Tabs } from 'antd'
-import { AppstoreOutlined, CheckCircleOutlined, EditOutlined, StarOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, CheckCircleOutlined, EditOutlined, PictureOutlined, StarOutlined } from '@ant-design/icons'
 import { ASSET_FIELDS, type AssetFacts, type StructuredAssetType } from './AssetFactsFields'
 import { ResourceImage } from './ResourceImage'
 import { buildFileDownloadUrl } from '../utils'
@@ -13,7 +13,7 @@ const views = [['FRONT', '正面'], ['LEFT', '侧面'], ['TOP', '俯视'], ['BAC
 /** 固定高度的分类资产设定；长内容与检测结果通过显式展开保留完整编辑能力。 */
 export function AssetFields({ type, name, onName, facts, onFacts, description, onDescription, styles, onAnalysis, disabled, factsReadOnly = false }: {
   type: StructuredAssetType; name: string; onName: (value: string) => void; facts: AssetFacts; onFacts: (value: AssetFacts) => void
-  description: string; onDescription: (value: string) => void; factsReadOnly?: boolean; styles: ReactNode; onAnalysis: () => void; disabled: boolean
+  description: string; onDescription: (value: string) => void; factsReadOnly?: boolean; styles: ReactNode; onAnalysis?: () => void; disabled: boolean
 }) {
   const [expanded, setExpanded] = useState<string>()
   const field = ASSET_FIELDS[type].find(item => item.key === expanded)
@@ -27,7 +27,7 @@ export function AssetFields({ type, name, onName, facts, onFacts, description, o
     <label><span>补充信息{!factsReadOnly && <Button type="text" size="small" aria-label="展开补充信息" icon={<EditOutlined />} disabled={disabled} onClick={() => setExpanded('supplement')} />}</span>
       <Input.TextArea aria-label="补充信息" rows={2} maxLength={8000} value={description} disabled={disabled || factsReadOnly} placeholder={factsReadOnly ? '未提供' : undefined} onChange={event => onDescription(event.target.value)} /></label>
     <div className="actor-style-fields">{styles}</div>
-    {!factsReadOnly && <Button onClick={onAnalysis}>智能检测与结果</Button>}
+    {!factsReadOnly && onAnalysis && <Button onClick={onAnalysis}>智能检测与结果</Button>}
     <Modal title={expanded === 'analysis' ? '智能检测' : label} open={!!expanded && expanded !== 'analysis'} onCancel={() => setExpanded(undefined)} footer={<Button aria-label="完成" onClick={() => setExpanded(undefined)}>完成</Button>}>
       {expanded !== 'analysis' && <Input.TextArea aria-label={`完整${label}`} rows={10} maxLength={field?.maxLength ?? 8000} value={field ? facts[field.key] ?? '' : description}
         onChange={event => field ? onFacts({ ...facts, [field.key]: event.target.value }) : onDescription(event.target.value)} disabled={disabled} />}
@@ -70,7 +70,7 @@ export function AssetPictures({ type, assetId, images, disabled, primaryDisabled
     <div className="actor-feature-image">
       {selected ? <button className="actor-feature-trigger" aria-label="查看多角度图片" onClick={() => setGallery(selected.view_angle ?? 'FRONT')}>
         <Image key={selected.file_id} preview={false} src={buildFileDownloadUrl(selected.file_id!)} alt={`${angleLabel(selected.view_angle ?? 'FRONT')}图片 ${sorted(selected.view_angle ?? 'FRONT').findIndex(image => image.id === selected.id) + 1}`} />
-      </button> : <span className="actor-empty">暂无图片，生成后在这里预览</span>}
+      </button> : <div className="actor-empty"><PictureOutlined aria-hidden="true" /><span>暂无图片，生成后在这里预览</span></div>}
     </div>
     {selected && <div className="actor-preview-caption"><span>{angleLabel(selected.view_angle ?? 'FRONT')} · 当前预览</span>{selected.is_primary && <Tag>主图</Tag>}{selected.is_view_default && <Tag>视角默认</Tag>}</div>}
     <div className="actor-thumbnail-row"><div className="actor-thumbnails" role="group" aria-label="多视角缩略图">{ordered.map(image => <button key={image.id} aria-label={`预览${angleLabel(image.view_angle ?? 'FRONT')}图片 ${image.id}`} aria-pressed={selected?.id === image.id} onClick={() => setSelectedId(image.id)}>

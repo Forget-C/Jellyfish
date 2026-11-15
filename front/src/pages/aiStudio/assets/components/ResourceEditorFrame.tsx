@@ -9,16 +9,20 @@ type Props = {
   className?: string
   id: string; open: boolean; drawer: boolean; inline?: boolean; title: string; backLabel: string
   titleExtra?: ReactNode; onClose: () => void; actions: ReactNode; children: ReactNode
+  onBodyReady?: (node: HTMLElement | null) => void
   actionsRef?: (node: HTMLDivElement | null) => void
   renderToolbar?: (children: ReactNode) => ReactNode
 }
 
 /** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
-export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra }: Props) {
+export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra, onBodyReady }: Props) {
   const appearance = useAppStore(state => state.appearance)
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
   const [body, setBody] = useState<HTMLElement | null>(null)
-  const captureBody = useCallback((node: HTMLDivElement | null) => setBody(node?.parentElement ?? null), [])
+  const captureBody = useCallback((node: HTMLDivElement | null) => {
+    const element = node?.parentElement ?? null
+    setBody(element); onBodyReady?.(element)
+  }, [onBodyReady])
   useEffect(() => {
     if (!drawer || !open || !body) return
     const update = () => setScrollEdges({ top: body.scrollTop > 0, bottom: body.scrollTop + body.clientHeight < body.scrollHeight - 1 })
@@ -70,7 +74,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${bounds.x > 0 ? '' : ' resource-editor-no-side'}`}
       style={{ top: bounds.y, left: bounds.x, width: bounds.width, height: bounds.height, maxWidth: `calc(100vw - ${bounds.x}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
       <div className="ant-drawer-content-wrapper">
-        <div ref={panel} id={id} role="dialog" aria-modal="false" aria-label={title} className="ant-drawer-content"
+        <div ref={panel} id={id} role="dialog" aria-modal="false" aria-label={title} className={`ant-drawer-content ${className ?? ''}`}
           style={{ backgroundPosition: `right -${bounds.y}px` }} onKeyDown={event => {
             if (event.key !== 'Escape' || event.defaultPrevented) return
             if ([...document.querySelectorAll<HTMLElement>('.ant-image-preview-wrap')].some(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')) return

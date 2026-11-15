@@ -69,27 +69,28 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const [page, setPage] = useState<'editor' | 'generation' | 'references' | 'adopt' | 'publish'>(initialPage)
   const isDrawer = !assetId || initialPage === 'publish' && page === 'publish'
   const drawerId = useId()
-  const fullDetail = !!assetId && !inline && initialPage === 'editor'
+  const fullDetail = (!assetId || !inline) && initialPage === 'editor'
+  const [drawerBody, setDrawerBody] = useState<HTMLElement | null>(null)
   const [detailCompact, setDetailCompact] = useState(() => window.matchMedia('(max-width:1199px), (max-height:739px)').matches)
   useEffect(() => {
     if (!fullDetail || !open || page === 'publish') return
-    const body = document.getElementById(drawerId)?.querySelector<HTMLElement>('.resource-editor-body')
+    const body = isDrawer ? drawerBody : document.getElementById(drawerId)?.querySelector<HTMLElement>('.resource-editor-body')
     if (!body) return
-    const container = body.closest<HTMLElement>('.project-workbench-content')
+    const container = isDrawer ? null : body.closest<HTMLElement>('.project-workbench-content')
     const update = () => {
       if (container) {
         const available = Math.max(0, container.getBoundingClientRect().bottom - body.getBoundingClientRect().top - parseFloat(getComputedStyle(container).paddingBottom))
         body.style.height = `${available}px`
         setDetailCompact(container.clientWidth < 960 || available < 600)
-      } else setDetailCompact(window.innerWidth < 1200 || window.innerHeight < 740)
+      } else setDetailCompact(window.innerWidth < 1200 || window.innerHeight < 740 || isDrawer && (body.clientWidth < 960 || body.clientHeight < 600))
     }
     const observer = new ResizeObserver(update)
-    observer.observe(container ?? document.documentElement)
+    observer.observe(container ?? (isDrawer ? body : document.documentElement))
     const toolbar = document.querySelector('.project-content-toolbar')
     if (toolbar) observer.observe(toolbar)
     window.addEventListener('resize', update); update()
     return () => { observer.disconnect(); window.removeEventListener('resize', update); body.style.height = '' }
-  }, [fullDetail, open, drawerId, assetId, kind, page])
+  }, [fullDetail, open, drawerId, assetId, kind, page, isDrawer, drawerBody])
   const [imageModels, setImageModels] = useState<{id:string;name:string}[]>([])
   const [selectedModel, setSelectedModel] = useState<string>()
   const [modelsFailed, setModelsFailed] = useState(false)
@@ -584,8 +585,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     onApply={(nextFacts, nextDescription) => { setFacts(nextFacts); setDescription(nextDescription) }} onState={onAnalysisState} />
   const detailStyles = imageBased ? <div className="grid grid-cols-2 gap-3"><label>视觉风格<Input disabled placeholder="未提供" /></label><label>视频风格<Input disabled placeholder="未提供" /></label></div> : <ProjectVisualStyleAndStyleFields layout="horizontal" disabled={busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options} onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />
   const detailFields = readOnly ? <div className="actor-readonly-settings">{settings}<Button onClick={() => setReadonlyOpen(true)}>查看完整设定</Button></div> : kind === 'character' ? <CharacterFields factsReadOnly={imageBased} key={`${projectId}:${kind}:${assetId}`} name={name} onName={setName} description={description} onDescription={setDescription} disabled={busy || generating || analysisBusy || loadFailed} styles={detailStyles} /> : <AssetFields factsReadOnly={imageBased} key={`${projectId}:${kind}:${assetId}`} type={kind} name={name} onName={setName} facts={facts} onFacts={setFacts} description={description} onDescription={setDescription}
-    disabled={busy || generating || analysisBusy || loadFailed} onAnalysis={() => setAnalysisOpen(true)} styles={detailStyles} />
-  const detailPictures = <AssetPictures key={`${projectId}:${kind}:${assetId}`} type={kind} savingViewDefault={savingViewDefault} onViewDefault={setViewDefault} assetId={assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
+    disabled={busy || generating || analysisBusy || loadFailed} onAnalysis={resource ? () => setAnalysisOpen(true) : undefined} styles={detailStyles} />
+  const detailPictures = <AssetPictures key={`${projectId}:${kind}:${assetId}`} type={kind} savingViewDefault={savingViewDefault} onViewDefault={setViewDefault} assetId={resource?.id ?? assetId ?? ''} images={images} disabled={busy || generating || analysisBusy || loadFailed || !!activeTasks.length} primaryDisabled={dirty || busy || generating || analysisBusy || loadFailed} readOnly={readOnly}
     onPrimary={setPrimary} onEdit={image => { acceptedAngles.current.clear(); setEditingImage(image); setEditingGeneration({ mode: 'edit', references: [{ file_id: image.file_id!, role: 'design' }], edit_instruction: '' }); setShowPreview(true); setPage('generation') }}
     feedback={imageError && <Alert type="error" message={imageError} action={resource && <Button onClick={() => void reloadImages(resource.id)}>重试读取图片</Button>} />}
     candidates={angle => <>{imageError && <Alert type="error" message={imageError} />}{candidates.filter(candidate => candidate.angle === angle && !images.some(image => image.file_id === candidate.fileId)).map(candidate => <div key={candidate.fileId}>
@@ -594,7 +595,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     status={angle => { const task = tasks[angle as Angle]; return task ? <>{task.error ?? ({ queued: '排队中', running: '生成中', submitting: '正在提交', succeeded: '生成成功', failed: '生成失败', cancelled: '已取消' } as Record<string,string>)[task.status]}{task.status === 'failed' && !readOnly && <Button size="small" onClick={() => { acceptedAngles.current.delete(angle as Angle); void generate([angle as Angle], editingGeneration) }}>重试</Button>}</> : null }} onGenerate={openGeneration} />
   const detailBody = <AssetDetailLayout compact={detailCompact} fields={detailFields} pictures={detailPictures} />
   return <>
-    <ResourceEditorFrame id={drawerId} className={fullDetail && page !== 'publish' ? 'actor-detail-page' : undefined} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title} titleExtra={<>{imageBased && <Tag>{({ upload: '上传', project: '项目转化', library: '资产库导入' } as Record<string, string>)[resource!.origin!]}</Tag>}{fullDetail && projectId ? <Tag>{resource?.source_character_id ? '从角色转化 · 只读' : readOnly ? '共享资产 · 只读' : '项目专属'}</Tag> : null}</>}
+    <ResourceEditorFrame onBodyReady={setDrawerBody} id={drawerId} className={fullDetail && page !== 'publish' ? 'actor-detail-page' : undefined} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title} titleExtra={<>{imageBased && <Tag>{({ upload: '上传', project: '项目转化', library: '资产库导入' } as Record<string, string>)[resource!.origin!]}</Tag>}{fullDetail && projectId ? <Tag>{resource?.source_character_id ? '从角色转化 · 只读' : readOnly ? '共享资产 · 只读' : '项目专属'}</Tag> : null}</>}
       backLabel={fullDetail && page !== 'publish' || page === 'editor' ? '返回' : '返回对象'} onClose={fullDetail && page !== 'publish' ? () => { if (busy || generating || analysisBusy || dirty) setCloseRequested(true); else void closeEditor() } : close} actionsRef={setReferenceToolbar}
       actions={fullDetail && page !== 'publish' ? <Space>{readOnly ? !resource?.source_character_id && resource?.project_id === null && <Button target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.id)}>在资产库编辑 ↗</Button> : <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => void save()}>保存设定</Button>}{resource?.project_id && (resource.library_copy_id ? <Button type="link" target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.library_copy_id)}>查看库中资产</Button> : <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => { setPublishName(resource.name); setPage('publish') }}>进入资产库</Button>)}</Space> : page === 'references' ? null : <Space wrap>{page === 'publish' ? <>{!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
         <Button type="primary" loading={busy} disabled={!publishName.trim() || !images.some(image => image.file_id)} onClick={() => void publish()}>确认入库</Button>

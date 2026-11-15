@@ -197,6 +197,10 @@ try {
     await page.getByRole('button',{name:/^填写设定/}).click()
     const create=page.getByRole('dialog',{name:kind==='scene'?'新建场景':`新建${label}`,exact:true})
     await create.waitFor()
+    assert.equal(await create.locator('.actor-fields').count(),1)
+    assert.equal(await create.getByText(/^详细设定/).count(),0)
+    assert.equal(await create.getByRole('button',{name:'选择参考主体',exact:true}).count(),0)
+    for (const field of await create.getByRole('textbox').all()) assert.equal(await field.isVisible(),true)
     for (const [width,height] of [[1440,900],[1023,768],[375,768]]) {
       await page.setViewportSize({width,height})
       await page.waitForFunction(() => {

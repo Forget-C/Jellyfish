@@ -17,7 +17,8 @@
 .actor-picture-card > div:first-child > .ant-btn:focus-visible { opacity:1; }
 .actor-picture-actions { display:flex; align-items:center; height:24px; justify-content:center; white-space:nowrap; }
 .actor-picture-actions .ant-tag { margin:0; padding-inline:4px; font-size:11px; }
-.actor-empty { flex:1; color:#667085; }
+.actor-empty { display:flex; flex-direction:column; align-items:center; gap:12px; color:#667085; text-align:center; }
+.actor-empty > .anticon { font-size:32px; color:#9aa7b8; }
 .actor-generate-action { flex:none; text-align:right; padding-top:12px; }
 .actor-gallery { display:flex; flex-wrap:wrap; gap:16px; padding-block:16px; }
 .actor-detail-page > .resource-editor-body { overflow-y:hidden; }
@@ -74,3 +75,10 @@
 
 .character-description { grid-template-rows:auto minmax(0,1fr); min-height:0; }
 .character-description textarea { min-height:0; }
+
+/* 新建面板与详情共用铺满正文的设定、图片区。 */
+.resource-editor-drawer .actor-detail-page > .ant-drawer-body { overflow-y:hidden; }
+.resource-editor-drawer .actor-detail-page .resource-editor-drawer-content { max-width:none; height:100%; display:flex; flex-direction:column; gap:12px; }
+.resource-editor-drawer .actor-detail-page .actor-detail-layout { flex:1; min-height:0; }
+.resource-editor-drawer .actor-detail-page:has(.actor-detail-tabs) > .ant-drawer-body { overflow-y:auto; }
+.resource-editor-drawer .actor-detail-page:has(.actor-detail-tabs) .resource-editor-drawer-content { height:auto; min-height:100%; }
