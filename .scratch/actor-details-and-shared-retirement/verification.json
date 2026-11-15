@@ -9,10 +9,51 @@
   "public_canvas_read_verified": 2,
   "public_scene_version_read_verified": 2,
   "sse_snapshot_recovery_verified": 2,
-  "live_save_exercised": false,
+  "live_save_exercised": true,
   "released_history_file_protections_verified": 39,
   "schema_revision": "d714ac930f21",
   "private_backup_path": "/private/tmp/jellyfish-shared-retirement-backup-20261115.json",
   "private_backup_mode": "0600",
-  "private_backup_sha256": "3c14408b8f4b572a856a7c1bc5571ecc47ee3587a863f462a157ac777b486907"
+  "private_backup_sha256": "3c14408b8f4b572a856a7c1bc5571ecc47ee3587a863f462a157ac777b486907",
+  "live_canvas_saves_verified": 2,
+  "live_scene_version_saves_verified": 2,
+  "live_save_results": [
+    {
+      "kind": "canvas",
+      "id": "d8a7eccaeecc4a999d0b143b4650cebe",
+      "revision_before": 10,
+      "revision_after": 11,
+      "unchanged_content": true,
+      "idempotent_replay": true,
+      "content_sha256": "a369d919da567e49ac39eb829ab00605f4194393db85d89f891cadf3948f79fa"
+    },
+    {
+      "kind": "canvas",
+      "id": "e15c1cc01c14422f9915fd7ba79e6fe7",
+      "revision_before": 476,
+      "revision_after": 477,
+      "unchanged_content": true,
+      "idempotent_replay": true,
+      "content_sha256": "f946f3198d9f006b231f8ba99303b9933598c8737f11a9be970673c093e82077"
+    },
+    {
+      "kind": "scene_version",
+      "id": "50e65178c63948e2be3a1d7691e5eda0",
+      "revision_before": 3,
+      "revision_after": 4,
+      "unchanged_content": true,
+      "idempotent_replay": true,
+      "content_sha256": "7d9da7052e988216af9b21efbc2c59a777d2a9b22784c84a7159a8f52c3f2504"
+    },
+    {
+      "kind": "scene_version",
+      "id": "59791d073efc4a46bc7860dc95e0b270",
+      "revision_before": 5,
+      "revision_after": 6,
+      "unchanged_content": true,
+      "idempotent_replay": true,
+      "content_sha256": "3be78b6a69d4a9aa67d3c3d16df5257f4b8f4e4a7ce897a83c1fb9f2ef3d166e"
+    }
+  ],
+  "live_save_media_protections_verified": 4
 }
