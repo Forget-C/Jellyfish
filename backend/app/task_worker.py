@@ -652,22 +652,17 @@ class TaskWorker:
     def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> ChatOpenAI:
         """Use only the provider and model configuration captured at admission."""
         from app.core.contracts.generation import FrozenGenerationConfig
-        from app.services.generation_canvas.check_media import OMNI_CHECK_MODEL
+        from app.services.generation_canvas.check_models import check_model_parameters
         frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
-        params = dict(frozen.model_params)
+        if task.kind == 'canvas_check':
+            params = check_model_parameters(frozen, multimodal=multimodal)
+        else:
+            params = dict(frozen.model_params)
+            params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
+            if multimodal:
+                params['use_responses_api'] = False
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
-        extra_body = dict(params.get('extra_body', {}))
-        if task.kind == 'canvas_check' and frozen.provider_key == 'aliyun_bailian' and frozen.model_name == OMNI_CHECK_MODEL:
-            # Assemble Omni's streamed JSON text before applying the check's schema and evidence rules.
-            params.update(streaming=True, use_responses_api=False)
-            extra_body.pop('enable_thinking', None)
-            extra_body.update(modalities=['text'], reasoning_effort='none', response_format={'type': 'json_object'})
-        else:
-            extra_body['enable_thinking'] = False
-        params['extra_body'] = extra_body
-        if multimodal:
-            params['use_responses_api'] = False
         return ChatOpenAI(**params)
 
     async def _canvas_check(self, task: Task) -> None:

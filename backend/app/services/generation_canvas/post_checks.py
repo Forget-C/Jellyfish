@@ -12,7 +12,8 @@ from app.schemas.canvas_checks import (
     CanvasCheckReportRead, CanvasPostCheckPreview, CanvasPostCheckRequest,
 )
 from app.schemas.generation_canvas import CanvasCompiledInput, CanvasDocument, CheckCard
-from app.services.generation_canvas.check_media import owned_check_files, supports_check_image, supports_check_video
+from app.services.generation_canvas.check_media import owned_check_files
+from app.services.generation_canvas.check_models import supports_check_image, supports_check_video
 from app.services.generation_canvas.check_product_text import (
     PRODUCT_TEXT_CATEGORY, PRODUCT_TEXT_LABEL, text_product_items,
 )

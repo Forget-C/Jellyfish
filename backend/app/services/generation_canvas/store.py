@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
+from typing import TYPE_CHECKING
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,9 @@ from app.schemas.generation_canvas import (
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.capabilities import model_capability
+
+if TYPE_CHECKING:
+    from app.services.directing.storyboard_save import StoryboardSaveEvidence
 
 
 
@@ -133,59 +137,29 @@ class CanvasStore:
         return receipt.response if receipt else None
 
     async def save_scene_application(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
-                                     *, chapter_version: str, scene_sources: dict, source_history: dict | None = None,
-                                     accepted_risks: 'list[dict] | None' = None,
-                                     restored_continuity: frozenset[str] = frozenset()) -> CanvasRead:
+                                     *, chapter_version: str, evidence: 'StoryboardSaveEvidence') -> CanvasRead:
         """Write the checked workbench plan using the ordinary save transaction."""
-        result = await self._write(canvas, command, digest, chapter_version=chapter_version,
-                                   scene_sources=scene_sources, source_history=source_history,
-                                   accepted_risks=accepted_risks, restored_continuity=restored_continuity)
+        result = await self._write(canvas, command, digest, chapter_version=chapter_version, evidence=evidence)
         return CanvasRead.model_validate(result['scene_canvas'])
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
-                     *, chapter_version: str | None = None, scene_sources: dict | None = None,
-                     source_history: dict | None = None, accepted_risks: 'list[dict] | None' = None,
-                     restored_continuity: frozenset[str] = frozenset()) -> dict:
+                     *, chapter_version: str | None = None, evidence: 'StoryboardSaveEvidence | None' = None) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         from app.services.generation_canvas.checks import CanvasChecks, changed_check_connections
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
-        prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources,
-                                          restored_continuity=restored_continuity)
-        storyboard = prepared.document.storyboard
-        previous = prepared.previous_document.storyboard
-        if chapter_version is None and canvas.sequence_id and (
-                (storyboard.continuity_check_task_id if storyboard else None) !=
-                (previous.continuity_check_task_id if previous else None)):
-            raise diagnostic('STORYBOARD_REVIEW_REQUIRED', '分镜检查只能通过确认应用或撤销恢复',
-                             {'canvas_id': canvas_id}, status=409)
-        if chapter_version is None and canvas.sequence_id and storyboard and (not previous or storyboard.task_id != previous.task_id):
-            from app.services.directing.storyboard_assembly import STORYBOARD_KIND
-            from app.services.directing.storyboard_review import require_storyboard_review
-            task = await self.db.get(Task, storyboard.task_id)
-            if (not task or task.kind != STORYBOARD_KIND or task.project_id != self.project_id
-                    or task.target_id != canvas.sequence_id or task.input_snapshot.get('canvas_id') != canvas_id):
-                raise diagnostic('INVALID_STORYBOARD_TASK', '分镜任务不属于此画布', {'canvas_id': canvas_id}, status=409)
-            require_storyboard_review(task, canvas_id)
-            result = task.result or {}
-            if result.get('review_state'):
-                baseline = {'expected_revision': result['base_revision'], 'document': result['document']}
-                initial = (baseline['expected_revision'] == canvas.revision and not task.input_snapshot.get('reextract_canvas_id')
-                           and not task.input_snapshot.get('review_retry_from')
-                           and prepared.document.model_dump(mode='json') == baseline['document'])
-                if not initial:
-                    applied = await self.db.get(CanvasSaveReceipt, (canvas_id, 'storyboard:' + task.id))
-                    history = applied.response.get('source_history', {}) if applied else {}
-                    restored = applied and (applied.request_hash == self.command_digest(baseline)
-                                            or history.get('after', {}).get('task_id') == task.id)
-                    if not restored:
-                        raise diagnostic('STORYBOARD_APPLICATION_REVIEW_REQUIRED', '请核对分镜差异后应用',
-                                         {'canvas_id': canvas_id}, status=409)
+        prepared = await prepare_document(self.db, self.project_id, canvas, command.document,
+                                          scene_sources=evidence.scene_sources if evidence else None,
+                                          restored_continuity=evidence.restored_continuity if evidence else frozenset())
+        if evidence is None:
+            from app.services.directing.storyboard_save import require_ordinary_save
+            await require_ordinary_save(self.db, canvas, prepared.previous_document, prepared.document)
         if canvas.sequence_id and prepared.document.name != prepared.previous_document.name and not prepared.document.name.strip():
             raise diagnostic('INVALID_CANVAS_NAME', '场次画布名称不能为空白', {'canvas_id': canvas_id, 'path': ['name']})
-        if canvas.sequence_id and chapter_version is None and previous and previous.visual_continuity:
+        previous = prepared.previous_document.storyboard
+        if canvas.sequence_id and evidence is None and previous and previous.visual_continuity:
             from app.services.directing.storyboard_visual_continuity import retain_removed_visual_continuity
             await retain_removed_visual_continuity(self.db, prepared.previous_document, prepared.document, command.request_id)
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
@@ -206,15 +180,8 @@ class CanvasStore:
                 revision=response['revision'], document=prepared.document,
                 source_changed=prepared.document.fixed_source.chapter_version != chapter_version,
                 scene=await self._scene_association(canvas)).model_dump(mode='json')
-        if source_history is not None:
-            response['source_history'] = source_history
-        if accepted_risks is not None:
-            from app.services.directing.storyboard_review_basis import canvas_review_fingerprint, risk_basis
-            response['review_history'] = {
-                'before': canvas_review_fingerprint(prepared.previous_document, full=True),
-                'after': canvas_review_fingerprint(prepared.document, full=True),
-                'risks': [{**risk, 'basis': risk_basis(prepared.document, risk['shot_ids'])} for risk in accepted_risks],
-            }
+        if evidence is not None:
+            response.update(evidence.receipt_fields(prepared.previous_document, prepared.document))
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()
         return response

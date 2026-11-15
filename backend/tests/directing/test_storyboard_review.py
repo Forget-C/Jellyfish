@@ -1,6 +1,7 @@
 """The scene task and both candidate application routes enforce continuity review."""
 
 import asyncio
+from copy import deepcopy
 import json
 from types import SimpleNamespace
 
@@ -362,14 +363,24 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
             assert await read_data(client, 'POST', task_path + '/apply', choice) == accepted
             observed = await read_data(client, 'GET', task_path)
             assert observed['review_state'] == 'accepted' and set(observed['accepted_conflict_ids']) == set(ids)
-            undo = await read_data(client, 'POST', task_path + '/restore', {'request_id': 'risk-undo',
-                'expected_revision': accepted['revision'], 'direction': 'undo', 'document': before['document']})
+            undo_request = {'request_id': 'risk-undo', 'expected_revision': accepted['revision'],
+                            'direction': 'undo', 'document': before['document']}
+            undo = await read_data(client, 'POST', task_path + '/restore', undo_request)
             forged = await client.put(canvas_path, json={'request_id': 'forged',
                 'expected_revision': undo['revision'], 'document': accepted['document']})
             assert forged.status_code == 409 and forged.json()['data']['code'] == 'STORYBOARD_REVIEW_REQUIRED'
-            redone = await read_data(client, 'POST', task_path + '/restore', {'request_id': 'risk-redo',
-                'expected_revision': undo['revision'], 'direction': 'redo', 'document': accepted['document']})
+            redo_request = {'request_id': 'risk-redo', 'expected_revision': undo['revision'],
+                            'direction': 'redo', 'document': accepted['document']}
+            altered = deepcopy(accepted['document'])
+            next(card for card in altered['cards'] if card['type'] == 'direction.shot')['visible_result'].update(
+                text='未经确认的另一份设计', authorship='user')
+            rejected = await client.post(task_path + '/restore', json={**redo_request, 'document': altered})
+            assert rejected.status_code == 422 and rejected.json()['data']['code'] == 'INVALID_STORYBOARD_RESTORE'
+            assert await read_data(client, 'GET', canvas_path) == undo
+            redone = await read_data(client, 'POST', task_path + '/restore', redo_request)
             assert redone['document'] == accepted['document']
+            assert await read_data(client, 'POST', task_path + '/restore', undo_request) == undo
+            assert await read_data(client, 'GET', canvas_path) == redone
             reextract = path.removesuffix('/storyboards') + '/canvases/' + task['canvas_id'] + '/storyboards'
             following = await read_data(client, 'POST', reextract, {'request_id': 'same-design', 'text_model_id': 'risk-text'})
             await worker.tick()

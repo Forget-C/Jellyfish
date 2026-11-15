@@ -1,5 +1,6 @@
 """Real HTTP, database, submitter and Worker at the agreed execution seam."""
 import asyncio
+import json
 from types import SimpleNamespace
 import httpx
 import pytest
@@ -88,6 +89,45 @@ async def accept(runtime, request_id='run'):
     response = await runtime.client.post(runtime.url + '/runs', json={'request_id': request_id, 'preview_token': body['preview_token']})
     assert response.status_code == 200, response.text
     return response.json()['data'], body
+
+
+@pytest.mark.asyncio
+async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_check_options(runtime):
+    async with runtime.sessions.begin() as db:
+        model = await db.get(Model, runtime.model_id)
+        model.name = 'qwen3.8-omni-flash'
+        model.params = {'temperature': 0.3, 'extra_body': {'enable_thinking': True}}
+        provider = await db.get(Provider, runtime.provider_id)
+        provider.name = 'aliyun_bailian'
+    await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        model = await db.get(Model, runtime.model_id)
+        model.name, model.params = 'changed-model', {'temperature': 0.9}
+
+    requests = []
+    def provider_reply(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        assert request.url.path == '/v1/chat/completions'
+        assert body['model'] == 'qwen3.8-omni-flash' and body['temperature'] == 0.3
+        assert body['stream'] is True and body['enable_thinking'] is False
+        assert not {'modalities', 'reasoning_effort', 'response_format'} & body.keys()
+        chunk = {'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': 'Ordinary text'},
+                              'finish_reason': None}]}
+        return httpx.Response(200, text=f'data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n',
+                              headers={'Content-Type': 'text/event-stream'})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider_reply)) as transport:
+        worker = TaskWorker(runtime.sessions, client=transport)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=False)
+    assert requests
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    assert node['status'] == 'succeeded' and node['text'] == 'Ordinary text'
 
 
 @pytest.mark.asyncio
