@@ -83,6 +83,20 @@ try {
   await detail.waitFor({ state: 'hidden' })
   await request(`${studio}/entities/character`, 'POST', { id: 'same-name-role', project_id: project, name: '阿同', description: '同名无图' })
   await page.reload()
+  await back.getByRole('button', { name: '选用同名', exact: true }).waitFor()
+  assert.equal(await back.locator('.management-object-actions-row button').count(), 3)
+  for (const width of [575, 576, 767, 768, 839, 840, 1023, 1024, 1079, 1080, 1359, 1360, 1639, 1640, 1879, 1880, 1900]) {
+    await page.setViewportSize({ width, height: 900 })
+    assert.ok(await back.locator('.management-object-actions-row button').evaluateAll(buttons => buttons.every(button => {
+      const box = button.getBoundingClientRect()
+      return [...button.querySelectorAll('span')].every(span => { const text = span.getBoundingClientRect(); return text.left >= box.left && text.right <= box.right })
+    })), `three-action text stays inside buttons at ${width}`)
+  }
+  await page.setViewportSize({ width: 1440, height: 960 })
+  assert.ok(await back.locator('.management-object-actions-row button').evaluateAll(buttons => buttons.every(button => {
+    const box = button.getBoundingClientRect()
+    return [...button.querySelectorAll('span')].every(span => { const text = span.getBoundingClientRect(); return text.left >= box.left && text.right <= box.right })
+  })), 'three actions fit without clipping labels')
   await back.getByRole('button', { name: '选用同名', exact: true }).click()
   const same = page.getByRole('dialog', { name: '选用同名资源', exact: true })
   await same.getByRole('button', { name: '选择阿同', exact: true }).click()
@@ -112,10 +126,41 @@ try {
   const replaced = (await read()).objects.find(item => item.excerpt === '后门的阿同')
   assert.notEqual(replaced.asset_id, 'same-name-role')
   assert.equal((await request(`${studio}/entities/character/same-name-role`)).name, '阿同')
-  for (const [width, height] of [[1440, 900], [390, 844], [280, 760]]) {
+  for (const [width, height] of [[1920, 1080], [1900, 833], [1440, 900], [1366, 768], [390, 844], [280, 760]]) {
     await page.setViewportSize({ width, height })
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     assert.equal(await back.locator('.management-object-excerpt').evaluate(node => node.getBoundingClientRect().height), 20)
+    await page.waitForFunction(expected => [...document.querySelectorAll('.management-object-actions-row button')].every(button => button.getBoundingClientRect().height === expected), width < 768 ? 36 : 32)
+    const layout = await page.locator('.management-object-card').evaluateAll(cards => cards.map(card => {
+      const buttons = [...card.querySelectorAll('.management-object-actions-row button')].map(button => { const rect = button.getBoundingClientRect(); return { width: rect.width, height: rect.height, right: rect.right } })
+      return { width: card.getBoundingClientRect().width, right: card.getBoundingClientRect().right, buttons }
+    }))
+    assert.ok(layout.every(card => Math.abs(card.width - layout[0].width) < 1), 'short and long content must have equal card widths')
+    const columnCount = await page.locator('.management-object-kind .management-card-grid').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length)
+    const gridWidth = await page.locator('.management-object-kind .management-card-grid').evaluate(node => node.getBoundingClientRect().width)
+    if (width === 1900 || width === 1920) assert.equal(columnCount, 6, 'wide desktop fits six equal-width object columns')
+    if (width === 1366) assert.equal(columnCount, 4, 'compact desktop fits four equal-width object columns')
+    if (width === 1900) assert.ok(await page.locator('.management-object-kind .management-card-grid').evaluate(grid => {
+      const originalWidth = grid.firstElementChild.getBoundingClientRect().width
+      const added = []
+      try {
+        while (grid.children.length < 7) { const copy = grid.firstElementChild.cloneNode(true); grid.append(copy); added.push(copy) }
+        const cards = [...grid.children].map(card => card.getBoundingClientRect())
+        return cards.every(card => Math.abs(card.width - originalWidth) < 1)
+          && Math.abs(cards[5].right - grid.getBoundingClientRect().right) < 1
+          && cards[6].top > cards[0].top && Math.abs(cards[6].left - cards[0].left) < 1
+      } finally { added.forEach(card => card.remove()) }
+    }), 'seven objects keep their width, fill six columns, and wrap the last card')
+    const remainder = gridWidth - columnCount * layout[0].width - (columnCount - 1) * 16
+    assert.ok(Math.abs(remainder) < 1, 'equal-width tracks fill the content area even with few objects')
+    assert.ok(await page.locator('.management-object-actions-row button').evaluateAll(buttons => buttons.every(button => {
+      const box = button.getBoundingClientRect()
+      return [...button.querySelectorAll('span')].every(span => { const text = span.getBoundingClientRect(); return text.left >= box.left && text.right <= box.right })
+    })), `action text stays inside buttons at ${width}`)
+    for (const card of layout) {
+      assert.ok(card.buttons.every(button => button.height === (width < 768 ? 36 : 32) && button.right <= card.right), `uniform action height without overflow at ${width}: ${JSON.stringify(layout)}`)
+      if (width >= 390) assert.ok(card.buttons.every(button => Math.abs(button.width - card.buttons[0].width) < 1), 'actions evenly fill their row')
+    }
     await page.screenshot({ path: join(output, `project-selection-${width}.png`), animations: 'disabled' })
   }
   await page.setViewportSize({ width: 1440, height: 960 })

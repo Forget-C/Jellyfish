@@ -1,4 +1,4 @@
-.project-resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 228px), 1fr)); gap: 16px; }
+.project-resource-grid { display: grid; grid-template-columns: repeat(var(--app-media-card-columns, 1), minmax(0, 1fr)); gap: 16px; }
 .project-resource-card { min-width: 0; overflow: hidden; border-radius: 12px; background: #fff; color: #263244; }
 .project-resource-cover { display: flex; align-items: center; justify-content: center; width: 100%; height: 160px; padding: 0; border: 0; background: #edf2f8; color: #536174; overflow: hidden; }
 button.project-resource-cover { cursor: zoom-in; }

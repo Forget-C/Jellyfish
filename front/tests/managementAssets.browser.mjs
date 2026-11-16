@@ -194,12 +194,23 @@ try {
     const primary = page.getByRole('button', { name: '新建演员', exact: true })
     assert.equal(await primary.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(36, 95, 197)')
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width)
+    assert.ok(await page.locator('.asset-library-grid').first().evaluate(node => {
+      const style = getComputedStyle(node)
+      const gutter = parseFloat(getComputedStyle(document.querySelector('.app-shell')).getPropertyValue('--app-page-gutter'))
+      const sidebar = true && window.innerWidth >= 1024 ? 216 : 0
+      const expectedWidth = document.documentElement.clientWidth - sidebar - 2 * gutter
+      if (Math.abs(node.getBoundingClientRect().width - expectedWidth) > 17) return false
+      const columns = style.gridTemplateColumns.split(' ').map(parseFloat)
+      const used = columns.reduce((sum, size) => sum + size, 0) + (columns.length - 1) * parseFloat(style.columnGap)
+      const remainder = node.getBoundingClientRect().width - used
+      return Math.abs(remainder) < 1
+    }), 'equal-width tracks fill the content area')
     if (width >= 1024) {
       const searchBounds = await box(search), createBounds = await box(primary)
       assert.ok(createBounds.x > searchBounds.x + searchBounds.width)
       assert.ok(Math.abs(createBounds.y + createBounds.height / 2 - searchBounds.y - searchBounds.height / 2) < 2)
     }
-    if (width <= 767) assert.equal((await box(card('演员竖图'))).x, (await box(card('演员宽图'))).x)
+    if (width < 480) assert.equal((await box(card('演员竖图'))).x, (await box(card('演员宽图'))).x)
     await page.screenshot({ path: join(output, `assets-${width}.png`), animations: 'disabled' })
   }
   assert.equal(generationRequests, 0, 'asset library cards never submit image generation')

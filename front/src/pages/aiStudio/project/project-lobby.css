@@ -102,8 +102,8 @@
 
 .project-lobby-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(var(--app-object-card-columns, 1), minmax(0, 1fr));
+  gap: 16px;
 }
 
 .project-lobby-card {
@@ -363,7 +363,7 @@
   }
 
   .project-lobby-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(var(--app-object-card-columns, 1), minmax(0, 1fr));
+    gap: 16px;
   }
 }

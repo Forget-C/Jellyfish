@@ -30,7 +30,7 @@
 
 .asset-library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 228px), 1fr));
+  grid-template-columns: repeat(var(--app-media-card-columns, 1), minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -122,7 +122,7 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
 @media (max-width: 767px) {
   .asset-library-tabs .management-heading .ant-tabs-nav { flex-basis: 100%; }
   .asset-library-tabs .management-tools { flex-basis: 160px; }
-  .asset-library-grid { grid-template-columns: minmax(0, 1fr); }
+  .asset-library-grid { grid-template-columns: repeat(var(--app-media-card-columns, 1), minmax(0, 1fr)); }
 }
 
 .asset-library-card-content { padding:16px; }

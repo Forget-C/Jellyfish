@@ -205,8 +205,18 @@ try {
   await page.getByRole('article').first().getByText('共 4 章', { exact: true }).waitFor()
   await chooseDisplay('最近更新')
 
-  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 900], [375, 812]]) {
+  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 900], [600, 900], [375, 812]]) {
     await page.setViewportSize({ width, height })
+    assert.ok(await page.locator('.project-lobby-grid').evaluate(node => {
+      const style = getComputedStyle(node)
+      const gutter = parseFloat(getComputedStyle(document.querySelector('.app-shell')).getPropertyValue('--app-page-gutter'))
+      const sidebar = false && window.innerWidth >= 1024 ? 216 : 0
+      const expectedWidth = document.documentElement.clientWidth - sidebar - 2 * gutter
+      if (Math.abs(node.getBoundingClientRect().width - expectedWidth) > 17) return false
+      const columns = style.gridTemplateColumns.split(' ').map(parseFloat)
+      const remainder = node.getBoundingClientRect().width - columns.reduce((sum, size) => sum + size, 0) - (columns.length - 1) * parseFloat(style.columnGap)
+      return Math.abs(remainder) < 1
+    }), 'project grid tracks fill the content area')
     await card.getByText('待补原文', { exact: true }).waitFor()
     const scenes = await card.getByText('未创建场次', { exact: true }).boundingBox()
     const chapters = await card.getByText('共 1 章', { exact: true }).boundingBox()

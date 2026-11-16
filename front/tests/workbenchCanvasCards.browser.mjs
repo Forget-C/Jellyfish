@@ -120,6 +120,17 @@ try {
       await page.setViewportSize({ width, height })
       await card('新分镜方案').getByRole('button', { name: '新分镜方案', exact: true }).scrollIntoViewIfNeeded()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '卡片内容不得造成页面横向溢出')
+    assert.ok(await page.locator('.management-canvas-cards .management-card-grid').first().evaluate(node => {
+      const style = getComputedStyle(node)
+      const gutter = parseFloat(getComputedStyle(document.querySelector('.app-shell')).getPropertyValue('--app-page-gutter'))
+      const sidebar = true && window.innerWidth >= 1024 ? 216 : 0
+      const expectedWidth = document.documentElement.clientWidth - sidebar - 2 * gutter
+      if (Math.abs(node.getBoundingClientRect().width - expectedWidth) > 17) return false
+      const columns = style.gridTemplateColumns.split(' ').map(parseFloat)
+      const used = columns.reduce((sum, size) => sum + size, 0) + (columns.length - 1) * parseFloat(style.columnGap)
+      const remainder = node.getBoundingClientRect().width - used
+      return Math.abs(remainder) < 1
+    }), 'equal-width tracks fill the content area')
       await page.screenshot({ path: join(output, `cards-${theme}-${width}.png`), animations: 'disabled' })
     }
     await page.setViewportSize({ width: 1366, height: 900 })

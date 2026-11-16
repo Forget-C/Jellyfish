@@ -355,11 +355,11 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                     </div>
                     <div className="management-object-excerpt" title={object.description || '未填写描述'}>{object.description || '未填写描述'}</div>
                     <div className="management-object-actions-row">
-                      {!object.asset_id && sameNames[object.id] && <Button variant="primary" disabled={disabled} onClick={() => { setSameNameOnly(true); setAssociationObject(object.id) }}>选用同名</Button>}
-                      <Button disabled={disabled} onClick={() => { setSameNameOnly(false); setAssociationObject(object.id) }}>{object.asset_id ? '重新选用' : '选用'}</Button>
+                      {!object.asset_id && sameNames[object.id] && <MainButton type="primary" aria-label="选用同名" disabled={disabled} onClick={() => { setSameNameOnly(true); setAssociationObject(object.id) }}>选用同名</MainButton>}
+                      <MainButton aria-label={object.asset_id ? '重新选用' : '选用'} disabled={disabled} onClick={() => { setSameNameOnly(false); setAssociationObject(object.id) }}>{object.asset_id ? '重新选用' : '选用'}</MainButton>
                       <ResourceCreateButton kind={kind} projectId={projectId} projectUpload initialName={object.name} onCreate={openCreate} onCreated={async resourceId => {
                         if (!await save(object.id, resourceId)) throw new Error('资源已创建，选用尚未完成，请重试')
-                      }}><Button variant={!object.asset_id && sameNames[object.id] ? 'secondary' : 'primary'} disabled={disabled}>{object.asset_id ? '重新创建' : '创建'}</Button></ResourceCreateButton>
+                      }}><MainButton type={!object.asset_id && sameNames[object.id] ? 'default' : 'primary'} aria-label={object.asset_id ? '重新创建' : '创建'} disabled={disabled}>{object.asset_id ? '重新创建' : '创建'}</MainButton></ResourceCreateButton>
                       {!object.asset_id && sameNames[object.id] === undefined && <small role="status">{sameNameError ? <MainButton type="text" onClick={() => setSameNameRetry(value => value + 1)}>重试同名查询</MainButton> : '同名查询中'}</small>}
                     </div>
                     <ObjectAssociationEditor open={associationObject === object.id} projectId={projectId} kind={kind} objectName={object.name} sameName={sameNameOnly}

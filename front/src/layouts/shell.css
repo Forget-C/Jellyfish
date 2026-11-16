@@ -15,6 +15,7 @@
 .app-shell {
   --app-header-height: 56px;
   --app-page-gutter: 20px;
+  --app-sidebar-width: 216px;
   --app-text: #263244;
   --app-muted: #536174;
   --app-accent: #245fc5;
@@ -112,3 +113,18 @@
 
 .app-sidebar-drawer .ant-tree-treenode { min-height: 36px; align-items: center; }
 .app-sidebar-drawer .ant-tree-node-content-wrapper { min-height: 36px; line-height: 36px; }
+
+/* Column counts stay independent of item count; each track shares the available width. */
+.app-shell { --app-media-card-columns: 1; --app-object-card-columns: 1; --app-canvas-card-columns: 1; }
+@media (min-width: 480px) { .app-shell { --app-media-card-columns: 2; } }
+@media (min-width: 576px) { .app-shell { --app-object-card-columns: 2; } }
+@media (min-width: 768px) { .app-shell { --app-media-card-columns: 3; --app-canvas-card-columns: 2; } }
+@media (min-width: 840px) { .app-shell { --app-object-card-columns: 3; } }
+@media (min-width: 1024px) { .app-shell { --app-media-card-columns: 4; --app-object-card-columns: 2; } }
+@media (min-width: 1080px) { .app-shell { --app-object-card-columns: 3; } }
+@media (min-width: 1280px) { .app-shell { --app-media-card-columns: 6; } }
+@media (min-width: 1360px) { .app-shell { --app-object-card-columns: 4; } }
+@media (min-width: 1400px) { .app-shell { --app-canvas-card-columns: 3; } }
+@media (min-width: 1640px) { .app-shell { --app-object-card-columns: 5; } }
+@media (min-width: 1760px) { .app-shell { --app-canvas-card-columns: 4; } }
+@media (min-width: 1880px) { .app-shell { --app-object-card-columns: 6; } }

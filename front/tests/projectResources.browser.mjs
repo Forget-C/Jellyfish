@@ -87,6 +87,17 @@ try {
       await page.getByRole('menuitemradio',{name:appearance}).waitFor({state:'hidden'})
       for(const [width,height] of [[1440,900],[1366,768],[1024,440],[375,768]]) {
         await page.setViewportSize({width,height});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
+    assert.ok(await page.locator('.project-resource-grid').first().evaluate(node => {
+      const style = getComputedStyle(node)
+      const gutter = parseFloat(getComputedStyle(document.querySelector('.app-shell')).getPropertyValue('--app-page-gutter'))
+      const sidebar = true && window.innerWidth >= 1024 ? 216 : 0
+      const expectedWidth = document.documentElement.clientWidth - sidebar - 2 * gutter
+      if (Math.abs(node.getBoundingClientRect().width - expectedWidth) > 17) return false
+      const columns = style.gridTemplateColumns.split(' ').map(parseFloat)
+      const used = columns.reduce((sum, size) => sum + size, 0) + (columns.length - 1) * parseFloat(style.columnGap)
+      const remainder = node.getBoundingClientRect().width - used
+      return Math.abs(remainder) < 1
+    }), 'equal-width tracks fill the content area')
       const titleEdge = (await page.getByRole('heading', { name: kind === 'scene' ? '项目场景' : `项目${label}`, exact: true }).boundingBox()).x
       const cardEdge = (await page.getByRole('article').first().boundingBox()).x
       assert.ok(Math.abs(cardEdge - titleEdge) <= 1, 'resource cards align with the content title and share one page gutter')
