@@ -23,6 +23,7 @@ class StructuredAssetMixin:
     )
 
     origin: Mapped[str] = mapped_column(String(16), nullable=False, default="created", server_default="created")
+    details_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     source_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -212,7 +213,6 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
 
     __tablename__ = "actors"
 
-    details_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     source_character_id: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="角色转化来源")
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")

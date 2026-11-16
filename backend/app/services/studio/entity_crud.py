@@ -24,6 +24,7 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
     return {
         "id": obj.id,
         "origin": obj.origin, "source_kind": obj.source_kind, "source_id": obj.source_id,
+        "details_editable": obj.details_editable,
         "project_id": obj.project_id,
         "library_copy_id": obj.library_copy_id,
         "references": obj.references,
@@ -34,8 +35,8 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
         "tags": obj.tags or [],
         "prompt_template_id": obj.prompt_template_id,
         "view_count": obj.view_count,
-        "style": obj.style if obj.origin == "created" else None,
-        "visual_style": obj.visual_style if obj.origin == "created" else None,
+        "style": obj.style if obj.origin == "created" or obj.details_editable else None,
+        "visual_style": obj.visual_style if obj.origin == "created" or obj.details_editable else None,
         "thumbnail": thumbnail,
     }
 
@@ -58,10 +59,13 @@ async def list_entities_paginated(
     stmt = select(spec.model)
     stmt = stmt.where(spec.model.project_id == project_id)
     stmt = apply_keyword_filter(stmt, q=q, fields=[spec.model.name, spec.model.description])
+    has_details = spec.model.origin == "created"
+    if entity_type_norm != "character":
+        has_details = has_details | spec.model.details_editable.is_(True)
     if style:
-        stmt = stmt.where(spec.model.origin == "created", getattr(spec.model, "style") == style)
+        stmt = stmt.where(has_details, getattr(spec.model, "style") == style)
     if visual_style:
-        stmt = stmt.where(spec.model.origin == "created", getattr(spec.model, "visual_style") == visual_style)
+        stmt = stmt.where(has_details, getattr(spec.model, "visual_style") == visual_style)
     stmt = apply_order(
         stmt,
         model=spec.model,
@@ -211,10 +215,11 @@ async def update_entity(
 
     update_data = spec.update_model.model_validate(body).model_dump(exclude_unset=True)
     opening = update_data.pop("details_editable", None)
-    if opening is not None and (opening is not True or entity_type_norm != "actor" or not obj.source_character_id):
+    can_open = bool(getattr(obj, "source_character_id", None)) or obj.origin == "upload"
+    if opening is not None and (opening is not True or not can_open):
         raise HTTPException(422, "详情开放后不能重新锁定")
-    if getattr(obj, "source_character_id", None) and not obj.details_editable and opening is not True:
-        raise HTTPException(403, "请先确认开放演员详情")
+    if can_open and not obj.details_editable and opening is not True:
+        raise HTTPException(403, "请先确认开放详情")
     if opening is True:
         obj.details_editable = True
     if obj.origin != "created" and not getattr(obj, "details_editable", False) and set(update_data) - {"name"}:

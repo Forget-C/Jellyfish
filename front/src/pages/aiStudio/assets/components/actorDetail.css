@@ -53,7 +53,9 @@
 .actor-thumbnails button[aria-pressed='true'] { border-color:#245fc5; background:#edf3fc; }
 .actor-thumbnails img { width:58px; height:60px; object-fit:contain; }
 .actor-thumbnails span { display:block; font-size:11px; white-space:nowrap; }
-.actor-image-parameters { flex:none; font-size:12px; padding:6px 0; border-top:1px solid #f0f3f8; }
+.actor-image-parameters { flex:none; min-height:64px; box-sizing:border-box; font-size:12px; padding:6px 0; border-top:1px solid #f0f3f8; }
+.actor-image-parameters .ant-skeleton-paragraph { margin:0; }
+.actor-image-parameters-empty { display:flex; align-items:center; color:#607386; }
 .actor-image-parameters > .ant-space { display:flex; }
 .actor-image-parameters .ant-btn { font-size:12px; padding:0; }
 .actor-task-summary { flex:none; font-size:12px; }

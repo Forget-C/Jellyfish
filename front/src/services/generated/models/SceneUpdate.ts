@@ -9,6 +9,7 @@ import type { ProjectVisualStyle } from './ProjectVisualStyle';
  * 局部更新Scene，未传字段保持原值。
  */
 export type SceneUpdate = {
+    details_editable?: (boolean | null);
     references?: Array<AssetPromptReference>;
     name?: (string | null);
     tags?: (Array<string> | null);

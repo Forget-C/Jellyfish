@@ -7,6 +7,7 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../
 
 type Props = {
   className?: string
+  drawerWidth?: number
   id: string; open: boolean; drawer: boolean; inline?: boolean; title: string; backLabel: string
   titleExtra?: ReactNode; onClose: () => void; actions: ReactNode; children: ReactNode
   onBodyReady?: (node: HTMLElement | null) => void
@@ -15,7 +16,7 @@ type Props = {
 }
 
 /** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
-export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra, onBodyReady }: Props) {
+export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra, onBodyReady, drawerWidth }: Props) {
   const appearance = useAppStore(state => state.appearance)
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
   const [body, setBody] = useState<HTMLElement | null>(null)
@@ -62,17 +63,19 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     }
   }, [drawer, open])
   const positioned = !!bounds
+  const width = bounds ? Math.min(drawerWidth ?? bounds.width, bounds.width) : 0
+  const left = bounds ? bounds.right - width : 0
   useEffect(() => {
     if (drawer && open && positioned) panel.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
   }, [drawer, open, positioned])
   const toolbar = <>
     <div className="resource-editor-page-heading"><Button type="text" icon={<ArrowLeftOutlined />} aria-label={backLabel} onClick={onClose}>{backLabel}</Button>
-      {titleExtra}<h1 className="app-page-title" title={title}>{title}</h1></div>
+      <h1 className="app-page-title" title={title}>{title}</h1>{titleExtra}</div>
     <div ref={actionsRef} className="resource-editor-page-actions">{actions}</div>
   </>
   if (drawer) return <><span ref={anchor} hidden />{open && bounds && createPortal(
-    <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${bounds.x > 0 ? '' : ' resource-editor-no-side'}`}
-      style={{ top: bounds.y, left: bounds.x, width: bounds.width, height: bounds.height, maxWidth: `calc(100vw - ${bounds.x}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
+    <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${left > 0 ? '' : ' resource-editor-no-side'}`}
+      style={{ top: bounds.y, left, width, height: bounds.height, maxWidth: `calc(100vw - ${left}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
       <div className="ant-drawer-content-wrapper">
         <div ref={panel} id={id} role="dialog" aria-modal="false" aria-label={title} className={`ant-drawer-content ${className ?? ''}`}
           style={{ backgroundPosition: `right -${bounds.y}px` }} onKeyDown={event => {

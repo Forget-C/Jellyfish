@@ -59,7 +59,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const [resource, setResource] = useState<Resource>()
   const [openingDetails, setOpeningDetails] = useState(false)
   const openingUnsaved = openingDetails && !resource?.details_editable
-  const detailsLocked = !!resource?.source_character_id && !resource.details_editable && !openingDetails
+  const detailsLocked = (!!resource?.source_character_id || resource?.origin === 'upload') && !resource?.details_editable && !openingDetails
   const imageBased = !resource?.details_editable && !openingDetails && (!!resource?.source_character_id || !!resource?.origin && resource.origin !== 'created')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -572,7 +572,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     setEditingImage(undefined)
     const config: AssetImagePromptRenderBody = { ...normalGenerationConfig.current, mode: undefined }
     if (!imageBased) { delete config.style; delete config.visual_style }
-    if (resource?.source_character_id && config.references === undefined) {
+    if ((resource?.source_character_id || resource?.origin === 'upload') && config.references === undefined) {
       const main = images.find(image => image.is_primary && image.file_id)
       config.references = main ? [{ file_id: main.file_id!, role: 'design' }] : []
     }
@@ -604,9 +604,9 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     status={angle => { const task = tasks[angle as Angle]; return task ? <>{task.error ?? ({ queued: '排队中', running: '生成中', submitting: '正在提交', succeeded: '生成成功', failed: '生成失败', cancelled: '已取消' } as Record<string,string>)[task.status]}{(task.status === 'failed') && <Button size="small" onClick={() => { acceptedAngles.current.delete(angle as Angle); void generate([angle as Angle], editingGeneration) }}>重试</Button>}</> : null }} onGenerate={openGeneration} />
   const detailBody = <AssetDetailLayout compact={detailCompact} fields={detailFields} pictures={detailPictures} />
   return <>
-    <ResourceEditorFrame onBodyReady={setDrawerBody} id={drawerId} className={fullDetail && page !== 'publish' ? 'actor-detail-page' : undefined} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title} titleExtra={<>{imageBased && !resource?.source_character_id && <Tag>{({ upload: '上传', project: '项目转化', library: '资产库导入' } as Record<string, string>)[resource!.origin!]}</Tag>}{fullDetail && (projectId || resource?.source_character_id) ? <Tag>{resource?.source_character_id ? resource.details_editable ? '从角色转化' : '从角色转化 · 详情只读' : '项目专属'}</Tag> : null}</>}
+    <ResourceEditorFrame onBodyReady={setDrawerBody} id={drawerId} className={fullDetail && page !== 'publish' ? 'actor-detail-page' : undefined} drawer={isDrawer} inline={inline} renderToolbar={renderToolbar} open={open} title={title} titleExtra={<>{resource?.origin && resource.origin !== 'created' && !resource.source_character_id && <Tag>{({ upload: '上传', project: '项目转化', library: '资产库导入' } as Record<string, string>)[resource!.origin!]}</Tag>}{fullDetail && (projectId || resource?.source_character_id) ? <Tag>{resource?.source_character_id ? resource.details_editable ? '从角色转化' : '从角色转化 · 详情只读' : '项目专属'}</Tag> : null}</>}
       backLabel={fullDetail && page !== 'publish' || page === 'editor' ? '返回' : '返回对象'} onClose={fullDetail && page !== 'publish' ? () => { if (busy || generating || analysisBusy || dirty) setCloseRequested(true); else void closeEditor() } : close} actionsRef={setReferenceToolbar}
-      actions={fullDetail && page !== 'publish' ? <Space>{(detailsLocked ? <Button disabled={busy || loadFailed} onClick={() => Modal.confirm({ title: '为此演员添加详情？', content: '保存后，详情将参与后续生成，可能与现有图片不一致。现有图片不会自动更新，请根据创作需要决定是否继续。', okText: '继续编辑', cancelText: '取消', onOk: () => setOpeningDetails(true) })}>{description || Object.values(facts).some(Boolean) ? '编辑详情' : '添加详情'}</Button> : <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => void save()}>保存设定</Button>)}{resource?.project_id && (resource.library_copy_id ? <Button type="link" target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.library_copy_id)}>查看库中资产</Button> : <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => { setPublishName(resource.name); setPage('publish') }}>进入资产库</Button>)}</Space> : page === 'references' ? null : <Space wrap>{page === 'publish' ? <>{!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
+      actions={fullDetail && page !== 'publish' ? <Space>{(detailsLocked ? <Button disabled={busy || loadFailed} onClick={() => Modal.confirm({ title: `为此${labels[kind]}添加详情？`, content: '保存后，详情将参与后续生成，可能与现有图片不一致。现有图片不会自动更新，请根据创作需要决定是否继续。', okText: '继续编辑', cancelText: '取消', onOk: () => setOpeningDetails(true) })}>{description || Object.values(facts).some(Boolean) ? '编辑详情' : '添加详情'}</Button> : <Button disabled={busy || generating || analysisBusy || loadFailed} onClick={() => void save()}>保存设定</Button>)}{resource?.project_id && (resource.library_copy_id ? <Button type="link" target="_blank" rel="noopener noreferrer" href={resourceAssetUrl(kind === 'character' ? 'actor' : kind, resource.library_copy_id)}>查看库中资产</Button> : <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => { setPublishName(resource.name); setPage('publish') }}>进入资产库</Button>)}</Space> : page === 'references' ? null : <Space wrap>{page === 'publish' ? <>{!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
         <Button type="primary" loading={busy} disabled={!publishName.trim() || !images.some(image => image.file_id)} onClick={() => void publish()}>确认入库</Button>
       </> : (page === 'adopt' ? <>
         {!isDrawer && <Button onClick={() => setPage('editor')}>返回编辑</Button>}
@@ -626,7 +626,6 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
           : <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => { setPublishName(resource.name); setPage('publish') }}>进入资产库</Button>}
         {dirty && <span>保存设定后可进入资产库。</span>}
       </Space>}
-      {imageBased && <p>{detailsLocked ? '此演员详情当前只读，可继续生成和管理图片。添加或编辑详情需先确认开放。' : '此资源以图片为基础，基础设定不可编辑；可修改名称并继续生成和管理图片。'}</p>}
       {error && <Alert type="error" showIcon message={error} action={loadFailed && <Button onClick={() => setLoadRetry(value => value + 1)}>重试读取对象</Button>} />}
       {fullDetail && page !== 'publish' ? detailBody : page === 'publish' ? <div className="resource-editor-fields"><h3>进入资产库 · 独立副本</h3>
         <label>副本名称<Input aria-label="副本名称" maxLength={255} value={publishName} onChange={event => setPublishName(event.target.value)} /></label>

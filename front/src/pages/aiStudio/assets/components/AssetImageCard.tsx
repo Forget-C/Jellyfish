@@ -22,6 +22,7 @@ export type LibraryAsset = {
   tags?: string[] | null
   thumbnail?: string | null
   details_editable?: boolean
+  origin?: string
   source_character_id?: string | null
   references?: AssetPromptReference[]
 }
@@ -134,11 +135,12 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
       const target = response.data as AssetImage | undefined
       if (!target) throw new Error('无法创建正面图片记录')
       let references = asset.references
-      if (asset.source_character_id) {
+      const useMainReference = asset.source_character_id || asset.origin === 'upload'
+      if (useMainReference) {
         const source = preferredImage((await adapter.listImages(asset.id)).filter(image => image.file_id))
         references = source?.file_id ? [{ file_id: source.file_id, role: 'design' }] : []
       }
-      const draft = await adapter.renderPrompt(asset.id, target.id, asset.source_character_id ? { references } : undefined)
+      const draft = await adapter.renderPrompt(asset.id, target.id, useMainReference ? { references } : undefined)
       const id = await adapter.createGenerationTask(asset.id, target.id, { ...draft, references })
       if (!id) throw new Error('未创建生成任务')
       setAssetGeneration(generationKey, { status: 'submitted', taskId: id })

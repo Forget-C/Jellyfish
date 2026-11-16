@@ -59,6 +59,7 @@ class AssetCreate(BaseModel):
 
 class AssetUpdate(BaseModel):
 
+    details_editable: bool | None = None
     references: list[AssetPromptReference] = Field(default_factory=list)
     name: str | None = None
     tags: list[str] | None = None
@@ -70,6 +71,7 @@ class AssetUpdate(BaseModel):
 
 class AssetRead(AssetBase):
 
+    details_editable: bool = False
     references: list[AssetPromptReference] = Field(default_factory=list)
     library_copy_id: str | None = None
     project_id: str | None = Field(None, description="所属项目；空值表示共享资产")

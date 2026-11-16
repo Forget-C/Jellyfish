@@ -9,6 +9,7 @@ import type { ProjectVisualStyle } from './ProjectVisualStyle';
  * 局部更新Costume，未传字段保持原值。
  */
 export type CostumeUpdate = {
+    details_editable?: (boolean | null);
     references?: Array<AssetPromptReference>;
     name?: (string | null);
     tags?: (Array<string> | null);

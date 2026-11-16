@@ -52,7 +52,7 @@ async def client(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["actor", "scene", "prop", "costume"])
-async def test_upload_name_only_and_default_order(client, kind):
+async def test_upload_locked_details_and_default_order(client, kind):
     uploaded = await client.post("/api/v1/studio/files/upload", files={"file": ("image.png", b"image", "image/png")})
     file_id = uploaded.json()["data"]["id"]
     body = {"id": "upload", "name": "上传对象", "images": [{"file_id": file_id, "view_angle": angle} for angle in ["LEFT", "FRONT", "LEFT"]]}
@@ -61,14 +61,66 @@ async def test_upload_name_only_and_default_order(client, kind):
     data = response.json()["data"]
     assert data["origin"] == "upload" and data["description"] == ""
     assert data["style"] is None and data["visual_style"] is None
-    if kind == "actor":
-        assert (await client.patch("/api/v1/studio/entities/actor/upload", json={"details_editable": True})).status_code == 422
     assert (await client.post(f"/api/v1/studio/entities/{kind}/image-source", json=body)).json()["data"]["id"] == "upload"
     assert (await client.patch(f"/api/v1/studio/entities/{kind}/upload", json={"supplementary_info": "禁止"})).status_code == 403
-    assert (await client.patch(f"/api/v1/studio/entities/{kind}/upload", json={"name": "允许改名"})).status_code == 200
+    assert (await client.patch(f"/api/v1/studio/entities/{kind}/upload", json={"name": "未确认改名"})).status_code == 403
     images = (await client.get(f"/api/v1/studio/entities/{kind}/upload/images")).json()["data"]["items"]
     assert [image["is_primary"] for image in images] == [True, False, False]
     assert [image["is_view_default"] for image in images] == [True, True, False]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["actor", "scene", "prop", "costume"])
+async def test_uploaded_details_open_once_and_participate_in_generation(client, kind):
+    uploaded = await client.post("/api/v1/studio/files/upload", files={"file": ("image.png", b"image", "image/png")})
+    file_id = uploaded.json()["data"]["id"]
+    path = f"/api/v1/studio/entities/{kind}"
+    created = await client.post(path + "/image-source", json={"id": "editable-upload", "name": "图片对象", "images": [{"file_id": file_id, "view_angle": "FRONT"}]})
+    assert created.status_code == 201, created.text
+    identity = path + "/editable-upload"
+    assert (await client.patch(identity, json={"supplementary_info": "未确认"})).status_code == 403
+    rejected = await client.patch(identity, json={"details_editable": True, "references": [{"file_id": "missing", "role": "design"}]})
+    assert rejected.status_code in {400, 404, 422}
+    assert (await client.get(identity)).json()["data"]["details_editable"] is False
+    fields = {"details_editable": True, "name": "开放对象", "supplementary_info": "保持窗边自然光", "style": "国漫", "visual_style": "动漫"}
+    opened = await client.patch(identity, json=fields)
+    assert opened.status_code == 200, opened.text
+    saved = (await client.get(identity)).json()["data"]
+    assert saved["details_editable"] is True and saved["origin"] == "upload"
+    assert saved["supplementary_info"] == fields["supplementary_info"]
+    assert saved["style"] == "国漫" and saved["visual_style"] == "动漫"
+    listed = (await client.get(path, params={"style": "国漫"})).json()["data"]["items"]
+    assert any(item["id"] == "editable-upload" and item["details_editable"] for item in listed)
+    images = (await client.get(identity + "/images")).json()["data"]["items"]
+    rendered = await client.post(f"/api/v1/studio/generation-prompts/assets/{kind}/editable-upload/slots/{images[0]['id']}/render", json={"references": [{"file_id": file_id, "role": "design"}]})
+    assert rendered.status_code == 200, rendered.text
+    assert fields["supplementary_info"] in rendered.json()["data"]["execution_prompt"]
+    assert (await client.patch(identity, json={"supplementary_info": "后续修改"})).status_code == 200
+    assert (await client.patch(identity, json={"details_editable": False})).status_code == 422
+
+
+def test_uploaded_details_migration_preserves_existing_facts():
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    import sqlalchemy as sa
+    path = Path(__file__).parents[1] / "alembic/versions/e82cfa190b64_uploaded_asset_details.py"
+    spec = importlib.util.spec_from_file_location("uploaded_detail_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = sa.create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            for table in ("scenes", "props", "costumes"):
+                connection.execute(sa.text(f"CREATE TABLE {table} (id TEXT PRIMARY KEY, supplementary_info TEXT)"))
+                connection.execute(sa.text(f"INSERT INTO {table} VALUES ('existing', '原资料')"))
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+            for table in ("scenes", "props", "costumes"):
+                assert connection.execute(sa.text(f"SELECT supplementary_info, details_editable FROM {table}")).one() == ("原资料", False)
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.asyncio
