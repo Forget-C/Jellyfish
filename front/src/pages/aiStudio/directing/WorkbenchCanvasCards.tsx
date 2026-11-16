@@ -37,9 +37,9 @@ function taskLabel(task: StoryboardTaskSummary) {
 }
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
-export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, historical, canCreate, actionHost, filterHost,
+export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneName, historical, canCreate, actionHost, filterHost,
   targetCanvas, targetTask, onCloseTask, onChange, onReviewSource }: Scope & {
-  filterHost: HTMLDivElement | null; historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
+  sceneName: string; filterHost: HTMLDivElement | null; historical: boolean; canCreate: boolean; actionHost: HTMLDivElement | null; onChange: () => void
   targetCanvas?: string | null; targetTask?: string | null; onCloseTask: (canvasId?: string) => void
   onReviewSource: (canvasId?: string) => void
 }) {
@@ -192,7 +192,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, histori
   const shown = canvases?.filter(canvas => canvas.name.toLocaleLowerCase().includes(keyword))
   return <section aria-labelledby="management-canvas-list-title" className="management-canvas-cards">
     {noticeContext}
-    <WorkbenchCanvasCreation {...{ projectId, chapterId, sequenceId, actionHost, onReviewSource }} editable={canCreate} onAccepted={id => {
+    <WorkbenchCanvasCreation {...{ projectId, chapterId, sequenceId, sceneName, actionHost, onReviewSource }} editable={canCreate} onAccepted={id => {
       setCreated(id)
       setQuery('')
       setRevision(value => value + 1)

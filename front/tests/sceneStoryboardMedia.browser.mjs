@@ -116,11 +116,12 @@ try {
     } else {
       await page.goto(management)
       await page.getByRole('button', { name: '生成新分镜画布', exact: true }).click()
-      const config = page.getByRole('region', { name: '生成新分镜画布配置', exact: true })
+      const config = page.getByRole('dialog', { name: '生成新分镜画布', exact: true })
       await config.getByText('忠实提取', { exact: true }).click()
       defaultName = await config.getByRole('textbox', { name: '画布名称' }).inputValue()
       assert.match(defaultName, /^分镜画布-\d{8}-\d{6}$/)
-      await config.getByRole('button', { name: '开始提取', exact: true }).click()
+      await config.getByRole('button', { name: '下一步：确认生成', exact: true }).click()
+      await config.getByRole('button', { name: '确认生成', exact: true }).click()
       await request(modelSettingsUrl, 'PUT', { ...modelSettings, default_video_model_id: 'story-video-model' })
     }
     const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: defaultName, exact: true }) })

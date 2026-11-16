@@ -365,7 +365,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
                   next.delete('objectTask')
                   return next
                 }, { replace: true }) }} />}
-            {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id}
+            {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} sceneName={selected.title}
               onReviewSource={reviewSource}
               canCreate={!historical && !!selected.source_excerpt.trim()} actionHost={storyboardActions} filterHost={filterHost}
               targetCanvas={params.get('canvas')} targetTask={params.get('storyboardTask')}

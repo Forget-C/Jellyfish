@@ -1,0 +1,24 @@
+.canvas-creation-wrap { overflow:clip; overscroll-behavior:contain; }
+.canvas-creation-dialog { padding-bottom:0; }
+.canvas-creation-dialog .ant-modal-content { display:flex; flex-direction:column; max-height:calc(100dvh - 48px); padding:0; border-radius:12px; overflow:hidden; }
+.canvas-creation-storyboard .ant-modal-content { height:min(720px,calc(100dvh - 48px)); }
+.canvas-creation-dialog .ant-modal-header { flex:none; margin:0; padding:16px 48px 16px 20px; }
+.canvas-creation-dialog .ant-modal-title { font-size:16px; font-weight:600; line-height:24px; }
+.canvas-creation-dialog .ant-modal-body { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:0 20px 16px; }
+.canvas-creation-dialog .ant-modal-footer { flex:none; margin:0; padding:12px 20px; border-top:1px solid #e5eaf0; }
+.canvas-creation-dialog .ant-btn { font-size:13px; border-radius:8px; }
+.canvas-creation-fields, .canvas-creation-fields fieldset { display:grid; gap:12px; min-width:0; }
+.canvas-creation-fields fieldset { border:0; margin:0; padding:0; }
+.canvas-creation-fields p { margin:0; }
+.canvas-creation-dialog .management-excerpt { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.6; margin-top:8px; }
+.canvas-creation-dialog .management-basis-reference { width:40px; height:32px; object-fit:contain; vertical-align:middle; }
+.canvas-creation-dialog .ant-alert { margin-bottom:12px; }
+@media(max-width:767px) {
+ .canvas-creation-dialog { max-width:calc(100vw - 32px); margin:16px auto; }
+ .canvas-creation-dialog .ant-modal-content { max-height:calc(100dvh - 32px); }
+ .canvas-creation-storyboard .ant-modal-content { height:calc(100dvh - 32px); }
+ .canvas-creation-dialog .ant-modal-header { padding:16px 48px 12px 16px; }
+ .canvas-creation-dialog .ant-modal-body { padding:0 16px 12px; }
+ .canvas-creation-dialog .ant-modal-footer { padding:12px 16px; }
+ .canvas-creation-dialog .ant-btn { min-height:36px; }
+}

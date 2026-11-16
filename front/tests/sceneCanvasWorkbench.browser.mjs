@@ -68,7 +68,7 @@ try {
   await page.getByRole('button', { name: '分镜与画布〔本场〕', exact: true }).click()
   const create = page.getByRole('button', { name: '新建空白画布', exact: true })
   await create.press('Enter')
-  const modal = page.getByRole('region', { name: '新建空白画布配置' })
+  const modal = page.getByRole('dialog', { name: '新建空白画布' })
   const input = modal.getByRole('textbox', { name: '画布名称' })
   assert.match(await input.inputValue(), /^分镜画布-\d{8}-\d{6}$/)
   await input.fill('第一套方案')

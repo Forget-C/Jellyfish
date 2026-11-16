@@ -1,27 +1,28 @@
-import { Alert, Button, Checkbox } from 'antd'
+import { Alert, Button, Checkbox, Typography } from 'antd'
 import type { StoryboardBasis } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 
 /** 显示本次会固定的摘录及可用参考，和当前对象任务状态分别表达。 */
 export function StoryboardBasisPreview({ basis, useSaved, onUseSaved, onRefresh, onOpenSource, onOpenObjects,
-  sourceLabel = '本次采用的场次摘录', emptyText }: {
+  compact = false, readOnly = false, sourceLabel = '本次采用的场次摘录', emptyText }: {
+  compact?: boolean; readOnly?: boolean
   basis: StoryboardBasis; useSaved: boolean; onUseSaved: (value: boolean) => void
   onRefresh: () => void; onOpenSource: () => void; onOpenObjects: () => void; sourceLabel?: string; emptyText?: string
 }) {
   return <div className="management-storyboard-basis">
     {basis.source_changed && <Alert showIcon type="warning" message="章节正文已变化，本次仍采用下方已确认摘录。"
-      action={<Button size="small" onClick={onOpenSource}>核对场次范围</Button>} />}
+      action={!readOnly && <Button size="small" onClick={onOpenSource}>核对场次范围</Button>} />}
     <details open>
       <summary>{sourceLabel}</summary>
-      <p className="management-excerpt">{basis.source_text}</p>
+      {compact ? <Typography.Paragraph className="management-excerpt" ellipsis={{ rows: 6, expandable: true, symbol: '展开全文' }}>{basis.source_text}</Typography.Paragraph> : <p className="management-excerpt">{basis.source_text}</p>}
     </details>
     {basis.preparation_stale ? <Alert showIcon type="warning" message="已保存对象与当前场次摘录不符，请先刷新对象准备。"
-      action={<Button size="small" onClick={onOpenObjects}>前往对象与参考</Button>} />
+      action={!readOnly && <Button size="small" onClick={onOpenObjects}>前往对象与参考</Button>} />
       : <>
         {basis.object_task_active && <Alert showIcon type="info" message="对象提取进行中，可等待后重新读取依据。"
-          action={<Button size="small" onClick={onRefresh}>重新读取依据</Button>} />}
+          action={!readOnly && <Button size="small" onClick={onRefresh}>重新读取依据</Button>} />}
         {basis.object_task_active && basis.preparation_revision > 0 &&
-          <Checkbox checked={useSaved} onChange={event => onUseSaved(event.target.checked)}>使用已保存对象继续</Checkbox>}
+          <Checkbox disabled={readOnly} checked={useSaved} onChange={event => onUseSaved(event.target.checked)}>使用已保存对象继续</Checkbox>}
         {basis.objects.length ? <details>
           <summary>本次采用的对象与参考（{basis.objects.length}）</summary>
           <ul>{basis.objects.map(object => <li key={object.id}>
