@@ -113,7 +113,7 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   const missed = document.storyboard?.objects.some(item => item.reference_card_id === card.id && item.origin === 'missed')
   const status = [disabled && '只读', missed && '补漏对象', selected ? '1 张参考图' : '未选择图片'].filter(Boolean).join(' · ')
   if (card.scene_object_source) {
-    const current = resolved.outputs.find(output => output.modality === 'image' && output.available !== false)
+    const current = resolved.outputs.find(output => output.modality === 'image' && output.source.position === 0 && output.available !== false)
     return <ReferenceCardEditor parameters={<span>场次对象参考 · 使用当前资源主图</span>} status={<span>{resolved.error || (current?.file_id ? '主图随对象选用更新' : '未选用资源或暂无主图')}</span>}>
       <div className="generation-reference-image">{current?.file_id && <img alt="当前资源主图" src={buildFileDownloadUrl(current.file_id)} />}</div>
       <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => setCanvasPicker(true)}>改用固定图片</WorkbenchButton>

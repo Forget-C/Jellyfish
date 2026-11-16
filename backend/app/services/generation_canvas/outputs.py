@@ -57,6 +57,8 @@ class ContentOutputHandler:
             outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
                 port_id='object', position=0, object_id=obj.object_id), modality='text',
                 payload=ObjectReferencePayload(object_id=obj.object_id, name=obj.name, category=obj.category))]
+            if card.scene_object_source and published_results:
+                return list(published_results) + outputs
             if card.image_binding or card.scene_object_source:
                 image = next((item for item in published_results if item.source.port_id == 'image'), None)
                 if image is None:
