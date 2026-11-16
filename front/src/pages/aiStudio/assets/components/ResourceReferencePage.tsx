@@ -12,7 +12,8 @@ const labels = { actor: '演员', character: '角色', scene: '场所', prop: '�
 const angleLabels: Record<string, string> = { FRONT: '正面', LEFT: '侧面', RIGHT: '右侧', TOP: '俯视', BACK: '背面', THREE_QUARTER: '3/4 侧面', DETAIL: '细节' }
 
 /** 在当前抽屉中选来源及具体图片，提交前始终使用独立的临时选择。 */
-export function ResourceReferencePage({ kind, projectId, purpose, value, onApply, onCancel, toolbarTarget }: {
+export function ResourceReferencePage({ kind, projectId, purpose, value, onApply, onCancel, toolbarTarget, onNames }: {
+  onNames?: (names: Record<string, string>) => void
   toolbarTarget?: HTMLElement | null
   kind: ResourceKind; projectId?: string | null; purpose: 'subject' | 'costume' | 'prop'
   value: AssetPromptReference[]; onApply: (value: AssetPromptReference[]) => void; onCancel: () => void
@@ -55,6 +56,7 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
       if (token !== request.current) return
       const images = rows.filter(image => image.file_id) as Picture[]
       setPictures(images)
+      onNames?.({ [`${sourceKind}:${next.id}`]: next.name })
       if (!selected.some(reference => reference.source_id === next.id && reference.source_kind === sourceKind)) {
         const main = images.find(image => image.is_primary) ?? images[0]
         setSelected(current => [...current.filter(reference => purpose === 'prop' || !belongs(reference)),
@@ -75,7 +77,7 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
       <Upload accept="image/*" showUploadList={false} beforeUpload={file => {
         setBusy(true); setError('')
         void StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string } })
-          .then(response => { if (response.data) setSelected(current => [...current, { file_id: response.data!.id, role }]) })
+          .then(response => { if (response.data) { onNames?.({ [response.data.id]: file.name }); setSelected(current => [...current, { file_id: response.data!.id, role }]) } })
           .catch(() => setError('上传参考图失败，请重试')).finally(() => setBusy(false))
         return false
       }}><Button disabled={busy}>上传参考图</Button></Upload>

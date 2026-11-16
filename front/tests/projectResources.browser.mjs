@@ -19,6 +19,7 @@ try {
   for(const [kind,tab,label] of [['actor','actors','演员'],['character','roles','角色'],['scene','scenes','场所'],['prop','props','道具'],['costume','costumes','服装']]) {
     const assets=[{id:'one',name:`${label}长名称测试`,description:'真实简介',thumbnail:'/api/cover'}, {id:'missing',name:`无图${label}`}, {id:'new',name:`新增${label}`},{id:'broken',name:`失效${label}`,thumbnail:'/api/broken'}]
     for (const asset of assets) Object.assign(asset, {project_id: 'resources', visual_style: '现实', style: '真人都市', references: []})
+    assets[0].references = Array.from({length:6}, (_, i) => ({file_id:'pic', role:'design', view_angle:['FRONT','LEFT','BACK','TOP','RIGHT','DETAIL'][i], source_kind:kind, source_id:'one'}))
     Object.assign(assets[0], {origin:'created',created_at:'2026-11-15T18:30:00Z'})
     Object.assign(assets[1], {origin:'library',library_copy_id:'library-copy'})
     Object.assign(assets[2], {origin:'project',source_character_id:kind==='actor'?'role-source':null})
@@ -119,6 +120,12 @@ try {
     const generation=page.getByRole('dialog',{name:`生成${kind==='scene'?'场景':label}图片`,exact:true})
     await generation.waitFor()
     assert.equal(await generation.getByRole('textbox', { name: '最终提示词', exact: true }).count(), 0)
+    await generation.locator('.asset-reference-item').nth(5).waitFor()
+    await generation.getByRole('button', {name:/移除参考：/}).first().click()
+    assert.equal(await generation.locator('.asset-reference-item').count(), 5)
+    await generation.getByRole('button', {name:'重置',exact:true}).click()
+    assert.equal(await generation.locator('.asset-reference-item').count(), 6)
+    assert.equal(await generation.getByRole('button', {name:'重置',exact:true}).isDisabled(), true)
     for (const [modalWidth, modalHeight] of [[1440,900],[1024,440],[375,768]]) {
       await page.setViewportSize({ width: modalWidth, height: modalHeight })
       await generation.getByRole('button', { name: '预览提示词', exact: true }).click()
@@ -127,6 +134,10 @@ try {
         const content = node.querySelector('.ant-modal-content')
         const body = node.querySelector('.ant-modal-body')
         const footer = node.querySelector('.ant-modal-footer').getBoundingClientRect()
+        const strip = node.querySelector('.asset-reference-strip')
+        const add = node.querySelector('.asset-reference-add').getBoundingClientRect()
+        if (body.scrollWidth > body.clientWidth + 1) throw new Error('弹窗正文横向溢出')
+        if (Math.abs(add.width - 88) > 1 || Math.abs(add.height - 88) > 1 || getComputedStyle(strip).overflowX !== 'auto') throw new Error('参考带尺寸或滚动不符合规范')
         body.scrollTop = body.scrollHeight
         return { height: content.getBoundingClientRect().height, footerBottom: footer.bottom, bodyOverflow: getComputedStyle(body).overflowY, pageOverflow: document.documentElement.scrollHeight > innerHeight + 1 }
       })
@@ -139,7 +150,11 @@ try {
     }
     await page.setViewportSize({ width: 1440, height: 900 })
 
-    if(kind==='character') for(const purpose of ['主体','服装','道具']) await generation.getByRole('button',{name:`选择参考${purpose}`,exact:true}).waitFor()
+    if(kind==='character') {
+      await generation.getByRole('button',{name:'添加参考图片',exact:true}).click()
+      for(const purpose of ['主体','服装','道具']) await page.getByRole('menuitem',{name:`选择参考${purpose}`,exact:true}).waitFor()
+      await generation.getByRole('heading',{name:/本次参考/}).click()
+    }
     await generation.getByRole('textbox',{name:'本次附加要求',exact:true}).fill('项目临时要求')
     await generation.getByRole('button',{name:'取消',exact:true}).click()
     await generation.waitFor({state:'hidden'})

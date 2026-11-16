@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { PlusOutlined, ReloadOutlined, CloseOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import type { InputRef } from 'antd'
-import { Alert, Button, Collapse, Input, Image, Checkbox, Tag, Space, Tabs, Modal, Select } from 'antd'
+import { Alert, Button, Collapse, Input, Image, Checkbox, Tag, Space, Tabs, Modal, Select, Dropdown, Tooltip } from 'antd'
 import { LlmService, FilmService, StudioProjectsService, StudioEntitiesService, StudioGenerationPromptsService, type AssetViewAngle, type DraftAssetPromptRenderBody, type RenderedPromptSnapshot, type AssetPromptReference, type AssetImagePromptRenderBody, type TaskOutputHistoryRead } from '../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../services/studioEntities'
 import { ProjectVisualStyleAndStyleFields } from '../../project/ProjectVisualStyleAndStyleFields'
@@ -204,7 +205,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     setOpeningDetails(false)
     setAnalysisRequest(0); setAnalysisError(''); setAnalysisCompleted(false)
     setAnalysisOpen(false)
-    setBaseline(''); setName(''); setDescription(''); setFacts({}); setReferences([]);
+    setReferenceNames({}); setBaseline(''); setName(''); setDescription(''); setFacts({}); setReferences([]);
     setResource(undefined); savedResource.current = undefined; setImages([]); setCandidates([]); setEditingImage(undefined); setTasks({}); setGeneration({}); setEditingGeneration({}); setEditingAngles(['FRONT']); setShowPreview(false); setSelectedAngles(['FRONT']); setPage(initialPage); setError(''); setCloseRequested(false)
     const initialVisual = seed?.visual_style ?? defaultVisualStyle as '现实' | '动漫'
     const initial = { name: seed?.name ?? '', description: seed?.description ?? '', visualStyle: initialVisual,
@@ -475,24 +476,62 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     {assetId && <ProjectVisualStyleAndStyleFields disabled={imageBased || busy || generating || analysisBusy || loadFailed} visual_style={visualStyle} style={style} options={options}
       onChange={next => { setVisualStyle(next.visual_style); setStyle(next.style) }} />}
   </div>
-  const [allReferences, setAllReferences] = useState(false)
+  const [referenceNames, setReferenceNames] = useState<Record<string, string>>({})
+  const defaultReferences = (): AssetPromptReference[] => {
+    if (imageBased || resource?.source_character_id || resource?.origin === 'upload') {
+      const main = images.find(image => image.is_primary && image.file_id)
+      return main ? [{ file_id: main.file_id!, role: 'design' }] : []
+    }
+    return references
+  }
+  const currentReferences = editingGeneration.references ?? references
+  useEffect(() => {
+    let active = true
+    const sources = new Map(currentReferences.filter(reference => reference.source_kind && reference.source_id).map(reference => [`${reference.source_kind}:${reference.source_id}`, reference]))
+    for (const [key, reference] of sources) {
+      void StudioEntitiesApi.get(reference.source_kind!, reference.source_id!).then(response => {
+        if (active && response.data) setReferenceNames(current => ({ ...current, [key]: response.data!.name }))
+      }).catch(() => { /* Missing sources retain the unnamed reference label. */ })
+    }
+    return () => { active = false }
+  }, [currentReferences])
   const referenceSection = (temporary = false) => {
     const current = temporary ? editingGeneration.references ?? references : references
+    if (temporary) {
+      const disabled = busy || generating || analysisBusy || loadFailed
+      const defaults = defaultReferences()
+      const referenceKeys = (items: AssetPromptReference[]) => items.map(item => `${item.file_id}:${item.role}:${item.view_angle ?? ''}`).sort().join('|')
+      const resetDisabled = referenceKeys(current) === referenceKeys(defaults)
+      return <>
+        <div className="asset-reference-heading"><h3>本次参考 · {current.length} 张</h3><Tooltip title="恢复默认参考"><Button type="text" aria-label="重置" icon={<ReloadOutlined />} disabled={disabled || resetDisabled} onClick={() => setEditingGeneration(value => ({ ...value, references: defaults }))}>重置</Button></Tooltip></div>
+        <div className="asset-reference-row">
+          <Dropdown trigger={['click']} menu={{ items: (['subject', ...(kind === 'character' ? ['costume', 'prop'] : [])] as ('subject' | 'costume' | 'prop')[]).map(value => ({ key: value, label: `选择参考${value === 'subject' ? '主体' : value === 'costume' ? '服装' : '道具'}` })), onClick: ({ key }) => { setPurpose(key as 'subject' | 'costume' | 'prop'); setPickerReturn('generation'); setPage('references') } }}><Button className="asset-reference-add" aria-label="添加参考图片" icon={<PlusOutlined />} disabled={disabled} /></Dropdown>
+          <div className="asset-reference-strip">{!current.length && <span className="asset-reference-empty">添加参考图片</span>}{current.map((reference, index) => {
+            const referenceName = referenceNames[`${reference.source_kind}:${reference.source_id}`] ?? referenceNames[reference.file_id] ?? (images.some(image => image.file_id === reference.file_id) ? name : '未命名参考')
+            return <div className="asset-reference-item" key={`${reference.file_id}:${reference.role}:${index}`}>
+              <Image width={88} height={88} src={buildFileDownloadUrl(reference.file_id)} alt={referenceName} />
+              <span className="asset-reference-type">{reference.role === 'costume' ? '服装' : reference.role === 'prop' ? '道具' : '主体'}{reference.view_angle ? ` · ${angleLabel(reference.view_angle)}` : ''}</span>
+              <div className="asset-reference-name"><Tooltip title={referenceName}><span>{referenceName}</span></Tooltip><Button type="text" size="small" icon={<CloseOutlined />} aria-label={`移除参考：${referenceName}`} disabled={disabled} onClick={() => setEditingGeneration(value => ({ ...value, references: current.filter((_, i) => i !== index) }))} /></div>
+            </div>
+          })}</div>
+        </div>
+      </>
+    }
     return <div className="resource-editor-fields">{<Space wrap>
       {(['subject', ...(kind === 'character' ? ['costume', 'prop'] : [])] as ('subject' | 'costume' | 'prop')[]).map(value =>
-        <Button key={value} disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setPurpose(value); setPickerReturn(temporary ? 'generation' : 'editor'); setPage('references') }}>
+        <Button key={value} disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setPurpose(value); setPickerReturn('editor'); setPage('references') }}>
           选择参考{value === 'subject' ? '主体' : value === 'costume' ? '服装' : '道具'}
         </Button>)}
-    </Space>}{(temporary && !allReferences ? current.slice(0, 4) : current).map((reference, index) => <Space key={`${reference.file_id}:${reference.role}:${index}`} wrap>
+    </Space>}{current.map((reference, index) => <Space key={`${reference.file_id}:${reference.role}:${index}`} wrap>
       <Image width={64} height={64} src={buildFileDownloadUrl(reference.file_id)} />
       <span>{reference.role === 'costume' ? '参考服装' : reference.role === 'prop' ? '参考道具' : '参考主体'}{reference.view_angle ? ` · ${angleLabel(reference.view_angle)}` : ' · 未标注视角'}</span>
       {<Button onClick={() => { const next = current.filter((_, i) => i !== index)
-        if (temporary) setEditingGeneration(value => ({ ...value, references: next })); else setReferences(next)
+        setReferences(next)
       }}>移除参考图</Button>}
-    </Space>)}{temporary && current.length > 4 && <Button onClick={() => setAllReferences(value => !value)}>{allReferences ? '收起参考' : `查看全部（${current.length}）`}</Button>}{(!temporary && resource) && references.some(reference => !['costume', 'prop'].includes(reference.role)) && <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => {
+    </Space>)}{resource && references.some(reference => !['costume', 'prop'].includes(reference.role)) && <Button disabled={dirty || busy || generating || analysisBusy} onClick={() => {
       const subjects = references.filter(reference => !['costume', 'prop'].includes(reference.role))
       setAdoptionIndex(subjects.length === 1 ? 0 : undefined); setPage('adopt')
-    }}>不生成，采用主体图片</Button>}{temporary && <Button onClick={() => setEditingGeneration(value => ({ ...value, references: undefined }))}>恢复对象参考</Button>}</div>
+    }}>不生成，采用主体图片</Button>}</div>
   }
   const subjectImages = references.filter(reference => !['costume', 'prop'].includes(reference.role))
   const saveAndClose = async (reference?: AssetPromptReference) => {
@@ -537,6 +576,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     </div>)}
   </div>
   const referencePicker = <ResourceReferencePage toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
+        onNames={names => setReferenceNames(current => ({ ...current, ...names }))}
         value={pickerReturn === 'generation' ? editingGeneration.references ?? references : references}
         onCancel={() => setPage(pickerReturn)} onApply={next => {
           if (pickerReturn === 'generation') setEditingGeneration(value => ({ ...value, references: next })); else setReferences(next)
@@ -553,7 +593,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         {imageBased && <ProjectVisualStyleAndStyleFields layout="horizontal" disabled={generating} visual_style={editingGeneration.visual_style ?? visualStyle} style={editingGeneration.style ?? style} options={options} onChange={next => setEditingGeneration(value => ({ ...value, visual_style: next.visual_style as AssetImagePromptRenderBody['visual_style'], style: next.style as AssetImagePromptRenderBody['style'] }))} />}
         <label>本次附加要求<Input.TextArea aria-label="本次附加要求" value={editingGeneration.additional_instruction ?? ''} rows={3}
           onChange={event => setEditingGeneration(value => ({ ...value, additional_instruction: event.target.value }))} /></label>
-        {editingGeneration.mode !== 'edit' && <section className="asset-generation-references"><h3>本次参考</h3>{referenceSection(true)}{imageBased && !editingGeneration.references?.some(reference => !['costume', 'prop', 'style'].includes(reference.role)) && <Alert type="warning" message="请选择有效主体参考图后生成" />}</section>}
+        {editingGeneration.mode !== 'edit' && <section className="asset-generation-references">{referenceSection(true)}{imageBased && !editingGeneration.references?.some(reference => !['costume', 'prop', 'style'].includes(reference.role)) && <Alert type="warning" message="请选择有效主体参考图后生成" />}</section>}
         <Collapse items={[{ key: 'display', label: '展示设置', children: <div className={fullDetail ? 'actor-generation-display' : undefined}>{displayFields.map(([key, label]) => <label key={key}>{label}
           <Input.TextArea aria-label={label} value={editingGeneration[key] ?? ''} onChange={event => setEditingGeneration(value => ({ ...value, [key]: event.target.value }))} />
         </label>)}</div> }]} />
@@ -575,18 +615,12 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     setEditingImage(undefined)
     const config: AssetImagePromptRenderBody = { ...normalGenerationConfig.current, mode: undefined }
     if (!imageBased) { delete config.style; delete config.visual_style }
-    if ((resource?.source_character_id || resource?.origin === 'upload') && config.references === undefined) {
-      const main = images.find(image => image.is_primary && image.file_id)
-      config.references = main ? [{ file_id: main.file_id!, role: 'design' }] : []
-    }
+    if (config.references === undefined) config.references = defaultReferences()
     if (imageBased) {
       const defaultVisual = resource?.project_id ? visualStyle : defaultVisualStyle
       config.style ??= (resource?.project_id ? style : getDefaultStyle(defaultVisual)) as AssetImagePromptRenderBody['style']
       config.visual_style ??= defaultVisual as AssetImagePromptRenderBody['visual_style']
-      if (config.references === undefined) {
-        const main = images.find(image => image.is_primary && image.file_id)
-        config.references = main ? [{ file_id: main.file_id!, role: 'design' }] : []
-      }
+
     }
     setEditingGeneration(config)
     setPage('generation')
