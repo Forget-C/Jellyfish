@@ -244,7 +244,9 @@ class StoryboardAssembly:
                                    name=distinct_name, name_binding=self._output(description, 'object', object_id))
             self._edge(description, 'object', reference, 'name')
             members += [description['id'], reference['id']]
-            if file_id := row.get('image_file_id'):
+            if self.args.get('scene_object_sequence_id') and 'semantic_id' not in row:
+                reference['scene_object_source'] = {'sequence_id': self.args['scene_object_sequence_id'], 'object_id': object_id}
+            elif file_id := row.get('image_file_id'):
                 image = self._card(key + ':image', 'content.image', file_id=file_id, sources=[source])
                 self._edge(image, 'image', reference, 'image_source')
                 reference['image_binding'] = {'file_id': file_id, 'source': self._output(image, 'image')}
@@ -371,7 +373,7 @@ class StoryboardAssembly:
             port = 'image' if modality == 'image' else 'subject_image'
             for object_key in object_keys:
                 _, reference = self.objects[object_key]
-                if reference.get('image_binding') and port in capability['input_ports']:
+                if (reference.get('image_binding') or reference.get('scene_object_source')) and port in capability['input_ports']:
                     self._adopt(reference, 'image', model, port,
                                 subject_name=reference['name'] if modality == 'video' else None)
         return model

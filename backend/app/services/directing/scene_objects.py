@@ -14,7 +14,7 @@ from app.core.contracts.directing.workspace import SourceSpan
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.directing import Sequence
 from app.models.llm import ModelCategoryKey, Provider
-from app.models.studio import FileItem, FileUsage
+from app.models.studio import FileUsage
 from app.models.task import Task
 from app.services.directing.scene_canvas import SCENE_TASK_ORDER, SceneCanvasService
 from app.services.directing.store import RevisionConflict
@@ -64,17 +64,6 @@ class SceneObjectService(SceneCanvasService):
         """将统一任务状态投影为场次对象状态。"""
         return SceneObjectTaskRead(task_id=task.id, status=TaskStatus(task.status), stage=task.stage, error=task.error_message)
 
-    async def _uploads(self, chapter_id: str, sequence_id: str, objects: list[SceneObjectCandidate]) -> set[tuple[str, str]]:
-        references = {f'scene-object:{sequence_id}:{item.id}': item.id for item in objects}
-        if not references:
-            return set()
-        rows = await self.db.execute(select(FileUsage.source_ref, FileItem.id)
-            .join(FileItem, FileItem.id == FileUsage.file_id).where(
-                FileUsage.project_id == self.project_id, FileUsage.chapter_id == chapter_id,
-                FileUsage.usage_kind.in_(['generation_upload', 'directing_reference']), FileUsage.source_ref.in_(references),
-                FileItem.type == 'image', FileItem.deleted_at.is_(None), FileItem.delete_requested_at.is_(None)))
-        return {(references[source_ref], file_id) for source_ref, file_id in rows}
-
     async def read_objects(self, chapter_id: str, sequence_id: str) -> SceneObjectsRead:
         """保留上次成功准备，单独展示最新任务及当前文件有效性。"""
         sequence, _ = await self._scene(chapter_id, sequence_id)
@@ -85,20 +74,15 @@ class SceneObjectService(SceneCanvasService):
             # 任务可能在两次查询之间提交，成功状态要随最新准备结果返回。
             await self.db.refresh(sequence, ['object_preparation'])
         prepared = sequence.object_preparation or {}
-        assets = await self.assets()
+        assets = await self.assets(main_only=True)
         by_identity = {(asset.kind, asset.id): asset for asset in assets}
         candidates = [SceneObjectCandidate.model_validate(value) for value in prepared.get('objects', [])]
-        uploads = await self._uploads(chapter_id, sequence_id, candidates)
         objects = []
         for candidate in candidates:
             asset = by_identity.get((candidate.kind, candidate.asset_id))
-            if candidate.image_file_id:
-                ready = (candidate.id, candidate.image_file_id) in uploads or bool(
-                    asset and candidate.image_file_id in asset.image_file_ids)
-                state = 'ready' if ready else 'unavailable'
-            else:
-                state = 'unassociated' if not candidate.asset_id else 'missing' if asset else 'unavailable'
-            objects.append(SceneObjectRead(**candidate.model_dump(), reference_state=state))
+            main = asset.main_image_file_id if asset else None
+            state = 'ready' if main else 'unassociated' if not candidate.asset_id else 'missing' if asset else 'unavailable'
+            objects.append(SceneObjectRead(**candidate.model_dump(), image_file_id=main, reference_state=state))
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
         candidate_task_id = await self.db.scalar(self._tasks(sequence_id).with_only_columns(Task.id).where(
             Task.input_snapshot['chapter_id'].as_string() == chapter_id,
@@ -139,7 +123,7 @@ class SceneObjectService(SceneCanvasService):
         return self.task_read(task)
 
     async def save_choice(self, chapter_id: str, sequence_id: str, object_id: str, body: SceneObjectChoice) -> SceneObjectsRead:
-        """按候选、资产类型、项目与真实图片归属校验，再保存本场选择。"""
+        """按候选、资产类型与项目归属校验，只保存本场资源选用。"""
         sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
         if not sequence.is_current:
             raise ValueError('此场次已退出当前划分')
@@ -152,53 +136,10 @@ class SceneObjectService(SceneCanvasService):
             raise HTTPException(404, 'Object not found in scene')
         from app.models.studio import Project
         await self.db.scalar(select(Project).where(Project.id == self.project_id).with_for_update())
-        asset = next((item for item in await self.assets() if item.kind == candidate.kind and item.id == body.asset_id), None)
+        asset = next((item for item in await self.assets(main_only=True) if item.kind == candidate.kind and item.id == body.asset_id), None)
         if body.asset_id and not asset:
             raise ValueError('所选资产不属于当前项目或类型不符')
-        if body.auto_select_image and asset:
-            selected = next(iter(asset.reference_images), None)
-            from app.core.contracts.directing.scene_objects import ObjectReferenceSource
-            source = ObjectReferenceSource(kind=selected.source_kind, asset_id=selected.source_id) if selected else None
-            body = body.model_copy(update={'image_file_id': selected.file_id if selected else None, 'reference_source': source})
-        if body.image_file_id and not body.asset_id:
-            raise ValueError('请先创建对象或明确选择已有项目对象')
-        if body.image_file_id and not (asset and body.image_file_id in asset.image_file_ids):
-            uploads = await self._uploads(chapter_id, sequence_id, [candidate])
-            if (candidate.id, body.image_file_id) not in uploads:
-                raise ValueError('所选图片不属于该资产或本场对象的可用上传')
-        from sqlalchemy import delete
-        from app.services.studio.file_usages import upsert_file_usage
-        source_ref = f'scene-object:{sequence_id}:{object_id}'
-        if body.image_file_id:
-            await upsert_file_usage(self.db, file_id=body.image_file_id, project_id=self.project_id,
-                chapter_id=chapter_id, usage_kind='directing_reference', source_ref=source_ref)
-        await self.db.execute(delete(FileUsage).where(FileUsage.project_id == self.project_id,
-            FileUsage.usage_kind == 'directing_reference', FileUsage.source_ref == source_ref,
-            FileUsage.file_id != body.image_file_id if body.image_file_id else True))
-        source = body.reference_source
-        if source is None and body.asset_id == candidate.asset_id and body.image_file_id is None:
-            source = candidate.reference_source
-        if source and asset:
-            allowed = source.kind == asset.kind and source.asset_id == asset.id
-            if not allowed:
-                raise ValueError('图片来源不属于所选对象资产')
-            if body.image_file_id and not any(image.file_id == body.image_file_id and
-                    image.source_kind == source.kind and image.source_id == source.asset_id for image in asset.reference_images):
-                if body.image_file_id != candidate.image_file_id or source != candidate.reference_source:
-                    raise ValueError('所选图片不属于指定来源')
-        elif source:
-            raise ValueError('图片来源需要关联资产')
-        if source is None and body.image_file_id and asset:
-            if body.image_file_id == candidate.image_file_id:
-                source = candidate.reference_source
-            if source is None:
-                from app.core.contracts.directing.scene_objects import ObjectReferenceSource
-                image = next((image for image in asset.reference_images if image.file_id == body.image_file_id), None)
-                if image:
-                    source = ObjectReferenceSource(kind=image.source_kind, asset_id=image.source_id)
-        candidate.reference_source = source
         candidate.asset_id = body.asset_id
-        candidate.image_file_id = body.image_file_id
         sequence.object_preparation = {**preparation, 'revision': body.expected_revision + 1,
                                        'objects': [item.model_dump(mode='json') for item in candidates]}
         await self.db.flush()
@@ -232,10 +173,10 @@ class SceneObjectService(SceneCanvasService):
         for row in result.objects:
             prior = previous.get(row.id)
             if prior:
-                row = row.model_copy(update={'asset_id': prior.asset_id, 'image_file_id': prior.image_file_id, 'reference_source': prior.reference_source})
+                row = row.model_copy(update={'asset_id': prior.asset_id})
                 if row != prior:
                     modified.append(row)
-                if prior.asset_id or prior.image_file_id:
+                if prior.asset_id:
                     retained_choices.append(row)
             else:
                 added.append(row)

@@ -118,8 +118,8 @@ class SceneStoryboardService(SceneObjectService):
         return [{
             'id': item.id, 'kind': item.kind, 'name': item.name, 'excerpt': item.excerpt,
             'asset_id': item.asset_id if (item.kind, item.asset_id) in available else None,
-            'image_file_id': item.image_file_id if item.reference_state == 'ready' else None,
-            'reference_unavailable': bool(item.image_file_id and item.reference_state != 'ready'),
+            'image_file_id': None,
+            'reference_unavailable': item.reference_state == 'unavailable',
         } for item in objects.objects]
 
     async def _storyboard_basis(self, sequence, chapter, objects: SceneObjectsRead, inputs: list[dict],
@@ -421,7 +421,7 @@ class SceneStoryboardService(SceneObjectService):
         # Availability labels belong to confirmation, not frozen model inputs.
         model_objects = [{key: value for key, value in item.items() if key != 'reference_unavailable'} for item in frozen_objects]
         args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
-                'objects': model_objects, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
+                'objects': model_objects, 'scene_object_sequence_id': sequence_id, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         if retry_of_task_id and not regenerate:
             failed = await self.db.get(Task, retry_of_task_id)

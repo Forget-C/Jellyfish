@@ -72,11 +72,11 @@ async def test_character_is_explicitly_created_and_reference_main_is_independent
         images = (await client.get('/api/v1/studio/entities/character/role/images')).json()['data']['items']
         main = next(image for image in images if image['is_primary'])
         assert main['file_id'] != 'image1' and main['view_angle'] == 'LEFT'
-        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'role', 'auto_select_image': True})
+        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'role'})
         assert chosen.status_code == 200, chosen.text
         current = chosen.json()['data']['objects'][0]
         assert current['asset_id'] == 'role' and current['image_file_id'] == main['file_id']
-        assert current['reference_source'] == {'kind': 'character', 'asset_id': 'role'}
+        assert 'reference_source' not in current
         assert current['reference_state'] == 'ready'
         actor_image_id = picture.json()['data']['id']
         await client.patch(f'/api/v1/studio/entities/actor/actor/images/{actor_image_id}', json={'file_id': None})
@@ -85,19 +85,22 @@ async def test_character_is_explicitly_created_and_reference_main_is_independent
 
 
 @pytest.mark.asyncio
-async def test_default_scene_reference_uses_main_at_any_angle_and_keeps_concrete_choice(tmp_path):
+async def test_scene_reference_tracks_current_main_at_any_angle(tmp_path):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         endpoint = await prepared_scene(client, sessions)
         created = await client.post('/api/v1/studio/entities/prop', json={'id': 'sword', 'project_id': 'p1', 'name': '长剑'})
         assert created.status_code == 201
         picture = await client.post('/api/v1/studio/entities/prop/sword/images', json={'file_id': 'image1', 'view_angle': 'TOP'})
         assert picture.status_code == 201
-        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword', 'auto_select_image': True})
+        chosen = await client.put(endpoint + '/object1', json={'expected_revision': 1, 'asset_id': 'sword'})
         assert chosen.status_code == 200, chosen.text
         assert chosen.json()['data']['objects'][0]['image_file_id'] == 'image1'
-        other = await client.post('/api/v1/studio/entities/prop/sword/images', json={'file_id': 'image1', 'view_angle': 'BACK', 'is_primary': True})
+        from app.models.studio import FileItem
+        async with sessions.begin() as db:
+            db.add(FileItem(id='replacement-main', type='image', name='新主图', storage_key='replacement.png'))
+        other = await client.post('/api/v1/studio/entities/prop/sword/images', json={'file_id': 'replacement-main', 'view_angle': 'BACK', 'is_primary': True})
         assert other.status_code == 201
-        assert (await client.get(endpoint)).json()['data']['objects'][0]['image_file_id'] == 'image1'
+        assert (await client.get(endpoint)).json()['data']['objects'][0]['image_file_id'] == 'replacement-main'
         stale = await client.put(endpoint + '/object1', json={'expected_revision': 1})
         assert stale.status_code == 409
 

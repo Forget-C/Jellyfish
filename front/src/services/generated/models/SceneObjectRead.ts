@@ -2,10 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ObjectReferenceSource } from './ObjectReferenceSource';
 import type { SourceSpan } from './SourceSpan';
 /**
- * 实际文件可用性按当前项目资产读取，已选文件不可用时仍可识别旧选择。
+ * 读取当前资源主图投影；图片身份不写入场次准备。
  */
 export type SceneObjectRead = {
     id: string;
@@ -17,6 +16,5 @@ export type SceneObjectRead = {
     suggested_asset_id?: (string | null);
     asset_id?: (string | null);
     image_file_id?: (string | null);
-    reference_source?: (ObjectReferenceSource | null);
     reference_state: 'unassociated' | 'missing' | 'ready' | 'unavailable';
 };

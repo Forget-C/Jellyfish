@@ -385,6 +385,13 @@ class AudioContentCard(MediaContentCard):
 
 
 
+class SceneObjectSource(BaseModel):
+    """场次提取对象身份；资源选用与实际用图不复制到画布。"""
+    model_config = ConfigDict(extra='forbid')
+    sequence_id: str = Field(min_length=1, max_length=64)
+    object_id: str = Field(min_length=1, max_length=64)
+
+
 class NamedImageReferenceCard(CardDefinition):
     """单张图片、单个映射名称；允许未完成草稿，名称有效后才发布输出。"""
     type_version: Literal[2] = 2
@@ -394,6 +401,7 @@ class NamedImageReferenceCard(CardDefinition):
     object_id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
     name_binding: OutputIdentity | None = None
     image_binding: ReferenceImageBinding | None = None
+    scene_object_source: SceneObjectSource | None = None
     input_ports: ClassVar[tuple[str, ...]] = ('name', 'image_source')
     output_ports: ClassVar[tuple[str, ...]] = ('image', 'object')
 

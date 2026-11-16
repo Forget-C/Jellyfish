@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Drawer, Empty, Grid, Image, Modal, Select, Space, Spin, message } from 'antd'
-import { CheckOutlined, MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined, SwapOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons'
-import { ApiError, StudioDirectingService, StudioFilesService } from '../../../services/generated'
-import type { AssetSummary, SceneObjectRead, SceneObjectsRead, ObjectReferenceSource } from '../../../services/generated'
+import { MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined } from '@ant-design/icons'
+import { ApiError, StudioDirectingService } from '../../../services/generated'
+import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
 import { ObjectAssociationEditor } from './ObjectAssociationEditor'
 import { ResourceEditorDrawer } from '../assets/components/ResourceEditorDrawer'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -16,12 +16,11 @@ import './workbench-object-preparation.css'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 const kinds = { character: '角色', scene: '场所', prop: '道具' } as const
-type ObjectChoice = { objectId: string; assetId?: string; imageFileId?: string; source?: ObjectReferenceSource; autoSelectImage?: boolean }
+type ObjectChoice = { objectId: string; assetId?: string }
 type ManagementActions = {
   host: HTMLDivElement | null; filterHost: HTMLDivElement | null; onChange: () => void;
   candidateTaskId: string | null; clearCandidateTask: () => void;
 }
-const angleLabels: Record<string, string> = { FRONT: '正面', LEFT: '左侧', RIGHT: '右侧', BACK: '背面' }
 const referenceLabels = { unassociated: '尚未关联资产', missing: '未选参考图', ready: '已选参考图', unavailable: '关联或图片不可用' }
 
 function activeTask(data?: SceneObjectsRead) {
@@ -69,7 +68,6 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [submitting, setSubmitting] = useState(false)
   const [savingObject, setSavingObject] = useState<string>()
   const saving = !!savingObject
-  const [angles, setAngles] = useState<Record<string, string>>({})
   const [associationObject, setAssociationObject] = useState<string>()
   const [descriptionObject, setDescriptionObject] = useState<SceneObjectRead>()
   const [assetEditor, setAssetEditor] = useState<AssetSummary>()
@@ -102,8 +100,6 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     try { return localStorage.getItem(requestKey) ?? undefined } catch { return undefined }
   })
   const loadVersion = useRef(0)
-  const fileInput = useRef<HTMLInputElement>(null)
-  const uploadObject = useRef<SceneObjectRead>()
   const scope = { projectId, chapterId, sequenceId }
   const read = useCallback(async () => {
     const generation = ++loadVersion.current
@@ -160,18 +156,16 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     } finally { setSubmitting(false) }
   }
 
-  const choose = async (objectId: string, assetId?: string, imageFileId?: string, source?: ObjectReferenceSource, autoSelectImage?: boolean) => {
+  const choose = async (objectId: string, assetId?: string) => {
     const current = lastRead.current ?? data
     if (!current || !editable) return
-    const changed = (current.objects.find(object => object.id === objectId)?.asset_id ?? undefined) !== assetId
     filterFocus.current = { id: objectId, index: filtered.findIndex(object => object.id === objectId) }
     const response = await StudioDirectingService.directingSceneObjectChoose({ ...scope, objectId,
       requestBody: { expected_revision: current.revision, asset_id: assetId ?? null,
-        auto_select_image: autoSelectImage ?? (!!assetId && changed && !imageFileId), reference_source: source, image_file_id: imageFileId ?? null },
+        },
     })
     if (!response.data) throw new Error('保存结果待核实，请刷新对象准备')
     loadVersion.current++; accept(response.data)
-    if (changed) setAngles(previous => { const next = { ...previous }; delete next[objectId]; return next })
   }
   const reportChoiceError = (objectId: string, message: string, retry?: ObjectChoice) => {
     if (management) setChoiceError({ objectId, message, retry })
@@ -184,42 +178,18 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     let retry: ObjectChoice | undefined
     if (recoverable) {
       const selected = latest?.objects.find(object => object.id === choice.objectId)
-      const expectedImage = choice.autoSelectImage ? latest?.assets.find(asset => asset.id === choice.assetId)?.reference_images?.[0]?.file_id : choice.imageFileId
-      if (selected && (selected.asset_id ?? undefined) === choice.assetId &&
-          (selected.image_file_id ?? undefined) === expectedImage && (!choice.source ||
-            selected.reference_source?.kind === choice.source.kind && selected.reference_source.asset_id === choice.source.asset_id)) return true
+      if (selected && (selected.asset_id ?? undefined) === choice.assetId) return true
       if (!latest || selected) retry = choice
     }
     reportChoiceError(choice.objectId, directingError(cause), retry)
     return false
   }
-  const save = async (objectId: string, assetId?: string, imageFileId?: string, source?: ObjectReferenceSource, autoSelectImage?: boolean) => {
+  const save = async (objectId: string, assetId?: string) => {
     if (!editable || saving) return false
-    const previous = lastRead.current?.objects.find(object => object.id === objectId)
-    const auto = autoSelectImage ?? (!!assetId && previous?.asset_id !== assetId && !imageFileId)
     setSavingObject(objectId); setChoiceError(undefined)
-    try { await choose(objectId, assetId, imageFileId, source, auto); return true }
-    catch (cause) { return await recoverChoice(cause, { objectId, assetId, imageFileId, source, autoSelectImage: auto }) }
+    try { await choose(objectId, assetId); return true }
+    catch (cause) { return await recoverChoice(cause, { objectId, assetId }) }
     finally { setSavingObject(undefined) }
-  }
-
-  const upload = async (object: SceneObjectRead, file: File) => {
-    if (!editable || saving) return
-    if (file.type && !file.type.startsWith('image/')) { reportChoiceError(object.id, '仅支持上传图片文件'); return }
-    let uploaded: string | undefined
-    setSavingObject(object.id); setError(''); setChoiceError(undefined)
-    try {
-      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: {
-        file: file as unknown as string, project_id: projectId, chapter_id: chapterId, usage_kind: 'generation_upload',
-        source_ref: `scene-object:${sequenceId}:${object.id}`,
-      } })
-      if (response.data?.type !== 'image') throw new Error('上传结果不是可用图片')
-      uploaded = response.data.id
-      await choose(object.id, object.asset_id ?? undefined, uploaded)
-    } catch (cause) {
-      if (uploaded) await recoverChoice(cause, { objectId: object.id, assetId: object.asset_id ?? undefined, imageFileId: uploaded })
-      else reportChoiceError(object.id, directingError(cause))
-    } finally { setSavingObject(undefined) }
   }
 
   const createSeed = useMemo(() => draft ? { name: draft.name, description: draft.description } : undefined, [draft])
@@ -270,7 +240,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const choiceErrorOnCard = choiceError && filtered.some(object => object.id === choiceError.objectId)
   const pendingChoice = choiceError?.retry
   const retryChoice = pendingChoice && <MainButton size="small" disabled={disabled} onClick={() => void save(
-    pendingChoice.objectId, pendingChoice.assetId, pendingChoice.imageFileId, pendingChoice.source, pendingChoice.autoSelectImage)}>核对后重试选择</MainButton>
+    pendingChoice.objectId, pendingChoice.assetId)}>核对后重试选择</MainButton>
   const closeDescription = () => {
     const id = descriptionObject?.id
     setDescriptionObject(undefined)
@@ -338,55 +308,27 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
             value: item.id, label: item.name + (item.id === object.suggested_asset_id ? '（提取建议）' : ''),
           }))
           if (object.asset_id && !asset) options.push({ value: object.asset_id, label: '关联资产不可用' })
-          const images = asset?.image_file_ids ?? []
-          const referenceImages = asset?.reference_images ?? []
-          const selectedImage = referenceImages.find(image => image.file_id === object.image_file_id)
-          const source = object.reference_source ?? (selectedImage ? { kind: selectedImage.source_kind, asset_id: selectedImage.source_id } : undefined)
-          const angleImages = source ? referenceImages.filter(image => image.source_kind === source.kind && image.source_id === source.asset_id) : referenceImages
-          const angle = angles[object.id] ?? selectedImage?.view_angle ?? 'FRONT'
-          const anglePicker = asset && referenceImages.length > 0 && <>
-            <Select aria-label="参考视角" size="small" value={angle} disabled={disabled} style={{ width: 90 }}
-              options={Object.entries(angleLabels).map(([value, label]) => ({ value, label }))}
-              onChange={value => {
-                const image = angleImages.find(item => item.view_angle === value && item.is_view_default)
-                void save(object.id, asset.id, image?.file_id, source).then(saved => { if (saved) setAngles(previous => ({ ...previous, [object.id]: value })) })
-              }} />
-            {!object.image_file_id && !angleImages.some(image => image.view_angle === angle) && <small>暂无{angleLabels[angle]}图</small>}
-          </>
           const assetSelect = <Select aria-label="关联资产" allowClear placeholder="关联已有资产" value={object.asset_id ?? undefined}
             disabled={disabled} options={options} onChange={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; void save(object.id, id) }} />
           const referenceFileId = object.reference_state === 'ready' ? object.image_file_id ?? undefined : undefined
           const openCreate = () => {
             setDraft({ object, name: object.name, description: object.description })
           }
-          const openUpload = () => { if (!asset) { openCreate(); return } uploadObject.current = object; fileInput.current?.click() }
           const assetAction = asset ? { key: 'prepare', label: '准备图片', onClick: () => openAsset(asset, object.id) }
             : { key: 'create', label: '新建并关联', onClick: openCreate }
           if (management) {
-            const imageOptions = images.map((id, index) => {
-              const image = referenceImages.find(item => item.file_id === id)
-              const label = image ? ` · ${angleLabels[image.view_angle] ?? '其他角度'} · 对象图` : ''
-              return { key: `file:${id}`,
-                label: <span className="management-reference-option"><img alt="" src={buildFileDownloadUrl(id)} />
-                  <span>参考图 {index + 1}{label}</span>{id === object.image_file_id && <CheckOutlined aria-label="当前已选" />}</span>,
-                onClick: () => void save(object.id, asset?.id, id, image ? { kind: image.source_kind, asset_id: image.source_id } : undefined),
-              }
-            })
             const assetUnavailable = !!object.asset_id && !asset
-            const imageUnavailable = object.image_file_id && object.reference_state === 'unavailable'
-            const referenceAction = object.image_file_id ? '更换参考图' : images.length ? '选择参考图' : '上传参考图'
-            const currentUpload = referenceFileId && !images.includes(referenceFileId) ? [{ key: 'current-upload', disabled: true,
-              label: <span className="management-reference-option"><img alt="" src={buildFileDownloadUrl(referenceFileId)} />当前已选参考图</span>,
-            }] : []
-            const referenceMenu = [...currentUpload, ...imageOptions, { key: 'upload', label: '上传参考图', onClick: openUpload }]
-            const cardActions = [...(asset ? [{ key: 'references', label: '编辑对象参考', onClick: () => openAsset(asset, object.id) }] : []), { key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) }, { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction, ...(object.image_file_id ? [{ key: 'clear-reference', label: '清除参考图', disabled: assetUnavailable,
-              onClick: () => void save(object.id, object.asset_id ?? undefined) }] : [])]
-            const referenceButton = <MainButton size="small" type="text" className="management-reference-action" aria-label={referenceAction} icon={object.image_file_id ? <SwapOutlined /> : images.length ? <PictureOutlined /> : <UploadOutlined />} disabled={disabled || assetUnavailable} loading={savingObject === object.id}
-              onClick={images.length ? undefined : openUpload}>{object.image_file_id ? '更换' : images.length ? '选择' : '上传'}</MainButton>
+            const imageUnavailable = object.reference_state === 'unavailable'
+            const cardActions = [...(asset ? [{ key: 'references', label: '编辑对象参考', onClick: () => openAsset(asset, object.id) }] : []),
+              { key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) },
+              { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction,
+              ...(object.asset_id ? [{ key: 'clear', label: '清空', onClick: () => Modal.confirm({ title: '清空对象选用？',
+                content: '保留对象名称、描述与出处、资源和图片。沿用本场对象的画布将不再有可用资源；已受理任务不变。',
+                okText: '清空', cancelText: '取消', onOk: async () => { if (!await save(object.id)) throw new Error('清空失败，请重试') } }) }] : [])]
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
-                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} controls={anglePicker} />
+                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} />
                   <div className="management-object-body">
                     <div className="management-object-title-row"><h4 title={object.name}>{object.name}</h4><small>{kinds[kind]}</small>
                       <Dropdown autoFocus trigger={['click']} disabled={disabled} menu={{ items: cardActions }}>
@@ -397,13 +339,12 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                     <ObjectAssociationEditor open={associationObject === object.id} onClose={() => {
                       setAssociationObject(undefined)
                       document.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(object.id)}"] button[aria-label="对象更多操作"]`)?.focus({ preventScroll: true })
-                    }} assetId={object.asset_id} hasReference={!!object.image_file_id} disabled={disabled} options={options}
+                    }} assetId={object.asset_id} hasReference={!!object.asset_id} disabled={disabled} options={options}
                       onSave={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; return save(object.id, id) }}
                       anchor={<div className="management-object-association-row"><LinkOutlined aria-hidden />
                         {asset ? <MainButton type="link" title={asset.name} onClick={() => openAsset(asset, object.id)} aria-label={`查看${asset.name}资产`}>{asset.name}<ArrowRightOutlined /></MainButton>
                           : <span>{assetUnavailable ? '关联资产不可用，请更换或解除关联' : '尚未关联资产'}</span>}
-                        {images.length ? <Dropdown autoFocus trigger={['click']} disabled={disabled}
-                          menu={{ items: referenceMenu }}>{referenceButton}</Dropdown> : referenceButton}
+
                       </div>} />
                     {imageUnavailable && <Badge status="warning" text="参考图不可用" />}
 
@@ -423,17 +364,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
               </div>
               <div className="scene-object-choices">
                 {assetSelect}
-                {anglePicker}
                 {asset && <Button disabled={disabled} onClick={() => openAsset(asset, object.id)}>编辑对象参考</Button>}
-                {asset && <Select aria-label="选择参考图" allowClear placeholder="选择参考图" disabled={disabled || !images.length}
-                  value={images.includes(object.image_file_id ?? '') ? object.image_file_id ?? undefined : undefined}
-                  options={images.map((id, index) => ({ value: id, label: `参考图 ${index + 1}` }))}
-                  onChange={id => void save(object.id, asset.id, id)} />}
                 <Space wrap>
-                  {[assetAction, { key: 'upload', label: '上传参考图', onClick: openUpload }]
+                  {[assetAction]
                     .map(({ key, label, onClick }) => <Button key={key} disabled={disabled} onClick={onClick}>{label}</Button>)}
-                  {object.image_file_id && !images.includes(object.image_file_id) &&
-                    <Button variant="quiet" disabled={disabled} onClick={() => void save(object.id, asset?.id)}>清除参考图</Button>}
                   <small>{referenceLabels[object.reference_state]}</small>
                 </Space>
               </div>
@@ -442,11 +376,6 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         })}</ul>
       </section>
     })}
-    <input ref={fileInput} type="file" accept="image/*" hidden onChange={event => {
-      const object = uploadObject.current, file = event.target.files?.[0]
-      event.target.value = ''
-      if (object && file) void upload(object, file)
-    }} />
     {draft && <ResourceEditorDrawer open kind={draft.object.kind} projectId={projectId} seed={createSeed}
       onClose={() => { setDraft(undefined); void read() }} onSaved={async resource => {
         const current = lastRead.current?.objects.find(object => object.id === draft.object.id)

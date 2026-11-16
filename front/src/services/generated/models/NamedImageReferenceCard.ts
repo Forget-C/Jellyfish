@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { OutputIdentity } from './OutputIdentity';
 import type { ReferenceImageBinding } from './ReferenceImageBinding';
+import type { SceneObjectSource } from './SceneObjectSource';
 /**
  * 单张图片、单个映射名称；允许未完成草稿，名称有效后才发布输出。
  */
@@ -16,4 +17,5 @@ export type NamedImageReferenceCard = {
     object_id?: (string | null);
     name_binding?: (OutputIdentity | null);
     image_binding?: (ReferenceImageBinding | null);
+    scene_object_source?: (SceneObjectSource | null);
 };

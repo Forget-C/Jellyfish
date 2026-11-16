@@ -2,10 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ObjectReferenceSource } from './ObjectReferenceSource';
 import type { SourceSpan } from './SourceSpan';
 /**
- * 服务端建立对象身份，并独立保存用户的关联与图片选择。
+ * 服务端建立故事对象身份，独立保存当前项目资源选用。
  */
 export type SceneObjectCandidate = {
     id: string;
@@ -16,7 +15,5 @@ export type SceneObjectCandidate = {
     span: SourceSpan;
     suggested_asset_id?: (string | null);
     asset_id?: (string | null);
-    image_file_id?: (string | null);
-    reference_source?: (ObjectReferenceSource | null);
 };
 
