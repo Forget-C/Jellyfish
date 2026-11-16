@@ -68,6 +68,7 @@ try {
     await page.getByRole('button', { name: /^上传图片/ }).click()
     const form = page.getByRole('dialog', { name: '上传图片创建', exact: true })
     await form.waitFor()
+    await page.waitForFunction(() => { const node = document.querySelector('[role="dialog"][aria-label="上传图片创建"]'); if (!node) return false; const box = node.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth + 1 })
     assert.equal(await form.getByRole('textbox', { name: '名称', exact: true }).inputValue(), storyName)
     assert.equal(await form.getByRole('button', { name: '创建', exact: true }).isDisabled(), true)
     await form.getByRole('textbox', { name: '名称', exact: true }).fill(resourceName)
@@ -79,9 +80,9 @@ try {
     await form.getByRole('img', { name: 'front.png', exact: true }).waitFor()
     await form.getByRole('img', { name: 'side.png', exact: true }).waitFor()
     await form.getByRole('button', { name: '设为主图', exact: true }).click()
-    await form.getByRole('combobox', { name: '图片1视角', exact: true }).press('ArrowDown')
-    await form.getByRole('combobox', { name: '图片1视角', exact: true }).press('ArrowDown')
-    await form.getByRole('combobox', { name: '图片1视角', exact: true }).press('Enter')
+    await form.locator('.resource-upload-item-controls').first().locator('.ant-select-selector').click()
+    await page.locator('.ant-select-dropdown:visible').getByText('侧面', { exact: true }).click()
+    await form.locator('.resource-upload-item-controls').first().getByTitle('侧面', { exact: true }).waitFor()
     let creations = 0, failSelection = true
     await page.route(`**/entities/${kind}/image-source`, route => { creations++; return route.continue() })
     await page.route('**/objects/*', route => {

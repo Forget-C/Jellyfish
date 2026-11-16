@@ -134,6 +134,14 @@ try {
       await page.setViewportSize({width,height})
       if(await page.getByRole('tab',{name:'图片',exact:true}).count())await page.getByRole('tab',{name:'图片',exact:true}).click()
       await page.getByRole('button',{name:/^查看全部/}).waitFor()
+      assert.equal(await page.locator('.project-workbench-content').evaluate(panel => {
+        const body = panel.querySelector('.resource-editor-body')
+        const content = body.firstElementChild
+        return Math.abs(content.getBoundingClientRect().top + panel.scrollTop + body.scrollTop - panel.getBoundingClientRect().top - parseFloat(getComputedStyle(panel).paddingTop)) < 1
+      }), true, `${kind} detail uses only the project content top spacing at ${width}px`)
+      assert.equal(await page.locator('.resource-editor-page-heading > .ant-btn').evaluate(node => getComputedStyle(node).fontSize), '13px')
+      assert.equal(await page.locator('.resource-editor-page-heading .app-page-title').evaluate(node => getComputedStyle(node).fontSize), '16px')
+      assert.equal(await page.locator('.resource-editor-page-actions .ant-btn').first().evaluate(node => getComputedStyle(node).fontSize), '13px')
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false)
       if(width===1440)assert.equal(await page.locator('.resource-editor-body').evaluate(node=>node.scrollHeight<=node.clientHeight+1),true,`${kind} desktop body fits vertically`)
       if(width===1440)assert.equal(await page.locator('.project-workbench-content').evaluate(node=>node.scrollHeight<=node.clientHeight+1),true,`${kind} desktop outer panel fits vertically`)

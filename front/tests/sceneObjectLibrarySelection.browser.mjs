@@ -73,9 +73,9 @@ try {
   await picker.getByRole('button', { name: '选择滚动资源0', exact: true }).waitFor()
   for (const [width, height] of [[1440, 600], [390, 640]]) {
     await page.setViewportSize({ width, height })
-    await page.waitForFunction(() => { const node = document.querySelector('.object-resource-dialog'); return node && getComputedStyle(node).transform === 'none' })
+    await page.waitForFunction(() => { const node = document.querySelector('.resource-selection-drawer'); if (!node) return false; const box = node.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth + 1 })
     const toolbar = picker.locator('.object-resource-picker-toolbar')
-    const footer = picker.locator('.ant-modal-footer')
+    const footer = picker.locator('.app-page-toolbar')
     const before = { toolbar: await toolbar.boundingBox(), footer: await footer.boundingBox() }
     const scroller = picker.locator('.object-resource-picker-content')
     assert.ok(await scroller.evaluate(node => node.scrollHeight > node.clientHeight), 'candidate list overflows naturally')
@@ -84,7 +84,7 @@ try {
     assert.deepEqual(await toolbar.boundingBox(), before.toolbar, 'source and search stay fixed while scrolling')
     assert.deepEqual(await footer.boundingBox(), before.footer, 'confirmation stays fixed while scrolling')
     assert.ok(before.footer.y + before.footer.height <= height, 'footer stays within viewport')
-    assert.ok(await picker.locator('.ant-modal-body').evaluate(node => node.scrollHeight <= node.clientHeight + 1), 'no outer body scroll')
+    assert.ok(await picker.locator('.ant-drawer-body').evaluate(node => node.scrollHeight <= node.clientHeight + 1), 'no outer body scroll')
     await page.screenshot({ path: join(output, `picker-scroll-${width}.png`), animations: 'disabled' })
     await scroller.evaluate(node => { node.scrollTop = 0 })
   }
@@ -99,6 +99,10 @@ try {
   await page.keyboard.press('Escape')
   await page.locator('.ant-image-preview-close:visible').waitFor({ state: 'hidden' })
   await picker.waitFor()
+  await picker.getByRole('button', { name: '返回', exact: true }).click()
+  const leave = page.getByRole('dialog', { name: '离开资产详情', exact: true })
+  await leave.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await leave.waitFor({ state: 'hidden' })
   await picker.getByRole('button', { name: '导入并选用', exact: true }).click()
   await picker.waitFor({ state: 'hidden' })
   const chosen = (await read()).objects.find(item => item.excerpt === '前门的阿同')
@@ -120,7 +124,9 @@ try {
   await same.getByRole('button', { name: '选择阿同', exact: true }).nth(1).click()
   await same.getByText('来源没有有效图片，无法导入。').waitFor()
   assert.equal(await same.getByRole('button', { name: '导入并选用', exact: true }).isDisabled(), true)
-  await same.getByRole('button', { name: /取\s*消/ }).click()
+  await same.getByRole('button', { name: '返回', exact: true }).click()
+  await page.getByRole('dialog', { name: '离开资产详情', exact: true }).getByRole('button', { name: '放弃修改并离开', exact: true }).click()
+  await same.waitFor({ state: 'hidden' })
   // Existing project name is not overwritten; rename the independent copy explicitly.
   await back.getByRole('button', { name: '选用', exact: true }).click()
   await page.locator('.object-resource-picker:visible .ant-segmented').getByText('资产库', { exact: true }).click()
@@ -155,6 +161,6 @@ try {
   await picker.getByTitle('下一页').click()
   await picker.locator('.ant-pagination-item-active').getByText('2', { exact: true }).waitFor()
   await picker.getByRole('button', { name: /^选择库分页/ }).first().waitFor()
-  await picker.getByRole('button', { name: /取\s*消/ }).click()
+  await picker.getByRole('button', { name: '返回', exact: true }).click()
   console.log('library import and selection passed')
 } catch (error) { if (page) await page.screenshot({ path: join(output, 'failure.png') }); throw error } finally { await cleanup() }

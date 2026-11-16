@@ -63,8 +63,9 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     }
   }, [drawer, open])
   const positioned = !!bounds
-  const width = bounds ? Math.min(drawerWidth ?? bounds.width, bounds.width) : 0
-  const left = bounds ? bounds.right - width : 0
+  const width = bounds ? Math.min(drawerWidth ?? bounds.width, bounds.width, document.documentElement.clientWidth) : 0
+  // Responsive navigation can briefly move the anchor outside the viewport without changing its width.
+  const left = bounds ? Math.max(0, Math.min(bounds.right, document.documentElement.clientWidth) - width) : 0
   useEffect(() => {
     if (drawer && open && positioned) panel.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
   }, [drawer, open, positioned])

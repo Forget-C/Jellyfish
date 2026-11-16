@@ -20,18 +20,18 @@
 .resource-reference-grid > div { min-width: 0; }
 .resource-reference-grid .ant-image img { max-height: 320px; object-fit: contain; }
 .resource-editor-page { min-width: 0; }
-.resource-editor-page > .app-page-toolbar { gap: 12px; min-height: 56px; flex-shrink: 0; }
+.resource-editor-page > .app-page-toolbar { gap: 12px; min-height: 56px; padding: 10px var(--app-page-gutter, 20px); flex-shrink: 0; }
 .resource-editor-page-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.resource-editor-page-heading .app-page-title { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resource-editor-page-heading .app-page-title { font-size: 16px; line-height: 24px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .resource-editor-page-actions { margin-left: auto; min-width: 0; }
-.resource-editor-body { padding: 20px; }
+.resource-editor-body { padding: 16px var(--app-page-gutter, 20px); }
 .resource-editor-inline > .app-page-toolbar { position: sticky; top: 0; z-index: 3; }
 .resource-editor-inline > .resource-editor-body { padding: 16px 0; }
 .resource-editor-page .resource-editor-desktop > div { padding: 16px; background: white; border-radius: 12px; }
 @media (max-width: 767px) {
   .resource-editor-page > .app-page-toolbar { flex-wrap: wrap; }
   .resource-editor-page-actions { width: 100%; margin-left: 0; }
-  .resource-editor-body { padding: 16px; }
+  .resource-editor-body { padding: 12px var(--app-page-gutter, 16px); }
 }
 
 /* 与页面共用背景定义；整张视口渐变在右边缘对齐，避免抽屉内重启渐变。 */
@@ -66,4 +66,11 @@
   .resource-editor-drawer .app-page-toolbar { padding-inline: 16px; }
   .resource-editor-drawer .resource-editor-page-heading { width: 100%; }
   .resource-editor-drawer .resource-editor-page-actions { width: 100%; }
+}
+
+/* Toolbar content is also portaled into the project toolbar. */
+.resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { font-size: 13px; min-height: 32px; border-radius: 8px; }
+.resource-editor-page-heading > .ant-tag { font-size: 12px; }
+@media (max-width: 767px) {
+  .resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { min-height: 36px; }
 }

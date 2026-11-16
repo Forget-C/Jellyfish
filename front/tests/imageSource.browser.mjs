@@ -194,6 +194,22 @@ try {
   if(kind==='actor'){
    await page.waitForFunction(()=>{const cover=document.querySelector('[aria-label="选择可导入资源"] img');return cover?.complete && cover.naturalWidth>0})
    assert.equal(await form.getByRole('button',{name:'导入',exact:true}).isDisabled(),true)
+   assert.equal(await form.getByRole('button',{name:'选择可导入资源',exact:true}).locator('.resource-card-metadata').count(),1)
+   for(const width of [1440,375]){
+    await page.setViewportSize({width,height:812})
+    await page.waitForFunction(()=>{const panel=document.querySelector('[role="dialog"][aria-label="从资产库导入"]').getBoundingClientRect();return panel.left>=0 && panel.right<=innerWidth+1})
+    const searchBox=form.getByRole('textbox',{name:'搜索来源资产',exact:true})
+    const before=await searchBox.boundingBox()
+    const scroll=form.locator('.resource-import-content')
+    assert.ok(await scroll.evaluate(node=>node.scrollHeight>node.clientHeight),'source cards overflow in the content region')
+    await scroll.evaluate(node=>{node.scrollTop=node.scrollHeight})
+    assert.ok(await scroll.evaluate(node=>node.scrollTop>0))
+    assert.deepEqual(await searchBox.boundingBox(),before,'search stays fixed while candidates scroll')
+    assert.ok(await form.locator('.ant-drawer-body').evaluate(node=>node.scrollHeight<=node.clientHeight+1),'drawer has no second scroll region')
+    await page.screenshot({path:output+`/import-scroll-${width}.png`,animations:'disabled'})
+    await scroll.evaluate(node=>{node.scrollTop=0})
+   }
+   await page.setViewportSize({width:1440,height:900})
    await page.screenshot({path:output+'/import-picker-desktop.png',animations:'disabled'})
    await form.getByTitle('2',{exact:true}).click()
    await form.getByRole('button',{name:'选择图库资源13',exact:true}).waitFor()

@@ -306,6 +306,12 @@ try {
       if(width>=1200 && height>=740) assert.ok(await dialog.locator('.resource-editor-body').evaluate(node=>node.scrollHeight<=node.clientHeight+1),`${type} ${width}x${height} desktop fits vertically` )
       assert.equal(await page.locator('.resource-editor-drawer').count(),0,'详情在页面正文，无抽屉及遮罩')
       assert.equal(layout.titleSize, '16px')
+      assert.equal(await dialog.locator('.resource-editor-page-heading > .ant-btn').evaluate(node => getComputedStyle(node).fontSize), '13px')
+      assert.equal(await dialog.locator('.resource-editor-page-actions .ant-btn').first().evaluate(node => getComputedStyle(node).fontSize), '13px')
+      assert.equal(await dialog.locator('.resource-editor-body').evaluate(node => {
+        const toolbar = node.previousElementSibling.getBoundingClientRect()
+        return Math.round(node.firstElementChild.getBoundingClientRect().top + node.scrollTop - toolbar.bottom)
+      }), width <= 767 ? 12 : 16, 'library detail toolbar-to-content spacing')
       if (width < 1200 || height < 740) await dialog.getByRole('tab', { name: '图片', exact: true }).click()
       {
         const viewAll = dialog.getByRole('button',{name:/^查看全部/})
