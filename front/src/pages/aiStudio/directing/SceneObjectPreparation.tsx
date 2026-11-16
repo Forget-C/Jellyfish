@@ -5,6 +5,7 @@ import { MoreOutlined, InfoCircleOutlined, ScanOutlined, DiffOutlined, ReloadOut
 import { ApiError, StudioDirectingService, StudioEntitiesService } from '../../../services/generated'
 import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
 import { ObjectAssociationEditor } from './ObjectAssociationEditor'
+import { ResourceCreateButton } from '../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../assets/components/ResourceEditorDrawer'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
@@ -356,7 +357,9 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
                     <div className="management-object-actions-row">
                       {!object.asset_id && sameNames[object.id] && <Button variant="primary" disabled={disabled} onClick={() => { setSameNameOnly(true); setAssociationObject(object.id) }}>选用同名</Button>}
                       <Button disabled={disabled} onClick={() => { setSameNameOnly(false); setAssociationObject(object.id) }}>{object.asset_id ? '重新选用' : '选用'}</Button>
-                      <Button variant={!object.asset_id && sameNames[object.id] ? 'secondary' : 'primary'} disabled={disabled} onClick={openCreate}>{object.asset_id ? '重新创建' : '创建'}</Button>
+                      <ResourceCreateButton kind={kind} projectId={projectId} projectUpload initialName={object.name} onCreate={openCreate} onCreated={async resourceId => {
+                        if (!await save(object.id, resourceId)) throw new Error('资源已创建，选用尚未完成，请重试')
+                      }}><Button variant={!object.asset_id && sameNames[object.id] ? 'secondary' : 'primary'} disabled={disabled}>{object.asset_id ? '重新创建' : '创建'}</Button></ResourceCreateButton>
                       {!object.asset_id && sameNames[object.id] === undefined && <small role="status">{sameNameError ? <MainButton type="text" onClick={() => setSameNameRetry(value => value + 1)}>重试同名查询</MainButton> : '同名查询中'}</small>}
                     </div>
                     <ObjectAssociationEditor open={associationObject === object.id} projectId={projectId} kind={kind} objectName={object.name} sameName={sameNameOnly}
@@ -397,7 +400,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         if (current?.asset_id !== resource.id && !await save(draft.object.id, resource.id)) throw new Error('对象已保存，场次关联尚未完成，请重试')
       }} />}
     </section>
-    {assetEditor && <div className="management-inline-asset"><ResourceEditorDrawer inline open kind={assetEditor.kind} assetId={assetEditor.id} projectId={projectId}
+    {assetEditor && <div className="management-inline-asset"><ResourceEditorDrawer inline fullDetails open kind={assetEditor.kind} assetId={assetEditor.id} projectId={projectId}
       onClose={() => void closeAsset()} onSaved={async () => { await read() }} /></div>}
   </>
 }

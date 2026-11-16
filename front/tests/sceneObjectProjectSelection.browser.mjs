@@ -100,6 +100,7 @@ try {
   await picker.getByRole('button', { name: /取\s*消/ }).click()
   assert.equal((await read()).objects.find(item => item.excerpt === '后门的阿同').asset_id, 'same-name-role')
   await back.getByRole('button', { name: '重新创建', exact: true }).click()
+  await page.getByRole('button', { name: /^填写设定/ }).click()
   const creation = page.getByRole('dialog', { name: '新建角色', exact: true })
   await creation.getByRole('textbox', { name: '名称', exact: true }).waitFor()
   assert.equal(await creation.getByRole('textbox', { name: '名称', exact: true }).inputValue(), '阿同')

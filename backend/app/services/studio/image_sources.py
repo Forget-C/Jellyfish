@@ -6,7 +6,7 @@ from uuid import NAMESPACE_URL, uuid5
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.studio import FileItem, Project
+from app.models.studio import FileItem, FileUsage, Project
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type, LINK_MODEL_BY_ENTITY
 from app.services.studio.entity_crud import flush_resource, get_entity
 from app.services.studio.files import require_available_file
@@ -62,8 +62,11 @@ async def create_image_source(db, *, entity_type, request):
             return previous
         if source is None or source.project_id is not None:
             raise HTTPException(404, "请选择资产库中的对应资源")
-    elif entity_type == "character" or request.project_id:
-        raise HTTPException(422, "上传创建仅适用于资产库")
+    elif request.project_id:
+        if entity_type not in {"character", "scene", "prop"}:
+            raise HTTPException(422, "项目上传仅支持角色、场景和道具")
+    elif entity_type == "character":
+        raise HTTPException(422, "角色上传需要项目")
     if request.project_id and await db.get(Project, request.project_id) is None:
         raise HTTPException(404, "项目不存在")
     rows = await source_images(db, source_spec, source.id) if request.source_id else []
@@ -73,6 +76,9 @@ async def create_image_source(db, *, entity_type, request):
         for image in request.images:
             try:
                 await require_available_file(db, file_id=image.file_id, expected_type="image")
+                if request.project_id and not await db.scalar(select(FileUsage.id).where(
+                        FileUsage.file_id == image.file_id, FileUsage.project_id == request.project_id).limit(1)):
+                    raise HTTPException(422, "上传图片不属于当前项目")
             except HTTPException:
                 previous = await read_retry(db, spec, entity_type, request.id, fingerprint)
                 if previous is not None:

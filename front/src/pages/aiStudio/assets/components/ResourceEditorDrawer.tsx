@@ -35,14 +35,14 @@ type Picture = { id: number; file_id?: string | null; view_angle?: string; is_pr
 type GenerationState = { taskId?: string; status: string; error?: string; slotId?: number; candidate?: boolean; originalFile?: string }
 export type Resource = AssetFacts & { id: string; name: string; description?: string; references?: AssetPromptReference[]; project_id?: string | null; source_character_id?: string | null; details_editable?: boolean; library_copy_id?: string | null; origin?: string; source_kind?: string | null; source_id?: string | null }
 type Props = {
-  inline?: boolean; renderToolbar?: (children: ReactNode) => ReactNode
+  inline?: boolean; fullDetails?: boolean; renderToolbar?: (children: ReactNode) => ReactNode
   open: boolean; kind: ResourceKind; projectId?: string; assetId?: string; initialPage?: 'editor' | 'publish'
   seed?: { name?: string; description?: string; visual_style?: '现实' | '动漫'; style?: string }
   onClose: () => void; onSaved?: (resource: Resource) => void | Promise<void>
 }
 
 /** 新建和详情共用对象草稿，生成设置只保留在本次打开的编辑器内。 */
-export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onClose, onSaved, initialPage = 'editor', inline, renderToolbar }: Props) {
+export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onClose, onSaved, initialPage = 'editor', inline, fullDetails = false, renderToolbar }: Props) {
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px)')
@@ -72,7 +72,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const [page, setPage] = useState<'editor' | 'generation' | 'references' | 'adopt' | 'publish'>(initialPage)
   const isDrawer = !assetId || initialPage === 'publish' && page === 'publish'
   const drawerId = useId()
-  const fullDetail = (!assetId || !inline) && initialPage === 'editor'
+  const fullDetail = (!assetId || !inline || fullDetails) && initialPage === 'editor'
   const [drawerBody, setDrawerBody] = useState<HTMLElement | null>(null)
   const [detailCompact, setDetailCompact] = useState(() => window.matchMedia('(max-width:1199px), (max-height:739px)').matches)
   useEffect(() => {

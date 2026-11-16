@@ -141,6 +141,7 @@ class CharacterUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    details_editable: bool | None = None
     name: str | None = None
     description: str | None = None
     style: ProjectStyle | None = None
@@ -148,6 +149,7 @@ class CharacterUpdate(BaseModel):
 
 
 class CharacterRead(SourceInfo, CharacterBase):
+    details_editable: bool = False
     created_at: datetime | None = None
     style: ProjectStyle | None = None
     visual_style: ProjectVisualStyle | None = None

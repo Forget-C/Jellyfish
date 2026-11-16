@@ -12,8 +12,8 @@ import type { ResourceKind } from './ResourceEditorDrawer'
 import './resourceCreate.css'
 
 /** 选择方式不创建对象；上传与导入共用独立的抽屉会话。 */
-export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, children }: {
-  kind: ResourceKind; projectId?: string; onCreate: () => void; onCreated: () => void | Promise<unknown>; children: ReactNode
+export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, children, projectUpload = false, initialName }: {
+  kind: ResourceKind; projectId?: string; onCreate: () => void; onCreated: (resourceId: string) => void | Promise<unknown>; children: ReactNode; projectUpload?: boolean; initialName?: string
 }) {
   const [choosing, setChoosing] = useState(false)
   const [imagesOpen, setImagesOpen] = useState(false)
@@ -24,9 +24,9 @@ export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, chi
     if (event.key === 'Escape') { event.stopPropagation(); setChoosing(false); trigger.current?.querySelector('button')?.focus() }
   }}>
     <button onClick={() => { setChoosing(false); onCreate() }}><FileAddOutlined aria-hidden /><strong>填写设定</strong><span>填写对象信息并创建</span></button>
-    <button onClick={() => { setChoosing(false); setImagesOpen(true) }}>{projectId ? <ImportOutlined aria-hidden /> : <UploadOutlined aria-hidden />}<strong>{projectId ? '从资产库导入' : '上传图片'}</strong><span>{projectId ? '创建独立项目副本' : '以图片创建资源'}</span></button>
+    <button onClick={() => { setChoosing(false); setImagesOpen(true) }}>{projectId && !projectUpload ? <ImportOutlined aria-hidden /> : <UploadOutlined aria-hidden />}<strong>{projectId && !projectUpload ? '从资产库导入' : '上传图片'}</strong><span>{projectId && !projectUpload ? '创建独立项目副本' : '以图片创建资源'}</span></button>
   </div>}><span ref={trigger} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setChoosing(false); trigger.current?.querySelector('button')?.focus() } }}>{children}</span></Popover>
-    {imagesOpen && <ImageSourceDrawer kind={kind} projectId={projectId} onClose={close} onCreated={onCreated} />}
+    {imagesOpen && <ImageSourceDrawer kind={kind} projectId={projectId} projectUpload={projectUpload} initialName={initialName} onClose={close} onCreated={onCreated} />}
   </>
 }
 
@@ -34,9 +34,10 @@ type UploadRow = { id: string; file: File; angle: string; fileId?: string; uploa
 type LibrarySource = { id: string; name: string; thumbnail?: string | null }
 const sourcePageSize = 12
 const views = [{ value: 'FRONT', label: '正面' }, { value: 'LEFT', label: '侧面' }, { value: 'TOP', label: '俯视' }, { value: 'BACK', label: '背面' }]
-function ImageSourceDrawer({ kind, projectId, onClose, onCreated }: { kind: ResourceKind; projectId?: string; onClose: () => void; onCreated: () => void | Promise<unknown> }) {
+function ImageSourceDrawer({ kind, projectId, onClose, onCreated, projectUpload = false, initialName }: { kind: ResourceKind; projectId?: string; onClose: () => void; onCreated: (resourceId: string) => void | Promise<unknown>; projectUpload?: boolean; initialName?: string }) {
+  const importing = !!projectId && !projectUpload
   const id = useId(), requestId = useRef(crypto.randomUUID())
-  const [name, setName] = useState(''), [query, setQuery] = useState('')
+  const [name, setName] = useState(initialName ?? ''), [query, setQuery] = useState('')
   const [preview, setPreview] = useState<string>()
   const [sources, setSources] = useState<LibrarySource[]>([])
   const [page, setPage] = useState(1), [total, setTotal] = useState(0)
@@ -51,19 +52,19 @@ function ImageSourceDrawer({ kind, projectId, onClose, onCreated }: { kind: Reso
   const [error, setError] = useState(''), [closeRequested, setCloseRequested] = useState(false)
   const active = useRef(true), lock = useRef(false), accepted = useRef(false)
   const sourceKind = kind === 'character' ? 'actor' : kind
-  const dirty = !accepted.current && (!!name || rows.length > 0 || !!sourceId)
+  const dirty = !accepted.current && (name !== (initialName ?? '') || rows.length > 0 || !!sourceId)
   const uploading = rows.some(row => row.uploading)
   const loading = sourcesLoading || picturesLoading
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   useEffect(() => {
-    if (!projectId) return
+    if (!importing) return
     let current = true
     setSourcesLoading(true); setSourceError('')
     void StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({ entityType: sourceKind, q: query, page, pageSize: sourcePageSize })
       .then(response => { if (current) { setSources((response.data?.items ?? []) as LibrarySource[]); setTotal(response.data?.pagination.total ?? 0) } })
       .catch(cause => { if (current) setSourceError(directingError(cause)) }).finally(() => { if (current) setSourcesLoading(false) })
     return () => { current = false }
-  }, [projectId, sourceKind, query, page, sourceRetry])
+  }, [projectId, importing, sourceKind, query, page, sourceRetry])
   useEffect(() => {
     if (!sourceId) return
     let current = true
@@ -75,37 +76,37 @@ function ImageSourceDrawer({ kind, projectId, onClose, onCreated }: { kind: Reso
   const upload = async (row: UploadRow) => {
     setRows(current => current.map(item => item.id === row.id ? { ...item, uploading: true, error: undefined } : item))
     try {
-      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: row.file as unknown as string } })
+      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: row.file as unknown as string, ...(projectUpload ? { project_id: projectId, usage_kind: 'generation_upload' } : {}) } })
       if (!response.data?.id) throw new Error('上传未返回图片')
       if (active.current) setRows(current => current.map(item => item.id === row.id ? { ...item, uploading: false, fileId: response.data!.id } : item))
     } catch (cause) { if (active.current) setRows(current => current.map(item => item.id === row.id ? { ...item, uploading: false, error: directingError(cause) } : item)) }
   }
   const save = async () => {
     if (lock.current || uploading || loading) return false
-    if (!accepted.current && (!name.trim() || (projectId ? !sourceId || !pictures.length : !rows.length || rows.some(row => !row.fileId)))) { setError('请填写名称并准备至少一张有效图片；失败项须重试或移除'); return false }
+    if (!accepted.current && (!name.trim() || (importing ? !sourceId || !pictures.length : !rows.length || rows.some(row => !row.fileId)))) { setError('请填写名称并准备至少一张有效图片；失败项须重试或移除'); return false }
     lock.current = true; setBusy(true); setError('')
     try {
       if (!accepted.current) {
         const requestBody: ImageSourceRequest = { id: requestId.current, name: name.trim(), project_id: projectId,
-          ...(projectId ? { source_id: sourceId } : { images: rows.map(row => ({ file_id: row.fileId!, view_angle: row.angle })) }) }
+          ...(importing ? { source_id: sourceId } : { images: rows.map(row => ({ file_id: row.fileId!, view_angle: row.angle })) }) }
         await StudioEntitiesService.createImageSourceEntityApiV1StudioEntitiesEntityTypeImageSourcePost({ entityType: kind, requestBody })
         accepted.current = true
       }
-      await onCreated()
+      await onCreated(requestId.current)
       return true
-    } catch (cause) { setError((accepted.current ? '资源已创建，列表刷新失败；重试不会重复创建。' : '') + directingError(cause)); return false }
+    } catch (cause) { setError((accepted.current ? projectUpload ? '资源已创建，选用或刷新失败；重试不会重复创建。' : '资源已创建，列表刷新失败；重试不会重复创建。' : '') + directingError(cause)); return false }
     finally { lock.current = false; setBusy(false) }
   }
   const host = useWorkspaceDraftStatus()
-  useWorkspaceDraft({ name: projectId ? '导入资源' : '上传资源', dirty, busy: busy || uploading, save, discard: onClose })
+  useWorkspaceDraft({ name: importing ? '导入资源' : '上传资源', dirty, busy: busy || uploading, save, discard: onClose })
   const close = () => { if (dirty || busy || uploading) setCloseRequested(true); else onClose() }
-  return <><ResourceEditorFrame id={id} open drawer drawerWidth={projectId ? 720 : 600} title={projectId ? '从资产库导入' : '上传图片创建'} backLabel="返回" onClose={close}
-    actions={<Button aria-label={accepted.current ? '重试刷新' : projectId ? '导入' : '创建'} type="primary" loading={busy} disabled={uploading || loading || !accepted.current && (!name.trim() || (projectId ? !sourceId || !pictures.length || !!pictureError : !rows.length || rows.some(row => !row.fileId)))} onClick={async () => { if (await save()) onClose() }}>{accepted.current ? '重试刷新' : projectId ? '导入' : '创建'}</Button>}>
-    <div className={`resource-editor-fields ${projectId ? 'resource-import-form' : 'resource-upload-form'}`}>
-      {!projectId && <label>名称<Input aria-label="名称" maxLength={255} value={name} disabled={busy || accepted.current} onChange={event => setName(event.target.value)} /></label>}
-      {projectId && <p>复制全部有效图片，后续修改与资产库独立保存。</p>}
+  return <><ResourceEditorFrame id={id} open drawer drawerWidth={importing ? 720 : 600} title={importing ? '从资产库导入' : '上传图片创建'} backLabel="返回" onClose={close}
+    actions={<Button aria-label={accepted.current ? projectUpload ? '重试选用' : '重试刷新' : importing ? '导入' : '创建'} type="primary" loading={busy} disabled={uploading || loading || !accepted.current && (!name.trim() || (importing ? !sourceId || !pictures.length || !!pictureError : !rows.length || rows.some(row => !row.fileId)))} onClick={async () => { if (await save()) onClose() }}>{accepted.current ? projectUpload ? '重试选用' : '重试刷新' : importing ? '导入' : '创建'}</Button>}>
+    <div className={`resource-editor-fields ${importing ? 'resource-import-form' : 'resource-upload-form'}`}>
+      {!importing && <label>名称<Input aria-label="名称" maxLength={255} value={name} disabled={busy || accepted.current} onChange={event => setName(event.target.value)} /></label>}
+      {importing && <p>复制全部有效图片，后续修改与资产库独立保存。</p>}
       {error && <Alert type="error" message={error} />}
-      {projectId ? <>
+      {importing ? <>
         <Input.Search aria-label="搜索来源资产" placeholder="搜索资产名称或描述" allowClear onSearch={value => { setQuery(value.trim()); setPage(1) }} onChange={event => { if (!event.target.value) { setQuery(''); setPage(1) } }} disabled={busy || accepted.current} />
         <div className="resource-upload-heading"><strong>选择来源资产</strong><span>{sourcesLoading ? '正在读取…' : `共 ${total} 项`}</span></div>
         {sourcesLoading ? <Skeleton active title={false} paragraph={{ rows: 3 }} /> : sourceError ? <Alert type="error" message={sourceError} action={<Button onClick={() => setSourceRetry(value => value + 1)}>重试来源</Button>} /> : sources.length ? <>
@@ -142,6 +143,7 @@ function ImageSourceDrawer({ kind, projectId, onClose, onCreated }: { kind: Reso
             if (!row) return node
             return <div className="resource-upload-item">{node}<div className="resource-upload-item-controls">
               {index === 0 && <Tag>主图</Tag>}
+              {projectUpload && index > 0 && <Button size="small" disabled={busy || accepted.current} onClick={() => setRows(current => [row, ...current.filter(item => item.id !== row.id)])}>设为主图</Button>}
               <label>视角<Select aria-label={`图片${index + 1}视角`} value={row.angle} options={views} disabled={busy || accepted.current} onChange={angle => setRows(current => current.map(item => item.id === row.id ? { ...item, angle } : item))} /></label>
               {row.error && <Button size="small" disabled={busy || accepted.current} onClick={() => void upload(row)}>重试上传</Button>}
               <Button type="text" size="small" disabled={busy || row.uploading || accepted.current} onClick={() => setRows(current => current.filter(item => item.id !== row.id))}>移除</Button>
