@@ -1,6 +1,6 @@
 # 对象参考卡片与资源选用设计
 
-状态：2026-11-16 已确认，尚未实现。本文记录目标行为，不代表当前页面或接口已支持；本轮仅确认方案并维护文档，未授权据此直接执行数据清理。
+状态：2026-11-16 功能已实现并通过集成验收；存量转换工具与隔离验证完成，实际库转换待精确计划确认。本文保留设计约束，实际转换未执行，不代表旧数据已处理。
 
 领域边界见[术语表](../../../GLOSSARY.md)、[场次对象身份引用决策](../adr/0009-scene-object-resource-references.md)及[独立项目导入决策](../adr/0008-image-source-resources-and-project-imports.md)。当前页面规范见[项目内部页规范](../standards/project-internal-ui.md)，当前业务实现见[场次工作台架构](../architecture/directing-foundation.md)。
 

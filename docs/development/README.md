@@ -20,7 +20,7 @@
 - [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
 - [场次设计、生产与交付设计](design/scene-production.md)
 - [场次工作台与共同画布设计](design/shared-canvas-workbench.md)
-- [对象参考卡片与资源选用设计（已确认，尚未实现）](design/scene-object-resource-selection.md)
+- [对象参考卡片与资源选用设计](design/scene-object-resource-selection.md)
 - [生成画布首版检查项目录](design/generation-canvas-check-catalog.md)
 - [ComfyUI 多结果与局部执行调研](design/research/comfyui-canvas-research.md)
 
@@ -52,7 +52,7 @@
 - [项目角色身份与共享资产复用](adr/0006-project-character-and-shared-assets.md)
 - [项目专属资源与独立入库副本（完整方案已最终确认，尚未实施）](adr/0007-project-resource-ownership-and-library-copies.md)
 - [图片来源资源与独立项目导入](adr/0008-image-source-resources-and-project-imports.md)
-- [场次对象身份引用与生产用图分离（已确认，尚未实现）](adr/0009-scene-object-resource-references.md)
+- [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
 
 ## 开发与维护指南
 
