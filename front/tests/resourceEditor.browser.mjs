@@ -103,6 +103,8 @@ try {
       const toolbar = node.querySelector('.app-page-toolbar').getBoundingClientRect()
       return {overflow:node.scrollWidth > node.clientWidth + 1, width:rect.width,x:rect.x,y:rect.y,height:rect.height,toolbarBottom:toolbar.bottom,contentWidth:content.width,aligned:Math.abs(content.x-header.x)<1 && toolbar.y===rect.y}
     })
+    assert.equal(await drawer.locator('.ant-drawer-body').evaluate(node => getComputedStyle(node).paddingTop), width <= 767 ? '12px' : '16px')
+    assert.equal(await drawer.locator('.resource-editor-page-heading > .ant-btn').evaluate(node => getComputedStyle(node).fontSize), '13px')
     assert.equal(layout.overflow,false)
     assert.equal(layout.width, width - (width >= 1024 ? 216 : 0))
     const region = await page.locator('.management-content').boundingBox()

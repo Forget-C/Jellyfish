@@ -269,7 +269,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }
   const descriptionContent = descriptionObject && <div className="management-object-description-content"><p>{descriptionObject.description || '未填写描述'}</p><p>出处：{descriptionObject.excerpt || '暂无出处'}</p></div>
   return <>
-    {compact ? <Drawer aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
+    {compact ? <Drawer className="app-detail-drawer" aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
       : <Modal title="描述与出处" open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
     <section hidden={!!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>

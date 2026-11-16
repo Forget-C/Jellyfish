@@ -50,7 +50,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
     if (quickEntry && matched && task?.status === 'succeeded' && task.candidate &&
       !task.pending_application && !task.repair_details && !task.structure_issues?.length && !task.retry_of_task_id && ownership.editable && !editor.recovery && !editor.conflict) void enter()
   })
-  return <Drawer open aria-label="处理分镜提取结果" title="处理分镜提取结果" width="min(720px, 100vw)" onClose={onClose}
+  return <Drawer className="app-detail-drawer" open aria-label="处理分镜提取结果" title="处理分镜提取结果" width="min(720px, 100vw)" onClose={onClose}
     footer={<div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
       <Button onClick={onClose}>暂不处理</Button><div ref={setActionHost} />
     </div>}>

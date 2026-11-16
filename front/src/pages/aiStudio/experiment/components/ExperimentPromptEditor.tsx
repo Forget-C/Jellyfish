@@ -128,7 +128,7 @@ function TemplateVariableEditor({ template, values, disabled, onApply, onUseFree
       </div>
       <Drawer
         title={<span ref={labelDialog} id={titleId}>编辑模板变量</span>}
-        rootClassName="experiment-template-drawer"
+        rootClassName="experiment-template-drawer app-detail-drawer"
         width="var(--experiment-template-drawer-width)"
         open={panelValues !== null}
         onClose={closePanel}

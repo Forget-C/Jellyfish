@@ -88,7 +88,7 @@ export function HomeRecentAssets() {
       </header>
       <div className="home-assets-inline"><AssetCards onSelect={setPreview} /></div>
     </section>
-    <Drawer title="最近资产" width="min(560px, 100vw)" open={drawerOpen} onClose={() => setDrawerOpen(false)} className="home-assets-drawer">
+    <Drawer title="最近资产" width="min(560px, 100vw)" open={drawerOpen} onClose={() => setDrawerOpen(false)} className="home-assets-drawer app-detail-drawer">
       <p><span className="home-sample-label">示例数据</span></p>
       <AssetCards onSelect={setPreview} />
     </Drawer>

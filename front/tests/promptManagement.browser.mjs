@@ -1,3 +1,4 @@
+import { assertDetailDrawerLayout } from './detailLayout.assertions.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -87,6 +88,7 @@ try {
   await name.press('Enter')
   const drawer = page.getByRole('dialog').filter({ hasText: '模板阅读' })
   await drawer.getByRole('heading', { name: template.name }).waitFor()
+  await assertDetailDrawerLayout(drawer)
   await drawer.getByRole('button', { name: /Close|关闭/ }).press('Escape')
   await drawer.waitFor({ state: 'hidden' })
   await name.and(page.locator(':focus')).waitFor()

@@ -1,4 +1,7 @@
 :root {
+  --app-detail-content-gap: 16px;
+  --app-detail-inline-padding: 20px;
+  --app-detail-control-height: 32px;
   --app-inspector-width: 344px;
   --app-border: #e5eaf0;
 }
@@ -128,3 +131,14 @@
 @media (min-width: 1640px) { .app-shell { --app-object-card-columns: 5; } }
 @media (min-width: 1760px) { .app-shell { --app-canvas-card-columns: 4; } }
 @media (min-width: 1880px) { .app-shell { --app-object-card-columns: 6; } }
+
+/* Ordinary detail drawers opt in; navigation and canvas panels keep their own layout. */
+.app-detail-drawer .ant-drawer-header { min-height:56px; padding:10px var(--app-detail-inline-padding); }
+.app-detail-drawer .ant-drawer-title { font-size:16px; font-weight:600; line-height:24px; }
+.app-detail-drawer .ant-drawer-header .ant-btn,
+.app-detail-drawer .ant-drawer-footer .ant-btn { font-size:13px; min-height:var(--app-detail-control-height); border-radius:8px; }
+.app-detail-drawer .ant-drawer-close { width:var(--app-detail-control-height); height:var(--app-detail-control-height); margin-inline-end:8px; }
+.app-detail-drawer .ant-drawer-body { padding:var(--app-detail-content-gap) var(--app-detail-inline-padding); }
+@media (max-width:767px) {
+  :root { --app-detail-content-gap:12px; --app-detail-inline-padding:16px; --app-detail-control-height:36px; }
+}

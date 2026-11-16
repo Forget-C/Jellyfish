@@ -63,7 +63,7 @@ export function PromptReader({ prompt, workspace, active = true, inline = false,
     <p className="design-secondary">{view === 'readable' ? '名称和字段已转换；实际提交以模型原文为准。未识别的内容保留原文。' : '这是提交给模型的指令文本；图片与参数请查看固定输入。'}点击有下划线的片段查看固定依据。</p>
     <div className="prompt-reader" ref={reader}><ReadableText text={prompt.text} context={context} compiled={compiled} raw={view === 'raw'} ranges={ranges} selection={selection} onInspect={inspect} /></div>
     <Button onClick={() => inspect(undefined, prompt.decisions.map((_, i) => i))}>完整编译来源与去向 · {prompt.decisions.length}</Button>
-    {inline || withinReader ? selection && <section ref={evidence} tabIndex={-1} className="prompt-inline-evidence" aria-label="指令固定依据"><Button onClick={close}>收起固定依据</Button>{details}</section> : workbench ? <WorkbenchDetails title="生成指令的冻结依据" status="只读" open={!!selection} onClose={close}>{details}</WorkbenchDetails> : <Drawer title="生成指令的冻结依据" width={560} open={!!selection} onClose={close}>
+    {inline || withinReader ? selection && <section ref={evidence} tabIndex={-1} className="prompt-inline-evidence" aria-label="指令固定依据"><Button onClick={close}>收起固定依据</Button>{details}</section> : workbench ? <WorkbenchDetails title="生成指令的冻结依据" status="只读" open={!!selection} onClose={close}>{details}</WorkbenchDetails> : <Drawer className="app-detail-drawer" title="生成指令的冻结依据" width={560} open={!!selection} onClose={close}>
       {details}
     </Drawer>}
   </section>

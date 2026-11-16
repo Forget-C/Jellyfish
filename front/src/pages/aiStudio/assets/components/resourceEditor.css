@@ -24,14 +24,13 @@
 .resource-editor-page-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .resource-editor-page-heading .app-page-title { font-size: 16px; line-height: 24px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .resource-editor-page-actions { margin-left: auto; min-width: 0; }
-.resource-editor-body { padding: 16px var(--app-page-gutter, 20px); }
+.resource-editor-body { padding: var(--app-detail-content-gap) var(--app-detail-inline-padding); }
 .resource-editor-inline > .app-page-toolbar { position: sticky; top: 0; z-index: 3; }
-.resource-editor-inline > .resource-editor-body { padding: 16px 0; }
+.resource-editor-inline > .resource-editor-body { padding: var(--app-detail-content-gap) 0; }
 .resource-editor-page .resource-editor-desktop > div { padding: 16px; background: white; border-radius: 12px; }
 @media (max-width: 767px) {
   .resource-editor-page > .app-page-toolbar { flex-wrap: wrap; }
   .resource-editor-page-actions { width: 100%; margin-left: 0; }
-  .resource-editor-body { padding: 12px var(--app-page-gutter, 16px); }
 }
 
 /* 与页面共用背景定义；整张视口渐变在右边缘对齐，避免抽屉内重启渐变。 */
@@ -40,7 +39,7 @@
 @media (forced-colors: active) {
   .resource-editor-drawer .ant-drawer-content { background: Canvas; }
 }
-.resource-editor-drawer .ant-drawer-body { padding: 20px; }
+.resource-editor-drawer .ant-drawer-body { padding: var(--app-detail-content-gap) var(--app-detail-inline-padding); }
 .resource-create-content { display: grid; gap: 16px; min-width: 0; padding: 16px; border-radius: 12px; background: #fff; }
 .resource-create-content .ant-collapse { background: transparent; }
 .resource-create-content .ant-collapse-header { padding-inline: 0 !important; }
@@ -48,7 +47,6 @@
 @media (max-width: 767px) {
   .resource-editor-drawer .ant-drawer-content-wrapper { width: 100% !important; max-width: 100%; }
   .resource-editor-drawer .ant-drawer-content { border-radius: 0; }
-  .resource-editor-drawer .ant-drawer-body { padding: 16px; }
   .resource-create-content .asset-dossier-fields { grid-template-columns: minmax(0, 1fr); }
 }
 .resource-editor-drawer .ant-drawer-content-wrapper { max-width: 100%; }

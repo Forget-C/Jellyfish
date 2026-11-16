@@ -492,7 +492,7 @@ const PromptTemplateManager: FC = () => {
           requestAnimationFrame(restoreListFocus)
         }} afterOpenChange={shown => {
           if (!shown) requestAnimationFrame(restoreListFocus)
-        }} className="management-prompt-reader-drawer">
+        }} className="management-prompt-reader-drawer app-detail-drawer">
         <div className="management-prompt-reader">{readerContent}</div>
       </Drawer>}
 

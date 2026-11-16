@@ -54,6 +54,7 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(12000)
   const management = `http://127.0.0.1:4298/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=objects`
+  await page.route('**/files/object-browser-image/download**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1536"><rect width="1536" height="1536" fill="lightgray"/></svg>' }))
   await page.goto(management)
   await page.getByRole('navigation', { name: '制作步骤' }).waitFor()
   const extract = page.getByRole('button', { name: '提取对象', exact: true })
@@ -77,8 +78,32 @@ try {
   await front.getByRole('button', { name: '对象更多操作', exact: true }).click()
   assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['描述与出处', '清空'])
   await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 1920, height: 850 })
   await front.getByRole('button', { name: '编辑阿同资源', exact: true }).click()
   const detail = page.getByRole('region', { name: '已有角色', exact: true })
+  await detail.getByRole('textbox', { name: '名称', exact: true }).waitFor()
+  await detail.locator('.actor-feature-image img').evaluate(img => img.decode())
+  for (const [width, height] of [[1920,850],[1440,900],[1366,768],[1024,440],[375,812]]) {
+    await page.setViewportSize({ width, height })
+    await page.waitForFunction(() => {
+      const root = document.querySelector('.management-inline-asset')
+      const body = root?.querySelector('.resource-editor-body')
+      const panel = root?.closest('.management-panel')
+      return body && panel && !!root.querySelector('.actor-detail-tabs') === (panel.clientWidth < 960 || body.clientHeight < 600)
+    })
+    const compact = detail.getByRole('tab', { name: '图片', exact: true })
+    if (await compact.count()) await compact.click()
+    await detail.getByRole('button', { name: '生成图片', exact: true }).scrollIntoViewIfNeeded()
+    const geometry = await detail.evaluate(node => {
+      const panel = node.closest('.management-panel')
+      const body = node.querySelector('.resource-editor-body')
+      return { panelHeight: panel.clientHeight, panelScroll: panel.scrollHeight, bodyHeight: body.clientHeight, bodyScroll: body.scrollHeight, compact: !!node.querySelector('.actor-detail-tabs') }
+    })
+    assert.ok(geometry.panelScroll <= geometry.panelHeight + 1, `object reference detail outer panel at ${width}x${height}: ${JSON.stringify(geometry)}`)
+    if (!geometry.compact) assert.ok(geometry.bodyScroll <= geometry.bodyHeight + 1, `desktop detail body must fit: ${JSON.stringify(geometry)}`)
+    await page.screenshot({ path: join(output, `object-detail-${width}-${height}.png`) })
+  }
+  await page.setViewportSize({ width: 1440, height: 960 })
   await detail.getByRole('button', { name: '返回', exact: true }).click()
   await detail.waitFor({ state: 'hidden' })
   await request(`${studio}/entities/character`, 'POST', { id: 'same-name-role', project_id: project, name: '阿同', description: '同名无图' })

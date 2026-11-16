@@ -17,7 +17,7 @@
 .management-prompt-reader-summary, .management-prompt-reader-empty { color: var(--app-muted, #536174); }
 .management-prompt-reader-content { margin: 0; font: inherit; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .management-prompt-reader-defaults { padding: 12px; border-radius: 8px; background: #f5f7fa; font-size: 13px; overflow-x: auto; }
-.management-prompt-reader-drawer .ant-drawer-body { padding: 0; }
+.management-prompt-reader-drawer .management-prompt-reader { padding: 0; }
 @media (width < 1024px) {
   .prompt-list { flex: 1; }
   .prompt-columns { gap: 0; }

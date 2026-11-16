@@ -118,6 +118,27 @@ try {
     await page.getByRole('button',{name:'生成图片',exact:true}).click()
     const generation=page.getByRole('dialog',{name:`生成${kind==='scene'?'场景':label}图片`,exact:true})
     await generation.waitFor()
+    assert.equal(await generation.getByRole('textbox', { name: '最终提示词', exact: true }).count(), 0)
+    for (const [modalWidth, modalHeight] of [[1440,900],[1024,440],[375,768]]) {
+      await page.setViewportSize({ width: modalWidth, height: modalHeight })
+      await generation.getByRole('button', { name: '预览提示词', exact: true }).click()
+      await generation.getByRole('button', { name: '收起提示词预览', exact: true }).waitFor()
+      const geometry = await generation.evaluate(node => {
+        const content = node.querySelector('.ant-modal-content')
+        const body = node.querySelector('.ant-modal-body')
+        const footer = node.querySelector('.ant-modal-footer').getBoundingClientRect()
+        body.scrollTop = body.scrollHeight
+        return { height: content.getBoundingClientRect().height, footerBottom: footer.bottom, bodyOverflow: getComputedStyle(body).overflowY, pageOverflow: document.documentElement.scrollHeight > innerHeight + 1 }
+      })
+      assert.ok(geometry.height <= modalHeight - 31)
+      assert.ok(geometry.footerBottom <= modalHeight)
+      assert.equal(geometry.bodyOverflow, 'auto')
+      assert.equal(geometry.pageOverflow, false)
+      await page.screenshot({ path: join(output, `${kind}-generation-${modalWidth}-${modalHeight}.png`), animations: 'disabled' })
+      await generation.getByRole('button', { name: '收起提示词预览', exact: true }).click()
+    }
+    await page.setViewportSize({ width: 1440, height: 900 })
+
     if(kind==='character') for(const purpose of ['主体','服装','道具']) await generation.getByRole('button',{name:`选择参考${purpose}`,exact:true}).waitFor()
     await generation.getByRole('textbox',{name:'本次附加要求',exact:true}).fill('项目临时要求')
     await generation.getByRole('button',{name:'取消',exact:true}).click()

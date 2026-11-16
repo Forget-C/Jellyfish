@@ -176,7 +176,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
       <TaskCenterButton workbench={workbench} type="text" className="app-task-trigger" aria-label="任务中心" aria-expanded={open} onClick={toggleOpen}>
         任务 {(!workbench || summaryCounts.active > 0) && <span className="app-task-count" aria-label={`${workbench ? '排队及运行任务' : '运行中任务'} ${summaryCounts.active}`}>{workbench && summaryCounts.active > 99 ? '99+' : summaryCounts.active}</span>}<DownOutlined className={workbench ? 'canvas-menu-chevron' : undefined} />
       </TaskCenterButton>
-      <Drawer title="任务中心" rootClassName={workbench ? 'canvas-task-center' : undefined} className="app-task-drawer" width={416} open={open} onClose={() => setOpen(false)} extra={<TaskCenterButton workbench={workbench} onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</TaskCenterButton>}>
+      <Drawer title="任务中心" rootClassName={workbench ? 'canvas-task-center' : undefined} className={workbench ? 'app-task-drawer' : 'app-task-drawer app-detail-drawer'} width={416} open={open} onClose={() => setOpen(false)} extra={<TaskCenterButton workbench={workbench} onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</TaskCenterButton>}>
         {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <TaskCenterButton workbench={workbench} block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>查看本场任务与业务结果</TaskCenterButton>}
             <div className="app-task-filters mb-3 flex flex-col gap-2">
               <Segmented

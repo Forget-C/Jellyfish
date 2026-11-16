@@ -81,3 +81,5 @@
 .resource-editor-drawer .actor-detail-page .actor-detail-layout { flex:1; min-height:0; }
 .resource-editor-drawer .actor-detail-page:has(.actor-detail-tabs) > .ant-drawer-body { overflow-y:auto; }
 .resource-editor-drawer .actor-detail-page:has(.actor-detail-tabs) .resource-editor-drawer-content { height:auto; min-height:100%; }
+
+.actor-detail-page:has(.actor-detail-tabs) > .resource-editor-body { overflow-y:auto; }

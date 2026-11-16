@@ -63,9 +63,9 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
     } catch { if (token === request.current) setError('读取对象图片失败，请重新选择或重试') }
     finally { if (token === request.current) setBusy(false) }
   }
-  return <div className="resource-editor-fields">
-    <Space wrap>
-      {!toolbarTarget && <Button onClick={onCancel}>返回</Button>}
+  return <div className="resource-editor-fields resource-reference-page">
+    <div className="resource-reference-toolbar"><Space wrap>
+
       <Select aria-label="参考来源范围" value={scope} options={[
         ...(projectId ? [{ value: 'project', label: '项目资源' }] : []), { value: 'library', label: '资产库' },
       ]} onChange={next => { setScope(next); setPage(1); if (next === 'library' && sourceKind === 'character') setSourceKind('actor') }} />
@@ -81,6 +81,7 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
       }}><Button disabled={busy}>上传参考图</Button></Upload>
     </Space>
     <Input.Search aria-label="搜索参考对象" placeholder="搜索参考对象" onSearch={text => { setQuery(text); setPage(1) }} />
+    </div><div className="resource-reference-content">
     {error && <Alert type="error" message={error} action={<Button onClick={() => source ? void chooseSource(source) : setRetry(value => value + 1)}>重试</Button>} />}
     <Spin spinning={busy}>
       <div className="resource-reference-grid">{sources.map(item => <Button key={item.id} className="resource-reference-tile"
@@ -101,6 +102,7 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
         })}</div></>}
     </Spin>
     <p>已选择 {selected.filter(belongs).length} 张图片；点击使用后回填草稿。</p>
-    {toolbarTarget ? createPortal(<Space><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>, toolbarTarget) : <Space><Button aria-label="取消" onClick={onCancel}>取消</Button><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>}
+    </div><div className="resource-reference-actions">{toolbarTarget ? createPortal(<Space><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>, toolbarTarget) : <Space><Button aria-label="取消" onClick={onCancel}>返回</Button><Button type="primary" disabled={busy} onClick={() => onApply(selected)}>使用所选图片</Button></Space>}
+    </div>
   </div>
 }

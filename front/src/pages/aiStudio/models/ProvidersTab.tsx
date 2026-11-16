@@ -386,6 +386,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       </WorkspaceScrollPanel>
 
       <Drawer
+        className="app-detail-drawer"
         title="供应商详情"
         aria-label="供应商详情"
         open={detailPanelOpen}

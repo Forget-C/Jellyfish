@@ -1,3 +1,4 @@
+import { assertDetailDrawerLayout } from './detailLayout.assertions.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -78,6 +79,7 @@ try {
   await page.keyboard.press('Enter')
   const details = page.getByRole('dialog').filter({ hasText: '供应商详情' })
   await details.getByText(provider.description).waitFor()
+  await assertDetailDrawerLayout(details)
   await details.getByText(provider.base_url, { exact: true }).waitFor()
   await details.screenshot({ animations: 'disabled' })
   await details.getByRole('button', { name: 'Close' }).focus()
