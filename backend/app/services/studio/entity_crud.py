@@ -54,11 +54,14 @@ async def list_entities_paginated(
     page: int,
     page_size: int,
     project_id: str | None = None,
+    exact_name: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     entity_type_norm = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type_norm)
     stmt = select(spec.model)
     stmt = stmt.where(spec.model.project_id == project_id)
+    if exact_name is not None:
+        stmt = stmt.where(spec.model.name == exact_name.strip())
     stmt = apply_keyword_filter(stmt, q=q, fields=[spec.model.name, spec.model.description])
     has_details = spec.model.origin == "created"
     if entity_type_norm != "character":

@@ -311,3 +311,22 @@ async def test_project_link_requires_an_independent_project_object(client, kind)
     private_link = await client.post(f"/api/v1/studio/project-assets/{kind}", json={"project_id": "p", "asset_id": "private"})
     assert private_link.status_code == 201
     assert (await client.delete(f"/api/v1/studio/project-assets/{kind}/{private_link.json()['data']['id']}")).status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["character", "scene", "prop"])
+async def test_project_exact_name_candidates_are_distinct_from_keyword_search(client, kind):
+    await client.post('/api/v1/studio/projects', json={'id': 'candidate-project', 'name': '候选项目', 'style': '真人都市'})
+    for index, name in enumerate(['张三', '张三的朋友', '李四']):
+        response = await client.post(f'/api/v1/studio/entities/{kind}', json={
+            'id': f'candidate-{index}', 'name': name, 'project_id': 'candidate-project'})
+        assert response.status_code == 201, response.text
+    assert (await client.post('/api/v1/studio/projects', json={'id': 'other-project', 'name': '其他项目', 'style': '真人都市'})).status_code == 201
+    assert (await client.post(f'/api/v1/studio/entities/{kind}', json={'id': 'foreign', 'name': '张三', 'project_id': 'other-project'})).status_code == 201
+    matches = await client.get(f'/api/v1/studio/entities/{kind}', params={
+        'project_id': 'candidate-project', 'exact_name': ' 张三 '})
+    assert matches.status_code == 200, matches.text
+    assert [item['name'] for item in matches.json()['data']['items']] == ['张三']
+    missing = await client.get(f'/api/v1/studio/entities/{kind}', params={
+        'project_id': 'candidate-project', 'exact_name': '不存在'})
+    assert missing.json()['data']['pagination']['total'] == 0

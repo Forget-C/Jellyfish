@@ -74,7 +74,7 @@
 .management-object-card h4 { display: flex; align-items: baseline; gap: 8px; }
 .management-object-card h4 small { font-size: 12px; font-weight: 400; color: var(--app-muted); }
 .management-object-card .management-reference-frame { background: #eaf0f8; }
-.management-object-card .management-reference-frame:empty::after { content: '未选参考图'; display: grid; place-items: center; height: 100%; color: var(--app-muted); font-size: 12px; }
+.management-object-card .management-reference-frame:empty::after { content: '暂无图片'; display: grid; place-items: center; height: 100%; color: var(--app-muted); font-size: 12px; }
 .management-accessible-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .management-object-card .management-reference-frame { aspect-ratio: auto; height: 160px; grid-row: 1; }
 .management-association-control { display: flex; gap: 4px; align-items: center; min-width: 0; }
@@ -120,3 +120,17 @@
 .management-reference-angle { position: absolute; bottom: 8px; left: 8px; z-index: 1; display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 6px; }
 
 .management-object-card .management-reference-frame { position: relative; }
+
+.management-object-excerpt { display: block; height: 20px; min-height: 20px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.management-object-actions-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 24px; }
+.management-object-body .management-object-title-row h4 > .ant-btn { padding: 0; max-width: 100%; height: auto; font-size: 14px; font-weight: 600; }
+.management-object-title-row h4 > .ant-btn > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.management-object-body { flex: 1; }
+.management-object-kind .management-card-grid > li, .management-object-kind .management-card-grid > li > section { display: flex; min-width: 0; }
+.management-object-kind .management-object-card { width: 100%; }
+.management-object-card > .ant-card-body { height: 100%; }
+.management-object-actions-row { margin-top: auto; }
+.object-resource-picker { display: grid; gap: 16px; }
+.object-resource-picker .resource-import-cover .ant-image { width: 100%; height: 100%; }
+.object-resource-picker .resource-import-cover img { height: 100%; object-fit: contain; }
+@media(max-width:767px) { .management-object-actions-row { min-height: 36px; } }

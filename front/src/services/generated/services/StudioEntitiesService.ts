@@ -134,6 +134,7 @@ export class StudioEntitiesService {
         entityType,
         projectId,
         q,
+        exactName,
         style,
         visualStyle,
         order,
@@ -150,6 +151,10 @@ export class StudioEntitiesService {
          * 关键字，过滤 name/description
          */
         q?: (string | null),
+        /**
+         * 按数据库名称规则匹配同名对象
+         */
+        exactName?: (string | null),
         /**
          * 题材/风格（单值）
          */
@@ -172,6 +177,7 @@ export class StudioEntitiesService {
             query: {
                 'project_id': projectId,
                 'q': q,
+                'exact_name': exactName,
                 'style': style,
                 'visual_style': visualStyle,
                 'order': order,
