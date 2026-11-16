@@ -16,7 +16,8 @@ type Picture = { id: number; file_id?: string; view_angle?: string; is_primary?:
 const angleLabels: Record<string, string> = { FRONT: '正面', LEFT: '侧面', RIGHT: '右侧', TOP: '俯视', BACK: '背面', THREE_QUARTER: '3/4 侧面', DETAIL: '细节' }
 
 /** 一次会话只编辑当前用途，应用前保留独立选择；其他用途原样带回。 */
-export function ResourceReferencePage({ kind, projectId, purpose, value, onApply, onCancel, toolbarTarget, onNames, onUploading, onPreview, returnLabel }: {
+export function ResourceReferencePage({ kind, projectId, purpose, value, onApply, onCancel, toolbarTarget, onNames, onUploading, onPreview, returnLabel, referenceNames }: {
+  referenceNames?: Record<string, string>
   returnLabel?: string
   onPreview?: (open: boolean) => void
   onNames?: (names: Record<string, string>) => void; onUploading?: (uploading: boolean) => void
@@ -30,7 +31,7 @@ export function ResourceReferencePage({ kind, projectId, purpose, value, onApply
   const [total, setTotal] = useState(0), [sources, setSources] = useState<LibraryAsset[]>([])
   const [source, setSource] = useState<LibraryAsset>(), [pictures, setPictures] = useState<Picture[]>([])
   const [view, setView] = useState<'resources' | 'pictures' | 'selected'>('resources')
-  const [selected, setSelected] = useState(value), [names, setNames] = useState<Record<string, string>>({})
+  const [selected, setSelected] = useState(value), [names, setNames] = useState<Record<string, string>>(referenceNames ?? {})
   const [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [error, setError] = useState('')
   const [uploadError, setUploadError] = useState(false)
   const [retry, setRetry] = useState(0)

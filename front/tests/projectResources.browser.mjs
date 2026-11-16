@@ -1,3 +1,4 @@
+import { checkReferencePurposes } from './referencePicker.assertions.mjs'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -191,6 +192,7 @@ try {
       await generation.getByRole('button',{name:'生成',exact:true}).waitFor()
     }
     if(kind==='character') {
+      await checkReferencePurposes(page,generation,output)
       await generation.getByRole('button',{name:'添加参考图片',exact:true}).click()
       for(const purpose of ['主体','服装','道具']) await page.getByRole('menuitem',{name:`选择参考${purpose}`,exact:true}).waitFor()
       await generation.getByRole('heading',{name:/本次参考/}).click()

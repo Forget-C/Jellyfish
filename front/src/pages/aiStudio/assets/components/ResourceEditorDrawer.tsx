@@ -577,7 +577,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   </div>
   const [referencePreview, setReferencePreview] = useState(false)
   const [referenceUploading, setReferenceUploading] = useState(false)
-  const referencePicker = <ResourceReferencePage returnLabel={pickerReturn === 'generation' ? '返回生成' : '返回表单'} onPreview={setReferencePreview} onUploading={setReferenceUploading} toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
+  const referencePicker = <ResourceReferencePage referenceNames={referenceNames} returnLabel={pickerReturn === 'generation' ? '返回生成' : '返回表单'} onPreview={setReferencePreview} onUploading={setReferenceUploading} toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
         onNames={names => setReferenceNames(current => ({ ...current, ...names }))}
         value={pickerReturn === 'generation' ? editingGeneration.references ?? references : references}
         onCancel={() => setPage(pickerReturn)} onApply={next => {
