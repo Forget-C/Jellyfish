@@ -84,7 +84,7 @@ try {
   await request(`${studio}/entities/character`, 'POST', { id: 'same-name-role', project_id: project, name: '阿同', description: '同名无图' })
   await page.reload()
   await back.getByRole('button', { name: '选用同名', exact: true }).click()
-  const same = page.getByRole('dialog', { name: '选用同名项目资源', exact: true })
+  const same = page.getByRole('dialog', { name: '选用同名资源', exact: true })
   await same.getByRole('button', { name: '选择阿同', exact: true }).click()
   await same.getByText('暂无图片，选用后可进入详情准备图片。').waitFor()
   await same.getByRole('button', { name: '确认选用', exact: true }).click()
