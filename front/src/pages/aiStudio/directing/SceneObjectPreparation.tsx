@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Drawer, Empty, Grid, Image, Modal, Select, Space, Spin, message } from 'antd'
-import { MoreOutlined, InfoCircleOutlined, ArrowRightOutlined, ScanOutlined, DiffOutlined, LinkOutlined, ReloadOutlined } from '@ant-design/icons'
-import { ApiError, StudioDirectingService } from '../../../services/generated'
+import { MoreOutlined, InfoCircleOutlined, ScanOutlined, DiffOutlined, ReloadOutlined } from '@ant-design/icons'
+import { ApiError, StudioDirectingService, StudioEntitiesService } from '../../../services/generated'
 import type { AssetSummary, SceneObjectRead, SceneObjectsRead } from '../../../services/generated'
 import { ObjectAssociationEditor } from './ObjectAssociationEditor'
 import { ResourceEditorDrawer } from '../assets/components/ResourceEditorDrawer'
@@ -69,6 +69,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const [savingObject, setSavingObject] = useState<string>()
   const saving = !!savingObject
   const [associationObject, setAssociationObject] = useState<string>()
+  const [sameNameOnly, setSameNameOnly] = useState(false)
+  const [sameNames, setSameNames] = useState<Record<string, boolean>>({})
+  const [sameNameError, setSameNameError] = useState('')
+  const [sameNameRetry, setSameNameRetry] = useState(0)
   const [descriptionObject, setDescriptionObject] = useState<SceneObjectRead>()
   const [assetEditor, setAssetEditor] = useState<AssetSummary>()
   const [draft, setDraft] = useState<{ object: SceneObjectRead; name: string; description: string }>()
@@ -216,6 +220,19 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const action = data?.task?.status === 'failed' || data?.task?.status === 'cancelled' ? '重试提取对象'
     : data?.revision ? '重新提取对象' : '提取对象'
 
+  const sameNameKey = JSON.stringify(data?.objects.filter(object => !object.asset_id).map(object => [object.id, object.kind, object.name]) ?? [])
+  useEffect(() => {
+    let current = true
+    setSameNames({}); setSameNameError('')
+    const objects: [string, 'character' | 'scene' | 'prop', string][] = JSON.parse(sameNameKey)
+    void Promise.all(objects.map(async ([id, kind, name]) => {
+      const response = await StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({ entityType: kind, projectId, exactName: name, pageSize: 1 })
+      return [id, !!response.data?.pagination.total] as const
+    })).then(matches => { if (current) setSameNames(Object.fromEntries(matches)) })
+      .catch(cause => { if (current) setSameNameError(directingError(cause)) })
+    return () => { current = false }
+  }, [sameNameKey, projectId, sameNameRetry])
+
   const disabled = !editable || saving
   const extractionDisabled = disabled || loading || running && !pendingRequest
   const extractionLabel = pendingRequest ? '核实提取请求' : action
@@ -266,7 +283,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       <h2 id="scene-object-preparation-title">场次对象与参考</h2>
       <Button variant="primary" loading={submitting} disabled={extractionDisabled} onClick={() => void extract()}>{extractionLabel}</Button>
     </div>}
-    {!management && <p>参考图可留空，各画布采用后独立管理。</p>}
+    {!management && <p>选用对象可暂时无图，动态画布在实际生产时读取当前资源。</p>}
     {loading && <Spin aria-label="正在读取对象准备" />}
     {(error || choiceError && !choiceErrorOnCard) && <Alert type="error" showIcon message={error || choiceError?.message} action={management
       ? <Space wrap>
@@ -294,7 +311,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => { setReference(key) }, items: [{key:'all',label:'全部参考状态'},{key:'missing',label:'未选参考图'},{key:'ready',label:'已选参考图'},{key:'unavailable',label:'参考图不可用'}] }}><MainButton disabled={!data?.objects.length} type="text" aria-label="参考筛选">参考筛选{reference !== 'all' ? ' · 已筛选' : ''}</MainButton></Dropdown>
       <span>{data ? `${filtered.length} 个对象` : '对象数量未确认'}</span>
       {!!data?.objects.length && !filtered.length && <MainButton type="text" onClick={() => { setKindFilter('all'); setAssociation('all'); setReference('all') }}>清除筛选</MainButton>}
-      <span title="参考图可留空，各画布采用后独立管理。" tabIndex={0}><InfoCircleOutlined aria-hidden /></span>
+      <span title="选用对象可暂时无图，动态画布在实际生产时读取当前资源。" tabIndex={0}><InfoCircleOutlined aria-hidden /></span>
     </div>, management.filterHost)}
     {(management ? ['all' as const] : Object.keys(kinds) as Array<keyof typeof kinds>).map(group => {
       const rows = group === 'all' ? filtered : filtered.filter(object => object.kind === group)
@@ -317,36 +334,31 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           const assetAction = asset ? { key: 'prepare', label: '准备图片', onClick: () => openAsset(asset, object.id) }
             : { key: 'create', label: '新建并关联', onClick: openCreate }
           if (management) {
-            const assetUnavailable = !!object.asset_id && !asset
-            const imageUnavailable = object.reference_state === 'unavailable'
-            const cardActions = [...(asset ? [{ key: 'references', label: '编辑对象参考', onClick: () => openAsset(asset, object.id) }] : []),
-              { key: 'association', label: '修改关联资产', onClick: () => setAssociationObject(object.id) },
-              { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) }, assetAction,
-              ...(object.asset_id ? [{ key: 'clear', label: '清空', onClick: () => Modal.confirm({ title: '清空对象选用？',
+                        const cardActions = [
+              { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) },
+              ...(object.asset_id ? [{ key: 'clear', label: '清空', disabled: !editable, onClick: () => Modal.confirm({ title: '清空对象选用？',
                 content: '保留对象名称、描述与出处、资源和图片。沿用本场对象的画布将不再有可用资源；已受理任务不变。',
                 okText: '清空', cancelText: '取消', onOk: async () => { if (!await save(object.id)) throw new Error('清空失败，请重试') } }) }] : [])]
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
-                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={!!imageUnavailable} />
+                  <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={object.reference_state === 'unavailable'} />
                   <div className="management-object-body">
-                    <div className="management-object-title-row"><h4 title={object.name}>{object.name}</h4><small>{kinds[kind]}</small>
-                      <Dropdown autoFocus trigger={['click']} disabled={disabled} menu={{ items: cardActions }}>
-                        <MainButton type="text" icon={<MoreOutlined />} aria-label="对象更多操作" disabled={disabled} />
+                    <div className="management-object-title-row"><h4 title={object.name}>{asset ? <MainButton type="link" aria-label={`编辑${object.name}资源`} onClick={() => openAsset(asset, object.id)}>{object.name}</MainButton> : object.name}</h4><small>{kinds[kind]}</small>
+                      <Dropdown autoFocus trigger={['click']} disabled={saving} menu={{ items: cardActions }}>
+                        <MainButton type="text" icon={<MoreOutlined />} aria-label="对象更多操作" disabled={saving} />
                       </Dropdown>
                     </div>
-                    <div className="management-object-excerpt" title={object.excerpt || '暂无出处'} tabIndex={0}><span>出处</span><span>{object.excerpt || '暂无出处'}</span></div>
-                    <ObjectAssociationEditor open={associationObject === object.id} onClose={() => {
-                      setAssociationObject(undefined)
-                      document.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(object.id)}"] button[aria-label="对象更多操作"]`)?.focus({ preventScroll: true })
-                    }} assetId={object.asset_id} hasReference={!!object.asset_id} disabled={disabled} options={options}
-                      onSave={id => { filterFocus.current = { id: object.id, index: filtered.findIndex(row => row.id === object.id) }; return save(object.id, id) }}
-                      anchor={<div className="management-object-association-row"><LinkOutlined aria-hidden />
-                        {asset ? <MainButton type="link" title={asset.name} onClick={() => openAsset(asset, object.id)} aria-label={`查看${asset.name}资产`}>{asset.name}<ArrowRightOutlined /></MainButton>
-                          : <span>{assetUnavailable ? '关联资产不可用，请更换或解除关联' : '尚未关联资产'}</span>}
-
-                      </div>} />
-                    {imageUnavailable && <Badge status="warning" text="参考图不可用" />}
+                    <div className="management-object-excerpt" title={object.description || '未填写描述'}>{object.description || '未填写描述'}</div>
+                    <div className="management-object-actions-row">
+                      {!object.asset_id && sameNames[object.id] && <Button variant="primary" disabled={disabled} onClick={() => { setSameNameOnly(true); setAssociationObject(object.id) }}>选用同名</Button>}
+                      <Button disabled={disabled} onClick={() => { setSameNameOnly(false); setAssociationObject(object.id) }}>{object.asset_id ? '重新选用' : '选用'}</Button>
+                      <Button variant={!object.asset_id && sameNames[object.id] ? 'secondary' : 'primary'} disabled={disabled} onClick={openCreate}>{object.asset_id ? '重新创建' : '创建'}</Button>
+                      {!object.asset_id && sameNames[object.id] === undefined && <small role="status">{sameNameError ? <MainButton type="text" onClick={() => setSameNameRetry(value => value + 1)}>重试同名查询</MainButton> : '同名查询中'}</small>}
+                    </div>
+                    <ObjectAssociationEditor open={associationObject === object.id} projectId={projectId} kind={kind} objectName={object.name} sameName={sameNameOnly}
+                      onClose={() => { setAssociationObject(undefined); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(object.id)}"] .management-object-actions-row button`)?.focus({ preventScroll: true })) }}
+                      assetId={object.asset_id} disabled={disabled} onSave={id => save(object.id, id)} />
 
                   </div>
                   {choiceError?.objectId === object.id && <Alert type="error" showIcon message={choiceError.message}
