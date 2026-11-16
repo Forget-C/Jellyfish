@@ -10,6 +10,7 @@ import type { ProjectVisualStyle } from './ProjectVisualStyle';
  */
 export type CharacterUpdate = {
     references?: Array<AssetPromptReference>;
+    details_editable?: (boolean | null);
     name?: (string | null);
     description?: (string | null);
     style?: (ProjectStyle | null);

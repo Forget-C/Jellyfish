@@ -268,6 +268,8 @@ class Character(Base, TimestampMixin):
 
     __tablename__ = "characters"
 
+    details_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
     origin: Mapped[str] = mapped_column(String(16), nullable=False, default="created", server_default="created")
     source_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

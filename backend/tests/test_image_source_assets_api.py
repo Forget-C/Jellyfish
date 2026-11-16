@@ -330,3 +330,73 @@ async def test_project_exact_name_candidates_are_distinct_from_keyword_search(cl
     missing = await client.get(f'/api/v1/studio/entities/{kind}', params={
         'project_id': 'candidate-project', 'exact_name': '不存在'})
     assert missing.json()['data']['pagination']['total'] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+async def test_project_upload_creates_independent_owned_resource_and_replays(client, kind):
+    project = (await client.post('/api/v1/studio/projects', json={'id': 'project', 'name': '上传项目', 'style': '真人都市'})).json()['data']['id']
+    upload = await client.post('/api/v1/studio/files/upload', data={'project_id': project, 'usage_kind': 'generation_upload'},
+        files={'file': ('portrait.png', b'image', 'image/png')})
+    assert upload.status_code == 201, upload.text
+    file_id = upload.json()['data']['id']
+    path = f'/api/v1/studio/entities/{kind}'
+    body = {'id': 'project-upload', 'project_id': project, 'name': '本场对象',
+        'images': [{'file_id': file_id, 'view_angle': 'LEFT'}, {'file_id': file_id, 'view_angle': 'FRONT'}]}
+    created = await client.post(path + '/image-source', json=body)
+    assert created.status_code == 201, created.text
+    assert created.json()['data']['project_id'] == project
+    assert created.json()['data']['origin'] == 'upload'
+    assert created.json()['data']['description'] == ''
+    assert (await client.post(path + '/image-source', json=body)).json()['data']['id'] == 'project-upload'
+    pictures = (await client.get(path + '/project-upload/images')).json()['data']['items']
+    assert len(pictures) == 2
+    assert [image['is_primary'] for image in pictures] == [True, False]
+    assert [image['is_view_default'] for image in pictures] == [True, True]
+    assert [image['view_angle'] for image in pictures] == ['LEFT', 'FRONT']
+    assert (await client.post(path + '/image-source', json={**body, 'name': '另一个内容'})).status_code == 409
+    assert (await client.post(path + '/image-source', json={**body, 'id': 'duplicate-name'})).status_code == 409
+    assert not (await client.get(path)).json()['data']['items']
+    project_rows = (await client.get(path, params={'project_id': project})).json()['data']['items']
+    assert [item['id'] for item in project_rows] == ['project-upload']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['character', 'scene', 'prop'])
+async def test_project_upload_details_confirm_then_save_and_reopen(client, kind):
+    project = (await client.post('/api/v1/studio/projects', json={'id': 'project', 'name': '上传项目', 'style': '真人都市'})).json()['data']['id']
+    upload = await client.post('/api/v1/studio/files/upload', data={'project_id': project, 'usage_kind': 'generation_upload'}, files={'file': ('image.png', b'image', 'image/png')})
+    file_id = upload.json()['data']['id']
+    path = f'/api/v1/studio/entities/{kind}/project-detail'
+    created = await client.post(f'/api/v1/studio/entities/{kind}/image-source', json={'id': 'project-detail', 'name': '图片对象', 'project_id': project, 'images': [{'file_id': file_id, 'view_angle': 'FRONT'}]})
+    assert created.status_code == 201, created.text
+    assert not created.json()['data']['details_editable']
+    fields = {'description': '自己的角色设定'} if kind == 'character' else {'supplementary_info': '自己的对象设定'}
+    assert (await client.patch(path, json=fields)).status_code == 403
+    opened = await client.patch(path, json={**fields, 'details_editable': True})
+    assert opened.status_code == 200, opened.text
+    assert (await client.get(path)).json()['data']['details_editable'] is True
+    listed = (await client.get(f'/api/v1/studio/entities/{kind}', params={'project_id': project, 'style': '真人都市'})).json()['data']['items']
+    assert any(item['id'] == 'project-detail' for item in listed)
+    images = (await client.get(path + '/images')).json()['data']['items']
+    rendered = await client.post(f"/api/v1/studio/generation-prompts/assets/{kind}/project-detail/slots/{images[0]['id']}/render", json={'references': [{'file_id': file_id, 'role': 'design'}]})
+    assert rendered.status_code == 200, rendered.text
+    assert next(iter(fields.values())) in rendered.json()['data']['execution_prompt']
+    assert (await client.patch(path, json=fields)).status_code == 200
+    assert (await client.patch(path, json={'details_editable': False})).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_project_upload_rejects_foreign_files_types_and_invalid_scope(client):
+    for project in ['own', 'foreign']:
+        assert (await client.post('/api/v1/studio/projects', json={'id': project, 'name': project, 'style': '真人都市'})).status_code == 201
+    upload = await client.post('/api/v1/studio/files/upload', data={'project_id': 'foreign', 'usage_kind': 'generation_upload'}, files={'file': ('image.png', b'image', 'image/png')})
+    file_id = upload.json()['data']['id']
+    body = {'id': 'rejected', 'name': '对象', 'project_id': 'own', 'images': [{'file_id': file_id, 'view_angle': 'FRONT'}]}
+    for kind in ['character', 'scene', 'prop']:
+        assert (await client.post(f'/api/v1/studio/entities/{kind}/image-source', json=body)).status_code == 422
+        assert (await client.post(f'/api/v1/studio/entities/{kind}/image-source', json={**body, 'project_id': 'missing'})).status_code == 404
+        assert (await client.post(f'/api/v1/studio/entities/{kind}/image-source', json={**body, 'images': [{'file_id': file_id, 'view_angle': 'RIGHT'}]})).status_code == 422
+    for kind in ['actor', 'costume']:
+        assert (await client.post(f'/api/v1/studio/entities/{kind}/image-source', json=body)).status_code == 422
+    assert (await client.post('/api/v1/studio/entities/character/image-source', json={**body, 'project_id': None})).status_code == 422

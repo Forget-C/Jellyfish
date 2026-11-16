@@ -64,8 +64,7 @@ async def list_entities_paginated(
         stmt = stmt.where(spec.model.name == exact_name.strip())
     stmt = apply_keyword_filter(stmt, q=q, fields=[spec.model.name, spec.model.description])
     has_details = spec.model.origin == "created"
-    if entity_type_norm != "character":
-        has_details = has_details | spec.model.details_editable.is_(True)
+    has_details = has_details | spec.model.details_editable.is_(True)
     if style:
         stmt = stmt.where(has_details, getattr(spec.model, "style") == style)
     if visual_style:
