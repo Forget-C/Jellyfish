@@ -575,7 +575,9 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       {task.error && <span>{task.error}</span>}{task.status === 'failed' && <Button disabled={generating} onClick={() => void generate([angle as Angle])}>重试{angleLabel(angle)}</Button>}
     </div>)}
   </div>
-  const referencePicker = <ResourceReferencePage toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
+  const [referencePreview, setReferencePreview] = useState(false)
+  const [referenceUploading, setReferenceUploading] = useState(false)
+  const referencePicker = <ResourceReferencePage returnLabel={pickerReturn === 'generation' ? '返回生成' : '返回表单'} onPreview={setReferencePreview} onUploading={setReferenceUploading} toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
         onNames={names => setReferenceNames(current => ({ ...current, ...names }))}
         value={pickerReturn === 'generation' ? editingGeneration.references ?? references : references}
         onCancel={() => setPage(pickerReturn)} onApply={next => {
@@ -694,9 +696,9 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       </>}
     </ResourceEditorFrame>
     {fullDetail && <Modal title="智能检测" forceRender open={analysisOpen} onCancel={() => setAnalysisOpen(false)} footer={<Button aria-label="完成" onClick={() => setAnalysisOpen(false)}>完成</Button>}>{analysis}</Modal>}
-    {fullDetail && <AssetGenerationDialog label={labels[kind]} references={page === 'references'} editing={editingGeneration.mode === 'edit'} open={page === 'generation' || page === 'references'} generating={generating} dirty={dirty}
+    {fullDetail && <AssetGenerationDialog label={labels[kind]} referencePurpose={purpose} referenceUploading={referenceUploading || referencePreview} references={page === 'references'} editing={editingGeneration.mode === 'edit'} open={page === 'generation' || page === 'references'} generating={generating} dirty={dirty}
       disabled={(imageBased && !editingGeneration.references?.some(reference => !['costume', 'prop', 'style'].includes(reference.role))) || busy || analysisBusy || loadFailed || !selectedModel || !imageModels.some(model => model.id === selectedModel) || !!activeTasks.length}
-      error={error} onCancel={() => setPage('editor')} onGenerate={() => void generate(editingAngles, editingGeneration)}>
+      error={error} onCancel={() => setPage(page === 'references' ? pickerReturn : 'editor')} onGenerate={() => void generate(editingAngles, editingGeneration)}>
       {error && <Alert type="error" message={error} />}{page === 'references' ? referencePicker : generationPanel}
       {Object.entries(tasks).filter(([, task]) => task?.status === 'failed').map(([angle, task]) => <Alert key={angle} type="error" message={`${angleLabel(angle)}：${task?.error}`} />)}
     </AssetGenerationDialog>}

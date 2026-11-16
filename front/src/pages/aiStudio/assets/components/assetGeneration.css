@@ -48,3 +48,12 @@
 .asset-reference-name .ant-btn { flex:none; width:24px; min-height:24px; height:24px; padding:0; }
 .asset-reference-empty { align-self:center; color:#536174; font-size:12px; }
 .asset-generation-references { min-width:0; }
+.asset-generation-dialog .object-resource-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.reference-picker-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.reference-picture-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; }
+.reference-picture { display:flex; flex-direction:column; min-width:0; gap:4px; }
+.reference-picture .ant-image { width:100%; aspect-ratio:1; background:#f0f4f9; border-radius:8px; overflow:hidden; }
+.reference-picture .ant-image-img { width:100%; height:100%; object-fit:contain; }
+.reference-picture > span { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.reference-picture:has([aria-pressed="true"]) { outline:2px solid #245dca; outline-offset:3px; border-radius:8px; }
+@media(max-width:575px) { .asset-generation-dialog .object-resource-grid { grid-template-columns:minmax(0,1fr); } }

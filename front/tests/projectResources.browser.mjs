@@ -150,6 +150,46 @@ try {
     }
     await page.setViewportSize({ width: 1440, height: 900 })
 
+    if(kind==='actor') {
+      await generation.getByRole('button',{name:'添加参考图片',exact:true}).click()
+      await page.getByRole('menuitem',{name:'选择参考主体',exact:true}).click()
+      const picker=page.getByRole('dialog',{name:'选择主体参考',exact:true})
+      for (const [width,height] of [[1440,900],[1024,440],[375,768]]) {
+        await page.setViewportSize({width,height})
+        await picker.getByRole('button',{name:`浏览参考资源 ${assets[0].name}`,exact:true}).waitFor()
+        const fit=await picker.evaluate(node=>{const body=node.querySelector('.ant-modal-body');return body.scrollWidth<=body.clientWidth+1 && document.documentElement.scrollHeight<=innerHeight+1})
+        assert.equal(fit,true)
+        await page.screenshot({path:join(output,`reference-picker-${width}-${height}.png`),animations:'disabled'})
+      }
+      await page.setViewportSize({width:1440,height:900})
+      await picker.getByRole('button',{name:`浏览参考资源 ${assets[0].name}`,exact:true}).click()
+      await picker.getByRole('button',{name:'取消选择',exact:true}).click()
+      await picker.getByRole('button',{name:'选择图片',exact:true}).click()
+      await picker.getByRole('button',{name:'取消选择',exact:true}).waitFor()
+      await picker.getByRole('button',{name:'返回资源列表',exact:true}).click()
+      await picker.getByRole('button',{name:'查看已选',exact:true}).click()
+      await picker.getByRole('button',{name:'移除',exact:true}).waitFor()
+      assert.equal(await picker.getByRole('button',{name:'移除',exact:true}).count(),1)
+      await picker.getByRole('button',{name:'移除',exact:true}).click()
+      await picker.getByRole('button',{name:'应用参考',exact:true}).click()
+      assert.equal(await generation.locator('.asset-reference-item').count(),0)
+      await generation.getByRole('button',{name:'重置',exact:true}).click()
+      await generation.getByRole('button',{name:'添加参考图片',exact:true}).click()
+      await page.getByRole('menuitem',{name:'选择参考主体',exact:true}).click()
+      await picker.waitFor()
+      let releaseUpload
+      const uploadGate=new Promise(resolve=>{releaseUpload=resolve})
+      await page.route('**/files/upload',async route=>{await uploadGate;await route.fulfill({status:503,json:{detail:'upload failed'}})})
+      await picker.locator('input[type=file]').setInputFiles({name:'参考.png',mimeType:'image/png',buffer:Buffer.from('test')})
+      await picker.locator('button:disabled').filter({hasText:'应用参考'}).waitFor()
+      await page.keyboard.press('Escape')
+      assert.equal(await picker.isVisible(),true)
+      releaseUpload()
+      await picker.getByText('上传参考图失败，请重新上传',{exact:true}).waitFor()
+      await page.unroute('**/files/upload')
+      await page.keyboard.press('Escape')
+      await generation.getByRole('button',{name:'生成',exact:true}).waitFor()
+    }
     if(kind==='character') {
       await generation.getByRole('button',{name:'添加参考图片',exact:true}).click()
       for(const purpose of ['主体','服装','道具']) await page.getByRole('menuitem',{name:`选择参考${purpose}`,exact:true}).waitFor()
