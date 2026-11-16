@@ -99,6 +99,22 @@ try {
   })), 'three actions fit without clipping labels')
   await back.getByRole('button', { name: '选用同名', exact: true }).click()
   const same = page.getByRole('dialog', { name: '选用同名资源', exact: true })
+  await same.waitFor()
+  assert.equal(await same.locator('.ant-modal-content').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(255, 255, 255)')
+  const sameCard = same.getByRole('button', { name: '选择阿同', exact: true })
+  assert.equal(await sameCard.locator('.resource-card-metadata').count(), 1)
+  assert.equal(await sameCard.locator('.project-resource-description').textContent(), '同名无图')
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    assert.ok(await same.evaluate(node => node.scrollWidth <= node.clientWidth))
+    await page.waitForFunction(() => { const node = document.querySelector('.object-resource-dialog'); return node && getComputedStyle(node).transform === 'none' && getComputedStyle(node).opacity === '1' })
+    await page.screenshot({ path: join(output, `same-name-picker-${width}.png`), animations: 'disabled' })
+  }
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await sameCard.focus()
+  await page.keyboard.press('Space')
+  assert.equal(await sameCard.getAttribute('aria-pressed'), 'true')
+
   await same.getByRole('button', { name: '选择阿同', exact: true }).click()
   await same.getByText('暂无图片，选用后可进入详情准备图片。').waitFor()
   await same.getByRole('button', { name: '确认选用', exact: true }).click()

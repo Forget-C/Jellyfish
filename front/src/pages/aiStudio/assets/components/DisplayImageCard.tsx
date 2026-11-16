@@ -6,6 +6,7 @@ import './project-resource-card.css'
 
 type DisplayImageCardProps = {
   variant?: 'default' | 'project'
+  selection?: { label: string; selected: boolean; disabled: boolean; onSelect: () => void }
   imageFit?: 'contain' | 'cover'
   lazyImage?: boolean
   requireImageForClick?: boolean
@@ -26,6 +27,7 @@ type DisplayImageCardProps = {
 
 export function DisplayImageCard({
   variant = 'default',
+  selection,
   imageFit = 'contain',
   lazyImage = false,
   requireImageForClick = false,
@@ -69,7 +71,11 @@ export function DisplayImageCard({
       : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : onImageClick ? placeholder : <><PictureOutlined aria-hidden />暂无封面</>}</span>
     const canOpen = (!!onImageClick && (!requireImageForClick || !!displayUrl)) || !!(enablePreview && displayUrl)
     return <>
-      <article className="project-resource-card">
+      <article className={`project-resource-card${selection ? ' project-resource-selectable' : ''}`}
+        role={selection ? 'button' : undefined} aria-label={selection?.label} aria-pressed={selection?.selected}
+        aria-disabled={selection?.disabled} tabIndex={selection ? (selection.disabled ? -1 : 0) : undefined}
+        onClick={selection ? () => { if (!selection.disabled) selection.onSelect() } : undefined}
+        onKeyDown={selection ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!selection.disabled) selection.onSelect() } } : undefined}>
         {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" title="放大预览" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>
           : <div className="project-resource-cover">{content}</div>}
         <div className="project-resource-card-body">
