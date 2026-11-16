@@ -12,7 +12,7 @@ import './referenceCard.css'
 export function ReferenceCard({ card, readonly, error, outputs }: {
   card: NamedImageReferenceCard; readonly: boolean; error?: string; outputs?: CanvasResolvedOutput[]
 }) {
-  const fileId = card.scene_object_source ? outputs?.find(output => output.modality === 'image' && output.available !== false)?.file_id : card.image_binding?.file_id
+  const fileId = card.scene_object_source ? outputs?.find(output => output.modality === 'image' && output.source.position === 0 && output.available !== false)?.file_id : card.image_binding?.file_id
   return <GenerationCardFrame label="参考图片预览" status={<>{readonly && <span>只读</span>}<ReferenceCardSummary card={card} /><span>{error || (fileId ? '1 张参考图' : '缺少主图')}</span></>}>
     <div className="generation-reference-preview">{fileId ? <img alt="参考图片" src={buildFileDownloadUrl(fileId)} /> : <div><PictureOutlined aria-hidden /><span>未选择参考图</span></div>}</div>
   </GenerationCardFrame>
