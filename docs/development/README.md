@@ -67,6 +67,7 @@
 - [数据库升级与回退](guides/database-upgrade.md)
 - [接入章节划分历史](guides/chapter-division-history-import.md)
 - [身份参考存量整理](guides/identity-reference-cleanup.md)
+- [转换场次对象的旧单图准备](guides/convert-scene-object-selections.md)
 - [资产结构化切换](guides/structured-asset-switch.md)
 - [开发与站点维护 FAQ](guides/developer-faq.md)
 - [站点维护](../../site/README.md)
