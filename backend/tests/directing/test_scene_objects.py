@@ -49,7 +49,7 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             db.add_all([Character(id='front-asset', project_id='p1', name='前门角色', style='真人都市'),
                         Character(id='foreign-asset', project_id='p2', name='外部角色', style='真人都市')])
             await db.flush()
-            db.add(CharacterImage(character_id='front-asset', file_id='image1'))
+            db.add(CharacterImage(character_id='front-asset', file_id='image1', is_primary=True))
         base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = (await client.get(base)).json()['data']
         scene = await client.post(base + '/sequences', json={'title': '测试场次', 'position': 0,
@@ -104,10 +104,9 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             assert len(calls) == 2 and original in calls[0]
 
             object_url = endpoint + '/' + ready['objects'][0]['id']
-            choice = {'expected_revision': ready['revision'], 'asset_id': 'front-asset', 'image_file_id': 'image1'}
+            choice = {'expected_revision': ready['revision'], 'asset_id': 'front-asset'}
             assert (await client.put(object_url, json={**choice, 'asset_id': 'foreign-asset'})).status_code == 422
             assert (await client.put(object_url, json={**choice, 'image_file_id': 'video1'})).status_code == 422
-            assert (await client.put(endpoint + '/' + ready['objects'][1]['id'], json={**choice, 'asset_id': None})).status_code == 422
             selected = await client.put(object_url, json=choice)
             assert selected.status_code == 200, selected.text
             assert (await client.put(object_url, json=choice)).status_code == 409
@@ -143,11 +142,11 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             assert [item['excerpt'] for item in preview['removed']] == ['后门的阿同']
             assert preview['modified'][0]['id'] == selected['objects'][0]['id']
             assert preview['modified'][0]['name'] == '前门来客'
-            assert preview['retained_choices'][0]['image_file_id'] == 'image1'
+            assert preview['retained_choices'][0]['asset_id'] == 'front-asset'
 
             concurrent = await client.post(endpoint + '/extractions', json={**request, 'request_id': 'concurrent'})
             assert concurrent.status_code == 200, concurrent.text
-            edited = await client.put(object_url, json={**choice, 'expected_revision': refreshed['revision'], 'image_file_id': None})
+            edited = await client.put(object_url, json={**choice, 'expected_revision': refreshed['revision'], 'asset_id': None})
             assert edited.status_code == 200, edited.text
             preserved = await run()
             assert preserved['task']['status'] == 'succeeded'
@@ -167,13 +166,12 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             old_apply = await client.post(candidate_path + '/apply', json=apply_command(preview))
             assert old_apply.status_code == 409, old_apply.text
             rebased = await review()
-            assert rebased['retained_choices'][0]['asset_id'] == 'front-asset'
-            assert rebased['retained_choices'][0]['image_file_id'] is None
+            assert rebased['retained_choices'] == []
             restored = await client.put(object_url, json={**choice, 'expected_revision': rebased['revision']})
             assert restored.status_code == 200, restored.text
             assert (await client.post(candidate_path + '/apply', json=apply_command(rebased))).status_code == 409
             confirmed = await review()
-            assert confirmed['retained_choices'][0]['image_file_id'] == 'image1'
+            assert confirmed['retained_choices'][0]['asset_id'] == 'front-asset'
             command = apply_command(confirmed)
             wrong_task = await client.post(candidate_path.replace('/p1/', '/p2/') + '/apply', json=command)
             assert wrong_task.status_code == 404

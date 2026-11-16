@@ -17,7 +17,7 @@ function Changes({ label, objects, note }: {
 }
 
 function choiceLabel(object: SceneObjectCandidate) {
-  return [object.asset_id && '资产关联', object.image_file_id && '参考图'].filter(Boolean).join('和')
+  return [object.asset_id && '资源选用'].filter(Boolean).join('和')
 }
 
 const taskStatus = { queued: '对象提取排队中', running: '正在提取对象', failed: '对象提取失败',

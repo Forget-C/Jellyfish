@@ -53,7 +53,7 @@ def carry_reference_choices(current, candidate, cards, kept, edges, order, produ
                 if use.active:
                     _set_extracted_reference(current.id, model, use.binding_id, None, port, False, '', edges, order)
                 continue
-            active = bool(port and port in production_ports and reference.image_binding)
+            active = bool(port and port in production_ports and (reference.image_binding or reference.scene_object_source))
             if active != use.active or card_id != default:
                 label = getattr(cards.get(default), 'name', '') or reference.name
                 _set_extracted_reference(current.id, model, use.binding_id, reference, port, active, label, edges, order)

@@ -70,7 +70,7 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
     const current = latest.current.card
     const name = current.name_binding ? current.name || '' : current.name?.trim() ? current.name : fileInfo && fileInfo.id === image.file_id ? fileInfo.name : ''
     pendingName.current = !name && !current.name_binding ? image.file_id! : undefined
-    onChange({ ...current, name, image_binding: { source: image.source, file_id: image.file_id!, result_set_id: image.result_set_id } })
+    onChange({ ...current, name, scene_object_source: null, image_binding: { source: image.source, file_id: image.file_id!, result_set_id: image.result_set_id } })
   }
   const allImages = new Map<string, CanvasResolvedOutput>()
   for (const outputs of Object.values(modelOutputs || {})) for (const image of outputs) if (usable(image)) allImages.set(referenceImageKey(image), image)
@@ -112,6 +112,17 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   </>
   const missed = document.storyboard?.objects.some(item => item.reference_card_id === card.id && item.origin === 'missed')
   const status = [disabled && '只读', missed && '补漏对象', selected ? '1 张参考图' : '未选择图片'].filter(Boolean).join(' · ')
+  if (card.scene_object_source) {
+    const current = resolved.outputs.find(output => output.modality === 'image' && output.available !== false)
+    return <ReferenceCardEditor parameters={<span>场次对象参考 · 使用当前资源主图</span>} status={<span>{resolved.error || (current?.file_id ? '主图随对象选用更新' : '未选用资源或暂无主图')}</span>}>
+      <div className="generation-reference-image">{current?.file_id && <img alt="当前资源主图" src={buildFileDownloadUrl(current.file_id)} />}</div>
+      <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => setCanvasPicker(true)}>改用固定图片</WorkbenchButton>
+      <WorkbenchModal title="从当前画布选择参考图" open={canvasPicker} onCancel={() => setCanvasPicker(false)} footer={null}>
+        <div className="generation-reference-picker">{unconnected.map(image => <WorkbenchButton key={referenceImageKey(image)} disabled={disabled} onClick={() => { chooseCandidate(image); setCanvasPicker(false) }}><img alt="参考候选" src={buildFileDownloadUrl(image.file_id!)} />选择参考图 {caption(image)}</WorkbenchButton>)}</div>
+        {!unconnected.length && <p>当前画布没有可关联的未连线图片内容卡。</p>}
+      </WorkbenchModal>
+    </ReferenceCardEditor>
+  }
   return <ReferenceCardEditor parameters={parameters} status={<span>{status}</span>}>
     <div className="generation-reference-image" data-empty={!selected}>
       {selected ? <><img alt="当前参考图" src={buildFileDownloadUrl(selected.file_id)} /><div className="generation-reference-image-actions">

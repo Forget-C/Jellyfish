@@ -233,7 +233,7 @@ class WorkspaceService(DirectingStore):
         return ExtractedFrame(file_id=result.id, source=Source(kind="file", reference=take.id, version="1",
             file_id=file.id, media_range={"source_in_ms": at_ms, "source_out_ms": at_ms + 1}))
 
-    async def assets(self):
+    async def assets(self, *, main_only=False):
         """列出当前项目直接拥有的对象，供场次工作单显式选择。"""
         from app.core.contracts.directing.workspace import AssetSummary
         from app.models.studio import Character, Scene, Prop
@@ -244,10 +244,11 @@ class WorkspaceService(DirectingStore):
                    for kind, model in [('character', Character), ('scene', Scene), ('prop', Prop)]]
         for kind, query in queries:
             rows = list(await self.db.scalars(query))
-            grouped = await reference_images(self.db, kind, [row.id for row in rows])
+            grouped = await reference_images(self.db, kind, [row.id for row in rows], main_only=main_only)
             for row in rows:
                 images, unavailable = grouped[row.id]
                 result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or '',
+                    main_image_file_id=next((image.file_id for image in images if image.is_primary), None),
                     reference_images=images, image_file_ids=list(dict.fromkeys(image.file_id for image in images)),
                     unavailable_image_count=unavailable))
         return result

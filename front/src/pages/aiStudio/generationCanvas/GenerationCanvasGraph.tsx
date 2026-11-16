@@ -1436,7 +1436,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         setDefault={(reference, image) => {
           const current = latest.current
           const result = updateStoryboardReference(current, {
-            ...reference, image_binding: image ? storyboardImageBinding(current, image) : null,
+            ...reference, scene_object_source: null, image_binding: image ? storyboardImageBinding(current, image) : null,
           }, operations, capability, true)
           if (result.document) edit(result.document)
           return result.reason
@@ -1744,7 +1744,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
-            {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
+            {isReference && <ReferenceCard outputs={runtime?.outputs[card.id]} card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly}
               action={renderModelCardAction?.({ card, document, runs: runtime?.runs ?? [], runStatus: node?.status, disabled: precheckDisabled, checking: runtime?.checking === card.id || preparingModel === card.id,
                 precheck: trigger => void precheckFromCard(card.id, trigger) })} />}

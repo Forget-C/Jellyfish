@@ -102,7 +102,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             db.add_all([Model(id='scope-text', name='fixture-text', category='text', provider_id='scope-openai'),
                         Model(id='scope-image', name='gpt-image-1', category='image', provider_id='scope-openai'),
                         Model(id='scope-video', name='viduq2', category='video', provider_id='scope-vidu'),
-                        CharacterImage(character_id='scope-character', file_id='image1')])
+                        CharacterImage(character_id='scope-character', file_id='image1', is_primary=True)])
         chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = await read_data(client, 'GET', chapter_path)
         scene = await read_data(client, 'POST', chapter_path + '/sequences', {'title': '码头', 'position': 0,
@@ -118,7 +118,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             await work()
             prepared = await read_data(client, 'GET', endpoint + '/objects')
             await read_data(client, 'PUT', endpoint + '/objects/' + prepared['objects'][0]['id'],
-                            {'expected_revision': prepared['revision'], 'asset_id': 'scope-character', 'image_file_id': 'image1'})
+                            {'expected_revision': prepared['revision'], 'asset_id': 'scope-character'})
 
             async def build(model):
                 task = await read_data(client, 'POST', endpoint + '/storyboards',
@@ -269,7 +269,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             db.add_all([Model(id='rain-text-model', name='text', category='text', provider_id='rain-text'),
                         Model(id='rain-video-model', name='viduq2', category='video', provider_id='rain-video'),
                         ProjectPropLink(project_id='p1', prop_id='parked-van'),
-                        PropImage(prop_id='parked-van', file_id='image1')])
+                        PropImage(prop_id='parked-van', file_id='image1', is_primary=True)])
         chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = await read_data(client, 'GET', chapter_path)
         scene = await read_data(client, 'POST', chapter_path + '/sequences', {'title': '车旁等候', 'position': 0,
@@ -282,7 +282,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             await asyncio.gather(*worker.jobs.values())
             objects = await read_data(client, 'GET', endpoint + '/objects')
             await read_data(client, 'PUT', endpoint + '/objects/' + objects['objects'][0]['id'],
-                            {'expected_revision': objects['revision'], 'asset_id': 'parked-van', 'image_file_id': 'image1'})
+                            {'expected_revision': objects['revision'], 'asset_id': 'parked-van'})
             task = await read_data(client, 'POST', endpoint + '/storyboards', {'request_id': 'rain-storyboard',
                 'text_model_id': 'rain-text-model', 'production_model_id': 'rain-video-model'})
             await worker.tick()

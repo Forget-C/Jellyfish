@@ -504,7 +504,6 @@ export type { Note_Input } from './models/Note_Input';
 export type { Note_Output } from './models/Note_Output';
 export type { ObjectExtractionRequest } from './models/ObjectExtractionRequest';
 export type { ObjectReferencePayload } from './models/ObjectReferencePayload';
-export type { ObjectReferenceSource } from './models/ObjectReferenceSource';
 export type { ObservedRange } from './models/ObservedRange';
 export type { OutputIdentity } from './models/OutputIdentity';
 export type { PaginatedData_Any_ } from './models/PaginatedData_Any_';
@@ -664,6 +663,7 @@ export type { SceneObjectCandidateReceipt } from './models/SceneObjectCandidateR
 export type { SceneObjectCandidateReview } from './models/SceneObjectCandidateReview';
 export type { SceneObjectChoice } from './models/SceneObjectChoice';
 export type { SceneObjectRead } from './models/SceneObjectRead';
+export type { SceneObjectSource } from './models/SceneObjectSource';
 export type { SceneObjectsRead } from './models/SceneObjectsRead';
 export type { SceneObjectTaskRead } from './models/SceneObjectTaskRead';
 export type { ScenePlannedCutItem } from './models/ScenePlannedCutItem';

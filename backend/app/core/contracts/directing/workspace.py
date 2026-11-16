@@ -290,6 +290,7 @@ class AssetReferenceImage(Contract):
     source_kind: Literal['character', 'scene', 'prop']
     source_id: Identity
     slot_id: int
+    is_primary: bool = False
     is_view_default: bool = False
 
 
@@ -301,6 +302,7 @@ class AssetSummary(Contract):
     name: str
     description: str
     image_file_ids: list[Identity] = Field(default_factory=list)
+    main_image_file_id: Identity | None = None
     unavailable_image_count: int = Field(default=0, ge=0)
     actor_id: Identity | None = None
     reference_images: list[AssetReferenceImage] = Field(default_factory=list)

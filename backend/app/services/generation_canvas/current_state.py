@@ -60,6 +60,8 @@ class CanvasCurrentState:
         context = context or CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
         document = context.document
         cards = context.cards
+        from app.services.generation_canvas.scene_object_sources import current_scene_images
+        result.update(await current_scene_images(self.db, self.project_id, document))
         # 文件可在保存后失效；读取和编译统一使用已核验的媒体出口。
         from app.services.generation_canvas.outputs import card_outputs
         from app.services.studio.files import require_available_file

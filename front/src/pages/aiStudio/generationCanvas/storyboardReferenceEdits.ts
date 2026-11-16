@@ -33,7 +33,7 @@ function synchronizeUses(document: CanvasDocument, changes: ReferenceChange[], o
   const changed = new Map<string, boolean>()
   let next = document
   for (const { shot, object, prior, chosen } of changes) {
-    if (chosen.image_binding && (chosen.name_binding?.object_id ?? chosen.object_id) !== object.object_id) {
+    if ((chosen.image_binding || chosen.scene_object_source) && (chosen.name_binding?.object_id ?? chosen.object_id) !== object.object_id) {
       return { reason: '参考卡已改绑其他对象，请先核对对象身份' }
     }
     for (const use of modelUses(shot, object.object_id)) {
@@ -46,8 +46,8 @@ function synchronizeUses(document: CanvasDocument, changes: ReferenceChange[], o
       if (use.active && (!existing || existing.source.card_id !== prior.id || existing.source.port_id !== 'image' || existing.input_port !== port)) continue
       if (!use.active && existing) continue
       const capability = capabilityFor(model)
-      const replacement = chosen.image_binding && (existing?.source.card_id === chosen.id || capability?.input_ports.includes(port))
-      if (chosen.image_binding && existing && !replacement) return { reason: '无法核实镜头模型对参考用途的支持，请先检查生产模型' }
+      const replacement = (chosen.image_binding || chosen.scene_object_source) && (existing?.source.card_id === chosen.id || capability?.input_ports.includes(port))
+      if ((chosen.image_binding || chosen.scene_object_source) && existing && !replacement) return { reason: '无法核实镜头模型对参考用途的支持，请先检查生产模型' }
       if (!existing && !replacement || existing?.source.card_id === chosen.id && replacement) continue
       if (existing && !replacement && (bindingReferences(model, existing.id).length ||
           ('frame_targets' in model && model.frame_targets?.some(target => target.binding_id === existing.id)))) {
@@ -110,7 +110,7 @@ export function assignStoryboardModel(document: CanvasDocument, next: Generation
     const use = shot.reference_uses?.find(item => item.model_card_id === next.id && item.object_id === object.object_id)
     if (!use || use.active || adopted.has(object.object_id)) return []
     const reference = storyboardReferenceCard(document, shot.reference_overrides?.[object.object_id] ?? object.reference_card_id)
-    if (!reference?.image_binding || (reference.name_binding?.object_id ?? reference.object_id) !== object.object_id) return []
+    if (!(reference?.image_binding || reference?.scene_object_source) || (reference.name_binding?.object_id ?? reference.object_id) !== object.object_id) return []
     return [{ shot, object, prior: reference, chosen: reference }]
   }))
   return changes.length ? synchronizeUses(result.document, changes, operations, () => capability, next.id) : result
@@ -124,7 +124,7 @@ export function updateStoryboardReference(document: CanvasDocument, card: Genera
   if (!prior) return result
   const chosen = storyboardReferenceCard(result.document, card.id)
   if (!chosen) return result
-  if (!explicit && JSON.stringify(prior.image_binding ?? null) === JSON.stringify(chosen.image_binding ?? null)) return result
+  if (!explicit && JSON.stringify([prior.image_binding, prior.scene_object_source]) === JSON.stringify([chosen.image_binding, chosen.scene_object_source])) return result
   const changes = document.storyboard.shots.flatMap(shot => document.storyboard!.objects.flatMap(object => {
     const referenceId = shot.reference_overrides?.[object.object_id] ?? object.reference_card_id
     return shot.object_ids.includes(object.object_id) && referenceId === card.id ? [{ shot, object, prior, chosen }] : []
@@ -155,7 +155,7 @@ export function chooseStoryboardOverride(document: CanvasDocument, shotId: strin
     if (!current) next = { ...next, cards: [...(next.cards ?? []), variant],
       groups: next.groups?.map(group => group.id === shot.group_id && group.kind !== 'stack'
         ? { ...group, card_ids: [...(group.card_ids ?? []), variant.id] } : group) }
-    chosen = { ...variant, image_binding: storyboardImageBinding(document, image) }
+    chosen = { ...variant, scene_object_source: null, image_binding: storyboardImageBinding(document, image) }
     const edited = operations.update(next, chosen)
     if (!edited.document) return edited
     next = edited.document
