@@ -84,10 +84,11 @@ class SceneObjectService(SceneCanvasService):
             state = 'ready' if main else 'unassociated' if not candidate.asset_id else 'missing' if asset else 'unavailable'
             objects.append(SceneObjectRead(**candidate.model_dump(), image_file_id=main, reference_state=state))
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
-        candidate_task_id = await self.db.scalar(self._tasks(sequence_id).with_only_columns(Task.id).where(
+        latest_result = (await self.db.execute(self._tasks(sequence_id).with_only_columns(Task.id, Task.result).where(
             Task.input_snapshot['chapter_id'].as_string() == chapter_id,
-            Task.status == TaskStatus.succeeded, Task.result['pending_application'].as_boolean().is_(True),
-        ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))
+            Task.status == TaskStatus.succeeded,
+        ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
+        candidate_task_id = latest_result.id if latest_result and (latest_result.result or {}).get('pending_application') else None
         return SceneObjectsRead(revision=prepared.get('revision', 0), source_version=prepared.get('source_version'),
             source_changed=bool(prepared and prepared['source_digest'] != digest), objects=objects, assets=assets,
             task=self.task_read(task) if task else None, candidate_task_id=candidate_task_id)
@@ -194,12 +195,26 @@ class SceneObjectService(SceneCanvasService):
         sequence, _ = await self._scene(chapter_id, sequence_id)
         task = await self._extraction_task(chapter_id, sequence_id, task_id)
         result = self._extraction_result(task)
-        if result is None:
+        if result is None or not result.pending_application and result.applied_revision is None:
             return SceneObjectCandidateReview(task=self.task_read(task), candidate_available=False,
                 revision=(sequence.object_preparation or {}).get('revision', 0), source_changed=False,
                 is_current=sequence.is_current, added=[], removed=[], modified=[], retained_choices=[])
         review, _ = self._candidate_plan(sequence, task, result)
         return review
+
+    async def discard_candidate(self, chapter_id: str, sequence_id: str, task_id: str) -> SceneObjectTaskRead:
+        """只退出尚未应用的候选，幂等保留任务结果和当前场次准备。"""
+        await self._scene(chapter_id, sequence_id, lock=True)
+        task = await self._extraction_task(chapter_id, sequence_id, task_id)
+        result = self._extraction_result(task)
+        if result is None:
+            raise HTTPException(409, '此对象提取尚无可退出的候选')
+        if result.applied_revision is not None:
+            raise RevisionConflict('该对象提取结果已应用，不能退出')
+        result.pending_application = False
+        task.result = result.model_dump(mode='json')
+        await self.db.flush()
+        return self.task_read(task)
 
     async def apply_candidate(self, chapter_id: str, sequence_id: str, task_id: str,
                               body: SceneObjectCandidateApplication) -> SceneObjectCandidateReceipt:
@@ -212,7 +227,7 @@ class SceneObjectService(SceneCanvasService):
         if not result.pending_application:
             if result.application == body and result.applied_revision is not None:
                 return SceneObjectCandidateReceipt(task_id=task.id, revision=result.applied_revision)
-            raise RevisionConflict('该对象提取结果已应用')
+            raise RevisionConflict('该对象提取结果已应用或已退出')
         review, merged = self._candidate_plan(sequence, task, result)
         if not review.is_current:
             raise RevisionConflict('此场次已退出当前划分，不能应用对象候选')

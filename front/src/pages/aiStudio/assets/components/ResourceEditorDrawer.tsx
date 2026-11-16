@@ -569,15 +569,15 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       }}>加入视角文件夹</Button>
     </Space></div>)}
     {dirty && resource && <p>对象设定尚未保存，请先保存再调整图片选择。</p>}
-    {<div role="group" aria-label="本次生成角度">本次生成角度<Checkbox.Group options={[...angles]} value={selectedAngles} onChange={values => setSelectedAngles(values as Angle[])} /></div>}
-    {!selectedAngles.length && <p>未选择角度，默认生成正面。</p>}
+    {<div role="group" aria-label="本次生成角度">本次生成角度<Checkbox.Group options={angles.map(angle => ({ ...angle, disabled: selectedAngles.length === 1 && selectedAngles[0] === angle.value }))} value={selectedAngles} onChange={values => { if (values.length) setSelectedAngles(values as Angle[]) }} /></div>}
+
     {Object.entries(tasks).map(([angle, task]) => task && <div key={angle} role="status">{angleLabel(angle)} · {task.status === 'queued' ? '排队中' : task.status === 'running' ? '生成中' : task.status === 'submitting' ? '正在提交' : task.status === 'succeeded' ? '生成成功' : '生成失败'}
       {task.error && <span>{task.error}</span>}{task.status === 'failed' && <Button disabled={generating} onClick={() => void generate([angle as Angle])}>重试{angleLabel(angle)}</Button>}
     </div>)}
   </div>
   const [referencePreview, setReferencePreview] = useState(false)
   const [referenceUploading, setReferenceUploading] = useState(false)
-  const referencePicker = <ResourceReferencePage referenceNames={referenceNames} returnLabel={pickerReturn === 'generation' ? '返回生成' : '返回表单'} onPreview={setReferencePreview} onUploading={setReferenceUploading} toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
+  const referencePicker = <ResourceReferencePage generationAngles={pickerReturn === 'generation' ? editingAngles : selectedAngles} referenceNames={referenceNames} returnLabel={pickerReturn === 'generation' ? '返回生成' : '返回表单'} onPreview={setReferencePreview} onUploading={setReferenceUploading} toolbarTarget={fullDetail ? null : referenceToolbar} kind={kind} projectId={resource ? resource.project_id : projectId} purpose={purpose}
         onNames={names => setReferenceNames(current => ({ ...current, ...names }))}
         value={pickerReturn === 'generation' ? editingGeneration.references ?? references : references}
         onCancel={() => setPage(pickerReturn)} onApply={next => {
@@ -587,7 +587,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const generationPanel = <div className="resource-editor-fields asset-generation-fields">
         <div className="asset-generation-basics">
           {fullDetail && <label>图片模型<Select className="w-full" aria-label="图片模型" value={selectedModel} options={imageModels.map(model => ({ value: model.id, label: model.name }))} onChange={setSelectedModel} />{modelsFailed && <Alert type="error" message="读取图片模型失败" action={<Button onClick={() => setModelRetry(value => value + 1)}>重试模型列表</Button>} />}</label>}
-          {editingGeneration.mode !== 'edit' && <div className="asset-generation-angles" role="group" aria-label="本次生成角度"><span>本次生成角度</span><Checkbox.Group options={[...angles]} value={editingAngles} onChange={values => setEditingAngles(values as Angle[])} /></div>}
+          {editingGeneration.mode !== 'edit' && <div className="asset-generation-angles" role="group" aria-label="本次生成角度"><span>本次生成角度</span><Checkbox.Group options={angles.map(angle => ({ ...angle, disabled: editingAngles.length === 1 && editingAngles[0] === angle.value }))} value={editingAngles} onChange={values => { if (values.length) setEditingAngles(values as Angle[]) }} /></div>}
         </div>
         {editingGeneration.mode === 'edit' && <><p>局部修改仅处理当前一张图片，原图保留。</p><label>修改要求<Input.TextArea aria-label="修改要求" value={editingGeneration.edit_instruction ?? ''}
           onChange={event => setEditingGeneration(value => ({ ...value, edit_instruction: event.target.value }))} /></label><label>保持内容<Input.TextArea aria-label="保持内容" value={editingGeneration.preserve_instruction ?? ''}
@@ -599,7 +599,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         <Collapse items={[{ key: 'display', label: '展示设置', children: <div className={fullDetail ? 'actor-generation-display' : undefined}>{displayFields.map(([key, label]) => <label key={key}>{label}
           <Input.TextArea aria-label={label} value={editingGeneration[key] ?? ''} onChange={event => setEditingGeneration(value => ({ ...value, [key]: event.target.value }))} />
         </label>)}</div> }]} />
-        {!editingAngles.length && <p>未选择角度，默认生成正面。</p>}
+
         <Button onClick={() => setShowPreview(value => !value)}>{showPreview ? '收起提示词预览' : '预览提示词'}</Button>
         {showPreview && <>
           {previewBusy && <p role="status">提示词正在更新，当前预览尚未生效</p>}

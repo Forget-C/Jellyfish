@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Button, Card, Dropdown, Input, Radio, Space, Spin } from 'antd'
+import { Alert, Button, Card, Dropdown, Input, Modal, Radio, Space, Spin } from 'antd'
 import { MoreOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
@@ -172,7 +172,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, edit
         </fieldset>
         <Space wrap>
           <Button onClick={() => { setDraft(undefined); setError(''); if (draft.kind === 'blank') requestAnimationFrame(() => moreButton.current?.focus()) }} disabled={submitting}>取消</Button>
-          <Button type="primary" loading={submitting} disabled={!eligible || !editable} onClick={confirm}>
+          <Button type="primary" loading={submitting} disabled={!eligible || !editable} onClick={() => needsBasis ? Modal.confirm({ title: '确认生成分镜？', content: '将根据当前配置和已确认的场次依据调用 AI，创建新的分镜画布；已有画布保持不变。', okText: '开始生成', cancelText: '取消', onOk: confirm }) : confirm()}>
             {needsBasis ? '开始提取' : '创建画布'}
           </Button>
         </Space>

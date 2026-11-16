@@ -140,6 +140,14 @@ async def read_scene_object_candidate(project_id: str, chapter_id: str, sequence
     return success_response(await SceneObjectService(db, project_id).read_candidate(chapter_id, sequence_id, task_id))
 
 
+@router.post("/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions/{task_id}/discard",
+             response_model=ApiResponse[SceneObjectTaskRead], operation_id="directing_scene_object_candidate_discard")
+async def discard_scene_object_candidate(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
+                                         db: AsyncSession = Depends(get_db, scope="function")):
+    """忽略本次未应用候选，保留已保存的对象与资源引用。"""
+    return success_response(await _call(SceneObjectService(db, project_id).discard_candidate(chapter_id, sequence_id, task_id)))
+
+
 @router.post("/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions/{task_id}/apply",
              response_model=ApiResponse[SceneObjectCandidateReceipt], operation_id="directing_scene_object_candidate_apply")
 async def apply_scene_object_candidate(project_id: str, chapter_id: str, sequence_id: str, task_id: str,

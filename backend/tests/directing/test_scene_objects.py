@@ -210,6 +210,18 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             assert stale['added'] and stale['removed']
             assert (await client.post(pending_path + '/apply', json=apply_command(before_source))).status_code == 409
             assert (await read_objects())['objects'] == adopted['objects']
+            before_exit = await read_objects()
+            assert (await client.post(candidate_path + '/discard')).status_code == 409
+            assert (await client.post(pending_path.replace('/p1/', '/p2/') + '/discard')).status_code == 404
+            for _ in range(2):
+                exited = await client.post(pending_path + '/discard')
+                assert exited.status_code == 200, exited.text
+            after_exit = await read_objects()
+            assert after_exit['candidate_task_id'] is None
+            assert after_exit['objects'] == before_exit['objects']
+            assert after_exit['revision'] == before_exit['revision']
+            assert not (await review(pending_path))['candidate_available']
+            assert (await client.post(pending_path + '/apply', json=apply_command(before_source))).status_code == 409
             tasks = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1'})).json()['data']['items']
             assert {item['task_kind'] for item in tasks} == {'directing_object_extract'}
         finally:

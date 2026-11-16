@@ -238,8 +238,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   const saveActions = <Space wrap className="chapter-division-save">
     <span className="chapter-division-version">{chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}</span>
     <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing || interaction.dirty || !!interaction.blocked} onClick={() => {
-      if (draftDirty) Modal.confirm({ title: '使用 AI 智能划分？', content: '分析成功后将替换当前草稿；若分析期间继续编辑，结果会保留到历史版本。', okText: '开始分析', cancelText: '取消', onOk: startAnalysis })
-      else void startAnalysis()
+      Modal.confirm({ title: '确认智能划分？', content: draftDirty ? '将调用 AI 分析本章原文，分析成功后替换当前草稿；若分析期间继续编辑，AI 结果将保留到历史版本。' : '将调用 AI 分析本章原文并生成场次划分草稿，确认后开始任务。', okText: '开始划分', cancelText: '取消', onOk: startAnalysis })
     }}>{running || activeTasks.length ? '划分中…' : '智能划分'}</Button>
     <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
     {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>保存为新版本</Button>}

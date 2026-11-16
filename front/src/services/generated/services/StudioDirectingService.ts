@@ -346,6 +346,37 @@ export class StudioDirectingService {
         });
     }
     /**
+     * Discard Scene Object Candidate
+     * 忽略本次未应用候选，保留已保存的对象与资源引用。
+     * @returns ApiResponse_SceneObjectTaskRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneObjectCandidateDiscard({
+        projectId,
+        chapterId,
+        sequenceId,
+        taskId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        taskId: string,
+    }): CancelablePromise<ApiResponse_SceneObjectTaskRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/objects/extractions/{task_id}/discard',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+                'task_id': taskId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Apply Scene Object Candidate
      * 确认应用已核对的整批对象，响应未知可用相同命令核实。
      * @returns ApiResponse_SceneObjectCandidateReceipt_ Successful Response

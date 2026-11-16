@@ -57,3 +57,5 @@
 .reference-picture > span { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .reference-picture:has([aria-pressed="true"]) { outline:2px solid #245dca; outline-offset:3px; border-radius:8px; }
 @media(max-width:575px) { .asset-generation-dialog .object-resource-grid { grid-template-columns:minmax(0,1fr); } }
+.reference-picture-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.reference-picture-actions .ant-btn { font-size:12px; gap:4px; padding-inline:2px; }

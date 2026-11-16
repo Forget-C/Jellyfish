@@ -218,6 +218,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       ;(originTrigger?.isConnected && originTrigger.closest('[data-management-object]') ? originTrigger : trigger ?? filterControl.current?.querySelector<HTMLElement>('button, input, [tabindex="0"]') ?? document.getElementById('management-current-scene'))?.focus({ preventScroll: true })
     })
   }, [read])
+  const confirmExtraction = () => {
+    if (pendingRequest) { void extract(); return }
+    Modal.confirm({ title: '确认提取对象？', content: '将调用 AI 提取本场角色、场所和道具。已有对象准备会保留，重新提取的差异需核对后应用。', okText: '开始提取', cancelText: '取消', onOk: extract })
+  }
   const action = data?.task?.status === 'failed' || data?.task?.status === 'cancelled' ? '重试提取对象'
     : data?.revision ? '重新提取对象' : '提取对象'
 
@@ -276,16 +280,16 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       <h3 className="management-accessible-heading" ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
       {management.host && !assetEditor && createPortal(<>
         <MainButton type="primary" icon={candidateTask ? <DiffOutlined aria-hidden /> : <ScanOutlined aria-hidden />} loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
-          onClick={() => candidateTask ? setLocalReview(candidateTask) : void extract()}>
+          onClick={() => candidateTask ? setLocalReview(candidateTask) : confirmExtraction()}>
           {candidateTask ? '核对对象差异' : extractionLabel}
         </MainButton>
         {candidateTask && <Dropdown trigger={['click']} menu={{ items: [
-          { key: 'extract', label: action, disabled: extractionDisabled, onClick: () => void extract() },
+          { key: 'extract', label: action, disabled: extractionDisabled, onClick: confirmExtraction },
         ] }}><MainButton type="text" icon={<MoreOutlined />} aria-label="对象步骤更多操作" /></Dropdown>}
       </>, management.host)}
     </> : <div className="scene-canvas-list-header">
       <h2 id="scene-object-preparation-title">场次对象与参考</h2>
-      <Button variant="primary" loading={submitting} disabled={extractionDisabled} onClick={() => void extract()}>{extractionLabel}</Button>
+      <Button variant="primary" loading={submitting} disabled={extractionDisabled} onClick={confirmExtraction}>{extractionLabel}</Button>
     </div>}
     {!management && <p>选用对象可暂时无图，动态画布在实际生产时读取当前资源。</p>}
     {loading && <Spin aria-label="正在读取对象准备" />}
