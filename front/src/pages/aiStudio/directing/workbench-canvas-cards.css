@@ -22,7 +22,6 @@
 .management-canvas-created.ant-card { border-color: #91caff; }
 .management-storyboard-basis { display: grid; gap: 8px; }
 .management-storyboard-basis .management-excerpt { margin-top: 8px; }
-.management-basis-reference { width: 40px; height: 32px; object-fit: contain; vertical-align: middle; }
 .management-canvas-error {
   color: var(--app-muted);
   margin: 8px 0 0;

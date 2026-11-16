@@ -145,12 +145,14 @@ class SceneStoryboardService(SceneObjectService):
             'active_task_id': active_task_id,
         })
         names = {(asset.kind, asset.id): asset.name for asset in objects.assets}
+        # 当前状态仅供创建前核对，不参与依据身份，也不补写历史依据。
+        states = {item.id: item.reference_state for item in objects.objects} if canvas is None else {}
         return StoryboardBasis(token=token, source_text=text, source_changed=source_version != chapter_version,
             preparation_revision=objects.revision, preparation_stale=objects.source_changed,
             object_task_active=active_task_id is not None, objects=[StoryboardBasisObject(
                 id=item['id'], name=item['name'], excerpt=item['excerpt'], kind=item['kind'], asset_id=item['asset_id'],
                 asset_name=names.get((item['kind'], item['asset_id'])), image_file_id=item['image_file_id'],
-                reference_unavailable=item['reference_unavailable'],
+                reference_unavailable=item['reference_unavailable'], reference_state=states.get(item['id']),
             ) for item in inputs])
 
     async def reextract_storyboard(self, chapter_id: str, sequence_id: str, canvas_id: str,

@@ -14,4 +14,5 @@ export type StoryboardBasisObject = {
     asset_name?: (string | null);
     image_file_id?: (string | null);
     reference_unavailable?: boolean;
+    reference_state?: ('ready' | 'unassociated' | 'missing' | 'unavailable' | null);
 };

@@ -43,13 +43,11 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
   const [pending, setPending] = useState(() => savedIntent(key))
   const [draft, setDraft] = useState<Draft>()
   const [stage, setStage] = useState<'configure' | 'confirm'>('configure')
-  const [checking, setChecking] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const moreButton = useRef<HTMLButtonElement>(null)
   const [basis, setBasis] = useState<StoryboardBasis>()
   const [basisLoading, setBasisLoading] = useState(false)
   const [basisError, setBasisError] = useState('')
-  const [basisRevision, setBasisRevision] = useState(0)
   const [useSaved, setUseSaved] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -57,7 +55,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
   const needsBasis = draft?.kind === 'storyboard'
   const dirty = !!draft && !pending && (draft.name !== draft.defaultName || draft.mode !== 'complete' || needsBasis && useSaved)
   const { pendingNavigation } = useWorkspaceDraftStatus()
-  const transition = useWorkspaceDraft({ name: '分镜画布配置', dirty, busy: submitting || checking, discard: () => setDraft(undefined) })
+  const transition = useWorkspaceDraft({ name: '分镜画布配置', dirty, busy: submitting, discard: () => setDraft(undefined) })
 
   useEffect(() => {
     mounted.current = true
@@ -76,7 +74,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
     }).catch(cause => { if (active) setBasisError(directingError(cause)) })
       .finally(() => { if (active) setBasisLoading(false) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, needsBasis, basisRevision])
+  }, [projectId, chapterId, sequenceId, needsBasis])
 
   const start = (kind: Kind) => {
     const name = defaultCanvasName()
@@ -122,7 +120,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
           setBasis(undefined); setUseSaved(false); setStage('configure')
         }
       }
-      if (mounted.current) setError(directingError(cause))
+      if (mounted.current) setError(cause instanceof ApiError && cause.status === 409 && intent.kind === 'storyboard' ? '依据已变化，请关闭后重新打开核对。' : directingError(cause))
     } finally {
       sending.current = false
       if (mounted.current) setSubmitting(false)
@@ -136,20 +134,6 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
     if (!editable || !draft || !eligible || pending || sending.current || confirming.current) return
     confirming.current = true
     try {
-      if (draft.kind === 'storyboard') {
-        setChecking(true); setError('')
-        try {
-          const latest = (await Directing.directingStoryboardBasis(scope)).data
-          if (!mounted.current) return
-          if (!latest) throw new Error('无法核实本次生成依据，请重试')
-          if (latest.token !== basis?.token || latest.preparation_stale) {
-            setBasis(undefined); setUseSaved(false); setStage('configure')
-            setError('场次或对象准备已变化，请重新读取依据并再次确认。')
-            return
-          }
-        } catch (cause) { setError(directingError(cause)); return }
-        finally { setChecking(false) }
-      }
       const body = { name: draft.name.trim() || draft.defaultName, request_id: crypto.randomUUID() }
       if (draft.kind === 'blank') await submit({ kind: 'blank', body })
       else if (basis) await submit({ kind: 'storyboard', body: { ...body, mode: draft.mode,
@@ -157,11 +141,10 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
     } finally { confirming.current = false }
   }
   const close = () => {
-    if (submitting || checking) return
+    if (submitting) return
     transition(() => { setDraft(undefined); setError(''); if (draft?.kind === 'blank') requestAnimationFrame(() => moreButton.current?.focus()) })
   }
   const leave = (action: () => void) => transition(() => { setDraft(undefined); action() })
-  const refreshBasis = () => setBasisRevision(value => value + 1)
   const actions = <Space wrap>
     {pending ? !draft && <Button type="primary" loading={submitting} onClick={() => void submit(pending)}>核实提交</Button>
       : <>
@@ -181,13 +164,13 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
     {pending && !draft && !submitting && <Alert type="warning" showIcon message="画布提交结果待核实，将使用原请求身份。" />}
     {!draft && error && <Alert type="error" showIcon message={error} />}
     <Modal wrapClassName="canvas-creation-wrap" className={`canvas-creation-dialog${needsBasis ? ' canvas-creation-storyboard' : ''}`} title={title} width={720} centered open={!!draft}
-      maskClosable={false} closable={!submitting && !checking} keyboard={!submitting && !checking && !pendingNavigation} onCancel={close}
+      maskClosable={false} closable={!submitting} keyboard={!submitting && !pendingNavigation} onCancel={close}
       footer={<Space wrap>
-        <Button aria-label="取消" disabled={submitting || checking} onClick={close}>取消</Button>
-        {needsBasis && stage === 'confirm' && <Button disabled={submitting || checking || !!pending} onClick={() => setStage('configure')}>返回配置</Button>}
+        <Button aria-label="取消" disabled={submitting} onClick={close}>取消</Button>
+        {needsBasis && stage === 'confirm' && <Button disabled={submitting || !!pending} onClick={() => setStage('configure')}>返回配置</Button>}
         {pending ? <Button type="primary" loading={submitting} onClick={() => void submit(pending)}>{submitting ? '正在提交' : '核实提交'}</Button>
           : needsBasis && stage === 'configure' ? <Button type="primary" disabled={!eligible || !editable || basisLoading} onClick={() => setStage('confirm')}>下一步：确认生成</Button>
-            : <Button type="primary" loading={submitting || checking} disabled={!eligible || !editable} onClick={() => void confirm()}>{needsBasis ? '确认生成' : '创建画布'}</Button>}
+            : <Button type="primary" loading={submitting} disabled={!eligible || !editable} onClick={() => void confirm()}>{needsBasis ? '确认生成' : '创建画布'}</Button>}
       </Space>}>
       {error && <Alert type="error" showIcon message={error} />}
       {pending && !submitting && <Alert type="warning" showIcon message="提交结果待核实，请核实原请求，避免重复生成。" />}
@@ -198,9 +181,9 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
             { key: 'name', label: '画布名称', children: draft.name.trim() || draft.defaultName },
             { key: 'scene', label: '场次', children: sceneName },
             { key: 'mode', label: '分镜模式', children: draft.mode === 'faithful' ? '忠实提取' : '自动产出完整分镜' },
-            { key: 'references', label: '采用依据', children: `${basis?.objects.length ?? 0} 个对象 · ${basis?.objects.filter(object => object.image_file_id && !object.reference_unavailable).length ?? 0} 张有效参考` },
+            { key: 'references', label: '采用依据', children: `${basis?.objects.length ?? 0} 个对象，其中 ${basis?.objects.filter(object => object.asset_id && !object.reference_unavailable).length ?? 0} 个已选用资源` },
           ]} />
-        </> : <fieldset disabled={submitting || checking || !!pending}>
+        </> : <fieldset disabled={submitting || !!pending}>
           <label htmlFor={nameId}>画布名称</label>
           <Input id={nameId} value={draft.name} maxLength={255} onChange={event => change({ name: event.target.value })} />
           {needsBasis ? <><Radio.Group aria-label="分镜模式" value={draft.mode} options={[
@@ -209,9 +192,9 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
           <p>生成分镜设计和视频模型卡。打开卡片后可选择生产模型。</p></> : <p>画布从本场已确认摘录开始，保留固定原文卡片。</p>}
         </fieldset>}
         {needsBasis && (basisLoading ? <Spin aria-label="正在读取分镜依据" /> : basis
-          ? <StoryboardBasisPreview basis={basis} compact readOnly={stage === 'confirm' || !!pending || submitting || checking} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refreshBasis}
+          ? <StoryboardBasisPreview basis={basis} compact readOnly={stage === 'confirm' || !!pending || submitting} useSaved={useSaved} onUseSaved={setUseSaved}
             onOpenSource={() => leave(onReviewSource)} onOpenObjects={() => leave(() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'objects')))} />
-          : <Alert type="warning" showIcon message={basisError || '请重新核对本次采用依据'} action={<Button disabled={submitting || checking} onClick={refreshBasis}>重新读取依据</Button>} />)}
+          : <Alert type="warning" showIcon message={basisError || '请关闭后重新打开核对本次采用依据'} />)}
       </div>}
     </Modal>
   </>

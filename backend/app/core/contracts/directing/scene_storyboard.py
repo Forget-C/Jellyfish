@@ -34,6 +34,7 @@ class StoryboardBasisObject(Contract):
     asset_name: str | None = None
     image_file_id: Identity | None = None
     reference_unavailable: bool = False
+    reference_state: Literal['ready', 'unassociated', 'missing', 'unavailable'] | None = None
 
 
 class StoryboardBasis(Contract):
