@@ -226,8 +226,11 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     setSameNames({}); setSameNameError('')
     const objects: [string, 'character' | 'scene' | 'prop', string][] = JSON.parse(sameNameKey)
     void Promise.all(objects.map(async ([id, kind, name]) => {
-      const response = await StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({ entityType: kind, projectId, exactName: name, pageSize: 1 })
-      return [id, !!response.data?.pagination.total] as const
+      const responses = await Promise.all([
+        StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({ entityType: kind, projectId, exactName: name, pageSize: 1 }),
+        StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({ entityType: kind === 'character' ? 'actor' : kind, exactName: name, pageSize: 1 }),
+      ])
+      return [id, responses.some(response => !!response.data?.pagination.total)] as const
     })).then(matches => { if (current) setSameNames(Object.fromEntries(matches)) })
       .catch(cause => { if (current) setSameNameError(directingError(cause)) })
     return () => { current = false }
