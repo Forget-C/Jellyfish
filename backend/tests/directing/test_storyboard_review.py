@@ -404,7 +404,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout'])
+@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict'])
 async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, monkeypatch, outcome):
     calls = []
     class ControlledModel:
@@ -426,6 +426,8 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 return SimpleNamespace(content=json.dumps({'structure_choices': [{'id': 'include',
                     'title': '补充镜头参与对象', 'impact': '张三参与镜头 only，保留原地等待设计',
                     'instruction': '把已登记的张三 zs 加入镜头 only 的 object_ids'}]}))
+            if len(calls) == 3 and outcome == 'notes_conflict':
+                return SimpleNamespace(content=json.dumps({'structure_choices': [], 'reason': '意见要求删改等待正文，请修改意见后重试'}))
             if len(calls) == 3 and outcome == 'choice_timeout':
                 raise httpx.ReadTimeout('controlled structural correction timeout')
             if len(calls) >= 3:
@@ -456,6 +458,9 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
             assert first['status'] == 'failed'
             basis = await read_data(client, 'GET', path + '/' + task['task_id'] + '/retry/basis')
             assert basis['structure_only']
+            assert basis['user_issues'][0]['title'] == '镜头 01 · 对象关联'
+            assert '张三' in basis['user_issues'][0]['explanation']
+            assert 'blocking' not in basis['user_issues'][0]['explanation']
             assert 'blocking' in basis['structure_issues'][0] or outcome.startswith('choice')
             if outcome.startswith('choice'):
                 assert basis['structure_options'][0]['id'] == 'include'
@@ -464,7 +469,8 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 assert refused.status_code == 409
             retry = await read_data(client, 'POST', path + '/' + task['task_id'] + '/retry', {
                 'request_id': 'fix-structure', 'basis_token': basis['basis']['token'],
-                'structure_choice_id': 'include' if outcome.startswith('choice') else None})
+                'structure_choice_id': 'include' if outcome.startswith('choice') and outcome != 'choice_custom' else None,
+                'correction_notes': '保留等待表演，仅补齐张三的出镜关联'})
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
             result = await read_data(client, 'GET', path + '/' + retry['task_id'])
@@ -477,7 +483,12 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 await worker.tick()
                 await asyncio.gather(*worker.jobs.values())
                 result = await read_data(client, 'GET', path + '/' + resumed['task_id'])
-            if outcome in ('unsafe', 'unsafe_association'):
+            if outcome == 'notes_conflict':
+                assert result['status'] == 'failed'
+                next_basis = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
+                assert next_basis['previous_correction_notes'] == '保留等待表演，仅补齐张三的出镜关联'
+                assert next_basis['user_issues'][-1]['explanation'] == '意见要求删改等待正文，请修改意见后重试'
+            elif outcome in ('unsafe', 'unsafe_association'):
                 assert result['status'] == 'failed'
                 assert len(calls) == 3
                 assert ('未涉及错误的关联' if outcome == 'unsafe_association' else '结构纠错改变了') in result['error']
@@ -486,6 +497,12 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 assert result['pending_application']
                 assert len(calls) == (5 if outcome == 'choice_timeout' else 4)
             assert '继续修正保留草案' in calls[2][-1].content
+            assert '保留等待表演，仅补齐张三的出镜关联' in calls[2][-1].content
+            replay = await client.post(path + '/' + task['task_id'] + '/retry', json={
+                'request_id': 'fix-structure', 'basis_token': basis['basis']['token'],
+                'structure_choice_id': 'include' if outcome.startswith('choice') and outcome != 'choice_custom' else None,
+                'correction_notes': '另一份意见'})
+            assert replay.status_code == 409
         finally:
             worker.text_pool.shutdown(wait=False)
             if worker.client:

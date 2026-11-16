@@ -50,7 +50,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
     if (quickEntry && matched && task?.status === 'succeeded' && task.candidate &&
       !task.pending_application && !task.repair_details && !task.structure_issues?.length && !task.retry_of_task_id && ownership.editable && !editor.recovery && !editor.conflict) void enter()
   })
-  return <Drawer className="app-detail-drawer" open aria-label="处理分镜提取结果" title="处理分镜提取结果" width="min(720px, 100vw)" onClose={onClose}
+  return <Drawer className="app-detail-drawer management-storyboard-review" open aria-label="处理分镜提取结果" title="处理分镜提取结果" width="min(720px, 100vw)" onClose={onClose}
     footer={<div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
       <Button onClick={onClose}>暂不处理</Button><div ref={setActionHost} />
     </div>}>
@@ -76,7 +76,9 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
         <Button disabled={!ownership.editable} onClick={() => editor.reload()}>使用服务器内容</Button>
       </Space>} />}
       {(task?.status === 'queued' || task?.status === 'running') && <p role="status">提取或审查正在进行，关闭后可继续查看进度。</p>}
-      {task?.error && <Alert type="error" showIcon message="提取未完成，请核对依据后重试。" description={<details><summary>查看失败原因</summary>{task.error}</details>} />}
+      {task?.error && <Alert type={task.structure_issues?.length ? 'warning' : 'error'} showIcon
+        message={task.structure_issues?.length ? '提取结果需要处理，请核对下方问题并选择处理方式。' : '提取未完成，请核对依据后重试。'}
+        description={!task.structure_issues?.length && <details><summary>查看失败原因</summary>{task.error}</details>} />}
       {task?.status === 'failed' && task.repair_details && <details><summary>查看此前候选与修正记录</summary>
         <p>{task.repair_details.reason}</p>
         <StoryboardReviewFindings report={task.repair_details.before_review} candidate={task.candidate} />

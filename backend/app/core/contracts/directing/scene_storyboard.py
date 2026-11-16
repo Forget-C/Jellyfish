@@ -319,9 +319,19 @@ class StoryboardRetry(Contract):
     basis_token: str | None = Field(default=None, min_length=64, max_length=64)
     use_saved_objects: bool = False
     regenerate: bool = False
+    correction_notes: str = Field(default="", max_length=2000)
     structure_choice_id: Identity | None = None
     targeted_repair: StoryboardTargetedRepair | None = Field(default=None, exclude_if=lambda value: value is None)
     review_plan: StoryboardPlanReview | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class StoryboardUserIssue(Contract):
+    """User-facing explanation resolved only from the retained draft."""
+
+    title: str
+    explanation: str
+    decision: str
+    context: str = ''
 
 
 class StoryboardRetryBasis(Contract):
@@ -338,6 +348,8 @@ class StoryboardRetryBasis(Contract):
     review_only: bool = False
     structure_only: bool = False
     structure_issues: list[str] = Field(default_factory=list)
+    user_issues: list[StoryboardUserIssue] = Field(default_factory=list)
+    previous_correction_notes: str = ""
     structure_options: list[StoryboardStructureOption] = Field(default_factory=list)
 
 

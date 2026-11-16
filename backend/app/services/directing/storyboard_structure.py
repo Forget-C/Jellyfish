@@ -1,6 +1,7 @@
 """Retain a failed storyboard for bounded association repair, never for direct application."""
 
 import json
+import re
 from copy import deepcopy
 
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardStructureOption
@@ -34,9 +35,11 @@ def structure_feedback(saved: dict) -> str:
     """The model sees only draft evidence and errors, never provider configuration."""
     return ('继续修正保留草案中的对象关联、设计范围或引用错误。保留镜头数量、顺序、身份、原文事实和所有设计正文。'
             '不能为了通过校验扩大出镜对象；依据不足时保留问题，不猜测创作取舍。返回完整 JSON。\n'
+            '用户纠错意见只适用于本次关联修正，不是新增原文事实。若与所选方案矛盾或超出范围，'
+            '不得自行决定优先级或忽略意见，返回空 structure_choices 并用自然语言 reason 说明需要用户修改什么，使用对象名称与镜头序号，不使用内部ID和字段路径。'
             + CHOICE_INSTRUCTION
             + json.dumps({'draft': saved['draft'], 'issues': saved['issues'],
-                          'selected_option': saved.get('selected_option')}, ensure_ascii=False))
+                          'selected_option': saved.get('selected_option'), 'correction_notes': saved.get('correction_notes', '')}, ensure_ascii=False))
 
 
 CHOICE_INSTRUCTION = (
@@ -118,3 +121,52 @@ def validate_structure_repair(original: dict, updated: dict, issues: list[str], 
         else:
             raise ValueError('结构纠错改变了无关内容，修改未采用')
     check(original, updated)
+
+
+def user_structure_issues(saved: dict, objects: list[dict]) -> list[dict]:
+    """Translate known diagnostics without exposing paths or guessing missing identities."""
+    draft = saved.get('draft') or {}
+    shots = draft.get('shots', [])
+    names = {item['id']: item['name'] for item in objects + draft.get('missed_objects', [])}
+    result = []
+    seen = set()
+    for issue in saved.get('issues', []):
+        if issue in seen or issue == saved.get('decision_reason'):
+            continue
+        seen.add(issue)
+        row = {'title': '待定位的问题', 'explanation': '暂时无法定位具体内容，请展开技术诊断查看原始记录。',
+               'decision': '请核对原文与草案，说明处理方式；依据不足时保留问题。', 'context': ''}
+        for index, shot in enumerate(shots):
+            if not re.search(r'设计 shot:' + re.escape(shot['id']) + r':', issue):
+                continue
+            row['title'] = f'镜头 {index + 1:02d} · 关联问题'
+            row['context'] = shot.get('excerpt', '')
+            if '设计主体未参与其声明的镜头' in issue:
+                match = re.search(r'，对象 ([^，]+)，', issue)
+                name = names.get(match[1]) if match else None
+                row.update(title=f'镜头 {index + 1:02d} · 对象关联',
+                    explanation=f'设计涉及“{name}”，但其适用镜头未将该对象列为参与对象。' if name else '设计涉及的对象未被列入其适用镜头的参与对象，相关对象无法识别。',
+                    decision='请确认对象是否参与这些镜头，或调整设计的适用范围。')
+            elif '引用' in issue or '依赖' in issue:
+                row.update(explanation='设计引用的内容不存在，或超出当前镜头的适用范围。',
+                    decision='请核对设计应引用的内容及其适用范围。')
+            break
+        result.append(row)
+    if saved.get('decision_reason'):
+        result.append({'title': '需要调整处理方式', 'explanation': saved['decision_reason'],
+                       'decision': '请重新选择方案或修改纠错意见，依据不足时保留问题。', 'context': ''})
+    return result
+
+
+def readable_structure_options(saved: dict, objects: list[dict]) -> list[dict]:
+    """Keep executable choices intact while resolving their display labels from frozen evidence."""
+    draft = saved.get('draft') or {}
+    labels = {shot['id']: f'镜头 {index + 1:02d}' for index, shot in enumerate(draft.get('shots', []))}
+    labels.update({item['id']: item['name'] for item in objects + draft.get('missed_objects', [])})
+    def readable(text):
+        for identity, label in sorted(labels.items(), key=lambda pair: len(pair[0]), reverse=True):
+            text = text.replace('镜头 ' + identity, label)
+            text = re.sub(r'(?<![\w])' + re.escape(identity) + r'(?![\w])', lambda _match, value=label: value, text)
+        return text
+    return [{**option, 'title': readable(option['title']), 'impact': readable(option['impact'])}
+            for option in saved.get('options', [])]

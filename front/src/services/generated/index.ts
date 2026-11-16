@@ -770,6 +770,7 @@ export type { StoryboardStructureOption } from './models/StoryboardStructureOpti
 export type { StoryboardTargetedRepair } from './models/StoryboardTargetedRepair';
 export type { StoryboardTaskRead } from './models/StoryboardTaskRead';
 export type { StoryboardTaskSummary } from './models/StoryboardTaskSummary';
+export type { StoryboardUserIssue } from './models/StoryboardUserIssue';
 export type { StyleDesignFields } from './models/StyleDesignFields';
 export type { StyleOption } from './models/StyleOption';
 export type { StyleRule_Input } from './models/StyleRule_Input';

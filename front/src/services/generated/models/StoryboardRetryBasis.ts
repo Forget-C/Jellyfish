@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { StoryboardBasis } from './StoryboardBasis';
 import type { StoryboardStructureOption } from './StoryboardStructureOption';
+import type { StoryboardUserIssue } from './StoryboardUserIssue';
 /**
  * 本次重试实际可采用的依据与沿用的模型配置。
  */
@@ -19,5 +20,7 @@ export type StoryboardRetryBasis = {
     review_only?: boolean;
     structure_only?: boolean;
     structure_issues?: Array<string>;
+    user_issues?: Array<StoryboardUserIssue>;
+    previous_correction_notes?: string;
     structure_options?: Array<StoryboardStructureOption>;
 };

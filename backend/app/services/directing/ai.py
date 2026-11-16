@@ -208,7 +208,7 @@ def generate_directing_result(kind: str, llm, args: dict):
                     reason = str(reason)[:1200]
                     failure = DirectingOutputError('结构纠错需要创作选择，请核对方案后继续' if choices else '无法形成可靠纠错方案，请核对设计依据或明确重新生成')
                     failure.storyboard_structure = {'output': text, 'draft': structure_original,
-                        'issues': structure_issues + [reason], 'options': choices}
+                        'issues': structure_issues + [reason], 'options': choices, 'decision_reason': reason}
                     raise failure
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             if kind == STORYBOARD_KIND:

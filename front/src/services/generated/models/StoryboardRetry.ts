@@ -12,6 +12,7 @@ export type StoryboardRetry = {
     basis_token?: (string | null);
     use_saved_objects?: boolean;
     regenerate?: boolean;
+    correction_notes?: string;
     structure_choice_id?: (string | null);
     targeted_repair?: (StoryboardTargetedRepair | null);
     review_plan?: (StoryboardPlanReview | null);

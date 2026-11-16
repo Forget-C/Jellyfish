@@ -72,3 +72,13 @@
 .management-canvas-cover::before { content:''; position:absolute; width:120px; height:72px; border-radius:12px; background:#fff5; transform:rotate(-9deg); }
 .management-canvas-cover .anticon { z-index:1; }
 .management-canvas-metadata { display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; color:var(--app-muted); font-size:12px; }
+
+.management-storyboard-processing { display:grid; gap:16px; min-width:0; overflow-wrap:anywhere; }
+.management-storyboard-review h3 { margin:0; font-size:14px; font-weight:600; }
+.management-storyboard-review p { margin:8px 0; line-height:1.7; }
+.management-processing-issue { padding:12px 0; border-bottom:1px solid var(--app-border); }
+.management-processing-hint { color:var(--app-muted); font-size:12px; }
+.management-storyboard-review .ant-drawer-footer > div { flex-wrap:wrap; }
+.management-storyboard-review .ant-radio-group { display:grid; gap:8px; }
+.management-storyboard-review .ant-space { max-width:100%; }
+.management-storyboard-review summary { cursor:pointer; }

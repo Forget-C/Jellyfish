@@ -123,7 +123,6 @@ try {
   // Retry candidates require explicit management review. Lost replies reuse the receipt.
   await page.goto(management)
   await card.getByRole('button', { name: '处理提取问题', exact: true }).click()
-  await page.getByRole('button', { name: '重试分镜', exact: true }).click()
   await page.getByRole('button', { name: '确认重试', exact: true }).click()
   await control({ storyboard_release: 3 })
   await poll(() => data(tasks), rows => rows.some(row => row.retry_of_task_id === later.task_id && row.status === 'succeeded'))

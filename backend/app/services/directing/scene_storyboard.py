@@ -165,6 +165,10 @@ class SceneStoryboardService(SceneObjectService):
         """保留原配置与画布身份，仍按当前画布基线组织差异。"""
         await self._scene(chapter_id, sequence_id)
         failed = await self._get_storyboard(chapter_id, sequence_id, task_id)
+        other_intent = body.regenerate or body.targeted_repair or body.review_plan
+        review_only = self._review_source(failed) or failed.kind == STORYBOARD_CHECK_KIND
+        if body.correction_notes.strip() and (other_intent or review_only):
+            raise ValueError("纠错意见仅用于分镜结构纠错")
         if body.regenerate and (body.structure_choice_id or body.targeted_repair or body.review_plan):
             raise ValueError('重新生成不能同时选择局部纠错')
         if body.review_plan:
@@ -179,14 +183,14 @@ class SceneStoryboardService(SceneObjectService):
             return await self._retry_review(chapter_id, sequence_id, failed, body)
         request = self._retry_request(failed, body.request_id, body.basis_token, use_saved=body.use_saved_objects)
         return await self._submit(chapter_id, sequence_id, request,
-                                  canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id, regenerate=body.regenerate, structure_choice_id=body.structure_choice_id)
+                                  canvas_id=failed.input_snapshot['canvas_id'], retry_of_task_id=task_id, regenerate=body.regenerate, structure_choice_id=body.structure_choice_id, correction_notes=body.correction_notes.strip())
 
     @staticmethod
     def _retry_request(failed: Task, request_id: str, basis_token: str | None = None, *,
                        use_saved: bool = False, preview: bool = False) -> StoryboardReextractRequest:
         """保留原任务实际文本模型，单独记录本次确认依据。"""
         config = {**{key: value for key, value in failed.input_snapshot['storyboard_request'].items()
-                     if key not in ('regenerate', 'structure_choice_id')}, 'request_id': request_id,
+                     if key not in ('regenerate', 'structure_choice_id', 'correction_notes')}, 'request_id': request_id,
                   'basis_token': basis_token, 'use_saved_objects': use_saved}
         if basis_token or preview:
             config['text_model_id'] = failed.input_snapshot['model_id']
@@ -213,11 +217,16 @@ class SceneStoryboardService(SceneObjectService):
         model, production, capability = await self._storyboard_models(body)
         settings = self._retry_settings(task_id, body, model, production, capability)
         basis = await self._storyboard_basis(sequence, chapter, objects, inputs, canvas=canvas, settings=settings)
+        from app.services.directing.storyboard_structure import user_structure_issues, readable_structure_options
+        saved_structure = ((failed.result or {}).get('storyboard_structure')
+                           or failed.input_snapshot['run_args'].get('structure_resume') or {})
         return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis,
+            user_issues=user_structure_issues(saved_structure, failed.input_snapshot['run_args']['objects']),
             source_kind='confirmed_scene' if body.adopt_current_source else 'fixed',
+            previous_correction_notes=failed.input_snapshot.get('storyboard_request', {}).get('correction_notes', ''),
             structure_only=bool(((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('draft')),
             structure_issues=((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('issues', []),
-            structure_options=((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('options', []),
+            structure_options=readable_structure_options(saved_structure, failed.input_snapshot['run_args']['objects']),
             mode=body.mode, text_model_name=model.name, production_model_id=body.production_model_id,
             production_model_name=production.name if production else None, pending_modality=body.pending_modality or 'image')
 
@@ -368,9 +377,11 @@ class SceneStoryboardService(SceneObjectService):
 
     async def _submit(self, chapter_id: str, sequence_id: str, body: StoryboardRequest,
                       *, canvas_id: str | None = None, retry_of_task_id: str | None = None, regenerate: bool = False,
-                      structure_choice_id: str | None = None) -> StoryboardTaskRead:
+                      structure_choice_id: str | None = None, correction_notes: str = "") -> StoryboardTaskRead:
         sequence, chapter = await self._scene(chapter_id, sequence_id, lock=True)
         request = body.model_dump(mode='json')
+        if correction_notes:
+            request['correction_notes'] = correction_notes
         if regenerate:
             request['regenerate'] = True
         if structure_choice_id:
@@ -435,11 +446,13 @@ class SceneStoryboardService(SceneObjectService):
                     raise RevisionConflict('提取依据已变化，无法继续原草案纠错，请明确选择重新生成')
                 options = saved.get('options', [])
                 selected = next((option for option in options if option['id'] == structure_choice_id), None)
-                if options and not selected:
+                if options and not selected and not correction_notes:
                     raise RevisionConflict('请先选择本次结构纠错方案')
                 if structure_choice_id and not selected:
                     raise ValueError('纠错方案已失效，请重新核对')
-                args['structure_resume'] = {**saved, 'selected_option': selected}
+                args['structure_resume'] = {**saved, 'selected_option': selected, 'correction_notes': correction_notes}
+        if correction_notes and 'structure_resume' not in args:
+            raise ValueError('没有可继续纠错的保留草案')
         protected = await self.storyboard_repair_protections(canvas.id, sequence_id) if canvas_id else set()
         current = (await CanvasStore(self.db, self.project_id).get(canvas.id)).document if canvas_id else canvas.document
         review_basis = capture_review_basis(CanvasDocument.model_validate(current))
