@@ -100,8 +100,6 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
   font-size: 12px;
 }
 .asset-library-tags .ant-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; margin: 0; }
-.asset-library-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-.asset-library-card-actions > [role="status"] { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .asset-library-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .asset-library-skeleton { padding: 12px; }
 .asset-library-skeleton > .ant-skeleton.ant-skeleton-element,

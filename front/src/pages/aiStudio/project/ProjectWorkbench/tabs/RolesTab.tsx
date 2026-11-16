@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Dropdown, Empty, Modal, message, Pagination, Tag } from 'antd'
+import { Alert, Button, Dropdown, Empty, Modal, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useProjectCharacters } from '../hooks/useProjectData'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
-import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
+import { ResourceCardMetadata } from '../../../assets/components/ResourceCardMetadata'
 import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
@@ -94,9 +94,7 @@ export function RolesTab() {
                       requestAnimationFrame(() => setDeleteTarget({ id: c.id, name: c.name }))
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${c.name}更多操作`} /></Dropdown>}
-                meta={<><Tag>项目专属</Tag><ResourcePublishButton kind="character" asset={c} projectId={projectId} onSaved={refresh} />
-                  <div className="project-resource-description">{c.description?.trim() || '未填写简介'}</div>
-                </>}
+                meta={<><ResourceCardMetadata asset={c} /><div className="project-resource-description" title={c.description ?? undefined}>{c.description?.trim() || '未填写简介'}</div></>}
               />
             ))}
             </div>

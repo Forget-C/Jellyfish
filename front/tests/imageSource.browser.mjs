@@ -18,6 +18,8 @@ try {
  const errors=[];page.on('pageerror',error=>errors.push(error.message))
  const assets={}, images={}, requests=[]
  let uploads=0, failUpload=true, failCreate=true, lastPatch
+ let importMode=false, failSources=true, failSourcePictures=true
+ const librarySources=[{id:'library-one',name:'可导入资源',thumbnail:'library-file'},{id:'library-empty',name:'无图片资源'},...Array.from({length:11},(_,index)=>({id:'library-'+(index+3),name:'图库资源'+(index+3),thumbnail:'library-file'}))]
  await page.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname
   const respond=data=>route.fulfill({json:{success:true,data}})
@@ -43,8 +45,20 @@ try {
   }
   const entity=path.match(/\/entities\/(actor|character|scene|prop|costume)(?:\/([^/]+))?(\/images)?$/)
   if(entity){const[,kind,id,pictures]=entity
-   if(pictures)return list(id==='library-one'?[{id:1,file_id:'library-file',view_angle:'FRONT',is_primary:true,is_view_default:true}]:images[kind]??[])
-   if(!id){const project=new URL(req.url()).searchParams.get('project_id');return list(project?(assets[kind]?.project_id?[assets[kind]]:[]):[{id:'library-one',name:'可导入资源',project_id:null,style:'真人都市',visual_style:'现实'},...(assets[kind]&&!assets[kind].project_id?[assets[kind]]:[])])}
+   if(pictures){
+    if(importMode && id==='library-one' && failSourcePictures){failSourcePictures=false;return route.fulfill({status:503,json:{detail:'成员图片读取失败'}})}
+    return list(id==='library-empty'?[]:id==='library-one'?[{id:1,file_id:'library-file',view_angle:'FRONT',is_primary:true,is_view_default:true},{id:2,file_id:'library-side',view_angle:'LEFT'}]:images[kind]??[])
+   }
+   if(!id){
+    const params=new URL(req.url()).searchParams, project=params.get('project_id')
+    if(importMode && !project){
+     if(failSources)return route.fulfill({status:503,json:{detail:'来源列表读取失败'}})
+     const currentPage=Number(params.get('page')??1), size=Number(params.get('page_size')??12), query=params.get('q')??''
+     const matches=librarySources.filter(source=>source.name.includes(query))
+     return respond({items:matches.slice((currentPage-1)*size,currentPage*size),pagination:{total:matches.length,page:currentPage,page_size:size}})
+    }
+    return list(project?(assets[kind]?.project_id?[assets[kind]]:[]):[{id:'library-one',name:'可导入资源',project_id:null,style:'真人都市',visual_style:'现实'},...(assets[kind]&&!assets[kind].project_id?[assets[kind]]:[])])
+   }
    if(req.method()==='PATCH'){lastPatch=req.postDataJSON();Object.assign(assets[kind],lastPatch)}
    return respond(assets[kind]??{id,name:'可导入资源',project_id:null,style:'真人都市',visual_style:'现实'})
   }
@@ -162,16 +176,62 @@ try {
   await modal.getByRole('button',{name:'取消',exact:true}).click();await modal.waitFor({state:'hidden'})
  }
  for(const[kind,tab,label]of [...kinds.map(([kind,plural,label])=>[kind,plural,label]),['character','roles','角色']]) {
+  importMode=false
   await page.goto(`http://127.0.0.1:4933/projects/p?tab=${tab}`)
   await page.getByRole('button',{name:kind==='character'?'新建角色':'新建',exact:true}).first().click()
+  importMode=true
   await page.getByRole('button',{name:/^从资产库导入/}).click()
   const form=page.getByRole('dialog',{name:'从资产库导入',exact:true})
-  await form.getByRole('combobox',{name:'来源资产',exact:true}).press('ArrowDown')
-  await page.getByText('可导入资源',{exact:true}).last().click()
+  await form.waitFor()
+  assert.ok((await form.boundingBox()).width<=720,'imports use a compact visual picker')
+  assert.equal(await form.getByRole('combobox',{name:'来源资产',exact:true}).count(),0,'text select is removed')
+  if(kind==='actor'){
+   await form.getByRole('button',{name:'重试来源',exact:true}).waitFor()
+   failSources=false
+   await form.getByRole('button',{name:'重试来源',exact:true}).click()
+  }
+  await form.getByRole('button',{name:'选择可导入资源',exact:true}).waitFor()
+  if(kind==='actor'){
+   await page.waitForFunction(()=>{const cover=document.querySelector('[aria-label="选择可导入资源"] img');return cover?.complete && cover.naturalWidth>0})
+   assert.equal(await form.getByRole('button',{name:'导入',exact:true}).isDisabled(),true)
+   await page.screenshot({path:output+'/import-picker-desktop.png',animations:'disabled'})
+   await form.getByTitle('2',{exact:true}).click()
+   await form.getByRole('button',{name:'选择图库资源13',exact:true}).waitFor()
+   const search=form.getByRole('textbox',{name:'搜索来源资产',exact:true})
+   await search.fill('不存在');await search.press('Enter')
+   await form.getByText('未找到匹配的资产',{exact:true}).waitFor()
+   await search.fill('');await search.press('Enter')
+   await form.getByRole('button',{name:'选择无图片资源',exact:true}).click()
+   await form.getByText('来源没有有效图片，暂时不能导入。',{exact:true}).waitFor()
+   assert.equal(await form.getByRole('button',{name:'导入',exact:true}).isDisabled(),true)
+  }
+  await form.getByRole('button',{name:'选择可导入资源',exact:true}).press('Enter')
+  if(kind==='actor')await form.getByRole('button',{name:'重试图片',exact:true}).click()
   await form.getByRole('img',{name:'来源图片 1',exact:true}).waitFor()
+  await form.getByRole('img',{name:'来源图片 2',exact:true}).waitFor()
+  assert.ok((await form.locator('.resource-import-pictures .ant-image').first().boundingBox()).height<=100,'member thumbnails stay compact regardless of image aspect ratio')
+  if(kind==='actor'){
+   await form.locator('.resource-import-pictures .ant-image').nth(1).click()
+   await page.locator('.ant-image-preview-wrap').waitFor({state:'visible'})
+   await page.keyboard.press('Escape')
+   await page.locator('.ant-image-preview-wrap').waitFor({state:'hidden'})
+   assert.equal(await form.isVisible(),true,'closing member preview keeps the import selection')
+  }
   await form.getByRole('textbox',{name:'名称',exact:true}).fill(`导入${label}`)
+  if(kind==='actor'){
+   const search=form.getByRole('textbox',{name:'搜索来源资产',exact:true})
+   await search.fill('不存在');await search.press('Enter')
+   await form.getByText('未找到匹配的资产',{exact:true}).waitFor()
+   assert.equal(await form.getByRole('textbox',{name:'名称',exact:true}).inputValue(),'导入演员','search keeps the selected source and custom copy name')
+   await search.fill('可导入');await search.press('Enter')
+   await form.getByRole('button',{name:'选择可导入资源',exact:true}).waitFor()
+   assert.equal(await form.getByRole('button',{name:'选择可导入资源',exact:true}).getAttribute('aria-pressed'),'true')
+   await page.screenshot({path:output+'/import-selection-desktop.png',animations:'disabled'})
+  }
   await page.setViewportSize({width:375,height:812})
   await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth+1)
+  await page.waitForFunction(()=>{const panel=document.querySelector('[role="dialog"][aria-label="从资产库导入"]').getBoundingClientRect();return panel.left>=0 && panel.right<=innerWidth+1})
+  assert.equal(await form.evaluate(node=>node.scrollWidth>node.clientWidth),false,'visual picker has no mobile overflow')
   await page.screenshot({path:output+`/import-${kind}-mobile.png`,animations:'disabled'})
   await form.getByRole('button',{name:'导入',exact:true}).click();await form.waitFor({state:'hidden'})
   assert.equal(requests.at(-1).project_id,'p');assert.equal(requests.at(-1).source_id,'library-one')

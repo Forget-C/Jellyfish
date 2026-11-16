@@ -15,17 +15,13 @@ let browser, page
 const cleanup = browserCleanup(() => ({ browser, server }))
 const types = [['actor', '演员', 'actors'], ['scene', '场景', 'scenes'], ['prop', '道具', 'props'], ['costume', '服装', 'costumes']]
 const records = Object.fromEntries(types.map(([type, label]) => [type, [
-  { id: type + '-tall', name: label + '竖图', thumbnail: 'tall', description: '很长的描述。'.repeat(28), tags: ['标签一', '标签二', '标签三'] },
-  { id: type + '-wide', name: label + '宽图', thumbnail: 'wide' },
-  { id: type + '-missing', name: label + '缺图' },
-  { id: type + '-broken', name: label + '损坏封面', thumbnail: 'broken' },
+  { id: type + '-tall', name: label + '竖图', thumbnail: 'tall', origin: 'created', created_at: '2026-11-15T18:30:00Z', description: '很长的描述。'.repeat(28), tags: ['标签一', '标签二', '标签三'] },
+  { id: type + '-wide', name: label + '宽图', thumbnail: 'wide', origin: 'upload', created_at: '2026-11-16T00:00:00' },
+  { id: type + '-missing', name: label + '缺图', origin: 'project' },
+  { id: type + '-broken', name: label + '损坏封面', thumbnail: 'broken', origin: 'library', source_character_id: type === 'actor' ? 'role-source' : null },
 ]]))
 records.costume.push(...Array.from({ length: 9 }, (_, index) => ({ id: `costume-page-${index + 1}`, name: `服装分页 ${index + 1}` })))
-let failRead, failDelete = true, generationStatus = 'running', generationCount = 0, deleteCount = 0
-const promptRequests = []
-let lastPromptReferences
-let releaseGeneration
-const holdGeneration = new Promise(resolve => { releaseGeneration = resolve })
+let failRead, failDelete = true, generationRequests = 0, deleteCount = 0
 const box = async locator => {
   const bounds = await locator.boundingBox()
   assert.ok(bounds)
@@ -34,7 +30,7 @@ const box = async locator => {
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
+  page = await browser.newPage({ locale: 'zh-CN', timezoneId: 'Asia/Shanghai', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(8000)
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
@@ -48,10 +44,7 @@ try {
       const [width, height] = path.includes('tall') ? [100, 1600] : [1600, 100]
       return route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="steelblue"/></svg>` })
     }
-    if (path.endsWith('/film/tasks/task-asset/status')) {
-      if (generationStatus === 'succeeded') records.actor.find(asset => asset.id === 'actor-missing').thumbnail = 'wide'
-      return respond({ task_id: 'task-asset', status: generationStatus })
-    }
+    if (request.method() === 'POST' && (path.includes('/generation-') || path.endsWith('/images'))) generationRequests++
     if (path.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     const match = path.match(/\/entities\/(actor|scene|prop|costume)(?:\/([^/]+))?(\/images)?$/)
     if (match) {
@@ -76,17 +69,6 @@ try {
       if (type === 'scene') return respond({ items: pageItems })
       return list(pageItems, items.length)
     }
-    if (path.endsWith('/generation-prompts/assets/actor/actor-missing/slots/19/render')) {
-      promptRequests.push(path)
-      lastPromptReferences = request.postDataJSON().references
-      return respond({ render_id: 'render-asset', template_id: 'tpl', template_version: 1, variables_snapshot: {}, execution_prompt: '画一个演员', recommended_media: { references: [] } })
-    }
-    if (path.endsWith('/generation-tasks/actors/actor-missing/slots/19/tasks')) {
-      generationCount++
-      await holdGeneration
-      assert.equal(request.postDataJSON().execution_prompt, '画一个演员')
-      return respond({ task_id: 'task-asset' })
-    }
     return respond([])
   })
   const card = name => page.getByRole('article').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -100,8 +82,7 @@ try {
   const wide = card('演员宽图').getByRole('img', { name: '演员宽图', exact: true })
   await wide.evaluate(image => image.decode())
   assert.equal((await box(wide)).height, (await box(tall)).height)
-  assert.equal((await box(card('演员竖图').getByRole('button', { name: '重新生成', exact: true }))).y,
-    (await box(card('演员缺图').getByRole('button', { name: '生成', exact: true }))).y)
+  assert.equal((await box(card('演员竖图').locator('.asset-library-description'))).height, (await box(card('演员缺图').locator('.asset-library-description'))).height)
   await thumbnail.press('Enter')
   const preview = page.getByRole('dialog', { name: '演员竖图 · 图片预览' })
   const full = preview.getByRole('img', { name: '演员竖图', exact: true })
@@ -122,8 +103,20 @@ try {
     await missing.getByText('暂无封面', { exact: true }).waitFor()
     await missing.getByText('未填写简介', { exact: true }).waitFor()
     assert.equal(await missing.getByText('暂无标签',{exact:true}).count(),0)
-    assert.equal(await missing.getByRole('button', { name: '生成', exact: true }).count(), 1)
-    assert.equal(await missing.getByRole('link', { name: label + '缺图' }).getAttribute('href'), `/assets/${route}/${type}-missing/edit`)
+    assert.equal(await missing.getByRole('button', { name: /生成/ }).count(), 0)
+    const filled = card(label + '竖图')
+    await filled.getByText('设定创建', { exact: true }).waitFor()
+    await filled.getByLabel('创建日期 2026/11/16', { exact: true }).waitFor()
+    await card(label + '宽图').getByText('上传', { exact: true }).waitFor()
+    await missing.getByText('项目转化', { exact: true }).waitFor()
+    await missing.getByText('日期未提供', { exact: true }).waitFor()
+    await card(label + '损坏封面').getByText(type === 'actor' ? '从角色转化' : '资产库导入', { exact: true }).waitFor()
+    assert.equal(await filled.locator('.asset-library-card-content > *').count(), 3, 'cards contain exactly three information rows')
+    assert.equal((await box(filled)).height, (await box(missing)).height, 'empty descriptions reserve the same card height')
+    const titleBox = await box(filled.locator('.project-resource-title-row')), metaBox = await box(filled.locator('.resource-card-metadata')), descriptionBox = await box(filled.locator('.asset-library-description'))
+    assert.ok(titleBox.y + titleBox.height <= metaBox.y && metaBox.y + metaBox.height <= descriptionBox.y)
+    assert.equal(descriptionBox.height, 40)
+    assert.equal(await missing.getByRole('link', { name: label + '缺图', origin: 'project' }).getAttribute('href'), `/assets/${route}/${type}-missing/edit`)
     if (type === 'scene') await page.getByText('已加载 4 项', { exact: true }).waitFor()
   }
   await page.getByTitle('2', { exact: true }).click()
@@ -137,40 +130,6 @@ try {
 
   await page.getByRole('tab', { name: '演员', exact: true }).click()
   const missingActor = card('演员缺图')
-  const generationRequest = page.waitForRequest(request =>
-    request.method() === 'POST' && request.url().endsWith('/generation-tasks/actors/actor-missing/slots/19/tasks'))
-  await missingActor.getByRole('button', { name: '生成', exact: true }).click()
-  await generationRequest
-  const busy = missingActor.getByRole('button', { name: '生成中', exact: true })
-  await busy.waitFor()
-  assert.equal(await busy.isDisabled(), true)
-  await page.getByRole('tab', { name: '场景', exact: true }).click()
-  await card('场景竖图').waitFor()
-  await page.getByRole('tab', { name: '演员', exact: true }).click()
-  await busy.waitFor()
-  assert.equal(await busy.isDisabled(), true, '请求还在等待时切回资产分类，生成入口仍锁定')
-  releaseGeneration()
-  await page.getByText('已创建演员图片生成任务', { exact: true }).waitFor()
-  assert.equal(generationCount, 1)
-  assert.equal(promptRequests.length, 1)
-  await page.waitForResponse(response => response.url().endsWith('/film/tasks/task-asset/status'))
-  assert.equal(await busy.isDisabled(), true)
-  generationStatus = 'succeeded'
-  await missingActor.getByRole('button', { name: '重新生成', exact: true }).waitFor()
-  generationStatus = 'failed'
-  await missingActor.getByRole('button', { name: '重新生成', exact: true }).click()
-  await page.getByText('演员图片生成失败', { exact: true }).waitFor()
-  assert.equal(generationCount, 2)
-  records.actor.find(asset => asset.id === 'actor-missing').source_character_id = 'source-role'
-  await page.getByRole('button', { name: '刷新', exact: true }).click()
-  await missingActor.getByText('从角色转化 · 详情只读', { exact: true }).waitFor()
-  await missingActor.getByRole('button', { name: '重新生成', exact: true }).click()
-  await missingActor.getByRole('button', { name: '生成中', exact: true }).waitFor()
-  await missingActor.getByRole('button', { name: '重新生成', exact: true }).waitFor()
-  assert.equal(generationCount, 3)
-  assert.deepEqual(lastPromptReferences, [{ file_id: 'wide', role: 'design' }])
-
-
   const search = page.getByRole('textbox', { name: '搜索演员' })
   await search.fill('缺图')
   await search.press('Enter')
@@ -243,14 +202,14 @@ try {
     if (width <= 767) assert.equal((await box(card('演员竖图'))).x, (await box(card('演员宽图'))).x)
     await page.screenshot({ path: join(output, `assets-${width}.png`), animations: 'disabled' })
   }
+  assert.equal(generationRequests, 0, 'asset library cards never submit image generation')
   assert.deepEqual(errors, [])
-  console.log('Asset library covers, preview, generation, recovery, deletion and responsive layout verified.')
+  console.log('Asset library covers, metadata, preview, recovery, deletion and responsive layout verified.')
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') })
   console.log('Browser evidence:', output)
   console.error(await page?.locator('body').innerText())
   throw error
 } finally {
-  releaseGeneration()
   await cleanup()
 }

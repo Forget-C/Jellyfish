@@ -13,12 +13,16 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })
+  const page = await browser.newPage({ timezoneId: 'Asia/Shanghai', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })
   page.setDefaultTimeout(10000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   for(const [kind,tab,label] of [['actor','actors','演员'],['character','roles','角色'],['scene','scenes','场所'],['prop','props','道具'],['costume','costumes','服装']]) {
     const assets=[{id:'one',name:`${label}长名称测试`,description:'真实简介',thumbnail:'/api/cover'}, {id:'missing',name:`无图${label}`}, {id:'new',name:`新增${label}`},{id:'broken',name:`失效${label}`,thumbnail:'/api/broken'}]
     for (const asset of assets) Object.assign(asset, {project_id: 'resources', visual_style: '现实', style: '真人都市', references: []})
+    Object.assign(assets[0], {origin:'created',created_at:'2026-11-15T18:30:00Z'})
+    Object.assign(assets[1], {origin:'library',library_copy_id:'library-copy'})
+    Object.assign(assets[2], {origin:'project',source_character_id:kind==='actor'?'role-source':null})
+    assets[3].description='需要截断的完整详情'.repeat(35)
     let failAssetSave=false, submittedModel
     const imageRows=[{id:1,file_id:'pic',view_angle:'FRONT',is_primary:true,is_view_default:true}]
     let links=[assets[0],assets[1],assets[2],assets[3]].map((a,i)=>({id:i+1,project_id:'resources',[kind+'_id']:a.id})), attempts=0
@@ -56,6 +60,17 @@ try {
     await page.goto(`http://127.0.0.1:4546/projects/resources?tab=${tab}`)
     const preview=page.getByRole('button',{name:'预览'+assets[0].name,exact:true})
     await preview.waitFor()
+    const cards=page.getByRole('article')
+    const firstCard=cards.first()
+    await firstCard.getByLabel('创建日期 2026/11/16',{exact:true}).waitFor()
+    await firstCard.getByText('设定创建',{exact:true}).waitFor()
+    await cards.nth(1).getByText('资产库导入',{exact:true}).waitFor()
+    await cards.nth(2).getByText(kind==='actor'?'从角色转化':'项目转化',{exact:true}).waitFor()
+    assert.equal(await cards.getByRole('link',{name:'查看库中资产',exact:true}).count(),0)
+    assert.equal(await cards.getByRole('button',{name:'进入资产库',exact:true}).count(),0)
+    assert.equal(await firstCard.locator('.project-resource-card-body > *').count(),3)
+    const descriptionBoxes=await cards.locator('.project-resource-description').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().height))
+    assert.deepEqual(descriptionBoxes,[40,40,40,40],'empty and long descriptions retain the same height')
     assert.equal(await preview.locator('img').evaluate(img=>getComputedStyle(img).objectFit),kind==='scene'?'cover':'contain')
     await preview.press('Enter')
     const image=page.getByRole('dialog',{name:assets[0].name,exact:true})

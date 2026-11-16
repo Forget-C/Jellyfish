@@ -10,8 +10,7 @@ import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
-import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
-import { Tag } from 'antd'
+import { ResourceCardMetadata } from '../../../assets/components/ResourceCardMetadata'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
 
@@ -20,6 +19,8 @@ type AssetKind = 'prop' | 'costume'
 type AssetItemLike = {
   project_id?: string | null
   library_copy_id?: string | null
+  origin?: string
+  created_at?: string | null
   id: string
   name: string
   description?: string | null
@@ -149,7 +150,7 @@ function LinkedAssetTab({
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${asset?.name ?? '资源信息暂不可用'}更多操作`} /></Dropdown>}
-                  meta={<><Tag>项目专属</Tag>{asset && <ResourcePublishButton kind={kind} asset={asset} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{asset?.description?.trim() || '未填写简介'}</div></>}
+                  meta={<><ResourceCardMetadata asset={asset} /><div className="project-resource-description" title={asset?.description ?? undefined}>{asset?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}

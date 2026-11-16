@@ -1,6 +1,6 @@
 import { directingError } from '../../../directing/common'
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Dropdown, Empty, Modal, Space, Tag, message, Pagination } from 'antd'
+import { Button, Dropdown, Empty, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { StudioProjectAssetsService } from '../../../../../services/generated'
@@ -9,7 +9,7 @@ import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { useProjectCharacters } from '../hooks/useProjectData'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
-import { ResourcePublishButton } from '../../../assets/components/ResourcePublishButton'
+import { ResourceCardMetadata } from '../../../assets/components/ResourceCardMetadata'
 import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorDrawer'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
@@ -18,6 +18,8 @@ import { ProjectContentToolbar } from '../ProjectContentToolbar'
 type ActorLike = {
   project_id?: string | null
   library_copy_id?: string | null
+  origin?: string
+  created_at?: string | null
   source_character_id?: string | null
   id: string
   name: string
@@ -131,8 +133,7 @@ export function ActorsTab() {
                       })
                     } },
                   ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${a?.name ?? '演员'}更多操作`} /></Dropdown>}
-                  meta={<><Tag>{a?.source_character_id ? '从角色转化' : '项目专属'}</Tag>
-                  {a && <ResourcePublishButton kind="actor" asset={a} projectId={projectId} onSaved={loadLinks} />} <div className="project-resource-description">{a?.description?.trim() || '未填写简介'}</div></>}
+                  meta={<><ResourceCardMetadata asset={a} /><div className="project-resource-description" title={a?.description ?? undefined}>{a?.description?.trim() || '未填写简介'}</div></>}
                 />
               )
             })}

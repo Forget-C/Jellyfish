@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Self
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -71,6 +72,7 @@ class AssetUpdate(BaseModel):
 
 class AssetRead(AssetBase):
 
+    created_at: datetime | None = None
     details_editable: bool = False
     references: list[AssetPromptReference] = Field(default_factory=list)
     library_copy_id: str | None = None

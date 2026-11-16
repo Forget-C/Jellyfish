@@ -142,7 +142,6 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
       {result && (result.assets.length ? <div className="asset-library-grid" aria-busy={loading}>
         {result.assets.map(asset => <AssetImageCard key={asset.id} asset={asset} assetType={assetType} label={label}
           editPath={`/assets/${route}/${encodeURIComponent(asset.id)}/edit`}
-          onGenerated={reload}
           onDelete={() => { setDeleteFailed(false); setDeleteTarget(asset) }} />)}
       </div> : !failed && !loading && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query ? '无匹配资产' : `暂无${label}资产`}>
         {query ? <Button onClick={() => { setSearch(''); searchAssets('') }}>清除搜索</Button>

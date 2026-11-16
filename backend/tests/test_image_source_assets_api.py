@@ -60,6 +60,10 @@ async def test_upload_locked_details_and_default_order(client, kind):
     assert response.status_code == 201, response.text
     data = response.json()["data"]
     assert data["origin"] == "upload" and data["description"] == ""
+    assert data["created_at"]
+    assert (await client.get(f"/api/v1/studio/entities/{kind}/upload")).json()["data"]["created_at"] == data["created_at"]
+    listed = (await client.get(f"/api/v1/studio/entities/{kind}")).json()["data"]["items"]
+    assert next(item for item in listed if item["id"] == "upload")["created_at"] == data["created_at"]
     assert data["style"] is None and data["visual_style"] is None
     assert (await client.post(f"/api/v1/studio/entities/{kind}/image-source", json=body)).json()["data"]["id"] == "upload"
     assert (await client.patch(f"/api/v1/studio/entities/{kind}/upload", json={"supplementary_info": "禁止"})).status_code == 403
@@ -136,6 +140,9 @@ async def test_import_and_publish_copy_only_images(client, kind):
     response = await client.post(f"/api/v1/studio/entities/{kind}/image-source", json=body)
     assert response.status_code == 201, response.text
     assert response.json()["data"]["origin"] == "library"
+    assert response.json()["data"]["created_at"]
+    listed = (await client.get(f"/api/v1/studio/entities/{kind}", params={"project_id": "p"})).json()["data"]["items"]
+    assert next(item for item in listed if item["id"] == "target")["created_at"] == response.json()["data"]["created_at"]
     assert response.json()["data"]["description"] == ""
     assert (await client.post(f"/api/v1/studio/entities/{kind}/image-source", json=body)).json()["data"]["id"] == "target"
     images = (await client.get(f"/api/v1/studio/entities/{kind}/target/images")).json()["data"]["items"]

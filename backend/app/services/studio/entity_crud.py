@@ -25,6 +25,7 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
         "id": obj.id,
         "origin": obj.origin, "source_kind": obj.source_kind, "source_id": obj.source_id,
         "details_editable": obj.details_editable,
+        "created_at": obj.created_at,
         "project_id": obj.project_id,
         "library_copy_id": obj.library_copy_id,
         "references": obj.references,

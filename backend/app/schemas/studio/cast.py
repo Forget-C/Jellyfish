@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Self
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -82,6 +83,7 @@ class ActorRead(SourceInfo, ActorFields, ActorBase):
     """返回演员设定及后端派生的完整描述。"""
 
     style: ProjectStyle | None = None
+    created_at: datetime | None = None
     visual_style: ProjectVisualStyle | None = None
 
     references: list[AssetPromptReference] = Field(default_factory=list)
@@ -146,6 +148,7 @@ class CharacterUpdate(BaseModel):
 
 
 class CharacterRead(SourceInfo, CharacterBase):
+    created_at: datetime | None = None
     style: ProjectStyle | None = None
     visual_style: ProjectVisualStyle | None = None
 

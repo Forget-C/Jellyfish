@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Dropdown, Modal, Spin, Tag, message } from 'antd'
-import { ArrowRightOutlined, MoreOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { useCallback, useRef, useState } from 'react'
+import { Alert, Button, Dropdown, Modal, Spin } from 'antd'
+import { ArrowRightOutlined, MoreOutlined, PictureOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { FilmService, StudioEntitiesService, type AssetPromptReference } from '../../../../services/generated'
-import { useTaskUiStore } from '../../components/taskUiStore'
 import './project-resource-card.css'
+import { ResourceCardMetadata } from './ResourceCardMetadata'
 import { assetAdapters } from '../assetAdapters'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../utils'
 
@@ -24,7 +23,7 @@ export type LibraryAsset = {
   details_editable?: boolean
   origin?: string
   source_character_id?: string | null
-  references?: AssetPromptReference[]
+  created_at?: string | null
 }
 
 export type LibraryAssetType = 'actor' | 'scene' | 'prop' | 'costume'
@@ -38,14 +37,13 @@ function preferredImage(images: AssetImage[]) {
   return images.find(image => image.is_primary && image.file_id) ?? images.find(image => image.view_angle === 'FRONT' && image.file_id) ?? images.find(image => image.file_id)
 }
 
-/** 资产库卡片将预览、编辑和生成分别绑定到明确入口，档案和项目卡片由各自组件负责。 */
-export function AssetImageCard({ asset, assetType, label, editPath, onDelete, onGenerated }: {
+/** 资产库卡片提供封面预览和详情入口，档案和项目卡片由各自组件负责。 */
+export function AssetImageCard({ asset, assetType, label, editPath, onDelete }: {
   asset: LibraryAsset
   assetType: LibraryAssetType
   label: string
   editPath: string
   onDelete: () => void
-  onGenerated: () => void
 }) {
   const adapter = assetAdapters[assetType]
   const thumbnailUrl = resolveAssetUrl(asset.thumbnail)
@@ -57,19 +55,9 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
   const [imagesFailed, setImagesFailed] = useState(false)
   const [selectedImageId, setSelectedImageId] = useState<number>()
   const [failedPreview, setFailedPreview] = useState<string>()
-  const generationKey = `${assetType}:${asset.id}`
-  const generation = useTaskUiStore(state => state.assetGenerations[generationKey])
-  const taskId = generation?.status === 'submitted' ? generation.taskId : undefined
-  const [taskReadFailed, setTaskReadFailed] = useState(false)
-  const hasActiveTask = useTaskUiStore(state => Object.values(state.serverItems).some(task =>
-    (task.status === 'queued' || task.status === 'running') && task.target_type === `${assetType}_image_slot`
-    && task.source?.kind === assetType && task.source.id === asset.id,
-  ))
-
   const generatedImages = images.filter(image => Boolean(image.file_id))
   const selectedImage = generatedImages.find(image => image.id === selectedImageId) ?? preferredImage(generatedImages)
   const previewUrl = buildFileDownloadUrl(selectedImage?.file_id)
-  const generating = Boolean(generation) || hasActiveTask
 
   const loadImages = useCallback(async () => {
     setImagesLoading(true)
@@ -90,69 +78,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
     void loadImages()
   }
 
-  useEffect(() => {
-    if (!taskId) return
-    let active = true
-    let timer: number
-    const poll = async () => {
-      try {
-        const response = await FilmService.getTaskStatusApiV1FilmTasksTaskIdStatusGet({ taskId })
-        if (!active) return
-        const status = response.data?.status
-        if (!status) throw new Error('生成状态缺失')
-        setTaskReadFailed(false)
-        if (status === 'queued' || status === 'running') {
-          timer = window.setTimeout(poll, 2000)
-          return
-        }
-        useTaskUiStore.getState().setAssetGeneration(generationKey)
-        if (status === 'succeeded') {
-          message.success(`${label}图片已生成`)
-          onGenerated()
-        } else if (status === 'failed') message.error(`${label}图片生成失败`)
-        else if (status === 'cancelled') message.info(`${label}图片生成已取消`)
-      } catch {
-        if (!active) return
-        setTaskReadFailed(true)
-        timer = window.setTimeout(poll, 2000)
-      }
-    }
-    timer = window.setTimeout(poll, 2000)
-    return () => {
-      active = false
-      window.clearTimeout(timer)
-    }
-  }, [generationKey, label, onGenerated, taskId])
-
-  const generate = async () => {
-    const { assetGenerations, setAssetGeneration } = useTaskUiStore.getState()
-    if (assetGenerations[generationKey] || hasActiveTask) return
-    setAssetGeneration(generationKey, { status: 'submitting' })
-    try {
-      const response = await StudioEntitiesService.createEntityImageApiV1StudioEntitiesEntityTypeEntityIdImagesPost({
-        entityType: assetType, entityId: asset.id, requestBody: { view_angle: 'FRONT' },
-      })
-      const target = response.data as AssetImage | undefined
-      if (!target) throw new Error('无法创建正面图片记录')
-      let references = asset.references
-      const useMainReference = asset.source_character_id || asset.origin === 'upload'
-      if (useMainReference) {
-        const source = preferredImage((await adapter.listImages(asset.id)).filter(image => image.file_id))
-        references = source?.file_id ? [{ file_id: source.file_id, role: 'design' }] : []
-      }
-      const draft = await adapter.renderPrompt(asset.id, target.id, useMainReference ? { references } : undefined)
-      const id = await adapter.createGenerationTask(asset.id, target.id, { ...draft, references })
-      if (!id) throw new Error('未创建生成任务')
-      setAssetGeneration(generationKey, { status: 'submitted', taskId: id })
-      message.success(`已创建${label}图片生成任务`)
-    } catch {
-      setAssetGeneration(generationKey)
-      message.error(`创建${label}图片生成任务失败`)
-    }
-  }
-
   const coverAvailable = Boolean(thumbnailUrl && thumbnailUrl !== brokenCover)
-  const generateLabel = generating ? '生成中' : thumbnailUrl ? '重新生成' : '生成'
   const description = asset.description?.trim()
   const coverPlaceholder = <span className="asset-library-cover-placeholder">
     <PictureOutlined aria-hidden="true" />{thumbnailUrl ? '图片加载失败' : '暂无封面'}
@@ -175,16 +101,8 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete, on
             <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
           </Dropdown>
         </div>
-        <Tag>{asset.source_character_id ? asset.details_editable ? '从角色转化' : '从角色转化 · 详情只读' : '共享资产'}</Tag>
+        <ResourceCardMetadata asset={asset} />
         <p className="asset-library-description" title={description}>{description || '未填写简介'}</p>
-        <div className="asset-library-card-actions">
-          <Button type="text" size="small" icon={<ThunderboltOutlined aria-hidden="true" />}
-            aria-label={generateLabel} loading={generating} disabled={generating} onClick={() => void generate()}>
-            {generateLabel}
-          </Button>
-          {taskReadFailed && <span role="status">状态读取失败，正在重试</span>}
-
-        </div>
       </div>
     </article>
 
