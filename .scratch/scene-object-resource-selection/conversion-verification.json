@@ -1,0 +1,23 @@
+{
+  "approved_plan_sha256": "569836736a232c516036ad16599fd48b63566de367ec9b4cee052dc1e63ee109",
+  "result": {
+    "already_applied": false,
+    "sequences": 1,
+    "released_usages": 1
+  },
+  "verification": {
+    "objects_retained": 5,
+    "revision_before": 10,
+    "revision_after": 11,
+    "selected_resource": 1,
+    "ready_main_image": 1,
+    "released_usages": 1,
+    "retained_plan_usages": 4,
+    "all_other_usages_unchanged": true,
+    "unchanged_tables": 13,
+    "public_api": "passed",
+    "postflight_candidates": 0,
+    "backup_mode": "0600"
+  },
+  "backup": "/private/tmp/jellyfish-object-conversion-backup-20261116.json"
+}

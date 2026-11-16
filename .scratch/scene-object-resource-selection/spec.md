@@ -1,6 +1,7 @@
 # 对象参考卡片、资源选用与动态生产引用
 
 Status: ready-for-agent
+Completion: resolved
 Blocked by: None
 
 ## Problem Statement
@@ -180,3 +181,7 @@ Blocked by: None
 - 归属与项目上传：[图片来源资源与独立项目导入](../../docs/development/adr/0008-image-source-resources-and-project-imports.md)。
 - 引用决策：[场次对象身份引用与生产用图分离](../../docs/development/adr/0009-scene-object-resource-references.md)。
 - 技能边界：本轮仅整理和发布规格；后续实施及存量清理按用户相应授权与精确影响范围执行。
+
+## Comments
+
+六张实施票据及本次实际存量转换均已完成。集成分支 `codex-scene-object-resource-selection`，具体检查与实际库转换证据见 [集成验收](acceptance.md)。
