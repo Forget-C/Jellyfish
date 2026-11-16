@@ -1,6 +1,8 @@
 import type { CanvasDocument, CanvasResolvedOutput, NamedImageReferenceCard, OutputIdentity } from '../../../services/generated'
 import { sourceKey } from './promptRules'
 
+export const sceneImageViewLabels = ['主图', '正面', '左侧', '右侧', '背面', '四分之三侧面', '俯视', '细节'] as const
+
 const referenceTypes: Record<string, string> = { 'reference.character': '人物', 'reference.place': '场所', 'reference.prop': '道具', 'reference.costume': '服装' }
 
 /** 显示名只修饰当前模型的引用，编号、输出身份及持久绑定保持原值。 */
@@ -26,8 +28,10 @@ export function referenceLabels(document: CanvasDocument, sources: Pick<CanvasRe
     if (!card || !referenceTypes[card.type || '']) continue
     const reference = card as NamedImageReferenceCard
     const linked = reference.name_binding?.canvas_id === document.id ? cards.get(reference.name_binding.card_id) : undefined
-    const name = ((linked && 'name' in linked ? linked.name : reference.name) || '').trim()
-    if (!name) continue
+    const objectName = ((linked && 'name' in linked ? linked.name : reference.name) || '').trim()
+    if (!objectName) continue
+    const view = reference.scene_object_source && output.source.port_id === 'image' ? sceneImageViewLabels[output.source.position] : undefined
+    const name = view && output.source.position > 0 ? `${objectName}-${view}` : objectName
     const key = sourceKey(output.source), group = groups.get(name) || []
     if (!group.some(item => item.key === key)) group.push({ key, type: referenceTypes[reference.type], angle: reference.angle?.trim() || '正面', token: output.token || `@缺失(${output.source.card_id}:${output.source.position + 1})` })
     groups.set(name, group)
