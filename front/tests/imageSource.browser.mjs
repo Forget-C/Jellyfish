@@ -199,6 +199,7 @@ try {
     await page.setViewportSize({width,height:812})
     await page.waitForFunction(()=>{const panel=document.querySelector('[role="dialog"][aria-label="从资产库导入"]').getBoundingClientRect();return panel.left>=0 && panel.right<=innerWidth+1})
     const searchBox=form.getByRole('textbox',{name:'搜索来源资产',exact:true})
+    await form.evaluate(element=>Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{}))))
     const before=await searchBox.boundingBox()
     const scroll=form.locator('.resource-import-content')
     assert.ok(await scroll.evaluate(node=>node.scrollHeight>node.clientHeight),'source cards overflow in the content region')
