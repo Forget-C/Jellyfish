@@ -63,38 +63,48 @@ try {
   const chapters = projectUrl + '?tab=chapters'
   await page.goto(chapters)
   await page.getByRole('textbox', { name: '搜索章节' }).fill('候车')
-  await page.getByRole('button', { name: '工作台管理', exact: true }).press('Enter')
+  const chapterEntrance=page.locator(`[data-chapter-workbench="${chapter}"]`)
+  await chapterEntrance.press('Enter')
   await page.getByRole('region', { name: '完整章节原文' }).waitFor()
-  await page.getByRole('button', { name: '新增场次', exact: true }).click()
-  await page.getByRole('textbox', { name: '场次标题' }).fill('两人等候')
-  await page.getByRole('button', { name: '键盘/触屏选区', exact: true }).click()
-  await page.getByRole('textbox', { name: '键盘或触屏选择原文' }).evaluate((element, end) => {
-    element.focus(); element.setSelectionRange(0, end); document.dispatchEvent(new Event('selectionchange'))
-  }, text.length)
-  await page.locator(`[aria-label="选中原文"][data-start="0"][data-end="${text.length}"]`).waitFor()
-  await page.getByRole('button', { name: '保存新版本', exact: true }).click()
-  await page.getByRole('button', { name: '保存本章划分', exact: true }).click()
-  await page.getByRole('dialog', { name: '划分变更预览' }).waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: '新建场次', exact: true }).click()
+  await page.getByRole('textbox', { name: '新场次名称' }).fill('两人等候')
+  await page.getByRole('radio', { name: '键盘／触屏选择', exact: true }).locator('xpath=ancestor::label').click()
+  const selection=page.getByRole('textbox', { name: '键盘或触屏选择原文' })
+  await selection.press('Home')
+  await selection.press('Shift+End')
+  await page.getByRole('button', { name: '创建场次', exact: true }).click()
+  await page.getByRole('button', { name: '保存为新版本', exact: true }).click()
+  const divisionPreview=page.getByRole('dialog', { name: '划分变更预览' })
+  await divisionPreview.getByRole('button', { name: '保存本章划分', exact: true }).click()
+  await divisionPreview.waitFor({ state: 'hidden' })
   const { sequences: [sequence] } = await request(chapterApi)
   const sceneApi = `${chapterApi}/sequences/${sequence.id}`
   assert.equal(sequence.source_text, text)
   const management = `${projectUrl}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
-  await page.getByRole('button', { name: '进入场次制作', exact: true }).click()
+  await page.goto(management.replace('step=storyboard','step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
-  await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
+  await page.locator('.ant-modal-confirm').filter({hasText:'确认提取对象？'}).getByRole('button',{name:'开始提取',exact:true}).click()
   const prepared = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
-  await prepared.getByRole('combobox', { name: '关联资产' }).click()
-  await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await prepared.getByRole('button', { name: '选择参考图' }).click()
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'),
-    page.getByRole('menuitem', { name: '上传参考图', exact: true }).click()])
-  await chooser.setFiles({ name: '前门备用参考.png', mimeType: 'image/png',
-    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=', 'base64') })
-  await prepared.getByText('已选参考图', { exact: true }).waitFor()
-  await prepared.getByRole('button', { name: '更换参考图' }).click()
-  await page.getByText('参考图 1', { exact: true }).click()
-  await prepared.getByText('已选参考图', { exact: true }).waitFor()
-  await poll(() => request(sceneApi + '/objects'), result => result.objects[0].image_file_id === 'object-browser-image', 'reference selection did not save')
+  const resourceImages=`${studio}/entities/character/object-browser-character/images`
+  const originalImage=(await request(resourceImages)).items.find(image=>image.file_id==='object-browser-image')
+  await request(`${resourceImages}/${originalImage.id}`,'PATCH',{is_primary:true})
+  await prepared.getByRole('button',{name:'选用',exact:true}).click()
+  const resourcePicker=page.getByRole('dialog',{name:'选用项目资源',exact:true})
+  await resourcePicker.getByRole('button',{name:'选择已有角色',exact:true}).click()
+  await resourcePicker.getByRole('button',{name:'确认选用',exact:true}).click()
+  await prepared.getByRole('img',{name:'阿同已选参考图',exact:true}).waitFor()
+  // 对象绑定整个资源；通过资源主图验证参考动态更新，再恢复原主图供媒体执行。
+  const form=new FormData()
+  form.append('file',new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=','base64')],{type:'image/png'}),'前门备用参考.png')
+  form.append('project_id',project)
+  const uploaded=await fetch(`${studio}/files/upload`,{method:'POST',body:form})
+  assert.ok(uploaded.ok,await uploaded.clone().text())
+  const uploadedFile=(await uploaded.json()).data
+  const backup=await request(resourceImages,'POST',{file_id:uploadedFile.id,view_angle:'FRONT'})
+  await request(`${resourceImages}/${backup.id}`,'PATCH',{is_primary:true})
+  assert.equal((await request(sceneApi+'/objects')).objects[0].image_file_id,uploadedFile.id)
+  await request(`${resourceImages}/${originalImage.id}`,'PATCH',{is_primary:true})
+  await poll(() => request(sceneApi + '/objects'), result => result.objects[0].image_file_id === 'object-browser-image', 'resource primary reference did not update')
 
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
   const confirm = preview.getByRole('button', { name: '确认执行', exact: true })
@@ -151,7 +161,7 @@ try {
       await card.getByText('当前定位', { exact: true }).waitFor()
       assert.equal(new URL(page.url()).searchParams.get('canvas'), opened.searchParams.get('canvas'))
       assert.equal(new URL(page.url()).searchParams.get('storyboardTask'), opened.searchParams.get('storyboardTask'))
-      await card.getByRole('button', { name: '打开画布', exact: true }).press('Enter')
+      await card.getByRole('button', { name: defaultName, exact: true }).press('Enter')
       await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
       assert.ok(noteSaved(await request(canvas)))
     }
@@ -213,6 +223,31 @@ try {
     await assign(preparedModel, modality === 'image')
     const preparedPreview = await request(canvas + '/precheck', 'POST', { card_id: preparedModel })
     assert.deepEqual(preparedPreview.input.media.map(media => media.file_id), ['object-browser-image'])
+    if(modality==='image') {
+      const frontReference=objects.find(item=>item.object_id===shots[0].object_ids[0]).reference_card_id
+      const primarySourceKey=JSON.stringify([state.id,frontReference,'image',0])
+      const primaryChoice=page.locator('.wb-details:visible').locator(`[data-reference-source=${JSON.stringify(primarySourceKey)}]`)
+      await primaryChoice.getByRole('button',{name:/^取消采用 /}).click()
+      await poll(()=>request(canvas),saved=>!saved.document.cards.find(card=>card.id===preparedModel).input_bindings.some(binding=>binding.source.card_id===frontReference),'valid reference was not unadopted')
+      const withoutValidReference=await request(canvas+'/precheck','POST',{card_id:preparedModel})
+      assert.equal(withoutValidReference.diagnostics.some(issue=>issue.code==='CREATIVE_REFERENCE_IMAGE_MISSING'&&issue.target.card_id===frontReference),false,'an available dynamic main image is not an empty placeholder')
+      await primaryChoice.getByRole('button',{name:/^采用 /}).click()
+      await poll(()=>request(canvas),saved=>saved.document.cards.find(card=>card.id===preparedModel).input_bindings.some(binding=>binding.source.card_id===frontReference),'valid reference was not restored')
+
+    }
+    const preparedEditor=page.locator('.wb-details:visible')
+    const missingAttribute=modality==='video'?'data-input-binding-id':'data-reference-source'
+    const cancelName=modality==='video'?/^取消主体图片 /:/^取消采用 /
+    const missingRows=preparedEditor.locator(`[${missingAttribute}]`).filter({hasText:'来源输出缺失'}).filter({has:page.getByRole('button',{name:cancelName})})
+    const missingCount=(await request(canvas+'/precheck','POST',{card_id:preparedModel})).diagnostics.filter(issue=>issue.code==='OUTPUT_MISSING').length
+    for(let index=0;index<missingCount;index++) {
+      await missingRows.first().waitFor()
+      const identity=await missingRows.first().getAttribute(missingAttribute)
+      const cancel=preparedEditor.locator(`[${missingAttribute}=${JSON.stringify(identity)}]`).getByRole('button',{name:cancelName})
+      await cancel.click()
+      await cancel.waitFor({state:'hidden'})
+    }
+    await poll(async()=>{const result=await request(canvas+'/precheck','POST',{card_id:preparedModel});return {can_run:result.can_run,diagnostics:result.diagnostics}},result=>result.can_run,'prepared shot still has an adopted empty input')
     await closeCanvasDetails(page)
 
     if (modality === 'image') {
@@ -221,6 +256,18 @@ try {
     }
     const { reference_card_id: referenceId } = objects.find(item => item.object_id === shot.object_ids[0])
     assert.equal(state.document.cards.find(card => card.id === referenceId).image_binding, null)
+    // 动态对象出口保留已采用关系；空出口必须先显式取消采用，才能按无创作参考继续。
+    const missingReference=state.document.cards.find(card=>card.id===referenceId)
+    const missingPrecheck=await request(canvas+'/precheck','POST',{card_id:cardId})
+    assert.ok(missingPrecheck.diagnostics.some(issue=>issue.code==='OUTPUT_MISSING'))
+    const missingEditor=await openCanvasCard(page,cardId)
+    if(modality==='video') {
+      const missingBinding=(await request(canvas)).document.cards.find(card=>card.id===cardId).input_bindings.find(binding=>binding.source.card_id===referenceId)
+      await missingEditor.locator(`[data-input-binding-id=${JSON.stringify(missingBinding.id)}]`).getByRole('button',{name:/^取消主体图片 /}).click()
+    } else await missingEditor.locator('[data-reference-source]').filter({hasText:missingReference.name}).getByRole('button',{name:/^取消采用 /}).click()
+    await poll(()=>request(canvas),saved=>!saved.document.cards.find(card=>card.id===cardId).input_bindings.some(binding=>binding.source.card_id===referenceId),'empty adopted reference was not removed')
+    await closeCanvasDetails(page)
+
     const readRuntime = () => request(canvas + '/runtime')
     const videoAction = (id, name = '生成视频') => page.locator(`[data-card-id="${id}"]`).getByRole('button', { name, exact: true })
     if (modality === 'video') {
@@ -374,10 +421,10 @@ try {
     }
   }
   await page.getByRole('button', { name: '返回工作台管理', exact: true }).click()
-  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
+  await page.getByRole('button', { name: '返回章节列表', exact: true }).click()
   await page.waitForURL(chapters)
   assert.equal(await page.getByRole('textbox', { name: '搜索章节' }).inputValue(), '候车')
-  await page.getByRole('button', { name: '工作台管理', exact: true }).and(page.locator(':focus')).waitFor()
+  await chapterEntrance.and(page.locator(':focus')).waitFor()
   console.log('scene storyboard media browser passed', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})

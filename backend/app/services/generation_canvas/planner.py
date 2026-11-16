@@ -29,7 +29,7 @@ async def plan(current_state, canvas, command, *, lock_config=False):
     nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis, 'hash': basis.basis_hash,
         'dependencies': [], 'private': basis.to_snapshot()}}
     reused = {item.result_set_id for item in compiled.used if item.result_set_id}
-    diagnostics = compiled.diagnostics + storyboard_reference_warnings(context, basis.card, basis.capability)
+    diagnostics = compiled.diagnostics + storyboard_reference_warnings(context, basis.card, basis.capability, model_outputs=outputs)
     return {'nodes': nodes, 'diagnostics': diagnostics,
         'can_run': compiled.can_run and not any('run' in issue.blocks for issue in diagnostics),
         'reused': sorted(reused), 'hash': digest({key: {'hash': item['hash'], 'dependencies': item['dependencies']} for key, item in nodes.items()})}

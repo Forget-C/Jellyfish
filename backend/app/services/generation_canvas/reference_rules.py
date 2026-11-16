@@ -24,8 +24,8 @@ def _reference_object(card):
     return card.name_binding.object_id if card.name_binding else card.object_id or card.id
 
 
-def storyboard_reference_warnings(context, card, capability):
-    """提示当前生产卡未采用的有效空占位；实际采用继续走正常输入校验。"""
+def storyboard_reference_warnings(context, card, capability, *, model_outputs):
+    """按当前绑定及主图出口提示未采用的空占位，不以提取时的采用标记替代实际选择。"""
     storyboard = context.document.storyboard
     if not storyboard or not isinstance(card, ModelCard) or not capability:
         return []
@@ -46,12 +46,14 @@ def storyboard_reference_warnings(context, card, capability):
         if card.id not in shot.model_card_ids or not isinstance(design, ShotDesignCard) or design.shot_id != shot.shot_id:
             continue
         for use in shot.reference_uses:
-            if (use.model_card_id != card.id or use.active or use.binding_id in bindings
+            if (use.model_card_id != card.id or use.binding_id in bindings
                     or use.object_id not in shot.object_ids or use.object_id in adopted):
                 continue
             reference = context.cards.get(shot.reference_overrides.get(use.object_id, defaults.get(use.object_id)))
             if (isinstance(reference, NamedImageReferenceCard) and not reference.image_binding
-                    and _reference_object(reference) == use.object_id and not reference_name_issue(context.document, reference)):
+                    and _reference_object(reference) == use.object_id and not reference_name_issue(context.document, reference)
+                    and not any(output.source.port_id == 'image' and output.source.position == 0 and output.available
+                                for output in context.published_outputs(reference.id, model_outputs=model_outputs))):
                 warnings[reference.id] = CanvasDiagnostic(
                     code='CREATIVE_REFERENCE_IMAGE_MISSING', message=f'{reference.name} 尚未选择创作参考图，可确认不携带该图片继续',
                     severity='warning', target={'card_id': reference.id, 'path': []}, blocks=[])

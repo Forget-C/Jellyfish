@@ -169,6 +169,14 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
                 assert not unavailable['can_run'] and unavailable['preview_token'] is None, unavailable
                 assert any(item['code'] == 'OUTPUT_MISSING' and 'run' in item['blocks'] for item in unavailable['diagnostics'])
                 assert not any(item['code'] == 'CREATIVE_REFERENCE_IMAGE_MISSING' for item in unavailable['diagnostics'])
+                # 提取元数据仍记载曾采用，但人工已经取消实际绑定。
+                bound['storyboard']['shots'][0]['reference_uses'][0]['active'] = True
+                actual['input_bindings'] = [item for item in actual['input_bindings'] if item['id'] != binding_id]
+                await save(bound, 'removed-actual-reference')
+                removed = await precheck(first)
+                assert removed['can_run']
+                assert any(item['code'] == 'CREATIVE_REFERENCE_IMAGE_MISSING' for item in removed['diagnostics'])
+
 
                 model = next(item for item in changed['cards'] if item['id'] == first)
                 if modality == 'video':

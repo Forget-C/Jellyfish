@@ -301,7 +301,11 @@ export async function selectCanvasReferenceImage(page, label) {
 export async function openReadyStoryboard(page, name) {
   const cards = page.getByRole('list', { name: '本场画布', exact: true })
   const card = cards.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) })
-  await card.getByRole('button', { name: '进入画布', exact: true }).click()
+  const candidate=card.getByRole('button',{name:/^(查看并采用分镜|核对分镜)$/})
+  const existing=card.getByRole('button',{name,exact:true})
+  await Promise.race([candidate.waitFor(),existing.waitFor()])
+  if(await candidate.isVisible()) await candidate.click()
+  else await existing.click()
   await enterStoryboardCanvas(page)
   await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
 }
