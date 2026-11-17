@@ -54,6 +54,7 @@
 - [图片来源资源与独立项目导入](adr/0008-image-source-resources-and-project-imports.md)
 - [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
 - [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
+- [原文异常修复与补充解释的边界（已最终确认，尚未实施）](adr/0011-chapter-source-explanations.md)
 
 ## 开发与维护指南
 
