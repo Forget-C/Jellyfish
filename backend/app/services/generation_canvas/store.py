@@ -45,9 +45,10 @@ class CanvasStore:
     async def list(self) -> list[GenerationCanvas]:
         """列出项目画布，沿用现有项目存在性边界。"""
         await get_or_404(self.db, Project, self.project_id, detail="Project not found")
-        rows = list((await self.db.scalars(select(GenerationCanvas).where(
+        # 仅让轻量 ID 参与排序，避免大 JSON 文档耗尽 MySQL 排序缓冲。
+        ids = list((await self.db.scalars(select(GenerationCanvas.id).where(
             GenerationCanvas.project_id == self.project_id).order_by(GenerationCanvas.created_at, GenerationCanvas.id))).all())
-        return [await self.get(row.id) for row in rows]
+        return [await self.get(canvas_id) for canvas_id in ids]
 
     async def get(self, canvas_id: str, *, lock: bool = False) -> GenerationCanvas:
         """锁住文档行后再读回执，使同画布的竞争请求按数据库顺序核实。"""

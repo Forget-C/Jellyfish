@@ -104,6 +104,31 @@ async def test_create_canvas_returns_created_response_and_readable_document(canv
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', [None, 'mysql'], indirect=True)
+async def test_canvas_list_orders_large_documents_and_keeps_project_scope(canvas_client, canvas_file_store):
+    from datetime import datetime
+    from app.models.generation_canvas import GenerationCanvas
+    from app.schemas.generation_canvas import CanvasDocument
+
+    text = 'large canvas content ' * 50000
+    expected = ['earlier', 'same-a', 'same-b']
+    async with canvas_file_store['sessions'].begin() as db:
+        for canvas_id, project_id, day in [('same-b', 'p', 2), ('outside', 'other', 1),
+                                           ('earlier', 'p', 1), ('same-a', 'p', 2)]:
+            document = CanvasDocument(id=canvas_id, project_id=project_id, name=canvas_id,
+                cards=[{'id': 'text', 'type': 'content.text', 'text': text}])
+            db.add(GenerationCanvas(id=canvas_id, project_id=project_id, document=document.model_dump(),
+                created_at=datetime(2026, 1, day)))
+
+    response = await canvas_client.get('/canvases/p')
+    assert response.status_code == 200, response.text[:500]
+    canvases = response.json()['data']
+    assert [canvas['id'] for canvas in canvases] == expected
+    assert all(canvas['document']['cards'][0]['text'] == text for canvas in canvases)
+    assert (await canvas_client.get('/canvases/missing')).status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_project_canvas_can_save_empty_text_and_reopen_independently(canvas_client):
     client = canvas_client
     first = (await client.post('/canvases/p', json={'name': '画布一'})).json()['data']
