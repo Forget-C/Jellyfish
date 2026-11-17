@@ -16,6 +16,7 @@ delete chapters[104].sequence_count
 chapters[2].raw_text = ''
 const writes = [], requests = [], errors = []
 const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: " 她推开门。优化后的原文。\n" } }
+let checkCount = 0
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -30,15 +31,21 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (path.endsWith('/script-processing/check-consistency-async')) {
       const source = req.postDataJSON().script_text
-      taskResults.check = { has_issues: true, issues: [{ issue_type: 'fact', classification: 'contradiction', excerpt: source, description: '需要核对', suggestion: '修复标点' }], check_scope: 'source_consistency', source_version: createHash('sha256').update(source).digest('hex'), explanation_version: createHash('sha256').update('[]').digest('hex') }
+      const notes = (req.postDataJSON().source_explanations ?? []).map(item => ({ kind: 'explanation', excerpt: '', ...item }))
+      const noteHash = items => createHash('sha256').update(JSON.stringify(items.map(item => Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))))).digest('hex')
+      taskResults.check = { policy_version: 2, review_version: noteHash(notes), has_issues: true, issues: [{ issue_type: 'fact', classification: 'contradiction', excerpt: source, description: '需要核对', suggestion: '修复标点' }], check_scope: 'source_consistency', source_version: createHash('sha256').update(source).digest('hex'), explanation_version: createHash('sha256').update('[]').digest('hex') }
+      taskResults.check.explanation_version = noteHash(notes.filter(item => item.policy_version === 2 && item.source_version === taskResults.check.source_version))
+      if (notes.length) taskResults.check.issues.push({ target: 'explanation', explanation_id: notes[0].id, issue_type: 'explanation_scope', description: '解释可能混入拍摄安排', suggestion: '请核对原意' })
+      taskResults.optimize.review_version = taskResults.check.review_version
+      taskResults.optimize.policy_version = 2
       taskResults.optimize.source_text = source
       taskResults.optimize.explanation_version = createHash('sha256').update('[]').digest('hex')
-      return respond({ task_id: 'check', status: 'queued' })
+      return respond({ task_id: `check${++checkCount}`, status: 'queued' })
     }
     if (path.endsWith('/script-processing/optimize-script-async')) return respond({ task_id: 'optimize', status: 'queued' })
     if (path.endsWith('/script-processing/simplify-script-async')) return respond({ task_id: 'simplify', status: 'queued' })
-    const taskPath = path.match(/\/film\/tasks\/(check|optimize|simplify)\/(status|result)$/)
-    if (taskPath) return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, result: taskResults[taskPath[1]] })
+    const taskPath = path.match(/\/film\/tasks\/(check\d+|optimize|simplify)\/(status|result)$/)
+    if (taskPath) return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, result: taskResults[taskPath[1].startsWith('check') ? 'check' : taskPath[1]] })
     if (path.endsWith('/projects/p1')) return respond({ id: 'p1', name: '章节管理测试', stats: {} })
     if (path.endsWith('/chapters')) {
       if (req.method() === 'POST') {
@@ -175,6 +182,11 @@ try {
   await page.getByText('原文异常，需要修复', { exact: true }).click()
   await editor.getByRole('button', { name: '生成修复建议', exact: true }).click()
   await editor.getByRole('button', { name: '应用修复稿', exact: true }).waitFor()
+  await editor.getByRole('button', { name: '添加解释', exact: true }).click()
+  await editor.getByRole('textbox', { name: '解释1内容', exact: true }).fill('尚未复核的背景说明')
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.chapter-editor-modal button')).find(button => button.textContent === '应用修复稿')?.disabled === true)
+  await editor.getByRole('button', { name: '删除解释', exact: true }).click()
+
   assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '她推开门？')
   await page.screenshot({ path: join(evidence, 'source-repair-preview.png'), animations: 'disabled' })
   await editor.getByRole('button', { name: '应用修复稿', exact: true }).click()
@@ -297,6 +309,19 @@ try {
   await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
   assert.equal(writes.at(-1).source_explanations[0].start, 7)
   assert.equal(writes.at(-1).source_explanations[0].end, 9)
+  await editor.getByRole('button', { name: '原文一致性检查', exact: true }).click()
+  await editor.getByRole('button', { name: '确认越界，退出采用', exact: true }).waitFor()
+  assert.equal(await editor.getByText('已确认', { exact: true }).count(), 1)
+  await editor.getByRole('button', { name: '确认越界，退出采用', exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: join(evidence, 'explanation-review.png'), animations: 'disabled' })
+  assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '李哥来到门口，李哥挥手。')
+  await editor.getByRole('button', { name: '确认越界，退出采用', exact: true }).click()
+  await editor.getByText('待复核', { exact: true }).waitFor()
+  await editor.getByRole('button', { name: /^保\s*存$/ }).click()
+  await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
+  assert.equal(writes.at(-1).source_explanations[0].source_version, '')
+  assert.equal(writes.at(-1).source_explanations[0].text, '此处刻意不交代身份。')
+
 
   await editor.getByRole('button', { name: /^关\s*闭$/ }).click()
   await page.goto(`${base}&edit=ch105`)

@@ -83,3 +83,27 @@ async def test_concurrent_explanation_save_rejects_old_basis(tmp_path):
         assert stale.status_code == 409
         current = (await api.get('/api/v1/studio/chapters/ch1')).json()['data']
         assert current['source_explanations'][0]['id'] == 'one'
+
+
+async def test_legacy_explanations_are_retained_but_not_adopted_until_policy_review(tmp_path):
+    from tests.directing.test_api import client_for
+    from tests.directing.test_store import database
+    async with database(tmp_path) as sessions, client_for(sessions) as api:
+        chapter = (await api.get('/api/v1/studio/chapters/ch1')).json()['data']
+        item = {'id': 'legacy', 'excerpt': '兄弟', 'text': '这里是同学间的称呼',
+                'source_version': sha256(chapter['raw_text'].encode()).hexdigest()}
+        saved = await api.patch('/api/v1/studio/chapters/ch1', json={'source_explanations': [item]})
+        assert saved.status_code == 200, saved.text
+        base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        source = (await api.get(base)).json()['data']
+        scene = (await api.post(base + '/sequences', json={'title': '测试', 'position': 0,
+            'source_version': source['source_version'], 'span': {'start': 0, 'end': 7}})).json()['data']
+        canvas_path = base + '/sequences/' + scene['id'] + '/canvases'
+        old = (await api.post(canvas_path, json={'name': '复核前'})).json()['data']
+        assert old['document']['fixed_source'].get('source_explanations', []) == []
+        item['policy_version'] = 2
+        saved = await api.patch('/api/v1/studio/chapters/ch1', json={'source_explanations': [item]})
+        assert saved.status_code == 200, saved.text
+        new = (await api.post(canvas_path, json={'name': '复核后'})).json()['data']
+        assert new['document']['fixed_source']['source_explanations'][0]['policy_version'] == 2
+        assert old['document']['fixed_source'].get('source_explanations', []) == []

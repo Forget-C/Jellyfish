@@ -3,7 +3,7 @@ from hashlib import sha256
 import json
 
 from fastapi import HTTPException
-from app.schemas.source_explanations import chapter_basis_version
+from app.schemas.source_explanations import chapter_basis_version, SOURCE_POLICY_VERSION
 
 
 def source_version(text: str) -> str:
@@ -34,7 +34,7 @@ def validate_explanations(items: list[dict], text: str) -> None:
 def explanation_basis(chapter) -> dict:
     """任务固定有效解释及独立摘要，不读取或改写历史任务。"""
     version = source_version(chapter.raw_text)
-    items = [item for item in (chapter.source_explanations or []) if item['source_version'] == version]
+    items = [item for item in (chapter.source_explanations or []) if item['source_version'] == version and item.get('policy_version') == SOURCE_POLICY_VERSION]
     encoded = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     return {'items': items, 'version': source_version(encoded)}
 

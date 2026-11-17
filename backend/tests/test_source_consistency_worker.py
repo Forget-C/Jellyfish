@@ -47,3 +47,27 @@ def test_repair_combines_adjacent_selected_ranges_without_rejecting_valid_change
         'check_scope': 'source_consistency', 'issues': [
             {'excerpt': '李四来了。', 'resolution': 'repair'}, {'excerpt': '张三走了。', 'resolution': 'repair'}]}})
     assert result.optimized_script_text == '甲乙丙'
+
+
+def test_language_check_locates_explanation_issues_without_invalidating_notes():
+    source = '李成才下车，向他们打招呼到。'
+    note = {'id': 'route', 'excerpt': '', 'text': '沿车尾绕行并停到镜头左边。',
+            'source_version': sha256(source.encode()).hexdigest(), 'policy_version': 2}
+    llm = _MockChatModel(json.dumps({'issues': [
+        {'issue_type': 'language', 'classification': 'contradiction', 'excerpt': '打招呼到',
+         'description': '用字问题', 'suggestion': '改为打招呼道'},
+        {'issue_type': 'explanation_scope', 'target': 'explanation', 'explanation_id': 'route',
+         'description': '这是新增的拍摄路线', 'suggestion': '用户确认后退出采用'}], 'has_issues': True}))
+    result = generate_script_result('script_consistency', llm, {'script_text': source, 'source_explanations': [note]})
+    assert result.policy_version == 2
+    assert result.issues[0].target == 'source'
+    assert result.issues[1].explanation_id == 'route'
+    assert note['policy_version'] == 2
+
+
+def test_explanation_scope_issue_cannot_be_misreported_as_source_repair():
+    import pytest
+    llm = _MockChatModel(json.dumps({'issues': [{'issue_type': 'explanation_scope', 'target': 'source',
+        'excerpt': '原文', 'description': '解释越界', 'suggestion': '调整解释'}], 'has_issues': True}))
+    with pytest.raises(ValueError, match='解释问题'):
+        generate_script_result('script_consistency', llm, {'script_text': '原文'})

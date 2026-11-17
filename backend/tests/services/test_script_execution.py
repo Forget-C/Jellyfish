@@ -63,7 +63,7 @@ async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(m
                 assert not calls
             else:
                 assert saved.status == "succeeded"
-                assert saved.result == {**expected, "check_scope": "source_consistency",
+                assert saved.result == {**expected, "check_scope": "source_consistency", "policy_version": 2, "review_version": sha256(b"[]").hexdigest(),
                     "source_version": sha256(args["script_text"].encode()).hexdigest(),
                     "explanation_version": sha256(b"[]").hexdigest()}
                 assert len(calls) == 1

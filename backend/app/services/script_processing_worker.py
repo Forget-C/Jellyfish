@@ -15,6 +15,7 @@ from app.chains.agents import (
     ScriptOptimizerAgent,
     ScriptSimplifierAgent,
 )
+from app.schemas.source_explanations import SOURCE_POLICY_VERSION
 from app.services.chapters.explanations import source_version, validate_explanations
 from app.schemas.skills.script_processing import (
     ScriptConsistencyCheckResult,
@@ -29,8 +30,16 @@ def _consistency(llm, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
     text = str(run_args.get("script_text") or "")
     explanations = run_args.get('source_explanations') or []
     validate_explanations(explanations, text)
-    valid = [item for item in explanations if item['source_version'] == source_version(text)]
-    result = agent.extract(script_text=text, explanations=json.dumps(valid, ensure_ascii=False))
+    current = [item for item in explanations if item['source_version'] == source_version(text)]
+    valid = [item for item in current if item.get('policy_version') == SOURCE_POLICY_VERSION]
+    result = agent.extract(script_text=text, explanations=json.dumps(explanations, ensure_ascii=False))
+    for issue in result.issues:
+        if issue.issue_type == 'explanation_scope' and issue.target != 'explanation':
+            raise ValueError('解释问题须定位到具体解释，不能作为正文问题')
+        if issue.target == 'explanation' and issue.explanation_id not in {item['id'] for item in explanations}:
+            raise ValueError('检查引用了不存在的补充解释')
+    result.review_version = source_version(json.dumps(explanations, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    result.policy_version = SOURCE_POLICY_VERSION
     result.check_scope = 'source_consistency'
     result.source_version = source_version(text)
     result.explanation_version = source_version(json.dumps(valid, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
@@ -101,6 +110,8 @@ def _optimize(llm, run_args: dict[str, Any]) -> ScriptOptimizationResult:
         for tag, start, end, _, _ in SequenceMatcher(None, source, result.optimized_script_text, autojunk=False).get_opcodes():
             if tag != 'equal' and not any(left <= start <= end <= right for left, right in merged):
                 raise ValueError('修改涉及未选问题的原文，整批建议未采用')
+    result.review_version = consistency.get('review_version')
+    result.policy_version = consistency.get('policy_version')
     result.source_text = source
     result.explanation_version = consistency.get('explanation_version')
     return result

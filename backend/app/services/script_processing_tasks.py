@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.source_explanations import SOURCE_POLICY_VERSION
 from app.services.chapters.explanations import source_version, validate_explanations
 import json
 from app.core.contracts.task import TaskStatus
@@ -271,17 +272,20 @@ async def create_script_optimization_task(
     consistency: dict,
     source_explanations: list[dict] | None = None,
 ) -> AsyncTaskCreateResult:
-    if consistency.get('check_scope') != 'source_consistency':
+    if consistency.get('check_scope') != 'source_consistency' or consistency.get('policy_version') != SOURCE_POLICY_VERSION:
         raise HTTPException(409, '旧版检查结果不能用于新修复，请重新检查')
     if consistency.get('source_version') != source_version(script_text):
         raise HTTPException(409, '检查依据已变化，请重新检查')
     validate_explanations(source_explanations or [], script_text)
-    valid = [item for item in source_explanations or [] if item['source_version'] == source_version(script_text)]
+    review_version = source_version(json.dumps(source_explanations or [], ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    if consistency.get('review_version') != review_version:
+        raise HTTPException(409, '检查时的解释内容已变化，请重新检查')
+    valid = [item for item in source_explanations or [] if item['source_version'] == source_version(script_text) and item.get('policy_version') == SOURCE_POLICY_VERSION]
     version = source_version(json.dumps(valid, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
     if consistency.get('explanation_version') != version:
         raise HTTPException(409, '补充解释已变化，请重新检查')
     issues = consistency.get('issues') or []
-    if not isinstance(issues, list) or not issues or any(not isinstance(item, dict) or item.get('resolution') != 'repair' or
+    if not isinstance(issues, list) or not issues or any(not isinstance(item, dict) or item.get('target', 'source') != 'source' or item.get('resolution') != 'repair' or
                          (item.get('classification') == 'ambiguity' and not str(item.get('instruction', '')).strip()) for item in issues):
         raise HTTPException(422, '请先确认并选择需要修复的原文异常')
     return await _create_analysis_task(
@@ -292,7 +296,7 @@ async def create_script_optimization_task(
         run_args={
             "script_text": script_text,
             "consistency": consistency,
-            **({"source_explanations": source_explanations} if source_explanations is not None else {}),
+            **({"source_explanations": valid} if source_explanations is not None else {}),
         },
     )
 

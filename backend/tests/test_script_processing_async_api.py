@@ -272,9 +272,23 @@ def test_optimize_rejects_malformed_issue_selection(client):
     try:
         response = client.post('/api/v1/script-processing/optimize-script-async', json={
             'chapter_id': 'chapter-1', 'script_text': '原文',
-            'consistency': {'check_scope': 'source_consistency',
+            'consistency': {'check_scope': 'source_consistency', 'policy_version': 2, 'review_version': sha256(b'[]').hexdigest(),
                             'source_version': sha256('原文'.encode()).hexdigest(),
                             'explanation_version': sha256(b'[]').hexdigest(), 'issues': ['invalid']}})
         assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_previous_policy_check_cannot_start_new_repair(client):
+    from hashlib import sha256
+    app.dependency_overrides[get_db] = _override_db()
+    try:
+        response = client.post('/api/v1/script-processing/optimize-script-async', json={
+            'chapter_id': 'chapter-1', 'script_text': '原文', 'consistency': {
+                'check_scope': 'source_consistency', 'source_version': sha256('原文'.encode()).hexdigest(),
+                'explanation_version': sha256(b'[]').hexdigest(),
+                'issues': [{'excerpt': '原文', 'resolution': 'repair'}]}})
+        assert response.status_code == 409
     finally:
         app.dependency_overrides.clear()

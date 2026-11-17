@@ -9,13 +9,15 @@ class ScriptConsistencyIssue(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    issue_type: Literal["character_confusion", "spatial", "action_time", "prop_state", "fact"] = Field("character_confusion", description="身份指代、空间、动作时间、道具状态或原文事实")
+    issue_type: Literal["character_confusion", "spatial", "action_time", "prop_state", "fact", "language", "semantics", "explanation_scope"] = Field("character_confusion", description="文字表达、语义、文本一致性或补充解释适用性")
+    target: Literal['source', 'explanation'] = 'source'
+    explanation_id: str | None = None
     classification: Literal['contradiction', 'ambiguity', 'optional'] = 'ambiguity'
     excerpt: str = ''
     candidates: list[str] = Field(default_factory=list)
     character_candidates: List[str] = Field(default_factory=list, description="涉及的角色候选（名字/称呼/ID 皆可，优先用原文称呼）")
-    description: str = Field(..., description="问题描述（为什么会混淆）")
-    suggestion: str = Field(..., description="修改建议（如何改写以消除混淆）")
+    description: str = Field(..., description="问题表现及文字依据")
+    suggestion: str = Field(..., description="处理建议（正文修复或解释核对）")
     affected_lines: Optional[Dict[str, int]] = Field(None, description="受影响的行号范围，形如 {start_line: x, end_line: y}")
     evidence: List[EvidenceSpan] = Field(default_factory=list, description="原文依据（可选）")
 
@@ -27,17 +29,21 @@ class ScriptConsistencyCheckResult(BaseModel):
 
     issues: List[ScriptConsistencyIssue] = Field(default_factory=list, description="问题列表")
     has_issues: bool = Field(..., description="是否发现问题")
+    policy_version: int | None = None
     check_scope: Literal['character_confusion', 'source_consistency'] = 'character_confusion'
+    review_version: str | None = None
     source_version: str | None = None
     explanation_version: str | None = None
     summary: Optional[str] = Field(None, description="总结（可选）")
 
 
 class ScriptOptimizationResult(BaseModel):
-    """剧本优化输出：仅在发现角色混淆问题时使用。"""
+    """用户确认的正文异常修复建议及其固定依据。"""
 
     model_config = ConfigDict(extra="forbid")
 
+    policy_version: int | None = None
+    review_version: str | None = None
     source_text: str | None = None
     explanation_version: str | None = None
     optimized_script_text: str = Field(..., description="优化后的剧本文本")

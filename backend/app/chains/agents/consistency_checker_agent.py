@@ -10,13 +10,20 @@ from app.chains.agents.base import AgentBase
 from app.schemas.skills.script_processing import ScriptConsistencyCheckResult
 
 _CONSISTENCY_CHECKER_SYSTEM_PROMPT = """\
-你是原文一致性检查员。检查身份与指代、空间关系、动作与时间、道具状态、原文事实五类一致性。
-正常称呼（如多人都可能被叫李哥）、文学留白、未写精确站位或焦段不直接构成错误。
-人物出画不等于离场，切镜不改变场内状态；不要要求原文逐镜重复交代在场人物。
+你是章节文字表达检查员。只检查文字表达与原意解释，不检查具体拍摄安排。
+检查 language：错别字、影响理解的标点、语法搭配、成分缺失、语序；semantics：语义不通及上下文表达矛盾。
+身份指代、空间、动作时间、道具和事实仅检查原文明示内容的歧义或冲突。
+结合上下文保留有意的口语、方言、省略、重复和文学留白；不做一般润色，不默认改变文风。
+例如“李成才从另一侧车门下来并打招呼”表达成立；没有绕车路线、停位、机位或遮挡安排不构成章节问题。
+上下文已明确李哥是谁时不要重复报错。不能从本章得到的身份、背景和意图应提问，由用户补充确认，不编造候选。
+用户允许有意不说明时保留不确定性，不要求填满留白。
+同时检查补充解释：是否与正文冲突、编造未经确认背景、混入为拍摄新增的路线或站位。
+空间描述本身不是越界证据，必须区分澄清原意与选择拍摄实现。不判断拍摄方案是否合理，不把解释内容改写进正文。
+explanations 中包含待复核及旧正文解释；旧正文的解释不可当作当前正文事实，必要时仅提示重新核对。
+正文问题 target=source；解释问题 target=explanation，explanation_id 必须为输入中真实条目ID。
+AI 只提供疑点和建议，不自动作废解释。kind=normal 是用户的正常表达确认，依据未变时不要反复报同一问题。
 每项给出 issue_type、classification（contradiction 明确矛盾、ambiguity 待确认歧义、optional 可选补充）、
-逐字且可定位的 excerpt、description、suggestion；有多种可靠解释时给 candidates，不凑选项。
-先判断表述是否成立，不把模型可能误解等同于原文错误。只检查本章，不推断其他章节或资产设定。
-补充解释是经用户确认的原意说明，不是原文摘录，不能用于新增剧情或覆盖正文冲突。
+逐字且有足够上下文唯一定位的 excerpt、description、suggestion；候选只列有依据的解释，不凑数。
 
 输出 ScriptConsistencyCheckResult：
 - issues: 每条问题必须包含 character_candidates、description、suggestion；尽量给出 affected_lines（start_line/end_line）。
@@ -27,12 +34,12 @@ _CONSISTENCY_CHECKER_SYSTEM_PROMPT = """\
 
 CONSISTENCY_CHECKER_PROMPT = PromptTemplate(
     input_variables=["script_text", "explanations"],
-    template="## 原文剧本\n{script_text}\n\n## 已确认补充解释\n{explanations}\n\n## 输出\n",
+    template="## 原文剧本\n{script_text}\n\n## 补充解释（含待复核条目）\n{explanations}\n\n## 输出\n",
 ).partial(explanations="[]")
 
 
 class ConsistencyCheckerAgent(AgentBase[ScriptConsistencyCheckResult]):
-    """一致性检查（角色混淆）：输入原文，检测同一角色身份/行为混淆并给出修改建议。"""
+    """检查章节文字表达和补充解释的适用性，提出疑点与建议。"""
 
     @property
     def system_prompt(self) -> str:
@@ -47,7 +54,7 @@ class ConsistencyCheckerAgent(AgentBase[ScriptConsistencyCheckResult]):
         return ScriptConsistencyCheckResult
 
     def _normalize(self, data: dict[str, Any]) -> dict[str, Any]:
-        """规范化一致性检查结果（角色混淆）。"""
+        """规范化章节文字检查结果。"""
         data = dict(data)
         if "issues" not in data or not isinstance(data["issues"], list):
             data["issues"] = []

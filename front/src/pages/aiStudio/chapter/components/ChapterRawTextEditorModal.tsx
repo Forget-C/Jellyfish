@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons'
 import { ScriptProcessingService, StudioChaptersService } from '../../../../services/generated'
 import type { SourceExplanation } from '../../../../services/generated'
-import { SourceExplanationsEditor, sourceVersion } from './SourceExplanationsEditor'
+import { SourceExplanationsEditor, sourceVersion, SOURCE_POLICY_VERSION } from './SourceExplanationsEditor'
 import type { ScriptConsistencyCheckResult } from './scriptConsistencyResult'
 import {
   CONSISTENCY_CHECK_RELATION_TYPE,
@@ -79,18 +79,21 @@ export function ChapterRawTextEditorModal({
   const [basisVersion, setBasisVersion] = useState<string>()
   const [savedExplanations, setSavedExplanations] = useState<SourceExplanation[]>([])
   const [rawVersion, setRawVersion] = useState('')
+  const [reviewVersion, setReviewVersion] = useState('')
   const [explanationVersion, setExplanationVersion] = useState('')
   const [decisions, setDecisions] = useState<Record<number, string>>({})
   const [intent, setIntent] = useState<Record<number, string>>({})
-  const [repairPreview, setRepairPreview] = useState<{ text: string; source: string; explanationVersion?: string }>()
+  const [repairPreview, setRepairPreview] = useState<{ text: string; source: string; explanationVersion?: string; policyVersion?: number; reviewVersion?: string }>()
   useEffect(() => {
     let active = true
     setRawVersion(''); setExplanationVersion('')
     void sourceVersion(rawText).then(async version => {
-      const valid = explanations.filter(item => item.source_version === version)
-      const stable = JSON.stringify(valid.map(item => ({ ...(item.end == null ? {} : { end: item.end }), excerpt: item.excerpt ?? '', id: item.id, kind: item.kind ?? 'explanation', source_version: item.source_version, ...(item.start == null ? {} : { start: item.start }), text: item.text })))
+      const valid = explanations.filter(item => item.source_version === version && item.policy_version === SOURCE_POLICY_VERSION)
+      const canonical = (items: SourceExplanation[]) => JSON.stringify(items.map(item => ({ ...(item.end == null ? {} : { end: item.end }), excerpt: item.excerpt ?? '', id: item.id, kind: item.kind ?? 'explanation', ...(item.policy_version == null ? {} : { policy_version: item.policy_version }), source_version: item.source_version, ...(item.start == null ? {} : { start: item.start }), text: item.text })))
+      const stable = canonical(valid)
+      const reviewHash = await sourceVersion(canonical(explanations))
       const explanationHash = await sourceVersion(stable)
-      if (active) { setRawVersion(version); setExplanationVersion(explanationHash) }
+      if (active) { setRawVersion(version); setExplanationVersion(explanationHash); setReviewVersion(reviewHash) }
     })
     return () => { active = false }
   }, [rawText, explanations])
@@ -154,7 +157,7 @@ export function ChapterRawTextEditorModal({
           message.error('一键优化失败：未返回有效内容')
           return
         }
-        setRepairPreview({ text: optimized, source: String(result?.source_text ?? ''), explanationVersion: result?.explanation_version })
+        setRepairPreview({ text: optimized, source: String(result?.source_text ?? ''), explanationVersion: result?.explanation_version, policyVersion: result?.policy_version, reviewVersion: result?.review_version })
       },
       onFailed: (errorMessage) => {
         message.error(errorMessage)
@@ -296,7 +299,7 @@ export function ChapterRawTextEditorModal({
       await executeAsyncTaskCreate({
         request: () =>
           ScriptProcessingService.checkConsistencyAsyncApiV1ScriptProcessingCheckConsistencyAsyncPost({
-            requestBody: { script_text: rawText, chapter_id: chapterId ?? null, source_explanations: explanations.filter(item => item.source_version === rawVersion) },
+            requestBody: { script_text: rawText, chapter_id: chapterId ?? null, source_explanations: explanations },
           }),
         trackTaskData: trackConsistencyTaskData,
         startedMessage: consistencyTaskCopy.startedMessage,
@@ -342,13 +345,13 @@ export function ChapterRawTextEditorModal({
     })) {
       return
     }
-    if (consistencyResult.check_scope !== 'source_consistency' || consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) {
+    if (consistencyResult.check_scope !== 'source_consistency' || consistencyResult.review_version !== reviewVersion || consistencyResult.policy_version !== SOURCE_POLICY_VERSION || consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) {
       message.warning('检查依据已变化或为旧版检查，请重新检查'); return
     }
     if ((consistencyResult.issues ?? []).some((item, index) => decisions[index] === 'repair' && item.classification === 'ambiguity' && !intent[index]?.trim())) {
       message.info('请先明确所选歧义的处理意见，或将其设为暂不确定'); return
     }
-    const selected = (consistencyResult.issues ?? []).flatMap((item, index) => decisions[index] === 'repair' ? [{ ...item, resolution: 'repair', instruction: intent[index] ?? '' }] : [])
+    const selected = (consistencyResult.issues ?? []).flatMap((item, index) => decisions[index] === 'repair' && item.target !== 'explanation' ? [{ ...item, resolution: 'repair', instruction: intent[index] ?? '' }] : [])
     if (!selected.length) { message.info('请先选择已确认的原文异常'); return }
     setOptimizingScript(true)
     try {
@@ -359,7 +362,7 @@ export function ChapterRawTextEditorModal({
               chapter_id: chapterId ?? null,
               script_text: rawText,
               consistency: { ...consistencyResult, issues: selected },
-              source_explanations: explanations.filter(item => item.source_version === rawVersion),
+              source_explanations: explanations,
             },
           }),
         trackTaskData: trackOptimizeTaskData,
@@ -677,11 +680,11 @@ export function ChapterRawTextEditorModal({
               style={{ resize: 'none', background: '#fdfdfd' }}
             />
             <SourceExplanationsEditor items={explanations} version={rawVersion} rawText={rawText} disabled={actionsLoading} onChange={setExplanations} />
-            {consistencyResult && (consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) && <Alert type="warning" message="检查结果已过期或为旧版检查，请重新检查后修复" />}
+            {consistencyResult && (consistencyResult.review_version !== reviewVersion || consistencyResult.policy_version !== SOURCE_POLICY_VERSION || consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) && <Alert type="warning" message="检查结果已过期或为旧版检查，请重新检查后修复" />}
             {repairPreview && <Card title="原文异常修复预览">
               <p>修改前</p><pre style={{ whiteSpace: 'pre-wrap' }}>{repairPreview.source}</pre>
               <p>修改后</p><pre style={{ whiteSpace: 'pre-wrap' }}>{repairPreview.text}</pre>
-              <Space><Button disabled={repairPreview.source !== rawText || repairPreview.explanationVersion !== explanationVersion} onClick={() => { setRawText(repairPreview.text); setRepairPreview(undefined) }}>应用修复稿</Button>
+              <Space><Button disabled={repairPreview.reviewVersion !== reviewVersion || repairPreview.policyVersion !== SOURCE_POLICY_VERSION || repairPreview.source !== rawText || repairPreview.explanationVersion !== explanationVersion} onClick={() => { setRawText(repairPreview.text); setRepairPreview(undefined) }}>应用修复稿</Button>
               <Button onClick={() => setRepairPreview(undefined)}>放弃建议</Button></Space>
             </Card>}
             {consistencyResult ? (
@@ -693,7 +696,7 @@ export function ChapterRawTextEditorModal({
                     <Tag color={consistencyResult.has_issues ? 'red' : 'green'}>
                       {consistencyResult.has_issues ? '发现问题' : '无问题'}
                     </Tag>
-                    <Tag>issues：{consistencyIssues.length}</Tag>
+                    <Tag>问题：{consistencyIssues.length}</Tag>
                     <Button
                       size="small"
                       type="primary"
@@ -724,12 +727,22 @@ export function ChapterRawTextEditorModal({
                   <List
                     size="small"
                     dataSource={consistencyIssues}
-                    renderItem={(it: any, idx) => (
+                    renderItem={(it: any, idx) => it.target === 'explanation' ? (
+                      <List.Item><Space direction="vertical">
+                        <Tag>补充解释问题</Tag>
+                        <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{explanations.find(item => item.id === it.explanation_id)?.text ?? '条目已移除'}</div>
+                        <div>{it.description}</div><div>建议：{it.suggestion}</div>
+                        <Button disabled={actionsLoading || consistencyResult.review_version !== reviewVersion || consistencyResult.policy_version !== SOURCE_POLICY_VERSION || consistencyResult.source_version !== rawVersion} onClick={() => {
+                          setExplanations(previous => previous.map(item => item.id === it.explanation_id ? { ...item, source_version: '', policy_version: undefined } : item))
+                          message.info('已退出采用，解释内容保留待调整')
+                        }}>确认越界，退出采用</Button>
+                        <div>若判断不成立，可保留解释；AI 疑点不会自动作废解释。需要修改时请在上方解释条目中编辑。</div>
+                      </Space></List.Item>
+                    ) : (
                       <List.Item>
                         <div className="min-w-0">
                           <div className="font-medium">
-                            {it?.issue_type ? `[${it.issue_type}] ` : ''}
-                            Issue {idx + 1}
+                            {({ language: '语言表达', semantics: '语义表达', character_confusion: '身份指代', spatial: '文字空间关系', action_time: '文字时序', prop_state: '道具描述', fact: '文本事实' } as Record<string, string>)[it.issue_type] ?? '文字问题'} · 问题 {idx + 1}
                           </div>
                           <div className="text-sm">{it?.description}</div>
                           <Tag>{({ contradiction: '明确矛盾', ambiguity: '待确认歧义', optional: '可选补充' } as Record<string, string>)[it.classification] ?? '待确认'}</Tag>
@@ -737,7 +750,7 @@ export function ChapterRawTextEditorModal({
                           <Select aria-label={`问题${idx + 1}性质`} placeholder="确认问题性质" value={decisions[idx]} style={{ width: 210 }} onChange={value => {
                               setDecisions(previous => ({ ...previous, [idx]: value }))
                               setExplanations(previous => previous.filter(item => !(item.kind === 'normal' && item.excerpt === it.excerpt && item.source_version === rawVersion)))
-                              if (value === 'normal' && it.excerpt && rawVersion) setExplanations(previous => [...previous, { id: crypto.randomUUID(), kind: 'normal', excerpt: it.excerpt, text: '用户确认此处表述正常，无需处理。', source_version: rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
+                              if (value === 'normal' && it.excerpt && rawVersion) setExplanations(previous => [...previous, { id: crypto.randomUUID(), policy_version: SOURCE_POLICY_VERSION, kind: 'normal', excerpt: it.excerpt, text: '用户确认此处表述正常，无需处理。', source_version: rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
                             }}
                             options={[{ value: 'repair', label: '原文异常，需要修复' }, { value: 'explain', label: '正常表述，需要解释' }, { value: 'normal', label: '正常，无需处理' }, { value: 'unknown', label: '暂不确定' }]} />
                           {(decisions[idx] === 'repair' || decisions[idx] === 'explain') && <>
@@ -745,7 +758,7 @@ export function ChapterRawTextEditorModal({
                             <Input.TextArea aria-label={`问题${idx + 1}处理意见`} placeholder="处理意见或原意解释；有多种解释时请明确意图" value={intent[idx] ?? ''} onChange={event => setIntent(previous => ({ ...previous, [idx]: event.target.value }))} />
                           </>}
                           {decisions[idx] === 'explain' && <Button disabled={!intent[idx]?.trim() || consistencyResult.source_version !== rawVersion} onClick={() => {
-                            setExplanations(previous => [...previous, { id: crypto.randomUUID(), excerpt: it.excerpt ?? '', text: intent[idx], source_version: !it.excerpt || rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
+                            setExplanations(previous => [...previous, { id: crypto.randomUUID(), policy_version: SOURCE_POLICY_VERSION, excerpt: it.excerpt ?? '', text: intent[idx], source_version: !it.excerpt || rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
                             setDecisions(previous => ({ ...previous, [idx]: 'normal' }))
                           }}>确认并添加解释</Button>}
 

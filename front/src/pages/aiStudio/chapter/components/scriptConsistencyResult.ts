@@ -27,6 +27,8 @@ export type ScriptConsistencyIssue = {
     /**
      * 固定为角色混淆类问题
      */
+    target?: 'source' | 'explanation';
+    explanation_id?: string | null;
     issue_type?: string;
     classification?: 'contradiction' | 'ambiguity' | 'optional';
     excerpt?: string;
@@ -65,6 +67,8 @@ export type ScriptConsistencyCheckResult = {
      * 是否发现问题
      */
     has_issues: boolean;
+    review_version?: string | null;
+    policy_version?: number | null;
     check_scope?: 'character_confusion' | 'source_consistency';
     source_version?: string;
     explanation_version?: string;

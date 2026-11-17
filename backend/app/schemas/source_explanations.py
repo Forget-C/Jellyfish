@@ -5,9 +5,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+SOURCE_POLICY_VERSION = 2
+
+
 class SourceExplanation(BaseModel):
     """空摘录表示全章解释；版本匹配后才可被任务采用。"""
     model_config = ConfigDict(extra='forbid')
+    policy_version: int | None = Field(default=None, ge=1, exclude_if=lambda value: value is None)
     kind: Literal['explanation', 'normal'] = 'explanation'
     id: str = Field(min_length=1, max_length=64)
     excerpt: str = ''
