@@ -404,7 +404,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict'])
+@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict', 'shared', 'shared_unsafe'])
 async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, monkeypatch, outcome):
     calls = []
     class ControlledModel:
@@ -419,9 +419,11 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 'id': 'blocking', 'card_type': 'direction.blocking', 'object_id': 'zs',
                 'fields': {'position': {'state': 'proposal', 'text': '保持原地'}}}]}],
                 'missed_objects': [{'id': 'zs', 'name': '张三', 'kind': 'character', 'excerpt': '张三等待。'}]}
-            if outcome == 'unsafe_association':
-                result['designs'] = [{'id': 'unrelated', 'card_type': 'direction.camera', 'fields': {
-                    'position': {'state': 'proposal', 'text': '保持机位', 'scope': {'shot_ids': ['only']}}}}]
+            if outcome.startswith('shared'):
+                result['designs'] = result['shots'][0].pop('designs')
+            if outcome in ('unsafe_association', 'shared_unsafe'):
+                result.setdefault('designs', []).append({'id': 'unrelated', 'card_type': 'direction.camera', 'fields': {
+                    'position': {'state': 'proposal', 'text': '保持机位', 'scope': {'shot_ids': ['only']}}}})
             if len(calls) == 2 and outcome.startswith('choice'):
                 return SimpleNamespace(content=json.dumps({'structure_choices': [{'id': 'include',
                     'title': '补充镜头参与对象', 'impact': '张三参与镜头 only，保留原地等待设计',
@@ -432,8 +434,8 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 raise httpx.ReadTimeout('controlled structural correction timeout')
             if len(calls) >= 3:
                 result['shots'][0]['object_ids'] = ['zs']
-                if outcome == 'unsafe_association':
-                    result['designs'][0]['fields']['position']['scope']['phase'] = 'video'
+                if outcome in ('unsafe_association', 'shared_unsafe'):
+                    result['designs'][-1]['fields']['position']['scope']['phase'] = 'video'
                 if outcome == 'unsafe':
                     result['shots'][0]['designs'][0]['fields']['position']['text'] = '改成奔跑'
             return SimpleNamespace(content=json.dumps(result))
@@ -458,7 +460,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
             assert first['status'] == 'failed'
             basis = await read_data(client, 'GET', path + '/' + task['task_id'] + '/retry/basis')
             assert basis['structure_only']
-            assert basis['user_issues'][0]['title'] == '镜头 01 · 对象关联'
+            assert basis['user_issues'][0]['title'] == ('镜头 01 · 共享站位与走位' if outcome.startswith('shared') else '镜头 01 · 对象关联')
             assert '张三' in basis['user_issues'][0]['explanation']
             assert 'blocking' not in basis['user_issues'][0]['explanation']
             assert 'blocking' in basis['structure_issues'][0] or outcome.startswith('choice')
@@ -488,10 +490,13 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 next_basis = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
                 assert next_basis['previous_correction_notes'] == '保留等待表演，仅补齐张三的出镜关联'
                 assert next_basis['user_issues'][-1]['explanation'] == '意见要求删改等待正文，请修改意见后重试'
-            elif outcome in ('unsafe', 'unsafe_association'):
+            elif outcome in ('unsafe', 'unsafe_association', 'shared_unsafe'):
                 assert result['status'] == 'failed'
                 assert len(calls) == 3
-                assert ('未涉及错误的关联' if outcome == 'unsafe_association' else '结构纠错改变了') in result['error']
+                assert ('未涉及错误的关联' if outcome in ('unsafe_association', 'shared_unsafe') else '结构纠错改变了') in result['error']
+                next_basis = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
+                assert next_basis['user_issues'][-1]['title'] == '上次纠错未采用'
+                assert next_basis['structure_issues'][:len(basis['structure_issues'])] == basis['structure_issues']
             else:
                 assert result['status'] == 'succeeded', result
                 assert result['pending_application']

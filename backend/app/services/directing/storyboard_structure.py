@@ -4,6 +4,7 @@ import json
 import re
 from copy import deepcopy
 
+from app.services.generation_canvas.catalog import CARD_TITLES
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardStructureOption
 
 
@@ -136,6 +137,34 @@ def user_structure_issues(saved: dict, objects: list[dict]) -> list[dict]:
         seen.add(issue)
         row = {'title': '待定位的问题', 'explanation': '暂时无法定位具体内容，请展开技术诊断查看原始记录。',
                'decision': '请核对原文与草案，说明处理方式；依据不足时保留问题。', 'context': ''}
+        rejection_reasons = {
+            '结构纠错修改了未涉及错误的关联': '纠错修改了本次问题范围之外的关联，整批修改未采用，原草案保持不变。',
+            '结构纠错改变了无关参与对象': '纠错改变了本次问题范围之外的参与对象，整批修改未采用，原草案保持不变。',
+            '结构纠错改变了镜头结构、原文事实或无关设计正文': '纠错改变了受保护的镜头结构、原文事实或设计正文，修改未采用，原草案保持不变。',
+            '结构纠错改变了无关内容': '纠错改变了本次问题范围之外的内容，修改未采用，原草案保持不变。',
+        }
+        rejection = next((message for reason, message in rejection_reasons.items() if reason in issue), None)
+        if rejection:
+            row.update(title='上次纠错未采用', explanation=rejection,
+                       decision='请将纠错意见限定在已列出的问题范围内，再提交纠错。')
+            result.append(row)
+            continue
+        shared = next((design for design in draft.get('designs', [])
+                       if f"设计 scene:design:{design['id']}，" in issue), None)
+        if shared and '设计主体未参与其声明的镜头' in issue:
+            match = re.search(r'，镜头 ([^；]+)；', issue)
+            missing = [value.strip() for value in match[1].split(',')] if match else []
+            targets = [(index, shot) for index, shot in enumerate(shots) if shot['id'] in missing]
+            if targets and len(targets) == len(set(missing)):
+                location = '、'.join(f'镜头 {index + 1:02d}' for index, _shot in targets)
+                label = CARD_TITLES.get(shared.get('card_type'), '设计卡').removesuffix('卡')
+                name = names.get(shared.get('object_id'))
+                row.update(title=f'{location} · 共享{label}',
+                    explanation=f'“{name}”的共享{label}适用于{location}，但这些镜头未将该对象列为参与对象。' if name else f'共享{label}涉及的对象未被列入{location}的参与对象，相关对象无法识别。',
+                    decision='请确认对象是否参与这些镜头；若不参与，请限定共享设计的适用范围。',
+                    context='\n'.join(f"镜头 {index + 1:02d}：{shot.get('excerpt', '')}" for index, shot in targets))
+                result.append(row)
+                continue
         for index, shot in enumerate(shots):
             if not re.search(r'设计 shot:' + re.escape(shot['id']) + r':', issue):
                 continue
