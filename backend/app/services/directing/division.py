@@ -3,12 +3,14 @@
 from hashlib import sha256
 import json
 from uuid import NAMESPACE_URL, uuid5
+from types import SimpleNamespace
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import aliased
 
 from app.services.chapters.explanations import explanation_basis
+from app.core.contracts.directing.shooting_preparation import ShootingPreparation
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.workspace import ChapterSequences
 from app.core.contracts.directing.division import DivisionDraft, DivisionImpact, DivisionPreview, DivisionSave, DivisionSaved
@@ -33,6 +35,17 @@ class DivisionService(WorkspaceService):
         return await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id)
             .with_for_update().execution_options(populate_existing=True))
 
+    async def _source_chapter(self, chapter, draft):
+        """旧原文仅从本章不可变版本取回，不能接受客户端任意正文。"""
+        if draft.source_basis_id is None:
+            return chapter
+        version = await self.db.scalar(select(DivisionVersion).where(
+            DivisionVersion.id == draft.source_basis_id, DivisionVersion.chapter_id == chapter.id))
+        if version is None or version.source_version != draft.source_version:
+            raise ValueError('所选原文版本不属于当前章节')
+        snapshot = ChapterSequences.model_validate(version.snapshot)
+        return SimpleNamespace(id=chapter.id, title=chapter.title, raw_text=snapshot.raw_text)
+
     async def _current_rows(self, query):
         """交付先持有任务锁时不反向等待；让用户重试预览，避免形成任务/场次锁环。"""
         try:
@@ -41,6 +54,42 @@ class DivisionService(WorkspaceService):
             if error.orig.args and error.orig.args[0] in (3572, 1205, 1213):
                 raise RevisionConflict('相关任务或成果正在更新，请稍后重新预览') from error
             raise
+
+    async def _validate_preparation(self, chapter_id, preparation):
+        """报告引用必须属于本项目本章，不能通过版本快照带入他人任务。"""
+        if preparation.check_task_id:
+            task = await self.db.scalar(select(Task).where(Task.id == preparation.check_task_id,
+                Task.project_id == self.project_id, Task.target_type == 'directing_chapter',
+                Task.target_id == chapter_id, Task.kind == 'directing_shooting_check'))
+            if task is None:
+                raise ValueError('拍摄检查报告不属于当前章节')
+
+    async def _stored_preparation(self, chapter_id, text, preparation, start, source_version):
+        """在保存版本时固定报告覆盖状态，不在历史阅读时重算。"""
+        value = preparation.model_copy(deep=True)
+        value.check_covered = None
+        if value.check_task_id:
+            task = await self.db.get(Task, value.check_task_id)
+            args = task.input_snapshot['run_args']
+            chapter = await self.chapter(chapter_id)
+            explanations = self._check_explanations(
+                chapter, SimpleNamespace(source_text=text, source_start=start, source_version=source_version))
+            value.check_covered = (task.status == 'succeeded' and args['script_text'] == text
+                and task.input_snapshot['request'].get('source_start') == start
+                and args['shooting_preparation'].get('notes', []) == [note.model_dump(mode='json') for note in value.notes]
+                and args.get('source_explanations', []) == explanations.get('source_explanations', []))
+        return value
+
+    @staticmethod
+    def _check_explanations(chapter, body):
+        """只冻结同版且位置准确的解释，避免新解释套用到旧摘录。"""
+        from hashlib import sha256
+        from app.services.chapters.explanations import explanation_basis
+        if (body.source_version != sha256(chapter.raw_text.encode()).hexdigest()
+                or body.source_start is None
+                or chapter.raw_text[body.source_start:body.source_start + len(body.source_text)] != body.source_text):
+            return {}
+        return {'source_explanations': explanation_basis(chapter)['items'], 'source_start': body.source_start}
 
     async def _state(self, chapter, draft):
         rows = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter.id, Sequence.is_current.is_(True))
@@ -73,6 +122,7 @@ class DivisionService(WorkspaceService):
                     raise ValueError('请基于当前原文重新定位并确认全部场次')
         previous_end = 0
         for member in sorted(draft.members, key=lambda member: member.span.start):
+            await self._validate_preparation(chapter.id, member.shooting_preparation)
             if member.span.start < previous_end:
                 raise ValueError('最终划分范围重叠，请调整共享边界')
             if member.span.end > len(chapter.raw_text) or not chapter.raw_text[member.span.start:member.span.end].strip():
@@ -115,6 +165,8 @@ class DivisionService(WorkspaceService):
             else:
                 if not row.is_current:
                     changes.append('restored')
+                if ShootingPreparation.model_validate(row.shooting_preparation or {}).model_dump(mode='json') != member.shooting_preparation.model_dump(mode='json'):
+                    changes.append('shooting_preparation')
                 if row.title != member.title.strip():
                     changes.append('title')
                 if row.position != position:
@@ -211,7 +263,7 @@ class DivisionService(WorkspaceService):
 
     async def preview_division(self, chapter_id: str, draft: DivisionDraft) -> DivisionPreview:
         """读取实时影响；不创建场次、回执或预览记录。"""
-        chapter = await self._lock_chapter(chapter_id)
+        chapter = await self._source_chapter(await self._lock_chapter(chapter_id), draft)
         rows = await self._state(chapter, draft)
         return await self._preview(chapter, draft, rows)
 
@@ -234,9 +286,17 @@ class DivisionService(WorkspaceService):
                 for field in ('source_revision_id', 'restored_baseline', 'history_reconfirmed'):
                     legacy['draft'].pop(field)
                 hashes.add(digest(legacy))
+                if body.draft.source_basis_id is None:
+                    legacy['draft'].pop('source_basis_id')
+                    hashes.add(digest(legacy))
+                    if all(not member.shooting_preparation.notes and member.shooting_preparation.check_task_id is None for member in body.draft.members):
+                        for member in legacy['draft']['members']:
+                            member.pop('shooting_preparation', None)
+                        hashes.add(digest(legacy))
             if receipt.request_hash not in hashes:
                 raise RevisionConflict('提交身份已用于另一份划分，不能复用')
             return DivisionSaved.model_validate(receipt.response)
+        chapter = await self._source_chapter(chapter, body.draft)
         rows = await self._state(chapter, body.draft)
         preview = await self._preview(chapter, body.draft, rows)
         if preview.preview_token != body.preview_token:
@@ -264,17 +324,23 @@ class DivisionService(WorkspaceService):
                         is_current=False, position=impact.before.position, version=impact.before.version + 1))
                     continue
                 member = impact.after
+                preparation = member.shooting_preparation.model_copy(deep=True)
+                if impact.before and ('range' in impact.changes or impact.before.source_text != chapter.raw_text[member.span.start:member.span.end]):
+                    for note in preparation.notes:
+                        note.choice = 'review'
+                preparation = await self._stored_preparation(chapter_id, chapter.raw_text[member.span.start:member.span.end], preparation, member.span.start, body.draft.source_version)
                 if impact.before is None:
                     identity = uuid5(NAMESPACE_URL, f'division:{chapter_id}:{body.request_id}:{member.key}').hex
                     row = Sequence(id=identity, chapter_id=chapter_id, position=position, title=member.title.strip(),
-                        version=1, source=Source(kind='chapter', reference=chapter_id, version=body.draft.source_version).model_dump(mode='json'),
+                        version=1, shooting_preparation=preparation.model_dump(mode='json'), source=Source(kind='chapter', reference=chapter_id, version=body.draft.source_version).model_dump(mode='json'),
                         source_start=member.span.start, source_end=member.span.end,
                         source_text=chapter.raw_text[member.span.start:member.span.end])
                     self.db.add(row)
                     created[member.key] = identity
                     await self.db.flush()
                 else:
-                    values = dict(title=member.title.strip(), position=position, version=impact.before.version + 1, is_current=True)
+                    values = dict(title=member.title.strip(), position=position, version=impact.before.version + 1, is_current=True,
+                                  shooting_preparation=preparation.model_dump(mode='json'))
                     if 'range' in impact.changes or 'source' in impact.changes:
                         values.update(source_start=member.span.start, source_end=member.span.end,
                             source_text=chapter.raw_text[member.span.start:member.span.end],

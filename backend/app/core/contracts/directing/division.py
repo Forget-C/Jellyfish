@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Text
+from app.core.contracts.directing.shooting_preparation import ShootingPreparation
 from app.core.contracts.directing.workspace import ChapterSequences, SequenceRead, SourceSpan
 
 
@@ -23,6 +24,7 @@ class DivisionMember(Contract):
     title: Text = Field(max_length=255)
     span: SourceSpan
     reconfirm_source: bool = False
+    shooting_preparation: ShootingPreparation = Field(default_factory=ShootingPreparation)
 
 
 class DivisionLineage(Contract):
@@ -36,6 +38,7 @@ class DivisionDraft(Contract):
     """最终整章方案；遗漏不等于退出，所有旧身份必须保留或明确退出。"""
 
     source_version: Text
+    source_basis_id: Identity | None = None
     source_task_id: Identity | None = None
     source_revision_id: Identity | None = None
     restored_baseline: list[DivisionBaseline] = Field(default_factory=list)
@@ -85,7 +88,7 @@ class DivisionImpact(Contract):
     key: Identity
     before: SequenceRead | None
     after: DivisionMember | None
-    changes: list[Literal["added", "title", "position", "range", "source", "exited", "restored"]]
+    changes: list[Literal["added", "title", "position", "range", "source", "exited", "restored", "shooting_preparation"]]
     design_count: int = Field(ge=0)
     plan_count: int = Field(ge=0)
     take_count: int = Field(ge=0)

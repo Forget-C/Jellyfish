@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ShootingPreparation } from './ShootingPreparation';
 import type { Source } from './Source';
 import type { SourceSpan } from './SourceSpan';
 /**
@@ -19,5 +20,5 @@ export type SequenceRead = {
     source_text: string;
     source_changed: boolean;
     is_current?: boolean;
+    shooting_preparation?: ShootingPreparation;
 };
-

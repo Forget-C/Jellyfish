@@ -6,7 +6,8 @@ import ts from 'typescript'
 const compile = name => readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8').then(source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText)
 const selection = `data:text/javascript;base64,${Buffer.from(await compile('sourceSelection')).toString('base64')}`
 const common = `data:text/javascript;base64,${Buffer.from(await compile('common')).toString('base64')}`
-const code = (await compile('chapterDivision')).replaceAll("'./sourceSelection'", JSON.stringify(selection)).replaceAll("'./common'", JSON.stringify(common))
+const preparation = `data:text/javascript;base64,${Buffer.from(await compile('shootingPreparation')).toString('base64')}`
+const code = (await compile('chapterDivision')).replaceAll("'./sourceSelection'", JSON.stringify(selection)).replaceAll("'./common'", JSON.stringify(common)).replaceAll("'./shootingPreparation'", JSON.stringify(preparation))
 const { initialDivision, changeDivisionSpan, divisionRequest, removeDivisionMember, divisionBaselineMatches, analysisDivision, versionDivision } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
 const chapter = { source_version: 'v1', raw_text: '前😀段。后段。尾段。', sequences: [
   { id: 's1', title: '前场', version: 1, source_changed: false, span: { start: 0, end: 4 } },

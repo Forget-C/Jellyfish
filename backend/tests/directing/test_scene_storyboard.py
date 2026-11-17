@@ -59,6 +59,10 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         scene = await client.post(base + '/sequences', json={'title': '场次', 'position': 0,
             'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
         assert scene.status_code == 200, scene.text
+        prep = await client.put(base + '/sequences/' + scene.json()['data']['id'] + '/shooting-preparation',
+            json={'request_id': 'prep-save', 'expected_version': scene.json()['data']['version'],
+                  'preparation': {'notes': [{'id': 'carry', 'text': '切换细节时人物仍在场'}]}})
+        assert prep.status_code == 200, prep.text
         path = base + '/sequences/' + scene.json()['data']['id'] + '/storyboards'
         request = {'request_id': 'first', 'name': '忠实稿', 'text_model_id': 'story-text', 'mode': 'faithful'}
         submitted = await client.post(path, json=request)
@@ -83,6 +87,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         assert (await client.get((path + '/' + task['task_id']).replace('/p1/', '/p2/'))).status_code == 404
         candidate = ready['candidate']
         document = candidate['document']
+        assert document['fixed_source']['shooting_notes'][0]['text'] == '切换细节时人物仍在场'
         cards = document['cards']
         assert len([card for card in cards if card['type'] == 'content.character']) == 1
         assert document['storyboard']['objects'][0]['origin'] == 'missed'

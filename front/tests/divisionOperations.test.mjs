@@ -5,7 +5,8 @@ import ts from 'typescript'
 const compile = async name => ts.transpileModule(await readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const uri = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`
 const source = uri(await compile('sourceSelection'))
-const { planDivisionAssignment } = await import(uri((await compile('divisionOperations')).replaceAll("'./sourceSelection'", JSON.stringify(source))))
+const preparation = uri(await compile('shootingPreparation'))
+const { planDivisionAssignment } = await import(uri((await compile('divisionOperations')).replaceAll("'./sourceSelection'", JSON.stringify(source)).replaceAll("'./shootingPreparation'", JSON.stringify(preparation))))
 const raw = '甲乙丙丁'
 const draft = { source_version: 'v1', baseline: [{ sequence_id: 'a', version: 1 }, { sequence_id: 'b', version: 1 }], members: [
   { key: 'a', sequence_id: 'a', title: 'A', span: { start: 0, end: 2 } },

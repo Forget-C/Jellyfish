@@ -37,6 +37,7 @@ class WorkspaceService(DirectingStore):
         return SequenceRead(id=row.id, project_id=self.project_id, chapter_id=row.chapter_id,
                             title=row.title, position=row.position, version=row.version, is_current=row.is_current,
                             source=Source.model_validate(row.source), source_text=row.source_text,
+                            shooting_preparation=row.shooting_preparation or {},
                             span=SourceSpan(start=row.source_start, end=row.source_end) if row.source_end else None,
                             source_changed=row.source["version"] != sha256(chapter.raw_text.encode()).hexdigest())
 

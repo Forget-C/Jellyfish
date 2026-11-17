@@ -42,6 +42,7 @@ class StoryboardBasis(Contract):
 
     token: str
     source_text: str
+    shooting_notes: list[dict] = Field(default_factory=list)
     source_changed: bool
     preparation_revision: int
     preparation_stale: bool

@@ -1,5 +1,6 @@
 import type { SourceSpan } from '../../../services/generated'
 import type { ChapterDivisionDraft, DraftMember } from './chapterDivision'
+import { reviewShootingPreparation } from './shootingPreparation'
 import { sameSpan, sourceSlice } from './sourceSelection'
 
 export type DivisionAssignment = {
@@ -73,6 +74,19 @@ export function planDivisionAssignment(draft: ChapterDivisionDraft, raw: string,
   if (new Set(members.map(row => row.key)).size !== members.length) throw new Error('候选场次标识重复，请重新操作')
   const identities = members.flatMap(row => row.sequence_id ? [row.sequence_id] : [])
   if (new Set(identities).size !== identities.length) throw new Error('同一场次关联不能重复保留')
+  for (const member of members) {
+    const original = draft.members.find(row => row.key === member.key)
+    if (!original || !sameSpan(original.span, member.span)) {
+      const sources = draft.members.filter(row => row.span && member.span && overlaps(row.span, member.span))
+      const notes = sources.flatMap(row => (row.shooting_preparation?.notes || []).map(note => ({ ...note, id: note.id, choice: 'review' as const })))
+      member.shooting_preparation = reviewShootingPreparation(member.shooting_preparation)
+      if (notes.length) {
+        const unique = [...new Map(notes.map(note => [`${note.id}:${note.text}`, note])).values()]
+        member.shooting_preparation = { ...member.shooting_preparation,
+          notes: unique.map((note, index) => unique.findIndex(other => other.id === note.id) === index ? note : { ...note, id: `${note.id.slice(0, 40)}:${index}` }) }
+      }
+    }
+  }
   const value: ChapterDivisionDraft = { ...draft, members,
     exited_sequence_ids: draft.baseline.filter(row => !identities.includes(row.sequence_id)).map(row => row.sequence_id),
     restored_baseline: draft.restored_baseline?.filter(row => identities.includes(row.sequence_id)),

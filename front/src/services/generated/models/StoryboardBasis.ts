@@ -9,6 +9,7 @@ import type { StoryboardBasisObject } from './StoryboardBasisObject';
 export type StoryboardBasis = {
     token: string;
     source_text: string;
+    shooting_notes?: Array<Record<string, any>>;
     source_changed: boolean;
     preparation_revision: number;
     preparation_stale: boolean;

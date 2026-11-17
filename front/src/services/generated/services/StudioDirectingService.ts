@@ -71,12 +71,14 @@ import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneV
 import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
+import type { ApiResponse_ShootingCheckRead_ } from '../models/ApiResponse_ShootingCheckRead_';
 import type { ApiResponse_StoryboardBasis_ } from '../models/ApiResponse_StoryboardBasis_';
 import type { ApiResponse_StoryboardDiff_ } from '../models/ApiResponse_StoryboardDiff_';
 import type { ApiResponse_StoryboardRetryBasis_ } from '../models/ApiResponse_StoryboardRetryBasis_';
 import type { ApiResponse_StoryboardTaskRead_ } from '../models/ApiResponse_StoryboardTaskRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
+import type { ApiResponse_Union_ShootingCheckRead__NoneType__ } from '../models/ApiResponse_Union_ShootingCheckRead__NoneType__';
 import type { ApiResponse_UnitCanvasGraph_ } from '../models/ApiResponse_UnitCanvasGraph_';
 import type { ApiResponse_VideoReferenceCapabilities_ } from '../models/ApiResponse_VideoReferenceCapabilities_';
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
@@ -127,6 +129,8 @@ import type { SceneVideoSubmitRequest } from '../models/SceneVideoSubmitRequest'
 import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
+import type { ShootingCheckRequest } from '../models/ShootingCheckRequest';
+import type { ShootingPreparationSave } from '../models/ShootingPreparationSave';
 import type { ShootRequest } from '../models/ShootRequest';
 import type { SourceResolveRequest } from '../models/SourceResolveRequest';
 import type { StoryboardApplication } from '../models/StoryboardApplication';
@@ -189,6 +193,125 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'chapter_id': chapterId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Shooting Check Latest
+     * 重开场次弹窗时发现最近一次检查。
+     * @returns ApiResponse_Union_ShootingCheckRead__NoneType__ Successful Response
+     * @throws ApiError
+     */
+    public static directingShootingCheckLatest({
+        projectId,
+        chapterId,
+        draftKey,
+    }: {
+        projectId: string,
+        chapterId: string,
+        draftKey: string,
+    }): CancelablePromise<ApiResponse_Union_ShootingCheckRead__NoneType__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/shooting-checks',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            query: {
+                'draft_key': draftKey,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Shooting Check Submit
+     * 检查生成前场次草稿，不创建目标画布。
+     * @returns ApiResponse_ShootingCheckRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingShootingCheckSubmit({
+        projectId,
+        chapterId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        requestBody: ShootingCheckRequest,
+    }): CancelablePromise<ApiResponse_ShootingCheckRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/shooting-checks',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Shooting Check Read
+     * 读取当前或历史检查的原始结果。
+     * @returns ApiResponse_ShootingCheckRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingShootingCheckRead({
+        projectId,
+        chapterId,
+        taskId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        taskId: string,
+    }): CancelablePromise<ApiResponse_ShootingCheckRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/shooting-checks/{task_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'task_id': taskId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Shooting Preparation
+     * 即时保存指定场次拍摄说明，并生成新划分版本。
+     * @returns ApiResponse_ChapterSequences_ Successful Response
+     * @throws ApiError
+     */
+    public static directingShootingPreparationSave({
+        projectId,
+        chapterId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sequenceId: string,
+        requestBody: ShootingPreparationSave,
+    }): CancelablePromise<ApiResponse_ChapterSequences_> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/shooting-preparation',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

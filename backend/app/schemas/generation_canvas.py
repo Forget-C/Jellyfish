@@ -796,6 +796,7 @@ class CanvasFixedSource(BaseModel):
     chapter_id: str
     chapter_version: str
     source_explanations: list[dict] = Field(default_factory=list, exclude_if=lambda value: not value)
+    shooting_notes: list[dict] = Field(default_factory=list, exclude_if=lambda value: not value)
 
 
 class CanvasSourceIndex(BaseModel):

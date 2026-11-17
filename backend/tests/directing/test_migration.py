@@ -130,6 +130,10 @@ def test_foundation_migration_and_next_upgrade():
         scene_objects.op = migration.op
         scene_objects.upgrade()
         assert connection.scalar(sa.text("SELECT object_preparation FROM directing_sequences WHERE id='seq'")) is None
+        shooting = revision_module('f7a3c9e215b0_scene_shooting_preparation.py')
+        shooting.op = migration.op
+        shooting.upgrade()
+        assert connection.scalar(sa.text("SELECT shooting_preparation FROM directing_sequences WHERE id='seq'")) is None
         assert not compare_metadata(context, Base.metadata)
         for statement in (
             "INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('bad','missing',1,'scene','{}',1)",

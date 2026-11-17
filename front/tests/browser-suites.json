@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "shooting-preparation": { "file": "shootingPreparation.browser.mjs", "ports": [4386, 8386], "timeoutMs": 180000 },
     "independent-canvas": { "file": "independentCanvas.browser.mjs", "ports": [4471, 8471], "timeoutMs": 180000 },
 
     "generation-canvas-generated-prompt": { "file": "generationCanvasGeneratedPrompt.browser.mjs", "ports": [4279, 8279], "timeoutMs": 180000 },
@@ -223,7 +224,7 @@
     "instruction-video": ["instruction-card", "frame-inputs", "default-assets", "reference-source", "frame-dependencies", "instruction-inputs", "candidate-refresh", "scene-video"],
     "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
     "references": ["frame-inputs", "default-assets", "reference-source"],
-    "workbench": ["chapter-list-editor", "source-provenance", "division-assignment", "manual-split", "workbench-division", "workbench-management", "workbench-canvas-cards", "workbench-canvas-rename", "workbench-canvas-creation", "workbench-storyboard-retry", "workbench-canvas-deletion", "scene-canvas-legacy-routes", "storyboard-recovery", "storyboard-reextract", "storyboard-scope", "storyboard-video-first-layout", "storyboard-video-defaults", "scene-storyboard-media", "storyboard-references", "storyboard-reference-switch", "storyboard-visual-continuity", "scene-storyboard", "scene-storyboard-sources", "scene-object-resource-reference", "scene-object-project-selection", "scene-object-project-upload", "scene-object-library-selection", "scene-object-preparation", "scene-canvas-workbench", "workbench-ui", "workbench-style", "design-scope", "unit-design", "instruction-preparation", "instruction-design", "object-asset-selection"],
+    "workbench": ["chapter-list-editor", "source-provenance", "division-assignment", "manual-split", "shooting-preparation", "workbench-division", "workbench-management", "workbench-canvas-cards", "workbench-canvas-rename", "workbench-canvas-creation", "workbench-storyboard-retry", "workbench-canvas-deletion", "scene-canvas-legacy-routes", "storyboard-recovery", "storyboard-reextract", "storyboard-scope", "storyboard-video-first-layout", "storyboard-video-defaults", "scene-storyboard-media", "storyboard-references", "storyboard-reference-switch", "storyboard-visual-continuity", "scene-storyboard", "scene-storyboard-sources", "scene-object-resource-reference", "scene-object-project-selection", "scene-object-project-upload", "scene-object-library-selection", "scene-object-preparation", "scene-canvas-workbench", "workbench-ui", "workbench-style", "design-scope", "unit-design", "instruction-preparation", "instruction-design", "object-asset-selection"],
     "graph": ["browse-controls", "graph-navigation", "director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "edit-seams-graph", "edit-cut-evidence", "timeline", "take-library-graph", "take-library", "legacy-take-library"]
   },
   "excludedFiles": {

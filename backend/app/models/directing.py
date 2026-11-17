@@ -27,6 +27,7 @@ class Sequence(Base, TimestampMixin):
     source_end: Mapped[int | None] = mapped_column(Integer)
     source_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("('')"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    shooting_preparation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     object_preparation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (

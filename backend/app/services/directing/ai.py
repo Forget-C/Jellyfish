@@ -9,6 +9,7 @@ from openai import APIError
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from app.core.contracts.directing.shooting_preparation import ShootingCheckReport
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent, validate_new_design_row_ids
@@ -40,7 +41,7 @@ from app.services.task_service import TaskService
 
 
 STORYBOARD_ORGANIZATION = 'directing_storyboard_organization'
-RESULT_CONTRACTS = {STORYBOARD_KIND: SceneStoryboard, STORYBOARD_ORGANIZATION: StoryboardOrganization, OBJECT_EXTRACTION_KIND: SceneObjectExtraction, "directing_unit_design": SceneUnitDesignResult, "directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
+RESULT_CONTRACTS = {"directing_shooting_check": ShootingCheckReport,STORYBOARD_KIND: SceneStoryboard, STORYBOARD_ORGANIZATION: StoryboardOrganization, OBJECT_EXTRACTION_KIND: SceneObjectExtraction, "directing_unit_design": SceneUnitDesignResult, "directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
 
 
 class DirectingOutputError(ValueError):
@@ -98,6 +99,15 @@ def generate_directing_result(kind: str, llm, args: dict):
         "directing_instruction": "仅依据给定原文、当前单元、明确参考与 scope 编写可直接执行的拍摄指令。scope.execution 是本次明确选择的可拍内容；scope.constraints 中仅 video 阶段适用视频正文，sound/postproduction 阶段不得误写成视频模型要求；scope.background 仅作解释，不自动变成动作或约束；其中所属镜头完整结果可以描述整体动作，但本单元只执行 action_scope 和已选条目。design 是来源工作单，仅用于理解已纳入范围，不能从同镜关系或共用对象补选执行项。只返回原 unit.id 和完整正文 text，不修改设计、单元身份或参考，不声称检查通过或已生成视频。保留动作因果、人物与摄影约束，不编造未提供素材。requirements 是用户本次编写要求。",
         "directing_review_revision": "评估固定检查意见（review=null 时为用户主动修改，不得伪造问题）和整体 instruction。人工 request.edits 必须原样保留，不得覆盖；主动修改 changes.problem_keys 和 outcomes 可为空；用 summary 的 status/reason/choices 说明整体结果，status 为 planned、needs_choice、unresolved 或 unchanged。无实际变化用 unchanged，超出范围用 unresolved，必要选择用 needs_choice 和至少两项 choices，不能伪造检查问题。preview_text/candidate_identity/source_prompt_revision_id 留空，由服务端渲染。仅替换 revision_context.allowed_design_fields 或 allowed_unit_fields 列出的已有字段；before 必须逐字复制固定字段，input_identity 原样返回。不得增加 applicable_shot_ids 等不存在字段，不得增删身份或引用。sound.execution 只有 generated/postproduction/unknown。检查意见不是事实，不能通过删除正确设计掩盖编译器或供应商限制；此类问题返回 unresolved。原文事实优先；必要创作取舍返回 needs_choice 及至少两个简短选项，不猜测用户意图。每个 problem_keys 中的问题都必须有 outcome，即使用户没有填写方向，planned 必须关联实际修改。不能修复的问题明确解释。只输出必要修改，不能宣称新检查通过。Note 新来源使用 revision_context.task_identity。声音制作方式必须有 direction.sound_execution 明确选择才能拟落实，不能从自由文本猜测。",
         "directing_unit_design": "仅组织 organization_inputs 中当前镜头的既有六岗设计为完整执行单元方案；一次判断是否分段并生成一或多个单元。每个结果单元用 operation 明确保留 retain、局部修改 modify 或新建 create。保留项使用原身份与原字段且不改变原模型；局部修改只修改 source_unit_id 明确的目标并保持身份，哪怕仅更换目标模型也标记 modify；新增补拍使用新身份 create，来源为 source_unit_id，不能删除其他单元。省略 entry_state、exit_state 或 reference_requirements 表示保留已有要求，明确空值字符串或空列表才表示清空。按动作完整性、空间和真实模型能力组织。coverage.action_scope 必须取自适用设计的动作正文，可用分号或换行组合多个既有片段；不能创造新动作、情绪、镜头或摄影变化。覆盖选择只使用适用候选的稳定 ID；完整拍摄时 action_scope 明确包含当前镜头完整 visible_result，可选择同镜适用设计而无需重复其不同措辞；局部拍摄时，所选行的主要动作须完整包含在 action_scope 中；凝视、呼吸等已设计的辅助表演仍随明确选择保留，不必重复成新的故事动作。仅执行主要动作行内片段时不要勾选该整行动作，直接保留可追溯片段范围。不能改变 shot_id 或 target_model_id。分段理由进入 reason；entry_state、exit_state 只能摘录已有适用设计状态，可用分号组合，未知请留空并列缺项；时长必须符合 capabilities，未知时留空并列出缺项。参考需要只写 reference_requirements，每项只能选择以下待准备类别：" + "、".join(UNIT_DESIGN_REFERENCE_REQUIREMENTS) + "；不能附加动作、特写或其他创作文字，类别不代表已支持或已绑定。不能虚构真实文件、落幅、检查通过或素材采用。未安排的必要内容明确列入 missing；不要重写六岗设计。",
+        "directing_shooting_check": (
+            "这是生成分镜前的场次拍摄检查，此时没有镜头或分镜设计。仅检查给定原文和已有场次拍摄说明。"
+            "覆盖站位、行进路线、人物视线与摄影可见性的分别判断、镜外人物与物品状态连续性。"
+            "区分明确冲突conflict、影响动作或重要意图的关键待明确insufficient_basis、可选建议optional。"
+            "普通可行拍法留给生成；缺少距离路线本身不是问题，不编造已存在的站位、镜头或障碍。"
+            "正常出画不等于离场，省略过程不等于未发生，尊重有依据的跳时、倒叙和刻意遮挡。"
+            "场次拍摄说明只是参考，不是硬约束，不据此验收；原文语义问题单列source类别，不改写原文。"
+            "excerpt如非空必须逐字来自script_text；针对说明的疑点填写真实note_id；不得输出改写后的说明。"
+        ),
         "directing_divide": "将章节分成连续叙事场次。excerpt 必须逐字复制原文中连续的一段，不得改写，按原文顺序排列。不同地点或时间转换可分场，不按镜头分场。",
         "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行，并明确 participant_ids，引用本工作单的参与对象 ID；包括实际参与的静态车辆与手持物件。明确无对象用空列表，不得省略或使用 null，不因同一节拍或全场名单就把其他镜头对象加入。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
@@ -131,6 +141,8 @@ def generate_directing_result(kind: str, llm, args: dict):
         instruction += '\n这是预先限定的正文局部修订。instruction_scope 的 start/end 是原 unit.instruction 的 Unicode 字符半开范围，只修改此范围，范围外逐字保留；仍返回完整正文 text，不只返回替换片段。'
     if "source_explanations" in args:
         instruction += "\nsource_explanations 是用户确认的原意解释，仅用于理解，不能冒充原文摘录、新增剧情或覆盖正文冲突；只采用适用于当前摘录的解释。解释 start/end 为整章 Unicode 字符半开范围，script_text 从 source_start 开始；不得把其他位置同名词的解释套到当前片段。kind=normal 表示用户确认的正常表述，不反复报为异常。"
+    if args.get('shooting_notes'):
+        instruction += "\nshooting_notes 是随场次采用的拍摄参考说明，两种模式均用于理解空间、动作和状态；不是必须逐条满足的执行约束，也不构成验收门槛。choice=delegate 交由生成设计。与原文事实分别表达，不伪造原文摘录，不覆盖原文冲突，不视为模型自行新增的场次情节。"
     model_args = args
     if kind == 'directing_design' and args.get('scene_version_design'):
         model_args = {**args, 'design_protocol': scene_design_protocol()}
@@ -144,6 +156,7 @@ def generate_directing_result(kind: str, llm, args: dict):
         model_args = {'mode': args['mode'], 'script_text': args['script_text'],
                       'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
                       'source_explanations': args.get('source_explanations', []), 'source_start': args.get('source_start'),
+                      'shooting_notes': args.get('shooting_notes', []),
                       'supported_design_fields': storyboard_design_fields(),
                       'subject_card_types': sorted(SUBJECT_PORTS),
                       'required_subject_card_types': sorted(REQUIRED_SUBJECTS)}
@@ -355,6 +368,13 @@ def generate_directing_result(kind: str, llm, args: dict):
         result.validate_scope(inputs.unit.id, [item.id for item in inputs.unit.coverage],
                               scope=inputs.scope, instruction=args['instruction'], references=inputs.unit.references,
                               require_destinations=args.get('destination_contract_version') == 1)
+    if kind == 'directing_shooting_check':
+        notes = {note['id'] for note in args['shooting_preparation']['notes']}
+        for issue in result.issues:
+            if issue.excerpt and issue.excerpt not in args['script_text']:
+                raise ValueError('拍摄检查引用了原文不存在的内容')
+            if issue.note_id is not None and issue.note_id not in notes:
+                raise ValueError('拍摄检查引用了不存在的场次说明')
     if kind == "directing_divide":
         cursor = 0
         for scene in result.scenes:

@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, Role
+from app.core.contracts.directing.shooting_preparation import ShootingPreparation
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
@@ -61,6 +62,7 @@ class SequenceRead(Contract):
     source_text: str
     source_changed: bool
     is_current: bool = True
+    shooting_preparation: ShootingPreparation = Field(default_factory=ShootingPreparation)
 
 
 class DivisionVersionRef(Contract):

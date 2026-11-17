@@ -24,7 +24,10 @@ class ControlledTextModel:
     def invoke(self, messages):
         """根据冻结的业务请求选择对应固定模型输出。"""
         arguments = json.loads(messages[1].content)
-        if 'existing_assets' in arguments:
+        if 'shooting_preparation' in arguments:
+            payload = {'issues': [{'id': 'route', 'category': 'path', 'kind': 'optional',
+                'excerpt': '', 'problem': '路线可由生成设计', 'suggestion': '可由生成安排可行路线'}]}
+        elif 'existing_assets' in arguments:
             assert arguments['script_text'] == '前厅点灯。'
             payload = {'objects': [{'kind': 'scene', 'name': '前厅', 'description': '灯光亮起', 'excerpt': '前厅'}]}
         else:
