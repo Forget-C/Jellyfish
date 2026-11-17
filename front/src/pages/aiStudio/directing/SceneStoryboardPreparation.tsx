@@ -52,6 +52,9 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   const [submitting, setSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
+  const [readError, setReadError] = useState('')
+  const [readRevision, setReadRevision] = useState(0)
+  const [reading, setReading] = useState(false)
   const [reportedTask, setTask] = useState<StoryboardTaskSummary>()
   const task = reportedTask && reportedTask.task_id === target.appliedTaskId
     ? { ...reportedTask, candidate_available: false,
@@ -74,6 +77,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   }, [])
 
   useEffect(() => {
+    setReadError(''); setReading(true)
     const version = ++load.current
     let active = true
     wait.current = undefined
@@ -87,9 +91,10 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
       const row = Array.isArray(response.data) ? response.data[0] : response.data
       if (row && row.canvas_id !== targetId) throw new Error('此分镜任务不属于当前画布')
       setTask(row ?? undefined)
-    }).catch(cause => { if (active && version === load.current) setError(directingError(cause)) })
+    }).catch(cause => { if (active && version === load.current) setReadError(directingError(cause)) })
+      .finally(() => { if (active && version === load.current) setReading(false) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, targetId, selectedTaskId, navigationKey, key])
+  }, [projectId, chapterId, sequenceId, targetId, selectedTaskId, navigationKey, key, readRevision])
 
   const showConfig = !!draft
   useEffect(() => {
@@ -210,6 +215,8 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         <Button loading={checking} onClick={() => void viewResult()}>查看分镜结果</Button>}
     </Space>
     {!open && pending && !submitting && <Alert type="warning" message="分镜提交结果待核实，将使用原请求身份。" />}
+    {readError && <Alert type="warning" showIcon message="分镜任务记录读取失败，当前画布仍保留。"
+      description={readError} action={<Button disabled={reading || submitting || open} onClick={() => setReadRevision(value => value + 1)}>重试读取分镜任务</Button>} />}
     {!open && error && <Alert type="warning" showIcon message={error} />}
     {failed && task.error && <Alert type="error" showIcon message={task.error} />}
     <WorkbenchModal title={action} open={open} width={480} onCancel={close}

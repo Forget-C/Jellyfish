@@ -174,10 +174,30 @@ try {
   assert.deepEqual(await data(reviewCanvas), untouched)
   await reviewCard.getByRole('button', { name: '核对分镜', exact: true }).click()
   await findings.getByRole('checkbox', { name: '接受风险：静止与入场要求冲突', exact: true }).check()
+  let failedHistoryRead = false
+  const historyRoute = /\/storyboards\?/
+  await page.route(historyRoute, route => {
+    if (!failedHistoryRead && route.request().method() === 'GET') {
+      failedHistoryRead = true
+      return route.abort('failed')
+    }
+    return route.continue()
+  })
   await findings.getByRole('button', { name: '应用并进入画布', exact: true }).click()
   await page.getByText('已接受分镜设计风险', { exact: true }).first().waitFor()
   const accepted = await data(reviewCanvas)
   assert.ok(accepted.document.storyboard)
+  await page.getByText('分镜任务记录读取失败，当前画布仍保留。', { exact: true }).waitFor()
+  assert.ok(failedHistoryRead)
+  const historyRecovered = page.waitForResponse(response => historyRoute.test(response.url()) &&
+    response.request().method() === 'GET' && response.ok())
+  await page.getByRole('button', { name: '重试读取分镜任务', exact: true }).click()
+  await historyRecovered
+  await page.getByText('分镜任务记录读取失败，当前画布仍保留。', { exact: true }).waitFor({ state: 'hidden' })
+  assert.deepEqual(await data(reviewCanvas), accepted)
+  await page.getByText('已接受分镜设计风险', { exact: true }).first().waitFor()
+  await page.unroute(historyRoute)
+
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
   await poll(() => data(reviewCanvas), value => !value.document.storyboard)
   await page.getByRole('button', { name: '重做操作', exact: true }).click()

@@ -56,6 +56,9 @@ class SceneCanvasService(WorkspaceService):
         """读取场次摘要与本场画布，不加载旧版本或写入新依据。"""
         sequence, chapter = await self._scene(chapter_id, sequence_id)
         version = sha256(chapter.raw_text.encode()).hexdigest()
+        ids = (await self.db.scalars(select(GenerationCanvas.id).where(
+            GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence.id)
+            .order_by(GenerationCanvas.created_at.desc(), GenerationCanvas.id.desc()))).all()
         fixed = self._fixed_basis()
         rows = (await self.db.execute(select(
             GenerationCanvas.id, GenerationCanvas.created_at, GenerationCanvas.revision,
@@ -65,8 +68,10 @@ class SceneCanvasService(WorkspaceService):
             cast(func.json_extract(fixed, '$.selection_end'), Integer).label('source_end'),
             GenerationCanvas.document['storyboard']['task_id'].as_string().label('applied_task'),
         ).where(
-            GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence.id
-        ).order_by(GenerationCanvas.created_at.desc(), GenerationCanvas.id.desc()))).all()
+            GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence.id, GenerationCanvas.id.in_(ids)
+        ))).all() if ids else []
+        by_id = {row.id: row for row in rows}
+        rows = [by_id[identity] for identity in ids if identity in by_id]
         latest, candidates = await self._canvas_storyboards(chapter_id, sequence_id) if rows else ({}, {})
         canvases = []
         for row in rows:

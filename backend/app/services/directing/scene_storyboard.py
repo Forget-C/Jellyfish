@@ -592,11 +592,15 @@ class SceneStoryboardService(SceneObjectService):
             if not member:
                 raise HTTPException(404, 'Canvas not found in scene')
             query = query.where(target == canvas_id)
-        tasks = (await self.db.execute(query.with_only_columns(
+        # Sort only identities: MySQL filesort otherwise carries large JSON/error payloads.
+        ids = (await self.db.scalars(query.with_only_columns(Task.id)
+            .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(20))).all()
+        rows = (await self.db.execute(query.where(Task.id.in_(ids)).with_only_columns(
             Task.id, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id, target.label('canvas_id'),
             Task.result['review_state'].as_string().label('review_state'),
-            Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from'))
-            .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(20))).all()
+            Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from')))).all() if ids else []
+        by_id = {row.id: row for row in rows}
+        tasks = [by_id[identity] for identity in ids if identity in by_id]
         saved = set(await self.db.scalars(select(CanvasSaveReceipt.request_id).where(
             CanvasSaveReceipt.request_id.in_(['storyboard:' + task.id for task in tasks if task.status == TaskStatus.succeeded]))))
         return [self._storyboard_summary(task, task.canvas_id, task.status == TaskStatus.succeeded and 'storyboard:' + task.id not in saved)
