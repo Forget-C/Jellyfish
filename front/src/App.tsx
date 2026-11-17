@@ -24,7 +24,6 @@ import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
 import { WorkbenchManagementPage } from './pages/aiStudio/directing/WorkbenchManagementPage'
 import { chapterCompositionRetired, legacyChapterManagementLocation } from './pages/aiStudio/directing/chapterNavigation'
-import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
 import { SceneCanvasWorkbench } from './pages/aiStudio/directing/SceneCanvasWorkbench'
 import { CanvasListPage } from './pages/aiStudio/generationCanvas/CanvasListPage'
 import { GenerationCanvasPage } from './pages/aiStudio/generationCanvas/GenerationCanvasPage'
@@ -61,7 +60,6 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="canvases/:canvasId" element={<GenerationCanvasPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/workbench-management" element={<WorkbenchManagementPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId/canvas-workbench" element={<SceneCanvasWorkbench />} />
-          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
           <Route element={<ManagementLayout />}>
             <Route path="assets" element={<AssetManager />} />
             <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />

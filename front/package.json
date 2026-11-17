@@ -16,12 +16,10 @@
     "openapi:update": "pnpm run openapi:fetch && pnpm run openapi:gen",
     "test:workbench-ui": "node tests/run-browser.mjs workbench",
     "test:preflight": "node tests/preflight.mjs",
-    "test:design-scope": "node tests/run-browser.mjs design-scope",
     "lint:check": "node scripts/lint-baseline.mjs",
     "lint:baseline": "node scripts/lint-baseline.mjs --prune",
     "test:unit": "node --test --test-reporter=dot tests/*.test.mjs",
-    "test:browser": "node tests/run-browser.mjs",
-    "test:canvas-graph": "node tests/run-browser.mjs graph"
+    "test:browser": "node tests/run-browser.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",

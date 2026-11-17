@@ -127,7 +127,7 @@ test('repository manifest accounts for every browser file and target regressions
     const listed = spawnSync(process.execPath, [runner, selection, '--list'], { encoding: 'utf8' })
     assert.equal(listed.status, 0, listed.stderr)
     const cases = JSON.parse(listed.stdout)
-    for (const file of ['chapterListEditor.browser.mjs', 'sourceProvenance.browser.mjs']) {
+    for (const file of ['chapterListEditor.browser.mjs', 'sceneCanvasLegacyRoutes.browser.mjs']) {
       assert.equal(cases.filter(item => item.file === file).length, 1, `${selection}: ${file}`)
     }
   }

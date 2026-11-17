@@ -65,7 +65,6 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(15000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const legacy = page.getByRole('region', { name: '场次画布工作台', exact: true })
   const newHost = page.getByRole('region', { name: '工作台管理', exact: true })
   const versionReads = []
   page.on('request', request => {
@@ -88,18 +87,6 @@ try {
   await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
 
-  await page.goto(old + '?canvas=edit')
-  await legacy.getByRole('button', { name: '打开剪辑工作区', exact: true }).waitFor()
-  await page.goto(`${old}?canvas=edit&version=${first.id}`)
-  await legacy.getByText('旧版交付甲', { exact: true }).first().waitFor()
-  await legacy.getByRole('button', { name: '更多操作', exact: true }).click()
-  assert.equal(await legacy.getByRole('button', { name: /用于章节|更新到章节|章节当前使用/ }).count(), 0)
-  await legacy.getByRole('button', { name: '定位时间线片段', exact: true }).waitFor()
-  await legacy.getByRole('button', { name: '定位源素材', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前方案素材审查', exact: true }).waitFor()
-  await page.goto(`${old}?version=${second.id}`)
-  await legacy.getByText('旧版方案乙', { exact: true }).first().waitFor()
-
   const management = page.getByRole('region', { name: '工作台管理', exact: true })
   const retired = page.getByText('章节组合已停用，可在工作台管理中继续准备场次。', { exact: true })
   for (const link of [chapterPage + '&panel=assembly', old.replace('/' + sequence.id, '') + '?panel=assembly&sequence=' + sequence.id]) {
@@ -113,21 +100,6 @@ try {
   await page.waitForURL(url => url.pathname === managementPath.replace(project, 'wrong-project'))
   await management.getByText('章节不属于当前项目', { exact: true }).waitFor()
   assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
-  for (const canvas of ['director', 'units', 'edit']) {
-    await page.goto(`${old}?canvas=${canvas}`)
-    await page.waitForURL(url => url.pathname === new URL(old).pathname && url.searchParams.get('canvas') === canvas)
-    await legacy.waitFor()
-  }
-
-  await page.goto(prep)
-  await page.getByRole('button', { name: '任务中心', exact: true }).click()
-  const active = page.locator('.app-task-card').filter({ hasText: '导出整场视频' })
-  await active.getByRole('button', { name: /查\s*看/ }).click()
-  await page.waitForURL(url => url.pathname === new URL(old).pathname && url.searchParams.get('exportTask') === task.task_id)
-  const query = new URL(page.url()).searchParams
-  assert.equal(query.get('version'), first.id)
-  assert.equal(query.get('exportVersion'), first.id)
-  await page.getByRole('region', { name: '当前导出记录', exact: true }).waitFor()
   assert.equal((await used()).id, delivery.id)
   assert.equal((await used()).version_id, first.id)
   const history = await request(`${directing}/sequences/${sequence.id}/deliveries`)
@@ -136,7 +108,7 @@ try {
   assert.ok(file.usages.some(usage => usage.source_ref === 'scene-delivery:' + delivery.id))
   assert.equal((await request(`${versions}/${first.id}`)).revision, saved.revision)
   assert.equal((await request(versions)).length, 2)
-  console.log('legacy scene routes preserved', output)
+  console.log('management routes and retained backend records verified', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   throw error
