@@ -207,7 +207,8 @@ class SceneStoryboardService(SceneObjectService):
         if self._review_source(failed) or failed.kind == STORYBOARD_CHECK_KIND:
             await self._ensure_no_active_storyboard(sequence_id, failed.input_snapshot['canvas_id'])
             await self._ensure_not_retried(sequence_id, task_id)
-            return await self._review_retry_basis(sequence, failed)
+            preview = await self._review_retry_basis(sequence, failed)
+            return StoryboardRetryBasis.model_validate({**preview.model_dump(), **await self._storyboard_retry_presentation(failed)})
         body = self._retry_request(failed, 'preview', preview=True)
         canvas, prior_task_id = await self._reextract_baseline(sequence, chapter, failed.input_snapshot['canvas_id'], body, lock=False)
         await self._ensure_no_active_storyboard(sequence_id, canvas.id)
@@ -217,11 +218,11 @@ class SceneStoryboardService(SceneObjectService):
         model, production, capability = await self._storyboard_models(body)
         settings = self._retry_settings(task_id, body, model, production, capability)
         basis = await self._storyboard_basis(sequence, chapter, objects, inputs, canvas=canvas, settings=settings)
-        from app.services.directing.storyboard_structure import user_structure_issues, readable_structure_options
+        from app.services.directing.storyboard_structure import readable_structure_options
         saved_structure = ((failed.result or {}).get('storyboard_structure')
                            or failed.input_snapshot['run_args'].get('structure_resume') or {})
         return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis,
-            user_issues=user_structure_issues(saved_structure, failed.input_snapshot['run_args']['objects']),
+            **await self._storyboard_retry_presentation(failed),
             source_kind='confirmed_scene' if body.adopt_current_source else 'fixed',
             previous_correction_notes=failed.input_snapshot.get('storyboard_request', {}).get('correction_notes', ''),
             structure_only=bool(((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('draft')),
@@ -229,6 +230,33 @@ class SceneStoryboardService(SceneObjectService):
             structure_options=readable_structure_options(saved_structure, failed.input_snapshot['run_args']['objects']),
             mode=body.mode, text_model_name=model.name, production_model_id=body.production_model_id,
             production_model_name=production.name if production else None, pending_modality=body.pending_modality or 'image')
+
+    async def _storyboard_retry_presentation(self, failed: Task) -> dict:
+        """Keep attempt outcomes separate from validation of the exact retained draft."""
+        from app.services.directing.storyboard_structure import structure_attempt, user_structure_issues
+        lineage, seen = [], set()
+        current = failed
+        while current and current.id not in seen:
+            if (current.project_id != failed.project_id or current.target_id != failed.target_id
+                    or current.input_snapshot.get('canvas_id') != failed.input_snapshot.get('canvas_id')):
+                break
+            seen.add(current.id)
+            lineage.append(current)
+            current = await self.db.get(Task, current.retry_of_task_id) if current.retry_of_task_id else None
+        saved = (failed.result or {}).get('storyboard_structure') or failed.input_snapshot.get('run_args', {}).get('structure_resume') or {}
+        draft = saved.get('draft')
+        evidence = saved
+        if 'draft_issues' not in saved:
+            for ancestor in lineage[1:]:
+                older = (ancestor.result or {}).get('storyboard_structure') or ancestor.input_snapshot.get('run_args', {}).get('structure_resume') or {}
+                if older.get('draft') != draft:
+                    break
+                evidence = older
+        issues = evidence.get('draft_issues', evidence.get('issues', [])) if draft else []
+        converted = user_structure_issues({**evidence, 'issues': issues},
+                                         failed.input_snapshot.get('run_args', {}).get('objects', []))
+        return {'user_issues': [issue for issue in converted if issue['title'] not in ('上次纠错未采用', '需要调整处理方式')],
+                'current_attempt': structure_attempt(failed), 'history': [structure_attempt(task) for task in lineage[1:]]}
 
     @staticmethod
     def _review_source(task: Task) -> str | None:

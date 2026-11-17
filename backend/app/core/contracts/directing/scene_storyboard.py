@@ -334,6 +334,18 @@ class StoryboardUserIssue(Contract):
     context: str = ''
 
 
+class StoryboardAttemptRead(Contract):
+    """One task's outcome; it does not describe unresolved draft validation issues."""
+
+    task_id: Identity
+    created_at: str
+    status: str
+    title: str
+    reason: str
+    correction_notes: str = ''
+    diagnostics: list[str] = Field(default_factory=list)
+
+
 class StoryboardRetryBasis(Contract):
     """本次重试实际可采用的依据与沿用的模型配置。"""
 
@@ -349,6 +361,8 @@ class StoryboardRetryBasis(Contract):
     structure_only: bool = False
     structure_issues: list[str] = Field(default_factory=list)
     user_issues: list[StoryboardUserIssue] = Field(default_factory=list)
+    current_attempt: StoryboardAttemptRead | None = None
+    history: list[StoryboardAttemptRead] = Field(default_factory=list)
     previous_correction_notes: str = ""
     structure_options: list[StoryboardStructureOption] = Field(default_factory=list)
 

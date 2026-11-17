@@ -29,7 +29,7 @@ def retained_structure(output: str, issues: list[str]) -> dict:
     if any(marker in issue for issue in issues for marker in (
             '分镜出处必须', '原文事实必须', '设计字段出处不属于', '镜头身份必须唯一', '创作提议必须')):
         draft = None
-    return {'output': output, 'draft': draft, 'issues': issues}
+    return {'output': output, 'draft': draft, 'issues': issues, 'draft_issues': issues if draft else []}
 
 
 def structure_feedback(saved: dict) -> str:
@@ -199,3 +199,37 @@ def readable_structure_options(saved: dict, objects: list[dict]) -> list[dict]:
         return text
     return [{**option, 'title': readable(option['title']), 'impact': readable(option['impact'])}
             for option in saved.get('options', [])]
+
+
+def structure_attempt(task) -> dict:
+    """Use only this task's diagnostics; infer legacy append records only from an exact prefix."""
+    saved = (task.result or {}).get('storyboard_structure') or {}
+    resume = task.input_snapshot.get('run_args', {}).get('structure_resume') or {}
+    checkpoint_only = bool(resume) and saved.get('issues') == resume.get('issues') and saved.get('output') == resume.get('output')
+    diagnostics = [] if checkpoint_only else saved.get('attempt_issues')
+    if diagnostics is None:
+        issues, previous = saved.get('issues', []), resume.get('issues', [])
+        diagnostics = issues[len(previous):] if issues[:len(previous)] == previous else []
+    title = '本轮执行未完成' if task.status != 'cancelled' else '本轮已取消'
+    reason = '该轮未记录独立原因，请查看技术诊断。'
+    if saved.get('decision_reason') and not checkpoint_only:
+        title, reason = '需要调整处理方式', '模型认为：' + saved['decision_reason']
+    else:
+        converted = user_structure_issues({'issues': diagnostics}, [])
+        rejected = next((issue for issue in converted if issue['title'] == '上次纠错未采用'), None)
+        if rejected:
+            title, reason = '本轮修改未采用', rejected['explanation']
+        elif diagnostics:
+            reason = '本轮输出未通过校验，未形成可采用结果。请查看技术诊断。'
+        elif task.status == 'cancelled':
+            reason = '本轮执行已取消。'
+        elif (not saved or checkpoint_only) and task.error_message:
+            reason = '本轮调用或执行未完成，请查看技术诊断。'
+    if task.status == 'succeeded':
+        title, reason = '本轮执行已完成', '该轮任务已完成；结果是否应用以画布记录为准。'
+    elif task.status == 'cancelled':
+        title, reason = '本轮已取消', '本轮执行已取消。'
+    return {'task_id': task.id, 'created_at': task.created_at.isoformat() + 'Z', 'status': task.status,
+            'title': title, 'reason': reason,
+            'correction_notes': task.input_snapshot.get('storyboard_request', {}).get('correction_notes', ''),
+            'diagnostics': diagnostics or ([task.error_message] if task.error_message else [])}

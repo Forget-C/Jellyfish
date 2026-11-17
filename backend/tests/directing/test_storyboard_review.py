@@ -10,6 +10,7 @@ import pytest
 
 from app.models.llm import Model, Provider
 from app.models.studio import Chapter
+from app.models.task import Task
 from app.task_worker import TaskWorker
 from tests.directing.test_api import client_for
 from tests.directing.test_store import database
@@ -404,7 +405,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict', 'shared', 'shared_unsafe'])
+@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict', 'notes_conflict_legacy', 'shared', 'shared_unsafe'])
 async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, monkeypatch, outcome):
     calls = []
     class ControlledModel:
@@ -428,7 +429,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 return SimpleNamespace(content=json.dumps({'structure_choices': [{'id': 'include',
                     'title': '补充镜头参与对象', 'impact': '张三参与镜头 only，保留原地等待设计',
                     'instruction': '把已登记的张三 zs 加入镜头 only 的 object_ids'}]}))
-            if len(calls) == 3 and outcome == 'notes_conflict':
+            if len(calls) >= 3 and outcome.startswith('notes_conflict'):
                 return SimpleNamespace(content=json.dumps({'structure_choices': [], 'reason': '意见要求删改等待正文，请修改意见后重试'}))
             if len(calls) == 3 and outcome == 'choice_timeout':
                 raise httpx.ReadTimeout('controlled structural correction timeout')
@@ -480,22 +481,47 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 assert result['status'] == 'failed'
                 again = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
                 assert again['structure_only']
+                assert again['current_attempt']['title'] == '本轮执行未完成'
+                assert len(again['user_issues']) == 1
                 resumed = await read_data(client, 'POST', path + '/' + retry['task_id'] + '/retry', {
                     'request_id': 'resume-structure', 'basis_token': again['basis']['token'], 'structure_choice_id': 'include'})
                 await worker.tick()
                 await asyncio.gather(*worker.jobs.values())
                 result = await read_data(client, 'GET', path + '/' + resumed['task_id'])
-            if outcome == 'notes_conflict':
+            if outcome.startswith('notes_conflict'):
+                if outcome.endswith('legacy'):
+                    async with sessions.begin() as db:
+                        for identity in (task['task_id'], retry['task_id']):
+                            historical = await db.get(Task, identity)
+                            saved = {**historical.result['storyboard_structure']}
+                            saved.pop('draft_issues', None)
+                            saved.pop('attempt_issues', None)
+                            historical.result = {**historical.result, 'storyboard_structure': saved}
                 assert result['status'] == 'failed'
                 next_basis = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
                 assert next_basis['previous_correction_notes'] == '保留等待表演，仅补齐张三的出镜关联'
-                assert next_basis['user_issues'][-1]['explanation'] == '意见要求删改等待正文，请修改意见后重试'
+                assert next_basis['current_attempt']['reason'] == '模型认为：意见要求删改等待正文，请修改意见后重试'
+                assert len(next_basis['user_issues']) == 1
+                assert next_basis['history'][0]['task_id'] == task['task_id']
+                repeated = await read_data(client, 'POST', path + '/' + retry['task_id'] + '/retry', {
+                    'request_id': 'repeat-conflict', 'basis_token': next_basis['basis']['token'],
+                    'correction_notes': '保留等待表演，仅补齐张三的出镜关联'})
+                await worker.tick()
+                await asyncio.gather(*worker.jobs.values())
+                latest = await read_data(client, 'GET', path + '/' + repeated['task_id'] + '/retry/basis')
+                assert len(latest['user_issues']) == 1
+                assert latest['history'][0]['task_id'] == retry['task_id']
+                assert latest['current_attempt']['reason'] == latest['history'][0]['reason']
+                assert latest['current_attempt']['task_id'] != latest['history'][0]['task_id']
             elif outcome in ('unsafe', 'unsafe_association', 'shared_unsafe'):
                 assert result['status'] == 'failed'
                 assert len(calls) == 3
                 assert ('未涉及错误的关联' if outcome in ('unsafe_association', 'shared_unsafe') else '结构纠错改变了') in result['error']
                 next_basis = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
-                assert next_basis['user_issues'][-1]['title'] == '上次纠错未采用'
+                assert next_basis['current_attempt']['title'] == '本轮修改未采用'
+                assert len(next_basis['user_issues']) == 1
+                assert all(issue['title'] != '上次纠错未采用' for issue in next_basis['user_issues'])
+                assert next_basis['history'][0]['task_id'] == task['task_id']
                 assert next_basis['structure_issues'][:len(basis['structure_issues'])] == basis['structure_issues']
             else:
                 assert result['status'] == 'succeeded', result
@@ -512,3 +538,28 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
             worker.text_pool.shutdown(wait=False)
             if worker.client:
                 await worker.client.aclose()
+
+
+@pytest.mark.parametrize(('issues', 'expected'), [
+    (['历史越界', '本轮格式错误'], ['本轮格式错误']),
+    (['无法确认归属的旧问题'], []),
+])
+def test_legacy_attempt_diagnostics_require_an_exact_history_prefix(issues, expected):
+    from datetime import datetime
+    from app.services.directing.storyboard_structure import structure_attempt
+    task = SimpleNamespace(id='current', created_at=datetime(2026, 11, 17), status='failed',
+        input_snapshot={'run_args': {'structure_resume': {'issues': ['历史越界']}}},
+        result={'storyboard_structure': {'issues': issues}}, error_message=None)
+    report = structure_attempt(task)
+    assert report['diagnostics'] == expected
+    if not expected:
+        assert report['reason'] == '该轮未记录独立原因，请查看技术诊断。'
+
+
+@pytest.mark.parametrize(('status', 'title'), [('succeeded', '本轮执行已完成'), ('cancelled', '本轮已取消')])
+def test_attempt_outcome_preserves_terminal_task_status(status, title):
+    from datetime import datetime
+    from app.services.directing.storyboard_structure import structure_attempt
+    task = SimpleNamespace(id='historical', created_at=datetime(2026, 11, 17), status=status,
+        input_snapshot={}, result={}, error_message=None)
+    assert structure_attempt(task)['title'] == title

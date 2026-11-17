@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { StoryboardAttemptRead } from './StoryboardAttemptRead';
 import type { StoryboardBasis } from './StoryboardBasis';
 import type { StoryboardStructureOption } from './StoryboardStructureOption';
 import type { StoryboardUserIssue } from './StoryboardUserIssue';
@@ -21,6 +22,8 @@ export type StoryboardRetryBasis = {
     structure_only?: boolean;
     structure_issues?: Array<string>;
     user_issues?: Array<StoryboardUserIssue>;
+    current_attempt?: (StoryboardAttemptRead | null);
+    history?: Array<StoryboardAttemptRead>;
     previous_correction_notes?: string;
     structure_options?: Array<StoryboardStructureOption>;
 };

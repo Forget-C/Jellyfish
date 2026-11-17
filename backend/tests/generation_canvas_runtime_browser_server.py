@@ -125,6 +125,8 @@ class ControlledModel:
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'front', 'excerpt': revised}]}, ensure_ascii=False))
         if control.get('storyboard_structure_choices') and args.get('mode') == 'complete':
             subject = next(item['id'] for item in args['objects'] if item['kind'] == 'character')
+            if '测试依据不足' in messages[-1].content:
+                return SimpleNamespace(content=json.dumps({'structure_choices': [], 'reason': '镜头缺少人物出镜依据，请调整适用范围。'}))
             selected = ('"selected_option": {' in messages[-1].content
                         or '保留等待设计，仅补齐参与对象关联' in messages[-1].content)
             if len(messages) > 2 and not selected:

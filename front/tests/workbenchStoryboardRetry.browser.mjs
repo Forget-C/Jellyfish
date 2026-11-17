@@ -275,6 +275,37 @@ try {
   await structureCard.getByRole('button', { name: '核对分镜', exact: true }).waitFor()
   assert.equal((await data(studio + '/generation-canvases/' + project + '/' + structureTask.canvas_id)).revision, 0)
 
+  const historyTask = await data(sceneApi + '/storyboards', 'POST', {
+    name: '历史记录区分', request_id: 'history-separation', mode: 'complete',
+  })
+  let attempt = await poll(() => data(sceneApi + '/storyboards/' + historyTask.task_id), value => value.status === 'failed')
+  for (const request_id of ['history-first', 'history-second']) {
+    const basis = await data(sceneApi + '/storyboards/' + attempt.task_id + '/retry/basis')
+    const accepted = await data(sceneApi + '/storyboards/' + attempt.task_id + '/retry', 'POST', {
+      request_id, basis_token: basis.basis.token, correction_notes: '测试依据不足',
+    })
+    attempt = await poll(() => data(sceneApi + '/storyboards/' + accepted.task_id), value => value.status === 'failed')
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto(management)
+  const historyCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '历史记录区分', exact: true }) })
+  await historyCard.getByRole('button', { name: '处理提取问题', exact: true }).click()
+  const currentResult = page.getByRole('region', { name: '本轮结果', exact: true })
+  const reason = '模型认为：镜头缺少人物出镜依据，请调整适用范围。'
+  await currentResult.getByText(reason, { exact: true }).waitFor()
+  await page.getByText('保留草案的问题（1）', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('region', { name: '保留草案的问题', exact: true }).getByText(reason, { exact: true }).count(), 0)
+  await structureDialog.getByLabel('纠错意见', { exact: true }).fill('稍后处理的草稿')
+  const historySummary = page.getByText('历史处理记录（2次）', { exact: true })
+  assert.equal(await historySummary.locator('..').getByText(reason, { exact: true }).isVisible(), false)
+  await historySummary.click()
+  await historySummary.locator('..').getByText(reason, { exact: true }).waitFor()
+  assert.equal(await structureDialog.getByLabel('纠错意见', { exact: true }).inputValue(), '稍后处理的草稿')
+  await page.screenshot({ path: join(output, 'history-separation-desktop.png'), animations: 'disabled' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await structureDialog.evaluate(element => element.scrollWidth <= element.clientWidth), true)
+  await page.screenshot({ path: join(output, 'history-separation-narrow.png'), animations: 'disabled' })
+
 } finally {
   if (backend.exitCode === null) await control({ disconnect: true, storyboard_release: 100, storyboard_review_release: 100,
     storyboard_repair_release: true, storyboard_recheck_release: true }).catch(() => {})

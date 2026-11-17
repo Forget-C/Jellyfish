@@ -746,6 +746,7 @@ export type { Staging_Output } from './models/Staging_Output';
 export type { StagingActivity_Input } from './models/StagingActivity_Input';
 export type { StagingActivity_Output } from './models/StagingActivity_Output';
 export type { StoryboardApplication } from './models/StoryboardApplication';
+export type { StoryboardAttemptRead } from './models/StoryboardAttemptRead';
 export type { StoryboardBasis } from './models/StoryboardBasis';
 export type { StoryboardBasisObject } from './models/StoryboardBasisObject';
 export type { StoryboardCandidate } from './models/StoryboardCandidate';

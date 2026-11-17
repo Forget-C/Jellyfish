@@ -157,14 +157,22 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
       {error && <Alert type="error" showIcon message={error} action={target && !pending && !loading
         && <Button size="small" onClick={refresh}>重新读取依据</Button>} />}
       {loading && <Spin aria-label="正在读取重试依据" />}
-      {preview && <>
-        {!!preview.user_issues?.length && <section><h3>待处理问题（{preview.user_issues?.length}）</h3>
+      {preview && (!preview.current_attempt || preview.current_attempt.task_id === target && target === task?.task_id) && <>
+        {preview.current_attempt && <section aria-label="本轮结果">
+          <h3>本轮结果</h3>
+          <p><strong>{preview.current_attempt.title}</strong> · <time dateTime={preview.current_attempt.created_at}>{new Date(preview.current_attempt.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</time></p>
+          <p>{preview.current_attempt.reason}</p>
+          {preview.structure_only && <p>保留草案未更新；纠错结果仍需核对后应用。</p>}
+          {preview.current_attempt.correction_notes && <><strong>本轮提交的意见</strong><p>{preview.current_attempt.correction_notes}</p>
+            <Button disabled={!!pending || submitting} onClick={() => updateNotes(preview.current_attempt?.correction_notes ?? '')}>沿用此意见</Button></>}
+        </section>}
+        {!!preview.user_issues?.length && <section aria-label="保留草案的问题"><h3>保留草案的问题（{preview.user_issues?.length}）</h3>
           {preview.user_issues?.map((issue, index) => <article className="management-processing-issue" key={index}>
             <strong>{issue.title}</strong><p>{issue.explanation}</p><p>{issue.decision}</p>
             {issue.context && <details><summary>查看相关内容</summary><p>{issue.context}</p></details>}
           </article>)}
         </section>}
-        <h3>处理方式</h3>
+        <h3>下一次处理</h3>
         {!preview.review_only && <Radio.Group value={regenerate} disabled={!!pending || submitting}
           onChange={event => setRegenerate(event.target.value as boolean)}>
           <Radio value={false}>{preview.structure_only ? '修正当前草案' : '重新提取分镜'}</Radio>
@@ -186,16 +194,22 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
             </div>)}
             <Radio value={null}>自行说明处理方式</Radio>
           </Radio.Group>}
-          <label htmlFor="storyboard-correction-notes">纠错意见{choice === null ? '（必填）' : '（选填）'}</label>
+          <label htmlFor="storyboard-correction-notes">下一次纠错意见{choice === null ? '（必填）' : '（选填）'}</label>
           <Input.TextArea id="storyboard-correction-notes" aria-label="纠错意见" value={pending?.body.correction_notes ?? notes}
             onChange={event => updateNotes(event.target.value)} disabled={!!pending || submitting} maxLength={2000} showCount rows={4}
             placeholder="说明应如何修正对象关联、适用范围或引用" />
           <p className="management-processing-hint">仅用于本次关联纠错，不改动镜头数量、顺序、事实和设计正文。</p>
-          {preview.previous_correction_notes && <details><summary>上次纠错意见</summary><p>{preview.previous_correction_notes}</p>
-            <Button disabled={!!pending || submitting} onClick={() => updateNotes(preview.previous_correction_notes ?? '')}>沿用上次意见</Button></details>}
         </>}
         {regenerate && <p role="status">纠错意见不用于本次重新生成</p>}
-        {!!preview.structure_issues?.length && <details><summary>技术诊断</summary><ul>{preview.structure_issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul></details>}
+        {!!preview.history?.length && <details><summary>历史处理记录（{preview.history.length}次）</summary>
+          {preview.history.map(attempt => <article className="management-processing-issue" key={attempt.task_id}>
+            <strong>{attempt.title.replace(/^本轮/, '')}</strong> · <time dateTime={attempt.created_at}>{new Date(attempt.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</time>
+            {attempt.correction_notes && <p>提交意见：{attempt.correction_notes}</p>}
+            <p>{attempt.reason}</p>
+            {!!attempt.diagnostics?.length && <details><summary>该轮技术诊断</summary><ul>{attempt.diagnostics.map((issue, index) => <li key={index}>{issue}</li>)}</ul></details>}
+          </article>)}
+        </details>}
+        {!!preview.current_attempt?.diagnostics?.length && <details><summary>本轮技术诊断</summary><ul>{preview.current_attempt.diagnostics.map((issue, index) => <li key={index}>{issue}</li>)}</ul></details>}
         <details open={basis?.preparation_stale || basis?.object_task_active || basis?.source_changed || undefined}><summary>本次使用的原文、对象与模型</summary>
         <Descriptions column={1} size="small" items={[
           { key: 'canvas', label: '目标画布', children: canvas.name },

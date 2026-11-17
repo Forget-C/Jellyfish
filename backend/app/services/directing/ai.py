@@ -208,7 +208,8 @@ def generate_directing_result(kind: str, llm, args: dict):
                     reason = str(reason)[:1200]
                     failure = DirectingOutputError('结构纠错需要创作选择，请核对方案后继续' if choices else '无法形成可靠纠错方案，请核对设计依据或明确重新生成')
                     failure.storyboard_structure = {'output': text, 'draft': structure_original,
-                        'issues': structure_issues + [reason], 'options': choices, 'decision_reason': reason}
+                        'issues': structure_issues + [reason], 'options': choices, 'decision_reason': reason, 'attempt_issues': [reason],
+                        **({'draft_issues': (structure_saved or structure_failed)['draft_issues']} if 'draft_issues' in (structure_saved or structure_failed or {}) else {})}
                     raise failure
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             if kind == STORYBOARD_KIND:
@@ -296,8 +297,13 @@ def generate_directing_result(kind: str, llm, args: dict):
                 if kind == STORYBOARD_KIND:
                     from app.services.directing.storyboard_structure import retained_structure
                     failure.storyboard_structure = retained_structure(text, paths)
+                    failure.storyboard_structure['attempt_issues'] = paths
                     if structure_original:
                         failure.storyboard_structure['draft'] = structure_original
+                        if 'draft_issues' in (structure_saved or structure_failed or {}):
+                            failure.storyboard_structure['draft_issues'] = (structure_saved or structure_failed)['draft_issues']
+                        else:
+                            failure.storyboard_structure.pop('draft_issues', None)
                         failure.storyboard_structure['issues'] = structure_issues + paths
                 raise failure from None
             # 结构、来源与单元范围共用一次纠错，沿用 Worker 的取消回调和总时限。
