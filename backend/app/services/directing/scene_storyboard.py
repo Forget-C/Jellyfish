@@ -221,12 +221,14 @@ class SceneStoryboardService(SceneObjectService):
         from app.services.directing.storyboard_structure import readable_structure_options
         saved_structure = ((failed.result or {}).get('storyboard_structure')
                            or failed.input_snapshot['run_args'].get('structure_resume') or {})
+        from app.services.directing.storyboard_structure import diagnose_retained_structure
+        saved_structure = diagnose_retained_structure(saved_structure, failed.input_snapshot['run_args'])
         return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis,
             **await self._storyboard_retry_presentation(failed),
             source_kind='confirmed_scene' if body.adopt_current_source else 'fixed',
             previous_correction_notes=failed.input_snapshot.get('storyboard_request', {}).get('correction_notes', ''),
             structure_only=bool(((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('draft')),
-            structure_issues=((failed.result or {}).get('storyboard_structure') or failed.input_snapshot['run_args'].get('structure_resume') or {}).get('issues', []),
+            structure_issues=saved_structure.get('issues', []),
             structure_options=readable_structure_options(saved_structure, failed.input_snapshot['run_args']['objects']),
             mode=body.mode, text_model_name=model.name, production_model_id=body.production_model_id,
             production_model_name=production.name if production else None, pending_modality=body.pending_modality or 'image')
@@ -244,17 +246,10 @@ class SceneStoryboardService(SceneObjectService):
             lineage.append(current)
             current = await self.db.get(Task, current.retry_of_task_id) if current.retry_of_task_id else None
         saved = (failed.result or {}).get('storyboard_structure') or failed.input_snapshot.get('run_args', {}).get('structure_resume') or {}
-        draft = saved.get('draft')
-        evidence = saved
-        if 'draft_issues' not in saved:
-            for ancestor in lineage[1:]:
-                older = (ancestor.result or {}).get('storyboard_structure') or ancestor.input_snapshot.get('run_args', {}).get('structure_resume') or {}
-                if older.get('draft') != draft:
-                    break
-                evidence = older
-        issues = evidence.get('draft_issues', evidence.get('issues', [])) if draft else []
-        converted = user_structure_issues({**evidence, 'issues': issues},
-                                         failed.input_snapshot.get('run_args', {}).get('objects', []))
+        from app.services.directing.storyboard_structure import diagnose_retained_structure
+        evidence = diagnose_retained_structure(saved, failed.input_snapshot['run_args'])
+        converted = user_structure_issues(evidence,
+                                         failed.input_snapshot.get('run_args', {}).get('objects', [])) if saved.get('draft') else []
         return {'user_issues': [issue for issue in converted if issue['title'] not in ('上次纠错未采用', '需要调整处理方式')],
                 'current_attempt': structure_attempt(failed), 'history': [structure_attempt(task) for task in lineage[1:]]}
 
@@ -478,7 +473,9 @@ class SceneStoryboardService(SceneObjectService):
                     raise RevisionConflict('请先选择本次结构纠错方案')
                 if structure_choice_id and not selected:
                     raise ValueError('纠错方案已失效，请重新核对')
-                args['structure_resume'] = {**saved, 'selected_option': selected, 'correction_notes': correction_notes}
+                from app.services.directing.storyboard_structure import diagnose_retained_structure
+                args['structure_resume'] = {**diagnose_retained_structure(saved, prior_args),
+                                            'selected_option': selected, 'correction_notes': correction_notes}
         if correction_notes and 'structure_resume' not in args:
             raise ValueError('没有可继续纠错的保留草案')
         protected = await self.storyboard_repair_protections(canvas.id, sequence_id) if canvas_id else set()

@@ -292,7 +292,7 @@ def generate_directing_result(kind: str, llm, args: dict):
                     raise DirectingOutputError(str(error), diagnostics) from None
                 if kind == 'directing_unit_design' and not isinstance(error, ValidationError):
                     raise DirectingOutputError('单元方案范围校验失败：' + str(error)) from None
-                paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
+                paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in (errors if kind == STORYBOARD_KIND else errors[:8])]
                 failure = DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths), diagnostics)
                 if kind == STORYBOARD_KIND:
                     from app.services.directing.storyboard_structure import retained_structure

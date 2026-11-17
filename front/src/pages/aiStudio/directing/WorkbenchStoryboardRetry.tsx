@@ -167,6 +167,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
             <Button disabled={!!pending || submitting} onClick={() => updateNotes(preview.current_attempt?.correction_notes ?? '')}>沿用此意见</Button></>}
         </section>}
         {!!preview.user_issues?.length && <section aria-label="保留草案的问题"><h3>保留草案的问题（{preview.user_issues?.length}）</h3>
+          <p>以下问题根据保留草案与本任务的固定依据重新核验。</p>
           {preview.user_issues?.map((issue, index) => <article className="management-processing-issue" key={index}>
             <strong>{issue.title}</strong><p>{issue.explanation}</p><p>{issue.decision}</p>
             {issue.context && <details><summary>查看相关内容</summary><p>{issue.context}</p></details>}

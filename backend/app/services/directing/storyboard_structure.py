@@ -4,6 +4,8 @@ import json
 import re
 from copy import deepcopy
 
+from pydantic import ValidationError
+
 from app.services.generation_canvas.catalog import CARD_TITLES
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardStructureOption
 
@@ -30,6 +32,23 @@ def retained_structure(output: str, issues: list[str]) -> dict:
             '分镜出处必须', '原文事实必须', '设计字段出处不属于', '镜头身份必须唯一', '创作提议必须')):
         draft = None
     return {'output': output, 'draft': draft, 'issues': issues, 'draft_issues': issues if draft else []}
+
+
+
+def diagnose_retained_structure(saved: dict, args: dict) -> dict:
+    """Revalidate the frozen draft; execution history never grants repair permissions."""
+    from app.services.directing.storyboard_assembly import validate_storyboard
+    if not saved.get('draft'):
+        return saved
+    try:
+        validate_storyboard(SceneStoryboard.model_validate(saved['draft']), args)
+        issues = []
+    except ValidationError as error:
+        issues = [('.'.join(map(str, item['loc'])) or '工作单') + '：' + item['msg']
+                  for item in error.errors(include_url=False, include_input=False, include_context=False)]
+    except ValueError as error:
+        issues = ['design：' + str(error)]
+    return {**saved, 'issues': issues, 'draft_issues': issues}
 
 
 def structure_feedback(saved: dict) -> str:
