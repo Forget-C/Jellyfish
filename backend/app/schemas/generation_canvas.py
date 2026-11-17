@@ -3,6 +3,7 @@ from app.core.contracts.generation_canvas import CanvasStoryboardMode, Reference
 from datetime import datetime
 from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.core.contracts.directing.storyboard_prompt import GeneratedVideoPrompt
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.video_generation import AudioCapability
@@ -242,6 +243,7 @@ class ImageModelCard(ModelCard):
 class VideoModelCard(ModelCard):
     """视频处理卡；目标端口固定帧与主体用途。"""
     type: Literal['model.video'] = 'model.video'
+    generated_prompt: GeneratedVideoPrompt | None = Field(default=None, exclude_if=lambda value: value is None)
     config: VideoModelConfig = Field(default_factory=VideoModelConfig)
     design_media_uses: list[DesignMediaUse] = Field(default_factory=list)
     input_ports: ClassVar[tuple[str, ...]] = ('text', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video')

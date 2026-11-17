@@ -24,6 +24,7 @@ function activeTask(task?: StoryboardTaskSummary | null) {
 
 function taskLabel(task: StoryboardTaskSummary) {
   if (task.status === 'queued') return '分镜排队中'
+  if (task.stage === 'writing_video_prompts') return '正在编写视频提示词'
   if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
   if (task.stage === 'repairing_storyboard') return '正在定向修正分镜'
   if (task.stage === 'rechecking_storyboard') return '正在复核分镜连续性'

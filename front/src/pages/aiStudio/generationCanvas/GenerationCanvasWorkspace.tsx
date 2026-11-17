@@ -1,3 +1,4 @@
+import { PromptEditingContext, PromptEditingActiveContext } from './PromptEditingContext'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
@@ -101,8 +102,25 @@ export function GenerationCanvasWorkspace({
   const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
   const pendingInspect = useRef<CanvasInspectTarget>()
   const editor = useGenerationCanvasEditor(projectId, canvasId, true, sceneSave)
-  const leaveEditor = useRef(editor.requestLeave); leaveEditor.current = editor.requestLeave
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && editor.needsLeaveProtection())
+  const [promptEditors, setPromptEditors] = useState<Set<string>>(() => new Set())
+  const reportPromptEditing = useCallback((cardId: string, editing: boolean) => setPromptEditors(previous => {
+    if (previous.has(cardId) === editing) return previous
+    const next = new Set(previous)
+    if (editing) next.add(cardId); else next.delete(cardId)
+    return next
+  }), [])
+  const requestLeave = async () => {
+    if (promptEditors.size) return false
+    return editor.requestLeave()
+  }
+  useEffect(() => {
+    if (!promptEditors.size) return
+    const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', prevent)
+    return () => window.removeEventListener('beforeunload', prevent)
+  }, [promptEditors])
+  const leaveEditor = useRef(requestLeave); leaveEditor.current = requestLeave
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!promptEditors.size || editor.needsLeaveProtection()))
   useEffect(() => { if (blocker.state === 'blocked') void leaveEditor.current().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
   const { current, document, edit, save, saving, dirty, ownership, configureCatalog: configureEditorCatalog } = editor
   const layoutApplication = editor.storyboardApplication
@@ -158,7 +176,7 @@ export function GenerationCanvasWorkspace({
 
   const management: CanvasManagementContext = {
     current, saving, editable: ownership.editable,
-    running: !!runtime.busyCards.size, canEdit: ownership.canEdit, requestLeave: editor.requestLeave,
+    running: !!runtime.busyCards.size, canEdit: ownership.canEdit, requestLeave,
     nameEditor: current?.id === canvasId && !current.scene && document && <Input aria-label="画布名称" value={document.name} maxLength={255}
       disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
       onChange={event => change({ ...document, name: event.target.value })} />,
@@ -166,12 +184,12 @@ export function GenerationCanvasWorkspace({
   return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
     <header ref={toolbar} className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
-        <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await editor.requestLeave()) back.onClick() }} />
+        <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
         {renderCanvasManagement?.(management)}
         <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : current ? '已保存' : '尚无画布'}</span>
         {current && <WorkbenchIconButton label="保存画布" variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
-        <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={editor.requestLeave} />}</div>
+        <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={requestLeave} />}</div>
       </div>
       <div className="generation-toolbar-center" />
       <div className="canvas-toolbar-actions">
@@ -209,10 +227,11 @@ export function GenerationCanvasWorkspace({
       </WorkbenchModal>
     {canvasId && frameSelection?.scope === scope && <SaveVideoFrameDialog key={scope} projectId={projectId} canvasId={canvasId}
       source={frameSelection.source} disabled={frameDisabled} onSave={saveSelectedFrame} onClose={() => setFrameSelection(undefined)} />}
+    {!!promptEditors.size && <Alert type="info" message="提示词正在编辑，请保存修改或取消编辑后再离开、预检或生成。" />}
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
-        <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
-        <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
+      <PromptEditingContext.Provider value={reportPromptEditing}><PromptEditingActiveContext.Provider value={!!promptEditors.size}><GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
+        <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }} />
+        <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={change} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
         renderModelCardAction={renderModelCardAction} modelCardSources={modelCardSources} onSelectVideoFrame={frameDisabled ? undefined : selectVideoFrame}
         renderModelCardMenu={renderModelCardMenu && (context => renderModelCardMenu({ ...context, disabled: context.disabled || frameDisabled,
@@ -226,7 +245,7 @@ export function GenerationCanvasWorkspace({
           },
         }))}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
-          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
+          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptEditingContext.Provider>
     </div>}
   </section></WorkbenchDetailsProvider></WorkbenchTheme>
 }

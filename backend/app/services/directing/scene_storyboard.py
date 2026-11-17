@@ -287,6 +287,7 @@ class SceneStoryboardService(SceneObjectService):
                 StoryboardApplication(expected_revision=canvas.revision,
                     overwrite_card_ids=failed.input_snapshot.get('review_overwrite_card_ids', [])))
         return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis, review_only=True,
+            prompt_only=(source.result or {}).get('prompt_state') == 'pending',
             review_basis_changed=changed, review_diff=diff,
             source_kind='confirmed_scene' if config.get('adopt_current_source') else 'fixed',
             mode=args['mode'], text_model_name=snapshot['model_name'], production_model_id=args['production_model_id'],
@@ -513,7 +514,7 @@ class SceneStoryboardService(SceneObjectService):
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
-                      'provider_key': config.provider_key, 'run_args': args,
+                      'provider_key': config.provider_key, 'run_args': args, 'video_prompt_version': 1,
                       'review_protected_designs': sorted(protected), 'review_basis': review_basis,
                       **({'review_current_document': current} if canvas_id else {})})
         return await self._storyboard_read(task)
@@ -764,6 +765,8 @@ class SceneStoryboardService(SceneObjectService):
             eligible = (saved_repair_fields(planned, issue_report) if task.kind == STORYBOARD_CHECK_KIND and planned.storyboard
                         else draft and task.input_snapshot['run_args']['mode'] == 'complete' and repair_fields(
                             draft, issue_report, protected))
+            eligible = eligible or (task.kind == STORYBOARD_KIND and bool(issue.prompt_unit_ids)
+                and set(issue.prompt_unit_ids) <= {card.id for card in planned.cards if getattr(card, 'generated_prompt', None)})
             choices[key] = StoryboardConflictChoice(id=key, issue=issue, previously_accepted=False, can_repair=bool(eligible))
         token = evidence_digest({'task': task.id, 'current': latest['all'], 'planned': planned_fingerprint,
                                  'choices': sorted(choices)})

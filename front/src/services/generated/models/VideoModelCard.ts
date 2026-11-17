@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasDetachedResult } from './CanvasDetachedResult';
 import type { DesignMediaUse } from './DesignMediaUse';
+import type { GeneratedVideoPrompt } from './GeneratedVideoPrompt';
 import type { InputBinding } from './InputBinding';
 import type { PromptDocument } from './PromptDocument';
 import type { VideoModelConfig } from './VideoModelConfig';
@@ -26,6 +27,7 @@ export type VideoModelCard = {
     prompt?: PromptDocument;
     input_bindings?: Array<InputBinding>;
     type?: string;
+    generated_prompt?: (GeneratedVideoPrompt | null);
     config?: VideoModelConfig;
     design_media_uses?: Array<DesignMediaUse>;
 };

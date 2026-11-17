@@ -426,11 +426,16 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
 async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, monkeypatch, outcome):
     notes = '仅将四项共享站位排除镜头 01，保留其他范围和正文' if outcome == 'shared_multiple_legacy' else '保留等待表演，仅补齐张三的出镜关联'
     calls = []
+    prompt_notes = []
     class ControlledModel:
         def __init__(self, **_kwargs):
             pass
         def invoke(self, messages):
             args = json.loads(messages[1].content)
+            if 'prompt_unit' in args:
+                from tests.directing.storyboard_prompt_fixture import video_prompt_response
+                prompt_notes.append(args['correction_notes'])
+                return video_prompt_response(messages)
             calls.append(messages)
             if 'storyboard_draft' in args:
                 return SimpleNamespace(content='{"issues": []}')
@@ -481,7 +486,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
         scene = await read_data(client, 'POST', chapter + '/sequences', {'title': '等待', 'position': 0,
             'source_version': source['source_version'], 'span': {'start': 0, 'end': 10 if outcome == 'shared_multiple_legacy' else 5}})
         path = chapter + '/sequences/' + scene['id'] + '/storyboards'
-        task = await read_data(client, 'POST', path, {'request_id': 'structure', 'text_model_id': 'structure-text'})
+        task = await read_data(client, 'POST', path, {'request_id': 'structure', 'text_model_id': 'structure-text', 'pending_modality': 'video' if outcome == 'shared_multiple_legacy' else 'image'})
         worker = TaskWorker(sessions)
         try:
             await worker.tick()
@@ -571,6 +576,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 assert result['pending_application']
                 assert len(calls) == (5 if outcome == 'choice_timeout' else 4)
             if outcome == 'shared_multiple_legacy':
+                assert prompt_notes == [notes, notes]
                 assert all(f'blocking_{index}' in calls[2][-1].content.split('"issues":')[1] for index in range(4))
             assert '继续修正保留草案' in calls[2][-1].content
             assert notes in calls[2][-1].content

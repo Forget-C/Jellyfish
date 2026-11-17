@@ -95,6 +95,8 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
         elif not source.available:
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
     from app.services.generation_canvas.design_references import FLAT_DESIGN_TYPES, REFERENCE_DESIGN_TYPES
+    generated = getattr(card, 'generated_prompt', None)
+    placements = {row.card_id: row.placement for row in generated.designs} if generated else {}
     primary_designs = [item for item in result.used if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in REFERENCE_DESIGN_TYPES]
     if card.type == 'model.video' and capability:
         audio = capability.native_audio_output
@@ -107,8 +109,13 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
                 'unknown': '当前模型的原生声音输出能力未知',
             }[audio.declaration]
             issue('NATIVE_AUDIO_OUTPUT_UNAVAILABLE', f'已采用声音设计：{detail}。', None, ['model_id'], warning=True)
+    rendered_designs = set()
     def design_text(item):
         if item in primary_designs:
+            source_id = item.source.card_id
+            if generated and placements.get(source_id) == 'reference' and source_id not in rendered_designs:
+                rendered_designs.add(source_id)
+                return item.text or ''
             return ''
         # 描述归属只取本次直接采用的载荷，不从命名图片或同名卡片反查正文。
         if isinstance(item.payload, DescriptionTextPayload) and item.payload.name:
@@ -220,7 +227,15 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
         if binding.id not in mentioned and item and item.available and item.modality == 'text':
             result.text += ('\n' if result.text else '') + design_text(item)
 
-    if primary_designs:
+    if generated:
+        referenced = {binding.source.card_id for binding in card.input_bindings if binding.id in mentioned}
+        for source_id, placement in placements.items():
+            if placement == 'reference' and source_id not in referenced and any(binding.source.card_id == source_id for binding in card.input_bindings):
+                issue('GENERATED_DESIGN_REFERENCE_MISSING', '正文设计引用已删除，请恢复引用或明确解除采用', source_id, ['prompt'])
+        before = [item.text for item in primary_designs if placements.get(item.source.card_id, 'before') == 'before' and item.text]
+        after = [item.text for item in primary_designs if placements.get(item.source.card_id) == 'after' and item.text]
+        result.text = '\n\n'.join([*before, result.text, *after])
+    elif primary_designs:
         supplementary = result.text.strip()
         sound_note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行，不代表已生成声音。' if card.type == 'model.video' else ''
         result.text = '导演设计 · 主要依据\n' + '\n'.join(('设计卡：' + item.source.card_id + '\n' if label_sources else '') + item.text + ('\n' + sound_note if sound_note and item.payload.design_type in ('direction.dialogue', 'direction.sound') else '') for item in primary_designs)

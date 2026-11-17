@@ -7,6 +7,8 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import httpx
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
+
 import pytest
 
 from app.bootstrap import bootstrap_all_registries
@@ -34,6 +36,8 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
             pass
 
         def invoke(self, _messages):
+            if response := video_prompt_response(_messages):
+                return response
             if 'storyboard_draft' in json.loads(_messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps(semantic, ensure_ascii=False))

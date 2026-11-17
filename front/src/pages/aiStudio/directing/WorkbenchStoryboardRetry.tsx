@@ -146,13 +146,13 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
     {!target && (error || pending && !submitting) && <p className="management-canvas-error" role="status">
       {pending ? '重试结果待核实。' : error}
     </p>}
-    <RetryContainer inline={inline} actionHost={actionHost} title={reviewOnly ? '核对重试审查' : '核对分镜处理'} open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
+    <RetryContainer inline={inline} actionHost={actionHost} title={preview?.prompt_only ? '核对提示词恢复' : reviewOnly ? '核对重试审查' : '核对分镜处理'} open={!!target} onCancel={() => setTarget(undefined)} footer={<Space>
       {!inline && <Button aria-label="关闭重试确认" onClick={() => setTarget(undefined)}>关闭</Button>}
       <Button type="primary" loading={submitting} disabled={!pending && !ready} onClick={confirm}>
-        {pending ? verifyLabel : regenerate ? '确认重新生成' : preview?.structure_only ? '提交纠错' : preview?.structure_issues?.length ? '确认重新生成' : reviewOnly ? '重新审查' : '确认重试'}
+        {pending ? verifyLabel : regenerate ? '确认重新生成' : preview?.structure_only ? '提交纠错' : preview?.structure_issues?.length ? '确认重新生成' : preview?.prompt_only ? '继续编写提示词' : reviewOnly ? '重新审查' : '确认重试'}
       </Button>
     </Space>}>
-      {!preview?.structure_only && <p>{reviewOnly ? '已保留分镜草案。本次从审查阶段继续，结果仍需核对后应用。'
+      {!preview?.structure_only && <p>{preview?.prompt_only ? '设计与已完成提示词已保留。本次继续未完成单元，完成后再审查。' : reviewOnly ? '已保留分镜草案。本次从审查阶段继续，结果仍需核对后应用。'
         : '本次使用下方已核对的输入，任务仍在原画布中继续。生成结果需要核对后应用。'}</p>}
       {pending && !submitting && <Alert type="warning" showIcon message="重试结果待核实，将使用同一请求身份。" />}
       {error && <Alert type="error" showIcon message={error} action={target && !pending && !loading

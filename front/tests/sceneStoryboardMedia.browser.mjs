@@ -204,13 +204,8 @@ try {
         await assign(cardId, true, async () => {
           assert.equal((await request(canvas)).document.cards.find(card => card.id === cardId).model_id, null)
           await closeCanvasDetails(page)
-          await page.getByRole('button', { name: '重新提取', exact: true }).click()
-          const settings = page.getByRole('dialog', { name: '重新提取', exact: true })
-          await settings.getByText(modelName, { exact: true }).waitFor()
-          assert.equal(await settings.getByRole('radio', { name: '图片模型卡' }).count(), 0)
+          assert.equal(await page.getByRole('button', { name: '重新提取', exact: true }).count(), 0)
           allowSave()
-          await settings.getByRole('button', { name: '取消', exact: true }).click()
-          await settings.waitFor({ state: 'hidden' })
         })
       } finally {
         allowSave()
