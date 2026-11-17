@@ -1,10 +1,11 @@
 """堆叠行为仅通过公开 HTTP 观察，组织不是集合输出。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
 async def saved_stack(client):
-    canvas = (await client.post('/canvases/p', json={'name': '堆叠'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '堆叠'})).json()['data']
     document = canvas['document']
     document['cards'] = [
         {'id': 'source', 'type': 'content.text', 'type_version': 1, 'text': '来源'},
@@ -15,7 +16,7 @@ async def saved_stack(client):
                          {'id': 'outgoing', 'source_card': 'inside', 'source_port': 'text', 'target_card': 'outside', 'target_port': 'text'}]
     document['input_order'] = {'inside': {'text': ['incoming']}, 'outside': {'text': ['outgoing']}}
     document['groups'] = [{'id': 'stack', 'name': '堆叠', 'kind': 'stack', 'card_ids': ['inside'], 'collapsed': False}]
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     response = await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': document})
     assert response.status_code == 200, response.text
     return url, (await client.get(url)).json()['data']['document']

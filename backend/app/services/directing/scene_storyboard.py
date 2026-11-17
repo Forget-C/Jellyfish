@@ -843,7 +843,7 @@ class SceneStoryboardService(SceneObjectService):
             raise ValueError('目标画布已不属于原场次')
         baseline = CanvasDocument.model_validate(snapshot['baseline']['document'])
         assembled = StoryboardAssembly(snapshot['run_args'], task.id, baseline).build(result)
-        frozen_canvas = SimpleNamespace(id=canvas.id, document=baseline.model_dump(), detached_proofs=None,
+        frozen_canvas = SimpleNamespace(id=canvas.id, kind=canvas.kind, document=baseline.model_dump(), detached_proofs=None,
                                         card_types={card.id: card.type for card in baseline.cards})
         prepared = await prepare_document(self.db, self.project_id, frozen_canvas, assembled.model_dump())
         return StoryboardCandidate(base_revision=snapshot['baseline']['revision'], document=prepared.document)

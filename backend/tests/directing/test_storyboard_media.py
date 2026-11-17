@@ -1,4 +1,5 @@
 """Extracted references and actual single-card production through public HTTP and Worker."""
+from tests.canvas_urls import canvas_url
 import asyncio
 import base64
 import json
@@ -69,7 +70,7 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
         start = await client.post(path, json={'request_id': 'story', 'text_model_id': 'text', 'production_model_id': modality, 'mode': 'faithful'})
         assert start.status_code == 200, start.text
         started = start.json()['data']
-        base = '/api/v1/studio/generation-canvases/p1/'
+        base = canvas_url('/api/v1/studio/generation-canvases/p1/')
         canvas = base + started['canvas_id']
 
         async def read():
@@ -109,12 +110,12 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
                 assert warnings[0]['severity'] == 'warning' and warnings[0]['blocks'] == []
                 assert calls == [] and (await client.get(canvas + '/runtime')).json()['data']['runs'] == []
 
-                ordinary = await client.post(base.rstrip('/'), json={'name': '普通画布'})
+                ordinary = await client.post('/api/v1/studio/generation-canvases', json={'name': '普通画布'})
                 assert ordinary.status_code == 200, ordinary.text
                 ordinary_state = ordinary.json()['data']
-                ordinary_path = base + ordinary_state['id']
+                ordinary_path = '/api/v1/studio/generation-canvases/' + ordinary_state['id']
                 ordinary_doc = ordinary_state['document']
-                ordinary_doc['cards'] = [{**blank, 'name_binding': None}, {
+                ordinary_doc['cards'] = [{**blank, 'name_binding': None, 'scene_object_source': None}, {
                     'id': 'ordinary-model', 'type': 'model.' + modality, 'model_id': modality,
                     'prompt': {'segments': [{'id': 'text', 'kind': 'text', 'text': '小雨推门。'}]},
                     'config': {'ratio': '16:9'} if modality == 'video' else {},

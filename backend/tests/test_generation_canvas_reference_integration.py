@@ -1,4 +1,5 @@
 """混合设计角色的原始存量经 Store 读取后保持不变。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -7,8 +8,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 async def test_store_reads_mixed_design_roles_without_rewriting(canvas_client, canvas_file_store):
     from app.models.generation_canvas import GenerationCanvas
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '混合25类设计'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '混合25类设计'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     retired = ['criterion', 'creative_control', 'guidance', 'fact', 'performance_rule', 'situation', 'performance', 'activity',
                'narrative', 'event', 'space_rule', 'anchor', 'camera', 'lighting', 'composition', 'movement', 'focus', 'sound']
     retained = ['style', 'blocking', 'environment', 'dialogue', 'beat', 'shot', 'continuity']

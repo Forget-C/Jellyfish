@@ -1,4 +1,5 @@
 """Canvas save media inventory through HTTP, including fixed files and first-error order."""
+from tests.canvas_urls import canvas_params, canvas_url, seed_scene_canvas
 from copy import deepcopy
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -29,9 +30,9 @@ async def test_shared_fixed_file_keeps_every_usage_and_releases_only_removed_rol
     prefix = doc['id'] + ':'
     assert await protections(client, files[0]) == [prefix + part for part in ['design:e', 'image', 'ref']]
     # Another canvas protects the same file independently.
-    other = (await client.post('/canvases/p', json={'name': 'other'})).json()['data']
+    other = (await seed_scene_canvas(client, '/canvases/p', json={'name': 'other'})).json()['data']
     other_doc = {**other['document'], 'cards': [{'id': 'image', 'type': 'content.image', 'file_id': files[0]}]}
-    assert (await save(client, f"/canvases/p/{other['id']}", other_doc)).status_code == 200
+    assert (await save(client, canvas_url(f"/canvases/p/{other['id']}"), other_doc)).status_code == 200
     other_ref = other['id'] + ':image'
     doc['cards'][0]['file_id'] = files[1]
     assert (await save(client, url, doc, 1, 'replace-source')).status_code == 200
@@ -46,7 +47,7 @@ async def test_shared_fixed_file_keeps_every_usage_and_releases_only_removed_rol
     doc['cards'][1]['image_binding'] = None
     assert (await save(client, url, doc, 3, 'clear-reference')).status_code == 200
     assert await protections(client, files[0]) == [other_ref]
-    assert (await client.delete(f"/canvases/p/{other['id']}", params={'expected_revision': 1})).status_code == 200
+    assert (await client.delete(canvas_url(f"/canvases/p/{other['id']}"), params={**canvas_params(canvas_url(f"/canvases/p/{other['id']}")), **({'expected_revision': 1})})).status_code == 200
     assert await protections(client, files[0]) == []
 
 

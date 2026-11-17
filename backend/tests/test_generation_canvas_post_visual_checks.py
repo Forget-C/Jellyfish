@@ -1,4 +1,5 @@
 """Historical visual checks use real media through HTTP, generation and Worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import base64
 import json
@@ -138,7 +139,7 @@ async def test_post_visual_check_shares_real_media_preserves_evidence_and_leaves
             products = url + '/checks/check/products'
             product, = (await client.get(products)).json()['data']
             assert product['modality'] == modality and product['generation_status'] == 'succeeded'
-            inspection = f"{products}/{product['run_id']}/{product['node_id']}/{product['position']}"
+            inspection = append_canvas_path(products, f"/{product['run_id']}/{product['node_id']}/{product['position']}")
 
             document = (await client.get(url)).json()['data']['document']
             document['cards'][1]['visible_result']['text'] = '能看见蓝色背景'
@@ -190,7 +191,7 @@ async def test_post_visual_check_shares_real_media_preserves_evidence_and_leaves
             selected_category = 'R02' if with_reference else 'R03'
             item_id = next(item['id'] for item in history['items'] if item['category'] == selected_category)
             original_result = next(result for result in history['results'] if result['item_id'] == item_id)
-            response = await client.post(f"{url}/checks/check/reports/{history['id']}/recheck", json={
+            response = await client.post((url + f"/checks/check/reports/{history['id']}/recheck"), json={
                 'item_id': item_id, 'clarification': '请复看原画面的红色区域',
             })
             assert response.status_code == 200, response.text

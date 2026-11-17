@@ -1,3 +1,4 @@
+import { persistSceneChange } from './sceneCanvasPersistence'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Drawer, Space, Spin } from 'antd'
 import { StudioDirectingService as Directing, type SceneCanvasSummary, type StoryboardTaskRead } from '../../../services/generated'
@@ -12,7 +13,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary; historical: boolean
   onClose: () => void; onChange: () => void; onEnter: () => void; onReviewSource: () => void
 }) {
-  const editor = useGenerationCanvasEditor(projectId, canvas.id, false)
+  const editor = useGenerationCanvasEditor(projectId, canvas.id, false, persistSceneChange)
   const [loadedTask, setTask] = useState<StoryboardTaskRead>()
   const [error, setError] = useState('')
   const [actionHost, setActionHost] = useState<HTMLDivElement | null>(null)

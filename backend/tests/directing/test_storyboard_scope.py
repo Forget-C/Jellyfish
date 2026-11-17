@@ -1,5 +1,6 @@
 """复杂分镜的正式任务、保存和编译使用同一共同画布。"""
 
+from tests.canvas_urls import append_canvas_path, canvas_url
 import asyncio
 import json
 from types import SimpleNamespace
@@ -127,7 +128,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
                 finished = await read_data(client, 'GET', endpoint + '/storyboards/' + task['task_id'])
                 assert finished['status'] == 'succeeded', finished
                 candidate = finished['candidate']
-                path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+                path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
                 await read_data(client, 'PUT', path, {'request_id': 'storyboard:' + task['task_id'],
                     'expected_revision': candidate['base_revision'], 'document': candidate['document']})
                 return path, await read_data(client, 'GET', path)
@@ -137,7 +138,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             verify_all_design_fields(image['document'], outputs[0])
             image_story = image['document']['storyboard']
             first_model = image_story['shots'][0]['model_card_ids'][0]
-            compiled = await read_data(client, 'GET', f'{image_path}/cards/{first_model}/compile')
+            compiled = await read_data(client, 'GET', append_canvas_path(image_path, f'/cards/{first_model}/compile'))
             used_cards = {item['source']['card_id'] for item in compiled['used']}
             origins = image_story['origins']
             adopted_anchor = [key for key in used_cards if origins.get(key, {}).get('semantic_key', '').startswith('scene:design:anchor')]
@@ -195,10 +196,10 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
                 group['card_ids'] = [key for key in group['card_ids'] if key not in (card['id'], ungrouped)]
             data['groups'].append({'id': 'manual-model-group', 'name': '人工制作组', 'card_ids': [card['id']]})
             await read_data(client, 'PUT', video_path, {'request_id': 'manual', 'expected_revision': video['revision'], 'document': data})
-            edited = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
+            edited = await read_data(client, 'GET', append_canvas_path(video_path, f"/cards/{card['id']}/compile"))
             assert '分段动作举高' not in edited['text']
             before_reextract = await read_data(client, 'GET', video_path)
-            rerun = await read_data(client, 'POST', endpoint + '/canvases/' + video_path.rsplit('/', 1)[-1] + '/storyboards',
+            rerun = await read_data(client, 'POST', endpoint + canvas_url('/canvases/') + video['id'] + '/storyboards',
                 {'request_id': 'repeat-segmented', 'text_model_id': 'scope-text', 'production_model_id': 'scope-video'})
             await work()
             application = endpoint + '/storyboards/' + rerun['task_id']
@@ -213,7 +214,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             assert [group['id'] for group in groups if card['id'] in group['card_ids']] == ['manual-model-group']
             assert all(ungrouped not in group['card_ids'] for group in groups)
             assert merged['document']['storyboard']['origins'][specific]['applicability'] == data['storyboard']['origins'][specific]['applicability']
-            after = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
+            after = await read_data(client, 'GET', append_canvas_path(video_path, f"/cards/{card['id']}/compile"))
             assert '分段动作举高' not in after['text']
             assert [item['file_id'] for item in after['media']] == ['image1']
             undo = await read_data(client, 'POST', application + '/restore',
@@ -290,7 +291,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             finished = await read_data(client, 'GET', endpoint + '/storyboards/' + task['task_id'])
             assert finished['status'] == 'succeeded', finished
             candidate = finished['candidate']
-            path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+            path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
             await read_data(client, 'PUT', path, {'request_id': 'storyboard:' + task['task_id'],
                 'expected_revision': candidate['base_revision'], 'document': candidate['document']})
             document = (await read_data(client, 'GET', path))['document']

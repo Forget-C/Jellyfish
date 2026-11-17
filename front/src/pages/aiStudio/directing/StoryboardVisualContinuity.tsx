@@ -33,7 +33,7 @@ function ContinuityPicker(context: WorkbenchModelMenuContext & {
   onClose: () => void
 }) {
   const { target, document, runs, disabled, prepare, commit, onClose } = context
-  const projectId = document.project_id, canvasId = document.id
+  const projectId = (document.project_id || ''), canvasId = document.id
   const results = continuityResults(document, target.id, runs)
   const adopted = activeVisualContinuity(document, target.id)
   const update = adopted && newContinuityResult(results, adopted.origin, runs)

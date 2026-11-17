@@ -1,5 +1,6 @@
 """分镜创建通过公开接口核对原文、准备和原请求身份。"""
 
+from tests.canvas_urls import canvas_url
 import asyncio
 import json
 from types import SimpleNamespace
@@ -123,7 +124,7 @@ async def test_blank_canvas_can_recover_original_request_without_duplication(tmp
         assert accepted.is_success, accepted.text
         canvas = accepted.json()['data']
         assert [card['type'] for card in canvas['document']['cards']] == ['content.basis']
-        renamed = await client.put('/api/v1/studio/generation-canvases/p1/' + canvas['id'], json={
+        renamed = await client.put(canvas_url('/api/v1/studio/generation-canvases/p1/') + canvas['id'], json={
             'request_id': 'rename-blank', 'expected_revision': canvas['revision'],
             'document': {**canvas['document'], 'name': '后来改名'},
         })

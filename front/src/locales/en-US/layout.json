@@ -18,6 +18,7 @@
 },
   "menu": {
     "home": "Home",
+    "canvases": "Canvas",
     "projects": "Projects",
     "management": "Management",
     "lab": "Lab",

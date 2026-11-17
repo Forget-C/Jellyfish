@@ -1,4 +1,5 @@
 """人物、物件和场所经画布 HTTP 保存并发布明确出口。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.generation_canvas_reference_fixtures import reference_image_sources
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -9,8 +10,8 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 @pytest.mark.asyncio
 async def test_description_and_object_reference_are_separate_outputs(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '对象'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '对象'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document['cards'] = [{'id': 'person', 'type': 'content.character', 'object_id': 'zhang-san', 'name': '张三', 'text': '红衣，沉默。', 'source_locator': '手稿第2页'}]
     saved = await client.put(url, json={'request_id': 'objects', 'expected_revision': 0, 'document': document})
@@ -27,8 +28,8 @@ async def test_description_and_object_reference_are_separate_outputs(canvas_clie
 @pytest.mark.asyncio
 async def test_names_are_unique_per_canvas_and_saved_object_identity_is_stable(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '唯一名称'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '唯一名称'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     first = {'id': 'person', 'type': 'content.character', 'object_id': 'person-one', 'name': '张三', 'text': ''}
     document['cards'] = [first]
@@ -40,15 +41,15 @@ async def test_names_are_unique_per_canvas_and_saved_object_identity_is_stable(c
     changed = await client.put(url, json={'request_id': 'identity', 'expected_revision': 1, 'document': {**document, 'cards': [{**first, 'object_id': 'different'}]}})
     assert changed.status_code == 422
     assert changed.json()['detail']['code'] == 'IMMUTABLE_OBJECT_IDENTITY'
-    other = (await client.post('/canvases/p', json={'name': '另一画布'})).json()['data']
-    assert (await client.put(f"/canvases/p/{other['id']}", json={'request_id': 'same-name', 'expected_revision': 0, 'document': {**other['document'], 'cards': [first]}})).status_code == 200
+    other = (await seed_scene_canvas(client, '/canvases/p', json={'name': '另一画布'})).json()['data']
+    assert (await client.put(canvas_url(f"/canvases/p/{other['id']}"), json={'request_id': 'same-name', 'expected_revision': 0, 'document': {**other['document'], 'cards': [first]}})).status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_incomplete_objects_publish_only_literal_description_and_models_adopt_text(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '正文采用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '正文采用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'place', 'type': 'content.place', 'name': '', 'text': '空屋里有张三', 'category': 'place'},
                     {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'place', 'port_id': 'text', 'position': 0}}]}}]
@@ -71,8 +72,8 @@ async def test_incomplete_objects_publish_only_literal_description_and_models_ad
 @pytest.mark.parametrize('category', ['prop', 'costume'])
 async def test_structural_categories_and_description_binding_protection(canvas_client, category):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '物件'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '物件'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'id': 'item', 'type': 'content.' + category, 'object_id': 'item-one', 'name': '青色长袍', 'text': '正文可以提到任何类别。'}
     doc['cards'] = [source, {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'item', 'port_id': 'text', 'position': 0}}]}}]
@@ -92,8 +93,8 @@ async def test_structural_categories_and_description_binding_protection(canvas_c
 @pytest.mark.asyncio
 async def test_split_description_type_cannot_change_and_keeps_identity(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '类别修正'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '类别修正'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     item = {'id': 'item', 'type': 'content.prop', 'object_id': 'item-one', 'name': '长袍', 'text': '丝绸'}
     doc['cards'] = [item]

@@ -1,4 +1,5 @@
 """Reference saves use the final document while retaining fixed files and diagnostics."""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 from copy import deepcopy
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -7,14 +8,14 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 async def reference_document(client):
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': (f'{index}.png', b'image', 'image/png')})).json()['data']['id'] for index in range(2)]
-    canvas = (await client.post('/canvases/p', json={'name': 'reference save'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': 'reference save'})).json()['data']
     document = canvas['document']
     document.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': files[0]},
         {'id': 'ref', 'type': 'reference.character', 'name': '人物', 'image_binding': {'file_id': files[0],
             'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}}}],
         edges=[{'id': 'edge', 'source_card': 'image', 'source_port': 'image', 'target_card': 'ref', 'target_port': 'image_source'}],
         input_order={'ref': {'image_source': ['edge']}})
-    return f"/canvases/p/{canvas['id']}", document, files
+    return canvas_url(f"/canvases/p/{canvas['id']}"), document, files
 
 
 async def save(client, url, document, revision=0, request_id='save'):

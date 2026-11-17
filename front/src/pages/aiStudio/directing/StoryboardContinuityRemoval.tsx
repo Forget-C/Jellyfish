@@ -12,7 +12,7 @@ type Offer = NonNullable<Awaited<ReturnType<typeof previewRemoval>>>
 
 async function previewRemoval(before: CanvasRead, target: string) {
   const { document } = before
-  const projectId = document.project_id, canvasId = document.id
+  const projectId = (document.project_id || ''), canvasId = document.id
   const card = document.cards?.find(item => item.id === target)
   const modelId = card && 'model_id' in card ? card.model_id : undefined
   const [latest, capability] = await Promise.all([

@@ -111,8 +111,8 @@ def estimate_product_calls(compiled, modality, card, model, unavailable, *, gene
 class CanvasPostChecks:
     """Observe historical outputs without recomputing the active target or updating generation."""
 
-    def __init__(self, db: AsyncSession, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db: AsyncSession, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
         self.checks = CanvasChecks(db, project_id)
         self.history = CanvasHistoricalContent(db, project_id)
 

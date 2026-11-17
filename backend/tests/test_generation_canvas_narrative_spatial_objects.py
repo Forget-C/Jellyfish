@@ -1,4 +1,5 @@
 """通用对象退役通过公开读取、编译和真实任务执行验证。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 from copy import deepcopy
 import asyncio
 from types import SimpleNamespace
@@ -23,8 +24,8 @@ def design_card(kind, field):
 @pytest.mark.parametrize('kind,field', CASES)
 async def test_reading_narrative_spatial_legacy_bindings_preserves_revision_and_connections(canvas_client, canvas_file_store, kind, field):
     from app.models.generation_canvas import GenerationCanvas
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '对象退役'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '对象退役'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = lambda port: {'canvas_id': canvas['id'], 'card_id': 'place', 'port_id': port, 'position': 0, **({'object_id': 'hall'} if port == 'object' else {})}
     card = design_card(kind, field)
     card['input_bindings'] = [{'id': 'old', 'input_port': 'effect_object', 'source': source('object')}]

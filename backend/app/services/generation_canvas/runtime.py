@@ -32,8 +32,8 @@ def _admission_hash(generation_hash: str, checks: dict) -> str:
 
 class CanvasRuntime:
     """画布受理与观察边界；范围调度沿用真实 Submitter 和 Task 生命周期。"""
-    def __init__(self, db: AsyncSession, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db: AsyncSession, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
 
     async def precheck(self, canvas_id: str, command: CanvasPrecheckRequest) -> CanvasPrecheck:
         """预检不占用节点，令牌绑定当前修订和实际使用依据。"""
@@ -185,13 +185,31 @@ class CanvasRuntime:
 
 
 
-async def ensure_project_idle(db: AsyncSession, project_id: str) -> None:
+async def active_canvas_task(db: AsyncSession, canvas_ids: list[str]) -> str | None:
+    """包括生成后的检查派发与报告任务；只读状态，避免反转 Task→画布锁序。"""
+    from sqlalchemy import and_, or_
+    from app.models.task import Task
+    from app.models.generation_canvas import CanvasCheckReport
+    from app.core.contracts.task import TERMINAL_TASK_STATUSES
+    if not canvas_ids:
+        return None
+    nodes = select(CanvasRunNode.id).where(CanvasRunNode.canvas_id.in_(canvas_ids))
+    reports = select(CanvasCheckReport.id).where(CanvasCheckReport.canvas_id.in_(canvas_ids))
+    results = select(CanvasResultSet.id).where(CanvasResultSet.canvas_id.in_(canvas_ids))
+    return await db.scalar(select(Task.id).where(Task.status.not_in(TERMINAL_TASK_STATUSES), or_(
+        and_(Task.target_type == 'canvas_node', Task.target_id.in_(nodes)),
+        and_(Task.target_type == 'canvas_check_report', Task.target_id.in_(reports)),
+        and_(Task.target_type == 'canvas_result_set', Task.target_id.in_(results)),
+    )).limit(1))
+
+
+async def ensure_project_idle(db: AsyncSession, project_id: str | None) -> None:
     """Project deletion and run admission share document locks; neither locks Tasks."""
     canvases = list(await db.scalars(select(GenerationCanvas).where(GenerationCanvas.project_id == project_id)
                                     .order_by(GenerationCanvas.id).with_for_update()))
+    store = CanvasStore(db, project_id)
     for canvas in canvases:
-        if await db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas.id).limit(1)):
-            raise diagnostic('RUN_SCOPE_BUSY', '项目仍有活动画布运行', {'canvas_id': canvas.id}, status=409, blocks=['delete'])
+        await store.require_idle(canvas)
 
 
 async def delete_runtime(db: AsyncSession, canvas_id: str) -> None:

@@ -49,14 +49,18 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   }
   else if (kind === 'project') navigateTo = `/projects/${id}`
   else if (kind === 'character' && projectId) navigateTo = `/projects/${projectId}/roles/${id}/edit`
-  else if (kind === 'generation_canvas' && projectId && source.canvas_id) {
+  else if (kind === 'generation_canvas' && source.canvas_id) {
     const query = new URLSearchParams({ canvas: source.canvas_id })
     if (source.run_id) query.set('run', source.run_id)
     if (source.node_id) query.set('node', source.node_id)
     if (source.check_card_id) query.set('check', source.check_card_id)
     if (source.check_report_id) query.set('report', source.check_report_id)
-    navigateTo = generationCanvasLocation(projectId, query)
+    query.delete('canvas')
+    navigateTo = projectId && chapterId && source.sequence_id
+      ? `/projects/${projectId}/chapters/${chapterId}/sequences/${source.sequence_id}/canvas-workbench?canvas=${source.canvas_id}&${query}`
+      : !projectId ? generationCanvasLocation(source.canvas_id, query) : null
   }
+  else if (kind === 'deleted_canvas') navigateTo = null
   else if (kind === 'experiment_session') navigateTo = `/lab?session=${encodeURIComponent(id)}`
   else navigateTo = ASSET_EDIT_PATH_BUILDERS[`${kind}_image`]?.(id) ?? null
   return { sourceLabel: source.title, navigateTo }

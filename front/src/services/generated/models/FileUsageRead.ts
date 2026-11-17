@@ -5,7 +5,7 @@
 export type FileUsageRead = {
     id: number;
     file_id: string;
-    project_id: string;
+    project_id: (string | null);
     chapter_id: (string | null);
     usage_kind: string;
     source_ref: string;

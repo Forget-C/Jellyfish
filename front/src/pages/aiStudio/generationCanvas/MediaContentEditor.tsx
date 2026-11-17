@@ -66,7 +66,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
     latest.current.onChange({ ...latest.current.card, uploading: true })
     try {
       const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: {
-        file: file as unknown as string, project_id: projectId, usage_kind: 'generation_upload',
+        file: file as unknown as string, project_id: projectId || undefined, usage_kind: 'generation_upload',
       } })
       if (!response.data || response.data.type !== type) throw new Error('文件类型不匹配')
       if (token === operation.current) {
@@ -85,16 +85,16 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
     const requestCounter = libraryRequest
     const token = ++requestCounter.current
     setLoading(true); setError('')
-    StudioFilesService.listFilesApiApiV1StudioFilesGet({ projectId, page, pageSize: 20, isDesc: true })
+    StudioFilesService.listFilesApiApiV1StudioFilesGet({ projectId: projectId || undefined, page, pageSize: 20, isDesc: true })
       .then(response => {
         if (token !== libraryRequest.current) return
         setFiles(response.data?.items || []); setTotal(response.data?.pagination.total || 0)
-      }).catch(() => { if (token === libraryRequest.current) setError('项目文件读取失败，请重试') })
+      }).catch(() => { if (token === libraryRequest.current) setError(projectId ? '项目文件读取失败，请重试' : '文件读取失败，请重试') })
       .finally(() => { if (token === libraryRequest.current) setLoading(false) })
     return () => { requestCounter.current++ }
   }, [library, page, projectId, refresh])
 
-  const actions = <Dropdown trigger={['click']} menu={{ items: [{ key: 'upload', label: card.file_id ? '替换文件' : '上传文件' }, { key: 'library', label: '从项目文件选择' }],
+  const actions = <Dropdown trigger={['click']} menu={{ items: [{ key: 'upload', label: card.file_id ? '替换文件' : '上传文件' }, { key: 'library', label: projectId ? '从项目文件选择' : '从文件管理选择' }],
     onClick: ({ key }) => { if (key === 'upload') input.current?.click(); else { setPage(1); setLibrary(true) } } }} disabled={disabled || uploading}>
     <WorkbenchIconButton label="添加媒体" icon={<PlusOutlined />} disabled={disabled || uploading} />
   </Dropdown>
@@ -120,12 +120,12 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
       {actions}
     </>}
     {error && <Alert type="error" message={error} />}
-    {(uploading || card.uploading) && <Alert type="info" message={uploading ? '上传中，暂不发布有效输出' : '上次上传未完成，请重新上传或从项目文件选择'} />}
+    {(uploading || card.uploading) && <Alert type="info" message={uploading ? '上传中，暂不发布有效输出' : (projectId ? '上次上传未完成，请重新上传或从项目文件选择' : '上次上传未完成，请重新上传或从文件管理选择')} />}
     <input ref={input} hidden aria-label="上传媒体文件" type="file" accept={`${type}/*`} disabled={disabled}
       onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file) }} />
-    <Modal title="项目文件库" open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
+    <Modal title={projectId ? '项目文件库' : '文件管理'} open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
       {error && <Alert type="error" message={error} />}
-      <Button loading={loading} onClick={() => setRefresh(value => value + 1)}>刷新项目文件</Button>
+      <Button loading={loading} onClick={() => setRefresh(value => value + 1)}>{projectId ? '刷新项目文件' : '刷新文件'}</Button>
       {files.filter(file => file.type === type).map(file => <div key={file.id} style={{ marginBottom: 16 }}>
         <MediaPreview fileId={file.id} type={type} />
         <Space wrap>
@@ -133,7 +133,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
           <Button disabled={disabled || uploading} onClick={() => {
             latest.current.onChange({ ...latest.current.card, file_id: file.id, uploading: false }); setLibrary(false)
           }}>选用 {file.name}</Button>
-          <Button danger loading={releasing === file.id} disabled={loading || disabled || !!releasing} onClick={async () => {
+          {projectId && <Button danger loading={releasing === file.id} disabled={loading || disabled || !!releasing} onClick={async () => {
             setReleasing(file.id); setError('')
             try {
               await StudioFilesService.releaseUploadRetention({ fileId: file.id, projectId })
@@ -143,7 +143,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
                 ? reason.body?.message || '无法释放上传保留：请先移除该文件的其他使用关系'
                 : '清理结果未确认，请刷新项目文件核实后重试')
             } finally { setReleasing(undefined) }
-          }}>释放上传保留</Button>
+          }}>释放上传保留</Button>}
         </Space>
       </div>)}
       {!loading && !files.some(file => file.type === type) && <Empty description="本页没有匹配类型的文件" />}

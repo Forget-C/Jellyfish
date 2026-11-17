@@ -26,12 +26,12 @@ class FileUsage(Base, TimestampMixin):
         index=True,
         comment="文件 ID",
     )
-    project_id: Mapped[str] = mapped_column(
+    project_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
-        comment="项目 ID",
+        comment="项目 ID（独立画布可空）",
     )
     chapter_id: Mapped[str | None] = mapped_column(
         String(64),

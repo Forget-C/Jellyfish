@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 创建无需章节或场次的项目画布。
+ * 创建不依赖项目、章节或场次的自由画布。
  */
 export type CanvasCreate = {
     name?: string;

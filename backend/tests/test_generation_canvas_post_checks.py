@@ -1,4 +1,5 @@
 """Historical text inspection through public requests and the real Worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import json
 from types import SimpleNamespace
@@ -26,7 +27,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
     document['input_order'] = {'m': {'text': ['adopt', 'fact-link']}}
     connect_check(document, source='m')
     await save_canvas(client, url, document, 1)
-    checks = f'{url}/checks/check'
+    checks = (url + f'/checks/check')
     products = checks + '/products'
     calls = []
     fail_check = False
@@ -83,7 +84,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         await advance()
         old, = await get(products)
         assert old['run_id'] == old_run['run_id'] and old['generation_status'] == 'succeeded'
-        old_url = f"{products}/{old['run_id']}/{old['node_id']}/{old['position']}"
+        old_url = append_canvas_path(products, f"/{old['run_id']}/{old['node_id']}/{old['position']}")
         prepared = await get(old_url)
         assert prepared['estimated_calls'] == 1 and prepared['product']['text'] == '门边放着一把红伞。'
         assert {item['category'] for item in prepared['items']} == {'R01'}
@@ -99,7 +100,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert still_old == old
         assert partial['run_id'] == partial_run['run_id'] and partial['generation_status'] == 'failed'
         assert partial['result_set_id'] is None
-        partial_url = f"{products}/{partial['run_id']}/{partial['node_id']}/{partial['position']}"
+        partial_url = append_canvas_path(products, f"/{partial['run_id']}/{partial['node_id']}/{partial['position']}")
         assert (await client.get(old_url.replace(old['node_id'], partial['node_id']))).status_code == 422
         assert (await client.get(old_url.replace(runtime.project_id, 'different-project'))).status_code == 404
         fixed = await get(old_url)
@@ -127,7 +128,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert latest['results'][0]['outcome'] == 'indeterminate'
         assert 'private-secret' not in str(historical)
         original = next(item for item in historical['results'] if item['item_id'].endswith(':visible_result'))
-        response = await client.post(f"{checks}/reports/{historical['id']}/recheck", json={
+        response = await client.post(append_canvas_path(checks, f"/reports/{historical['id']}/recheck"), json={
             'item_id': original['item_id'], 'clarification': '核对门边物件',
         })
         assert response.status_code == 200, response.text
@@ -172,7 +173,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         assert product['generation_status'] == 'succeeded' and product['result_set_id'] != old['result_set_id']
         current = (await get(url + '/runtime'))['current_outputs']['m'][0]
         assert current['result_set_id'] == product['result_set_id'] and current['text'] == '一份新正文。'
-        empty_url = f"{products}/{product['run_id']}/{product['node_id']}/{product['position']}"
+        empty_url = append_canvas_path(products, f"/{product['run_id']}/{product['node_id']}/{product['position']}")
         empty = await get(empty_url)
         assert empty['items'] == [] and empty['estimated_calls'] == 0
         unavailable = await submit(empty_url, empty)
@@ -196,7 +197,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
         generated, _ = await accept(runtime, 'prompt-only')
         await advance()
         authored = next(row for row in await get(products) if row['run_id'] == generated['run_id'])
-        authored_url = f"{products}/{authored['run_id']}/{authored['node_id']}/{authored['position']}"
+        authored_url = append_canvas_path(products, f"/{authored['run_id']}/{authored['node_id']}/{authored['position']}")
         authored_basis = await get(authored_url)
         item, = authored_basis['items']
         assert not item['enabled'] and authored_basis['estimated_calls'] == 0

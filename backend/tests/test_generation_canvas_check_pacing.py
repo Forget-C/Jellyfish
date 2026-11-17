@@ -1,4 +1,5 @@
 """Semantic duration and rhythm checks through saved canvas HTTP and the actual Worker."""
+from tests.canvas_urls import append_canvas_path
 import pytest
 
 from tests.test_generation_canvas_check_consistency import check_category, save_requirements
@@ -85,7 +86,7 @@ async def test_clear_duration_keeps_one_rule_result_when_check_model_is_configur
     checks = await save_requirements(runtime, [shot])
     preview = (await client.get(checks)).json()['data']
     item, = (item for item in preview['items'] if item['category'] == 'P06')
-    response = await client.post(f'{checks}/runs', json={
+    response = await client.post(append_canvas_path(checks, f'/runs'), json={
         'expected_revision': preview['basis']['revision'], 'basis_hash': preview['basis']['basis_hash'],
         'item_id': item['id'],
     })

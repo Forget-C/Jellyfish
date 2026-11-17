@@ -29,7 +29,8 @@ class GenerationCanvas(Base, TimestampMixin):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'), server_default=_CanvasCreationTime())
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default='free', server_default='free')
     sequence_id: Mapped[str | None] = mapped_column(
         ForeignKey('directing_sequences.id', name='fk_generation_canvas_sequence', ondelete='SET NULL'), index=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

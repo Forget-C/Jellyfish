@@ -1,4 +1,5 @@
 """叙事设计通过公开 HTTP 保存并发布完整本卡设计。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -10,8 +11,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
     ('shot', 'shot_id', {'narrative_role': '揭示选择', 'visible_result': '拿起钥匙', 'estimated_duration': '约五秒'}),
 ])
 async def test_independent_narrative_cards_keep_complete_fields_and_stable_identity(canvas_client, kind, identity, fields):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '叙事'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '叙事'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     card = {'id': 'design', 'type': 'direction.' + kind, 'name': '决定', **{key: {'state': 'undecided', 'text': value} for key, value in fields.items()}}
     if identity:
         card[identity] = 'stable'
@@ -31,8 +32,8 @@ async def test_independent_narrative_cards_keep_complete_fields_and_stable_ident
 @pytest.mark.asyncio
 async def test_story_references_keep_distinct_uses_without_expanding_text(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '关系'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '关系'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     def source(card, port):
         return {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0, 'object_id': card}
     doc = canvas['document']
@@ -68,8 +69,8 @@ async def test_story_references_keep_distinct_uses_without_expanding_text(canvas
 @pytest.mark.asyncio
 @pytest.mark.parametrize('case,code', [('identity', 'IMMUTABLE_NARRATIVE_IDENTITY'), ('duplicate', 'DUPLICATE_NARRATIVE_IDENTITY'), ('name', 'DUPLICATE_NARRATIVE_NAME'), ('invalid', 'INVALID_NARRATIVE_CATEGORY'), ('beat_count', 'BEAT_COUNT_EXCEEDED'), ('cycle', 'GRAPH_CYCLE')])
 async def test_story_identity_and_relation_errors_are_located(canvas_client, case, code):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '约束'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '约束'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'beat', 'type': 'direction.beat', 'beat_id': 'one', 'name': '开始'}]
     assert (await canvas_client.put(url, json={'request_id': 'first', 'expected_revision': 0, 'document': doc})).status_code == 200
@@ -173,8 +174,8 @@ async def test_actual_worker_receives_complete_shot_design_with_explicit_ancesto
 @pytest.mark.asyncio
 async def test_renaming_copying_and_invalidating_story_sources_preserves_identity(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '身份生命周期'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '身份生命周期'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'event', 'port_id': 'event', 'object_id': 'bell', 'position': 0}
     doc.update(cards=[{'id': 'event', 'type': 'direction.event', 'event_id': 'bell', 'name': '钟响', 'action_change': {'state': 'proposal', 'text': '清脆钟声'}},
@@ -197,8 +198,8 @@ async def test_renaming_copying_and_invalidating_story_sources_preserves_identit
 
 @pytest.mark.asyncio
 async def test_camera_can_select_one_shot_without_reading_its_design(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '摄影所属镜头'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '摄影所属镜头'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'shot', 'port_id': 'shot', 'position': 0, 'object_id': 'reaction'}
     doc = canvas['document']
     doc.update(cards=[{'id': 'shot', 'type': 'direction.shot', 'shot_id': 'reaction', 'name': '反应镜头', 'visible_result': {'state': 'proposal', 'text': '不跨级传递的镜头全文'}},
@@ -218,8 +219,8 @@ async def test_camera_can_select_one_shot_without_reading_its_design(canvas_clie
 
 @pytest.mark.asyncio
 async def test_image_target_uses_shot_visible_result_and_keeps_whole_design(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '镜头画面目标'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '镜头画面目标'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc.update(cards=[{'id': 'shot', 'type': 'direction.shot', 'name': '决定', 'visible_result': {'state': 'proposal', 'text': '握住钥匙'}, 'estimated_duration': {'state': 'undecided', 'text': '约五秒'}},
         {'id': 'image', 'type': 'model.image', 'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': {'canvas_id': canvas['id'], 'card_id': 'shot', 'port_id': 'text', 'position': 0}}], 'frame_targets': [{'binding_id': 'design', 'state_id': 'field:visible_result'}]}],

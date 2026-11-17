@@ -1,4 +1,5 @@
 """独立运镜通过公开保存和编译边界验证。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -6,8 +7,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_movement_publishes_whole_design_and_stable_frames(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '独立运镜'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '独立运镜'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'move', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'move', 'type': 'direction.movement', 'fields': {
@@ -30,8 +31,8 @@ async def test_movement_publishes_whole_design_and_stable_frames(canvas_client):
 
 @pytest.mark.asyncio
 async def test_movement_rejects_foreign_fields_and_duplicate_phase_identity(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '校验'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '校验'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     for content in ({'fields': {'light_sources': {'state': 'proposal', 'text': '侧光'}}},
                     {'phases': [{'id': 'same'}, {'id': 'same'}]}):
         doc = {**canvas['document'], 'cards': [{'id': 'move', 'type': 'direction.movement', **content}]}
@@ -43,8 +44,8 @@ async def test_movement_rejects_foreign_fields_and_duplicate_phase_identity(canv
 
 @pytest.mark.asyncio
 async def test_movement_phase_rename_reorder_and_inactive_frame_keep_identity(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '阶段'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '阶段'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'move', 'type': 'direction.movement', 'phases': [
         {'id': 'a', 'name': '门口', 'frame': {'state': 'fact', 'text': '停在门口'}},
@@ -69,8 +70,8 @@ async def test_movement_phase_rename_reorder_and_inactive_frame_keep_identity(ca
 
 @pytest.mark.asyncio
 async def test_movement_retains_explicit_object_relationship_and_scope(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '关系'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '关系'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'object', 'position': 0, 'object_id': 'person-id'}
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'person-id', 'name': '张三', 'text': '穿着外套'},

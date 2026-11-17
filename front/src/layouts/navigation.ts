@@ -1,5 +1,6 @@
 export const mainNavigation = [
   { key: 'home', to: '/' },
+  { key: 'canvases', to: '/canvases' },
   { key: 'projects', to: '/projects' },
   { key: 'management', to: '/models' },
   { key: 'lab', to: '/lab' },
@@ -20,6 +21,7 @@ export function managementPageForPath(pathname: string) {
 export function activeMainNavigation(pathname: string): typeof mainNavigation[number]['key'] | undefined {
   const section = pathname.split('/')[1]
   if (!section) return 'home'
+  if (section === 'canvases') return 'canvases'
   if (section === 'projects') return 'projects'
   if (managementPageForPath(pathname)) return 'management'
   if (section === 'lab') return 'lab'
@@ -62,7 +64,7 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
     return [{ label: '资产', to: '/assets' }, { label: category.label, to: `/assets?tab=${category.tab}` }, { label: titles.page || `${category.label}档案` }]
   }
   if (path.length === 3 && path[0] === 'agents' && path[1] && path[2] === 'edit') return [{ label: 'Agent 管理', to: '/agents' }, { label: titles.page || 'Agent 编辑' }]
-  const pageLabels: Record<string, string> = { projects: '项目列表', lab: '实验室', settings: '设置' }
+  const pageLabels: Record<string, string> = { canvases: '画布', projects: '项目列表', lab: '实验室', settings: '设置' }
   const label = managementPageForPath(pathname)?.label ?? pageLabels[path[0]]
   return [{ label: path.length === 0 ? '首页' : (path.length === 1 && typeof label === 'string' ? label : '页面未找到') }]
 }

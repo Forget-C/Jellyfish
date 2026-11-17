@@ -15,7 +15,7 @@ from app.models.studio import Chapter, FileUsage, Project
 from app.models.task import Task
 from app.schemas.generation_canvas import (
     CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasRead,
-    CanvasSave, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
+    CanvasSave, CanvasSummary, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
 )
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
@@ -37,14 +37,46 @@ class SceneCanvasSeed:
 
 
 class CanvasStore:
-    """使用项目作用域读取，文档写入及回执由调用方事务共同提交。"""
-    def __init__(self, db: AsyncSession, project_id: str):
+    """按真实归属读取，文档写入及回执由调用方事务共同提交。"""
+    def __init__(self, db: AsyncSession, project_id: str | None):
         self.db = db
-        self.project_id = project_id
+        self.project_id = project_id or None
+
+    async def summaries(self, *, q: str, page: int, page_size: int) -> tuple[list[CanvasSummary], int]:
+        """按归属和名称筛选摘要，稳定分页且不读取或排序大文档。"""
+        scope = [GenerationCanvas.project_id == self.project_id,
+                 GenerationCanvas.kind == ('scene' if self.project_id else 'free')]
+        if q.strip():
+            # 名称检索也与排序隔离，避免 JSON 条件使 MySQL 携带文档排序。
+            matches = list((await self.db.scalars(select(GenerationCanvas.id).where(*scope,
+                GenerationCanvas.document['name'].as_string().contains(q.strip(), autoescape=True)))).all())
+            scope.append(GenerationCanvas.id.in_(matches))
+        total = await self.db.scalar(select(func.count()).select_from(GenerationCanvas).where(*scope))
+        ids = list((await self.db.scalars(select(GenerationCanvas.id).where(*scope)
+            .order_by(GenerationCanvas.updated_at.desc(), GenerationCanvas.id.desc())
+            .offset((page - 1) * page_size).limit(page_size))).all())
+        if not ids:
+            return [], total
+        # JSON 摘要单独读取，避免 MySQL 将大文档带入排序缓冲。
+        rows = (await self.db.execute(select(GenerationCanvas.id, GenerationCanvas.revision, GenerationCanvas.updated_at,
+            GenerationCanvas.document['name'].as_string().label('name'),
+            GenerationCanvas.document['cover_file_id'].as_string().label('cover_file_id'))
+            .where(GenerationCanvas.id.in_(ids)))).all()
+        summaries = {row.id: CanvasSummary.model_validate(row._mapping) for row in rows}
+        return [summaries[canvas_id] for canvas_id in ids if canvas_id in summaries], total
+
+    async def rename(self, canvas_id: str, name: str, expected_revision: int) -> CanvasRead:
+        """重命名复用完整保存与 CAS，避免覆盖其他编辑器的新修订。"""
+        current = await self.read(canvas_id)
+        document = current.document.model_copy(update={'name': name})
+        await self.save(canvas_id, CanvasSave(request_id=uuid4().hex, expected_revision=expected_revision,
+                                             document=document.model_dump()))
+        return await self.read(canvas_id)
 
     async def list(self) -> list[GenerationCanvas]:
         """列出项目画布，沿用现有项目存在性边界。"""
-        await get_or_404(self.db, Project, self.project_id, detail="Project not found")
+        if self.project_id is not None:
+            await get_or_404(self.db, Project, self.project_id, detail="Project not found")
         # 仅让轻量 ID 参与排序，避免大 JSON 文档耗尽 MySQL 排序缓冲。
         ids = list((await self.db.scalars(select(GenerationCanvas.id).where(
             GenerationCanvas.project_id == self.project_id).order_by(GenerationCanvas.created_at, GenerationCanvas.id))).all())
@@ -63,7 +95,7 @@ class CanvasStore:
                                       .execution_options(synchronize_session=False))
             stmt = stmt.with_for_update().execution_options(populate_existing=True)
         canvas = await self.db.scalar(stmt)
-        if canvas is None:
+        if canvas is None or canvas.kind != ('scene' if self.project_id else 'free'):
             raise HTTPException(404, 'Canvas not found')
         return canvas
 
@@ -71,6 +103,8 @@ class CanvasStore:
         """附带固定依据的新鲜度，普通画布仍只读取自身文档。"""
         canvas = await self.get(canvas_id)
         document = CanvasDocument.model_validate(canvas.document)
+        from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+        validate_canvas_cards(canvas, document)
         source = document.fixed_source
         source_changed = None
         if source:
@@ -93,13 +127,14 @@ class CanvasStore:
 
     async def create(self, name: str, *, scene: SceneCanvasSeed | None = None) -> GenerationCanvas:
         """建立共同文档和运行事件头，场次入口可提供已校验的固定依据。"""
-        await get_or_404(self.db, Project, self.project_id, detail="Project not found")
+        if self.project_id is not None:
+            await get_or_404(self.db, Project, self.project_id, detail="Project not found")
         canvas_id = scene.canvas_id if scene and scene.canvas_id else uuid4().hex
         document = CanvasDocument(id=canvas_id, project_id=self.project_id, name=name,
                                   cards=[scene.basis] if scene else [],
                                   fixed_source=scene.fixed_source if scene else None)
         canvas = GenerationCanvas(id=canvas_id, project_id=self.project_id,
-                                  sequence_id=scene.sequence_id if scene else None,
+                                  sequence_id=scene.sequence_id if scene else None, kind='scene' if self.project_id else 'free',
                                   document=document.model_dump(), revision=0,
                                   card_types={scene.basis.id: scene.basis.type} if scene else {})
         if scene:
@@ -230,12 +265,37 @@ class CanvasStore:
     async def delete(self, canvas_id: str, *, expected_revision: int) -> None:
         """删除前核实真实占用；历史、引用与文档在调用方事务内一起释放。"""
         canvas = await self.get(canvas_id, lock=True)
+        await self.delete_record(canvas, expected_revision=expected_revision)
+
+    async def delete_record(self, canvas: GenerationCanvas, *, expected_revision: int) -> None:
+        """删除调用方已锁定且核实归属的记录；供普通删除与旧画布退出共用。"""
+        canvas_id = canvas.id
         if canvas.revision != expected_revision:
             raise diagnostic('DELETE_REVISION_CHANGED', '画布已保存新修订，请重新核对并确认删除',
                              {'canvas_id': canvas_id}, status=409, blocks=['delete'])
+        await self.require_idle(canvas)
+        # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
+        from app.services.generation_canvas.runtime import delete_runtime
+        await delete_runtime(self.db, canvas_id)
+        await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
+        await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
+        await self.db.execute(delete(FileUsage).where(
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source', 'generation_upload')),
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
+        await self.db.delete(canvas)
+        await self.db.flush()
+
+
+    async def require_idle(self, canvas: GenerationCanvas) -> None:
+        """画布删除、项目删除及维护清理共用活动任务门禁；调用方已锁定文档。"""
+        canvas_id = canvas.id
         from app.models.generation_canvas import CanvasScopeOccupancy
         if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):
             raise diagnostic('RUN_SCOPE_BUSY', '画布仍有活动运行，任务结束后可删除',
+                             {'canvas_id': canvas_id}, status=409, blocks=['delete'])
+        from app.services.generation_canvas.runtime import active_canvas_task
+        if await active_canvas_task(self.db, [canvas_id]):
+            raise diagnostic('CANVAS_TASK_BUSY', '画布仍有活动检查或派发任务，请等待任务结束',
                              {'canvas_id': canvas_id}, status=409, blocks=['delete'])
         if canvas.sequence_id:
             from app.services.directing.storyboard_assembly import STORYBOARD_KIND
@@ -250,13 +310,3 @@ class CanvasStore:
             if active_task:
                 raise diagnostic('STORYBOARD_BUSY', '画布仍有活动分镜任务，任务结束后可删除',
                                  {'canvas_id': canvas_id, 'task_id': active_task}, status=409, blocks=['delete'])
-        # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
-        from app.services.generation_canvas.runtime import delete_runtime
-        await delete_runtime(self.db, canvas_id)
-        await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
-        await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
-        await self.db.execute(delete(FileUsage).where(
-            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source')),
-            FileUsage.source_ref.like(f'{canvas_id}:%')))
-        await self.db.delete(canvas)
-        await self.db.flush()

@@ -1,4 +1,5 @@
 """P03 observes adopted reference media through public canvas and worker boundaries."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import base64
 import json
@@ -62,14 +63,14 @@ async def prepare(runtime, image_storage):
 
 
 async def preview(runtime):
-    response = await runtime.client.get(f'{runtime.url}/checks/check')
+    response = await runtime.client.get((runtime.url + f'/checks/check'))
     assert response.status_code == 200, response.text
     return response.json()['data']
 
 
 async def run(runtime, current):
     basis = current['basis']
-    response = await runtime.client.post(f'{runtime.url}/checks/check/runs', json={
+    response = await runtime.client.post((runtime.url + f'/checks/check/runs'), json={
         'expected_revision': basis['revision'], 'basis_hash': basis['basis_hash'],
     })
     assert response.status_code == 200, response.text
@@ -109,7 +110,7 @@ async def test_p03_only_sends_relevant_adopted_image_and_records_observed_eviden
             await asyncio.gather(*worker.jobs.values())
         finally:
             worker.text_pool.shutdown(wait=False)
-    response = await runtime.client.get(f'{runtime.url}/checks/check/reports')
+    response = await runtime.client.get((runtime.url + f'/checks/check/reports'))
     assert response.status_code == 200, response.text
     assert 'visual-secret' not in response.text and 'data:image' not in response.text and 'key-red' not in response.text
     report, = response.json()['data']
@@ -142,7 +143,7 @@ async def test_p03_keeps_uncertain_and_unreadable_media_separate(runtime, image_
             await asyncio.gather(*worker.jobs.values())
         finally:
             worker.text_pool.shutdown(wait=False)
-    report, = (await runtime.client.get(f'{runtime.url}/checks/check/reports')).json()['data']
+    report, = (await runtime.client.get((runtime.url + f'/checks/check/reports'))).json()['data']
     assert report['id'] == accepted['id']
     result, = report['results']
     assert result['outcome'] == 'indeterminate'
@@ -211,7 +212,7 @@ async def test_p03_uses_explicit_object_mapping_and_text_reference_and_keeps_uns
 async def test_p03_recheck_uses_original_image_and_model_after_replacement_and_card_deletion(runtime, image_storage):
     red = await prepare(runtime, image_storage)
     client, url = runtime.client, runtime.url
-    checks = f'{url}/checks/check'
+    checks = (url + f'/checks/check')
     original = await run(runtime, await preview(runtime))
     calls = []
 
@@ -235,7 +236,7 @@ async def test_p03_recheck_uses_original_image_and_model_after_replacement_and_c
         try:
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-            old, = (await client.get(f'{checks}/reports')).json()['data']
+            old, = (await client.get(append_canvas_path(checks, f'/reports'))).json()['data']
             item, = old['items']
             assert old['id'] == original['id'] and old['results'][0]['outcome'] == 'conforming'
             document = (await client.get(url)).json()['data']['document']
@@ -246,14 +247,14 @@ async def test_p03_recheck_uses_original_image_and_model_after_replacement_and_c
             await save_canvas(client, url, document, 2)
 
             body = {'item_id': item['id'], 'clarification': '请复看角落。不要改用当前图片。'}
-            path = f"{checks}/reports/{old['id']}/recheck"
+            path = append_canvas_path(checks, f"/reports/{old['id']}/recheck")
             other_project = path.replace(runtime.project_id, 'wrong-project', 1)
             assert (await client.post(other_project, json=body)).status_code == 404
             response = await client.post(path, json=body)
             assert response.status_code == 200, response.text
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-            reviewed, retained = (await client.get(f'{url}/check-reports/archived')).json()['data']
+            reviewed, retained = (await client.get((url + f'/check-reports/archived'))).json()['data']
             assert reviewed['basis'] == old['basis'] and retained == old
             assert reviewed['id'] != old['id'] and reviewed['recheck']['report_id'] == old['id']
             assert reviewed['results'][0]['observed_media'][0]['file_id'] == 'red'
@@ -264,7 +265,7 @@ async def test_p03_recheck_uses_original_image_and_model_after_replacement_and_c
             assert response.status_code == 200, response.text
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-            unavailable, _, retained = (await client.get(f'{url}/check-reports/archived')).json()['data']
+            unavailable, _, retained = (await client.get((url + f'/check-reports/archived'))).json()['data']
             result, = unavailable['results']
             assert result['outcome'] == 'indeterminate' and not result['observed_media']
             assert '无法读取' in result['message']
@@ -298,7 +299,7 @@ async def test_p03_prompt_only_attributes_unambiguous_text_and_can_run_long_segm
     current = await preview(runtime)
     item, = [item for item in current['items'] if item['category'] == 'P03' and item['source']['card_id'] == 'model']
     assert item['field_id'] == f'prompt:{long_id}' and len(item['id']) <= 256
-    response = await client.post(f'{url}/checks/check/runs', json={'item_id': item['id'],
+    response = await client.post((url + f'/checks/check/runs'), json={'item_id': item['id'],
         'expected_revision': current['basis']['revision'], 'basis_hash': current['basis']['basis_hash']})
     assert response.status_code == 200, response.text
     assert [entry['item_id'] for entry in response.json()['data']['executions']] == [item['id']]
@@ -321,6 +322,6 @@ async def test_p03_cannot_turn_a_proposal_into_a_hard_visual_finding(runtime, im
             await asyncio.gather(*worker.jobs.values())
         finally:
             worker.text_pool.shutdown(wait=False)
-    report, = (await runtime.client.get(f'{runtime.url}/checks/check/reports')).json()['data']
+    report, = (await runtime.client.get((runtime.url + f'/checks/check/reports'))).json()['data']
     assert report['results'][0]['outcome'] == 'risk'
     assert report['results'][0]['observed_media'][0]['file_id'] == 'red'

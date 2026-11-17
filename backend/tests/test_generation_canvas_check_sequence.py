@@ -1,4 +1,5 @@
 """Action and continuity observations through public HTTP and the real task worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import json
 from types import SimpleNamespace
@@ -22,7 +23,7 @@ def binding(canvas_id, card_id, source_port, object_id, target_port):
 
 async def run_check(runtime, category, design, related):
     client, url = runtime.client, runtime.url
-    checks = f'{url}/checks/check'
+    checks = (url + f'/checks/check')
     edges = [{'id': item['id'], 'source_card': item['source']['card_id'], 'source_port': item['source']['port_id'],
               'target_card': design['id'], 'target_port': item['input_port']} for item in design.get('input_bindings', [])]
     document = {**runtime.document, 'cards': [*related, design,
@@ -39,7 +40,7 @@ async def run_check(runtime, category, design, related):
     preview = (await client.get(checks)).json()['data']
     item, = (item for item in preview['items'] if item['category'] == category and item['source']['card_id'] == design['id'])
     assert item['availability'] == 'ready' and item['input_stamp']
-    response = await client.post(f'{checks}/runs', json={
+    response = await client.post(append_canvas_path(checks, f'/runs'), json={
         'expected_revision': preview['basis']['revision'], 'basis_hash': preview['basis']['basis_hash'], 'item_id': item['id'],
     })
     assert response.status_code == 200, response.text
@@ -47,7 +48,7 @@ async def run_check(runtime, category, design, related):
     try:
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
-        report = (await client.get(f'{checks}/reports')).json()['data'][0]
+        report = (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'][0]
         assert report['executions'][0]['status'] == 'succeeded'
         return report['results'][0]
     finally:

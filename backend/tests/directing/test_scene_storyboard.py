@@ -1,5 +1,6 @@
 """Faithful scene extraction through public task and common canvas APIs."""
 
+from tests.canvas_urls import append_canvas_path, canvas_params, canvas_url
 import asyncio
 import json
 from copy import deepcopy
@@ -92,7 +93,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         assert document['storyboard']['origins'][shots[0]['id']]['sources'][0]['start'] == 1
         assert document['storyboard']['task_id'] == task['task_id']
 
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
         before = (await client.get(canvas_path)).json()['data']
         assert before['revision'] == candidate['base_revision'] == 0
         assert [card['type'] for card in before['document']['cards']] == ['content.basis']
@@ -120,7 +121,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         assert persisted['storyboard']['origins'][performance['id']]['manually_edited']
 
         late = (await client.post(path, json={**request, 'request_id': 'late'})).json()['data']
-        late_path = '/api/v1/studio/generation-canvases/p1/' + late['canvas_id']
+        late_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + late['canvas_id']
         prior = (await client.get(late_path)).json()['data']
         save = await client.put(late_path, json={'request_id': 'user-first', 'expected_revision': prior['revision'],
             'document': {**prior['document'], 'name': '人工先保存'}})
@@ -152,15 +153,15 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         failed = (await client.get(path + '/' + rejected['task_id'])).json()['data']
         assert failed['status'] == 'failed' and failed['candidate'] is None
         assert len(calls) == 5, 'one initial request and at most one correction per task'
-        rejected_path = '/api/v1/studio/generation-canvases/p1/' + rejected['canvas_id']
+        rejected_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + rejected['canvas_id']
         after_failure = (await client.get(rejected_path)).json()['data']
         assert after_failure['revision'] == 0 and len(after_failure['document']['cards']) == 1
-        listed = await client.get(path, params={'canvas_id': rejected['canvas_id']})
+        listed = await client.get(path, params={**canvas_params(path), **({'canvas_id': rejected['canvas_id']})})
         assert listed.status_code == 200, listed.text
         assert [task['task_id'] for task in listed.json()['data']] == [failed['task_id']]
         assert not listed.json()['data'][0]['candidate_available']
         assert (await client.get(path.replace('/p1/', '/p2/'))).status_code == 404
-        retry_path = f"{path}/{failed['task_id']}/retry"
+        retry_path = append_canvas_path(path, f"/{failed['task_id']}/retry")
         retry_request = {'request_id': 'retry-same-target'}
         retried = await client.post(retry_path, json=retry_request)
         assert retried.status_code == 200, retried.text
@@ -176,7 +177,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         pending_models = [card for card in recovered['candidate']['document']['cards'] if card['type'].startswith('model.')]
         assert pending_models and all(card['type'] == 'model.video' and card['model_id'] is None for card in pending_models)
         assert (await client.get(rejected_path)).json()['data'] == after_failure
-        tasks = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1'})).json()['data']['items']
+        tasks = (await client.get('/api/v1/film/tasks', params={**canvas_params('/api/v1/film/tasks'), **({'project_id': 'p1'})})).json()['data']['items']
         assert {item['task_kind'] for item in tasks} == {'directing_storyboard'}
         assert len(tasks) == 4
 
@@ -321,7 +322,7 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
             assert expanded['status'] == 'succeeded', expanded
             candidate = expanded['candidate']
             assert candidate['document']['storyboard']['mode'] == 'complete'
-            canvas_path = '/api/v1/studio/generation-canvases/p1/' + expanded['canvas_id']
+            canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + expanded['canvas_id']
             applied = await client.put(canvas_path, json={'request_id': 'storyboard:' + expanded['task_id'],
                 'expected_revision': candidate['base_revision'], 'document': candidate['document']})
             assert applied.status_code == 200, applied.text
@@ -405,7 +406,7 @@ async def test_reextract_requires_confirmed_revised_scene_and_undo_restores_sour
         command = {'request_id': 'first', 'text_model_id': 'story-text', 'mode': 'faithful'}
         first = await run(path, await data(await client.post(path, json=command)))
         canvas_id = first['canvas_id']
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + canvas_id
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + canvas_id
         await data(await client.put(canvas_path, json={'request_id': 'storyboard:' + first['task_id'],
             'expected_revision': 0, 'document': first['candidate']['document']}))
         current = await data(await client.get(canvas_path))
@@ -431,7 +432,7 @@ async def test_reextract_requires_confirmed_revised_scene_and_undo_restores_sour
         assert old in compiled_before['input']['text']
 
         await data(await client.patch('/api/v1/studio/chapters/ch1', json={'raw_text': new}))
-        submit_path = scene_path + '/canvases/' + canvas_id + '/storyboards'
+        submit_path = scene_path + canvas_url('/canvases/') + canvas_id + '/storyboards'
         reextract = {**command, 'request_id': 'reextract', 'adopt_current_source': True}
         unconfirmed = await client.post(submit_path, json=reextract)
         assert unconfirmed.status_code == 409, unconfirmed.text

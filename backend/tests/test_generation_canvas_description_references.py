@@ -1,4 +1,5 @@
 """四类描述、名称关联与按角度唯一的参考通过真实保存边界验证。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 from copy import deepcopy
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -23,8 +24,8 @@ def test_legacy_description_is_rejected_without_mutation(category):
 @pytest.mark.parametrize('category', ['character', 'place', 'prop', 'costume'])
 async def test_reference_names_follow_only_selected_same_type_description(canvas_client, category):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': category})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': category})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'description', 'port_id': 'object', 'position': 0, 'object_id': 'entity'}
     doc.update(cards=[{'id': 'description', 'type': 'content.' + category, 'object_id': 'entity', 'name': '林夏', 'text': '不能传入参考的正文'},
         {'id': 'reference', 'type': 'reference.' + category, 'name': '独立名称'}],
@@ -58,8 +59,8 @@ async def test_reference_names_follow_only_selected_same_type_description(canvas
 @pytest.mark.asyncio
 async def test_description_names_are_unique_only_in_same_type_and_basis_is_retained(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '命名范围'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '命名范围'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc['cards'] = [{'id': kind, 'type': 'content.' + kind, 'object_id': kind, 'name': '雨燕', 'text': ''} for kind in ['character', 'place', 'prop', 'costume']]
     doc['cards'].append({'id': 'basis', 'type': 'content.basis', 'text': '原文', 'source_locator': '第3章', 'selection_start': 1, 'selection_end': 3})
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
@@ -74,8 +75,8 @@ async def test_description_names_are_unique_only_in_same_type_and_basis_is_retai
 @pytest.mark.asyncio
 async def test_angles_share_bound_identity_and_protect_downstream_adoption(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '多角度'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '多角度'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     binding = {'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'object', 'position': 0, 'object_id': 'person'}
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'person', 'name': '林夏'},
         *[{'id': angle, 'type': 'reference.character', 'name_binding': binding, 'angle': angle} for angle in ['front', 'side']],
@@ -102,13 +103,13 @@ async def test_angles_share_bound_identity_and_protect_downstream_adoption(canva
 @pytest.mark.parametrize('category', ['place', 'prop', 'costume'])
 async def test_name_candidate_edges_reject_other_description_types(canvas_client, category):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '类型匹配'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '类型匹配'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': 'source', 'type': 'content.' + category, 'object_id': 'source', 'name': '名称'},
                       {'id': 'target', 'type': 'reference.character'}],
         edges=[{'id': 'e', 'source_card': 'source', 'source_port': 'object', 'target_card': 'target', 'target_port': 'name'}],
         input_order={'target': {'name': ['e']}})
-    response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'mismatch', 'expected_revision': 0, 'document': doc})
+    response = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'mismatch', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_REFERENCE_CATEGORY'
 
 
@@ -116,8 +117,8 @@ async def test_name_candidate_edges_reject_other_description_types(canvas_client
 async def test_store_reads_legacy_document_and_identity_registry_without_rewriting(canvas_client, canvas_file_store):
     from app.models.generation_canvas import GenerationCanvas
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '旧数据'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '旧数据'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'description', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'description', 'type': 'content.object', 'category': 'costume', 'object_id': 'coat', 'name': '大衣', 'text': '旧描述'},
                       {'id': 'model', 'type': 'model.text', 'input_bindings': [{'id': 'adopted', 'input_port': 'text', 'source': source}]}],
@@ -145,8 +146,8 @@ async def test_existing_incompatible_reference_candidate_does_not_block_valid_na
     """历史冲突候选直接清理，新人物名称连线不被无关旧边阻塞。"""
     from app.models.generation_canvas import GenerationCanvas
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '旧候选连线'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '旧候选连线'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc.update(cards=[{'id': 'old-prop', 'type': 'reference.prop', 'name': ''},
                       {'id': 'role', 'type': 'reference.character', 'name': ''},
                       {'id': 'person', 'type': 'content.character', 'object_id': 'person', 'name': '林夏'}],

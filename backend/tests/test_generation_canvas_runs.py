@@ -1,4 +1,5 @@
 """Real HTTP, database, submitter and Worker at the agreed execution seam."""
+from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas, canvas_params
 import asyncio
 import json
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ async def runtime(tmp_path, request):
     bootstrap_all_registries()
     from uuid import uuid4
     mysql = getattr(request, 'param', None) == 'mysql'
+    independent = getattr(request, 'param', None) == 'independent'
     suffix = uuid4().hex[:12]
     project_id, provider_id, model_id = ('p-' + suffix, 'provider-' + suffix, 'model-' + suffix)
     if mysql:
@@ -56,8 +58,13 @@ async def runtime(tmp_path, request):
     app.dependency_overrides[get_db] = database
     prefix = '/api/v1/studio/generation-canvases' if real_app else '/canvases'
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        canvas = (await client.post(f'{prefix}/{project_id}', json={'name': 'run'})).json()['data']
-        url = f"{prefix}/{project_id}/{canvas['id']}"
+        client.canvas_sessions = sessions
+        if independent:
+            canvas = (await client.post(prefix, json={'name': 'run'})).json()['data']
+            url = append_canvas_path(prefix, f"/{canvas['id']}")
+        else:
+            canvas = (await seed_scene_canvas(client, append_canvas_path(prefix, f'/{project_id}'), json={'name': 'run'})).json()['data']
+            url = canvas_url(append_canvas_path(prefix, f"/{project_id}/{canvas['id']}"))
         document = canvas['document']
         document['cards'] = [{'id': 'm', 'type': 'model.text', 'model_id': model_id,
                               'prompt': {'segments': [{'id': 'body', 'kind': 'text', 'text': 'Frozen prompt'}]}}]
@@ -230,7 +237,7 @@ async def test_activity_guards_allow_edits_but_reject_card_canvas_project_deleti
     response = await runtime.client.put(runtime.url, json={'request_id': 'delete-card', 'expected_revision': 1, 'document': changed})
     assert response.status_code == 409
     assert response.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
-    rejected = await runtime.client.delete(runtime.url, params={'expected_revision': 1})
+    rejected = await runtime.client.delete(runtime.url, params={**canvas_params(runtime.url), **({'expected_revision': 1})})
     assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
     assert (await runtime.client.delete('/projects/' + runtime.project_id)).status_code == 409
 
@@ -438,7 +445,7 @@ async def test_mysql_activity_guard_sees_run_committed_after_earlier_read(runtim
 
 
 @pytest.mark.asyncio
-async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path):
+async def test_runtime_migration_preserves_existing_scene_canvas_observation(tmp_path):
     """An existing document must have an event mutex before its first subscription."""
     import importlib.util
     from pathlib import Path
@@ -458,7 +465,7 @@ async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path)
             GenerationCanvas.__table__.create(connection)
             CanvasSaveReceipt.__table__.create(connection)
             connection.execute(Project.__table__.insert().values(id='existing-project', name='existing', style='真人都市'))
-            connection.execute(GenerationCanvas.__table__.insert().values(id='existing-canvas', project_id='existing-project', revision=7,
+            connection.execute(GenerationCanvas.__table__.insert().values(id='existing-canvas', project_id='existing-project', kind='scene', revision=7,
                 card_types={}, document={'id': 'existing-canvas', 'project_id': 'existing-project', 'name': 'old'}))
             path = Path(__file__).parents[1] / 'alembic/versions/473ab089b58f_generation_canvas_runtime.py'
             spec = importlib.util.spec_from_file_location('canvas_runtime_migration', path)
@@ -571,7 +578,7 @@ async def test_queued_cancel_targets_history_and_structured_errors_after_source_
     history = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert history['runs'][0]['nodes'][0]['id'] == node['id']
     assert history['runs'][0]['nodes'][0]['basis']['input']['text'] == 'Frozen prompt'
-    task_page = await runtime.client.get('/api/v1/film/tasks', params={'project_id': runtime.project_id})
+    task_page = await runtime.client.get('/api/v1/film/tasks', params={**canvas_params('/api/v1/film/tasks'), **({'project_id': runtime.project_id})})
     assert task_page.status_code == 200, task_page.text
     source = task_page.json()['data']['items'][0]['source']
     assert source['canvas_id'] == runtime.canvas_id and source['run_id'] == accepted['run_id'] and source['node_id'] == node['id']

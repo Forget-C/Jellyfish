@@ -4,15 +4,13 @@ import { Alert, Empty, Input, Space } from 'antd'
 import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication } from '../../../services/generated'
-import { useGenerationCanvasEditor, type StoryboardReviewPreparation, type StoryboardScope } from './useGenerationCanvasEditor'
+import { useGenerationCanvasEditor, type StoryboardReviewPreparation, type StoryboardScope, type PendingSave } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph, type CanvasModelCardActionContext, type CanvasModelCardMenuContext } from './GenerationCanvasGraph'
 import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
 import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
-import { CheckArchive } from './CheckArchive'
-import { consumeStoryboardRiskNotice } from '../directing/storyboardRiskNotice'
 import { CanvasAppearancePicker } from '../directing/ui/CanvasAppearancePicker'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -59,6 +57,8 @@ export type WorkbenchModelMenuContext = CanvasModelCardMenuContext & {
 }
 
 interface GenerationCanvasWorkspaceProps {
+  sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>
+  renderFeedback?: (current?: CanvasRead) => ReactNode
   layoutPolicy?: CanvasLayoutPolicy
   projectId: string
   canvasId: string | null
@@ -84,7 +84,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
+  sceneSave, renderFeedback, projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const toolbar = useRef<HTMLElement>(null)
@@ -100,7 +100,7 @@ export function GenerationCanvasWorkspace({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
   const pendingInspect = useRef<CanvasInspectTarget>()
-  const editor = useGenerationCanvasEditor(projectId, canvasId)
+  const editor = useGenerationCanvasEditor(projectId, canvasId, true, sceneSave)
   const leaveEditor = useRef(editor.requestLeave); leaveEditor.current = editor.requestLeave
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && editor.needsLeaveProtection())
   useEffect(() => { if (blocker.state === 'blocked') void leaveEditor.current().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
@@ -109,14 +109,6 @@ export function GenerationCanvasWorkspace({
   const beforeApplication = layoutApplication?.taskId === document?.storyboard?.task_id &&
     layoutApplication?.before.id === document?.id && layoutApplication?.before.project_id === projectId
     ? layoutApplication.before : undefined
-  const [riskNotice, setRiskNotice] = useState<string>()
-  useEffect(() => { setRiskNotice(undefined) }, [projectId, canvasId])
-  useEffect(() => {
-    const applied = current?.document.storyboard
-    if (canvasId && consumeStoryboardRiskNotice(projectId, canvasId, applied?.continuity_check_task_id ?? applied?.task_id)) {
-      setRiskNotice(projectId + ':' + canvasId)
-    }
-  }, [projectId, canvasId, current])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -189,7 +181,6 @@ export function GenerationCanvasWorkspace({
           editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
         {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
-        {current && <CheckArchive key={scope} projectId={projectId} canvasId={current.id} revision={current.revision} targetReportId={liveCheck ? undefined : checkReportId ?? undefined} />}
         <CanvasAppearancePicker compact />
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
@@ -199,9 +190,7 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
-    {riskNotice === projectId + ':' + canvasId && <Alert type="info" showIcon closable
-      onClose={() => setRiskNotice(undefined)} message="已按你的选择保留设计并接受相关风险" />}
-    {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}
+    {renderFeedback?.(current)}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
 

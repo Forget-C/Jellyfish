@@ -1,5 +1,6 @@
 """场次画布列表按真实任务和文档报告状态。"""
 
+from tests.canvas_urls import append_canvas_path, canvas_url
 import asyncio
 import json
 from datetime import UTC, datetime
@@ -61,7 +62,7 @@ async def test_scene_canvas_summaries_keep_pending_and_adopted_sources_separate(
         assert summary[second['canvas_id']]['latest_storyboard']['task_id'] == second['task_id']
         assert summary[first['canvas_id']]['latest_storyboard']['status'] == 'queued'
 
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + second['canvas_id']
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + second['canvas_id']
         initial = await data(await client.get(canvas_path))
         edited = await data(await client.put(canvas_path, json={
             'expected_revision': initial['revision'], 'request_id': 'manual-edit',
@@ -102,7 +103,7 @@ async def test_scene_canvas_summaries_keep_pending_and_adopted_sources_separate(
 
         assert not row['can_open']
         blank = await data(await client.post(canvases_path, json={'name': '人工空白画布'}))
-        await data(await client.post(scene_path + '/canvases/' + blank['id'] + '/storyboards',
+        await data(await client.post(scene_path + canvas_url('/canvases/') + blank['id'] + '/storyboards',
                                     json={**config, 'request_id': 'blank-reextract'}))
         listing = (await data(await client.get(canvases_path)))['canvases']
         assert next(item for item in listing if item['id'] == blank['id'])['can_open']
@@ -121,7 +122,7 @@ async def test_canvas_source_change_follows_confirmed_range_inside_same_chapter(
         scene = await data(await client.post(path + '/sequences', json={
             'title': '场次', 'position': 0, 'source_version': version, 'span': {'start': 0, 'end': 3},
         }))
-        canvases = f"{path}/sequences/{scene['id']}/canvases"
+        canvases = append_canvas_path(path, f"/sequences/{scene['id']}/canvases")
         await data(await client.post(canvases, json={'name': '已固定原文的画布'}))
         assert not (await data(await client.get(canvases)))['canvases'][0]['source_changed']
 
@@ -165,7 +166,7 @@ async def test_scene_canvas_and_task_order_with_same_second_admissions(tmp_path,
             'title': '场次', 'position': 0, 'source_version': chapter['source_version'],
             'span': {'start': 0, 'end': 3},
         }))
-        scene_path = f"{path}/sequences/{scene['id']}"
+        scene_path = append_canvas_path(path, f"/sequences/{scene['id']}")
         config = {'text_model_id': 'summary-order-text', 'mode': 'faithful'}
         first = await data(await client.post(scene_path + '/storyboards', json={**config, 'name': '先建', 'request_id': 'first'}))
         second = await data(await client.post(scene_path + '/storyboards', json={**config, 'name': '后建', 'request_id': 'second'}))

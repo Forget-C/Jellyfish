@@ -19,14 +19,15 @@ import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_
 import type { ApiResponse_ImageContentCard_ } from '../models/ApiResponse_ImageContentCard_';
 import type { ApiResponse_list_CanvasCheckProduct__ } from '../models/ApiResponse_list_CanvasCheckProduct__';
 import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
-import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
+import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
 import type { CanvasPostCheckRequest } from '../models/CanvasPostCheckRequest';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
+import type { CanvasRename } from '../models/CanvasRename';
 import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
 import type { CanvasRuntimeEvent } from '../models/CanvasRuntimeEvent';
 import type { CanvasSave } from '../models/CanvasSave';
@@ -37,20 +38,26 @@ import { request as __request } from '../core/request';
 export class StudioGenerationCanvasesService {
     /**
      * List Canvases
-     * 列出项目画布。
-     * @returns ApiResponse_list_CanvasRead__ Successful Response
+     * 分页读取独立画布摘要。
+     * @returns ApiResponse_PaginatedData_CanvasSummary__ Successful Response
      * @throws ApiError
      */
     public static canvasList({
-        projectId,
+        q = '',
+        page = 1,
+        pageSize = 24,
     }: {
-        projectId: string,
-    }): CancelablePromise<ApiResponse_list_CanvasRead__> {
+        q?: string,
+        page?: number,
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_PaginatedData_CanvasSummary__> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}',
-            path: {
-                'project_id': projectId,
+            url: '/api/v1/studio/generation-canvases',
+            query: {
+                'q': q,
+                'page': page,
+                'page_size': pageSize,
             },
             errors: {
                 422: `Validation Error`,
@@ -59,22 +66,43 @@ export class StudioGenerationCanvasesService {
     }
     /**
      * Create Canvas
-     * 创建空画布。
+     * 创建不依赖项目的自由画布。
      * @returns ApiResponse_CanvasRead_ Successful Response
      * @throws ApiError
      */
     public static canvasCreate({
-        projectId,
         requestBody,
     }: {
-        projectId: string,
         requestBody: CanvasCreate,
     }): CancelablePromise<ApiResponse_CanvasRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}',
+            url: '/api/v1/studio/generation-canvases',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Rename Canvas
+     * 按修订重命名独立画布，复用完整保存校验。
+     * @returns ApiResponse_CanvasRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasRename({
+        canvasId,
+        requestBody,
+    }: {
+        canvasId: string,
+        requestBody: CanvasRename,
+    }): CancelablePromise<ApiResponse_CanvasRead_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/name',
             path: {
-                'project_id': projectId,
+                'canvas_id': canvasId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -90,18 +118,20 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasGet({
-        projectId,
         canvasId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasRead_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -115,20 +145,22 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasSave({
-        projectId,
         canvasId,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         requestBody: CanvasSave,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasSaved_> {
         return __request(OpenAPI, {
             method: 'PUT',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -145,23 +177,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasDelete({
-        projectId,
         canvasId,
         expectedRevision,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         expectedRevision: number,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_NoneType_> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
             },
             query: {
                 'expected_revision': expectedRevision,
+                'project_id': projectId,
             },
             errors: {
                 409: `Conflict`,
@@ -176,21 +208,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasModelCapability({
-        projectId,
         canvasId,
         modelId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         modelId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasModelCapability_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/models/{model_id}/capability',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/models/{model_id}/capability',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'model_id': modelId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -204,21 +238,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCompile({
-        projectId,
         canvasId,
         cardId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCompiledInput_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/cards/{card_id}/compile',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/cards/{card_id}/compile',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -232,20 +268,22 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasPrecheck({
-        projectId,
         canvasId,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         requestBody: CanvasPrecheckRequest,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasPrecheck_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/precheck',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/precheck',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -261,20 +299,22 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasRunSubmit({
-        projectId,
         canvasId,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         requestBody: CanvasRunSubmit,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasRunAccepted_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/runs',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -290,18 +330,20 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasRuntime({
-        projectId,
         canvasId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasSnapshot_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runtime',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/runtime',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -315,18 +357,20 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasStreamConnection({
-        projectId,
         canvasId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasStreamConnection_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/events/connection',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/events/connection',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -340,23 +384,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasEvents({
-        projectId,
         canvasId,
         cursor,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cursor?: (number | null),
+        projectId?: string,
     }): CancelablePromise<CanvasRuntimeEvent> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/events',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/events',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
             },
             query: {
                 'cursor': cursor,
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -370,21 +414,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCancelRun({
-        projectId,
         canvasId,
         runId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         runId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasRunRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/cancel',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/runs/{run_id}/cancel',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'run_id': runId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -398,24 +444,26 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCancelNode({
-        projectId,
         canvasId,
         runId,
         nodeId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         runId: string,
         nodeId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasRunRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'run_id': runId,
                 'node_id': nodeId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -429,27 +477,29 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasOutputContent({
-        projectId,
         canvasId,
         runId,
         nodeId,
         position,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         runId: string,
         nodeId: string,
         position: number,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'run_id': runId,
                 'node_id': nodeId,
                 'position': position,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -463,20 +513,22 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasPrepareVideoFrame({
-        projectId,
         canvasId,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         requestBody: CanvasVideoFrameRequest,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_ImageContentCard_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/video-frames',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/video-frames',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -492,21 +544,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCardOutputs({
-        projectId,
         canvasId,
         cardId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCardOutputs_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/cards/{card_id}/outputs',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/cards/{card_id}/outputs',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -520,18 +574,20 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCatalog({
-        projectId,
         canvasId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCatalog_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/catalog',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/catalog',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -545,21 +601,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckPreview({
-        projectId,
         canvasId,
         cardId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCheckPreview_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -573,23 +631,25 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckRun({
-        projectId,
         canvasId,
         cardId,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
         requestBody: CanvasCheckRequest,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/runs',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/runs',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -606,21 +666,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckReports({
-        projectId,
         canvasId,
         cardId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_list_CanvasCheckReportRead__> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/reports',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/reports',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -634,21 +696,23 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckProducts({
-        projectId,
         canvasId,
         cardId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_list_CanvasCheckProduct__> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/products',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/products',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -662,30 +726,32 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasPostCheckPreview({
-        projectId,
         canvasId,
         cardId,
         runId,
         nodeId,
         position,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
         runId: string,
         nodeId: string,
         position: number,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasPostCheckPreview_> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
                 'run_id': runId,
                 'node_id': nodeId,
                 'position': position,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -699,32 +765,34 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasPostCheckRun({
-        projectId,
         canvasId,
         cardId,
         runId,
         nodeId,
         position,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
         runId: string,
         nodeId: string,
         position: number,
         requestBody: CanvasPostCheckRequest,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}/runs',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}/runs',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
                 'run_id': runId,
                 'node_id': nodeId,
                 'position': position,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -741,24 +809,26 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckCancel({
-        projectId,
         canvasId,
         cardId,
         reportId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
         reportId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/reports/{report_id}/cancel',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/reports/{report_id}/cancel',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
                 'report_id': reportId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -772,18 +842,20 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckArchivedReports({
-        projectId,
         canvasId,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_list_CanvasCheckReportRead__> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/check-reports/archived',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/check-reports/archived',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
             },
             errors: {
                 422: `Validation Error`,
@@ -797,26 +869,28 @@ export class StudioGenerationCanvasesService {
      * @throws ApiError
      */
     public static canvasCheckRecheck({
-        projectId,
         canvasId,
         cardId,
         reportId,
         requestBody,
+        projectId = '',
     }: {
-        projectId: string,
         canvasId: string,
         cardId: string,
         reportId: string,
         requestBody: CanvasCheckRecheckRequest,
+        projectId?: string,
     }): CancelablePromise<ApiResponse_CanvasCheckReportRead_> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/checks/{card_id}/reports/{report_id}/recheck',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/checks/{card_id}/reports/{report_id}/recheck',
             path: {
-                'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
                 'report_id': reportId,
+            },
+            query: {
+                'project_id': projectId,
             },
             body: requestBody,
             mediaType: 'application/json',

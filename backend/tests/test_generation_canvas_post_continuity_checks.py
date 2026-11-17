@@ -1,4 +1,5 @@
 """Public historical video checks distinguish endpoints, path and continuity evidence."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import base64
 import json
@@ -135,7 +136,7 @@ async def test_r05_endpoints_and_r06_occlusion_use_their_own_evidence(runtime, i
             await advance()
             checks = url + '/checks/check'
             product, = await get(checks + '/products')
-            inspection = f"{checks}/products/{product['run_id']}/{product['node_id']}/{product['position']}"
+            inspection = append_canvas_path(checks, f"/products/{product['run_id']}/{product['node_id']}/{product['position']}")
             preview = await get(inspection)
             assert preview['observation_method'] == 'video_mixed' and preview['estimated_calls'] == 3
             assert {item['category'] for item in preview['items']} == {'R05', 'R06'}
@@ -185,7 +186,7 @@ async def test_r05_endpoints_and_r06_occlusion_use_their_own_evidence(runtime, i
             only_endpoints = False
             for item_id, media_type in [('R05:movement:end_frame', 'image_url'), ('R06:change:continuity', 'video_url')]:
                 call_count = len(calls)
-                response = await client.post(f"{checks}/reports/{report['id']}/recheck", json={
+                response = await client.post(append_canvas_path(checks, f"/reports/{report['id']}/recheck"), json={
                     'item_id': item_id, 'clarification': '请复看原视频中对应的画面依据',
                 })
                 assert response.status_code == 200, response.text

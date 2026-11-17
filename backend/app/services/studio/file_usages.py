@@ -22,7 +22,7 @@ async def upsert_file_usage(
     session: AsyncSession,
     *,
     file_id: str,
-    project_id: str,
+    project_id: str | None,
     chapter_id: str | None,
 
     usage_kind: FileUsageKind | str,
@@ -97,7 +97,7 @@ async def sync_usage_from_character(
 
 def _scope_filters(
     *,
-    project_id: str,
+    project_id: str | None,
     chapter_title: str | None,
 
 ) -> list:
@@ -115,7 +115,7 @@ def _scope_filters(
 async def list_files_by_scope_paginated(
     session: AsyncSession,
     *,
-    project_id: str,
+    project_id: str | None,
     chapter_title: str | None = None,
 
     q: str | None = None,

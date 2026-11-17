@@ -1,4 +1,5 @@
 """场次对象引用经公开画布接口读取当前资源，而非固定准备阶段图片。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -17,8 +18,8 @@ async def test_scene_reference_tracks_selection_and_keeps_story_identity(canvas_
         await db.flush()
         db.add(CharacterImage(id=100, character_id='person', file_id='front', is_primary=True))
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '动态对象'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '动态对象'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'ref', 'type': 'reference.character', 'name': '张三', 'object_id': 'zhang',
         'scene_object_source': {'sequence_id': 'scene', 'object_id': 'zhang'}}]
@@ -136,8 +137,8 @@ async def test_scene_reference_publishes_stable_angle_positions(canvas_client, c
         db.add_all([CharacterImage(character_id='angles-person', file_id='main', view_angle='BACK', is_primary=True),
                     CharacterImage(character_id='angles-person', file_id='front', view_angle='FRONT', is_view_default=True),
                     CharacterImage(character_id='angles-person', file_id='left', view_angle='LEFT', is_view_default=True)])
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '多角度'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '多角度'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document['cards'] = [{'id': 'ref', 'type': 'reference.character', 'name': '张三',
         'scene_object_source': {'sequence_id': 'angles-scene', 'object_id': 'zhang'}}]

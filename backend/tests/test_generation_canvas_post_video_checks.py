@@ -1,4 +1,5 @@
 """R04 sends the retained video stream through the real check worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import base64
 import json
@@ -115,7 +116,7 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
             await advance()
             products = url + '/checks/check/products'
             product, = (await client.get(products)).json()['data']
-            inspection = f"{products}/{product['run_id']}/{product['node_id']}/{product['position']}"
+            inspection = append_canvas_path(products, f"/{product['run_id']}/{product['node_id']}/{product['position']}")
             document = (await client.get(url)).json()['data']['document']
             document['cards'][1]['activity']['text'] = '修改为先蓝后红'
             await save_canvas(client, url, document, 2)
@@ -149,7 +150,7 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
             assert uncertain['results'][0]['outcome'] == 'indeterminate'
             assert uncertain['results'][0]['observed_media'][0].get('evidence_range') is None
 
-            recheck_path = f"{url}/checks/check/reports/{report['id']}/recheck"
+            recheck_path = (url + f"/checks/check/reports/{report['id']}/recheck")
             clarification = {'item_id': activity['id'], 'clarification': '请复看红色转蓝色的原区间'}
             response = await client.post(recheck_path, json=clarification)
             assert response.status_code == 200, response.text

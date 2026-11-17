@@ -56,8 +56,8 @@ def _missing_basis(report_id: str, item_id: str):
 class CanvasCheckRechecks:
     """Recheck historical evidence without reading current design or model settings."""
 
-    def __init__(self, db: AsyncSession, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db: AsyncSession, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
         self.checks = CanvasChecks(db, project_id)
 
     async def run(self, canvas_id: str, card_id: str, report_id: str,

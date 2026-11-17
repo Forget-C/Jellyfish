@@ -1,4 +1,5 @@
 """Real video frames prepared and saved through the public canvas API."""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import asyncio
 import subprocess
 
@@ -35,8 +36,8 @@ async def test_fractional_tail_and_publication_after_storage_io(canvas_client, t
         files={'file': ('clip.mp4', video.read_bytes(), 'video/mp4')})
     assert uploaded.status_code == 201, uploaded.text
     file_id = uploaded.json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '选帧'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '选帧'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = {**canvas['document'], 'cards': [{'id': 'clip', 'type': 'content.video', 'file_id': file_id}]}
     assert (await client.put(url, json={'request_id': 'clip', 'expected_revision': 0, 'document': document})).status_code == 200
     request = {'request_id': 'select-frame', 'source_card_id': 'clip', 'source_file_id': file_id, 'at_ms': 43 if action == 'tail' else 0}
@@ -83,8 +84,8 @@ async def test_video_frame_is_independent_idempotent_and_preserves_provenance(ca
     uploaded = await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('clip.mp4', video.read_bytes(), 'video/mp4')})
     assert uploaded.status_code == 201, uploaded.text
     file_id = uploaded.json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '选帧'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '选帧'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = {**canvas['document'], 'cards': [{'id': 'clip', 'type': 'content.video', 'file_id': file_id}]}
     assert (await client.put(url, json={'request_id': 'clip', 'expected_revision': 0, 'document': document})).status_code == 200
     before = (await client.get(url)).json()['data']

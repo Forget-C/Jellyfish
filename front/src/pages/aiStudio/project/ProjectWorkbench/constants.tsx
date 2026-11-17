@@ -9,10 +9,8 @@ import {
   SettingOutlined,
 } from '@ant-design/icons'
 import type { Chapter } from '../../../../mocks/data'
-import { generationCanvasLocation } from '../../generationCanvas/navigation'
 
 export type TabKey =
-  | 'generation'
   | 'dashboard'
   | 'chapters'
   | 'actors'
@@ -30,7 +28,6 @@ type ProjectNavigationItem = { key: TabKey; label: string; icon: ReactNode }
 export const projectNavigationGroups: { label: string; items: ProjectNavigationItem[] }[] = [
   { label: '创作', items: [
     { key: 'dashboard', label: '项目概览', icon: <HomeOutlined /> },
-    { key: 'generation', label: '画布生成', icon: <PictureOutlined /> },
     { key: 'chapters', label: '章节', icon: <UnorderedListOutlined /> },
   ] },
   { label: '项目资源', items: [
@@ -58,9 +55,7 @@ export function projectTabLabel(tab: TabKey) {
 
 /** 切换分区时使用稳定地址，章节定位参数仍由章节入口和浏览器历史保存。 */
 export function projectTabLocation(projectId: string, tab: TabKey) {
-  return tab === 'generation'
-    ? generationCanvasLocation(projectId)
-    : `/projects/${encodeURIComponent(projectId)}?tab=${tab}`
+  return `/projects/${encodeURIComponent(projectId)}?tab=${tab}`
 }
 
 export const chapterStatusMap: Record<Chapter['status'], { color: string; text: string }> = {

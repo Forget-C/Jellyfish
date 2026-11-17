@@ -1,4 +1,5 @@
 """卡片目录经公开 HTTP 提供端点及产品分类；不从前端名称猜协议。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -6,8 +7,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '类型目录'})).json()['data']
-    response = await client.get(f"/canvases/p/{canvas['id']}/catalog")
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '类型目录'})).json()['data']
+    response = await client.get(canvas_url(f"/canvases/p/{canvas['id']}/catalog"))
     assert response.status_code == 200, response.text
     cards = {item['type']: item for item in response.json()['data']['cards']}
     assert cards['direction.composition']['title'] == '景别与构图卡'
@@ -36,7 +37,7 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     assert all('effect_object' not in {port['id'] for port in card['inputs']} for card in cards.values())
     assert next(port for port in cards['direction.performance']['inputs'] if port['id'] == 'dialogue_basis')['accepts'] == ['dialogue']
     assert next(field for field in cards['direction.performance']['fields'] if field['id'] == 'physical_action')['label'] == '身体动作'
-    assert (await client.get('/canvases/p/missing/catalog')).status_code == 404
+    assert (await client.get(canvas_url('/canvases/p/missing/catalog'))).status_code == 404
 
 
 @pytest.mark.asyncio
@@ -47,8 +48,8 @@ async def test_public_output_modality_has_only_four_content_modalities(canvas_cl
 
 @pytest.mark.asyncio
 async def test_catalog_exposes_type_specific_design_field_defaults(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '字段默认值'})).json()['data']
-    response = await canvas_client.get(f"/canvases/p/{canvas['id']}/catalog")
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '字段默认值'})).json()['data']
+    response = await canvas_client.get(canvas_url(f"/canvases/p/{canvas['id']}/catalog"))
     cards = {card['type']: card for card in response.json()['data']['cards']}
     fields = lambda kind: {field['id']: field['default_value'] for field in cards[kind]['fields']}
     assert fields('direction.space_rule')['spatial_basis']['purpose'] == 'background'

@@ -38,7 +38,7 @@ export function CardList({ catalog, readonly, onAdd, active, onActiveChange: set
   }} onDragEnd={event => { if (event.dataTransfer.dropEffect !== 'none') setActive(undefined) }} onClick={() => add(entry.type, entry.entry)}>{entry.title.replace('内容', '')}</WorkbenchButton>
   return <div className="generation-card-list-host" onKeyDown={event => { if (event.key === 'Escape' && active) { event.stopPropagation(); close() } }}>
     <div className="generation-card-categories" role="toolbar" aria-label="卡片分类">
-      {cardCategories.map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={category.title} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}
+      {cardCategories.filter(category => cardCategoryEntries(catalog, category.title).length > 0).map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={category.title} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}
     </div>
     {active && <nav className="generation-card-list" aria-label="添加卡片">
       <header><h2>{active}</h2><WorkbenchIconButton label="关闭卡片列表" icon={<CloseOutlined />} onClick={close} /></header>

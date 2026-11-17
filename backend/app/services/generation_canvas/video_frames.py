@@ -55,8 +55,8 @@ def validate_video_frame_origin(canvas_id: str, card, previous: dict | None) -> 
 class CanvasVideoFrames:
     """校验画布来源并提供可重试的独立图片卡准备操作。"""
 
-    def __init__(self, db, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
 
     async def prepare(self, canvas_id: str, body: CanvasVideoFrameRequest) -> ImageContentCard:
         """在锁外处理媒体，提交时重新核实来源并复用并发发布的文件。"""
@@ -98,7 +98,7 @@ class CanvasVideoFrames:
         await create_and_refresh(self.db, FileItem(id=file_id, type=FileType.image, name=f'frame-{body.at_ms}',
             content_type='image/png', size_bytes=len(frame), tags=[], storage_key=frame_key))
         await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id, chapter_id=None,
-                               usage_kind='generation_upload')
+                               usage_kind='generation_upload', source_ref=f'{canvas_id}:frame:{file_id}')
         return card
 
     async def _source(self, canvas, body: CanvasVideoFrameRequest) -> CanvasVideoFrameOrigin:

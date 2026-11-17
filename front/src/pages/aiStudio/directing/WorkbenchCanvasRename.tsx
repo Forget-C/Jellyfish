@@ -1,3 +1,4 @@
+import { persistSceneChange } from './sceneCanvasPersistence'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Space } from 'antd'
 import { useGenerationCanvasEditor } from '../generationCanvas/useGenerationCanvasEditor'
@@ -7,7 +8,7 @@ export function WorkbenchCanvasRename({ projectId, chapterId, sequenceId, canvas
   projectId: string; chapterId: string; sequenceId: string; canvasId: string; initialName: string;
   onClose: (name?: string) => void;
 }) {
-  const editor = useGenerationCanvasEditor(projectId, canvasId, false)
+  const editor = useGenerationCanvasEditor(projectId, canvasId, false, persistSceneChange)
   const { current, ownership, pendingRename } = editor
   const [name, setName] = useState(initialName)
   const [submitting, setSubmitting] = useState(false)

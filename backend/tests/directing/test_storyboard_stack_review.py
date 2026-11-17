@@ -1,5 +1,6 @@
 """Reviewed storyboard applications preserve the shared canvas stack guard."""
 
+from tests.canvas_urls import append_canvas_path, canvas_url
 import asyncio
 import json
 from types import SimpleNamespace
@@ -51,7 +52,7 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
                 await asyncio.gather(*worker.jobs.values())
             finally:
                 worker.text_pool.shutdown(wait=False)
-            ready = await data(await client.get(f"{path}/{task['task_id']}"))
+            ready = await data(await client.get(append_canvas_path(path, f"/{task['task_id']}")))
             assert ready['status'] == 'succeeded', ready
             return ready
 
@@ -59,12 +60,12 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
         chapter = await data(await client.get(base))
         scene = await data(await client.post(base + '/sequences', json={'title': '场次', 'position': 0,
             'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}}))
-        scene_path = f"{base}/sequences/{scene['id']}"
+        scene_path = (base + f"/sequences/{scene['id']}")
         path = scene_path + '/storyboards'
         command = {'request_id': 'first', 'text_model_id': 'story-text', 'mode': 'faithful', 'pending_modality': 'video'}
         first = await complete(path, await data(await client.post(path, json=command)))
         canvas_id = first['canvas_id']
-        canvas = '/api/v1/studio/generation-canvases/p1/' + canvas_id
+        canvas = canvas_url('/api/v1/studio/generation-canvases/p1/') + canvas_id
         initial_document = first['candidate']['document']
         await data(await client.put(canvas, json={'request_id': 'storyboard:' + first['task_id'],
             'expected_revision': 0, 'document': initial_document}))
@@ -91,9 +92,9 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
         design['fields']['light_direction']['text'] = '顶光'
         # Replace the second shot without changing the third shot ordinal.
         shots[1] = {'id': 'replacement', 'excerpt': '小雨关灯。'}
-        reextract = await complete(path, await data(await client.post(f'{scene_path}/canvases/{canvas_id}/storyboards',
+        reextract = await complete(path, await data(await client.post(append_canvas_path(scene_path, f'/canvases/{canvas_id}/storyboards'),
             json={**command, 'request_id': 'reextract'})))
-        application = f"{path}/{reextract['task_id']}"
+        application = append_canvas_path(path, f"/{reextract['task_id']}")
         unselected = await data(await client.post(application + '/diff', json={'expected_revision': before['revision']}))
         assert unselected['automatic_stacks'] == []
         choice = {'expected_revision': before['revision'], 'overwrite_card_ids': [edited['id']]}
@@ -103,7 +104,7 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
         assert diff['continuity_review']['stale']
         reviewed = await complete(path, await data(await client.post(application + '/retry',
             json={'request_id': 'review-overwrite', 'review_plan': choice})))
-        application = f"{path}/{reviewed['task_id']}"
+        application = append_canvas_path(path, f"/{reviewed['task_id']}")
         confirmed = {'confirmed_auto_stack_ids': [automatic['id']]}
         blocked = await client.post(application + '/apply', json={**choice, **confirmed})
         assert blocked.status_code == 422 and blocked.json()['data']['code'] == 'STACK_READ_ONLY', blocked.text

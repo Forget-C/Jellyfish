@@ -7,7 +7,6 @@ import brandLogo from '../../logo.svg'
 import { appearances, useAppStore } from '../store/useAppStore'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
-import { resolveProjectTab } from '../pages/aiStudio/project/ProjectWorkbench/constants'
 import { ProjectNavigation } from '../pages/aiStudio/project/ProjectWorkbench/ProjectNavigation'
 import { useLastManagementPage } from './useLastManagementPage'
 import { AppearancePreview } from './AppearancePreview'
@@ -25,7 +24,7 @@ const ordinaryPageTheme = {
 /** 普通路由的导航与主题在独立画布之外应用。 */
 function OrdinaryLayout() {
   const { t, i18n } = useTranslation('layout')
-  const { pathname, search } = useLocation()
+  const { pathname } = useLocation()
   const projectId = useMatches().find(match => match.id === 'project-navigation')?.params.projectId
   const navigate = useNavigate()
   const user = useAppStore(state => state.user)
@@ -37,7 +36,6 @@ function OrdinaryLayout() {
   const [accountOpen, setAccountOpen] = useState(false)
   const titles = useNavigationTitles()
   const projectIndex = !!projectId && pathname.split('/').filter(Boolean).length === 2
-  const legacyGeneration = projectIndex && resolveProjectTab(new URLSearchParams(search).get('tab')) === 'generation'
   useEffect(() => {
     const resolved = i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
     setLanguage(resolved)
@@ -85,7 +83,7 @@ function OrdinaryLayout() {
           ] }}><Button ref={accountButton} type="text" className="app-account" aria-label="用户与语言设置" aria-haspopup="menu" aria-expanded={accountOpen}><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
         </div>
       </header>
-      {projectId && !legacyGeneration ? <div className="app-project-frame">
+      {projectId ? <div className="app-project-frame">
         <ProjectNavigation key={projectId} projectId={projectId} projectName={projectIndex ? titles.page : titles.project} />
         {routeContent}
       </div> : routeContent}
@@ -96,6 +94,6 @@ function OrdinaryLayout() {
 /** 路由切换时保留同一个任务运行时，包括进出独立画布。 */
 export default function MainLayout() {
   const { pathname } = useLocation()
-  const standaloneCanvas = /^\/projects\/[^/]+\/generation-canvas\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+(?:\/canvas-workbench)?\/?$/.test(pathname)
+  const standaloneCanvas = /^\/canvases\/[^/]+\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+(?:\/canvas-workbench)?\/?$/.test(pathname)
   return <TaskRuntimeProvider>{standaloneCanvas ? <Outlet /> : <OrdinaryLayout />}</TaskRuntimeProvider>
 }
