@@ -11,6 +11,7 @@ from app.dependencies import get_db
 from app.models.studio import Chapter, Project
 from app.models.directing import Sequence
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
+from app.services.chapters.explanations import validate_explanations, lock_explanation_update
 from app.services.common import (
     create_and_refresh,
     delete_if_exists,
@@ -102,6 +103,7 @@ async def create_chapter(
         detail=entity_not_found("Project"),
         status_code=400,
     )
+    validate_explanations([item.model_dump() for item in body.source_explanations or []], body.raw_text)
     obj = await create_and_refresh(db, Chapter(**body.model_dump()))
     return created_response(ChapterRead.model_validate(obj))
 
@@ -133,7 +135,11 @@ async def update_chapter(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ChapterRead]:
     obj = await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
-    update = body.model_dump(exclude_unset=True)
+    if body.expected_basis_version is not None:
+        obj = await lock_explanation_update(db, chapter_id, body.expected_basis_version)
+    update = body.model_dump(exclude_unset=True, exclude={"expected_basis_version"})
+    if body.source_explanations is not None:
+        update["source_explanations"] = [item.model_dump() for item in body.source_explanations]
     if "project_id" in update:
         await require_entity(
             db,
@@ -142,6 +148,8 @@ async def update_chapter(
             detail=entity_not_found("Project"),
             status_code=400,
         )
+    validate_explanations((update.get("source_explanations") if "source_explanations" in update else obj.source_explanations) or [],
+                          update.get("raw_text", obj.raw_text))
     patch_model(obj, update)
     await flush_and_refresh(db, obj)
     return success_response(ChapterRead.model_validate(obj))

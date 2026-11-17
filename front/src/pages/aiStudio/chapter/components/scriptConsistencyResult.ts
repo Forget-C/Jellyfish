@@ -28,6 +28,9 @@ export type ScriptConsistencyIssue = {
      * 固定为角色混淆类问题
      */
     issue_type?: string;
+    classification?: 'contradiction' | 'ambiguity' | 'optional';
+    excerpt?: string;
+    candidates?: string[];
     /**
      * 涉及的角色候选（名字/称呼/ID 皆可，优先用原文称呼）
      */
@@ -62,6 +65,9 @@ export type ScriptConsistencyCheckResult = {
      * 是否发现问题
      */
     has_issues: boolean;
+    check_scope?: 'character_confusion' | 'source_consistency';
+    source_version?: string;
+    explanation_version?: string;
     /**
      * 总结（可选）
      */

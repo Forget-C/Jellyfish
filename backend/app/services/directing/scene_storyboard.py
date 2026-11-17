@@ -1,5 +1,6 @@
 """提交文本分镜任务并校验初次共同画布候选，不绕过画布保存。"""
 
+from app.services.chapters.explanations import explanation_basis
 from hashlib import sha256
 from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
@@ -139,7 +140,7 @@ class SceneStoryboardService(SceneObjectService):
                       'fixed_source': fixed.model_dump(mode='json'), 'evidence': evidence.model_dump(mode='json'),
                       'settings': settings}
         token = CanvasStore.command_digest({
-            'scene_id': sequence.id, 'chapter_version': chapter_version, 'source': source, **target,
+            'scene_id': sequence.id, 'chapter_version': chapter_version, 'explanation_basis': explanation_basis(chapter), 'source': source, **target,
             'start': sequence.source_start, 'end': sequence.source_end, 'text': text,
             'preparation_revision': objects.revision, 'preparation_stale': objects.source_changed, 'objects': inputs,
             'active_task_id': active_task_id,
@@ -484,6 +485,7 @@ class SceneStoryboardService(SceneObjectService):
         # Availability labels belong to confirmation, not frozen model inputs.
         model_objects = [{key: value for key, value in item.items() if key != 'reference_unavailable'} for item in frozen_objects]
         args = {'mode': body.mode, 'script_text': basis.text, 'source_version': fixed.chapter_version,
+                'source_explanations': fixed.source_explanations, 'source_start': basis.selection_start,
                 'objects': model_objects, 'scene_object_sequence_id': sequence_id, 'production_model_id': body.production_model_id, 'pending_modality': body.pending_modality or 'image',
                 'production_capability': capability.model_dump(mode='json') if capability else None}
         if retry_of_task_id and not regenerate:

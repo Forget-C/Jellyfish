@@ -1,5 +1,6 @@
 """前置对象提取交付与场次参考选择，不读取或更新旧场次版本。"""
 
+from app.services.chapters.explanations import explanation_basis, source_version
 from hashlib import sha256
 
 from fastapi import HTTPException
@@ -66,7 +67,7 @@ class SceneObjectService(SceneCanvasService):
 
     async def read_objects(self, chapter_id: str, sequence_id: str) -> SceneObjectsRead:
         """保留上次成功准备，单独展示最新任务及当前文件有效性。"""
-        sequence, _ = await self._scene(chapter_id, sequence_id)
+        sequence, chapter = await self._scene(chapter_id, sequence_id)
         task = (await self.db.execute(self._tasks(sequence_id)
             .with_only_columns(Task.id, Task.status, Task.stage, Task.error_message)
             .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
@@ -90,7 +91,8 @@ class SceneObjectService(SceneCanvasService):
         ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
         candidate_task_id = latest_result.id if latest_result and (latest_result.result or {}).get('pending_application') else None
         return SceneObjectsRead(revision=prepared.get('revision', 0), source_version=prepared.get('source_version'),
-            source_changed=bool(prepared and prepared['source_digest'] != digest), objects=objects, assets=assets,
+            source_changed=bool(prepared and (prepared['source_digest'] != digest or
+                (prepared.get('explanation_version') or source_version('[]')) != explanation_basis(chapter)['version'])), objects=objects, assets=assets,
             task=self.task_read(task) if task else None, candidate_task_id=candidate_task_id)
 
     async def submit_extraction(self, chapter_id: str, sequence_id: str, body: ObjectExtractionRequest) -> SceneObjectTaskRead:
@@ -112,8 +114,10 @@ class SceneObjectService(SceneCanvasService):
         provider = await self.db.get(Provider, model.provider_id)
         config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
         assets = sorted(await self.assets(), key=lambda asset: (asset.kind, asset.name, asset.id))
-        args = {'sequence_id': sequence_id, 'script_text': sequence.source_text, 'source_version': source.version,
+        args = {'sequence_id': sequence_id, 'script_text': sequence.source_text, 'source_start': sequence.source_start, 'source_version': source.version,
                 'source_digest': _source_digest(sequence.source_text, source.version, sequence.source_start),
+                'source_explanations': explanation_basis(chapter)['items'] if source.version == source_version(chapter.raw_text) else [],
+                'explanation_version': explanation_basis(chapter)['version'] if source.version == source_version(chapter.raw_text) else source_version('[]'),
                 'preparation_revision': (sequence.object_preparation or {}).get('revision', 0),
                 'existing_assets': [{'id': asset.id, 'kind': asset.kind, 'name': asset.name, 'description': asset.description[:800]}
                                     for asset in assets[:120]]}
@@ -160,13 +164,16 @@ class SceneObjectService(SceneCanvasService):
             return None
         return SceneObjectExtractionResult.model_validate(task.result)
 
-    def _candidate_plan(self, sequence: Sequence, task: Task, result: SceneObjectExtractionResult
+    async def _candidate_plan(self, sequence: Sequence, task: Task, result: SceneObjectExtractionResult
                         ) -> tuple[SceneObjectCandidateReview, list[SceneObjectCandidate]]:
         """按冻结出处产生的身份匹配，保留当前人工选择，并绑定当前准备修订。"""
         prepared = sequence.object_preparation or {}
         revision = prepared.get('revision', 0)
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
-        source_changed = digest != task.input_snapshot['run_args']['source_digest']
+        current_explanation_version = explanation_basis(await self.chapter(sequence.chapter_id))['version']
+        source_changed = (digest != task.input_snapshot['run_args']['source_digest'] or
+            task.input_snapshot['run_args'].get('explanation_version', source_version('[]'))
+            != current_explanation_version)
         previous = {row['id']: SceneObjectCandidate.model_validate(row) for row in prepared.get('objects', [])}
         new_ids = {row.id for row in result.objects}
         added, modified, retained_choices, merged = [], [], [], []
@@ -199,7 +206,7 @@ class SceneObjectService(SceneCanvasService):
             return SceneObjectCandidateReview(task=self.task_read(task), candidate_available=False,
                 revision=(sequence.object_preparation or {}).get('revision', 0), source_changed=False,
                 is_current=sequence.is_current, added=[], removed=[], modified=[], retained_choices=[])
-        review, _ = self._candidate_plan(sequence, task, result)
+        review, _ = await self._candidate_plan(sequence, task, result)
         return review
 
     async def discard_candidate(self, chapter_id: str, sequence_id: str, task_id: str) -> SceneObjectTaskRead:
@@ -228,7 +235,7 @@ class SceneObjectService(SceneCanvasService):
             if result.application == body and result.applied_revision is not None:
                 return SceneObjectCandidateReceipt(task_id=task.id, revision=result.applied_revision)
             raise RevisionConflict('该对象提取结果已应用或已退出')
-        review, merged = self._candidate_plan(sequence, task, result)
+        review, merged = await self._candidate_plan(sequence, task, result)
         if not review.is_current:
             raise RevisionConflict('此场次已退出当前划分，不能应用对象候选')
         if review.source_changed:
@@ -254,7 +261,7 @@ class SceneObjectService(SceneCanvasService):
                 FileUsage.usage_kind == 'directing_reference',
                 FileUsage.source_ref.in_([f'scene-object:{sequence.id}:{id_}' for id_ in removed])))
         sequence.object_preparation = {'revision': revision, 'source_version': args['source_version'],
-            'source_digest': args['source_digest'], 'objects': [item.model_dump(mode='json') for item in objects]}
+            'source_digest': args['source_digest'], 'explanation_version': args.get('explanation_version'), 'objects': [item.model_dump(mode='json') for item in objects]}
 
     async def complete_extraction(self, task: Task, result: SceneObjectExtraction) -> SceneObjectExtractionResult:
         """首次适用结果直接交付，其他成功结果保留为待核对候选。"""
@@ -267,7 +274,10 @@ class SceneObjectService(SceneCanvasService):
         objects = object_candidates(result, args)
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
         revision = (sequence.object_preparation or {}).get('revision', 0)
-        if sequence.is_current and digest == args['source_digest'] and revision == args['preparation_revision'] == 0:
+        current_explanation_version = explanation_basis(await self.chapter(sequence.chapter_id))['version']
+        if (sequence.is_current and digest == args['source_digest'] and revision == args['preparation_revision'] == 0
+                and args.get('explanation_version', source_version('[]'))
+                == current_explanation_version):
             await self._save_preparation(sequence, args, objects, 1)
             return SceneObjectExtractionResult(objects=objects, pending_application=False, applied_revision=1)
         return SceneObjectExtractionResult(objects=objects, pending_application=True)

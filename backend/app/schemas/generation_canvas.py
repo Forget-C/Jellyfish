@@ -795,6 +795,7 @@ class CanvasFixedSource(BaseModel):
     card_id: str
     chapter_id: str
     chapter_version: str
+    source_explanations: list[dict] = Field(default_factory=list, exclude_if=lambda value: not value)
 
 
 class CanvasSourceIndex(BaseModel):

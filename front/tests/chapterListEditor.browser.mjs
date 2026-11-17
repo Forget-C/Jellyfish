@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -14,7 +15,7 @@ const chapters = Array.from({ length: 105 }, (_, i) => ({ id: `ch${i + 1}`, proj
 delete chapters[104].sequence_count
 chapters[2].raw_text = ''
 const writes = [], requests = [], errors = []
-const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: "她推开门。优化后的原文。" } }
+const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: " 她推开门。优化后的原文。\n" } }
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -27,7 +28,13 @@ try {
     const req = route.request(), url = new URL(req.url()), path = url.pathname
     requests.push({ path, query: url.search, method: req.method() })
     const respond = data => route.fulfill({ json: { success: true, data } })
-    if (path.endsWith('/script-processing/check-consistency-async')) return respond({ task_id: 'check', status: 'queued' })
+    if (path.endsWith('/script-processing/check-consistency-async')) {
+      const source = req.postDataJSON().script_text
+      taskResults.check = { has_issues: true, issues: [{ issue_type: 'fact', classification: 'contradiction', excerpt: source, description: '需要核对', suggestion: '修复标点' }], check_scope: 'source_consistency', source_version: createHash('sha256').update(source).digest('hex'), explanation_version: createHash('sha256').update('[]').digest('hex') }
+      taskResults.optimize.source_text = source
+      taskResults.optimize.explanation_version = createHash('sha256').update('[]').digest('hex')
+      return respond({ task_id: 'check', status: 'queued' })
+    }
     if (path.endsWith('/script-processing/optimize-script-async')) return respond({ task_id: 'optimize', status: 'queued' })
     if (path.endsWith('/script-processing/simplify-script-async')) return respond({ task_id: 'simplify', status: 'queued' })
     const taskPath = path.match(/\/film\/tasks\/(check|optimize|simplify)\/(status|result)$/)
@@ -163,16 +170,22 @@ try {
   holdSave = false; releaseSave()
   await editor.getByRole('button', { name: '查看本章场次并核对', exact: true }).waitFor()
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门？' })
-  await editor.getByRole('button', { name: '角色混淆检查', exact: true }).click()
-  await editor.getByRole('button', { name: '一键优化', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('textarea[aria-label="章节原文"]')?.value === '她推开门。优化后的原文。')
+  await editor.getByRole('button', { name: '原文一致性检查', exact: true }).click()
+  await editor.getByRole('combobox', { name: '问题1性质' }).click()
+  await page.getByText('原文异常，需要修复', { exact: true }).click()
+  await editor.getByRole('button', { name: '生成修复建议', exact: true }).click()
+  await editor.getByRole('button', { name: '应用修复稿', exact: true }).waitFor()
+  assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '她推开门？')
+  await page.screenshot({ path: join(evidence, 'source-repair-preview.png'), animations: 'disabled' })
+  await editor.getByRole('button', { name: '应用修复稿', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="章节原文"]')?.value === ' 她推开门。优化后的原文。\n')
   const beforeAI = writes.length
   await save()
   await editor.getByRole('button', { name: '确认保存原文', exact: true }).waitFor()
   assert.equal(writes.length, beforeAI)
   await editor.getByRole('button', { name: '确认保存原文', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
-  assert.deepEqual(writes.at(-1), { raw_text: '她推开门。优化后的原文。' })
+  assert.deepEqual(writes.at(-1), { raw_text: ' 她推开门。优化后的原文。\n' })
   await editor.getByRole('button', { name: '对比模式', exact: true }).click()
   await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('她推开门。新的一天。')
   await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).fill('新的一天。')
@@ -263,6 +276,28 @@ try {
   assert.equal(writes.at(-1).index, 106)
   assert.equal(writes.at(-1).raw_text, '')
   assert.equal(requests.filter(row => row.path.includes('script-processing')).length, previousTaskRequests)
+  await editor.getByRole('button', { name: '添加解释', exact: true }).click()
+  await editor.getByRole('textbox', { name: '解释1内容', exact: true }).fill('此处刻意不交代身份。')
+  await editor.getByRole('button', { name: /^保\s*存$/ }).click()
+  await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
+  assert.equal(writes.at(-1).source_explanations[0].source_version, '')
+  await editor.getByRole('button', { name: '确认此解释', exact: true }).click()
+  await editor.getByRole('button', { name: /^保\s*存$/ }).click()
+  await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
+  assert.equal(writes.at(-1).source_explanations[0].source_version, createHash('sha256').update('').digest('hex'))
+  await page.screenshot({ path: join(evidence, 'source-explanation-confirmed.png'), animations: 'disabled' })
+  await editor.getByRole('textbox', { name: '章节原文', exact: true }).fill('李哥来到门口，李哥挥手。')
+  await editor.getByText('待复核', { exact: true }).waitFor()
+  await editor.getByRole('textbox', { name: '解释1原文摘录', exact: true }).fill('李哥')
+  assert.equal(await editor.getByRole('button', { name: '确认此解释', exact: true }).isDisabled(), true)
+  await editor.getByRole('combobox', { name: '解释1原文位置', exact: true }).click()
+  await page.getByText(/^第2处：/, { exact: false }).click()
+  await editor.getByRole('button', { name: '确认此解释', exact: true }).click()
+  await editor.getByRole('button', { name: /^保\s*存$/ }).click()
+  await page.waitForFunction(() => !document.querySelector('.chapter-editor-modal .ant-btn-loading'))
+  assert.equal(writes.at(-1).source_explanations[0].start, 7)
+  assert.equal(writes.at(-1).source_explanations[0].end, 9)
+
   await editor.getByRole('button', { name: /^关\s*闭$/ }).click()
   await page.goto(`${base}&edit=ch105`)
   await editor.getByText('场次数量读取失败，请重试', { exact: true }).waitFor()

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.chapters.explanations import explanation_basis
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
 from app.models.directing import Sequence
 from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
@@ -108,9 +109,10 @@ class CanvasStore:
         source = document.fixed_source
         source_changed = None
         if source:
-            chapter_text = await self.db.scalar(select(Chapter.raw_text).where(
+            chapter = await self.db.scalar(select(Chapter).where(
                 Chapter.id == source.chapter_id, Chapter.project_id == self.project_id))
-            source_changed = chapter_text is None or hashlib.sha256(chapter_text.encode()).hexdigest() != source.chapter_version
+            source_changed = (chapter is None or hashlib.sha256(chapter.raw_text.encode()).hexdigest() != source.chapter_version
+                              or source.source_explanations != explanation_basis(chapter)['items'])
         return CanvasRead(id=canvas.id, project_id=canvas.project_id, revision=canvas.revision,
                           document=document, source_changed=source_changed, scene=await self._scene_association(canvas))
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
+from app.schemas.source_explanations import SourceExplanation
 from app.schemas.common import ApiResponse, success_response
 from app.services.script_processing_tasks import create_consistency_task, create_costume_info_task, create_character_portrait_task, create_prop_info_task, create_scene_info_task, create_script_optimization_task, create_script_simplification_task, pick_consistency_relation_entity_id, pick_analysis_relation_entity_id
 from app.api.v1.routes.film.common import AsyncTaskCreateRead
@@ -22,16 +23,17 @@ router = APIRouter(prefix="/script-processing", tags=["script-processing"])
 # ============================================================================
 
 class ScriptConsistencyCheckRequest(BaseModel):
-    """一致性检查请求（角色混淆）。"""
+    """原文一致性检查请求。"""
     project_id: str | None = Field(None, description="项目 ID（异步任务关联可选）")
     chapter_id: str | None = Field(None, description="章节 ID（异步任务关联可选）")
     script_text: str = Field(..., description="完整剧本文本", min_length=1)
+    source_explanations: list[SourceExplanation] | None = None
 
 
 @router.post(
     "/check-consistency-async",
     response_model=ApiResponse[AsyncTaskCreateRead],
-    summary="异步检查角色混淆一致性（基于原文）",
+    summary="异步原文一致性检查",
     description="创建一致性检查任务并立即返回 task_id；前端可通过任务状态接口轮询。",
 )
 async def check_consistency_async(
@@ -46,6 +48,8 @@ async def check_consistency_async(
         db,
         relation_entity_id=relation_entity_id,
         script_text=request.script_text,
+        **({"source_explanations": [item.model_dump() for item in request.source_explanations]}
+           if request.source_explanations is not None else {}),
     )
     await db.commit()
     return success_response(
@@ -268,6 +272,7 @@ class ScriptOptimizeRequest(BaseModel):
     project_id: str | None = Field(None, description="项目 ID（异步任务关联可选）")
     chapter_id: str | None = Field(None, description="章节 ID（异步任务关联可选）")
     script_text: str = Field(..., description="原文剧本文本", min_length=1)
+    source_explanations: list[SourceExplanation] | None = None
     consistency: dict[str, Any] = Field(..., description="一致性检查输出（ScriptConsistencyCheckResult 序列化）")
 
 
@@ -299,6 +304,8 @@ async def optimize_script_async(
         relation_entity_id=relation_entity_id,
         script_text=request.script_text,
         consistency=request.consistency,
+        **({"source_explanations": [item.model_dump() for item in request.source_explanations]}
+           if request.source_explanations is not None else {}),
     )
     await db.commit()
     return success_response(

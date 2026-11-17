@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.chapters.explanations import source_version, validate_explanations
+import json
 from app.core.contracts.task import TaskStatus
 from app.models.task import Task
 from app.models.llm import Model, ModelSettings, ModelCategoryKey, Provider
@@ -134,7 +136,9 @@ async def create_consistency_task(
     *,
     relation_entity_id: str,
     script_text: str,
+    source_explanations: list[dict] | None = None,
 ) -> AsyncTaskCreateResult:
+    validate_explanations(source_explanations or [], script_text)
     existing = await find_active_consistency_task(db, relation_entity_id=relation_entity_id)
     if existing is not None:
         status_value = existing.status.value if hasattr(existing.status, "value") else str(existing.status)
@@ -151,7 +155,7 @@ async def create_consistency_task(
         task_kind=SCRIPT_CONSISTENCY_TASK_KIND,
         relation_type=CONSISTENCY_CHECK_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
-        run_args={"script_text": script_text},
+        run_args={"script_text": script_text, **({"source_explanations": source_explanations} if source_explanations is not None else {})},
     )
 
 
@@ -265,7 +269,21 @@ async def create_script_optimization_task(
     relation_entity_id: str,
     script_text: str,
     consistency: dict,
+    source_explanations: list[dict] | None = None,
 ) -> AsyncTaskCreateResult:
+    if consistency.get('check_scope') != 'source_consistency':
+        raise HTTPException(409, '旧版检查结果不能用于新修复，请重新检查')
+    if consistency.get('source_version') != source_version(script_text):
+        raise HTTPException(409, '检查依据已变化，请重新检查')
+    validate_explanations(source_explanations or [], script_text)
+    valid = [item for item in source_explanations or [] if item['source_version'] == source_version(script_text)]
+    version = source_version(json.dumps(valid, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    if consistency.get('explanation_version') != version:
+        raise HTTPException(409, '补充解释已变化，请重新检查')
+    issues = consistency.get('issues') or []
+    if not isinstance(issues, list) or not issues or any(not isinstance(item, dict) or item.get('resolution') != 'repair' or
+                         (item.get('classification') == 'ambiguity' and not str(item.get('instruction', '')).strip()) for item in issues):
+        raise HTTPException(422, '请先确认并选择需要修复的原文异常')
     return await _create_analysis_task(
         db,
         task_kind=SCRIPT_OPTIMIZE_TASK_KIND,
@@ -274,6 +292,7 @@ async def create_script_optimization_task(
         run_args={
             "script_text": script_text,
             "consistency": consistency,
+            **({"source_explanations": source_explanations} if source_explanations is not None else {}),
         },
     )
 

@@ -12,6 +12,7 @@ from app.models.directing import Sequence
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Chapter
 from app.models.task import Task
+from app.services.chapters.explanations import explanation_basis
 from app.schemas.generation_canvas import CanvasFixedSource, CanvasRead, CreativeBasisCard
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND
 from app.services.directing.storyboard_review import review_state
@@ -64,6 +65,7 @@ class SceneCanvasService(WorkspaceService):
             GenerationCanvas.id, GenerationCanvas.created_at, GenerationCanvas.revision,
             GenerationCanvas.document['name'].as_string().label('name'),
             GenerationCanvas.document['fixed_source']['chapter_version'].as_string().label('source_version'),
+            GenerationCanvas.document['fixed_source']['source_explanations'].label('source_explanations'),
             cast(func.json_extract(fixed, '$.selection_start'), Integer).label('source_start'),
             cast(func.json_extract(fixed, '$.selection_end'), Integer).label('source_end'),
             GenerationCanvas.document['storyboard']['task_id'].as_string().label('applied_task'),
@@ -76,7 +78,7 @@ class SceneCanvasService(WorkspaceService):
         canvases = []
         for row in rows:
             task, candidate = latest.get(row.id), candidates.get(row.id)
-            source_changed = row.source_version != version or (
+            source_changed = (row.source_explanations or []) != explanation_basis(chapter)['items'] or row.source_version != version or (
                 (row.source_start, row.source_end) != (sequence.source_start, sequence.source_end))
             canvases.append(SceneCanvasSummary(
                 id=row.id, name=row.name, created_at=row.created_at, source_changed=source_changed,
@@ -164,7 +166,8 @@ class SceneCanvasService(WorkspaceService):
                                   selection_start=sequence.source_start, selection_end=sequence.source_end)
         canvas = await store.create(name, scene=SceneCanvasSeed(
             sequence_id=sequence.id, basis=basis, canvas_id=canvas_id, fixed_source=CanvasFixedSource(
-                card_id=basis.id, chapter_id=chapter.id, chapter_version=source.version)))
+                card_id=basis.id, chapter_id=chapter.id, chapter_version=source.version,
+                source_explanations=explanation_basis(chapter)["items"] if source.version == sha256(chapter.raw_text.encode()).hexdigest() else [])))
         result = await store.read(canvas.id)
         if digest:
             self.db.add(CanvasSaveReceipt(canvas_id=canvas.id, request_id='scene-blank-create', request_hash=digest,

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.schemas.source_explanations import chapter_basis_version
+from app.schemas.source_explanations import SourceExplanation
 
 from app.models.studio import ChapterStatus, ProjectStyle, ProjectVisualStyle
 
@@ -52,6 +55,7 @@ class ChapterBase(BaseModel):
     title: str = Field(..., description="章节标题")
     summary: str = Field("", description="章节摘要")
     raw_text: str = Field("", description="章节原文")
+    source_explanations: list[SourceExplanation] | None = None
     condensed_text: str = Field("", description="精简原文")
     status: ChapterStatus = Field(ChapterStatus.draft, description="章节状态")
 
@@ -61,11 +65,13 @@ class ChapterCreate(ChapterBase):
 
 
 class ChapterUpdate(BaseModel):
+    expected_basis_version: str | None = None
     project_id: str | None = None
     index: int | None = None
     title: str | None = None
     summary: str | None = None
     raw_text: str | None = None
+    source_explanations: list[SourceExplanation] | None = None
     condensed_text: str | None = None
     status: ChapterStatus | None = None
 
@@ -74,6 +80,12 @@ class ChapterRead(ChapterBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    @computed_field
+    @property
+    def basis_version(self) -> str:
+        """当前原文与全部解释的编辑基线。"""
+        return chapter_basis_version(self.raw_text, [item.model_dump() for item in self.source_explanations or []])
+
     sequence_count: int = Field(0, description="已确认场次数")
 
 

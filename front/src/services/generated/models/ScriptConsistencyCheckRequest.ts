@@ -2,8 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { SourceExplanation } from './SourceExplanation';
 /**
- * 一致性检查请求（角色混淆）。
+ * 原文一致性检查请求。
  */
 export type ScriptConsistencyCheckRequest = {
     /**
@@ -18,5 +19,5 @@ export type ScriptConsistencyCheckRequest = {
      * 完整剧本文本
      */
     script_text: string;
+    source_explanations?: (Array<SourceExplanation> | null);
 };
-

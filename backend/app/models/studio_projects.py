@@ -107,6 +107,7 @@ class Chapter(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="章节标题")
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节摘要")
     raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节原文（未清洗/可较长）")
+    source_explanations: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     condensed_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="由模型精简后的原文（用于抽取/提示词）")
     status: Mapped[ChapterStatus] = mapped_column(
         String(32),

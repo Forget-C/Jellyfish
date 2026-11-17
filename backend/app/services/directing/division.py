@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import aliased
 
+from app.services.chapters.explanations import explanation_basis
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.workspace import ChapterSequences
 from app.core.contracts.directing.division import DivisionDraft, DivisionImpact, DivisionPreview, DivisionSave, DivisionSaved
@@ -59,7 +60,8 @@ class DivisionService(WorkspaceService):
             args = snapshot.get('run_args', {})
             if not isinstance(args, dict):
                 raise ValueError('历史分析资料不完整，不能载入保存')
-            if args.get('source_version') != draft.source_version or args.get('division_baseline') != {row.id: row.version for row in rows}:
+            if (args.get('source_version') != draft.source_version or args.get('division_baseline') != {row.id: row.version for row in rows}
+                    or args.get('source_explanations', []) != explanation_basis(chapter)['items']):
                 if not draft.history_reconfirmed:
                     raise RevisionConflict('分析期间原文或场次集合已变化，请重新分析或手动核对')
                 # 旧结果只通过显式核对进入当前草稿，仍保留原始任务来源。

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Space, Spin, Tag, message } from 'antd'
+import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Space, Spin, Tag, Select, message } from 'antd'
 import { flushSync } from 'react-dom'
 import {
   CloseCircleOutlined,
@@ -11,6 +11,8 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { ScriptProcessingService, StudioChaptersService } from '../../../../services/generated'
+import type { SourceExplanation } from '../../../../services/generated'
+import { SourceExplanationsEditor, sourceVersion } from './SourceExplanationsEditor'
 import type { ScriptConsistencyCheckResult } from './scriptConsistencyResult'
 import {
   CONSISTENCY_CHECK_RELATION_TYPE,
@@ -73,6 +75,25 @@ export function ChapterRawTextEditorModal({
   const [condensedText, setCondensedText] = useState('')
   const [savedRawText, setSavedRawText] = useState('')
   const [savedCondensedText, setSavedCondensedText] = useState('')
+  const [explanations, setExplanations] = useState<SourceExplanation[]>([])
+  const [basisVersion, setBasisVersion] = useState<string>()
+  const [savedExplanations, setSavedExplanations] = useState<SourceExplanation[]>([])
+  const [rawVersion, setRawVersion] = useState('')
+  const [explanationVersion, setExplanationVersion] = useState('')
+  const [decisions, setDecisions] = useState<Record<number, string>>({})
+  const [intent, setIntent] = useState<Record<number, string>>({})
+  const [repairPreview, setRepairPreview] = useState<{ text: string; source: string; explanationVersion?: string }>()
+  useEffect(() => {
+    let active = true
+    setRawVersion(''); setExplanationVersion('')
+    void sourceVersion(rawText).then(async version => {
+      const valid = explanations.filter(item => item.source_version === version)
+      const stable = JSON.stringify(valid.map(item => ({ ...(item.end == null ? {} : { end: item.end }), excerpt: item.excerpt ?? '', id: item.id, kind: item.kind ?? 'explanation', source_version: item.source_version, ...(item.start == null ? {} : { start: item.start }), text: item.text })))
+      const explanationHash = await sourceVersion(stable)
+      if (active) { setRawVersion(version); setExplanationVersion(explanationHash) }
+    })
+    return () => { active = false }
+  }, [rawText, explanations])
   const [consistencyResult, setConsistencyResult] = useState<ScriptConsistencyCheckResult | null>(null)
 
   const applyConsistencyTaskResult = useCallback(async (taskId: string) => {
@@ -81,11 +102,12 @@ export function ChapterRawTextEditorModal({
       failedFallbackMessage: '一致性检查失败',
       onSucceeded: (resultValue) => {
         setConsistencyResult(resultValue as ScriptConsistencyCheckResult)
+        setDecisions({}); setIntent({})
         const result = resultValue as Record<string, any>
         if (result?.has_issues) {
-          message.warning(`发现 ${Array.isArray(result.issues) ? result.issues.length : 0} 个角色混淆问题`)
+          message.warning(`发现 ${Array.isArray(result.issues) ? result.issues.length : 0} 个原文一致性问题`)
         } else {
-          message.success('未发现角色混淆问题')
+          message.success('未发现原文一致性问题')
         }
       },
       onFailed: (errorMessage) => {
@@ -127,14 +149,12 @@ export function ChapterRawTextEditorModal({
       failedFallbackMessage: '一键优化失败',
       onSucceeded: (resultValue) => {
         const result = resultValue as Record<string, any>
-        const optimized = String(result?.optimized_script_text ?? '').trim()
-        if (!optimized) {
+        const optimized = String(result?.optimized_script_text ?? '')
+        if (!optimized.trim()) {
           message.error('一键优化失败：未返回有效内容')
           return
         }
-        setRawText(optimized)
-        setMode('raw')
-        message.success('一键优化完成')
+        setRepairPreview({ text: optimized, source: String(result?.source_text ?? ''), explanationVersion: result?.explanation_version })
       },
       onFailed: (errorMessage) => {
         message.error(errorMessage)
@@ -211,6 +231,9 @@ export function ChapterRawTextEditorModal({
         const nextCondensed = data?.condensed_text ?? ''
         setRawText(nextRaw)
         setCondensedText(nextCondensed)
+        setBasisVersion(data.basis_version)
+        setExplanations(data.source_explanations ?? []); setSavedExplanations(data.source_explanations ?? [])
+        setRepairPreview(undefined)
         setSavedRawText(nextRaw)
         setSavedCondensedText(nextCondensed)
         setMode('raw')
@@ -273,7 +296,7 @@ export function ChapterRawTextEditorModal({
       await executeAsyncTaskCreate({
         request: () =>
           ScriptProcessingService.checkConsistencyAsyncApiV1ScriptProcessingCheckConsistencyAsyncPost({
-            requestBody: { script_text: scriptText, chapter_id: chapterId ?? null },
+            requestBody: { script_text: rawText, chapter_id: chapterId ?? null, source_explanations: explanations.filter(item => item.source_version === rawVersion) },
           }),
         trackTaskData: trackConsistencyTaskData,
         startedMessage: consistencyTaskCopy.startedMessage,
@@ -310,7 +333,7 @@ export function ChapterRawTextEditorModal({
       return
     }
     if (!consistencyResult) {
-      message.info('请先进行角色混淆检查')
+      message.info('请先进行原文一致性检查')
       return
     }
     if (notifyExistingTask(optimizeTask, {
@@ -319,6 +342,14 @@ export function ChapterRawTextEditorModal({
     })) {
       return
     }
+    if (consistencyResult.check_scope !== 'source_consistency' || consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) {
+      message.warning('检查依据已变化或为旧版检查，请重新检查'); return
+    }
+    if ((consistencyResult.issues ?? []).some((item, index) => decisions[index] === 'repair' && item.classification === 'ambiguity' && !intent[index]?.trim())) {
+      message.info('请先明确所选歧义的处理意见，或将其设为暂不确定'); return
+    }
+    const selected = (consistencyResult.issues ?? []).flatMap((item, index) => decisions[index] === 'repair' ? [{ ...item, resolution: 'repair', instruction: intent[index] ?? '' }] : [])
+    if (!selected.length) { message.info('请先选择已确认的原文异常'); return }
     setOptimizingScript(true)
     try {
       await executeAsyncTaskCreate({
@@ -326,8 +357,9 @@ export function ChapterRawTextEditorModal({
           ScriptProcessingService.optimizeScriptAsyncApiV1ScriptProcessingOptimizeScriptAsyncPost({
             requestBody: {
               chapter_id: chapterId ?? null,
-              script_text: scriptText,
-              consistency: consistencyResult as any,
+              script_text: rawText,
+              consistency: { ...consistencyResult, issues: selected },
+              source_explanations: explanations.filter(item => item.source_version === rawVersion),
             },
           }),
         trackTaskData: trackOptimizeTaskData,
@@ -426,7 +458,7 @@ export function ChapterRawTextEditorModal({
   }
 
   const rawChanged = rawText !== savedRawText
-  const hasUnsavedChanges = chapterTitle.trim() !== savedTitle || rawChanged || condensedText !== savedCondensedText
+  const hasUnsavedChanges = JSON.stringify(explanations) !== JSON.stringify(savedExplanations) || chapterTitle.trim() !== savedTitle || rawChanged || condensedText !== savedCondensedText
   const impact = rawChanged && !!sequenceCount
     ? `修改章节原文不会自动更新已有场次的划分和原文范围。本章已有 ${sequenceCount} 个场次，保存后需要重新核对。已有设计和素材保留，继续试拍前还需核对相关设计与计划依据。`
     : undefined
@@ -440,15 +472,19 @@ export function ChapterRawTextEditorModal({
     if (impact && !confirmed) { setConfirmRaw(rawText); return false }
     setSaving(true); setSaveError('')
     try {
-      await StudioChaptersService.updateChapterApiV1StudioChaptersChapterIdPatch({ chapterId, requestBody: {
+      const saved = await StudioChaptersService.updateChapterApiV1StudioChaptersChapterIdPatch({ chapterId, requestBody: {
+        expected_basis_version: basisVersion,
         ...(chapterTitle.trim() !== savedTitle ? { title: chapterTitle.trim() } : {}),
         ...(rawChanged ? { raw_text: rawText } : {}),
+        ...(JSON.stringify(explanations) !== JSON.stringify(savedExplanations) ? { source_explanations: explanations } : {}),
         ...(condensedText !== savedCondensedText ? { condensed_text: condensedText } : {}),
       } })
       flushSync(() => {
         setChapterTitle(chapterTitle.trim()); setSavedTitle(chapterTitle.trim())
         setRawText(rawText); setSavedRawText(rawText)
         setCondensedText(condensedText); setSavedCondensedText(condensedText)
+        setBasisVersion(saved.data?.basis_version)
+        setSavedExplanations(explanations)
         setConfirmRaw(undefined); setSaving(false)
         if (rawChanged && sequenceCount > 0) setNeedsReview(true)
       })
@@ -462,7 +498,7 @@ export function ChapterRawTextEditorModal({
     busy: saving || extracting || checkingConsistency || optimizingScript || !!simplifyTask || !!optimizeTask || !!consistencyTask,
     saveWarning: impact, save: () => handleSave(true), discard: () => {
       flushSync(() => {
-        setChapterTitle(savedTitle); setRawText(savedRawText); setCondensedText(savedCondensedText); setConfirmRaw(undefined)
+        setExplanations(savedExplanations); setChapterTitle(savedTitle); setRawText(savedRawText); setCondensedText(savedCondensedText); setConfirmRaw(undefined)
       })
     } })
   const handleRequestClose = () => guard(onClose)
@@ -508,7 +544,7 @@ export function ChapterRawTextEditorModal({
                 disabled={actionsLoading || !!consistencyTask}
                 onClick={() => void handleCheckConsistency()}
               >
-                {consistencyTask ? '检查中' : '角色混淆检查'}
+                {consistencyTask ? '检查中' : '原文一致性检查'}
               </Button>
               {consistencyTask ? (
                 <Button
@@ -640,10 +676,18 @@ export function ChapterRawTextEditorModal({
               rows={16}
               style={{ resize: 'none', background: '#fdfdfd' }}
             />
+            <SourceExplanationsEditor items={explanations} version={rawVersion} rawText={rawText} disabled={actionsLoading} onChange={setExplanations} />
+            {consistencyResult && (consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) && <Alert type="warning" message="检查结果已过期或为旧版检查，请重新检查后修复" />}
+            {repairPreview && <Card title="原文异常修复预览">
+              <p>修改前</p><pre style={{ whiteSpace: 'pre-wrap' }}>{repairPreview.source}</pre>
+              <p>修改后</p><pre style={{ whiteSpace: 'pre-wrap' }}>{repairPreview.text}</pre>
+              <Space><Button disabled={repairPreview.source !== rawText || repairPreview.explanationVersion !== explanationVersion} onClick={() => { setRawText(repairPreview.text); setRepairPreview(undefined) }}>应用修复稿</Button>
+              <Button onClick={() => setRepairPreview(undefined)}>放弃建议</Button></Space>
+            </Card>}
             {consistencyResult ? (
               <Card
                 size="small"
-                title="角色混淆检查结果"
+                title={consistencyResult.check_scope === 'source_consistency' ? '原文一致性检查结果' : '角色混淆检查结果（旧版）'}
                 extra={
                   <Space wrap>
                     <Tag color={consistencyResult.has_issues ? 'red' : 'green'}>
@@ -658,7 +702,7 @@ export function ChapterRawTextEditorModal({
                       disabled={actionsLoading || !!optimizeTask}
                       onClick={() => void handleOneClickOptimize()}
                     >
-                      {optimizeTask ? '优化中' : '一键优化'}
+                      {optimizeTask ? '生成中' : '生成修复建议'}
                     </Button>
                     {optimizeTask ? (
                       <Button
@@ -675,7 +719,7 @@ export function ChapterRawTextEditorModal({
                 }
               >
                 {consistencyIssues.length === 0 ? (
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未发现角色混淆问题" />
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未发现原文一致性问题" />
                 ) : (
                   <List
                     size="small"
@@ -688,6 +732,23 @@ export function ChapterRawTextEditorModal({
                             Issue {idx + 1}
                           </div>
                           <div className="text-sm">{it?.description}</div>
+                          <Tag>{({ contradiction: '明确矛盾', ambiguity: '待确认歧义', optional: '可选补充' } as Record<string, string>)[it.classification] ?? '待确认'}</Tag>
+                          {it.excerpt && <blockquote>{it.excerpt}</blockquote>}
+                          <Select aria-label={`问题${idx + 1}性质`} placeholder="确认问题性质" value={decisions[idx]} style={{ width: 210 }} onChange={value => {
+                              setDecisions(previous => ({ ...previous, [idx]: value }))
+                              setExplanations(previous => previous.filter(item => !(item.kind === 'normal' && item.excerpt === it.excerpt && item.source_version === rawVersion)))
+                              if (value === 'normal' && it.excerpt && rawVersion) setExplanations(previous => [...previous, { id: crypto.randomUUID(), kind: 'normal', excerpt: it.excerpt, text: '用户确认此处表述正常，无需处理。', source_version: rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
+                            }}
+                            options={[{ value: 'repair', label: '原文异常，需要修复' }, { value: 'explain', label: '正常表述，需要解释' }, { value: 'normal', label: '正常，无需处理' }, { value: 'unknown', label: '暂不确定' }]} />
+                          {(decisions[idx] === 'repair' || decisions[idx] === 'explain') && <>
+                            {!!it.candidates?.length && <Select aria-label={`问题${idx + 1}候选解释`} placeholder="选择解释或填写处理意见" style={{ width: '100%' }} options={it.candidates.map((text: string) => ({ value: text, label: text }))} onChange={value => setIntent(previous => ({ ...previous, [idx]: value }))} />}
+                            <Input.TextArea aria-label={`问题${idx + 1}处理意见`} placeholder="处理意见或原意解释；有多种解释时请明确意图" value={intent[idx] ?? ''} onChange={event => setIntent(previous => ({ ...previous, [idx]: event.target.value }))} />
+                          </>}
+                          {decisions[idx] === 'explain' && <Button disabled={!intent[idx]?.trim() || consistencyResult.source_version !== rawVersion} onClick={() => {
+                            setExplanations(previous => [...previous, { id: crypto.randomUUID(), excerpt: it.excerpt ?? '', text: intent[idx], source_version: !it.excerpt || rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
+                            setDecisions(previous => ({ ...previous, [idx]: 'normal' }))
+                          }}>确认并添加解释</Button>}
+
                           {it?.character_candidates?.length ? (
                             <div className="text-xs text-gray-500 mt-1">候选角色：{it.character_candidates.join('、')}</div>
                           ) : null}

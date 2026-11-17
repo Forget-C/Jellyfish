@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from difflib import SequenceMatcher
 from typing import Any
 
 from app.chains.agents import (
@@ -14,6 +15,7 @@ from app.chains.agents import (
     ScriptOptimizerAgent,
     ScriptSimplifierAgent,
 )
+from app.services.chapters.explanations import source_version, validate_explanations
 from app.schemas.skills.script_processing import (
     ScriptConsistencyCheckResult,
     ScriptOptimizationResult,
@@ -24,7 +26,15 @@ from app.schemas.skills.script_processing import (
 def _consistency(llm, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
     """执行 consistency 的冻结输入，只返回生成结果。"""
     agent = ConsistencyCheckerAgent(llm)
-    return agent.extract(script_text=str(run_args.get("script_text") or ""))
+    text = str(run_args.get("script_text") or "")
+    explanations = run_args.get('source_explanations') or []
+    validate_explanations(explanations, text)
+    valid = [item for item in explanations if item['source_version'] == source_version(text)]
+    result = agent.extract(script_text=text, explanations=json.dumps(valid, ensure_ascii=False))
+    result.check_scope = 'source_consistency'
+    result.source_version = source_version(text)
+    result.explanation_version = source_version(json.dumps(valid, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    return result
 
 
 def _character_portrait(llm, run_args: dict[str, Any]) -> Any:
@@ -66,10 +76,34 @@ def _costume_info(llm, run_args: dict[str, Any]) -> Any:
 def _optimize(llm, run_args: dict[str, Any]) -> ScriptOptimizationResult:
     """执行 optimize 的冻结输入，只返回生成结果。"""
     agent = ScriptOptimizerAgent(llm)
-    return agent.extract(
+    result = agent.extract(
         script_text=str(run_args.get("script_text") or ""),
         consistency_json=json.dumps(dict(run_args.get("consistency") or {}), ensure_ascii=False),
+        explanations=json.dumps(run_args.get("source_explanations") or [], ensure_ascii=False),
     )
+
+    consistency = run_args.get('consistency') or {}
+    source = run_args['script_text']
+    if consistency.get('check_scope') == 'source_consistency':
+        spans = []
+        for issue in consistency.get('issues', []):
+            excerpt = issue.get('excerpt', '')
+            if not excerpt or source.count(excerpt) != 1:
+                raise ValueError('修复问题须包含可唯一定位的原文摘录，请重新检查')
+            start = source.index(excerpt)
+            spans.append((start, start + len(excerpt)))
+        merged = []
+        for left, right in sorted(spans):
+            if merged and left <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(right, merged[-1][1]))
+            else:
+                merged.append((left, right))
+        for tag, start, end, _, _ in SequenceMatcher(None, source, result.optimized_script_text, autojunk=False).get_opcodes():
+            if tag != 'equal' and not any(left <= start <= end <= right for left, right in merged):
+                raise ValueError('修改涉及未选问题的原文，整批建议未采用')
+    result.source_text = source
+    result.explanation_version = consistency.get('explanation_version')
+    return result
 
 
 def _simplify(llm, run_args: dict[str, Any]) -> ScriptSimplificationResult:

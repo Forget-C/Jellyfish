@@ -174,3 +174,22 @@ async def test_basis_reports_current_reference_state_without_freezing_images(tmp
         unavailable = (await client.get(url)).json()['data']
         assert unavailable['objects'][0]['reference_state'] == 'unavailable'
         assert unavailable['token'] != before['token']
+
+@pytest.mark.asyncio
+async def test_canvas_freezes_confirmed_chapter_explanations(tmp_path):
+    from hashlib import sha256
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        item = {'kind': 'explanation', 'id': 'alias', 'excerpt': '兄弟', 'text': '兄弟是两位同学的称呼',
+                'source_version': sha256('兄弟在店中交谈'.encode()).hexdigest()}
+        response = await client.patch('/api/v1/studio/chapters/ch1', json={'source_explanations': [item]})
+        assert response.is_success, response.text
+        chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+        source = (await client.get(chapter)).json()['data']
+        response = await client.post(chapter + '/sequences', json={
+            'title': '解释场次', 'position': 0, 'source_version': source['source_version'],
+            'span': {'start': 0, 'end': 7}})
+        assert response.is_success, response.text
+        scene = response.json()['data']
+        response = await client.post(chapter + '/sequences/' + scene['id'] + '/canvases', json={'name': '解释依据'})
+        assert response.is_success, response.text
+        assert response.json()['data']['document']['fixed_source']['source_explanations'] == [item]

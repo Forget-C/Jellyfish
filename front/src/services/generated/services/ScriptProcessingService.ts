@@ -15,7 +15,7 @@ import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ScriptProcessingService {
     /**
-     * 异步检查角色混淆一致性（基于原文）
+     * 异步原文一致性检查
      * 创建一致性检查任务并立即返回 task_id；前端可通过任务状态接口轮询。
      * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
      * @throws ApiError

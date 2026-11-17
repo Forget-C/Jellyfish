@@ -1,6 +1,7 @@
 """为章节管理批量读取场次摘要，不加载画布文档或资产目录。"""
 
 from hashlib import sha256
+from app.services.chapters.explanations import explanation_basis, source_version as text_version
 
 from sqlalchemy import case, func, select
 
@@ -38,7 +39,8 @@ class WorkbenchManagementService(WorkspaceService):
             Sequence.source['version'].as_string().label('source_version'),
             func.substr(Sequence.source_text, 1, 160).label('source_excerpt'),
             case((prepared_digest.is_not(None), Sequence.source_text), else_='').label('prepared_source'),
-            prepared_digest.label('prepared_digest'), func.coalesce(count_objects, 0).label('object_count'),
+            prepared_digest.label('prepared_digest'),
+            Sequence.object_preparation['explanation_version'].as_string().label('explanation_version'), func.coalesce(count_objects, 0).label('object_count'),
             func.coalesce(canvas_counts.c.total, 0).label('canvas_count'),
         ).outerjoin(canvas_counts, canvas_counts.c.sequence_id == Sequence.id)
             .where(Sequence.chapter_id == chapter_id).order_by(Sequence.position, Sequence.id))).all()
@@ -50,8 +52,9 @@ class WorkbenchManagementService(WorkspaceService):
                 id=row.id, position=row.position, title=row.title, source_excerpt=row.source_excerpt,
                 source_changed=row.source_version != source_version,
                 object_count=row.object_count, canvas_count=row.canvas_count, has_object_preparation=prepared,
-                preparation_stale=prepared and row.prepared_digest != _source_digest(
-                    row.prepared_source, row.source_version, row.source_start),
+                preparation_stale=prepared and (row.prepared_digest != _source_digest(
+                    row.prepared_source, row.source_version, row.source_start) or
+                    (row.explanation_version or text_version('[]')) != explanation_basis(chapter)['version']),
                 object_task=tasks.get((row.id, OBJECT_EXTRACTION_KIND)),
                 storyboard_task=tasks.get((row.id, STORYBOARD_KIND)),
             )

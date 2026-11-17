@@ -20,6 +20,7 @@ from app.core.contracts.directing.instruction_basis import InstructionInputs
 from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE_REQUIREMENTS, SceneUnitDesignResult
 from app.core.contracts.directing.scene_objects import SceneObjectExtraction
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization
+from app.services.chapters.explanations import explanation_basis
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, validate_storyboard
 from app.services.directing.storyboard_scope import REQUIRED_SUBJECTS, SUBJECT_PORTS, organization_inputs, validate_organization
 from app.core.contracts.directing.scene_instruction import SceneInstructionResult, SceneInstructionScope
@@ -128,6 +129,8 @@ def generate_directing_result(kind: str, llm, args: dict):
                         '同时补齐摄影与受影响关系；保留有效原文事实、已有内容和用户约束，不得删除内容凑齐关系。')
     if args.get('instruction_scope'):
         instruction += '\n这是预先限定的正文局部修订。instruction_scope 的 start/end 是原 unit.instruction 的 Unicode 字符半开范围，只修改此范围，范围外逐字保留；仍返回完整正文 text，不只返回替换片段。'
+    if "source_explanations" in args:
+        instruction += "\nsource_explanations 是用户确认的原意解释，仅用于理解，不能冒充原文摘录、新增剧情或覆盖正文冲突；只采用适用于当前摘录的解释。解释 start/end 为整章 Unicode 字符半开范围，script_text 从 source_start 开始；不得把其他位置同名词的解释套到当前片段。kind=normal 表示用户确认的正常表述，不反复报为异常。"
     model_args = args
     if kind == 'directing_design' and args.get('scene_version_design'):
         model_args = {**args, 'design_protocol': scene_design_protocol()}
@@ -140,6 +143,7 @@ def generate_directing_result(kind: str, llm, args: dict):
         from app.services.directing.storyboard_assembly import storyboard_design_fields
         model_args = {'mode': args['mode'], 'script_text': args['script_text'],
                       'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
+                      'source_explanations': args.get('source_explanations', []), 'source_start': args.get('source_start'),
                       'supported_design_fields': storyboard_design_fields(),
                       'subject_card_types': sorted(SUBJECT_PORTS),
                       'required_subject_card_types': sorted(REQUIRED_SUBJECTS)}
@@ -410,6 +414,8 @@ class DirectingAIService(WorkspaceService):
             args['division_baseline'] = {row.id: row.version for row in members}
             chapter = await self.list_sequences(chapter_id)
             args.update(script_text=chapter.raw_text, chapter_id=chapter.chapter_id, source_version=chapter.source_version)
+        if kind == "directing_divide":
+            args["source_explanations"] = explanation_basis(await self.chapter(args['chapter_id']))["items"]
         if not args["script_text"].strip():
             raise ValueError("请先填写章节原文")
         if kind == "directing_design":

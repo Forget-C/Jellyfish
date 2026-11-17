@@ -243,3 +243,38 @@ def test_retired_synchronous_analysis_routes_are_absent():
         for name in ('check-consistency', 'analyze-character-portrait', 'analyze-prop-info', 'analyze-scene-info', 'analyze-costume-info')
     }
     assert retired.isdisjoint(app.openapi()['paths'])
+
+def test_optimize_rejects_expired_check(client):
+    app.dependency_overrides[get_db] = _override_db()
+    try:
+        response = client.post('/api/v1/script-processing/optimize-script-async', json={
+            'chapter_id': 'chapter-1', 'script_text': '新正文',
+            'consistency': {'check_scope': 'source_consistency', 'source_version': 'old', 'issues': []}})
+        assert response.status_code == 409
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_optimize_requires_new_check_scope(client):
+    app.dependency_overrides[get_db] = _override_db()
+    try:
+        response = client.post('/api/v1/script-processing/optimize-script-async', json={
+            'chapter_id': 'chapter-1', 'script_text': '原文',
+            'consistency': {'check_scope': 'character_confusion', 'issues': []}})
+        assert response.status_code == 409
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_optimize_rejects_malformed_issue_selection(client):
+    from hashlib import sha256
+    app.dependency_overrides[get_db] = _override_db()
+    try:
+        response = client.post('/api/v1/script-processing/optimize-script-async', json={
+            'chapter_id': 'chapter-1', 'script_text': '原文',
+            'consistency': {'check_scope': 'source_consistency',
+                            'source_version': sha256('原文'.encode()).hexdigest(),
+                            'explanation_version': sha256(b'[]').hexdigest(), 'issues': ['invalid']}})
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()

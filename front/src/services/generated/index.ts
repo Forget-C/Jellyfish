@@ -735,6 +735,7 @@ export type { SoundDesign_Output } from './models/SoundDesign_Output';
 export type { SoundDesignFields } from './models/SoundDesignFields';
 export type { Source } from './models/Source';
 export type { SourceCanvasNode } from './models/SourceCanvasNode';
+export type { SourceExplanation } from './models/SourceExplanation';
 export type { SourceRead } from './models/SourceRead';
 export type { SourceResolveRequest } from './models/SourceResolveRequest';
 export type { SourceSpan } from './models/SourceSpan';

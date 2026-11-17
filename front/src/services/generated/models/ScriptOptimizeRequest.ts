@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { SourceExplanation } from './SourceExplanation';
 /**
  * 剧本优化请求（基于一致性检查结果）。
  */
@@ -18,9 +19,9 @@ export type ScriptOptimizeRequest = {
      * 原文剧本文本
      */
     script_text: string;
+    source_explanations?: (Array<SourceExplanation> | null);
     /**
      * 一致性检查输出（ScriptConsistencyCheckResult 序列化）
      */
     consistency: Record<string, any>;
 };
-
