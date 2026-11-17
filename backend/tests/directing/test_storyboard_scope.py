@@ -4,6 +4,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
+
 import pytest
 
 from app.models.llm import Model, Provider
@@ -67,6 +69,8 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
@@ -239,6 +243,8 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)

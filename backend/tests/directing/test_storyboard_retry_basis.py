@@ -4,6 +4,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
+
 import pytest
 
 from app.models.llm import Model, Provider
@@ -23,6 +25,8 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)

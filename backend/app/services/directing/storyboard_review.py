@@ -10,7 +10,7 @@ from app.core.contracts.task import TaskStatus
 from app.services.generation_canvas.errors import diagnostic
 
 
-def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str, *, include_output: bool = False):
+def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str, *, include_output: bool = False, response_label: str = '审查响应'):
     """One provider call, strict JSON and a stable failure message."""
     from app.services.directing.ai import DirectingOutputError
     response = llm.invoke([
@@ -48,6 +48,9 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         '冲突必须引用具体字段原文并解释为何无法同时满足；只因描述含糊、空间基准不明或可能省略扭身动作时标 insufficient_basis。不得因修正困难把真实冲突降级。'
         '没有问题返回空 issues。只返回符合以下结构的 JSON：'
     )
+    if inputs.get('video_prompts'):
+        instruction += ('同时核对 video_prompts 的实际正文、真实引用与前后附加设计，正文遗漏、对象越界或与设计冲突须报告；'
+                        '提示词自身有误而设计正确时，使用 prompt_unit_ids 列出 video_prompts 的 card_id，不得伪造设计字段 repair_target。')
     if inputs.get('saved_canvas_check'):
         instruction += ('本次检查已保存画布，repair_targets.design_id 必须是 cards 中的实际卡片 ID，'
                         '包括镜头卡自身。shot_id 使用 shots 中的逻辑 id，共享设计留空。'
@@ -63,7 +66,10 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
                                            '分镜审查返回无效，请重试审查', include_output=True)
     known = {shot['id'] for shot in inputs['storyboard_draft']['shots']}
     errors = []
+    prompt_ids = {row['card_id'] for row in inputs.get('video_prompts', [])}
     for index, issue in enumerate(report.issues):
+        if len(set(issue.prompt_unit_ids)) != len(issue.prompt_unit_ids) or not set(issue.prompt_unit_ids) <= prompt_ids:
+            errors.append(f'issues.{index}.prompt_unit_ids 包含无效或重复的视频单元')
         unknown = sorted(set(issue.shot_ids) - known)
         repeated = sorted({key for key in issue.shot_ids if issue.shot_ids.count(key) > 1})
         if unknown:

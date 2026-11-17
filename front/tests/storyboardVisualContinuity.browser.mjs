@@ -69,6 +69,7 @@ try {
   const scene = `${chapterApi}/sequences/${sequence.id}`
   await page.goto(`${projectUrl}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=objects`)
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
   const task = await request(scene + '/storyboards', 'POST', { request_id: randomUUID(), name: '视觉承接',
     mode: 'faithful', production_model_id: 'story-video-model', pending_modality: 'video' })
@@ -92,7 +93,7 @@ try {
   await dialog.getByRole('button', { name: '取消', exact: true }).click()
   await model.getByRole('button', { name: '生成视频', exact: true }).click()
   const preview = page.getByRole('dialog', { name: '运行预检', exact: true })
-  assert.equal(await preview.getByRole('button', { name: '确认执行' }).isEnabled(), true)
+  await poll(() => preview.getByRole('button', { name: '确认执行' }).isEnabled(), Boolean, 'video precheck was not ready: ' + await preview.textContent())
   await closePrecheck(page)
   const run = async (id, targetCanvas = canvas, expectedStatus = 'succeeded') => {
     const checked = await request(targetCanvas + '/precheck', 'POST', { card_id: id })
@@ -225,9 +226,15 @@ try {
   await updateNotice.waitFor()
   const openReextract = async (revision) => {
     await request(controls, 'POST', { visual_continuity_revision: revision })
-    await page.getByRole('button', { name: '重新提取', exact: true }).click()
-    await page.getByRole('dialog', { name: '重新提取', exact: true })
-      .getByRole('button', { name: '开始提取', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: '重新提取', exact: true }).count(), 0)
+    // Seed a legacy operation through the public API; the canvas offers no new extraction action.
+    const resumed = await request(`${scene}/canvases/${task.canvas_id}/storyboards`, 'POST', {
+      request_id: randomUUID(), production_model_id: 'story-video-model', pending_modality: 'video', mode: 'faithful',
+    })
+    const finished = await poll(() => request(scene + '/storyboards/' + resumed.task_id),
+      item => ['succeeded', 'failed'].includes(item.status), 'legacy extraction did not finish')
+    assert.equal(finished.status, 'succeeded', JSON.stringify(finished))
+    await page.goto(`${projectUrl}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard&canvas=${task.canvas_id}&storyboardTask=${resumed.task_id}`)
     await openStoryboardReview(page)
     const diff = page.getByRole('dialog', { name: '处理分镜提取结果', exact: true })
     await diff.getByText('人工新增的卡片会保留。', { exact: false }).waitFor()

@@ -53,6 +53,9 @@ class ControlledModel:
 
     def invoke(self, messages):
         """为场次准备和分镜浏览器旅程替换外部模型输出。"""
+        from tests.directing.storyboard_prompt_fixture import video_prompt_response
+        if response := video_prompt_response(messages):
+            return response
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)

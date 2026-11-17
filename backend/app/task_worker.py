@@ -32,6 +32,7 @@ from app.services.directing.scene_export_execution import execute_scene_export
 from app.services.directing.scene_export_render import render_scene_cut
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
+from app.services.directing.storyboard_prompt import prompt_units
 from app.services.directing.storyboard_repair import apply_repair, merge_recheck, repair_fields, repair_storyboard
 from app.services.directing.storyboard_review import review_storyboard
 from app.services.directing.storyboard_review_basis import canvas_review_evidence, canvas_review_fingerprint
@@ -440,10 +441,12 @@ class TaskWorker:
             stage = 'rechecking_storyboard' if repair else 'repairing_storyboard' if targeted else 'reviewing_storyboard'
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, stage):
                 return
+        checkpoint['prompt_repair'] = prior.get('prompt_repair', {})
+        checkpoint = await self._write_storyboard_prompts(task, llm, stopped, checkpoint, prior)
         review = (StoryboardReviewReport.model_validate(targeted['report']) if targeted and not repair
                   else await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint))
         may_repair = (not source_id or targeted) and (targeted or not task.input_snapshot.get('review_exact_plan'))
-        if not repair and may_repair and review.state == 'conflict' and args['mode'] == 'complete':
+        if not repair and may_repair and review.state == 'conflict' and (args['mode'] == 'complete' or any(issue.prompt_unit_ids for issue in review.issues)):
             selected = StoryboardReviewReport.model_validate({'issues': [targeted['issue']]}) if targeted else review
             checkpoint, review = await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review, selected)
             if checkpoint is None:
@@ -461,10 +464,61 @@ class TaskWorker:
                 candidate['reviewed_plan_fingerprint'] = checkpoint['reviewed_plan_fingerprint']
             await TaskService(db).finish(task.id, result={**candidate, 'review_state': review.state,
                 'review': review.model_dump(mode='json'),
+                'prompt_inputs': checkpoint.get('prompt_inputs', {}), 'prompt_state': checkpoint.get('prompt_state'),
+                'prompt_repair': checkpoint.get('prompt_repair', {}),
                 'review_repair': checkpoint.get('review_repair'),
                 'repair_details': checkpoint.get('repair_details'),
                 'structure_history': checkpoint.get('structure_history')})
             await db.commit()
+
+    async def _write_storyboard_prompts(self, task, llm, stopped, checkpoint, prior):
+        """Persist each completed unit before proceeding; retry never repeats valid writing."""
+        from app.services.directing.storyboard_prompt import writing_inputs, input_identity, write_video_prompt, apply_video_prompt
+        from app.schemas.generation_canvas import VideoModelCard
+        if not task.input_snapshot.get('video_prompt_version'):
+            return checkpoint
+        document = CanvasDocument.model_validate(checkpoint['document'])
+        saved_cards = {card['id']: card for card in prior.get('document', {}).get('cards', [])}
+        identities = dict(prior.get('prompt_inputs', {}))
+        checkpoint['prompt_inputs'] = {}
+        for card in document.cards:
+            if not isinstance(card, VideoModelCard):
+                continue
+            inputs = writing_inputs(document, card, task.input_snapshot['run_args'])
+            if findings := checkpoint.get('prompt_repair', {}).get(card.id):
+                inputs['review_findings'] = findings
+            previous = saved_cards.get(card.id, {})
+            identity = input_identity(inputs, previous.get('generated_prompt'))
+            if identities.get(card.id) == identity and previous.get('generated_prompt'):
+                card.prompt = VideoModelCard.model_validate(previous).prompt
+                card.generated_prompt = VideoModelCard.model_validate(previous).generated_prompt
+            elif not card.generated_prompt:
+                checkpoint['prompt_state'] = 'pending'
+                checkpoint['document'] = document.model_dump(mode='json')
+                async with self.sessions() as db:
+                    if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'writing_video_prompts'):
+                        raise DirectingOutputError('任务已取消')
+                result = await self._run_script(task, llm, inputs, stopped, execute=write_video_prompt)
+                apply_video_prompt(card, result)
+            checkpoint['prompt_inputs'][card.id] = input_identity(inputs, card.generated_prompt.model_dump(mode='json'))
+            checkpoint['document'] = document.model_dump(mode='json')
+            async with self.sessions() as db:
+                if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'writing_video_prompts'):
+                    raise DirectingOutputError('任务已取消')
+        checkpoint['prompt_state'] = 'complete'
+        if saved := task.input_snapshot.get('review_current_document'):
+            from app.services.directing.scene_storyboard import SceneStoryboardService
+            async with self.sessions() as db:
+                planned, _ = await SceneStoryboardService(db, task.project_id).plan_extraction(task,
+                    CanvasDocument.model_validate(saved), document,
+                    StoryboardApplication(expected_revision=checkpoint['base_revision'],
+                        overwrite_card_ids=task.input_snapshot.get('review_overwrite_card_ids', [])))
+                checkpoint['effective_canvas'] = canvas_review_evidence(planned)
+                checkpoint['reviewed_plan_fingerprint'] = canvas_review_fingerprint(planned)
+        async with self.sessions() as db:
+            if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'reviewing_storyboard'):
+                raise DirectingOutputError('任务已取消')
+        return checkpoint
 
     async def _saved_storyboard_check(self, task: Task, llm, stopped: Event) -> None:
         """Inspect a frozen saved design, optionally applying one requested patch to its candidate only."""
@@ -575,6 +629,7 @@ class TaskWorker:
         return {'script_text': args['script_text'], 'mode': args['mode'],
                 'objects': [{key: item[key] for key in ('id', 'kind', 'name', 'excerpt')} for item in args['objects']],
                 **({'effective_canvas': checkpoint['effective_canvas']} if 'effective_canvas' in checkpoint else {}),
+                'video_prompts': prompt_units(checkpoint),
                 'storyboard_draft': checkpoint['review_draft']}
 
     async def _review_storyboard_checkpoint(self, task, llm, stopped, checkpoint):
@@ -605,10 +660,34 @@ class TaskWorker:
 
     async def _repair_storyboard_checkpoint(self, task, llm, stopped, generated, checkpoint, review, selected):
         """Spend the single automatic attempt before sending it, then recheck the valid change."""
+        prompt_ids = {unit for issue in selected.issues for unit in issue.prompt_unit_ids}
+        if prompt_ids and (task.input_snapshot['run_args']['mode'] != 'complete' or not any(issue.repair_targets for issue in selected.issues)):
+            from copy import deepcopy
+            prior = deepcopy(checkpoint)
+            checkpoint = deepcopy(checkpoint)
+            known = {card['id'] for card in checkpoint['document']['cards'] if card.get('generated_prompt')}
+            if not prompt_ids <= known:
+                raise DirectingOutputError('审查引用了不存在的视频提示词单元')
+            for card in checkpoint['document']['cards']:
+                if card['id'] in prompt_ids:
+                    card['generated_prompt'] = None
+                    prior.get('prompt_inputs', {}).pop(card['id'], None)
+            checkpoint['prompt_repair'] = {**checkpoint.get('prompt_repair', {}),
+                **{unit: selected.model_dump(mode='json') for unit in prompt_ids}}
+            checkpoint['review_repair'] = {'report': review.model_dump(mode='json'),
+                'recheck_shot_ids': list(dict.fromkeys(shot for issue in selected.issues for shot in issue.shot_ids))}
+            checkpoint['repair_details'] = {'status': 'applied', 'reason': '正在修正提示词，原设计保持不变。',
+                'before_review': review.model_dump(mode='json'), 'changes': []}
+            checkpoint = await self._write_storyboard_prompts(task, llm, stopped, checkpoint, prior)
+            return checkpoint, await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
+        prior_prompts = checkpoint
         async with self.sessions() as db:
             protected = await self._storyboard_protected_designs(db, task)
             reasons = []
             allowed = repair_fields(generated, selected, protected, reasons)
+            if not allowed and prompt_ids:
+                prompt_selection = selected.model_copy(update={'issues': [issue.model_copy(update={'repair_targets': []}) for issue in selected.issues if issue.prompt_unit_ids]})
+                return await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review, prompt_selection)
             if not allowed:
                 reason = '；'.join(dict.fromkeys(reasons)) or '审查未提供可安全修改的目标字段'
                 checkpoint['repair_details'] = {'status': 'unavailable', 'reason': reason,
@@ -638,6 +717,7 @@ class TaskWorker:
                     reason='修正包含越界或重复字段，整批修改未采用。' if invalid else '模型未返回有效变化，原草案已保留。')
                 return checkpoint, review
             validate_storyboard(repaired, task.input_snapshot['run_args'])
+            scope = list(dict.fromkeys([*scope, *(shot for issue in selected.issues if issue.prompt_unit_ids for shot in issue.shot_ids)]))
             repair = {**repair, 'recheck_shot_ids': scope}
             details = {**checkpoint['repair_details'], 'status': 'applied', 'reason': '修正已通过结构校验，仍需复查。', 'changes': changes}
             history = checkpoint.get('structure_history')
@@ -647,6 +727,10 @@ class TaskWorker:
             checkpoint['repair_details'] = details
             if not await self._save_storyboard_checkpoint(db, task, checkpoint, 'rechecking_storyboard'):
                 return None, review
+        checkpoint['prompt_repair'] = {**prior_prompts.get('prompt_repair', {}),
+            **{unit: selected.model_dump(mode='json') for unit in prompt_ids}}
+        prior_prompts = {**prior_prompts, 'prompt_inputs': {key: value for key, value in prior_prompts.get('prompt_inputs', {}).items() if key not in prompt_ids}}
+        checkpoint = await self._write_storyboard_prompts(task, llm, stopped, checkpoint, prior_prompts)
         return checkpoint, await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
 
     def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> ChatOpenAI:

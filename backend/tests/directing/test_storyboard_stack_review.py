@@ -4,6 +4,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
+
 import pytest
 
 from app.models.llm import Model, Provider
@@ -28,6 +30,8 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
             pass
 
         def invoke(self, _messages):
+            if response := video_prompt_response(_messages):
+                return response
             if 'storyboard_draft' in json.loads(_messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps({'shots': shots}, ensure_ascii=False))

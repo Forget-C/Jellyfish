@@ -20,6 +20,7 @@ function pendingSubmission(key: string): Submission | undefined {
 
 function taskLabel(task: StoryboardTaskSummary) {
   if (task.status === 'queued') return '分镜任务排队中'
+  if (task.stage === 'writing_video_prompts') return '正在编写视频提示词'
   if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
   if (task.stage === 'repairing_storyboard') return '正在定向修正分镜'
   if (task.stage === 'rechecking_storyboard') return '正在复核分镜连续性'
@@ -141,13 +142,6 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
     return () => { active = false; clearTimeout(timer) }
   }, [projectId, chapterId, sequenceId, taskId, polling, navigationKey])
 
-  const start = () => {
-    if (polling) { setWaiting(true); return }
-    if (pending) { setDraft(pending.body); return }
-    setDraft({ request_id: crypto.randomUUID(), mode: 'complete',
-      production_model_id: target.productionModelId, pending_modality: target.pendingModality })
-    setError('')
-  }
   const submit = async (submission: Submission, follow = false) => {
     if (!editable || sending.current) return
     try {
@@ -206,7 +200,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   const failed = task?.status === 'failed' || task?.status === 'cancelled'
   return <>
     <Space wrap>
-      <Button variant="primary" onClick={start} disabled={!editable}>{action}</Button>
+
       {!open && task && task.task_id !== target.appliedTaskId && <span role="status">{taskLabel(task)}</span>}
       {!open && task?.review_state === 'incomplete' &&
         <Button onClick={() => onReviewRetry(task.task_id)}>前往重试审查</Button>}

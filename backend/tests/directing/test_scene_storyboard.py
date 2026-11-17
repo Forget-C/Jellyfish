@@ -5,6 +5,8 @@ import json
 from copy import deepcopy
 from types import SimpleNamespace
 
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
+
 import pytest
 
 from app.models.llm import Model, Provider
@@ -36,6 +38,8 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             calls.append(str(messages))
@@ -198,6 +202,8 @@ async def test_storyboard_repairs_the_invalid_design_subject(tmp_path, monkeypat
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             calls.append(messages[-1].content)
@@ -280,6 +286,8 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             import httpx
@@ -362,6 +370,8 @@ async def test_reextract_requires_confirmed_revised_scene_and_undo_restores_sour
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             excerpt = '小雨关门。' if '小雨关门。' in str(messages) else old

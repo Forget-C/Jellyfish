@@ -225,6 +225,7 @@ class StoryboardReviewIssue(Contract):
     shot_ids: list[Identity] = Field(min_length=1, max_length=30)
     requirements: Text = Field(max_length=1200)
     suggestion: Text = Field(max_length=1200)
+    prompt_unit_ids: list[Identity] = Field(default_factory=list, max_length=30)
     repair_targets: list[StoryboardRepairTarget] = Field(default_factory=list, max_length=60)
 
 
@@ -357,6 +358,7 @@ class StoryboardRetryBasis(Contract):
     production_model_id: Identity | None = None
     production_model_name: str | None = None
     pending_modality: Literal['image', 'video']
+    prompt_only: bool = False
     review_only: bool = False
     review_basis_changed: bool = False
     review_diff: "StoryboardDiff | None" = None
