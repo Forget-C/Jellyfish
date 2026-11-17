@@ -102,8 +102,8 @@ async def persist_check_report(db: AsyncSession, canvas_id: str, report: CanvasC
 class CanvasChecks:
     """与画布保存使用相同项目边界，规则执行与报告写入处于同一事务。"""
 
-    def __init__(self, db: AsyncSession, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db: AsyncSession, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
         self.store = CanvasStore(db, project_id)
         self.current = CanvasCurrentState(db, project_id)
 

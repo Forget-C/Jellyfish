@@ -46,7 +46,7 @@ class FileUsageRead(BaseModel):
 
     id: int
     file_id: str
-    project_id: str
+    project_id: str | None
     chapter_id: str | None
 
     usage_kind: str

@@ -322,7 +322,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     if (cardMenuId && !cards.some(card => card.id === cardMenuId) && !resultsById.has(cardMenuId)) setCardMenuId(undefined)
   }, [cards, cardMenuId, resultsById])
-  const layoutKey = `jellyfish:generation-layout:${document.project_id}:${document.id}`
+  const layoutKey = `jellyfish:generation-layout:${(document.project_id || '')}:${document.id}`
   const cachedResultIds = retainedResultIds(cards, readStoredGraphView(`${layoutKey}:view:canvas`)?.positions || {})
   const visibleSourceConnections = visibleSourceEdges(document).filter(edge =>
     !(stackFor(edge.source_card) && stackFor(edge.source_card)?.id === stackFor(edge.target_card)?.id)
@@ -526,7 +526,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [cancelGroupDrag, movement])
   historicalPositions.current = { ...historicalPositions.current, ...layout.view.positions }
   retainedPositions.current = layout.view.positions
-  const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
+  const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${(document.project_id || '')}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
   const creationView = useRef<{ cardId: string; autoPlace: boolean; transform: typeof layout.view.transform }>()
   const pastedView = useRef<{ ids: string[]; origin: { x: number; y: number }; transform: typeof layout.view.transform }>()
   useEffect(() => {
@@ -614,7 +614,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     let active = true
     setCapabilities({}); setCapabilityErrors({})
     for (const modelId of new Set(modelIds.split('|').filter(Boolean))) {
-      Canvases.canvasModelCapability({ projectId: document.project_id, canvasId: document.id, modelId }).then(response => {
+      Canvases.canvasModelCapability({ projectId: (document.project_id || ''), canvasId: document.id, modelId }).then(response => {
         if (active && response.data) setCapabilities(previous => ({ ...previous, [modelId]: response.data! }))
       }).catch(() => { if (active) setCapabilityErrors(previous => ({ ...previous, [modelId]: '模型能力读取失败，原配置和连接已保留' })) })
     }
@@ -647,7 +647,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     // Resolve the model before binding references. The latest card preserves edits made while loading.
     const token = Symbol(next.id)
     choices.set(next.id, token)
-    void Canvases.canvasModelCapability({ projectId: current.project_id, canvasId: current.id, modelId }).then(response => {
+    void Canvases.canvasModelCapability({ projectId: (current.project_id || ''), canvasId: current.id, modelId }).then(response => {
       if (choices.get(next.id) !== token || currentReadonly.current) return
       const document = latest.current
       const previous = document.cards?.find(card => card.id === next.id)
@@ -684,7 +684,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const modelId = card.model_id || availableDefaultModel(card, defaults?.settings?.default_video_model_id, defaults?.models)
       if (!modelId) { configure(); return }
       const resolved = capabilities[modelId] || (await Canvases.canvasModelCapability({
-        projectId: document.project_id, canvasId: document.id, modelId,
+        projectId: (document.project_id || ''), canvasId: document.id, modelId,
       })).data
       const current = liveVideo()
       if (!live() || !current) return
@@ -850,14 +850,18 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const mounted=useRef(true)
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const pasteCards = async (clipboard: CardClipboard | undefined, position?: { x:number; y:number }) => {
-    if (readonly || !clipboard || clipboard.projectId !== document.project_id || clipboard.cards.some(card => copyRestriction(card))) return
+    if (readonly || !clipboard || clipboard.projectId !== (document.project_id || '') || clipboard.cards.some(card => copyRestriction(card))) return
+    if (clipboard.cards.some(card => !catalog.cards.some(definition => definition.type === card.type))) {
+      setReason('无法粘贴：包含当前画布不支持的分镜专属卡片')
+      return
+    }
     if(pastePending.current)return
     pastePending.current=true
     try {
       const fileIds=clipboard.cards.flatMap(card=>'file_id' in card && card.file_id ? [card.file_id] : 'image_binding' in card && card.image_binding?.file_id ? [card.image_binding.file_id] : [])
       await Promise.all([...new Set(fileIds)].map(async fileId=>{
         const {data}=await StudioFilesService.getFileDetailApiV1StudioFilesFileIdGet({fileId})
-        if(!data || data.deleted || !data.usages?.some(usage=>usage.project_id===document.project_id))throw new Error('文件不可用或不属于当前项目')
+        if(!data || data.deleted || (document.project_id || '') && !data.usages?.some(usage=>(usage.project_id || '')===(document.project_id || '')))throw new Error('文件不可用或不属于当前项目')
       }))
     } catch {setReason('无法粘贴：媒体不可用或项目归属不匹配');pastePending.current=false;return}
     pastePending.current=false
@@ -893,7 +897,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const targets = entries.flatMap(({ card }) => card ? [card] : [])
     const reason = entries.find(entry => entry.reason)?.reason
     if (!targets.length || reason) {setReason(reason || '请选择卡片');return}
-    const value:CardClipboard={schema:1,projectId:document.project_id,cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
+    const value:CardClipboard={schema:1,projectId:(document.project_id || ''),cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
     if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
     else try {writeCardClipboard(value);setReason('已复制，可在画布粘贴')} catch {setReason('卡片剪贴板保存失败，请重试')}
   }
@@ -922,7 +926,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const key=event.key.toLowerCase()
     if(!['c','v','d'].includes(key))return
     event.preventDefault();event.stopImmediatePropagation()
-    if(key==='v')void pasteCards(readCardClipboard(document.project_id));else copyCards(selected,key==='d')
+    if(key==='v')void pasteCards(readCardClipboard((document.project_id || '')));else copyCards(selected,key==='d')
   }
   useEffect(()=>{const handler=(event:KeyboardEvent)=>clipboardKey.current?.(event);window.addEventListener('keydown',handler,true);return()=>window.removeEventListener('keydown',handler,true)},[])
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
@@ -1096,7 +1100,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (!captured) { setReason('当前正式结果不可固定'); return }
     detachPending.current = true
     setDetaching(true)
-    const { id: canvasId, project_id: projectId } = latest.current
+    const { id: canvasId } = latest.current
+    const projectId = latest.current.project_id || ''
     try {
       const response = await Canvases.canvasOutputContent({ projectId, canvasId, ...captured })
       if (!container.current || currentReadonly.current || latest.current.id !== canvasId) return
@@ -1330,7 +1335,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {control?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的正文片段已不可用。</div>}
         {designDestination?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的设计字段、运镜阶段或引用已不可用。</div>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={detailReadonly}><fieldset disabled={detailReadonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || !!source && detailCard.type === 'content.basis' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={targetField} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={sourceStack ? undefined : modelSources(detailCard)} disabled={detailReadonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || !!source || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !detailReadonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={detailReadonly}><fieldset disabled={detailReadonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || !!source && detailCard.type === 'content.basis' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={targetField} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={sourceStack ? undefined : modelSources(detailCard)} disabled={detailReadonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || !!source || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !detailReadonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={(document.project_id || '')} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           automaticCheckRunId={automaticCheckRunId} capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={sourceStack ? undefined : references(detailCard)} disabled={detailReadonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={sourceStack || runtime?.disabled} onPrecheck={sourceStack ? undefined : () => runtime?.precheck(detailCard.id)} sourceActions={sourceStack ? undefined : modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
       </EditorContainer></AssociationInspectionContext.Provider>
   }
@@ -1370,7 +1375,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {label:'删除',danger:true,reason:readonly ? '当前只读' : contextMenu.ids.some(id => fixedCanvasSource(document, id)) ? '固定原文不可删除' : undefined,run:()=>removeCards(contextMenu.ids)},
     ] : [
       {label:'新建节点', reason:readonly ? '当前只读' : undefined, run:()=>{}},
-      {label:'粘贴', reason:readonly ? '当前只读' : !readCardClipboard(document.project_id) ? '剪贴板没有卡片' : undefined, run:()=>{const box=viewport.surface.current!.getBoundingClientRect();pasteCards(readCardClipboard(document.project_id),{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale})}},
+      {label:'粘贴', reason:readonly ? '当前只读' : !readCardClipboard((document.project_id || '')) ? '剪贴板没有卡片' : undefined, run:()=>{const box=viewport.surface.current!.getBoundingClientRect();pasteCards(readCardClipboard((document.project_id || '')),{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale})}},
       {label:'撤销',reason:readonly ? '当前只读' : !history?.canUndo ? '没有可撤销操作' : undefined, run:()=>history?.undo()},
     ]} onAdd={(type, entry) => {
       const box=viewport.surface.current!.getBoundingClientRect()
@@ -1412,7 +1417,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {uploadTextCard && <TextContentEditor card={uploadTextCard} disabled={readonly} onChange={next => edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })} />}
     </Modal>
     <Modal title={cards.some(card => card.id === detailId && isReferenceDesign(card)) ? "添加参考素材" : "上传模型来源"} open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
-      {uploadSourceCard && <MediaContentEditor key={uploadSourceCard.id} initialLibrary={uploadLibrary} card={uploadSourceCard} projectId={document.project_id} disabled={readonly} onChange={next => {
+      {uploadSourceCard && <MediaContentEditor key={uploadSourceCard.id} initialLibrary={uploadLibrary} card={uploadSourceCard} projectId={(document.project_id || '')} disabled={readonly} onChange={next => {
         if ((latest.current.cards || []).some(card => card.id === next.id)) edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })
       }} />}
     </Modal>
@@ -1752,7 +1757,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (card.type !== 'review.check') return cardNode
           const observedTarget = edges.find(edge => edge.target_card === card.id && edge.target_port === 'check_basis')?.source_card
           const observedNode = observedTarget ? runtime?.nodes[observedTarget] : undefined
-          return <CheckCardSession key={`${document.id}:${card.id}`} card={card} document={document} projectId={document.project_id}
+          return <CheckCardSession key={`${document.id}:${card.id}`} card={card} document={document} projectId={(document.project_id || '')}
             onChange={updateCard} savedCard={savedDocument?.cards?.find(row => row.id === card.id)} savedRevision={savedRevision}
             documentPending={!!editingStatus} disabled={readonly} editorOpen={detailId === card.id} models={models} modelOutputs={runtime?.outputs}
             reportTarget={diagnosticTarget?.cardId === card.id ? diagnosticTarget : undefined}
@@ -1802,7 +1807,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
 
 export function GenerationCanvasGraph(props: ComponentProps<typeof GenerationCanvasGraphContent>) {
-  return <CanvasCatalogProvider key={`${props.document.project_id}:${props.document.id}`} projectId={props.document.project_id} canvasId={props.document.id} onReady={props.onCatalogReady}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
+  return <CanvasCatalogProvider key={`${(props.document.project_id || '')}:${props.document.id}`} projectId={(props.document.project_id || '')} canvasId={props.document.id} onReady={props.onCatalogReady}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
 }
 
 function DesignReferenceBoundary({ children, ...props }: ComponentProps<typeof DesignReferenceEditor>) {

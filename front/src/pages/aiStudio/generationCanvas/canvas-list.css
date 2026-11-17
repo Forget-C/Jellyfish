@@ -1,0 +1,8 @@
+.canvas-list-scroll { padding: 0 var(--app-page-gutter) 24px; }
+.canvas-list-grid { display: grid; grid-template-columns: repeat(var(--app-object-card-columns, 1), minmax(0, 1fr)); gap: 20px; margin-bottom: 24px; }
+.canvas-list-card { min-width: 0; border: 1px solid var(--app-border); border-radius: 12px; padding: 16px; background: var(--app-panel, #fff); }
+.canvas-list-link { text-decoration: none; display: block; color: inherit; margin-bottom: 16px; }
+.canvas-list-link h2 { font-size: 16px; margin: 12px 0 6px; overflow-wrap: anywhere; }
+.canvas-list-link time { color: var(--app-muted); font-size: 12px; }
+.canvas-list-cover { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: var(--app-panel-soft, #f1f3f7); font-size: 32px; }
+.canvas-list-cover img { position: absolute; width: 100%; height: 100%; object-fit: cover; }

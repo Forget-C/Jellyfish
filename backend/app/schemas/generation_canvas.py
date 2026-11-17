@@ -1,7 +1,8 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
 from app.core.contracts.generation_canvas import CanvasStoryboardMode, ReferenceDesignField, StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
+from datetime import datetime
 from typing import Annotated, Any, ClassVar, Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.video_generation import AudioCapability
@@ -903,7 +904,7 @@ class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
     id: str
-    project_id: str
+    project_id: str | None = None
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
@@ -932,8 +933,15 @@ class CanvasDocument(BaseModel):
 
 
 class CanvasCreate(BaseModel):
-    """创建无需章节或场次的项目画布。"""
+    """创建不依赖项目、章节或场次的自由画布。"""
     name: str = Field(default='未命名画布', min_length=1, max_length=255)
+
+    @field_validator('name')
+    @classmethod
+    def require_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('画布名称不能为空白')
+        return value
 
 
 class CanvasSave(BaseModel):
@@ -953,7 +961,7 @@ class CanvasSceneAssociation(BaseModel):
 class CanvasRead(BaseModel):
     """当前保存的内容和 CAS 修订。"""
     id: str
-    project_id: str
+    project_id: str | None = None
     revision: int
     document: CanvasDocument
     source_changed: bool | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -1128,3 +1136,18 @@ class CanvasRuntimeEvent(BaseModel):
 class CanvasStreamConnection(BaseModel):
     """由 generated operation 提供流地址，通用 transport 负责 SSE。"""
     url: str
+
+
+class CanvasSummary(BaseModel):
+    """列表只返回展示摘要，不传输画布正文。"""
+    id: str
+    name: str
+    revision: int
+    cover_file_id: str | None = None
+    updated_at: datetime
+
+
+class CanvasRename(CanvasCreate):
+    """以已确认修订重命名，避免覆盖编辑器保存。"""
+    name: str = Field(min_length=1, max_length=255)
+    expected_revision: int = Field(ge=0)

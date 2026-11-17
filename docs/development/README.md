@@ -53,6 +53,7 @@
 - [项目专属资源与独立入库副本（完整方案已最终确认，尚未实施）](adr/0007-project-resource-ownership-and-library-copies.md)
 - [图片来源资源与独立项目导入](adr/0008-image-source-resources-and-project-imports.md)
 - [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
+- [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
 
 ## 开发与维护指南
 

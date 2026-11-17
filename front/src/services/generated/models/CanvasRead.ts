@@ -9,7 +9,7 @@ import type { CanvasSceneAssociation } from './CanvasSceneAssociation';
  */
 export type CanvasRead = {
     id: string;
-    project_id: string;
+    project_id?: (string | null);
     revision: number;
     document: CanvasDocument;
     source_changed?: (boolean | null);

@@ -1,8 +1,7 @@
-import { queueStoryboardRiskNotice } from '../directing/storyboardRiskNotice'
 import { createGraphRules } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
+import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave, StoryboardApplication, StoryboardCandidate } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { generationCanvasEditScope, useSceneEditOwnership } from '../directing/useSceneEditOwnership'
@@ -12,7 +11,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-type PendingSave = CanvasSave & { scene?: SceneChange }
+export type PendingSave = CanvasSave & { scene?: SceneChange }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasArrangementChange = { undo: () => void; redo: () => void }
@@ -22,7 +21,7 @@ type HistorySide = 'past' | 'future'
 const storyboardHandoffs = new Map<string, { revision: number; entry: HistoryEntry; receipt?: StoryboardApplicationReceipt }>()
 
 type Recovery = { schema: 1; baseline: CanvasRead; document: CanvasDocument; pending?: PendingSave }
-const validDocument = (value: CanvasDocument, projectId: string, canvasId: string) => value && value.id === canvasId && value.project_id === projectId && typeof value.name === 'string' && Array.isArray(value.cards) && value.cards.every(card => card && typeof card.id === 'string' && typeof card.type === 'string')
+const validDocument = (value: CanvasDocument, projectId: string, canvasId: string) => value && value.id === canvasId && (value.project_id || '') === projectId && typeof value.name === 'string' && Array.isArray(value.cards) && value.cards.every(card => card && typeof card.id === 'string' && typeof card.type === 'string')
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const preservesFixedSource = (server: CanvasDocument, draft: CanvasDocument) => {
   if (!same(server.fixed_source ?? null, draft.fixed_source ?? null) ||
@@ -56,7 +55,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
   ? `${reason.body?.data?.code || reason.status}: ${reason.body?.data?.message || reason.body?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
 
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
-export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true) {
+export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true, sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>) {
   const key = canvasRecoveryKey(projectId, canvasId)
   const ownership = useSceneEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [current, setCurrent] = useState<CanvasRead>()
@@ -71,7 +70,14 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [conflict, setConflict] = useState(false)
   const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: PendingSave; blocked?: CanvasDocument; recovery?: Recovery; initialBefore?: CanvasDocument; historySide?: HistorySide; conflict: boolean }>({ scope: key, conflict: false })
   const cleaner = useRef<(value: CanvasDocument) => CanvasDocument>()
-  const configureCatalog = useCallback((catalog: CanvasCatalog) => { cleaner.current = createCanvasOperations(createGraphRules(catalog)).clean }, [])
+  const configureCatalog = useCallback((catalog: CanvasCatalog) => {
+    const clean = createCanvasOperations(createGraphRules(catalog)).clean
+    const allowed = new Set(catalog.cards.map(card => card.type))
+    cleaner.current = value => {
+      if (value.cards?.some(card => !allowed.has(card.type || ''))) throw new Error('本地文档包含当前画布不支持的卡片')
+      return clean(value)
+    }
+  }, [])
   const inFlight = useRef<Promise<boolean>>()
   const handoffHistory = useRef(false)
   const history = useRef<{ scope: string; past: HistoryEntry[]; future: HistoryEntry[] }>({ scope: key, past: [], future: [] })
@@ -163,15 +169,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead> => {
     const scene = command.scene
     if (scene) {
-      const scope = { projectId, chapterId: scene.chapterId, sequenceId: scene.sequenceId, taskId: scene.taskId }
-      const response = scene.action === 'apply' ? await Directing.directingStoryboardApply({ ...scope, requestBody: scene.choices })
-        : await Directing.directingStoryboardRestore({ ...scope, requestBody: { request_id: command.request_id,
-          expected_revision: command.expected_revision, direction: scene.action, document: command.document as CanvasDocument } })
-      if (response.data?.id !== canvas.id || response.data.revision !== command.expected_revision + 1) throw new Error('invalid scene receipt')
-      if (scene.action === 'apply' && scene.choices?.accepted_conflict_ids?.length) {
-        queueStoryboardRiskNotice(projectId, canvas.id, scene.taskId)
-      }
-      return { ...response.data, scene: response.data.scene ?? canvas.scene }
+      if (!sceneSave) throw new Error('当前画布不支持场次操作')
+      return sceneSave(projectId, canvas, command)
     }
     const result = await Canvases.canvasSave({ projectId, canvasId: canvas.id, requestBody: command })
     if (!result.data || result.data.request_id !== command.request_id || result.data.canvas_id !== canvas.id) throw new Error('invalid receipt')

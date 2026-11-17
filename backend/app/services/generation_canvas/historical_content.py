@@ -15,8 +15,8 @@ def _matches_proof(proof, model_id, result_set_id, position):
 
 class CanvasHistoricalContent:
     """集中历史定位、首次内容匹配与已保存来源不可变规则。"""
-    def __init__(self, db, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
 
     async def prepare_content(self, canvas_id: str, run_id: str, node_id: str, position: int):
         """返回一次明确另存的独立内容；文档仍通过普通 CAS 队列保存。"""

@@ -50,7 +50,7 @@ import type { VisualStyleCard } from './VisualStyleCard';
  */
 export type CanvasDocument = {
     id: string;
-    project_id: string;
+    project_id?: (string | null);
     name: string;
     schema_version?: number;
     cover_file_id?: (string | null);

@@ -1,12 +1,13 @@
 """对白和声音安排通过公开保存、输出、编译边界验证。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
 @pytest.mark.asyncio
 async def test_adopted_dialogue_pronunciation_survives_reopening_and_clear(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白发音要求'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '对白发音要求'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'line', 'port_id': 'text', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[
@@ -53,8 +54,8 @@ async def test_adopted_dialogue_pronunciation_survives_reopening_and_clear(canva
 @pytest.mark.asyncio
 async def test_dialogue_speaker_and_complete_sound_design(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '对白声音'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '对白声音'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = lambda card, port, **extra: {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'alice', 'name': '小雪', 'text': '祖先秘密'},
         {'id': 'dialogue', 'type': 'direction.dialogue', 'dialogue_id': 'line-1',
@@ -81,8 +82,8 @@ async def test_dialogue_speaker_and_complete_sound_design(canvas_client):
 @pytest.mark.asyncio
 async def test_performance_explicitly_adopts_dialogue_identity_without_reverse_dependency(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '对白依据'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '对白依据'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = lambda card, port: {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0}
     doc.update(cards=[{'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'line-7', 'content': {'text': '等等', 'state': 'proposal'}},
         {'id': 'act', 'type': 'direction.performance', 'physical_action': {'text': '转头', 'state': 'proposal'},
@@ -109,8 +110,8 @@ async def test_performance_explicitly_adopts_dialogue_identity_without_reverse_d
 @pytest.mark.asyncio
 async def test_image_uses_sound_design_as_visible_meaning_and_requires_explicit_speaker(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '声音画面含义'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '声音画面含义'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'line', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'l', 'content': {'text': '喂', 'state': 'proposal'}},
         {'id': 'image', 'type': 'model.image', 'input_bindings': [{'id': 'line', 'source': source, 'input_port': 'text'}]}],
@@ -126,8 +127,8 @@ async def test_image_uses_sound_design_as_visible_meaning_and_requires_explicit_
 async def test_fixed_reference_interval_and_file_retention_do_not_propagate(canvas_client, kind, card_type):
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': (f'{i}.wav' if kind == 'audio' else f'{i}.mp4', b'media', 'audio/wav' if kind == 'audio' else 'video/mp4')})).json()['data']['id'] for i in range(2)]
-    canvas = (await client.post('/canvases/p', json={'name': '声音参考'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '声音参考'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc.update(cards=[{'id': 'audio', 'type': 'content.' + kind, 'file_id': files[0]},
         {'id': 'sound', 'type': card_type, **({'environment': {'text': '风声', 'state': 'undecided'}} if card_type == 'direction.sound' else {'dialogue_id': 'line', 'content': {'text': '对白', 'state': 'proposal'}}),
          'examples': [{'id': 'ex', 'source': {'canvas_id': canvas['id'], 'card_id': 'audio', 'port_id': kind, 'position': 0}, 'file_id': files[0], 'purpose': 'negative', 'start_ms': 100, 'end_ms': 900}]}],
@@ -227,8 +228,8 @@ async def test_actual_worker_receives_whole_sound_design_without_audio_reference
 
 @pytest.mark.asyncio
 async def test_empty_sound_is_not_published(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '制作安排'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '制作安排'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'sound', 'type': 'direction.sound'}]
     assert (await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
@@ -239,19 +240,19 @@ async def test_empty_sound_is_not_published(canvas_client):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('category,ids,code', [('place', ['a'], 'INVALID_DESIGN_CATEGORY'), ('costume', ['a'], 'INVALID_DESIGN_CATEGORY'), ('character', ['a', 'b'], 'SPEAKER_COUNT_EXCEEDED'), ('prop', [None], 'INVALID_DESIGN_BINDING')])
 async def test_speaker_requires_one_direct_eligible_identity(canvas_client, category, ids, code):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '说话对象资格'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '说话对象资格'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': key, 'type': 'reference.' + category, 'object_id': key, 'name': key} for key in ('a', 'b')] +
         [{'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'l', 'input_bindings': [{'id': str(i), 'input_port': 'speaker', 'source': {'canvas_id': canvas['id'], 'card_id': key or 'a', 'port_id': 'object', 'position': 0, 'object_id': key}} for i, key in enumerate(ids)]}],
         edges=[{'id': key, 'source_card': key, 'source_port': 'object', 'target_card': 'line', 'target_port': 'speaker'} for key in ('a', 'b')], input_order={'line': {'speaker': ['a', 'b']}})
-    result = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    result = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert result.status_code == 422 and result.json()['detail']['code'] == code, result.text
 
 
 @pytest.mark.asyncio
 async def test_saved_dialogue_identity_is_protected(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白身份'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '对白身份'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc['cards'] = [{'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'stable'}]
     assert (await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
     for patch, code in [({'dialogue_id': 'other'}, 'INVALID_DIALOGUE_IDENTITY')]:
@@ -263,16 +264,16 @@ async def test_saved_dialogue_identity_is_protected(canvas_client):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('start,end', [(100, 100), (100, 50), (None, 100), (-1, 100)])
 async def test_audio_reference_rejects_invalid_intervals(canvas_client, start, end):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '区间校验'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '区间校验'})).json()['data']
     doc = canvas['document']
     doc['cards'] = [{'id': 'sound', 'type': 'direction.sound', 'examples': [{'id': 'a', 'file_id': 'file', 'source': {'canvas_id': canvas['id'], 'card_id': 'audio', 'port_id': 'audio', 'position': 0}, 'start_ms': start, 'end_ms': end}]}]
-    assert (await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 422
+    assert (await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_explicitly_absent_dialogue_does_not_require_invented_speaker(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '没有对白'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '没有对白'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc.update(cards=[{'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'l', 'content': {'state': 'absent'}}, {'id': 'image', 'type': 'model.image', 'input_bindings': [{'id': 'line', 'source': {'canvas_id': canvas['id'], 'card_id': 'line', 'port_id': 'text', 'position': 0}, 'input_port': 'text'}]}],
         edges=[{'id': 'e', 'source_card': 'line', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'}], input_order={'image': {'text': ['e']}})
     assert (await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
@@ -284,8 +285,8 @@ async def test_explicitly_absent_dialogue_does_not_require_invented_speaker(canv
 @pytest.mark.asyncio
 @pytest.mark.parametrize('state,visible,phrase', [('empty', False, ''), ('not_applicable', False, ''), ('absent', True, '明确没有'), ('undecided', True, '待确定'), ('proposal', True, '提议'), ('fact', True, '事实')])
 async def test_sound_preserves_field_state_purpose_and_literal_text(canvas_client, state, visible, phrase):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '声音状态'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '声音状态'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc['cards'] = [{'id': 'sound', 'type': 'direction.sound', 'music': {'text': '有音乐且没有音乐', 'state': state, 'purpose': 'constraint', 'source_locator': '原文4'}}]
     assert (await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
     output = (await canvas_client.get(url + '/cards/sound/outputs')).json()['data']['outputs']
@@ -297,8 +298,8 @@ async def test_sound_preserves_field_state_purpose_and_literal_text(canvas_clien
 @pytest.mark.asyncio
 async def test_sound_retires_object_use_and_adopts_complete_field_reference_is_rejected(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '声源引用'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '声源引用'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'key', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'key', 'type': 'content.prop', 'object_id': 'key', 'name': '钥匙', 'text': '唯一金属纹路'},
         {'id': 'sound', 'type': 'direction.sound', 'action_sound': {'text': '钥匙落地', 'authorship': 'user'},
@@ -313,8 +314,8 @@ async def test_sound_retires_object_use_and_adopts_complete_field_reference_is_r
 
 @pytest.mark.asyncio
 async def test_audiovisual_relation_follows_only_the_adopted_dialogue(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白声画关系'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '对白声画关系'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     first_note = '画外说话，画面保持在听者身上'
     second_note = '说话人始终留在画内'

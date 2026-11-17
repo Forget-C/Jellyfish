@@ -1,4 +1,5 @@
 """Video purpose compilation through the public canvas compiler."""
+from tests.canvas_urls import canvas_params
 from app.schemas.generation_canvas import CanvasDocument, CanvasModelCapability, TextContentCard, GenerationCanvasEdge, PromptReference
 from app.services.generation_canvas.compiler import compile_card
 
@@ -141,7 +142,7 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
 @pytest.mark.parametrize('named', [False, True])
 async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route(runtime, image_storage, monkeypatch, named):
     accepted, preview = await setup_video(runtime, named=named)
-    rejected = await runtime.client.delete(runtime.url, params={'expected_revision': 2})
+    rejected = await runtime.client.delete(runtime.url, params={**canvas_params(runtime.url), **({'expected_revision': 2})})
     assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
     assert preview['input']['video_media']['frames']['keys'][0]['file_id'] != preview['input']['video_media']['frames']['first']['file_id']
     if named:

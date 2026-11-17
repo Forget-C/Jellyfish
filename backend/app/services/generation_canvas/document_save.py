@@ -21,7 +21,7 @@ class PreparedDocument:
     detached_proofs: dict[str, dict[str, Any]]
 
 
-async def prepare_document(db, project_id: str, canvas, raw_document: dict, *,
+async def prepare_document(db, project_id: str | None, canvas, raw_document: dict, *,
                            scene_sources: dict | None = None, restored_continuity: frozenset[str] = frozenset()) -> PreparedDocument:
     """调用方已锁画布并核对回执及 revision；保持首个诊断顺序，不写文档或替换保护。"""
     canvas_id = canvas.id
@@ -32,6 +32,10 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict, *,
         raise diagnostic('INVALID_DOCUMENT', error['msg'], {'canvas_id': canvas_id, 'path': list(error['loc'])}) from exc
     if document.id != canvas_id or document.project_id != project_id:
         raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
+    from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+    validate_canvas_cards(canvas, document)
+    if not document.name.strip():
+        raise diagnostic('INVALID_CANVAS_NAME', '画布名称不能为空白', {'path': ['name']})
     for card in document.cards:
         if isinstance(card, CheckCard) and card.id not in canvas.card_types and 'enabled_categories' not in card.model_fields_set:
             from app.services.generation_canvas.check_selection import initial_check_categories

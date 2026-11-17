@@ -27,5 +27,11 @@ test('unknown nested routes never pretend to identify a valid object', () => {
   for (const path of ['/unknown', '/projects/p1/roles/a1/edit/extra', '/projects/p1/chapters/ch1/sequences/s1/extra', '/assets/actors/a1/edit/extra', '/agents/a1/edit/extra']) {
     assert.deepEqual(pageBreadcrumbs(path), [{ label: '页面未找到' }])
   }
-  assert.equal(new Set(mainNavigation.map(item => item.to)).size, 4)
+  assert.equal(new Set(mainNavigation.map(item => item.to)).size, 5)
+})
+
+
+test('independent canvases have a top-level entry and list breadcrumb', () => {
+  assert.ok(mainNavigation.some(item => item.key === 'canvases' && item.to === '/canvases'))
+  assert.deepEqual(pageBreadcrumbs('/canvases'), [{ label: '画布' }])
 })

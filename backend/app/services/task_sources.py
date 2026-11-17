@@ -60,19 +60,22 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
                 found[row.id] = TaskSourceRead(kind="chapter", id=row.id, title=row.title, chapter_id=row.id, project_id=row.project_id)
         elif kind == "canvas_node":
             from app.models.generation_canvas import CanvasRunNode, GenerationCanvas
-            query = select(CanvasRunNode, GenerationCanvas).join(GenerationCanvas, GenerationCanvas.id == CanvasRunNode.canvas_id).where(CanvasRunNode.id.in_(ids))
-            for node, canvas in (await db.execute(query)).all():
+            query = select(CanvasRunNode, GenerationCanvas, Sequence.chapter_id).join(GenerationCanvas, GenerationCanvas.id == CanvasRunNode.canvas_id).outerjoin(Sequence, Sequence.id == GenerationCanvas.sequence_id).where(CanvasRunNode.id.in_(ids))
+            for node, canvas, chapter_id in (await db.execute(query)).all():
                 found[node.id] = TaskSourceRead(kind="generation_canvas", id=canvas.id, title=canvas.document["name"],
-                    project_id=canvas.project_id, canvas_id=canvas.id, run_id=node.run_id, node_id=node.id)
+                    project_id=canvas.project_id, canvas_id=canvas.id, run_id=node.run_id, node_id=node.id,
+                    chapter_id=chapter_id,
+                    sequence_id=canvas.sequence_id)
         elif kind == 'canvas_check_report':
             from app.models.generation_canvas import CanvasCheckReport, GenerationCanvas
             query = select(CanvasCheckReport.id, CanvasCheckReport.check_card_id, GenerationCanvas.id.label('canvas_id'),
-                           GenerationCanvas.project_id, GenerationCanvas.document['name'].as_string().label('title')).join(
+                           GenerationCanvas.project_id, GenerationCanvas.sequence_id, Sequence.chapter_id, GenerationCanvas.document['name'].as_string().label('title')).join(
                                GenerationCanvas, GenerationCanvas.id == CanvasCheckReport.canvas_id
-                           ).where(CanvasCheckReport.id.in_(ids))
+                           ).outerjoin(Sequence, Sequence.id == GenerationCanvas.sequence_id).where(CanvasCheckReport.id.in_(ids))
             for row in (await db.execute(query)).all():
                 found[row.id] = TaskSourceRead(kind='generation_canvas', id=row.canvas_id, title=row.title,
-                    project_id=row.project_id, canvas_id=row.canvas_id, check_card_id=row.check_card_id, check_report_id=row.id)
+                    project_id=row.project_id, canvas_id=row.canvas_id, check_card_id=row.check_card_id, check_report_id=row.id,
+                    chapter_id=row.chapter_id, sequence_id=row.sequence_id)
             for task in rows:
                 source = found.get(identities.get(task.id))
                 if source and source.project_id == task.project_id:
@@ -89,6 +92,9 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
                 for row in (await db.execute(select(Project.id, Project.name).where(Project.id.in_(remaining)))).all():
                     found[row.id] = TaskSourceRead(kind="project", id=row.id, title=row.name, project_id=row.id)
         result.update({task_id: found[identity] for task_id, identity in identities.items() if identity in found})
+    for task in rows:
+        if task.target_type in ('canvas_node', 'canvas_check_report') and task.id not in result:
+            result[task.id] = TaskSourceRead(kind='deleted_canvas', id=task.target_id or task.id, title='画布已删除')
     version_ids = {row.scene_version_id for row in rows if row.scene_version_id}
     if version_ids:
         versions = dict((await db.execute(select(SceneVersionRecord.id, SceneVersionRecord.sequence_id)

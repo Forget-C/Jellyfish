@@ -72,6 +72,7 @@ async def client_for(sessions):
 
     app.dependency_overrides[get_db] = scoped_db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.canvas_sessions = sessions
         yield client
 
 

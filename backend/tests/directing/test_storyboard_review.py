@@ -1,5 +1,6 @@
 """The scene task and both candidate application routes enforce continuity review."""
 
+from tests.canvas_urls import append_canvas_path, canvas_url
 import asyncio
 from copy import deepcopy
 import json
@@ -66,7 +67,7 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
             'source_version': source['source_version'], 'span': {'start': 0, 'end': len(original)}})
         path = chapter + '/sequences/' + scene['id'] + '/storyboards'
         task = await read_data(client, 'POST', path, {'request_id': 'draft', 'text_model_id': 'review-text'})
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
         before = await read_data(client, 'GET', canvas_path)
         worker = TaskWorker(sessions)
         try:
@@ -200,7 +201,7 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
             'source_version': source['source_version'], 'span': {'start': 0, 'end': len(original)}})
         path = chapter + '/sequences/' + scene['id'] + '/storyboards'
         task = await read_data(client, 'POST', path, {'request_id': 'repair', 'text_model_id': 'repair-text'})
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
         before = await read_data(client, 'GET', canvas_path)
         worker = TaskWorker(sessions)
         try:
@@ -221,7 +222,7 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 before = await read_data(client, 'GET', canvas_path)
                 assert before['document']['storyboard']['origins'][card['id']]['manually_edited']
                 review_enabled = True
-                target = path.removesuffix('/storyboards') + '/canvases/' + task['canvas_id'] + '/storyboards'
+                target = path.removesuffix('/storyboards') + canvas_url('/canvases/') + task['canvas_id'] + '/storyboards'
                 task = await read_data(client, 'POST', target, {'request_id': 'repair-reextract', 'text_model_id': 'repair-text'})
             result = await complete(task)
             assert len(repairs) == (0 if outcome == 'manual_protected' else 1)
@@ -257,7 +258,7 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 await read_data(client, 'PUT', canvas_path, {'request_id': 'storyboard:' + task['task_id'],
                     'expected_revision': candidate['base_revision'], 'document': candidate['document']})
                 first_model = candidate['document']['storyboard']['shots'][0]['model_card_ids'][0]
-                compiled = await read_data(client, 'GET', f'{canvas_path}/cards/{first_model}/compile')
+                compiled = await read_data(client, 'GET', append_canvas_path(canvas_path, f'/cards/{first_model}/compile'))
                 assert corrected in compiled['text'] and proposed not in compiled['text']
             if outcome == 'still_conflict':
                 task_path = path + '/' + task['task_id']
@@ -354,7 +355,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
         path = chapter + '/sequences/' + scene['id'] + '/storyboards'
         task = await read_data(client, 'POST', path, {'request_id': 'risk', 'text_model_id': 'risk-text'})
         task_path = path + '/' + task['task_id']
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
         worker = TaskWorker(sessions)
         try:
             await worker.tick()
@@ -398,7 +399,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
             assert redone['document'] == accepted['document']
             assert await read_data(client, 'POST', task_path + '/restore', undo_request) == undo
             assert await read_data(client, 'GET', canvas_path) == redone
-            reextract = path.removesuffix('/storyboards') + '/canvases/' + task['canvas_id'] + '/storyboards'
+            reextract = path.removesuffix('/storyboards') + canvas_url('/canvases/') + task['canvas_id'] + '/storyboards'
             following = await read_data(client, 'POST', reextract, {'request_id': 'same-design', 'text_model_id': 'risk-text'})
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())

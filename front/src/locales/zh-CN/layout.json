@@ -18,6 +18,7 @@
 },
   "menu": {
     "home": "首页",
+    "canvases": "画布",
     "projects": "项目",
     "management": "管理",
     "lab": "实验室",

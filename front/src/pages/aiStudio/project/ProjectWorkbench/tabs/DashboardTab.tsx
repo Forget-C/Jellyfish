@@ -9,7 +9,6 @@ import { directingError } from '../../../directing/common'
 import { chapterActionLocation, chapterLocation, workbenchManagementLocation } from '../../../directing/chapterNavigation'
 import { readRecentWork } from '../../../directing/workspaceContext'
 import { chapterProduction } from '../../chapterProduction'
-import { ProjectCanvasPreview } from '../ProjectCanvasPreview'
 import '../project-production.css'
 
 /** 项目概览使用真实章节和已有场次入口呈现当前制作。 */
@@ -66,7 +65,6 @@ export function DashboardTab() {
             </Empty>}
         </div>
       </section>
-      <ProjectCanvasPreview projectId={projectId} />
     </div>
     <section aria-labelledby="project-overview-sequences">
       <div className="project-section-heading">

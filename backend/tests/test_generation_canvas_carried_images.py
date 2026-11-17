@@ -1,4 +1,5 @@
 """Design-carried images use real save, compile and worker boundaries."""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -9,7 +10,7 @@ def reference_field(source, text='人物参考：'):
 
 async def carried_document(client):
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('image.png', b'image', 'image/png')})).json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '携带图片'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '携带图片'})).json()['data']
     source = {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id},
@@ -17,7 +18,7 @@ async def carried_document(client):
         {'id': 'model', 'type': 'model.image', 'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': {'canvas_id': canvas['id'], 'card_id': 'style', 'port_id': 'text', 'position': 0}}]}],
         edges=[{'id': 'reference', 'source_card': 'image', 'source_port': 'image', 'target_card': 'style', 'target_port': 'image_example'}, {'id': 'design', 'source_card': 'style', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
         input_order={'style': {'image_example': ['reference']}, 'model': {'text': ['design']}})
-    return f"/canvases/p/{canvas['id']}", doc, file_id
+    return canvas_url(f"/canvases/p/{canvas['id']}"), doc, file_id
 
 
 @pytest.mark.asyncio

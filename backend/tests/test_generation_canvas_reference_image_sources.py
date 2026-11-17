@@ -1,4 +1,5 @@
 """参考只新增图片内容来源；旧固定图片和下游采用不因清理旧来源边而丢失。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 from copy import deepcopy
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -10,8 +11,8 @@ async def test_new_images_require_content_image_and_old_binding_cleanup_keeps_ad
     client = canvas_client
     uploaded = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': ('legacy.png', b'image', 'image/png')})).json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '来源统一'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '来源统一'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'legacy-source', 'port_id': 'image', 'position': 0}
     adopted = {'id': 'use', 'input_port': 'image', 'subject_name': None, 'source': {**source, 'card_id': 'target'}}
     doc.update(cards=[{'id': 'legacy-source', 'type': 'reference.character', 'name': '旧来源', 'image_binding': {'file_id': uploaded}},
@@ -46,9 +47,9 @@ async def test_new_images_require_content_image_and_old_binding_cleanup_keeps_ad
 @pytest.mark.parametrize('source_type', ['model.image', 'reference.character'])
 async def test_new_non_content_image_connections_are_rejected(canvas_client, source_type):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '拒绝新来源'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '拒绝新来源'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': 'source', 'type': source_type}, {'id': 'target', 'type': 'reference.character'}],
         edges=[{'id': 'e', 'source_card': 'source', 'source_port': 'image', 'target_card': 'target', 'target_port': 'image_source'}], input_order={'target': {'image_source': ['e']}})
-    response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'new', 'expected_revision': 0, 'document': doc})
+    response = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'new', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_REFERENCE_SOURCE'

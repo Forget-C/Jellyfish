@@ -1,4 +1,5 @@
 """Cancellation and original report ownership through canvas HTTP and the real Worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import json
 from types import SimpleNamespace
@@ -15,7 +16,7 @@ async def setup_check(runtime):
     connect_check(document)
     document['cards'][3]['check_model_id'] = runtime.model_id
     await save_canvas(runtime.client, runtime.url, document, 1)
-    return f'{runtime.url}/checks/check', document
+    return (runtime.url + f'/checks/check'), document
 
 
 async def start_check(client, checks):
@@ -23,7 +24,7 @@ async def start_check(client, checks):
     assert response.status_code == 200, response.text
     preview = response.json()['data']
     item = next(item for item in preview['items'] if item['category'] == 'P01')
-    response = await client.post(f'{checks}/runs', json={
+    response = await client.post(append_canvas_path(checks, f'/runs'), json={
         'expected_revision': preview['basis']['revision'], 'basis_hash': preview['basis']['basis_hash'],
         'item_id': item['id'],
     })
@@ -32,7 +33,7 @@ async def start_check(client, checks):
 
 
 async def reports(client, checks):
-    response = await client.get(f'{checks}/reports')
+    response = await client.get(append_canvas_path(checks, f'/reports'))
     assert response.status_code == 200, response.text
     return response.json()['data']
 
@@ -63,7 +64,7 @@ async def test_cancel_check_distinguishes_running_provider_from_queued_work(runt
         queued = await start_check(client, checks)
 
         for report, expected in ((queued, 'cancelled'), (running, 'running')):
-            response = await client.post(f"{checks}/reports/{report['id']}/cancel")
+            response = await client.post(append_canvas_path(checks, f"/reports/{report['id']}/cancel"))
             assert response.status_code == 200, response.text
             data = response.json()['data']
             assert data['basis'] == report['basis'] and data['results'] == []
@@ -104,21 +105,21 @@ async def test_save_stops_only_checks_whose_original_target_was_removed(runtime,
 
     preview = (await client.get(checks)).json()['data']
     item = next(item for item in preview['items'] if item['category'] == 'P06')
-    response = await client.post(f'{checks}/runs', json={
+    response = await client.post(append_canvas_path(checks, f'/runs'), json={
         'expected_revision': preview['basis']['revision'], 'basis_hash': preview['basis']['basis_hash'],
         'item_id': item['id'],
     })
     assert response.status_code == 200, response.text
     complete = response.json()['data']
     original = await start_check(client, checks)
-    other_url = f'{url}/checks/other-check'
+    other_url = (url + f'/checks/other-check')
     other = await start_check(client, other_url)
     generation, _ = await accept(runtime)
 
-    wrong_card = await client.post(f"{other_url}/reports/{original['id']}/cancel")
+    wrong_card = await client.post(append_canvas_path(other_url, f"/reports/{original['id']}/cancel"))
     assert wrong_card.status_code == 404
     other_canvas = (await client.post(url.rsplit('/', 1)[0], json={'name': '其他画布'})).json()['data']
-    wrong_canvas = await client.post(f"{url.rsplit('/', 1)[0]}/{other_canvas['id']}/checks/check/reports/{original['id']}/cancel")
+    wrong_canvas = await client.post(append_canvas_path(url.rsplit('/', 1)[0], f"/{other_canvas['id']}/checks/check/reports/{original['id']}/cancel"))
     assert wrong_canvas.status_code == 404
     document['cards'][3]['enabled_categories'] = []
     document['cards'][3]['disabled_items'] = [original['items'][0]['id']]
@@ -144,11 +145,27 @@ async def test_save_stops_only_checks_whose_original_target_was_removed(runtime,
     assert cancelled['results'] == []
     assert retained == complete
     assert (await reports(client, other_url))[0] == other
-    active = (await client.get(f'{url}/runtime')).json()['data']
+    active = (await client.get((url + f'/runtime'))).json()['data']
     node = next(node for run in active['runs'] if run['id'] == generation['run_id'] for node in run['nodes'])
     assert node['status'] == 'queued'
     if change == 'delete':
         assert (await client.get(checks)).status_code == 404
-        archive = await client.get(f'{url}/check-reports/archived')
+        archive = await client.get((url + f'/check-reports/archived'))
         assert archive.status_code == 200, archive.text
         assert archive.json()['data'] == [cancelled, retained]
+
+
+@pytest.mark.asyncio
+async def test_active_check_blocks_canvas_deletion_until_cancelled(runtime):
+    from tests.canvas_urls import canvas_params
+    client = runtime.client
+    checks, _ = await setup_check(runtime)
+    report = await start_check(client, checks)
+    assert report['executions'][0]['status'] == 'queued'
+    assert (await client.delete('/projects/' + runtime.project_id)).status_code == 409
+    response = await client.delete(runtime.url, params={**canvas_params(runtime.url), 'expected_revision': 2})
+    assert response.status_code == 409, response.text
+    assert response.json()['detail']['code'] == 'CANVAS_TASK_BUSY'
+    assert (await reports(client, checks))[0]['id'] == report['id']
+    assert (await client.post(checks + f"/reports/{report['id']}/cancel")).status_code == 200
+    assert (await client.delete(runtime.url, params={**canvas_params(runtime.url), 'expected_revision': 2})).status_code == 200

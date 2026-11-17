@@ -2,8 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { CanvasRead } from './CanvasRead';
-export type ApiResponse_list_CanvasRead__ = {
+import type { PaginatedData_CanvasSummary_ } from './PaginatedData_CanvasSummary_';
+export type ApiResponse_PaginatedData_CanvasSummary__ = {
     /**
      * 与 HTTP 状态码一致
      */
@@ -15,7 +15,7 @@ export type ApiResponse_list_CanvasRead__ = {
     /**
      * 实际数据
      */
-    data?: (Array<CanvasRead> | null);
+    data?: (PaginatedData_CanvasSummary_ | null);
     /**
      * 附加元信息
      */

@@ -39,7 +39,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const attemptedDefault = useRef<string | undefined>(undefined)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs)
   const { isIndependentDesignEdge, cardTitles, cardDefinitions, candidatePorts } = useGraphRules()
   const adopted = card.input_bindings || []
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs

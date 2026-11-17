@@ -1,4 +1,5 @@
 """Field references are tested at public save, output and compile boundaries."""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -15,8 +16,8 @@ def referenced(canvas_id, field_id='reference', state='proposal'):
 @pytest.mark.parametrize('kind,key,other', CASES)
 async def test_field_documents_expand_once_and_keep_retained_references(canvas_client, kind, key, other):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '参数引用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '参数引用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '张三 @图片99 /首帧参考'}, {'id': 'design', 'type': f'direction.{kind}', 'fields': {key: referenced(canvas['id']), other: referenced(canvas['id'], 'retained', 'not_applicable')}}, {'id': 'model', 'type': 'model.text'}], edges=[{'id': 'candidate', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}, {'id': 'design-input', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'design': {'text': ['candidate']}, 'model': {'text': ['design-input']}})
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
@@ -44,8 +45,8 @@ async def test_field_documents_expand_once_and_keep_retained_references(canvas_c
 async def test_only_active_media_is_declared_and_image_consumption_uses_it(canvas_client, kind, key, other):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('reference.png', b'image', 'image/png')})).json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '素材依赖'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '素材依赖'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}
     field = {'state': 'proposal', 'document': {'segments': [{'id': 'use', 'kind': 'reference', 'source': source}, {'id': 'repeat', 'kind': 'reference', 'source': source}]}}
     document = canvas['document']
@@ -90,8 +91,8 @@ async def test_only_active_media_is_declared_and_image_consumption_uses_it(canva
 @pytest.mark.parametrize('problem', ['foreign', 'missing'])
 async def test_active_bad_field_reference_is_located_but_inactive_draft_does_not_block(canvas_client, problem):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '引用诊断'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '引用诊断'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': 'other' if problem == 'foreign' else canvas['id'], 'card_id': 'upstream', 'port_id': 'text', 'position': 0}
     document = canvas['document']
     upstream = {'id': 'upstream', 'type': 'content.text', 'text': '普通来源'}
@@ -115,8 +116,8 @@ async def test_active_bad_field_reference_is_located_but_inactive_draft_does_not
 @pytest.mark.asyncio
 async def test_movement_phase_document_keeps_stable_field_provenance(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '阶段引用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '阶段引用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '张三'}, {'id': 'design', 'type': 'direction.movement', 'phases': [{'id': 'stable', 'name': '起步', 'frame': referenced(canvas['id'])}]}], edges=[{'id': 'candidate', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}], input_order={'design': {'text': ['candidate']}})
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})).status_code == 200
@@ -132,8 +133,8 @@ async def test_movement_phase_document_keeps_stable_field_provenance(canvas_clie
 @pytest.mark.asyncio
 async def test_authored_unconfirmed_token_is_diagnosed_and_escaped_token_is_literal(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '未确认代号'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '未确认代号'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document['cards'] = [{'id': 'design', 'type': 'direction.style', 'fields': {'direction': {'state': 'proposal', 'document': {'segments': [{'id': 'literal', 'kind': 'text', 'text': '@图片99'}]}}}}]
     assert (await client.put(url, json={'request_id': 'draft', 'expected_revision': 0, 'document': document})).status_code == 200
@@ -150,8 +151,8 @@ async def test_authored_unconfirmed_token_is_diagnosed_and_escaped_token_is_lite
 @pytest.mark.parametrize('kind,key,other', FLAT_CASES)
 async def test_flat_design_fields_publish_structured_text_references(canvas_client, kind, key, other):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '表演引用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '表演引用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '张三'}, {'id': 'design', 'type': f'direction.{kind}', key: referenced(canvas['id'])}], edges=[{'id': 'candidate', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}], input_order={'design': {'text': ['candidate']}})
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
@@ -171,8 +172,8 @@ async def test_flat_design_fields_publish_structured_text_references(canvas_clie
 @pytest.mark.parametrize('nested,state,text,expected', [(False, 'proposal', '东墙前两步', '设计 / 位置 [提议]：东墙前两步'), (True, 'proposal', '', ''), (False, 'undecided', '东墙前两步', '设计 / 位置 [待确定]：东墙前两步'), (False, 'absent', '', '设计 / 位置 [明确没有]：')])
 async def test_anchor_reference_carries_whole_card_and_nested_dependencies(canvas_client, nested, state, text, expected):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '锚点展开'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '锚点展开'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     anchor_source = {'canvas_id': canvas['id'], 'card_id': 'anchor', 'port_id': 'anchor', 'position': 0, 'object_id': 'stable'}
     document = canvas['document']
     document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '不应递归展开的场所正文'}, {'id': 'anchor', 'type': 'direction.anchor', 'anchor_id': 'stable', 'name': '吧台左侧', 'position': referenced(canvas['id']) if nested else {'state': state, 'text': text}}, {'id': 'design', 'type': 'direction.blocking', 'path': {'state': 'proposal', 'document': {'segments': [{'id': 'anchor-use', 'kind': 'reference', 'source': anchor_source}]} }}, {'id': 'model', 'type': 'model.image', 'model_id': 'canvas-image'}], edges=[{'id': 'anchor-text', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'anchor', 'target_port': 'text'}, {'id': 'reference', 'source_card': 'anchor', 'source_port': 'anchor', 'target_card': 'design', 'target_port': 'anchor'}, {'id': 'adopt', 'source_card': 'design', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'anchor': {'text': ['anchor-text']}, 'design': {'anchor': ['reference']}, 'model': {'text': ['adopt']}})
@@ -199,11 +200,11 @@ async def test_anchor_reference_carries_whole_card_and_nested_dependencies(canva
 async def test_regular_media_candidate_can_be_local_example_without_carry(canvas_client, kind, key, other):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('example.png', b'image', 'image/png')})).json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '本地示例'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '本地示例'})).json()['data']
     source = {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}
     document = canvas['document']
     document.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id}, {'id': 'design', 'type': f'direction.{kind}', key: {'state': 'proposal', 'text': '手工设计'}, 'examples': [{'id': 'example', 'source': source, 'file_id': file_id, 'purpose': 'negative'}]}], edges=[{'id': 'candidate', 'source_card': 'image', 'source_port': 'image', 'target_card': 'design', 'target_port': 'image'}], input_order={'design': {'image': ['candidate']}})
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
     if kind not in ('anchor', 'dialogue', 'sound'):
         assert saved.status_code == 422, saved.text
@@ -216,10 +217,10 @@ async def test_regular_media_candidate_can_be_local_example_without_carry(canvas
 @pytest.mark.asyncio
 async def test_preserved_literal_design_text_remains_authored_data(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '保留旧文字'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '保留旧文字'})).json()['data']
     document = canvas['document']
     document['cards'] = [{'id': 'design', 'type': 'direction.performance_rule', 'applicability': {'state': 'proposal', 'document': {'segments': [{'id': 'legacy', 'kind': 'text', 'literal': True, 'text': '旧 @图片1 /首帧参考'}]}}}]
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
     output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
@@ -230,8 +231,8 @@ async def test_preserved_literal_design_text_remains_authored_data(canvas_client
 
 @pytest.mark.asyncio
 async def test_dialogue_text_reference_preserves_stable_identity(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '对白引用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '对白引用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '请留下'}, {'id': 'design', 'type': 'direction.dialogue', 'dialogue_id': 'stable', 'content': referenced(canvas['id'])}], edges=[{'id': 'text', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'design', 'target_port': 'text'}], input_order={'design': {'text': ['text']}})
     saved = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
@@ -246,11 +247,11 @@ async def test_dialogue_text_reference_preserves_stable_identity(canvas_client):
 @pytest.mark.asyncio
 async def test_visual_audio_reference_is_reported_as_unsupported(canvas_client):
     file_id = (await canvas_client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('reference.wav', b'audio', 'audio/wav')})).json()['data']['id']
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '音频仅本地参考'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '音频仅本地参考'})).json()['data']
     source = {'canvas_id': canvas['id'], 'card_id': 'audio', 'port_id': 'audio', 'position': 0}
     document = canvas['document']
     document.update(cards=[{'id': 'audio', 'type': 'content.audio', 'file_id': file_id}, {'id': 'design', 'type': 'direction.style', 'fields': {'direction': {'state': 'proposal', 'document': {'segments': [{'id': 'audio-use', 'kind': 'reference', 'source': source}]}}}}], edges=[{'id': 'audio', 'source_card': 'audio', 'source_port': 'audio', 'target_card': 'design', 'target_port': 'audio'}], input_order={'design': {'audio': ['audio']}})
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     saved = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
     output = (await canvas_client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]

@@ -37,7 +37,7 @@ export const DesignReferenceContext = createContext<ReferenceContext | undefined
 /** Reference session belongs to one retained design card, not a model prompt binding set. */
 export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField, onDisconnect, onLocateDesign, onChange }: { onChange?: (card: GenerationCard) => void; onDisconnect?: (edgeId: string) => void; onLocateDesign?: (cardId: string, fieldId: string) => void; targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
   const { cardDefinitions } = useGraphRules()
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
   const focused = useRef<React.RefObject<PromptEditorHandle>>()
   const focusedLabel = useRef<string>()
   const [expandedSource, setExpandedSource] = useState<string>()

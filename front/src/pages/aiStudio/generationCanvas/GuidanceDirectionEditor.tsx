@@ -18,7 +18,7 @@ export type GuidanceCard = AcceptanceCriterionCard | CreativeControlCard | Gener
 export function GuidanceDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign, requirementNameValidationRequested }: CardRendererProps) {
   const { cardDefinitions } = useGraphRules()
   const card = raw as GuidanceCard
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
   const nameInvalid = card.type === 'direction.criterion' && !!requirementNameValidationRequested && !card.name?.trim()
   const field = (key: string, label: string, purpose: DesignField['purpose'] = 'design') => <DesignFieldEditor compact key={key} label={label} purpose={purpose} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />
   const fields = Object.fromEntries(designFieldEntries(card))

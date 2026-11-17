@@ -1,3 +1,6 @@
+import { CheckArchive } from '../generationCanvas/CheckArchive'
+import { persistSceneChange } from './sceneCanvasPersistence'
+import { SceneCanvasFeedback } from './SceneCanvasFeedback'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Space, Spin } from 'antd'
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -67,7 +70,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
     to={workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard',
       { canvas: canvasId, storyboardTask: selectedTaskId ?? summary.latest_storyboard?.task_id })} />
   if (summary && scene) {
-    return <GenerationCanvasWorkspace key={canvasId} projectId={projectId} canvasId={canvasId}
+    return <GenerationCanvasWorkspace sceneSave={persistSceneChange} renderFeedback={current => <SceneCanvasFeedback current={current} />} key={canvasId} projectId={projectId} canvasId={canvasId}
       layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       onCanvasRead={rememberOpened}
@@ -99,7 +102,9 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         const models = document.cards?.filter((card): card is ImageModelCard | VideoModelCard =>
           modelIds.has(card.id) && (card.type === 'model.image' || card.type === 'model.video'))
         const model = models?.find(card => card.model_id) ?? models?.[0]
-        return <><SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
+        return <><CheckArchive projectId={projectId} canvasId={current.id} revision={current.revision}
+          targetReportId={current.document.cards?.some(card => card.id === query.get('check') && card.type === 'review.check') ? undefined : query.get('report') || undefined} />
+          <SceneStoryboardPreparation key={current.id} scope={{ projectId, chapterId, sequenceId }}
           navigationKey={location.key} selectedTaskId={selectedTaskId} editable={editable && !!scene.sequence.is_current}
           onReviewRetry={taskId => void requestLeave().then(allowed => { if (allowed) management('storyboard', taskId) })}
           target={{ id: current.id, appliedTaskId: current.document.storyboard?.task_id,

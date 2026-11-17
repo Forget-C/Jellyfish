@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "independent-canvas": { "file": "independentCanvas.browser.mjs", "ports": [4471, 8471], "timeoutMs": 180000 },
     "scene-object-project-upload": { "file": "sceneObjectProjectUpload.browser.mjs", "ports": [4304, 8304], "timeoutMs": 180000 },
     "scene-object-library-selection": { "file": "sceneObjectLibrarySelection.browser.mjs", "ports": [4299, 8299], "timeoutMs": 180000 },
     "scene-object-project-selection": { "file": "sceneObjectProjectSelection.browser.mjs", "ports": [4298, 8298], "timeoutMs": 180000 },
@@ -200,6 +201,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
+    "independent-canvas": ["independent-canvas"],
     "management-ui": ["resource-editor","image-source","asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
     "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "project-chapters-ui", "project-actors", "project-roles", "project-resources", "project-files", "project-settings", "management-navigation", "lab-navigation", "legacy-labs"],
 

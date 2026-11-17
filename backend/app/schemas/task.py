@@ -31,6 +31,7 @@ class TaskSourceRead(BaseModel):
     version_id: str | None = None
     unit_id: str | None = None
     shot_id: str | None = None
+    sequence_id: str | None = None
     canvas_id: str | None = None
     run_id: str | None = None
     node_id: str | None = None

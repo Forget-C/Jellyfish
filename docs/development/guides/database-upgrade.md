@@ -28,3 +28,18 @@ MySQL DDL 可能已部分生效。失败后先核实版本与实际表结构，�
 ## 开发迁移
 
 在 `backend` 目录运行 `uv run alembic revision --autogenerate -m "describe schema change"` 可生成候选 revision。提交前人工审查 MySQL DDL、索引、外键与现有数据兼容性。
+
+## 独立画布归属升级
+
+`c5e12a6b9f03` 将画布标为自由或场次类型，并允许独立画布和文件引用不带项目。升级前必须先让旧自由画布的生成、检查任务全部结束，再停止 API 和 Worker；检测到旧自由画布有活动任务或占用时，升级在任何 DDL 前拒绝。
+
+升级保留原始记录供显式维护核对，不迁移旧自由画布内容，也不提供旧路由或旧接口兼容。确认数据库备份后，在 `backend` 目录执行：
+
+```bash
+uv run python -m app.scripts.retire_project_free_canvases
+uv run python -m app.scripts.retire_project_free_canvases --apply
+```
+
+第一条只列出旧项目自由画布 ID，第二条在单一事务内清理这些画布、专属运行与保存／检查记录及对应文件引用。遇到活动任务或占用则整批拒绝。文件、通用任务历史、场次画布及其他业务引用保留。清理完成后再启动新 API 与 Worker。
+
+新独立画布没有可恢复的项目归属，本 revision 不支持 downgrade；回退须恢复升级前备份。MySQL DDL 部分失败时先核对实际结构，不盲目重跑。

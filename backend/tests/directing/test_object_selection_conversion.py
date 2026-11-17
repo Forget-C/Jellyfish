@@ -1,4 +1,5 @@
 """维护转换后通过公开接口观察资源级选用，不支持旧字段读取。"""
+from tests.canvas_urls import seed_scene_canvas, canvas_url
 import pytest
 
 from app.models.directing import Sequence
@@ -48,11 +49,11 @@ async def test_convert_member_selection_preserves_story_and_current_main(tmp_pat
         obj = response.json()['data']['objects'][0]
         assert (obj['name'], obj['description'], obj['asset_id'], obj['image_file_id']) == ('张三', '青年', 'person', 'image1')
         # 同一个公开画布入口读取转换后的动态对象；不重写已有固定图片。
-        canvas = (await client.post('/api/v1/studio/generation-canvases/p1', json={'name': '转换后'})).json()['data']
+        canvas = (await seed_scene_canvas(client, '/api/v1/studio/generation-canvases/p1', json={'name': '转换后'})).json()['data']
         document = canvas['document']
         document['cards'] = [{'id': 'ref', 'type': 'reference.character', 'name': '张三',
             'scene_object_source': {'sequence_id': 'scene', 'object_id': 'zhang'}}]
-        url = '/api/v1/studio/generation-canvases/p1/' + canvas['id']
+        url = canvas_url('/api/v1/studio/generation-canvases/p1/') + canvas['id']
         saved = await client.put(url, json={'request_id': 'converted', 'expected_revision': 0, 'document': document})
         assert saved.status_code == 200, saved.text
         outputs = await client.get(url + '/cards/ref/outputs')

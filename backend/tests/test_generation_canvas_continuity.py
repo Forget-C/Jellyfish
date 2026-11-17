@@ -1,4 +1,5 @@
 """连续性与事实在公开 HTTP 中完整采用，证据不成为隐式媒体输入。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -9,8 +10,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
     ('fact', {'fact': '左手始终戴表', 'source_basis': '原作第三段'}),
 ])
 async def test_constraint_cards_publish_complete_own_fields_and_frame_states(canvas_client, kind, fields):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '连续性'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '连续性'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'design', 'type': 'direction.' + kind, **{key: {'state': 'fact', 'text': value} for key, value in fields.items()}, 'scope': {'description': '本段', 'condition': '开门之后'}}]
     response = await canvas_client.put(url, json={'request_id': 'first', 'expected_revision': 0, 'document': doc})
@@ -26,8 +27,8 @@ async def test_constraint_cards_publish_complete_own_fields_and_frame_states(can
 @pytest.mark.asyncio
 @pytest.mark.parametrize('port,source_type,category,valid', [('space','content.place','place',True),('space','content.character','character',False),('participant','content.costume','costume',True),('participant','content.place','place',False),('related_event','direction.event','event',True)])
 async def test_constraint_relationships_only_adopt_eligible_direct_identity(canvas_client, port, source_type, category, valid):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '明确关系'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '明确关系'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     output_port = 'event' if category == 'event' else 'object'
     source = {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': output_port, 'position': 0, 'object_id': 'identity'}
     origin = {'id': 'source', 'type': source_type, 'name': '直接名称', **({'event_id':'identity','action_change':{'state':'fact','text':'不得跨级'}} if category=='event' else {'object_id':'identity','text':'不得跨级', **({'category':category} if source_type=='content.object' else {})})}
@@ -44,7 +45,7 @@ async def test_constraint_relationships_only_adopt_eligible_direct_identity(canv
 @pytest.mark.asyncio
 async def test_retired_continuity_evidence_is_rejected(canvas_client):
     files = [(await canvas_client.post('/files/upload',data={'project_id':'p','usage_kind':'generation_upload'},files={'file':(f'{i}.png', b'image', 'image/png')})).json()['data']['id'] for i in range(2)]
-    canvas=(await canvas_client.post('/canvases/p',json={'name':'固定证据'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
+    canvas=(await seed_scene_canvas(canvas_client, '/canvases/p',json={'name':'固定证据'})).json()['data'];url=canvas_url(f"/canvases/p/{canvas['id']}");doc=canvas['document']
     source={'canvas_id':canvas['id'],'card_id':'image','port_id':'image','position':0}
     doc.update(cards=[{'id':'image','type':'content.image','file_id':files[0]},{'id':'design','type':'direction.continuity','before':{'text':'空手','state':'fact'},'after':{'text':'握住钥匙','state':'fact'},'examples':[{'id':'evidence','file_id':files[0],'source':source,'purpose':'before','field_id':'before'}]}],edges=[{'id':'edge','source_card':'image','source_port':'image','target_card':'design','target_port':'image_example'}],input_order={'design':{'image_example':['edge']}})
     response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
@@ -52,7 +53,7 @@ async def test_retired_continuity_evidence_is_rejected(canvas_client):
 
 @pytest.mark.asyncio
 async def test_continuity_image_target_keeps_whole_design_and_rejects_field_mismatch(canvas_client):
-    canvas=(await canvas_client.post('/canvases/p',json={'name':'前后态'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
+    canvas=(await seed_scene_canvas(canvas_client, '/canvases/p',json={'name':'前后态'})).json()['data'];url=canvas_url(f"/canvases/p/{canvas['id']}");doc=canvas['document']
     source={'canvas_id':canvas['id'],'card_id':'design','port_id':'text','position':0}
     doc.update(cards=[{'id':'design','type':'direction.continuity','before':{'text':'空手','state':'fact'},'change':{'text':'拿钥匙','state':'proposal'},'after':{'text':'握钥匙','state':'fact'}},{'id':'image','type':'model.image','input_bindings':[{'id':'use','input_port':'text','source':source}]}],edges=[{'id':'edge','source_card':'design','source_port':'text','target_card':'image','target_port':'text'}],input_order={'image':{'text':['edge']}})
     assert (await canvas_client.put(url,json={'request_id':'save','expected_revision':0,'document':doc})).status_code==200
@@ -150,7 +151,7 @@ async def test_actual_worker_receives_whole_continuity_with_explicit_ancestors_w
 
 @pytest.mark.asyncio
 async def test_fact_retired_object_binding_is_rejected(canvas_client):
-    canvas=(await canvas_client.post('/canvases/p',json={'name':'锚点事实'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
+    canvas=(await seed_scene_canvas(canvas_client, '/canvases/p',json={'name':'锚点事实'})).json()['data'];url=canvas_url(f"/canvases/p/{canvas['id']}");doc=canvas['document']
     doc.update(cards=[{'id':'anchor','type':'direction.anchor','anchor_id':'door','name':'门边','position':{'state':'fact','text':'不穿透锚点正文'}},{'id':'fact','type':'direction.fact','fact':{'state':'fact','text':'不可移动'},'input_bindings':[{'id':'object','input_port':'effect_object','source':{'canvas_id':canvas['id'],'card_id':'anchor','port_id':'anchor','position':0,'object_id':'door'}}]}],edges=[{'id':'edge','source_card':'anchor','source_port':'anchor','target_card':'fact','target_port':'effect_object'}],input_order={'fact':{'effect_object':['edge']}})
     result=await canvas_client.put(url,json={'request_id':'save','expected_revision':0,'document':doc})
     assert result.status_code == 422, result.text
@@ -158,7 +159,7 @@ async def test_fact_retired_object_binding_is_rejected(canvas_client):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('case,code',[('count','CONSTRAINT_RELATION_COUNT'),('direct','INVALID_CONSTRAINT_BINDING')])
 async def test_constraint_structural_errors_are_located_without_text_correction(canvas_client,case,code):
-    canvas=(await canvas_client.post('/canvases/p',json={'name':'结构边界'})).json()['data'];url=f"/canvases/p/{canvas['id']}";doc=canvas['document']
+    canvas=(await seed_scene_canvas(canvas_client, '/canvases/p',json={'name':'结构边界'})).json()['data'];url=canvas_url(f"/canvases/p/{canvas['id']}");doc=canvas['document']
     doc.update(cards=[{'id':'one','type':'content.place','object_id':'one','name':'一号'},{'id':'two','type':'content.place','object_id':'two','name':'二号'},{'id':'rule','type':'direction.space_rule','axis':{'state':'proposal','text':'随意矛盾纯文本不纠错'},'input_bindings':[{'id':'one','input_port':'space','source':{'canvas_id':canvas['id'],'card_id':'one','port_id':'object','object_id':'one','position':0}}]}],edges=[{'id':'one','source_card':'one','source_port':'object','target_card':'rule','target_port':'space'}],input_order={'rule':{'space':['one']}})
     if case=='count':
         doc['cards'][-1]['input_bindings'].append({'id':'two','input_port':'space','source':{'canvas_id':canvas['id'],'card_id':'two','port_id':'object','object_id':'two','position':0}})

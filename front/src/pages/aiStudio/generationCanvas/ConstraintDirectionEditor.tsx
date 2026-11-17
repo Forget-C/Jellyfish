@@ -19,7 +19,7 @@ const labels = { spatial_basis: '空间依据', shootable_area: '可拍区域', 
 export function ConstraintDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions } = useGraphRules()
   const card = raw as ConstraintCard
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
   const keys = (card.type === 'direction.space_rule' ? ['spatial_basis', 'shootable_area', 'axis', 'scale'] : card.type === 'direction.continuity' ? ['before', 'change', 'after', 'following_constraints'] : ['fact', 'source_basis']) as (keyof typeof labels)[]
   const fields = Object.fromEntries(designFieldEntries(card))
   const category = card.type === 'direction.continuity' && <label className="design-continuity-category">连续性分类 <Select size="small" aria-label="连续性分类" value={card.category || 'space'} options={categoryOptions} onChange={category => onChange({ ...card, category })} /></label>

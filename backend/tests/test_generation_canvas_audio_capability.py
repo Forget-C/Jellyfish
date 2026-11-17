@@ -1,4 +1,5 @@
 """模型声音能力与实际输入约束通过生成画布公开接口验收。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from app.models.llm import Model, Provider
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -17,15 +18,15 @@ async def test_audio_declarations_do_not_open_unconnected_reference_input(canvas
             Model(id='q3', name='viduq3-pro', category='video', provider_id='vidu'),
         ])
         await db.commit()
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '原生声音能力'})).json()['data']
-    base = f"/canvases/p/{canvas['id']}/models"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '原生声音能力'})).json()['data']
+    base = canvas_url(f"/canvases/p/{canvas['id']}/models")
     for model_id, declaration, connected, audio_switch, reference in [
         ('canvas-image', 'unsupported', False, 'unsupported', 'unsupported'),
         ('canvas-video', 'unknown', False, 'unknown', 'unknown'),
         ('q3', 'supported', False, 'unknown', 'unknown'),
         ('seedance', 'supported', True, 'supported', 'supported'),
     ]:
-        response = await canvas_client.get(f'{base}/{model_id}/capability')
+        response = await canvas_client.get((base + f'/{model_id}/capability'))
         assert response.status_code == 200, response.text
         capability = response.json()['data']
         assert capability['native_audio_output'] == {
@@ -41,7 +42,7 @@ async def test_audio_declarations_do_not_open_unconnected_reference_input(canvas
     )
     assert upload.status_code == 201, upload.text
     audio_file = upload.json()['data']['id']
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     model = {'id': 'video', 'type': 'model.video', 'model_id': 'seedance',
              'config': {'ratio': '16:9', 'seconds': 5},
@@ -69,8 +70,8 @@ async def test_audio_declarations_do_not_open_unconnected_reference_input(canvas
 
 @pytest.mark.asyncio
 async def test_adopted_sound_with_unknown_capability_is_a_nonblocking_warning(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '声音提示'})).json()['data']
-    url, document = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '声音提示'})).json()['data']
+    url, document = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'sound', 'port_id': 'text', 'position': 0}
     model = {
         'id': 'model', 'type': 'model.video', 'model_id': 'canvas-video',
