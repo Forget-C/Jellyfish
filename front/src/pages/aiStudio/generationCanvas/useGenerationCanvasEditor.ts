@@ -1,3 +1,4 @@
+import { queueStoryboardRiskNotice } from '../directing/storyboardRiskNotice'
 import { createGraphRules } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -167,6 +168,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         : await Directing.directingStoryboardRestore({ ...scope, requestBody: { request_id: command.request_id,
           expected_revision: command.expected_revision, direction: scene.action, document: command.document as CanvasDocument } })
       if (response.data?.id !== canvas.id || response.data.revision !== command.expected_revision + 1) throw new Error('invalid scene receipt')
+      if (scene.action === 'apply' && scene.choices?.accepted_conflict_ids?.length) {
+        queueStoryboardRiskNotice(projectId, canvas.id, scene.taskId)
+      }
       return { ...response.data, scene: response.data.scene ?? canvas.scene }
     }
     const result = await Canvases.canvasSave({ projectId, canvasId: canvas.id, requestBody: command })

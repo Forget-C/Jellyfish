@@ -12,7 +12,7 @@ from app.services.directing.existing_storyboard_check import STORYBOARD_CHECK_KI
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND
 from app.services.directing.storyboard_continuity_choices import visual_continuity_state
 from app.services.directing.storyboard_review import require_storyboard_review
-from app.services.directing.storyboard_review_basis import active_risks, canvas_review_fingerprint, evidence_digest, risk_basis
+from app.services.directing.storyboard_review_basis import canvas_review_fingerprint, evidence_digest
 from app.services.generation_canvas.document_save import fixed_source_state
 from app.services.generation_canvas.errors import diagnostic
 
@@ -92,7 +92,7 @@ class StoryboardSaveEvidence:
             fields['review_history'] = {
                 'before': canvas_review_fingerprint(previous, full=True),
                 'after': canvas_review_fingerprint(document, full=True),
-                'risks': [{**risk, 'basis': risk_basis(document, risk['shot_ids'])} for risk in self._accepted_risks],
+                'risks': self._accepted_risks,
             }
         return fields
 
@@ -128,14 +128,3 @@ async def require_ordinary_save(db: AsyncSession, canvas: GenerationCanvas,
             if not restored:
                 raise diagnostic('STORYBOARD_APPLICATION_REVIEW_REQUIRED', '请核对分镜差异后应用',
                                  {'canvas_id': canvas.id}, status=409)
-
-
-async def applied_risks(db: AsyncSession, document: CanvasDocument) -> tuple[set[str], bool]:
-    """从真实应用回执读取风险及当前适用性，不采用客户端声明的确认状态。"""
-    if not document.storyboard:
-        return set(), False
-    task_id = document.storyboard.continuity_check_task_id or document.storyboard.task_id
-    receipt = await db.get(CanvasSaveReceipt, (document.id, 'storyboard:' + task_id))
-    risks = receipt.response.get('review_history', {}).get('risks', []) if receipt else []
-    active = active_risks(document, risks)
-    return active, bool(risks and len(active) != len(risks))

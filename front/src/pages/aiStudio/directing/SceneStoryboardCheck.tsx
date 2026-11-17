@@ -112,7 +112,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
     <Button disabled={!editable || polling || saving} loading={submitting} onClick={() => void submit()}>
       {intent.current ? '核实检查提交' : '检查分镜连续性'}
     </Button>
-    {task && <span role="status">{statusLabel(task)}</span>}
+    {task && (polling || retryable || task.pending_application) && <span role="status">{statusLabel(task)}</span>}
     {retryable && !intent.current && <Button disabled={!editable || submitting} onClick={() => void submit(task?.task_id)}>重试检查</Button>}
     {(task?.review || task?.error || error) && <Button onClick={() => setReportOpen('latest')}>查看检查报告</Button>}
     {appliedRisks && <Button onClick={() => setReportOpen('applied')}>

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Empty, Input, Space } from 'antd'
 import { useBlocker, useNavigate } from 'react-router-dom'
-import { StudioDirectingService as Directing, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication, StoryboardTaskRead } from '../../../services/generated'
+import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication } from '../../../services/generated'
 import { useGenerationCanvasEditor, type StoryboardReviewPreparation, type StoryboardScope } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph, type CanvasModelCardActionContext, type CanvasModelCardMenuContext } from './GenerationCanvasGraph'
 import type { GenerationCanvasLayoutPolicy } from './generationLayout'
@@ -12,7 +12,7 @@ import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
 import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
 import { CheckArchive } from './CheckArchive'
-import { StoryboardReviewFindings } from '../directing/SceneStoryboardReview'
+import { consumeStoryboardRiskNotice } from '../directing/storyboardRiskNotice'
 import { CanvasAppearancePicker } from '../directing/ui/CanvasAppearancePicker'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -87,6 +87,15 @@ export function GenerationCanvasWorkspace({
   projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
+  const toolbar = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const element = toolbar.current
+    if (!element) return
+    const measure = () => element.parentElement?.style.setProperty('--workbench-toolbar-bottom', `${element.offsetTop + element.offsetHeight}px`)
+    const observer = new ResizeObserver(measure)
+    observer.observe(element); measure()
+    return () => observer.disconnect()
+  }, [])
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
@@ -100,22 +109,14 @@ export function GenerationCanvasWorkspace({
   const beforeApplication = layoutApplication?.taskId === document?.storyboard?.task_id &&
     layoutApplication?.before.id === document?.id && layoutApplication?.before.project_id === projectId
     ? layoutApplication.before : undefined
-  const scene = current?.id === canvasId ? current.scene : undefined
-  const chapterId = scene?.chapter_id, sequenceId = scene?.sequence_id
-  const appliedTask = current?.document.storyboard?.continuity_check_task_id
-    ? undefined : current?.document.storyboard?.task_id
-  const appliedRevision = current?.revision
-  const [appliedReview, setAppliedReview] = useState<{ task: string; revision: number; result: StoryboardTaskRead }>()
-  const savedReview = appliedReview?.task === appliedTask && appliedReview?.revision === appliedRevision ? appliedReview?.result : undefined
+  const [riskNotice, setRiskNotice] = useState<string>()
+  useEffect(() => { setRiskNotice(undefined) }, [projectId, canvasId])
   useEffect(() => {
-    if (!appliedTask || appliedRevision === undefined || !chapterId || !sequenceId) return
-    let active = true
-    const request = Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: appliedTask })
-    void request.then(({ data }) => {
-      if (active && data?.canvas_id === canvasId) setAppliedReview({ task: appliedTask, revision: appliedRevision, result: data })
-    }).catch(() => { if (active) setAppliedReview(undefined) })
-    return () => { active = false; request.cancel() }
-  }, [appliedTask, appliedRevision, projectId, chapterId, sequenceId, canvasId])
+    const applied = current?.document.storyboard
+    if (canvasId && consumeStoryboardRiskNotice(projectId, canvasId, applied?.continuity_check_task_id ?? applied?.task_id)) {
+      setRiskNotice(projectId + ':' + canvasId)
+    }
+  }, [projectId, canvasId, current])
   const catalog = useRef<CanvasCatalog>()
   const configureCatalog = useCallback((value: CanvasCatalog) => {
     catalog.current = value
@@ -171,7 +172,7 @@ export function GenerationCanvasWorkspace({
       onChange={event => change({ ...document, name: event.target.value })} />,
   }
   return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
-    <header className="canvas-workbench-toolbar generation-workbench-header">
+    <header ref={toolbar} className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await editor.requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
@@ -198,13 +199,8 @@ export function GenerationCanvasWorkspace({
     </header>
     <div className="generation-feedback">
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
-    {savedReview?.review && (savedReview.review_state === 'warning' || savedReview.review_state === 'accepted' ||
-      savedReview.review_state === 'stale') && current &&
-      <Alert type="warning" showIcon message={savedReview.review_state === 'accepted' ? '已接受分镜设计风险' :
-        savedReview.review_state === 'stale' ? '分镜设计已变化，原风险确认已失效' : '部分连续性依据不足'}
-        description={<details><summary>查看连续性问题</summary>
-          <StoryboardReviewFindings report={savedReview.review} candidate={{ base_revision: current.revision, document: current.document }} />
-        </details>} />}
+    {riskNotice === projectId + ':' + canvasId && <Alert type="info" showIcon closable
+      onClose={() => setRiskNotice(undefined)} message="已按你的选择保留设计并接受相关风险" />}
     {current?.source_changed && <Alert type="warning" showIcon message="章节原文已变化，画布仍保留当前固定原文。" />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}

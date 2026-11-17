@@ -183,8 +183,24 @@ try {
     }
     return route.continue()
   })
+  let lostRiskReceipt = false
+  const riskApplyRoute = /\/storyboards\/[^/]+\/apply$/
+  await page.route(riskApplyRoute, async route => {
+    if (!lostRiskReceipt) {
+      await route.fetch()
+      lostRiskReceipt = true
+      return route.abort('failed')
+    }
+    return route.continue()
+  })
+  const lostResponse = page.waitForEvent('requestfailed', request => riskApplyRoute.test(request.url()))
   await findings.getByRole('button', { name: '应用并进入画布', exact: true }).click()
-  await page.getByText('已接受分镜设计风险', { exact: true }).first().waitFor()
+  await lostResponse
+  await findings.getByRole('button', { name: '应用并进入画布', exact: true }).click()
+
+  await page.getByText('已按你的选择保留设计并接受相关风险', { exact: true }).first().waitFor()
+  assert.ok(lostRiskReceipt)
+  await page.unroute(riskApplyRoute)
   const accepted = await data(reviewCanvas)
   assert.ok(accepted.document.storyboard)
   await page.getByText('分镜任务记录读取失败，当前画布仍保留。', { exact: true }).waitFor()
@@ -195,15 +211,21 @@ try {
   await historyRecovered
   await page.getByText('分镜任务记录读取失败，当前画布仍保留。', { exact: true }).waitFor({ state: 'hidden' })
   assert.deepEqual(await data(reviewCanvas), accepted)
-  await page.getByText('已接受分镜设计风险', { exact: true }).first().waitFor()
+  await page.getByText('已按你的选择保留设计并接受相关风险', { exact: true }).first().waitFor()
   await page.unroute(historyRoute)
+  const riskNotice = page.getByRole('alert').filter({ hasText: '已按你的选择保留设计并接受相关风险' })
+  await riskNotice.getByRole('button').click()
+  await riskNotice.waitFor({ state: 'hidden' })
+
 
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
   await poll(() => data(reviewCanvas), value => !value.document.storyboard)
   await page.getByRole('button', { name: '重做操作', exact: true }).click()
   await poll(() => data(reviewCanvas), value => value.document.storyboard?.task_id === accepted.document.storyboard.task_id)
   await page.reload()
-  await page.getByText('已接受分镜设计风险', { exact: true }).first().waitFor()
+  await page.getByRole('button', { name: '返回工作台管理', exact: true }).waitFor()
+  assert.equal(await page.getByText('已按你的选择保留设计并接受相关风险', { exact: true }).count(), 0)
+  assert.equal(await page.getByText('分镜设计已变化，原风险确认已失效', { exact: true }).count(), 0)
 
   await control({ storyboard_review_release: 100, storyboard_repair_on: reviewedControls.storyboard_review_calls + 1 })
   const repairTask = await data(sceneApi + '/storyboards', 'POST', {
@@ -246,7 +268,7 @@ try {
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
   await poll(() => data(repairCanvas), value => !value.document.storyboard.continuity_check_task_id)
   await page.reload()
-  await page.getByText('检查依据已变', { exact: true }).waitFor()
+  assert.equal(await page.getByText('检查依据已变', { exact: true }).count(), 0)
   await page.getByRole('button', { name: '查看检查报告', exact: true }).click()
   await page.getByRole('dialog', { name: '分镜连续性检查报告', exact: true }).waitFor()
   const ordinaryChecked = await context.newPage()

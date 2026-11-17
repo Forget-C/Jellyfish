@@ -405,14 +405,14 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
             next_path = path + '/' + following['task_id']
             next_review = (await read_data(client, 'POST', next_path + '/diff',
                 {'expected_revision': redone['revision']}))['continuity_review']
-            assert {item['id'] for item in next_review['conflicts'] if item['previously_accepted']} == set(ids)
+            assert not any(item['previously_accepted'] for item in next_review['conflicts'])
             changed = redone['document']
             shot = next(card for card in changed['cards'] if card['type'] == 'direction.shot')
             shot['visible_result'].update(text='张三离开车旁', authorship='user')
             edited = await read_data(client, 'PUT', canvas_path, {'request_id': 'changed',
                 'expected_revision': redone['revision'], 'document': changed})
             observed = await read_data(client, 'GET', task_path)
-            assert observed['review_state'] == 'stale' and not observed['accepted_conflict_ids']
+            assert observed['review_state'] == 'accepted' and set(observed['accepted_conflict_ids']) == set(ids)
             stale = await client.post(next_path + '/apply', json={'expected_revision': edited['revision'],
                 'review_token': next_review['token'], 'accepted_conflict_ids': ids})
             assert stale.status_code == 409 and stale.json()['data']['code'] == 'STORYBOARD_REVIEW_STALE'

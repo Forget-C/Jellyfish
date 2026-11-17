@@ -37,7 +37,7 @@ from app.services.directing.storyboard_reference_cleanup import card_name
 from app.services.generation_canvas.catalog import CARD_TITLES
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.document_save import prepare_document
-from app.services.directing.storyboard_save import StoryboardSaveEvidence, applied_risks
+from app.services.directing.storyboard_save import StoryboardSaveEvidence
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -751,7 +751,6 @@ class SceneStoryboardService(SceneObjectService):
         if reextract:
             # The merged plan can mask a new edit to a card selected for overwrite.
             stale = not basis or basis['all'] != latest['all'] or result.get('reviewed_plan_fingerprint') != planned_fingerprint
-        active, _ = await applied_risks(self.db, current)
         draft = SceneStoryboard.model_validate(result['review_draft']) if result.get('review_draft') else None
         protected = {origin.semantic_key for origin in current.storyboard.origins.values()
                      if origin.manually_edited} if current.storyboard else set()
@@ -765,7 +764,7 @@ class SceneStoryboardService(SceneObjectService):
             eligible = (saved_repair_fields(planned, issue_report) if task.kind == STORYBOARD_CHECK_KIND and planned.storyboard
                         else draft and task.input_snapshot['run_args']['mode'] == 'complete' and repair_fields(
                             draft, issue_report, protected))
-            choices[key] = StoryboardConflictChoice(id=key, issue=issue, previously_accepted=key in active, can_repair=bool(eligible))
+            choices[key] = StoryboardConflictChoice(id=key, issue=issue, previously_accepted=False, can_repair=bool(eligible))
         token = evidence_digest({'task': task.id, 'current': latest['all'], 'planned': planned_fingerprint,
                                  'choices': sorted(choices)})
         return StoryboardContinuityDiff(token=token, stale=stale, conflicts=list(choices.values()),
@@ -800,7 +799,7 @@ class SceneStoryboardService(SceneObjectService):
             if error.status_code != 404:
                 raise
             raise HTTPException(404, '此分镜任务的原画布已不可用') from error
-        candidate, pending = None, False
+        candidate, pending, receipt = None, False, None
         if task.status == TaskStatus.succeeded:
             candidate = StoryboardCandidate.from_task_result(task.result)
             receipt = await self.db.get(CanvasSaveReceipt, (canvas_id, 'storyboard:' + task.id))
@@ -815,11 +814,13 @@ class SceneStoryboardService(SceneObjectService):
         saved_check = task.kind == STORYBOARD_CHECK_KIND
         active_check = applied.storyboard.continuity_check_task_id if applied.storyboard else None
         if active_check == task.id or (not active_check and applied.storyboard and applied.storyboard.task_id == task.id):
-            accepted, stale = await applied_risks(self.db, applied)
-            if stale or accepted:
-                summary['review_state'] = 'stale' if stale else 'accepted'
+            # Acceptance is a historical application decision, not a live validity state.
+            risks = receipt.response.get('review_history', {}).get('risks', []) if receipt else []
+            accepted = {risk['id'] for risk in risks}
+            if accepted:
+                summary['review_state'] = 'accepted'
         if saved_check:
-            if task.status == TaskStatus.succeeded:
+            if task.status == TaskStatus.succeeded and candidate is not None:
                 basis = (canvas_review_fingerprint(CanvasDocument.model_validate(task.result['document']))
                          if active_check == task.id else task.input_snapshot['review_basis']['all'])
                 if (canvas_review_fingerprint(applied) != basis

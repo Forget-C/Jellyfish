@@ -95,8 +95,3 @@ def capture_review_basis(document: CanvasDocument, *, overwrite_card_ids: Iterab
 def risk_basis(document: CanvasDocument, shot_ids: list[str]) -> str:
     """Scope a risk decision to the reported shots and actual transition evidence."""
     return canvas_review_fingerprint(document, affected_shots(document, shot_ids))
-
-
-def active_risks(document: CanvasDocument, risks: list[dict]) -> set[str]:
-    """A decision only survives while its own evidence is unchanged."""
-    return {risk['id'] for risk in risks if risk['basis'] == risk_basis(document, risk['shot_ids'])}

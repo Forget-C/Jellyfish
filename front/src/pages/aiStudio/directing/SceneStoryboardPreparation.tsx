@@ -207,7 +207,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   return <>
     <Space wrap>
       <Button variant="primary" onClick={start} disabled={!editable}>{action}</Button>
-      {!open && task && <span role="status">{taskLabel(task)}</span>}
+      {!open && task && task.task_id !== target.appliedTaskId && <span role="status">{taskLabel(task)}</span>}
       {!open && task?.review_state === 'incomplete' &&
         <Button onClick={() => onReviewRetry(task.task_id)}>前往重试审查</Button>}
       {!open && pending && <Button loading={submitting} disabled={!editable} onClick={() => void submit(pending)}>核实提交</Button>}

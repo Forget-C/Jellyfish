@@ -128,7 +128,7 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
             undone = await read_data(client, 'POST', repaired_path + '/restore', {'request_id': 'undo-saved',
                 'expected_revision': applied['revision'], 'direction': 'undo', 'document': before['document']})
             assert undone['document'] == before['document']
-            assert (await read_data(client, 'GET', checks_path))['review_state'] == ('stale' if action == 'repair' else 'conflict')
+            assert (await read_data(client, 'GET', checks_path))['review_state'] == ('passed' if action == 'repair' else 'conflict')
 
             stale = await read_data(client, 'POST', checks_path, {'request_id': 'stale-check', 'expected_revision': undone['revision']})
             manual = undone['document']
