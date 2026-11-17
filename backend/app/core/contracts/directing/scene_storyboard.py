@@ -358,6 +358,8 @@ class StoryboardRetryBasis(Contract):
     production_model_name: str | None = None
     pending_modality: Literal['image', 'video']
     review_only: bool = False
+    review_basis_changed: bool = False
+    review_diff: "StoryboardDiff | None" = None
     structure_only: bool = False
     structure_issues: list[str] = Field(default_factory=list)
     user_issues: list[StoryboardUserIssue] = Field(default_factory=list)

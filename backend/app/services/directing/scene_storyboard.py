@@ -247,6 +247,8 @@ class SceneStoryboardService(SceneObjectService):
             current = await self.db.get(Task, current.retry_of_task_id) if current.retry_of_task_id else None
         saved = (failed.result or {}).get('storyboard_structure') or failed.input_snapshot.get('run_args', {}).get('structure_resume') or {}
         from app.services.directing.storyboard_structure import diagnose_retained_structure
+        if self._review_source(failed):
+            saved = {}
         evidence = diagnose_retained_structure(saved, failed.input_snapshot['run_args'])
         converted = user_structure_issues(evidence,
                                          failed.input_snapshot.get('run_args', {}).get('objects', [])) if saved.get('draft') else []
@@ -266,13 +268,26 @@ class SceneStoryboardService(SceneObjectService):
             raise HTTPException(404, 'Canvas not found in scene')
         args = snapshot['run_args']
         config = snapshot['storyboard_request']
-        token = CanvasStore.command_digest({'retry_review': failed.id, 'source': self._review_source(failed)})
+        token = CanvasStore.command_digest({'retry_review': failed.id, 'source': self._review_source(failed), 'document': canvas.document})
         objects = [StoryboardBasisObject.model_validate({key: item[key] for key in (
             'id', 'kind', 'name', 'excerpt', 'asset_id', 'image_file_id')}) for item in args['objects']]
+        source_id = self._review_source(failed)
+        source = failed if source_id == failed.id or not source_id else await self.db.get(Task, source_id)
+        previous = source.input_snapshot.get('review_basis')
+        latest = capture_review_basis(CanvasDocument.model_validate(canvas.document),
+            overwrite_card_ids=failed.input_snapshot.get('review_overwrite_card_ids', []))
+        changed = not previous or previous['all'] != latest['all']
         basis = StoryboardBasis(token=token, source_text=args['script_text'], source_changed=False,
             preparation_revision=0, preparation_stale=False, object_task_active=False, objects=objects)
         production = await self.db.get(Model, args['production_model_id']) if args['production_model_id'] else None
+        diff = None
+        if changed and (source.result or {}).get('document'):
+            _, diff = await self.plan_extraction(source, CanvasDocument.model_validate(canvas.document),
+                CanvasDocument.model_validate(source.result['document']),
+                StoryboardApplication(expected_revision=canvas.revision,
+                    overwrite_card_ids=failed.input_snapshot.get('review_overwrite_card_ids', [])))
         return StoryboardRetryBasis(canvas_id=canvas.id, basis=basis, review_only=True,
+            review_basis_changed=changed, review_diff=diff,
             source_kind='confirmed_scene' if config.get('adopt_current_source') else 'fixed',
             mode=args['mode'], text_model_name=snapshot['model_name'], production_model_id=args['production_model_id'],
             production_model_name=production.name if production else None, pending_modality=args['pending_modality'])
@@ -296,7 +311,18 @@ class SceneStoryboardService(SceneObjectService):
         source_id = self._review_source(failed) or failed.id
         source = failed if source_id == failed.id else await self.db.get(Task, source_id)
         resume_stage = 'rechecking_storyboard' if (source.result or {}).get('review_repair') else 'reviewing_storyboard'
-        return await self._submit_review_resume(sequence_id, failed, body, source_id, resume_stage)
+        canvas = await CanvasStore(self.db, self.project_id).get(basis.canvas_id, lock=True)
+        previous = source.input_snapshot.get('review_basis')
+        latest = capture_review_basis(CanvasDocument.model_validate(canvas.document),
+            overwrite_card_ids=failed.input_snapshot.get('review_overwrite_card_ids', []))
+        changed = not previous or previous['all'] != latest['all']
+        if changed and body.basis_token != basis.basis.token:
+            raise RevisionConflict('画布合并依据已变化，请重新读取并确认本次审查依据')
+        plan = {'review_current_document': canvas.document,
+                'review_basis': capture_review_basis(CanvasDocument.model_validate(canvas.document),
+                    overwrite_card_ids=failed.input_snapshot.get('review_overwrite_card_ids', [])),
+                'review_exact_plan': True} if changed else None
+        return await self._submit_review_resume(sequence_id, failed, body, source_id, resume_stage, review_plan=plan)
 
     async def _targeted_repair(self, chapter_id: str, sequence_id: str, task: Task, body: StoryboardRetry) -> StoryboardTaskRead:
         """Authorize one conflict-specific attempt from the currently reviewed candidate."""
@@ -356,9 +382,9 @@ class SceneStoryboardService(SceneObjectService):
             provider_id=source.provider_id, retry_of_task_id=source.id,
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={**snapshot, **(review_plan or {}), 'scene_admission_order': await self._next_scene_task_order(sequence_id),
-                'storyboard_request': {**snapshot['storyboard_request'], 'request_id': body.request_id},
+                'storyboard_request': {**snapshot['storyboard_request'], 'request_id': body.request_id, 'correction_notes': ''},
                 'review_retry_request': body.model_dump(mode='json'), 'review_retry_from': source_id, 'review_retry_stage': stage,
-                'review_targeted_repair': None if review_plan else repair or snapshot.get('review_targeted_repair')})
+                'review_targeted_repair': repair})
         return await self._storyboard_read(task)
 
     async def _ensure_no_active_storyboard(self, sequence_id: str, canvas_id: str) -> None:

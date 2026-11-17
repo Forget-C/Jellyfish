@@ -19,7 +19,7 @@ from tests.directing.test_storyboard_scope import read_data
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(('failure', 'kind'), [
-    ('timeout', 'conflict'), ('invalid', 'conflict'), ('unknown_shot', 'insufficient_basis'),
+    ('timeout', 'conflict'), ('invalid', 'conflict'), ('unknown_shot', 'insufficient_basis'), ('duplicate_shot', 'conflict'),
 ])
 async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp_path, monkeypatch, failure, kind):
     original = '张三站在车旁不动。镜头切到张三右手。'
@@ -32,6 +32,7 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
 
         def invoke(self, messages):
             args = json.loads(messages[1].content)
+            assert 'repair_targets' not in args, '重试审查不得调用正文修正'
             if 'storyboard_draft' in args:
                 reviews.append(args['storyboard_draft'])
                 if len(reviews) == 1:
@@ -39,14 +40,16 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
                         raise httpx.ReadTimeout('controlled review timeout')
                     if failure == 'invalid':
                         return SimpleNamespace(content='unparseable review')
-                    return SimpleNamespace(content=json.dumps({'issues': [{'kind': 'conflict', 'shot_ids': ['unknown'],
+                    return SimpleNamespace(content=json.dumps({'issues': [{'kind': 'conflict', 'shot_ids': ['first', 'first'] if failure == 'duplicate_shot' else ['unknown'],
                         'requirements': '未知镜头', 'suggestion': '无效建议'}]}))
                 result = {'issues': [{'kind': kind, 'shot_ids': ['first', 'second'],
                     'requirements': '静止与入场冲突，近景同时要求头、手和双脚；未交代从右手换到左手',
-                    'suggestion': '保留原站位和右手，近景只拍手'}]}
+                    'suggestion': '保留原站位和右手，近景只拍手',
+                    'repair_targets': [{'shot_id': 'first', 'design_id': 'continuity', 'field_id': 'change'}] if kind == 'conflict' else []}]}
             else:
                 drafts.append(args)
-                result = {'shots': [{'id': 'first', 'excerpt': '张三站在车旁不动。'},
+                result = {'shots': [{'id': 'first', 'excerpt': '张三站在车旁不动。', 'designs': [{'id': 'continuity',
+                    'card_type': 'direction.continuity', 'fields': {'change': {'state': 'proposal', 'text': '保持原地'}}}]},
                                     {'id': 'second', 'excerpt': '镜头切到张三右手。'}]}
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
 
@@ -79,6 +82,19 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
             retry_path = path + '/' + first['task_id'] + '/retry'
             basis = await read_data(client, 'GET', retry_path + '/basis')
             assert basis['review_only'] and basis['basis']['source_text'] == original
+            assert basis['current_attempt']['title'] == '候选已保留，审查未完成'
+            assert basis['user_issues'] == []
+            if failure in ('unknown_shot', 'duplicate_shot', 'invalid'):
+                assert any('审查响应' in entry for entry in basis['current_attempt']['diagnostics'])
+            if failure == 'duplicate_shot':
+                async with sessions.begin() as db:
+                    source_task = await db.get(Task, task['task_id'])
+                    source_task.input_snapshot = {**source_task.input_snapshot,
+                        'review_basis': {**source_task.input_snapshot['review_basis'], 'all': 'earlier-business-basis'}}
+                basis = await read_data(client, 'GET', retry_path + '/basis')
+                assert basis['review_basis_changed'] and basis['review_diff'] is not None
+                refused = await client.post(retry_path, json={'request_id': 'unconfirmed-review'})
+                assert refused.status_code == 409
             retry_request = {'request_id': 'retry-review', 'basis_token': basis['basis']['token']}
             retry = await read_data(client, 'POST', retry_path, retry_request)
             assert await read_data(client, 'POST', retry_path, retry_request) == retry

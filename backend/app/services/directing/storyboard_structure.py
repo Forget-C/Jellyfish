@@ -248,6 +248,18 @@ def structure_attempt(task) -> dict:
         title, reason = '本轮执行已完成', '该轮任务已完成；结果是否应用以画布记录为准。'
     elif task.status == 'cancelled':
         title, reason = '本轮已取消', '本轮执行已取消。'
+    result = task.result or {}
+    if task.status in ('failed', 'cancelled') and (
+            result.get('review_state') == 'pending' or task.input_snapshot.get('review_retry_from')):
+        corrected = bool(task.input_snapshot.get('run_args', {}).get('structure_resume') or result.get('structure_history'))
+        title = '纠错完成，审查未完成' if corrected else '候选已保留，审查未完成'
+        reason = '已保留候选。' + (task.error_message or '本轮审查未完成。') + ' 可仅重试审查。'
+        detail = result.get('design_diagnostics') or {}
+        diagnostics = detail.get('issues', [])
+        if detail.get('output'):
+            diagnostics = [*diagnostics, '审查响应：' + detail['output']]
+        elif not diagnostics:
+            diagnostics = [task.error_message or '审查未完成', '该轮未记录审查原始响应。']
     return {'task_id': task.id, 'created_at': task.created_at.isoformat() + 'Z', 'status': task.status,
             'title': title, 'reason': reason,
             'correction_notes': task.input_snapshot.get('storyboard_request', {}).get('correction_notes', ''),

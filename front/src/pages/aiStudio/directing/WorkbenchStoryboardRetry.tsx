@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Descriptions, Modal as AntModal, Input, Radio, Space, Spin } from 'antd'
+import { Alert, Button, Checkbox, Descriptions, Modal as AntModal, Input, Radio, Space, Spin } from 'antd'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
@@ -61,6 +61,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [useSaved, setUseSaved] = useState(false)
+  const [confirmedReviewBasis, setConfirmedReviewBasis] = useState(false)
   const [regenerate, setRegenerate] = useState(false)
   const [choice, setChoice] = useState<string | null>()
   useEffect(() => {
@@ -76,7 +77,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   useEffect(() => {
     if (!target) return
     let active = true
-    setPreview(undefined); setError(''); setUseSaved(false); setChoice(undefined); setRegenerate(false); setLoading(true)
+    setConfirmedReviewBasis(false); setPreview(undefined); setError(''); setUseSaved(false); setChoice(undefined); setRegenerate(false); setLoading(true)
     const request = Directing.directingStoryboardRetryBasis({ projectId, chapterId, sequenceId, taskId: target })
     void request.then(response => {
       if (!active) return
@@ -129,13 +130,13 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
   }
   const refresh = () => setRevision(value => value + 1)
   const basis = preview?.basis
-  const ready = !loading && retryable && task?.task_id === target && !!basis && !basis.preparation_stale
+  const ready = (!preview?.review_only || !preview?.review_basis_changed || confirmedReviewBasis) && !loading && retryable && task?.task_id === target && !!basis && !basis.preparation_stale
     && (!basis.object_task_active || basis.preparation_revision > 0 && useSaved)
     && (regenerate || !preview?.structure_options?.length || (choice === null ? !!notes.trim() : !!choice))
   const confirm = () => {
     if (pending) void submit(pending)
     else if (ready && basis && target) void submit({ taskId: target, body: {
-      request_id: crypto.randomUUID(), basis_token: basis.token, regenerate, structure_choice_id: regenerate ? undefined : choice ?? undefined, correction_notes: regenerate ? '' : notes.trim(), use_saved_objects: basis.object_task_active && useSaved,
+      request_id: crypto.randomUUID(), basis_token: basis.token, regenerate, structure_choice_id: regenerate ? undefined : choice ?? undefined, correction_notes: regenerate || reviewOnly ? '' : notes.trim(), use_saved_objects: basis.object_task_active && useSaved,
     } })
   }
   const verifyLabel = '核实提交结果'
@@ -163,7 +164,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
           <p><strong>{preview.current_attempt.title}</strong> · <time dateTime={preview.current_attempt.created_at}>{new Date(preview.current_attempt.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</time></p>
           <p>{preview.current_attempt.reason}</p>
           {preview.structure_only && <p>保留草案未更新；纠错结果仍需核对后应用。</p>}
-          {preview.current_attempt.correction_notes && <><strong>本轮提交的意见</strong><p>{preview.current_attempt.correction_notes}</p>
+          {!preview.review_only && preview.current_attempt.correction_notes && <><strong>本轮提交的意见</strong><p>{preview.current_attempt.correction_notes}</p>
             <Button disabled={!!pending || submitting} onClick={() => updateNotes(preview.current_attempt?.correction_notes ?? '')}>沿用此意见</Button></>}
         </section>}
         {!!preview.user_issues?.length && <section aria-label="保留草案的问题"><h3>保留草案的问题（{preview.user_issues?.length}）</h3>
@@ -174,6 +175,19 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
           </article>)}
         </section>}
         <h3>下一次处理</h3>
+        {preview.review_only && preview.review_basis_changed && <Alert type="warning" message="画布合并依据已变化，请先查看当前画布并确认本次审查将使用新的合并方案。" />}
+        {preview.review_only && preview.review_basis_changed && <>
+          {preview.review_diff && <section aria-label="本次合并方案">
+            <h4>本次候选与当前画布的合并变化</h4>
+            {(['added', 'modified', 'removed', 'orphaned'] as const).map((kind, index) => <div key={kind}>
+              <strong>{['新增', '更新', '移除', '引用受影响'][index]}</strong>
+              <ul>{preview.review_diff?.[kind].map(card => <li key={card.id}>{card.type_name} · {card.name}</li>)}</ul>
+            </div>)}
+          </section>}
+          <Checkbox checked={confirmedReviewBasis} disabled={!!pending || submitting || !preview.review_diff}
+            onChange={event => setConfirmedReviewBasis(event.target.checked)}>已核对合并变化，确认审查本次方案</Checkbox>
+        </>}
+
         {!preview.review_only && <Radio.Group value={regenerate} disabled={!!pending || submitting}
           onChange={event => setRegenerate(event.target.value as boolean)}>
           <Radio value={false}>{preview.structure_only ? '修正当前草案' : '重新提取分镜'}</Radio>
@@ -219,7 +233,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
           { key: 'production', label: '生产模型', children: preview.production_model_name
             ?? (preview.pending_modality === 'video' ? '稍后配置视频模型卡' : '稍后配置图片模型卡') },
         ]} />
-        <StoryboardBasisPreview basis={preview.basis} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refresh}
+        <StoryboardBasisPreview basis={preview.review_only ? { ...preview.basis, source_changed: false } : preview.basis} useSaved={useSaved} onUseSaved={setUseSaved} onRefresh={refresh}
           sourceLabel={preview.source_kind === 'fixed' ? '本次采用的画布固定原文' : '本次采用的场次摘录'}
           emptyText="本次重试未采用对象参考，可以继续核对。"
           onOpenSource={onReviewSource}

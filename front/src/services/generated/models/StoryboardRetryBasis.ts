@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { StoryboardAttemptRead } from './StoryboardAttemptRead';
 import type { StoryboardBasis } from './StoryboardBasis';
+import type { StoryboardDiff } from './StoryboardDiff';
 import type { StoryboardStructureOption } from './StoryboardStructureOption';
 import type { StoryboardUserIssue } from './StoryboardUserIssue';
 /**
@@ -19,6 +20,8 @@ export type StoryboardRetryBasis = {
     production_model_name?: (string | null);
     pending_modality: 'image' | 'video';
     review_only?: boolean;
+    review_basis_changed?: boolean;
+    review_diff?: (StoryboardDiff | null);
     structure_only?: boolean;
     structure_issues?: Array<string>;
     user_issues?: Array<StoryboardUserIssue>;

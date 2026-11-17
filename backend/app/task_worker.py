@@ -442,8 +442,8 @@ class TaskWorker:
                 return
         review = (StoryboardReviewReport.model_validate(targeted['report']) if targeted and not repair
                   else await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint))
-        if (not repair and review.state == 'conflict' and args['mode'] == 'complete'
-                and (targeted or not task.input_snapshot.get('review_exact_plan'))):
+        may_repair = (not source_id or targeted) and (targeted or not task.input_snapshot.get('review_exact_plan'))
+        if not repair and may_repair and review.state == 'conflict' and args['mode'] == 'complete':
             selected = StoryboardReviewReport.model_validate({'issues': [targeted['issue']]}) if targeted else review
             checkpoint, review = await self._repair_storyboard_checkpoint(task, llm, stopped, generated, checkpoint, review, selected)
             if checkpoint is None:
@@ -867,6 +867,9 @@ class TaskWorker:
     async def _fail(self, task_id: str, code: str, message: str, *, result: dict | None = None) -> None:
         """所有错误均经统一终态裁决，不覆盖已经提交的成功或取消。"""
         async with self.sessions() as db:
+            current = await db.get(Task, task_id)
+            if result and (current.result or {}).get('review_state') == 'pending':
+                result = {**current.result, **result}
             await TaskService(db).finish(task_id, error_code=code, error=message, result=result)
             await db.commit()
 

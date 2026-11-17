@@ -10,7 +10,7 @@ from app.core.contracts.task import TaskStatus
 from app.services.generation_canvas.errors import diagnostic
 
 
-def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str):
+def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str, *, include_output: bool = False):
     """One provider call, strict JSON and a stable failure message."""
     from app.services.directing.ai import DirectingOutputError
     response = llm.invoke([
@@ -23,9 +23,13 @@ def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_
         if content.startswith('```') and '\n' in content:
             content = content.split('\n', 1)[1].rsplit('```', 1)[0].strip()
     try:
-        return contract.model_validate_json(content)
+        parsed = contract.model_validate_json(content)
+        return (parsed, content) if include_output else parsed
     except (ValidationError, TypeError) as error:
-        raise DirectingOutputError(error_message) from error
+        from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
+        raise DirectingOutputError(error_message, SceneDesignDiagnostics(
+            output=content if isinstance(content, str) else '',
+            issues=['审查响应格式无效：' + type(error).__name__])) from error
 
 
 def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
@@ -52,10 +56,24 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         instruction += ('本次是重新提取。以 effective_canvas 的合并结果及实际采用关系为审查依据，'
                         '其中包含保留的人工设计。storyboard_draft 只用于镜头、设计和字段的逻辑身份索引。'
                         '若合并内容与草案不同，以合并内容为准，禁止将保留的人工设计列为定向修正目标。')
-    report = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction, '分镜审查返回无效，请重试审查')
+    inputs = {**inputs, 'valid_shots': [
+        {'id': shot['id'], 'label': f'镜头 {index + 1:02d}'} for index, shot in enumerate(inputs['storyboard_draft']['shots'])]}
+    instruction += 'shot_ids 只能使用 valid_shots 中的 id，不使用序号或卡片身份，同一问题内不可重复。'
+    report, output = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction,
+                                           '分镜审查返回无效，请重试审查', include_output=True)
     known = {shot['id'] for shot in inputs['storyboard_draft']['shots']}
-    if any(len(set(issue.shot_ids)) != len(issue.shot_ids) or not set(issue.shot_ids) <= known for issue in report.issues):
-        raise DirectingOutputError('分镜审查引用了无效镜头，请重试审查')
+    errors = []
+    for index, issue in enumerate(report.issues):
+        unknown = sorted(set(issue.shot_ids) - known)
+        repeated = sorted({key for key in issue.shot_ids if issue.shot_ids.count(key) > 1})
+        if unknown:
+            errors.append(f'issues.{index}.shot_ids 引用了不存在的镜头：{unknown}')
+        if repeated:
+            errors.append(f'issues.{index}.shot_ids 重复引用镜头：{repeated}')
+    if errors:
+        from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
+        raise DirectingOutputError('审查结果包含不存在或重复的镜头引用，请重试审查',
+            SceneDesignDiagnostics(output=output, issues=[*errors, f'合法镜头：{sorted(known)}']))
     return report
 
 
