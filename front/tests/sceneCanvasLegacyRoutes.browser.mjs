@@ -38,18 +38,9 @@ try {
   assert.ok(data)
   const sequence = data.sequences[0]
   const versions = `${directing}/sequences/${sequence.id}/versions`
-  const first = await request(versions, 'POST', { request_id: 'legacy-version-a', title: '旧版交付甲' })
-  const library = await request(`${versions}/${first.id}/take-library`)
-  const take = library.find(item => item.task_id === 'legacy-video-task')
-  assert.ok(take)
-  first.content.timeline.items = [{ kind: 'media', id: 'retained-clip', take_kind: take.take_kind, take_id: take.take_id,
-    file_id: take.file_id, fit: 'contain', media_range: { source_in_ms: 0, source_out_ms: 1000 }, timeline_start_ms: 0 }]
-  const saved = await request(`${versions}/${first.id}`, 'PUT', {
-    request_id: 'legacy-timeline', expected_revision: first.revision, content: first.content,
-  })
-  const delivery = await request(`${versions}/${first.id}/deliveries`, 'POST', { request_id: 'legacy-delivery', expected_revision: saved.revision })
-  const task = await request(`${versions}/${first.id}/exports`, 'POST', { request_id: 'legacy-export', expected_revision: saved.revision, size: 720 })
-  const second = await request(versions, 'POST', { request_id: 'legacy-version-b', title: '旧版方案乙' })
+  const { delivery, file_id: fileId } = await request(`${api}/browser-test/legacy-delivery/${sequence.id}`, 'POST')
+  assert.equal((await fetch(versions)).status, 404)
+  assert.equal((await fetch(`${versions}/${delivery.version_id}`)).status, 404)
   const chapters = `${origin}/projects/${project}?tab=chapters`
   const chapterPage = chapters + '&chapter=' + chapter
   const managementPath = `/projects/${project}/chapters/${chapter}/workbench-management`
@@ -83,7 +74,7 @@ try {
   await newHost.getByRole('button', { name: '生成新分镜画布', exact: true }).waitFor()
   assert.equal(await newHost.getByRole('button', { name: '场次更多操作', exact: true }).count(), 0)
   assert.deepEqual(versionReads, [])
-  await page.goto(`${prep}?version=${first.id}&canvas=edit`)
+  await page.goto(`${prep}?version=${delivery.version_id}&canvas=edit`)
   await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
 
@@ -101,13 +92,12 @@ try {
   await management.getByText('章节不属于当前项目', { exact: true }).waitFor()
   assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
   assert.equal((await used()).id, delivery.id)
-  assert.equal((await used()).version_id, first.id)
+  assert.equal((await used()).version_id, delivery.version_id)
   const history = await request(`${directing}/sequences/${sequence.id}/deliveries`)
   assert.deepEqual(history.map(item => item.id), [delivery.id])
-  const file = await request(`${api}/api/v1/studio/files/${take.file_id}`)
+  const file = await request(`${api}/api/v1/studio/files/${fileId}`)
   assert.ok(file.usages.some(usage => usage.source_ref === 'scene-delivery:' + delivery.id))
-  assert.equal((await request(`${versions}/${first.id}`)).revision, saved.revision)
-  assert.equal((await request(versions)).length, 2)
+  assert.equal(history[0].revision, delivery.revision)
   console.log('management routes and retained backend records verified', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})

@@ -1,9 +1,9 @@
 # 场次版本架构
 
-> 旧四画布前端宿主、路由和任务跳转已退役；本文旧场次版本相关内容保留为后端契约及历史实现说明，不代表当前产品入口。剪辑源码仅作[实现参考](../../../front/reference/retired-scene-edit/README.md)，不纳入生产构建和常规测试。
+> 旧四画布前端和旧场次版本 HTTP 接口均已退役。本文记录存量数据契约及历史实现。当前可用入口见[退役范围](directing-foundation.md#旧四画布退役范围)。剪辑源码仅作[实现参考](../../../front/reference/retired-scene-edit/README.md)，不纳入生产构建和常规测试。
 
 
-本页记录保留的旧场次版本后端契约，以及已退役宿主的保存、恢复与另存为历史行为。当前场次的默认入口及共同画布保存见[场次入口与旧版记录](directing-foundation.md#场次入口与旧版记录)。章节快照见[章节划分架构](chapter-division.md)，产品语义见[章节划分与场次版本设计](../design/chapter-and-scene-versions.md)。
+本页记录存量场次版本的数据契约，以及已退役宿主的保存、恢复与另存为历史行为。当前场次的默认入口及共同画布保存见[场次入口与旧版记录](directing-foundation.md#场次入口与旧版记录)。章节快照见[章节划分架构](chapter-division.md)，产品语义见[章节划分与场次版本设计](../design/chapter-and-scene-versions.md)。
 
 ## 身份、存储与来源
 

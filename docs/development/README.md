@@ -55,6 +55,7 @@
 - [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
 - [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
 - [原文异常修复与补充解释的边界](adr/0011-chapter-source-explanations.md)
+- [退役旧场次版本 HTTP 接口](adr/0013-retire-scene-version-api.md)
 
 ## 开发与维护指南
 

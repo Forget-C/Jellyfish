@@ -11,7 +11,8 @@ from app.api.v1.routes.studio.files import router as file_router
 from app.api.v1.routes.studio.generation_canvases import router as canvas_router
 from app.api.v1.routes.film.task_status import router as task_router
 from app.dependencies import get_db
-from app.models.studio import FileUsage
+from app.models.studio import FileItem, FileUsage
+from app.models.task import Task, TaskOutput
 from app.services.directing.store import DirectingStore
 from tests.directing.samples import design_sample, plan_sample
 from tests.directing.test_store import database, frozen
@@ -74,6 +75,39 @@ async def client_for(sessions):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.canvas_sessions = sessions
         yield client
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_versions_are_not_routed(tmp_path):
+    """旧场次版本接口已退役，场次读取接口仍可处理请求。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            scene = await DirectingStore(db, "p1").create_sequence(chapter_id="ch1", title="店内", position=0)
+        path = f"/api/v1/studio/projects/p1/directing/sequences/{scene.id}"
+        assert (await client.get(path)).status_code == 200
+        assert (await client.get(path + "/versions")).status_code == 404
+        assert (await client.post(path + "/versions/version/exports", json={})).status_code == 404
+        contract = (await client.get("/openapi.json")).json()
+        assert not any("/sequences/{sequence_id}/versions" in path for path in contract["paths"])
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_export_keeps_its_file_protected(tmp_path):
+    """历史导出仍可由通用任务接口查询，文件仍受原业务引用保护。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(FileItem(id="legacy-export", type="video", name="历史导出", storage_key="legacy/export.mp4"))
+            db.add(Task(id="old-export", kind="scene_export", project_id="p1", status="succeeded",
+                        result={"file_id": "legacy-export"}))
+            await db.flush()
+            db.add(TaskOutput(task_id="old-export", file_id="legacy-export", ordinal=0,
+                              delivery_status="published"))
+            db.add(FileUsage(file_id="legacy-export", project_id="p1", usage_kind="generated_video",
+                             source_ref="scene-export:old-export"))
+        result = await client.get("/api/v1/film/tasks/old-export/result")
+        assert result.status_code == 200
+        assert (await client.delete("/api/v1/studio/files/legacy-export")).status_code == 409
+        assert (await client.get("/api/v1/studio/files/legacy-export")).status_code == 200
 
 
 @pytest.mark.asyncio

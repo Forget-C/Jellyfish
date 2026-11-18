@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { DivisionResult } from './DivisionResult';
-import type { EditableSceneDesign_Output } from './EditableSceneDesign_Output';
+import type { EditableSceneDesign } from './EditableSceneDesign';
 import type { InstructionCheckResult } from './InstructionCheckResult';
 import type { ReviewPacket } from './ReviewPacket';
 import type { ReviewRevisionApplication } from './ReviewRevisionApplication';
@@ -23,7 +23,7 @@ export type DirectingTaskRead = {
     division_baseline?: (Record<string, any> | null);
     division?: (DivisionResult | null);
     design?: (SceneDesign_Output | null);
-    scene_design?: (EditableSceneDesign_Output | null);
+    scene_design?: (EditableSceneDesign | null);
     scene_instruction?: (SceneInstructionResult | null);
     instruction_check?: (InstructionCheckResult | null);
     review?: (ReviewPacket | null);

@@ -1224,13 +1224,6 @@ class DirectingStore:
 
     async def validate_task_continuity(self, task: Task):
         """Worker 发出请求前重查固定计划的实际依赖；已发出的请求保留原输入。"""
-        if task.target_type == 'scene_video':
-            execution, version = await self.scene_video_execution(task.target_id)
-            preparation = SceneVideoPreparation.model_validate(execution.preparation)
-            errors = await self.continuity_errors(version.sequence_id, preparation.inputs.unit)
-            if errors:
-                raise ContinuityNotReady('；'.join(errors))
-            return
         if task.target_type != "directing_unit":
             return
         prompt = await self.revision(task.input_snapshot.get("prompt_revision_id"), kind="prompt", confirmed=True)

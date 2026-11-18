@@ -1,6 +1,6 @@
 # 场次素材、剪辑与交付
 
-> 旧四画布前端宿主、路由和任务跳转已退役；本文旧场次版本相关内容保留为后端契约及历史实现说明，不代表当前产品入口。剪辑源码仅作[实现参考](../../../front/reference/retired-scene-edit/README.md)，不纳入生产构建和常规测试。
+> 旧四画布前端和旧场次版本 HTTP 接口均已退役。本文记录存量数据契约及历史实现。当前可用入口见[退役范围](directing-foundation.md#旧四画布退役范围)。剪辑源码仅作[实现参考](../../../front/reference/retired-scene-edit/README.md)，不纳入生产构建和常规测试。
 
 
 当前场次版本的实际素材、时间线、落幅依赖、章节交付和导出契约。基础身份与保存见[场次版本](scene-versions.md)，生产流程见[场次工作台架构](directing-foundation.md)。

@@ -100,6 +100,32 @@ def object_path(key: str) -> Path:
     return path
 
 
+@app.post('/browser-test/legacy-delivery/{sequence_id}')
+async def seed_legacy_delivery(sequence_id: str):
+    """通过隔离库准备已交付的旧版本，供现行工作台回归使用。"""
+    from app.core.contracts.directing.scene_delivery import SceneDeliveryCreate
+    from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionSave
+    from app.services.directing.scene_delivery import SceneDeliveryService
+
+    async with sessions.begin() as db:
+        service = SceneDeliveryService(db, 'canvas-project')
+        first = await service.create_scene_version(
+            sequence_id, SceneVersionCreate(request_id='legacy-version-a', title='旧版交付甲'))
+        library = await service.list_scene_takes(sequence_id, first.id)
+        take = next(item for item in library if item.task_id == 'legacy-video-task')
+        content = first.content.model_dump(mode='json')
+        content['timeline']['items'] = [{
+            'kind': 'media', 'id': 'retained-clip', 'take_kind': take.take_kind, 'take_id': take.take_id,
+            'file_id': take.file_id, 'fit': 'contain', 'timeline_start_ms': 0,
+            'media_range': {'source_in_ms': 0, 'source_out_ms': 1000},
+        }]
+        saved = await service.save_scene_version(sequence_id, first.id, SceneVersionSave(
+            request_id='legacy-timeline', expected_revision=first.revision, content=content))
+        delivery = await service.create_delivery(sequence_id, first.id, SceneDeliveryCreate(
+            request_id='legacy-delivery', expected_revision=saved.revision))
+        return {'data': {'delivery': delivery, 'file_id': take.file_id}}
+
+
 @app.post('/browser-test/legacy-takes/{take_id}/candidate')
 async def add_take_candidate_fixture(take_id: str):
     """外部生成完成边界：同文件的新独立输出经正式登记，不修改场次revision。"""
