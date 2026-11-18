@@ -15,7 +15,7 @@ from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
 from app.models.task import Task
 from app.services.task_service import TaskService, utcnow
-from app.task_worker import TaskWorker
+from app.task_worker import TaskWorker, WorkerLimits
 
 
 @pytest.mark.asyncio
@@ -33,8 +33,22 @@ async def test_worker_stops_retired_scene_version_tasks_before_provider_requests
             await connection.run_sync(Base.metadata.create_all)
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         async with sessions.begin() as db:
+            retired_submissions = [
+                ('scene_export', None, {}),
+                ('directing_unit_design', None, {}),
+                ('directing_instruction', None, {}),
+                ('directing_instruction_check', None, {}),
+                ('directing_design', 'directing_sequence', {'scene_design': {'version_id': 'old-version'}}),
+                ('video_generation', 'scene_video', {}),
+            ]
+            for kind, target_type, snapshot in retired_submissions:
+                with pytest.raises(ValueError, match='场次版本任务已退役'):
+                    await TaskService(db).submit(kind=kind, target_type=target_type, snapshot=snapshot)
             db.add_all([
                 Task(id="old-export", kind="scene_export"),
+                Task(id="old-unit", kind="directing_unit_design"),
+                Task(id="old-instruction", kind="directing_instruction"),
+                Task(id="old-check", kind="directing_instruction_check"),
                 Task(id="old-design", kind="directing_design",
                      input_snapshot={"scene_design": {"version_id": "old-version"}}),
                 Task(id="old-video", kind="video_generation", target_type="scene_video",
@@ -42,14 +56,14 @@ async def test_worker_stops_retired_scene_version_tasks_before_provider_requests
                      next_poll_at=utcnow()),
             ])
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-            worker = TaskWorker(sessions, client=client)
+            worker = TaskWorker(sessions, client=client, limits=WorkerLimits(text=5))
             try:
                 await worker.tick()
                 await asyncio.gather(*worker.jobs.values())
             finally:
                 worker.text_pool.shutdown(wait=True)
         async with sessions() as db:
-            for task_id in ("old-export", "old-design", "old-video"):
+            for task_id in ("old-export", "old-unit", "old-instruction", "old-check", "old-design", "old-video"):
                 task = await db.get(Task, task_id)
                 assert (task.status, task.error_code) == ("failed", "scene_version_retired")
             assert (await db.get(Task, "old-video")).provider_task_id == "remote-id"

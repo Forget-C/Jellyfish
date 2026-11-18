@@ -10,6 +10,7 @@ from app.api.v1.routes.studio.directing import router
 from app.api.v1.routes.studio.files import router as file_router
 from app.api.v1.routes.studio.generation_canvases import router as canvas_router
 from app.api.v1.routes.film.task_status import router as task_router
+from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.dependencies import get_db
 from app.models.studio import FileItem, FileUsage
 from app.models.task import Task, TaskOutput
@@ -75,6 +76,43 @@ async def client_for(sessions):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.canvas_sessions = sessions
         yield client
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_tasks_keep_typed_results(tmp_path):
+    """旧任务停止执行后仍可通过项目任务详情读取已保存结果。"""
+    design = EditableSceneDesign(sources=[
+        {'kind': 'chapter', 'reference': 'ch1', 'version': 'historical-source'},
+    ]).model_dump(mode='json')
+    snapshot = {'scene_design': {'version_id': 'old-version'}}
+    instruction = {'unit_id': 'unit', 'text': '人物递出旧信。'}
+    check = {'unit_id': 'unit', 'destinations': None, 'rows': [
+        {'role': 'direction', 'occurrence_id': 'shot', 'verdict': 'pass',
+         'rationale': '动作与固定指令一致。', 'findings': []},
+    ]}
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add_all([
+                Task(id='old-design-flat', kind='directing_design', input_snapshot=snapshot, result=design,
+                     target_type='directing_sequence', project_id='p1', status='succeeded'),
+                Task(id='old-design-candidate', kind='directing_design', target_type='directing_sequence',
+                     input_snapshot={**snapshot, 'run_args': {'design_candidate_version': 1}},
+                     result={'design': design, 'issues': [], 'attempt': 1}, project_id='p1', status='succeeded'),
+                Task(id='old-instruction', kind='directing_instruction', target_type='directing_sequence',
+                     result=instruction, project_id='p1', status='succeeded'),
+                Task(id='old-check', kind='directing_instruction_check', target_type='directing_sequence',
+                     result=check, project_id='p1', status='succeeded'),
+            ])
+        base = '/api/v1/studio/projects/p1/directing/tasks'
+        for task_id, field, expected in [
+            ('old-design-flat', 'scene_design', design),
+            ('old-design-candidate', 'scene_design', design),
+            ('old-instruction', 'scene_instruction', instruction),
+            ('old-check', 'instruction_check', check),
+        ]:
+            response = await client.get(f'{base}/{task_id}')
+            assert response.status_code == 200, response.text
+            assert response.json()['data'][field] == expected
 
 
 @pytest.mark.asyncio

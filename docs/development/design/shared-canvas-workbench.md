@@ -159,7 +159,7 @@ description: "记录场次提取、对象参考、共同卡片编辑与单卡生
 - 建卡、显式采用、校验、保存、布局沿用共同基础；需要新增的是工作台的确定性组装与初始摆放，不增加布局 Agent，不改变普通生成画布的整理行为。
 - 单元组织仅在需要执行分段时按需改接模型卡，既有范围保护和能力约束可复用，不建立另一套生成执行系统。
 
-事实依据：[统一导演模型执行器](../../../backend/app/services/directing/ai.py)按任务类型选择结构化契约，并通过一次生成、最多一次纠错获得结果；[整场设计服务](../../../backend/app/services/directing/scene_design.py)仍依赖旧版本；[单元组织](../../../backend/app/services/directing/scene_unit_design.py)按单镜头及模型能力处理。[共同画布文档](../../../backend/app/schemas/generation_canvas.py)不含坐标，[现有布局](../../../front/src/pages/aiStudio/generationCanvas/generationLayout.ts)处理分组和位置，需要工作台补初始组内排列规则。
+事实依据：[统一导演模型执行器](../../../backend/app/services/directing/ai.py)按任务类型选择结构化契约，并通过一次生成、最多一次纠错获得结果；现行分镜按[生成画布架构](../architecture/generation-canvas.md)组织镜头与执行分段。[共同画布文档](../../../backend/app/schemas/generation_canvas.py)不含坐标，[现有布局](../../../front/src/pages/aiStudio/generationCanvas/generationLayout.ts)处理分组和位置，需要工作台补初始组内排列规则。
 
 ## 工作台交互方案
 

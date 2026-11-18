@@ -43,7 +43,10 @@ from app.services.generation.media_execution import build_media_input, deliver_m
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
-from app.services.task_service import AUTO_CHECK_DISPATCH, MEDIA_KINDS, TASK_KINDS, TaskService, utcnow
+from app.services.task_service import (
+    AUTO_CHECK_DISPATCH, MEDIA_KINDS, RETIRED_SCENE_TASK_KINDS, TASK_KINDS,
+    TaskService, is_retired_scene_task, utcnow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +154,8 @@ class TaskWorker:
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(
                 Task.status == "running", Task.execution_mode == "remote",
             )) or 0
-            for phase, kinds, capacity in (("text", TASK_KINDS - MEDIA_KINDS, self.limits.text),
+            # 仍领取已入队的退役类型，由 _load 核对并写入终态。
+            for phase, kinds, capacity in (("text", (TASK_KINDS - MEDIA_KINDS) | RETIRED_SCENE_TASK_KINDS, self.limits.text),
                                            ("submit", MEDIA_KINDS, self.limits.submit)):
                 occupied = {task_id for task_id, current in self.phases.items() if current == phase}
                 if phase == "text":
@@ -206,11 +210,7 @@ class TaskWorker:
                 await TaskService(db).finish(task_id, cancelled=True)
                 await db.commit()
                 return None
-            if (
-                task.kind in {"scene_export", "directing_unit_design", "directing_instruction", "directing_instruction_check"}
-                or task.target_type == "scene_video"
-                or (task.kind == "directing_design" and task.input_snapshot.get("scene_design"))
-            ):
+            if is_retired_scene_task(task.kind, task.target_type, task.input_snapshot):
                 await TaskService(db).finish(task_id, error_code="scene_version_retired", error="旧场次版本任务已退役")
                 await db.commit()
                 return None

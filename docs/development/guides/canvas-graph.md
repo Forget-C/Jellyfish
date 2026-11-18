@@ -1,15 +1,15 @@
 # 旧场次版本 graph 契约与接入参考
 
-> 旧四画布前端宿主、路由和任务跳转已退役；本文旧场次版本相关内容保留为后端契约及历史实现说明，不代表当前产品入口。剪辑源码仅作[实现参考](../../../front/reference/retired-scene-edit/README.md)，不纳入生产构建和常规测试。
+> 旧四画布前端宿主、路由和任务跳转已退役；专属 HTTP 接口和后端图投影已退役。本文记录退役前的图字段和交互，供历史参考。剪辑源码仅作[实现参考](../../../front/reference/retired-scene-edit/README.md)，不纳入生产构建和常规测试。
 
 
-保留的旧场次版本接口返回 `director_graph`、`unit_graph`、`instruction_graph`、`edit_graph`。单元画布另通过只读 `unit-canvas/preview` 接口投影当前编辑，在保存前展示新增及修改的单元卡片。业务内容保存在原 `SceneVersionContent`；graph 是同一次读取的展示投影，不是另一份可保存的业务数据。指令图按明确单元展示已保存正文、实际消费依据与明确参考；完整正文在稳定挂载的独立工作区编辑，建议与检查继续沿用原业务入口。剪辑图默认按真实时间顺序展示已保存采用、待拍占位与源 Take 取材关系；播放器、时间线和原素材库从明确入口进入，浏览切换保持工作区挂载。下文前端工作区和业务入口均为退役前实现参考。现行分镜画布文档与执行使用[生成画布架构](../architecture/generation-canvas.md)，不消费这套旧版本 graph。
+退役前的旧场次版本接口返回 `director_graph`、`unit_graph`、`instruction_graph`、`edit_graph`。单元画布另通过只读 `unit-canvas/preview` 接口投影当前编辑，在保存前展示新增及修改的单元卡片。业务内容保存在原 `SceneVersionContent`；graph 是同一次读取的展示投影，不是另一份可保存的业务数据。指令图按明确单元展示已保存正文、实际消费依据与明确参考；完整正文在稳定挂载的独立工作区编辑，建议与检查继续沿用原业务入口。剪辑图默认按真实时间顺序展示已保存采用、待拍占位与源 Take 取材关系；播放器、时间线和原素材库从明确入口进入，浏览切换保持工作区挂载。下文前端工作区和业务入口均为退役前实现参考。现行分镜画布文档与执行使用[生成画布架构](../architecture/generation-canvas.md)，不消费这套旧版本 graph。
 
-## 后端接入步骤
+## 历史后端投影结构
 
-1. 在 `app/core/contracts/directing/canvas_graph.py` 复用 `CanvasObject`、`CanvasTarget`、`CanvasNode`、`CanvasEdge`、`CanvasMember`、`CanvasView` 和 `CanvasIssue`。业务节点使用有判别字段的具体类型，新增载荷保持明确字段，不接入任意 JSON 表单。
+1. 原图契约定义了 `CanvasObject`、`CanvasTarget`、`CanvasNode`、`CanvasEdge`、`CanvasMember`、`CanvasView` 和 `CanvasIssue`。业务节点使用有判别字段的具体类型，新增载荷保持明确字段，不接入任意 JSON 表单。
 2. 由 `DirectingStore` 完成项目、场次及版本鉴权，读取强类型内容和 revision；使用 `CanvasReadContext.load` 为同一快照加载共同证据。模型、文件、固定风格及依赖有效性调用既有服务，不在投影器里重新实现鉴权或准备流程。
-3. 在 service 层编写领域投影函数，参考 `director_canvas.py`、`unit_canvas.py` 与 `instruction_canvas.py`、`edit_canvas.py`。使用 `GraphAssembler.add_node/add_edge/add_view/add_issue` 注册对象，最后调用 `finish` 并构造具体 graph 类型。构建器不做 I/O，领域投影器负责真实成员、摘要、分组、入口和问题。
+3. 四类投影器分别组装导演、单元、指令和剪辑图，并使用 `GraphAssembler.add_node/add_edge/add_view/add_issue` 注册对象，最后调用 `finish` 并构造具体 graph 类型。构建器不做 I/O，领域投影器负责真实成员、摘要、分组、入口和问题。
 4. 每个显示节点使用唯一 ID，并通过 `object` 保留实际业务身份及内容路径；节点 ID、视图 ID 对消费者是不透明地址。配置字段只声明实际可编辑的内容。历史无稳定 ID 对象设为 `stable=false`，其身份限定在当前 revision，不在读取时补写 UUID。
 5. 成员复用节点，不复制业务单元；聚合入口提供 `entry_view_id`，节点提供 `home_view_id`，视图提供父级和锚点；每张图只有一个 parent_id 为空的根视图，消费者读取其返回 ID，不约定根地址字符串。所有边必须有真实来源，缺失业务引用明确返回问题或缺失节点。不要静默删边来伪装完整。
 6. 保持版本内容、各图和目标的 version/revision 一致。读取内容时同时固定标题、revision、最近保存请求身份和时间等响应元数据；证据加载可能重新读取同一 ORM 行，不能在加载后再从已刷新的实例取响应元数据。读取和保存均返回完整快照；API 只负责收参、鉴权入口和响应，不组装图。
