@@ -12,8 +12,9 @@ import type { ResourceKind } from './ResourceEditorDrawer'
 import './resourceCreate.css'
 
 /** 选择方式不创建对象；上传与导入共用独立的抽屉会话。 */
-export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, children, projectUpload = false, initialName }: {
+export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, onOpenUploads, children, projectUpload = false, initialName }: {
   kind: ResourceKind; projectId?: string; onCreate: () => void; onCreated: (resourceId: string) => void | Promise<unknown>; children: ReactNode; projectUpload?: boolean; initialName?: string
+  onOpenUploads?: () => void
 }) {
   const [choosing, setChoosing] = useState(false)
   const [imagesOpen, setImagesOpen] = useState(false)
@@ -24,15 +25,15 @@ export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, chi
     if (event.key === 'Escape') { event.stopPropagation(); setChoosing(false); trigger.current?.querySelector('button')?.focus() }
   }}>
     <button onClick={() => { setChoosing(false); onCreate() }}><FileAddOutlined aria-hidden /><strong>填写设定</strong><span>填写对象信息并创建</span></button>
-    <button onClick={() => { setChoosing(false); setImagesOpen(true) }}>{projectId && !projectUpload ? <ImportOutlined aria-hidden /> : <UploadOutlined aria-hidden />}<strong>{projectId && !projectUpload ? '从资产库导入' : '上传图片'}</strong><span>{projectId && !projectUpload ? '创建独立项目副本' : '以图片创建资源'}</span></button>
+    <button onClick={() => { setChoosing(false); if (onOpenUploads) onOpenUploads(); else setImagesOpen(true) }}>{projectId && !projectUpload ? <ImportOutlined aria-hidden /> : <UploadOutlined aria-hidden />}<strong>{projectId && !projectUpload ? '从资产库导入' : '上传图片'}</strong><span>{projectId && !projectUpload ? '创建独立项目副本' : '以图片创建资源'}</span></button>
   </div>}><span ref={trigger} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setChoosing(false); trigger.current?.querySelector('button')?.focus() } }}>{children}</span></Popover>
-    {imagesOpen && projectId && !projectUpload ? <LibraryImportDrawer kind={kind} projectId={projectId} onClose={close} onCreated={onCreated} /> : imagesOpen && <ImageSourceDrawer kind={kind} projectId={projectId} projectUpload={projectUpload} initialName={initialName} onClose={close} onCreated={onCreated} />}
+    {imagesOpen && projectId && !projectUpload ? <LibraryImportDrawer kind={kind} projectId={projectId} onClose={close} onCreated={onCreated} /> : imagesOpen && <ResourceImageSourceDrawer kind={kind} projectId={projectId} projectUpload={projectUpload} initialName={initialName} onClose={close} onCreated={onCreated} />}
   </>
 }
 
 type UploadRow = { id: string; file: File; angle: string; fileId?: string; uploading: boolean; error?: string }
 const views = [{ value: 'FRONT', label: '正面' }, { value: 'LEFT', label: '侧面' }, { value: 'TOP', label: '俯视' }, { value: 'BACK', label: '背面' }]
-function ImageSourceDrawer({ kind, projectId, onClose, onCreated, projectUpload = false, initialName }: { kind: ResourceKind; projectId?: string; onClose: () => void; onCreated: (resourceId: string) => void | Promise<unknown>; projectUpload?: boolean; initialName?: string }) {
+export function ResourceImageSourceDrawer({ kind, projectId, onClose, onCreated, projectUpload = false, initialName }: { kind: ResourceKind; projectId?: string; onClose: () => void; onCreated: (resourceId: string) => void | Promise<unknown>; projectUpload?: boolean; initialName?: string }) {
   const id = useId(), requestId = useRef(crypto.randomUUID())
   const [name, setName] = useState(initialName ?? '')
   const [preview, setPreview] = useState<string>()

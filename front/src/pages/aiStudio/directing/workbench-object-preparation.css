@@ -71,6 +71,21 @@
 }
 
 .management-object-preparation[hidden] { display: none; }
+.management-workspace .management-content:has(> .management-object-panel .management-object-preparation:not([hidden])) {
+  overflow-y: auto;
+}
+.management-workspace .management-content > .management-object-panel:has(.management-object-preparation:not([hidden])) {
+  display: flex;
+  flex-direction: column;
+  min-height: 144px;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.management-object-panel > .management-scene-production:has(.management-object-preparation:not([hidden])),
+.management-object-preparation:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.management-object-preparation .management-object-list-content { margin-inline: 0; min-height: 0; }
+.management-object-scroll { scrollbar-gutter: stable; }
+.management-object-preparation > .app-card-list-pagination { padding-inline: 0; }
 .management-object-card h4 { display: flex; align-items: baseline; gap: 8px; }
 .management-object-card h4 small { font-size: 12px; font-weight: 400; color: var(--app-muted); }
 .management-object-card .management-reference-frame { background: #eaf0f8; }

@@ -31,7 +31,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${api}/health`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -45,15 +45,154 @@ try {
   const objectsUrl = `${scenes}/${sequence.id}/objects`
   const read = () => request(objectsUrl)
   const canvas = await request(`${scenes}/${sequence.id}/canvases`, 'POST', { name: '已有方案' })
-  const canvasUrl = `${studio}/generation-canvases/${project}/${canvas.id}`
+  const canvasUrl = `${studio}/generation-canvases/${canvas.id}?project_id=${project}`
   const canvasBefore = await request(canvasUrl)
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4258, strictPort: true, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await page.addInitScript(() => {
+    window.__ENV = { BACKEND_URL: window.location.origin }
+    localStorage.setItem('jellyfish_language', 'zh-CN')
+  })
   page.setDefaultTimeout(12000)
   const management = `http://127.0.0.1:4258/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=objects`
+  const objectRoute = '**' + new URL(objectsUrl).pathname
+  const fixtureObjects = Array.from({ length: 12 }, (_, index) => ({
+    id: `pagination-object-${index}`, kind: index < 8 ? 'character' : 'prop', name: `分页对象 ${index + 1}`,
+    description: '', excerpt: '隔离分页夹具', reference_state: 'unassociated',
+  }))
+  Object.assign(fixtureObjects[2], { asset_id: 'object-browser-character', image_file_id: 'object-browser-image', reference_state: 'ready' })
+  Object.assign(fixtureObjects[4], { asset_id: 'object-browser-character', reference_state: 'missing' })
+  Object.assign(fixtureObjects[5], { asset_id: 'unavailable-resource', reference_state: 'unavailable' })
+  let failRefresh = false
+  let useSavedMainImage = false
+  await page.route(objectRoute, async route => {
+    if (failRefresh) {
+      failRefresh = false
+      return route.fulfill({ status: 503, json: { detail: '隔离刷新失败' } })
+    }
+    const response = await route.fetch()
+    const body = await response.json()
+    const mainImage = useSavedMainImage && body.data.assets.find(asset => asset.id === 'object-browser-character')?.main_image_file_id
+    body.data.objects = mainImage ? fixtureObjects.map((object, index) => index === 4
+      ? { ...object, reference_state: 'ready', image_file_id: mainImage } : object) : fixtureObjects
+    body.data.task = { task_id: 'fixture-object-extraction', status: 'running' }
+    await route.fulfill({ response, json: body })
+  })
+  await page.setViewportSize({ width: 1440, height: 620 })
+  await page.goto(management)
+  const pagination = page.getByRole('navigation', { name: '本场对象分页' })
+  const cards = page.getByRole('region', { name: '场次对象', exact: true }).getByRole('listitem')
+  await pagination.waitFor()
+  assert.equal(await cards.count(), 4)
+  await pagination.getByText('2', { exact: true }).click()
+  await cards.first().getByRole('region', { name: '分页对象 5 · 隔离分页夹具', exact: true }).waitFor()
+  const editFixture = page.getByRole('button', { name: '编辑分页对象 5资源', exact: true })
+  await editFixture.click()
+  const fixtureDetail = page.getByRole('region', { name: '已有角色', exact: true })
+  await page.setViewportSize({ width: 390, height: 620 })
+  await fixtureDetail.getByRole('button', { name: '返回', exact: true }).click()
+  await pagination.getByText('5 / 12', { exact: true }).waitFor()
+  await editFixture.and(page.locator(':focus')).waitFor()
+  await page.setViewportSize({ width: 1440, height: 620 })
+  await pagination.locator('.ant-pagination-item-active').getByText('2', { exact: true }).waitFor()
+  const uploadFixture = page.getByRole('region', { name: '分页对象 6 · 隔离分页夹具', exact: true })
+  await uploadFixture.getByRole('button', { name: '重新创建', exact: true }).click()
+  await page.getByRole('button', { name: /^上传图片/ }).click()
+  const upload = page.getByRole('dialog', { name: '上传图片创建', exact: true })
+  const uploadName = upload.getByRole('textbox', { name: '名称', exact: true })
+  await uploadName.fill('缩放时保留的上传草稿')
+  await page.setViewportSize({ width: 390, height: 620 })
+  await uploadFixture.waitFor({ state: 'detached' })
+  assert.equal(await uploadName.inputValue(), '缩放时保留的上传草稿')
+  await upload.getByRole('button', { name: '返回', exact: true }).click()
+  const uploadLeave = page.getByRole('dialog', { name: '离开资产详情', exact: true })
+  await uploadLeave.getByRole('button', { name: '放弃修改并离开', exact: true }).click()
+  await upload.waitFor({ state: 'hidden' })
+  await page.setViewportSize({ width: 1023, height: 401 })
+  await pagination.getByRole('button', { name: '下一页', exact: true }).click()
+  await cards.first().scrollIntoViewIfNeeded()
+  await page.setViewportSize({ width: 1440, height: 620 })
+  await pagination.locator('.ant-pagination-item-active').getByText('2', { exact: true }).waitFor()
+  const types = page.locator('.management-object-filters .ant-segmented')
+  await types.getByText('角色', { exact: true }).click()
+  await pagination.getByText('2', { exact: true }).click()
+  const scenesPicker = page.getByRole('group', { name: '选择场次' })
+  await scenesPicker.getByRole('button', { name: '2. 空镜', exact: true }).click()
+  await page.getByText(/^尚未提取对象/).waitFor()
+  await scenesPicker.getByRole('button', { name: '1. 两人等候', exact: true }).click()
+  await page.getByText('匹配 8 个对象', { exact: true }).waitFor()
+  await cards.first().getByRole('region', { name: '分页对象 5 · 隔离分页夹具', exact: true }).waitFor()
+
+  const pickSelectionState = async state => {
+    await page.getByRole('combobox', { name: '选用状态', exact: true }).press('ArrowDown')
+    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(state, { exact: true }).click()
+  }
+  const pickReferenceState = async state => {
+    await page.getByRole('button', { name: /^参考状态/ }).click()
+    await page.getByRole('menuitem', { name: state, exact: true }).click()
+  }
+  await pickSelectionState('已选用')
+  await pickReferenceState('已选资源但缺图')
+  await page.getByText('匹配 1 个对象', { exact: true }).waitFor()
+  await cards.first().getByRole('region', { name: '分页对象 5 · 隔离分页夹具', exact: true }).waitFor()
+  await pickReferenceState('参考不可用')
+  await page.getByText('没有匹配的对象', { exact: true }).waitFor()
+  await pickSelectionState('选用失效')
+  await cards.first().getByRole('region', { name: '分页对象 6 · 隔离分页夹具', exact: true }).waitFor()
+  await pickSelectionState('已选用')
+  await page.getByRole('button', { name: '清除筛选', exact: true }).click()
+  await page.getByText('12 个对象', { exact: true }).waitFor()
+
+  await pagination.getByText('2', { exact: true }).click()
+  await editFixture.focus()
+  failRefresh = true
+  await page.getByText('隔离刷新失败', { exact: true }).waitFor()
+  await editFixture.and(page.locator(':focus')).waitFor()
+  await pagination.locator('.ant-pagination-item-active').getByText('2', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '刷新对象准备', exact: true }).click()
+  await page.getByText('隔离刷新失败', { exact: true }).waitFor({ state: 'hidden' })
+
+  await pickSelectionState('已选用')
+  await page.setViewportSize({ width: 390, height: 620 })
+  await pagination.getByRole('button', { name: '下一页', exact: true }).click()
+  const fixtureToClear = page.getByRole('region', { name: '分页对象 5 · 隔离分页夹具', exact: true })
+  await fixtureToClear.getByRole('button', { name: '对象更多操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '清空', exact: true }).click()
+  await page.route(`${objectRoute}/${fixtureObjects[4].id}`, async route => {
+    const current = await read()
+    Object.assign(fixtureObjects[4], { asset_id: null, reference_state: 'unassociated' })
+    await route.fulfill({ json: { data: { ...current, objects: fixtureObjects } } })
+  }, { times: 1 })
+  await page.locator('.ant-modal-confirm:visible').filter({ hasText: '清空对象选用？' })
+    .getByRole('button', { name: /^清\s*空$/ }).click()
+  await pagination.waitFor({ state: 'hidden' })
+  await cards.first().getByRole('button', { name: '对象更多操作', exact: true }).and(page.locator(':focus')).waitFor()
+  await page.getByText('匹配 1 个对象', { exact: true }).waitFor()
+  await pickSelectionState('全部选用状态')
+  await page.setViewportSize({ width: 1440, height: 620 })
+
+  await page.locator('.management-object-filters .ant-segmented').getByText('道具', { exact: true }).click()
+  await cards.first().getByRole('region', { name: '分页对象 9 · 隔离分页夹具', exact: true }).waitFor()
+  await pagination.waitFor({ state: 'hidden' })
+  assert.equal(await cards.count(), 4)
+  Object.assign(fixtureObjects[4], { asset_id: 'object-browser-character', reference_state: 'missing' })
+  useSavedMainImage = true
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.reload()
+  await pickReferenceState('已选资源但缺图')
+  await editFixture.click()
+  await fixtureDetail.getByRole('button', { name: /^查看全部/ }).click()
+  const gallery = page.getByRole('dialog', { name: '图片集合' })
+  await gallery.getByRole('button', { name: /^设为主图/ }).click()
+  await gallery.getByText('主图', { exact: true }).waitFor()
+  await gallery.getByRole('button', { name: '关闭', exact: true }).click()
+  await fixtureDetail.getByRole('button', { name: '返回', exact: true }).click()
+  await page.getByText('没有匹配的对象', { exact: true }).waitFor()
+  await page.getByText('已保存，该对象已移出当前筛选', { exact: true }).waitFor()
+  await page.unroute(objectRoute)
+  await page.setViewportSize({ width: 1440, height: 960 })
   await page.goto(management)
   await page.getByRole('navigation', { name: '制作步骤' }).waitFor()
   const extract = page.getByRole('button', { name: '提取对象', exact: true })
@@ -82,9 +221,9 @@ try {
   const baseline = await read()
   const backObject = baseline.objects.find(object => object.excerpt === '后门的阿同')
   await request(`${objectsUrl}/${backObject.id}`, 'PUT', { expected_revision: baseline.revision, asset_id: 'object-browser-character' })
-  const associationFilter = page.getByRole('combobox', { name: '关联状态' })
+  const associationFilter = page.getByRole('combobox', { name: '选用状态' })
   await associationFilter.press('ArrowDown')
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('未关联', { exact: true }).click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('未选用', { exact: true }).click()
   await front.getByRole('button', { name: '选用', exact: true }).click()
   const picker = page.getByRole('dialog', { name: '选用项目资源', exact: true })
   await picker.waitFor()
@@ -98,7 +237,7 @@ try {
   await front.waitFor({ state: 'detached' })
   await page.getByRole('button', { name: '对象更多操作' }).first().waitFor()
   await associationFilter.press('ArrowDown')
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('全部关联状态', { exact: true }).click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('全部选用状态', { exact: true }).click()
   await front.getByRole('img', { name: '阿同已选参考图', exact: true }).waitFor()
   assert.equal(await front.getByRole('button', { name: '更换参考图', exact: true }).count(), 0)
   await front.getByRole('button', { name: '编辑阿同资源', exact: true }).click()
@@ -181,9 +320,9 @@ try {
   await front.waitFor({ state: 'detached' })
   await prop.waitFor()
   await page.locator('.management-object-filters .ant-segmented').getByText('全部', { exact: true }).click()
-  const referenceFilter = page.getByRole('button', { name: '参考筛选', exact: true })
+  const referenceFilter = page.getByRole('button', { name: /^参考状态/ })
   await referenceFilter.click()
-  await page.getByRole('menuitem', { name: '未选参考图', exact: true }).click()
+  await page.getByRole('menuitem', { name: '已选资源但缺图', exact: true }).click()
   await front.waitFor({ state: 'detached' })
   await back.waitFor({ state: 'detached' })
   await prop.waitFor()
@@ -265,7 +404,12 @@ try {
   assert.deepEqual(pending.objects, prepared.objects)
   await review.getByRole('button', { name: '暂不应用', exact: true }).click()
   await review.waitFor({ state: 'hidden' })
-  await page.goto(`${management}&objectTask=${pending.candidate_task_id}`)
+  await page.setViewportSize({ width: 390, height: 620 })
+  await page.getByRole('combobox', { name: '对象类型', exact: true }).press('ArrowDown')
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('角色', { exact: true }).click()
+  await pagination.getByRole('button', { name: '下一页', exact: true }).click()
+  await back.waitFor()
+  await reviewButton.click()
   const apply = review.getByRole('button', { name: '应用整批对象', exact: true })
   await apply.waitFor()
   await review.getByRole('heading', { name: '保留人工选择 2 项', exact: true }).waitFor()
@@ -304,6 +448,8 @@ try {
   assert.deepEqual((await replay).postDataJSON(), confirmedBody)
   await review.waitFor({ state: 'hidden' })
   assert.equal((await read()).revision, adopted.revision)
+  await pagination.getByText('2 / 2', { exact: true }).waitFor()
+  await back.waitFor()
 
   // Keep a real pending candidate when this scene becomes historical.
   await request(`${objectsUrl}/extractions`, 'POST', { request_id: 'historical-candidate' })
@@ -316,6 +462,7 @@ try {
   assert.ok(historicalCandidate)
   const assetUrl = `${studio}/entities/character/object-browser-character`
   await request(assetUrl, 'DELETE')
+  await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(management)
   await front.getByRole('button', { name: '重新选用', exact: true }).waitFor()
   assert.equal((await read()).objects[0].reference_state, 'unavailable', 'resource deletion invalidates the dynamic object reference')

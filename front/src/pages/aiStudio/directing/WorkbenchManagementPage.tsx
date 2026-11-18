@@ -205,37 +205,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     }
     previousDivision.current = division
   }, [overview, division])
-  const readingPanel = useRef<HTMLDivElement>(null)
-  const browseKey = managementBrowseKey(projectId, chapterId, selected?.id ?? '', step)
-  const ready = !!overview
-  const hasTarget = !!(params.get('canvas') || params.get('storyboardTask') || params.get('objectTask'))
-  useLayoutEffect(() => {
-    const panel = readingPanel.current
-    if (!panel || division || step === 'storyboard') return
-    const top = hasTarget ? 0 : readManagementBrowse(browseKey).top ?? 0
-    let restoring = true
-    const observer = new ResizeObserver(() => restore())
-    const stop = () => { restoring = false; observer.disconnect() }
-    const restore = () => {
-      panel.scrollTop = top
-      if (panel.scrollHeight >= top + panel.clientHeight) stop()
-    }
-    const remember = () => { if (!restoring) saveManagementBrowse(browseKey, { top: panel.scrollTop }) }
-    if (panel.firstElementChild) observer.observe(panel.firstElementChild)
-    restore()
-    panel.addEventListener('scroll', remember, { passive: true })
-    panel.addEventListener('wheel', stop, { passive: true })
-    panel.addEventListener('pointerdown', stop)
-    panel.addEventListener('keydown', stop)
-    return () => {
-      if (!restoring) saveManagementBrowse(browseKey, { top: panel.scrollTop })
-      stop()
-      panel.removeEventListener('scroll', remember)
-      panel.removeEventListener('wheel', stop)
-      panel.removeEventListener('pointerdown', stop)
-      panel.removeEventListener('keydown', stop)
-    }
-  }, [browseKey, ready, division, hasTarget, step])
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? (historical || !current.length)}
     query={sceneQuery} setQuery={setSceneQuery} scrollTop={sceneScroll}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
@@ -353,15 +322,14 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           <div ref={setFilterHost} className="management-filter-host" />
           {step === 'objects' ? <div className="management-object-actions" ref={setObjectActions} /> : <div className="management-storyboard-actions" ref={setStoryboardActions} />}
         </div>}
-        <WorkspaceScrollPanel ref={readingPanel} className={showCanvasList ? 'management-panel management-storyboard-panel' : 'management-panel'}>
-          {!showCanvasList && <>{loadError}{retiredNotice}</>}
+        <WorkspaceScrollPanel className={showCanvasList ? 'management-panel management-storyboard-panel' : 'management-panel management-object-panel'}>
+          {!selected && <>{loadError}{retiredNotice}</>}
           {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
           {!selected && !invalidScene && <p>{current.length ? '请选择当前场次继续制作。' : '本章没有当前场次，可从历史场次查看已有内容。'}</p>}
           {selected && <section key={selected.id} className="management-scene-production" aria-labelledby="management-current-scene">
-            {!showCanvasList && sceneNotices}
             {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
               editable={!historical && !!selected.source_excerpt.trim()}
-              management={{ host: objectActions, filterHost,
+              management={{ host: objectActions, filterHost, notices: <>{loadError}{retiredNotice}{sceneNotices}</>,
                 onChange: () => setRevision(value => value + 1), candidateTaskId: params.get('objectTask'),
                 clearCandidateTask: () => setParams(previous => {
                   const next = new URLSearchParams(previous)

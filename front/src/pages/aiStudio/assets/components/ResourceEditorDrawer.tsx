@@ -40,10 +40,11 @@ type Props = {
   open: boolean; kind: ResourceKind; projectId?: string; assetId?: string; initialPage?: 'editor' | 'publish'
   seed?: { name?: string; description?: string; visual_style?: '现实' | '动漫'; style?: string }
   onClose: () => void; onSaved?: (resource: Resource) => void | Promise<void>
+  onMainImageSaved?: () => void
 }
 
 /** 新建和详情共用对象草稿，生成设置只保留在本次打开的编辑器内。 */
-export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onClose, onSaved, initialPage = 'editor', inline, fullDetails = false, renderToolbar }: Props) {
+export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onClose, onSaved, onMainImageSaved, initialPage = 'editor', inline, fullDetails = false, renderToolbar }: Props) {
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px)')
@@ -268,6 +269,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         await StudioEntitiesService.adoptEntityReferenceMainApiV1StudioEntitiesEntityTypeEntityIdAdoptReferenceMainPost({
           entityType: kind, entityId: resource.id, requestBody: { reference: adoptReference },
         })
+        onMainImageSaved?.()
         await reloadImages(resource.id)
       }
       if (!response.data) throw new Error('对象保存失败')
@@ -402,7 +404,12 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const setPrimary = async (image: Picture) => {
     if ((!resource || dirty || busy || generating) || analysisBusy) return false
     setBusy(true); setImageError('')
-    try { await StudioEntitiesApi.updateImage(kind, resource.id, image.id, { is_primary: true }); await reloadImages(resource.id); return true }
+    try {
+      await StudioEntitiesApi.updateImage(kind, resource.id, image.id, { is_primary: true })
+      onMainImageSaved?.()
+      await reloadImages(resource.id)
+      return true
+    }
     catch { setImageError('设置主图失败，原主图已保留，请重试'); return false }
     finally { setBusy(false) }
   }
