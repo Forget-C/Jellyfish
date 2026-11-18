@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert, Button, Checkbox, Dropdown, Empty, Form, Input, InputNumber,
-  Modal, Pagination, Popconfirm, Select, Space, Spin, Switch, Tag, message,
+  Modal, Popconfirm, Select, Space, Spin, Switch, Tag, message,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
-  ArrowRightOutlined, BookOutlined, LeftOutlined, RightOutlined, DeleteOutlined, FileTextOutlined, MoreOutlined,
+  ArrowRightOutlined, BookOutlined, DeleteOutlined, FileTextOutlined, MoreOutlined,
   PlusOutlined, SearchOutlined, VideoCameraOutlined,
 } from '@ant-design/icons'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
@@ -19,7 +19,8 @@ import {
   ProjectVisualStyleAndStyleFields,
   type ProjectVisualStyleChoice,
 } from './ProjectVisualStyleAndStyleFields'
-import { useProjectPageSize } from './useProjectPageSize'
+import { useCardPageSize } from '../../../components/layout/useCardPageSize'
+import { CardListPagination } from '../../../components/layout/CardListPagination'
 import { useProjectStyleOptions } from './useProjectStyleOptions'
 
 import './project-lobby.css'
@@ -75,7 +76,7 @@ function ProjectLobby() {
   const { pathname } = useLocation()
   const [total, setTotal] = useState(0)
   const [reload, setReload] = useState(0)
-  const { panel, measureGrid, measureCard, pageSize } = useProjectPageSize()
+  const { panel, measureGrid, measureCard, pageSize } = useCardPageSize()
   const search = query.get('q') ?? ''
   const keyword = search.trim()
   const filterTab: FilterTab = query.get('stage') === 'edit_raw' ? 'editRaw' : 'all'
@@ -403,8 +404,8 @@ function ProjectLobby() {
           <Button disabled={batchDeleting} onClick={() => { setMultiSelectMode(false); setSelectedIds([]) }}>退出批量管理</Button>
         </div>
       )}
-      <div className="project-lobby-content">
-        <div ref={measureGrid} className="project-lobby-measure" aria-hidden="true">
+      <div className="app-card-list-content">
+        <div ref={measureGrid} className="app-card-list-grid app-card-list-measure" aria-hidden="true">
           <div ref={measureCard}>
             <div className="project-lobby-cover" />
             <div className="project-lobby-card-body" />
@@ -417,7 +418,7 @@ function ProjectLobby() {
               {!projects.length && (
                 <Empty description={keyword || filterTab !== 'all' ? '没有匹配的项目' : '暂无项目，点击「新建项目」开始'} />
               )}
-              <div className="project-lobby-grid">
+              <div className="app-card-list-grid project-lobby-grid">
                 {projects.map(project => {
                   const summary = projectStageMap[project.id]
                   const stage = typeof summary === 'object' ? summary : undefined
@@ -500,29 +501,8 @@ function ProjectLobby() {
           )}
         </WorkspaceScrollPanel>
       </div>
-      <div className="project-lobby-pagination">
-        {!loadError && pageSize > 0 && total > pageSize && (
-          <nav aria-label="项目列表分页">
-            {wideToolbar ? (
-              <Pagination
-                current={page}
-                pageSize={pageSize}
-                total={total}
-                size="small"
-                showSizeChanger={false}
-                disabled={loading || batchDeleting || deleting}
-                onChange={changePage}
-              />
-            ) : (
-              <Space>
-                <Button aria-label="上一页" icon={<LeftOutlined />} disabled={loading || batchDeleting || deleting || page <= 1} onClick={() => changePage(page - 1)} />
-                <span>{page} / {Math.ceil(total / pageSize)}</span>
-                <Button aria-label="下一页" icon={<RightOutlined />} disabled={loading || batchDeleting || deleting || page >= Math.ceil(total / pageSize)} onClick={() => changePage(page + 1)} />
-              </Space>
-            )}
-          </nav>
-        )}
-      </div>
+      <CardListPagination label="项目列表分页" page={page} pageSize={pageSize} total={loadError ? 0 : total}
+        compact={!wideToolbar} disabled={loading || batchDeleting || deleting} onChange={changePage} />
       <Modal
         title="删除项目"
         open={Boolean(deleteTarget)}

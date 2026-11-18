@@ -1,5 +1,5 @@
 import { Button } from 'antd'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { GenerationCanvasWorkspace } from './GenerationCanvasWorkspace'
 import { CanvasDeletionDialog } from './CanvasDeletionDialog'
@@ -8,13 +8,16 @@ import { CanvasDeletionDialog } from './CanvasDeletionDialog'
 export function GenerationCanvasPage() {
   const { canvasId } = useParams()
   const navigate = useNavigate()
+  const { state } = useLocation()
+  const listSearch = typeof state?.canvasListSearch === 'string' ? state.canvasListSearch : ''
+  const listLocation = { pathname: '/canvases', search: listSearch }
   const [search, setSearch] = useSearchParams()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   return <GenerationCanvasWorkspace projectId="" canvasId={canvasId || null}
-    back={{ label: '返回画布列表', onClick: () => navigate('/canvases') }} hostError={error}
+    back={{ label: '返回画布列表', onClick: () => navigate(listLocation) }} hostError={error}
     targetRun={search.get('run')} targetNode={search.get('node')} targetCheck={null} targetReport={null}
-    onCloseRunHistory={() => setSearch({}, { replace: true })}
+    onCloseRunHistory={() => setSearch({}, { replace: true, state })}
     renderCanvasManagement={({ current, running, editable, saving, nameEditor, requestLeave, canEdit }) => <>
       {nameEditor}
       <Button danger disabled={!current || running || !editable || saving} onClick={() => {
@@ -22,6 +25,6 @@ export function GenerationCanvasPage() {
       }}>删除画布</Button>
       {deleting && canvasId && <CanvasDeletionDialog projectId="" canvasId={canvasId} workbench
         canDelete={async () => !running && canEdit() && await requestLeave() && canEdit()}
-        onClose={() => setDeleting(false)} onFailure={setError} onDeleted={() => navigate('/canvases', { replace: true })} />}
+        onClose={() => setDeleting(false)} onFailure={setError} onDeleted={() => navigate(listLocation, { replace: true })} />}
     </>} />
 }

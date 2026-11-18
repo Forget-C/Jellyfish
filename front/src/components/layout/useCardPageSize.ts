@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 
 /** Measures the same grid tracks and card styles used by the visible list. */
-export function useProjectPageSize() {
+export function useCardPageSize() {
   const panel = useRef<HTMLDivElement>(null)
   const measureGrid = useRef<HTMLDivElement>(null)
   const measureCard = useRef<HTMLDivElement>(null)
