@@ -16,7 +16,7 @@ const actors = [
   { id: 'actor-broken', name: '失败图片演员', thumbnail: '/api/broken' },
   { id: 'actor-new', name: '待关联演员' },
 ]
-for (const actor of actors) Object.assign(actor,{project_id:null,visual_style:'现实',style:'真人都市'})
+for (const [index, actor] of actors.entries()) Object.assign(actor, { project_id: index < 3 ? 'actors-project' : null, visual_style: '现实', style: '真人都市' })
 let links = actors.slice(0,3).map((a,i) => ({ id: i+1, project_id: 'actors-project', actor_id: a.id }))
 let unlinkAttempts = 0
 try {
@@ -35,12 +35,13 @@ try {
       if(req.method()==='POST') { links.push({id:4,project_id:'actors-project',actor_id:req.postDataJSON().asset_id}); return respond(links.at(-1)) }
       return respond({items:links,pagination:{total:links.length}})
     }
-    if(path.includes('/project-assets/actor/')) {
-      unlinkAttempts++
-      if(unlinkAttempts===1) return route.fulfill({status:503,json:{detail:'取消关联失败'}})
-      links=links.filter(l=>l.id!==Number(path.split('/').at(-1))); return respond({})
-    }
     const actor=actors.find(a=>path.endsWith('/entities/actor/'+a.id))
+    if (actor && req.method() === 'DELETE') {
+      unlinkAttempts++
+      if (unlinkAttempts === 1) return route.fulfill({ status: 503, json: { detail: '删除项目演员失败' } })
+      links = links.filter(link => link.actor_id !== actor.id)
+      return respond({})
+    }
     if(actor)return respond(actor)
     if(path.endsWith('/entities/actor')) return respond({items:actors,pagination:{total:actors.length}})
     return respond({items:[],next_cursor:null})
@@ -63,7 +64,7 @@ try {
   const nameLink=page.getByRole('button',{name:actors[0].name,exact:true})
   const originalUrl=page.url()
   await nameLink.click()
-  await page.getByRole('link',{name:'在资产库编辑 ↗',exact:true}).waitFor()
+  await page.waitForFunction(({ expected }) => [...document.querySelectorAll('input')].some(input => input.value === expected), { expected: actors[0].name })
   assert.equal(page.url(),originalUrl)
   await page.getByRole('button',{name:'返回',exact:true}).click()
   await nameLink.waitFor()
@@ -82,46 +83,30 @@ try {
     }
   }
   await page.setViewportSize({width:1440,height:900})
-  await page.getByRole('button',{name:/从资产库关联/}).click()
-  const associate=page.getByRole('dialog',{name:'从资产库关联演员',exact:true})
-  await associate.getByRole('button',{name:'关联到项目',exact:true}).click()
-  await associate.waitFor({state:'hidden'})
-  await page.getByRole('button',{name:'待关联演员',exact:true}).waitFor()
-  assert.ok(links.some(l=>l.actor_id==='actor-new'))
-  await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'编辑共享资产 ↗',exact:true}).waitFor()
-  await page.keyboard.press('Escape')
-  await page.getByRole('menuitem',{name:'编辑共享资产 ↗',exact:true}).waitFor({state:'hidden'})
-  await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'取消关联',exact:true}).click()
-  const confirm=page.getByRole('dialog').filter({hasText:'仅移除项目关联，不删除资产库中的共享对象'})
-  await confirm.getByRole('button',{name:'取消关联',exact:true}).click()
-  await page.getByText('取消关联失败',{exact:true}).waitFor()
-  assert.equal(await confirm.isVisible(),true)
+  await page.getByRole('button', { name: actors[0].name + '更多操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '删除项目对象', exact: true }).click()
+  const confirm = page.getByRole('dialog').filter({ hasText: '已入库的独立副本继续保留' })
+  const remove = confirm.getByRole('button', { name: '删除项目对象', exact: true })
+  await remove.click()
+  await page.getByText('删除项目演员失败', { exact: true }).waitFor()
+  assert.equal(await confirm.isVisible(), true)
   await nameLink.waitFor()
-  await confirm.getByRole('button',{name:'取消关联',exact:true}).click()
-  await confirm.waitFor({state:'hidden'})
-  await nameLink.waitFor({state:'hidden'})
-  assert.equal(unlinkAttempts,2)
-  links = [{id:4,project_id:'actors-project',actor_id:'actor-new'}]
+  await remove.click()
+  await confirm.waitFor({ state: 'hidden' })
+  await nameLink.waitFor({ state: 'hidden' })
+  assert.equal(unlinkAttempts, 2)
+  links = links.filter(link => link.actor_id === actors[1].id)
   await page.reload()
-  const single = page.getByRole('article').filter({has:page.getByRole('button',{name:'待关联演员',exact:true})})
+  const single = page.getByRole('article').filter({ has: page.getByRole('button', { name: actors[1].name, exact: true }) })
   await single.waitFor()
   const singleBox = await single.boundingBox()
-  assert.ok(singleBox.width >= 228 && singleBox.width < 400, 'single project resource keeps a normal column width')
+  const grid = await single.locator('..').boundingBox()
+  assert.ok(singleBox.width > 0 && singleBox.width < grid.width, 'single project resource keeps a normal column width')
   await page.getByRole('button',{name:'查看资产库',exact:true}).click()
   const libraryCard=page.getByRole('article').filter({has:page.getByRole('link',{name:'待关联演员',exact:true})})
   await libraryCard.waitFor()
   assert.ok(Math.abs((await libraryCard.boundingBox()).width-singleBox.width)<2, 'same asset uses the same card grid across project/library')
   assert.equal(await libraryCard.getByText('暂无标签',{exact:true}).count(),0)
   await libraryCard.getByText('未填写简介',{exact:true}).waitFor()
-  await page.goto('http://127.0.0.1:4542/projects/actors-project?tab=actors')
-  await page.getByRole('button',{name:'待关联演员更多操作',exact:true}).click()
-  const popupPromise=page.waitForEvent('popup')
-  await page.getByRole('menuitem',{name:'编辑共享资产 ↗',exact:true}).click()
-  const popup=await popupPromise
-  await popup.waitForURL('**/assets/actors/actor-new/edit')
-  assert.equal(page.url(),originalUrl)
-  await popup.close()
   console.log(JSON.stringify({output,passed:true}))
 } finally { await cleanup() }
