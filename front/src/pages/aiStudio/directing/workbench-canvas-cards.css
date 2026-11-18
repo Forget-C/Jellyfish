@@ -59,6 +59,33 @@
 }
 
 .management-workspace .management-card-grid { grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr)); gap: 16px; }
+.management-workspace .management-content > .management-storyboard-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.management-storyboard-panel > .management-scene-production,
+.management-canvas-cards {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.management-canvas-page-body { position: relative; display: flex; flex: 1; min-height: 0; }
+.management-canvas-scroll { scrollbar-gutter: stable; }
+.management-canvas-page-measure {
+  display: grid;
+  grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr));
+  gap: 16px;
+}
+/* Budget a full card row, including task status and one action. */
+.management-canvas-page-card { height: 352px; }
+.management-canvas-cards > .app-card-list-pagination { padding-inline: 0; }
+@media (max-height: 400px) {
+  .management-workspace .management-content:has(> .management-storyboard-panel) { overflow-y: auto; }
+  .management-workspace .management-content > .management-storyboard-panel { flex: 1 0 144px; }
+}
 .management-workspace .management-canvas-card-heading h4 { min-width: 0; }
 .management-workspace .management-canvas-name.ant-btn { display: flex; align-items: center; gap: 6px; height: auto; max-width: 100%; padding: 0; text-align: left; white-space: normal; font-size: 14px; font-weight: 600; }
 .management-workspace .management-canvas-name .anticon { flex-shrink: 0; }

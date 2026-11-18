@@ -34,9 +34,10 @@ function RetryContainer({ inline, actionHost, ...props }: React.ComponentProps<t
 }
 
 /** 确认本次依据后重试原画布，未知结果只重放已保存的同一请求。 */
-export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted, onReviewSource, inline = false, actionHost }: {
+export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, canvas, historical, onAccepted, onSubmissionChange, onReviewSource, inline = false, actionHost }: {
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary
-  historical: boolean; onAccepted: () => void
+  historical: boolean; onAccepted: (taskId: string) => void
+  onSubmissionChange: (submitting: boolean) => void
   actionHost?: HTMLElement | null
   inline?: boolean
   onReviewSource: () => void
@@ -107,6 +108,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
     } catch (cause) { setError(directingError(cause)); return }
     sending.current = true
     setSubmitting(true); setPending(intent); setError('')
+    onSubmissionChange(true)
     try {
       const response = await Directing.directingStoryboardRetry({
         projectId, chapterId, sequenceId, taskId: intent.taskId, requestBody: intent.body,
@@ -114,9 +116,8 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
       if (response.data?.canvas_id !== canvasId) throw new Error('重试结果待核实')
       clear()
       try { sessionStorage.removeItem(draftKey) } catch { /* 已受理任务不受本地存储影响。 */ }
-      if (!mounted.current) return
-      setTarget(undefined)
-      onAccepted()
+      if (mounted.current) setTarget(undefined)
+      onAccepted(response.data.task_id)
     } catch (cause) {
       if (cause instanceof ApiError && [400, 401, 403, 404, 409, 422].includes(cause.status)) {
         clear()
@@ -126,6 +127,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
     } finally {
       sending.current = false
       if (mounted.current) setSubmitting(false)
+      onSubmissionChange(false)
     }
   }
   const refresh = () => setRevision(value => value + 1)

@@ -211,7 +211,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const hasTarget = !!(params.get('canvas') || params.get('storyboardTask') || params.get('objectTask'))
   useLayoutEffect(() => {
     const panel = readingPanel.current
-    if (!panel || division) return
+    if (!panel || division || step === 'storyboard') return
     const top = hasTarget ? 0 : readManagementBrowse(browseKey).top ?? 0
     let restoring = true
     const observer = new ResizeObserver(() => restore())
@@ -235,7 +235,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
       panel.removeEventListener('pointerdown', stop)
       panel.removeEventListener('keydown', stop)
     }
-  }, [browseKey, ready, division, hasTarget])
+  }, [browseKey, ready, division, hasTarget, step])
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? (historical || !current.length)}
     query={sceneQuery} setQuery={setSceneQuery} scrollTop={sceneScroll}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
@@ -258,6 +258,14 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const preparationNotice = selected?.preparation_stale && !historical && step !== 'objects' && <Alert type="warning" showIcon
     message="对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。"
     action={<Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />
+  const sceneNotices = <>
+    {historical && <Alert type="info" showIcon message="此场次已退出当前划分，可查看原有准备和画布。" />}
+    <div className="management-scene-notices" aria-label="本场制作提示">
+      {preparationNotice}
+      {sourceNotice && (preparationNotice ? <details><summary>章节原文也已变化，查看范围核对入口</summary>{sourceNotice}</details> : sourceNotice)}
+    </div>
+  </>
+  const showCanvasList = step === 'storyboard' && !!selected
   const activeStep = division ? 'division' : step
   const chapterHeading = <div className="management-chapter-heading">
     <Button type="text" icon={<ArrowLeftOutlined aria-hidden />} title="返回章节列表" aria-label="返回章节列表" disabled={updatingDivision} onClick={returnToChapters} />
@@ -345,17 +353,12 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           <div ref={setFilterHost} className="management-filter-host" />
           {step === 'objects' ? <div className="management-object-actions" ref={setObjectActions} /> : <div className="management-storyboard-actions" ref={setStoryboardActions} />}
         </div>}
-        <WorkspaceScrollPanel ref={readingPanel} className="management-panel">
-          {loadError}
-          {retiredNotice}
+        <WorkspaceScrollPanel ref={readingPanel} className={showCanvasList ? 'management-panel management-storyboard-panel' : 'management-panel'}>
+          {!showCanvasList && <>{loadError}{retiredNotice}</>}
           {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
           {!selected && !invalidScene && <p>{current.length ? '请选择当前场次继续制作。' : '本章没有当前场次，可从历史场次查看已有内容。'}</p>}
-          {selected && <section key={selected.id} aria-labelledby="management-current-scene">
-            {historical && <Alert type="info" showIcon message="此场次已退出当前划分，可查看原有准备和画布。" />}
-            <div className="management-scene-notices" aria-label="本场制作提示">
-              {preparationNotice}
-              {sourceNotice && (preparationNotice ? <details><summary>章节原文也已变化，查看范围核对入口</summary>{sourceNotice}</details> : sourceNotice)}
-            </div>
+          {selected && <section key={selected.id} className="management-scene-production" aria-labelledby="management-current-scene">
+            {!showCanvasList && sceneNotices}
             {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
               editable={!historical && !!selected.source_excerpt.trim()}
               management={{ host: objectActions, filterHost,
@@ -368,6 +371,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
             {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} sceneName={selected.title}
               onReviewSource={reviewSource}
               canCreate={!historical && !!selected.source_excerpt.trim()} actionHost={storyboardActions} filterHost={filterHost}
+              sceneNotices={<>{loadError}{retiredNotice}{sceneNotices}</>}
               targetCanvas={params.get('canvas')} targetTask={params.get('storyboardTask')}
               onCloseTask={canvasId => setParams(previous => {
                 const next = new URLSearchParams(previous)

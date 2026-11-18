@@ -8,10 +8,11 @@ import { WorkbenchStoryboardRetry } from './WorkbenchStoryboardRetry'
 import { directingError } from './common'
 
 /** 管理页处理候选；共同编辑器保留保存、修订、应用回执与撤销校验。 */
-export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onEnter, onReviewSource, quickEntry = false }: {
+export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onSubmissionChange, onEnter, onReviewSource, quickEntry = false }: {
   quickEntry?: boolean
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary; historical: boolean
-  onClose: () => void; onChange: () => void; onEnter: () => void; onReviewSource: () => void
+  onClose: () => void; onChange: (acceptedTaskId?: string) => void; onEnter: () => void; onReviewSource: () => void
+  onSubmissionChange: (submitting: boolean) => void
 }) {
   const editor = useGenerationCanvasEditor(projectId, canvas.id, false, persistSceneChange)
   const [loadedTask, setTask] = useState<StoryboardTaskRead>()
@@ -91,6 +92,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
           prepare={editor.prepareReview} reload={editor.reload} applying={editor.saving} saveError={editor.error}
           report={task.review} candidate={task.candidate} repairDetails={task.repair_details} structureIssues={task.structure_issues}
           reviewedOverwrite={task.reviewed_overwrite_card_ids} onOpenCanvas={canvas.applied_storyboard_task_id ? onEnter : undefined}
+          onRepairAccepted={onChange} onRepairSubmissionChange={onSubmissionChange}
           onRepaired={result => { setTask(result); onChange() }}
           apply={async choice => {
             const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: task.task_id }, choice)
@@ -103,7 +105,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
         editor.handoffStoryboardApplication(); onEnter()
       }}>进入当前画布</Button>}
       <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
-        onAccepted={onChange} />
+        onAccepted={onChange} onSubmissionChange={onSubmissionChange} />
     </Space>
     </div>
   </Drawer>
