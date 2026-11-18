@@ -19,7 +19,17 @@ const session = { id: 'image1', lab_type: 'image', title: '真实图片会话', 
 const olderSessions = Array.from({ length: 5 }, (_, index) => ({
   ...session, id: 'older' + index, title: '更早会话 ' + index, updated_at: '2026-11-09T10:00:00Z',
 }))
+const updated_at = '2026-11-10T10:30:00Z'
+const canvasRows = [
+  { id: 'scene-canvas', kind: 'scene', name: '真实场次画布', project_name: project.name, cover_file_id: 'home-cover', updated_at },
+  { id: 'free-canvas', kind: 'free', name: '真实生成画布', project_name: null, cover_file_id: null, updated_at },
+]
+const assetRows = ['actor', 'scene', 'prop', 'costume', 'actor', 'scene'].map((type, index) => ({
+  id: String(index), type, name: '真实资产 ' + index, updated_at,
+  thumbnail: index === 2 ? null : '/api/v1/studio/files/home-image/download',
+}))
 let state = 'loaded'
+let failedHome = ''
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
@@ -33,6 +43,12 @@ try {
     const { pathname } = url
     const respond = data => route.fulfill({ json: { code: 200, data } })
     const fail = () => route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
+    if (pathname.endsWith('/recent-canvases')) return failedHome === 'canvases' ? fail() : respond(state === 'empty' ? [] : canvasRows)
+    if (pathname.endsWith('/recent-assets')) return failedHome === 'assets' ? fail() : respond(state === 'empty' ? [] : assetRows)
+    if (/\/files\/home-(?:image|cover)\/download$/.test(pathname)) return route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6aYAAAAASUVORK5CYII=', 'base64'),
+    })
     if (pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     if (pathname.endsWith('/projects')) {
       if (state === 'error') return fail()
@@ -62,6 +78,10 @@ try {
   const assets = page.getByRole('region', { name: '最近资产', exact: true })
   const assetCards = assets.getByRole('listitem')
   await page.getByRole('heading', { name: '工作概览', level: 1 }).waitFor({ state: 'attached' })
+  await canvases.getByRole('heading', { name: canvasRows[0].name, exact: true }).waitFor()
+  await canvases.getByText('独立画布', { exact: false }).waitFor()
+  assert.equal(await canvases.getByRole('article').count(), 2)
+  assert.equal(await canvases.getByText('示例数据', { exact: true }).count(), 0)
   const canvasHeading = await canvases.getByRole('heading').first().boundingBox()
   const main = await page.getByRole('main').boundingBox()
   assert.ok(canvasHeading.y - main.y <= 32, '首页首个可见区块应紧接页面顶栏')
@@ -88,7 +108,7 @@ try {
   await assetButton.focus()
   await page.keyboard.press('Enter')
   const preview = page.getByRole('dialog', { name: assetName, exact: true })
-  await preview.getByText('示例资产', { exact: true }).waitFor()
+  await preview.getByText('演员', { exact: true }).waitFor()
   await preview.getByRole('img', { name: assetName, exact: true }).waitFor()
   await page.waitForFunction(() => document.activeElement?.closest('.home-asset-preview'))
   await page.keyboard.press('Escape')
@@ -122,7 +142,7 @@ try {
       const drawerCard = drawer.getByRole('listitem').last().getByRole('button')
       await drawerCard.click()
       const drawerPreview = page.getByRole('dialog', { name: await drawerCard.getAttribute('aria-label'), exact: true })
-      await drawerPreview.getByText('示例资产', { exact: true }).waitFor()
+      await drawerPreview.getByText('场景', { exact: true }).waitFor()
       await drawerPreview.getByRole('button', { name: 'Close', exact: true }).click({ trial: true })
       await page.waitForFunction(() => document.activeElement?.closest('.home-asset-preview'))
       await page.keyboard.press('Escape')
@@ -133,7 +153,7 @@ try {
       await drawer.waitFor({ state: 'hidden' })
       await page.waitForFunction(() => document.activeElement?.textContent.trim() === '查看最近资产')
     } else {
-      await assets.getByText('示例数据', { exact: true }).waitFor()
+      assert.equal(await assets.getByText('示例数据', { exact: true }).count(), 0)
       assert.equal(await assets.getByRole('button', { name: '查看最近资产' }).count(), 0)
       const cards = await assetCards.all()
       assert.equal(cards.length, width === 1366 ? 4 : 6)
@@ -180,8 +200,25 @@ try {
     await page.screenshot({ path: output + '/' + width + '-home.png', animations: 'disabled' })
   }
 
+  await canvases.getByRole('heading', { name: canvasRows[0].name, exact: true }).waitFor()
+  for (const [failure, region, other, otherText] of [
+    ['canvases', canvases, assets, assetRows[0].name],
+    ['assets', assets, canvases, canvasRows[0].name],
+  ]) {
+    failedHome = failure
+    await page.reload()
+    await region.getByRole('alert').waitFor()
+    await other.getByText(otherText, { exact: true }).waitFor()
+    failedHome = ''
+    await region.getByRole('button', { name: '重试' }).click()
+    await region.getByRole('alert').waitFor({ state: 'hidden' })
+    await region.getByText(failure === 'assets' ? assetRows[0].name : canvasRows[0].name, { exact: true }).waitFor()
+  }
+
   state = 'empty'
   await page.reload()
+  await canvases.getByText('暂无画布', { exact: true }).waitFor()
+  await assets.getByText('暂无资产', { exact: true }).waitFor()
   await progress.getByText('暂无项目', { exact: true }).waitFor()
   await sessions.getByText('暂无实验室会话', { exact: true }).waitFor()
   state = 'partial-error'

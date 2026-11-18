@@ -48,8 +48,7 @@
 .home-asset-meta, .home-asset-type, .home-asset-preview-meta { display: flex; align-items: center; gap: 5px; }
 .home-asset-meta { justify-content: space-between; color: var(--app-muted, #536174); font-size: 12px; }
 .home-asset-meta time { white-space: nowrap; }
-.home-assets-drawer p, .home-asset-preview-meta { margin: 0 0 12px; }
-.home-assets-drawer .home-sample-label, .home-asset-preview .home-sample-label { color: #536174; }
+.home-asset-preview-meta { margin: 0 0 12px; }
 .home-asset-preview .home-asset-image { height: clamp(120px, 50dvh, 360px); border-radius: 8px; }
 .home-asset-preview .home-asset-image img { object-fit: contain; }
 
@@ -70,7 +69,7 @@
   .home-assets-inline { display: none; }
   .home-assets-heading { margin-bottom: 0; }
   .home-assets-heading .home-assets-open { display: inline-flex; margin-inline-start: auto; }
-  .home-assets-library { margin-inline-start: 0; }
+  .home-assets-open + .home-assets-library { margin-inline-start: 0; }
 }
 
 @media (width < 400px) {

@@ -9,6 +9,7 @@ from app.api.v1.routes.studio import (
     entities,
     experiment_sessions,
     files,
+    home,
     generation_tasks,
     lab_generation_tasks,
     generation_prompts,
@@ -37,3 +38,4 @@ router.include_router(generation_tasks.router, prefix="/generation-tasks", tags=
 router.include_router(lab_generation_tasks.router, prefix="/generation-tasks/labs", tags=["studio/generation-tasks"])
 
 router.include_router(generation_canvases.router, prefix="/generation-canvases", tags=["studio/generation-canvases"])
+router.include_router(home.router, prefix="/home", tags=["studio/home"])
