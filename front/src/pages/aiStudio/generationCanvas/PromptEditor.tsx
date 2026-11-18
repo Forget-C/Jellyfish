@@ -185,7 +185,8 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         // 全角限定括号属于名称标签语法；即使当前候选中没有该名称，也不解释其编号前缀。
         const position = offset + match.index!
         if (textRun[position + match[0].length] === '（' || nameRanges.some(([from, to]) => position >= from && position < to)) continue
-        const command = card.type === 'model.video' ? textRun.slice(0, position).match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:[ \t]+"[^"]*")?[ \t]*$/)?.[1] : undefined
+        // Consecutive space-separated references still belong to the same command until prose resumes.
+        const command = card.type === 'model.video' ? textRun.slice(0, position).match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:[ \t]+"[^"]*")?(?:[ \t]+@(?:文本|图片|视频|音频)\d+)*[ \t]*$/)?.[1] : undefined
         if (command && !finalize) continue
         const candidate = currentCandidates.find(item => item.token === match[0] && item.available &&
           (command ? item.inputPorts?.includes(promptInputPort(card, item.source, command)) : !item.disabledReason))

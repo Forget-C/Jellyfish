@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-video-')
 const fixture = join(output, 'audio-video.mp4')
 execFileSync('/opt/homebrew/bin/ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-y', fixture])
-const api = 'http://127.0.0.1:8279', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8279', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_video_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8279', CANVAS_VIDEO_FIXTURE: fixture }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -44,12 +44,19 @@ try {
     form.append('project_id', 'canvas-project'); form.append('usage_kind', 'generation_upload')
     fileIds.push((await (await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: form })).json()).data.id)
   }
-  const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.video', model_id: 'video-frames', prompt: { segments: [] }, config: { ratio: '16:9', seconds: 5, seed: 7 } }, ...fileIds.map((file_id, i) => ({ id: `s${i}`, type: 'content.image', file_id })), { id: 'text-source', type: 'content.text', text: '原文' }],
-    edges: fileIds.map((_, i) => ({ id: `e${i}`, source_card: `s${i}`, source_port: 'image', target_card: 'm', target_port: i ? 'key_frame' : 'first_frame' })), input_order: { m: { first_frame: ['e0'], key_frame: ['e1'], text: ['et'] } } }
-  document.edges.push({ id: 'et', source_card: 'text-source', source_port: 'text', target_card: 'm', target_port: 'text' })
+  const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.video', model_id: 'video-frames', prompt: { segments: [] }, config: { ratio: '16:9', seconds: 5, seed: 7 } }, ...fileIds.map((file_id, i) => ({ id: `s${i}`, type: 'content.image', file_id })), { id: 'text-source', type: 'content.text', text: '原文' }], edges: [], input_order: { m: {} } }
+  for (const [port, sources] of Object.entries({
+    first_frame: ['s0', 's1'], last_frame: ['s1'], key_frame: ['s1', 's0'], subject_image: ['s0'], text: ['text-source'],
+  })) {
+    document.input_order.m[port] = sources.map(source => {
+      const id = `${port}-${source}`
+      document.edges.push({ id, source_card: source, source_port: source === 'text-source' ? 'text' : 'image', target_card: 'm', target_port: port })
+      return id
+    })
+  }
   assert.ok((await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })).ok)
-  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
-  await page.goto(`http://127.0.0.1:4279/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout::${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
+  await page.goto(`http://127.0.0.1:4279/canvases/${canvas.id}`)
   await page.locator('[data-card-id="m"]').press('Enter')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const card = page.locator('.wb-details:not([hidden])'), editor = card.getByRole('textbox', { name: '模型正文', exact: true })
@@ -73,13 +80,13 @@ try {
   let persisted = await save()
   writeFileSync(join(output,'directives-saved.json'),JSON.stringify(persisted,null,2))
   const instructions = persisted.prompt.segments.filter(segment => segment.kind === 'instruction')
-  assert.deepEqual(instructions.map(item => [item.command, item.references.length]), [['首帧参考', 1], ['尾帧参考', 1], ['关键帧参考', 2], ['主体参考', 1]])
+  assert.deepEqual(instructions.map(item => [item.command, item.references.length]), [['首帧参考', 1], ['尾帧参考', 1], ['关键帧参考', 2], ['主体参考', 0]])
   assert.ok(persisted.prompt.segments.filter(segment => segment.kind === 'text').map(segment => segment.text).join('').includes('同行正文'))
   assert.equal(await card.locator('[data-instruction-id]').count(), 4)
   await check()
-  await preview.getByRole('alert').filter({ hasText: 'UNSUPPORTED_REFERENCE_COMBINATION' }).waitFor()
+  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).waitFor()
   assert.equal(await preview.getByRole('button', { name: '确认执行', exact: true }).isDisabled(), true)
-  await preview.getByRole('alert').filter({ hasText: 'UNSUPPORTED_REFERENCE_COMBINATION' }).getByRole('button', { name: '定位问题' }).click()
+  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).getByRole('button', { name: '定位问题' }).click()
   await preview.waitFor({state:'hidden'})
   await card.locator('[data-segment-id]:focus').waitFor()
   assert.ok(await card.locator('[data-segment-id]:focus').count())
@@ -98,12 +105,11 @@ try {
   await closePreview()
   await clearInstructions()
   await editor.fill('/首帧参考 @图片1 /首帧参考 @图片2')
-  await editor.press('Tab'); await check()
-  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_COUNT_EXCEEDED' }).waitFor()
-  await closePreview()
+  await editor.press('Tab')
+  await page.getByRole('status').filter({ hasText: '首帧只能采用一项' }).waitFor()
   await clearInstructions()
   await editor.fill('/首帧参考 @文本1 同行正文'); await editor.press('Tab'); await check()
-  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_TYPE' }).getByRole('button', { name: '定位问题' }).click()
+  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).getByRole('button', { name: '定位问题' }).click()
   await preview.waitFor({state:'hidden'})
   await card.locator('[data-segment-id]:focus').waitFor()
   assert.ok(await card.locator('[data-segment-id]:focus').count())
@@ -122,7 +128,7 @@ try {
     assert.equal(await preview.getByRole('region', { name: '实际提交文本', exact: true }).textContent(), expected)
     assert.equal(await preview.getByRole('button', { name: '确认执行', exact: true }).isDisabled(), false)
   }
-  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   const run = (await (await accepted).json()).data
   await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
