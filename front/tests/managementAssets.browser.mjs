@@ -239,6 +239,8 @@ try {
   assert.equal(new URL(staleReturnTo, origin).searchParams.get('actorQuery'), '缺图')
   await missingActor.getByRole('link').click()
   await page.waitForURL(url => url.pathname === '/assets/actors/actor-missing/edit')
+  await page.getByText('演员缺图', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '生成图片', exact: true }).and(page.locator(':enabled')).waitFor()
   failRead = undefined
   await page.goBack()
   await missingActor.getByRole('link').and(page.locator(':focus')).waitFor()
