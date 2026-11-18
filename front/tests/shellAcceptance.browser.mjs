@@ -125,7 +125,7 @@ try {
   const projectNavigation = page.getByRole('navigation', { name: '项目导航', exact: true })
   await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
   assert.deepEqual(await projectNavigation.getByRole('link').allTextContents(), [
-    '项目概览', '画布生成', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
+    '项目概览', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
   ])
   await projectNavigation.getByText('旧信', { exact: true }).waitFor()
   for (const label of ['章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置', '项目概览']) {
