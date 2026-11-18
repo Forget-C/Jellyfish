@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -55,6 +55,8 @@ async def list_entities_paginated(
     page_size: int,
     project_id: str | None = None,
     exact_name: str | None = None,
+    source: list[str] | None = None,
+    has_cover: bool | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     entity_type_norm = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type_norm)
@@ -63,6 +65,18 @@ async def list_entities_paginated(
     if exact_name is not None:
         stmt = stmt.where(spec.model.name == exact_name.strip())
     stmt = apply_keyword_filter(stmt, q=q, fields=[spec.model.name, spec.model.description])
+    if source:
+        # Match the source label on cards, where a converted actor has precedence over origin.
+        card_source = spec.model.origin
+        if entity_type_norm == "actor":
+            card_source = case((spec.model.source_character_id != "", "role_conversion"), else_=card_source)
+        stmt = stmt.where(card_source.in_(source))
+    if has_cover is not None:
+        image_parent = getattr(spec.image_model, spec.id_field)
+        cover_exists = select(image_parent).where(
+            image_parent == spec.model.id, spec.image_model.file_id != "",
+        ).exists()
+        stmt = stmt.where(cover_exists if has_cover else ~cover_exists)
     has_details = spec.model.origin == "created"
     has_details = has_details | spec.model.details_editable.is_(True)
     if style:
@@ -77,7 +91,9 @@ async def list_entities_paginated(
         allow_fields=ENTITY_ORDER_FIELDS,
         default="created_at",
     )
-    if project_id is None and entity_type_norm in {"actor", "scene", "prop", "costume"}:
+    library_order = project_id is None and entity_type_norm in {"actor", "scene", "prop", "costume"}
+    project_resource_order = project_id is not None and order == "created_at" and is_desc
+    if library_order or project_resource_order:
         stmt = stmt.order_by(spec.model.id)
     items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
 

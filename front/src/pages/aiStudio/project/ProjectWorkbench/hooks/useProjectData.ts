@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { chapters as mockChapters, type Project, type Chapter as MockChapter } from '../../../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../../../services/generated'
 import type { ChapterRead, ProjectRead, ProjectUpdate } from '../../../../../services/generated'
-import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -125,40 +124,6 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
   }, [load])
 
   return { chapters, loading, total, totalKnown, error, refresh: load }
-}
-
-export function useProjectCharacters(projectId: string | undefined) {
-  const [characters, setCharacters] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    if (!projectId) {
-      setCharacters([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await StudioEntitiesApi.list('character', {
-        projectId,
-        page: 1,
-        pageSize: 100,
-        q: null,
-      })
-      const items = (res.data?.items ?? []).filter((x) => x.project_id === projectId)
-      setCharacters(items)
-    } catch {
-      setCharacters([])
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  return { characters, loading, refresh: load }
 }
 
 export { newId }

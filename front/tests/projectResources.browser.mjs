@@ -25,11 +25,11 @@ try {
     Object.assign(assets[1], {origin:'library',library_copy_id:'library-copy'})
     Object.assign(assets[2], {origin:'project',source_character_id:kind==='actor'?'role-source':null})
     assets[3].description='需要截断的完整详情'.repeat(35)
-    let failAssetSave=false, submittedModel
+    let failAssetSave=false, submittedModel, failList=false
     const imageRows=[{id:1,file_id:'pic',view_angle:'FRONT',is_primary:true,is_view_default:true}]
     let links=[assets[0],assets[1],assets[2],assets[3]].map((a,i)=>({id:i+1,project_id:'resources',[kind+'_id']:a.id})), attempts=0
     await page.route('**/api/**',async route=>{
-      const req=route.request(),path=new URL(req.url()).pathname
+      const req=route.request(), { pathname: path, searchParams } = new URL(req.url())
       const respond=data=>route.fulfill({json:{success:true,data}})
       if(path.endsWith('/files/pic/download'))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="240" height="480"><rect width="240" height="480" fill="navy"/></svg>'})
       if(path.endsWith('/model-settings'))return respond({default_image_model_id:'m'})
@@ -46,10 +46,23 @@ try {
         return respond({items:links,pagination:{total:links.length}})
       }
       if(path.includes('/project-assets/'+kind+'/'))throw new Error('Legacy unlink API must not be called')
-      if(path.endsWith('/entities/'+kind))return respond({items:assets,pagination:{total:assets.length}})
+      if(path.endsWith('/entities/'+kind)) {
+        if (failList && searchParams.get('project_id')) return route.fulfill({ status: 503 })
+        const query = searchParams.get('q') ?? ''
+        const sources = searchParams.getAll('source')
+        const cover = searchParams.get('has_cover')
+        const owner = searchParams.get('project_id')
+        const items = assets.filter(asset => (owner === null || asset.project_id === owner) && !asset.deleted
+          && (!query || `${asset.name} ${asset.description || ''}`.includes(query))
+          && (!sources.length || sources.includes(asset.source_character_id ? 'role_conversion' : asset.origin ?? 'created'))
+          && (cover === null || Boolean(asset.thumbnail) === (cover === 'true')))
+        const page = Number(searchParams.get('page')) || 1
+        const size = Number(searchParams.get('page_size')) || 100
+        return respond({items:items.slice((page-1)*size,page*size),pagination:{total:items.length}})
+      }
       const asset=assets.find(a=>path.endsWith('/entities/'+kind+'/'+a.id))
       if(asset){
-        if(req.method()==='DELETE') { attempts++; if(attempts===1)return route.fulfill({status:503,json:{detail:'删除失败'}}); links=links.filter(l=>l[kind+'_id']!==asset.id);return respond({}) }
+        if(req.method()==='DELETE') { attempts++; if(attempts===1)return route.fulfill({status:503,json:{detail:'删除失败'}}); links=links.filter(l=>l[kind+'_id']!==asset.id);asset.deleted=true;return respond({}) }
         if(req.method()==='PATCH') { if(failAssetSave)return route.fulfill({status:503,json:{detail:'保存失败'}});Object.assign(asset,req.postDataJSON()) }
         return respond(asset)
       }
@@ -62,6 +75,7 @@ try {
     await page.goto(`http://127.0.0.1:4546/projects/resources?tab=${tab}`)
     const preview=page.getByRole('button',{name:'预览'+assets[0].name,exact:true})
     await preview.waitFor()
+    await page.getByRole('button', { name: '筛选', exact: true }).waitFor()
     const cards=page.getByRole('article')
     const firstCard=cards.first()
     await firstCard.getByLabel('创建日期 2026/11/16',{exact:true}).waitFor()
@@ -83,6 +97,25 @@ try {
     await page.getByText('未填写简介',{exact:true}).first().waitFor()
     await page.getByText('图片加载失败',{exact:true}).waitFor()
     assert.equal(await page.getByRole('button',{name:'预览'+assets[3].name,exact:true}).count(),0)
+    const search = page.getByRole('textbox', { name: '搜索项目资源' })
+    const filter = page.getByRole('button', { name: /^筛选/ })
+    await filter.click()
+    await page.getByRole('checkbox', { name: '资产库导入' }).press('Space')
+    await page.getByRole('radio', { name: '待补封面' }).press('Space')
+    assert.equal(await cards.count(), 4, 'filters take effect only after applying')
+    await page.getByRole('button', { name: /^应\s*用$/ }).click()
+    await page.getByText('匹配 1 项', { exact: true }).waitFor()
+    await page.getByRole('button', { name: assets[1].name, exact: true }).waitFor()
+    await search.fill('不存在')
+    await search.press('Enter')
+    await page.getByText('无匹配资源', { exact: true }).waitFor()
+    await filter.click()
+    await page.getByRole('button', { name: '清除筛选' }).click()
+    assert.equal(await search.inputValue(), '不存在')
+    await search.fill('')
+    await search.press('Enter')
+    await page.getByText('共 4 项', { exact: true }).waitFor()
+
     for(const appearance of ['雾蓝微渐变','雾蓝纯色']) {
       await page.getByRole('button',{name:'用户与语言设置'}).click()
       await page.getByRole('menuitemradio',{name:appearance}).click()
@@ -205,7 +238,7 @@ try {
     await generation.waitFor({state:'hidden'})
     for(const [width,height] of [[1440,900],[1366,768],[1024,440],[375,768]]) {
       await page.setViewportSize({width,height})
-      if(await page.getByRole('tab',{name:'图片',exact:true}).count())await page.getByRole('tab',{name:'图片',exact:true}).click()
+      if (width <= 1024) await page.getByRole('tab', { name: '图片', exact: true }).click()
       await page.getByRole('button',{name:/^查看全部/}).waitFor()
       assert.equal(await page.locator('.project-workbench-content').evaluate(panel => {
         const body = panel.querySelector('.resource-editor-body')
@@ -272,24 +305,57 @@ try {
     assets[2].project_id='resources'
     if(kind==='prop') {
       assets.push(...Array.from({length:14},(_,i)=>({id:`extra-${i}`,name:`道具分页${i}`,description:'分页资源', project_id:'resources',visual_style:'现实',style:'真人都市'})))
-      links=assets.map((asset,i)=>({id:i+1,project_id:'resources',[kind+'_id']:asset.id}))
+      await search.fill('分页资源')
+      await search.press('Enter')
+      await page.getByText('匹配 14 项', { exact: true }).waitFor()
+      const pagination = page.getByRole('navigation', { name: '项目道具分页' })
+      await pagination.getByTitle('2', { exact: true }).click()
+      const restored = page.getByRole('button', { name: '道具分页12', exact: true })
+      await restored.waitFor()
       await page.reload()
-      await page.setViewportSize({width:375,height:440})
-      await page.getByTitle('2',{exact:true}).click()
-      const restored=page.getByRole('button',{name:assets[13].name,exact:true})
-      await restored.scrollIntoViewIfNeeded()
-      const panel=page.locator('.project-workbench-content')
-      const scrollBefore=await panel.evaluate(node=>node.scrollTop)
-      assert.ok(scrollBefore>0)
+      await restored.waitFor()
+      assert.equal(await search.inputValue(), '分页资源')
       await restored.click()
-      await page.getByRole('textbox',{name:'名称',exact:true}).waitFor()
-      assert.equal(page.url(),originalUrl)
-      await page.getByRole('button',{name:'返回',exact:true}).click()
+      await page.getByRole('textbox', { name: '名称', exact: true }).waitFor()
+      await page.getByRole('button', { name: '返回', exact: true }).click()
       await restored.and(page.locator(':focus')).waitFor()
-      assert.ok(Math.abs(await panel.evaluate(node=>node.scrollTop)-scrollBefore)<=1,'return preserves page 2 and its scroll position')
-      await page.setViewportSize({width:1440,height:900})
+      failList = true
+      await page.getByRole('button', { name: '刷新', exact: true }).click()
+      await page.getByText('读取项目资源失败，仍显示上一次结果', { exact: true }).waitFor()
+      await restored.waitFor()
+      failList = false
+      await page.getByRole('button', { name: '重试', exact: true }).click()
+      await page.getByText('读取项目资源失败，仍显示上一次结果', { exact: true }).waitFor({state:'hidden'})
+      failList = true
+      await search.fill('失败的查询')
+      await search.press('Enter')
+      await page.getByText('读取项目资源失败，仍显示上一次结果', { exact: true }).waitFor()
+      failList = false
+      await restored.click()
+      await page.getByRole('textbox', { name: '名称', exact: true }).waitFor()
+      await page.getByRole('button', { name: '生成图片', exact: true }).and(page.locator(':enabled')).waitFor()
+      await page.getByRole('button', { name: '返回', exact: true }).click()
+      await restored.and(page.locator(':focus')).waitFor()
+      assert.equal(await search.inputValue(), '分页资源')
+      await page.setViewportSize({ width:375,height:440 })
+      await pagination.getByText('13 / 14', { exact: true }).waitFor()
+      await restored.waitFor()
+      await page.setViewportSize({ width:1440,height:900 })
+      await pagination.getByTitle('2', { exact: true }).waitFor()
+      for (const index of [12, 13]) {
+        await page.getByRole('button', { name: `道具分页${index}更多操作`, exact: true }).click()
+        await page.getByRole('menuitem', { name: '删除项目对象', exact: true }).click()
+        const confirm = page.getByRole('dialog').filter({ hasText: '删除此项目对象' })
+        await confirm.getByRole('button', { name: '删除项目对象', exact: true }).click()
+        await confirm.waitFor({ state: 'hidden' })
+      }
+      await page.getByRole('button', { name: '道具分页0', exact: true }).waitFor()
+      assert.equal(await pagination.count(), 0, 'removing the last page returns to the first page')
+      await search.fill('')
+      await search.press('Enter')
+      await page.getByText('共 15 项', { exact: true }).waitFor()
     }
-    links=[]
+    assets.forEach(asset => { asset.deleted = true })
     await page.goto(`http://127.0.0.1:4546/projects/resources?tab=${tab}`)
     await page.getByText(/暂无项目/).waitFor()
     await page.getByRole('button',{name:/新建/}).click()
@@ -318,4 +384,7 @@ try {
     await page.unroute('**/api/**')
   }
   console.log(JSON.stringify({output,passed:true}))
+} catch (error) {
+  console.log('Browser evidence:', output)
+  throw error
 } finally {await cleanup()}

@@ -135,6 +135,8 @@ export class StudioEntitiesService {
         projectId,
         q,
         exactName,
+        source,
+        hasCover,
         style,
         visualStyle,
         order,
@@ -155,6 +157,14 @@ export class StudioEntitiesService {
          * 按数据库名称规则匹配同名对象
          */
         exactName?: (string | null),
+        /**
+         * 卡片来源，多个值取并集
+         */
+        source?: (Array<'created' | 'library' | 'upload' | 'project' | 'role_conversion'> | null),
+        /**
+         * 是否有可解析的已保存封面引用
+         */
+        hasCover?: (boolean | null),
         /**
          * 题材/风格（单值）
          */
@@ -178,6 +188,8 @@ export class StudioEntitiesService {
                 'project_id': projectId,
                 'q': q,
                 'exact_name': exactName,
+                'source': source,
+                'has_cover': hasCover,
                 'style': style,
                 'visual_style': visualStyle,
                 'order': order,

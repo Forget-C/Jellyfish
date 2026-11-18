@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,6 +120,10 @@ async def list_entities(
     project_id: str | None = Query(None, description="所属项目；不传时仅查询共享资产"),
     q: str | None = Query(None, description="关键字，过滤 name/description"),
     exact_name: str | None = Query(None, description="按数据库名称规则匹配同名对象"),
+    source: list[Literal["created", "library", "upload", "project", "role_conversion"]] | None = Query(
+        None, description="卡片来源，多个值取并集",
+    ),
+    has_cover: bool | None = Query(None, description="是否有可解析的已保存封面引用"),
     style: str | None = Query(None, description="题材/风格（单值）"),
     visual_style: str | None = Query(None, description="画面表现形式（单值：真人/动漫）"),
     order: str | None = Query(None),
@@ -133,6 +137,8 @@ async def list_entities(
         project_id=project_id,
         q=q,
         exact_name=exact_name,
+        source=source,
+        has_cover=has_cover,
         style=style,
         visual_style=visual_style,
         order=order,
