@@ -11,21 +11,18 @@ from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
-from app.core.contracts.directing.scene_version import EditableSceneDesign
-from app.core.contracts.directing.scene_design import SceneDesignDiagnostics, parse_scene_design_candidate
+from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
 from app.core.contracts.directing.production import ReviewPacket
-from app.core.contracts.directing.instruction_check import InstructionCheckResult
 from app.core.contracts.directing.scene_objects import SceneObjectExtraction
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization
 from app.services.chapters.explanations import explanation_basis
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND, validate_storyboard
 from app.services.directing.storyboard_scope import REQUIRED_SUBJECTS, SUBJECT_PORTS, organization_inputs, validate_organization
-from app.core.contracts.directing.scene_instruction import SceneInstructionResult
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
-from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
+from app.core.contracts.directing.workspace import AIRequest, DivisionResult
 from app.models.directing import DirectingRevision, Sequence
 from app.models.llm import ModelCategoryKey, Provider
-from app.models.task import Task, TaskOutput
+from app.models.task import Task
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.scene_objects import OBJECT_EXTRACTION_KIND, object_candidates
 from app.services.directing.workspace import WorkspaceService
@@ -43,10 +40,6 @@ RESULT_CONTRACTS = {
     'directing_design': SceneDesign,
     'directing_review': ReviewPacket,
     'directing_review_revision': ReviewRevisionCandidate,
-}
-HISTORICAL_RESULT_CONTRACTS = {
-    'directing_instruction': SceneInstructionResult,
-    'directing_instruction_check': InstructionCheckResult,
 }
 
 
@@ -105,8 +98,6 @@ def generate_directing_result(kind: str, llm, args: dict):
         "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行，并明确 participant_ids，引用本工作单的参与对象 ID；包括实际参与的静态车辆与手持物件。明确无对象用空列表，不得省略或使用 null，不因同一节拍或全场名单就把其他镜头对象加入。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
     }[kind]
-    if args.get('design_scope'):
-        instruction += '\n这是预先限定范围的局部修订。只能替换 design_scope 中列出的完整 Note，必须保留其余字段、来源、对象身份、顺序与关联，返回完整工作单；不得补齐范围外的未完成字段。'
     if "source_explanations" in args:
         instruction += "\nsource_explanations 是用户确认的原意解释，仅用于理解，不能冒充原文摘录、新增剧情或覆盖正文冲突；只采用适用于当前摘录的解释。解释 start/end 为整章 Unicode 字符半开范围，script_text 从 source_start 开始；不得把其他位置同名词的解释套到当前片段。kind=normal 表示用户确认的正常表述，不反复报为异常。"
     model_args = args
@@ -169,7 +160,7 @@ def generate_directing_result(kind: str, llm, args: dict):
                         'issues': structure_issues + [reason], 'options': choices, 'decision_reason': reason, 'attempt_issues': [reason],
                         **({'draft_issues': (structure_saved or structure_failed)['draft_issues']} if 'draft_issues' in (structure_saved or structure_failed or {}) else {})}
                     raise failure
-            result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
+            result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design"})
             if kind == STORYBOARD_KIND:
                 if structure_original:
                     from app.services.directing.storyboard_structure import validate_structure_repair
@@ -230,12 +221,7 @@ def generate_directing_result(kind: str, llm, args: dict):
         result, _, _ = validate_candidate(args["revision_context"], result)
     if kind == "directing_design":
         # 风格身份来自用户冻结输入，不采信模型生成的其他版本 ID。
-        if args.get('design_scope'):
-            from app.services.directing.scene_design_scope import validate_design_scope  # pylint: disable=import-outside-toplevel
-            previous = EditableSceneDesign.model_validate(args['previous_design']).model_dump(mode='json')
-            validate_design_scope(args['design_scope'], previous, result.model_dump(mode='json'))
-        else:
-            result.style_revision_id = args.get("style_revision_id")
+        result.style_revision_id = args.get("style_revision_id")
     if kind == STORYBOARD_KIND and (inputs := organization_inputs(result, args)):
         organized = generate_directing_result(STORYBOARD_ORGANIZATION, llm, {
             'organization_inputs': inputs, 'production_capability': args['production_capability']})
@@ -326,27 +312,3 @@ class DirectingAIService(WorkspaceService):
                 revision_id, expected_version = previous.id, previous.version
         return await self.save_revision(sequence_id, kind="design", payload=content.model_dump(mode="json"),
                                         revision_id=revision_id, expected_version=expected_version)
-
-
-    async def read_task(self, task_id: str) -> DirectingTaskRead:
-        """仅返回本项目导演任务的类型化结果，不暴露凭据或供应商原始响应。"""
-        task = await self.db.get(Task, task_id)
-        if task is None or task.project_id != self.project_id or task.target_type not in {"directing_chapter", "directing_sequence", "directing_unit", "directing_image"}:
-            raise ValueError("任务不属于当前工作区")
-        result = {}
-        result_key = {"directing_instruction_check": "instruction_check", "directing_instruction": "scene_instruction", "directing_divide": "division", "directing_design": "design", "directing_review": "review", "directing_review_revision": "revision"}.get(task.kind)
-        if task.status == "succeeded" and result_key and task.input_snapshot.get("scene_design"):
-            candidate = parse_scene_design_candidate(task.result, task.input_snapshot.get('run_args', {}))
-            result["scene_design"] = candidate.design if candidate else EditableSceneDesign.model_validate(task.result)
-        elif task.status == "succeeded" and result_key:
-            contract = HISTORICAL_RESULT_CONTRACTS.get(task.kind) or RESULT_CONTRACTS[task.kind]
-            result[result_key] = contract.model_validate(task.result)
-        if task.status == "succeeded" and task.target_type == "directing_image":
-            result["image_file_ids"] = list(await self.db.scalars(select(TaskOutput.file_id).where(TaskOutput.task_id == task.id).order_by(TaskOutput.ordinal)))
-        if task.kind == "directing_review_revision":
-            result["revision_request"] = task.input_snapshot.get("revision_request")
-            result["revision_application"] = task.input_snapshot.get("revision_application")
-        return DirectingTaskRead(task_id=task.id, kind=task.kind, status=task.status,
-                                 error=task.error_message,
-                                 division_baseline=task.input_snapshot.get("run_args", {}).get("division_baseline"),
-                                 source_version=task.input_snapshot.get("run_args", {}).get("source_version"), **result)

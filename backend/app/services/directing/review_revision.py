@@ -19,6 +19,7 @@ from app.models.directing import Sequence
 from app.models.task import Task
 from app.services.directing.production import ProductionService
 from app.services.directing.store import RevisionConflict
+from app.services.directing.task_query import read_directing_task
 from app.services.task_service import TaskService
 
 
@@ -319,7 +320,7 @@ class ReviewRevisionService(ProductionService):
         return candidate
 
     async def read_task(self, task_id):
-        result = await super().read_task(task_id)
+        result = await read_directing_task(self.db, self.project_id, task_id)
         if result.revision:
             task = await self.db.get(Task, task_id)
             frozen = task.input_snapshot.get('revision_preview')

@@ -113,6 +113,9 @@ async def test_retired_scene_tasks_keep_typed_results(tmp_path):
             response = await client.get(f'{base}/{task_id}')
             assert response.status_code == 200, response.text
             assert response.json()['data'][field] == expected
+        denied = await client.get('/api/v1/studio/projects/p2/directing/tasks/old-design-candidate')
+        assert denied.status_code == 422
+        assert '任务不属于当前工作区' in denied.text
 
 
 @pytest.mark.asyncio

@@ -33,12 +33,17 @@ async def test_worker_stops_retired_scene_version_tasks_before_provider_requests
             await connection.run_sync(Base.metadata.create_all)
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         async with sessions.begin() as db:
+            old_design_snapshot = {
+                'scene_design': {'version_id': 'old-version'},
+                'run_args': {'scene_version_design': True, 'design_scope_version': 1,
+                             'design_candidate_version': 1, 'design_scope': ['/direction/notes/0']},
+            }
             retired_submissions = [
                 ('scene_export', None, {}),
                 ('directing_unit_design', None, {}),
                 ('directing_instruction', None, {}),
                 ('directing_instruction_check', None, {}),
-                ('directing_design', 'directing_sequence', {'scene_design': {'version_id': 'old-version'}}),
+                ('directing_design', 'directing_sequence', old_design_snapshot),
                 ('video_generation', 'scene_video', {}),
             ]
             for kind, target_type, snapshot in retired_submissions:
@@ -50,7 +55,7 @@ async def test_worker_stops_retired_scene_version_tasks_before_provider_requests
                 Task(id="old-instruction", kind="directing_instruction"),
                 Task(id="old-check", kind="directing_instruction_check"),
                 Task(id="old-design", kind="directing_design",
-                     input_snapshot={"scene_design": {"version_id": "old-version"}}),
+                     input_snapshot=old_design_snapshot),
                 Task(id="old-video", kind="video_generation", target_type="scene_video",
                      status="running", execution_mode="remote", provider_task_id="remote-id",
                      next_poll_at=utcnow()),

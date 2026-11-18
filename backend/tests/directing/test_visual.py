@@ -6,6 +6,7 @@ from app.models.studio import FileUsage
 from app.models.directing import DirectingRevision, Take
 from app.core.contracts.directing.workspace import VisualRequest
 from app.services.directing.production import ProductionService
+from app.services.directing.task_query import read_directing_task
 from app.services.generation.media_execution import deliver_media
 from app.services.task_service import TaskService
 from tests.directing.test_store import database, frozen
@@ -33,7 +34,7 @@ async def test_visual_candidate_has_design_source_without_auto_adoption(tmp_path
             await tasks.claim(task.id, worker_id='test')
             await tasks.add_output(task.id, ordinal=0, file_id='image1')
             await tasks.finish(task.id, deliver=deliver_media)
-            assert (await service.read_task(task.id)).image_file_ids == ['image1']
+            assert (await read_directing_task(db, 'p1', task.id)).image_file_ids == ['image1']
             assert await db.scalar(select(FileUsage.file_id).where(FileUsage.source_ref == 'image-task:' + task.id)) == 'image1'
             assert await db.scalar(select(func.count()).select_from(Take)) == 0
             assert await db.scalar(select(func.count()).select_from(DirectingRevision)) == 1
