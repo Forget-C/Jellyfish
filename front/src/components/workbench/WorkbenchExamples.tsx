@@ -3,7 +3,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { WorkbenchTheme } from './WorkbenchTheme'
 import { WorkbenchButton, WorkbenchIconButton } from './WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './WorkbenchModal'
-import { CanvasTextPreview } from '../CanvasTextPreview'
+import { CanvasTextPreview } from './CanvasTextPreview'
 
 /** 开发环境中的真实组件状态样例，不请求业务数据或提交生成任务。 */
 export default function WorkbenchExamples() {

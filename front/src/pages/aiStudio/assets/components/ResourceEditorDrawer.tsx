@@ -14,7 +14,7 @@ import { buildFileDownloadUrl } from '../utils'
 import { readResourceImages } from '../resourceImages'
 import { assetAdapters } from '../assetAdapters'
 import { useWorkspaceDraft, useWorkspaceDraftStatus } from '../../directing/WorkspaceDrafts'
-import { directingError } from '../../directing/common'
+import { apiErrorMessage } from '../../../../services/apiErrorMessage'
 import { ResourceAnalysis } from './ResourceAnalysis'
 import { useTaskUiStore } from '../../components/taskUiStore'
 import { ResourceImage } from './ResourceImage'
@@ -276,7 +276,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       try { await onSaved?.(next); setFollowupPending(false) }
       catch { setFollowupPending(true); setError('对象已保存，但场次关联或列表刷新未完成；请重试保存，不会重复创建对象'); return false }
       return true
-    } catch (cause) { setError(directingError(cause)); return false }
+    } catch (cause) { setError(apiErrorMessage(cause)); return false }
     finally { lock.current = false; setBusy(false) }
   }
   const draftHost = useWorkspaceDraftStatus()
@@ -431,7 +431,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       if (!response.data?.id) throw new Error('未能确认入库结果，请重试')
       const next = { ...resource, library_copy_id: String(response.data.id) }
       setResource(next); savedResource.current = next; setPage('editor'); await onSaved?.(next)
-    } catch (cause) { setError(directingError(cause)) }
+    } catch (cause) { setError(apiErrorMessage(cause)) }
     finally { setBusy(false) }
   }
   const [referenceToolbar, setReferenceToolbar] = useState<HTMLDivElement | null>(null)

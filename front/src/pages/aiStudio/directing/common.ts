@@ -1,15 +1,5 @@
 import type { Note_Input } from '../../../services/generated'
 
-/** 从统一错误响应中提取具体业务缺口，供当前工作面板展示。 */
-export function directingError(error: unknown): string {
-  const value = error as { body?: { message?: unknown; detail?: unknown }; message?: string }
-  const detail = value?.body?.detail
-  if (Array.isArray(detail)) return detail.map(row => `${row.loc?.join('.') || '输入'}：${row.msg || '格式不正确'}`).join('；')
-  const message = value?.body?.message || detail || value?.message
-  return typeof message === 'string' ? message : '操作失败，请核对输入后重试'
-
-}
-
 /** 新增人工创作内容时保留来源，不冒充模型或原文事实。 */
 export function humanNote(text: string): Note_Input {
   return text.trim()

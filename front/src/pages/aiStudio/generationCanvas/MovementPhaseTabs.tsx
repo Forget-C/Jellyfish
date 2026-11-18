@@ -4,7 +4,7 @@ import type { InputRef } from 'antd'
 import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import type { MovementPhase } from '../../../services/generated'
-import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { useOrderedDesignItems } from './useOrderedDesignItems'
 
 /** 删除浮层脱离横向滚动区；保留触摸选中及跨浮层的键盘路径。 */

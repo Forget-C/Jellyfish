@@ -1,4 +1,4 @@
-import type { GraphView } from '../directing/graphLayout'
+import type { GraphView } from './graphLayout'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 type MovementHost = {

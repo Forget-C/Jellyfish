@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Checkbox, Radio, Select, Space } from 'antd'
 import { ApiError, LlmService, StudioDirectingService as Directing } from '../../../services/generated'
 import type { ModelRead, StoryboardReextractRequest, StoryboardTaskRead, StoryboardTaskSummary } from '../../../services/generated'
-import { directingError } from './common'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 type Submission = { kind: 'reextract'; body: StoryboardReextractRequest }
@@ -92,7 +92,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
       const row = Array.isArray(response.data) ? response.data[0] : response.data
       if (row && row.canvas_id !== targetId) throw new Error('此分镜任务不属于当前画布')
       setTask(row ?? undefined)
-    }).catch(cause => { if (active && version === load.current) setReadError(directingError(cause)) })
+    }).catch(cause => { if (active && version === load.current) setReadError(apiErrorMessage(cause)) })
       .finally(() => { if (active && version === load.current) setReading(false) })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, targetId, selectedTaskId, navigationKey, key, readRevision])
@@ -135,7 +135,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         latestSettle.current(response.data)
         if (activeTask(response.data)) timer = setTimeout(() => void read(), 1000)
       } catch (cause) {
-        if (active) { setError(directingError(cause)); timer = setTimeout(() => void read(), 2500) }
+        if (active) { setError(apiErrorMessage(cause)); timer = setTimeout(() => void read(), 2500) }
       }
     }
     timer = setTimeout(() => void read(), 350)
@@ -150,7 +150,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         setPending(stored); close(); throw new Error('请先核实此前的分镜提交')
       }
       localStorage.setItem(key, JSON.stringify(submission))
-    } catch (cause) { setError(directingError(cause)); return }
+    } catch (cause) { setError(apiErrorMessage(cause)); return }
     const captured = live.current
     const flow: typeof wait.current = follow && captured ? { ...captured } : undefined
     wait.current = flow
@@ -175,7 +175,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
       latestSettle.current(response.data)
     } catch (cause) {
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) clear()
-      if (captured && isLive(captured)) setError(directingError(cause))
+      if (captured && isLive(captured)) setError(apiErrorMessage(cause))
     } finally {
       sending.current = false
       if (captured && isLive(captured)) setSubmitting(false)
@@ -194,7 +194,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         resultHandler.current(response.data, false)
       }
     } catch (cause) {
-      if (captured && isLive(captured)) setError(directingError(cause))
+      if (captured && isLive(captured)) setError(apiErrorMessage(cause))
     } finally { if (captured && isLive(captured)) setChecking(false) }
   }
   const failed = task?.status === 'failed' || task?.status === 'cancelled'

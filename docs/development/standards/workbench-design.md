@@ -15,22 +15,22 @@
 ## 开发顺序
 
 1. 确定当前操作区域的主动作、次动作与状态。生成、应用、保存等业务含义由调用方决定。
-2. 从下表选择已有组件；重复业务流程不因布局相似就合并。调整公共颜色或尺寸时修改 `ui/WorkbenchTheme.tsx`，用示例页检查全部状态。
+2. 从下表选择已有组件；重复业务流程不因布局相似就合并。调整公共颜色或尺寸时修改 `front/src/components/workbench/WorkbenchTheme.tsx`，用示例页检查全部状态。
 3. 在真实页面接入，保留原有禁用条件、焦点、未保存输入和任务生命周期。
 4. 执行本页的验证命令，检查桌面与窄屏截图。完成标准是状态、布局、交互与主题隔离均符合要求，而非仅颜色相近。
 
 ## 共享组件入口
 
-目录：`front/src/pages/aiStudio/directing/`。
+共享工作台组件位于 `front/src/components/workbench/`。画布工具菜单、布局和编辑权协调位于 `front/src/pages/aiStudio/generationCanvas/`。
 
 | 组件 | 用途与边界 |
 | --- | --- |
-| `ui/WorkbenchTheme` | 局部 AntD 主题与语义 CSS 变量；主题同时覆盖 portal 弹窗及任务抽屉 |
-| `ui/WorkbenchButton` | `primary`、`secondary`、`quiet`、`danger` 四种动作；透传 loading、disabled、事件及可访问属性 |
-| `ui/WorkbenchIconButton` | 通用纯图标操作；必须提供 `label`，统一 tooltip、可访问名称与点击尺寸 |
-| `ui/WorkbenchDetails` | 单个非事务性悬浮详情目标；常规／展开尺寸、窄屏焦点约束与关闭恢复，字段和保存由业务层负责 |
-| `ui/WorkbenchModal` | 明确选择、预览、提交与一致性保护的操作容器；正文滚动、固定操作区，关闭保护由业务层提供 |
-| `ui/WorkbenchDialogActions` | 左侧次动作、右侧当前主动作；正文滚动不带走操作区 |
+| `WorkbenchTheme` | 局部 AntD 主题与语义 CSS 变量；主题同时覆盖 portal 弹窗及任务抽屉 |
+| `WorkbenchButton` | `primary`、`secondary`、`quiet`、`danger` 四种动作；透传 loading、disabled、事件及可访问属性 |
+| `WorkbenchIconButton` | 通用纯图标操作；必须提供 `label`，统一 tooltip、可访问名称与点击尺寸 |
+| `WorkbenchDetails` | 单个非事务性悬浮详情目标；常规／展开尺寸、窄屏焦点约束与关闭恢复，字段和保存由业务层负责 |
+| `WorkbenchModal` | 明确选择、预览、提交与一致性保护的操作容器；正文滚动、固定操作区，关闭保护由业务层提供 |
+| `WorkbenchDialogActions` | 左侧次动作、右侧当前主动作；正文滚动不带走操作区 |
 | `CanvasTextPreview` | 单份正文按真实溢出折叠，默认六行，可指定四行；短文无切换入口，宽度变化重新测量 |
 | `CanvasToolbarMenu` | 菜单持续挂载、Escape 收起与焦点恢复；菜单关闭不终止任务 |
 | `components/canvas/Canvas` | 通用视口、几何、标题拖动、卡片鼠标／键盘激活及事件隔离；业务布局、分组和关系留在各自适配 |

@@ -3,7 +3,7 @@ import type { CanvasCheckBasis, CanvasCheckItem, CanvasCheckReportRead, ModelRea
 import { CheckRecheckForm } from './CheckRecheckForm'
 import type { RecheckContext } from './CheckRecheckForm'
 import { HistoricalCheckProduct } from './HistoricalCheckProduct'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 import './checkCard.css'
 
 const executionStates = { queued: '排队中', running: '检查中', succeeded: '已完成', failed: '执行失败', cancelled: '已取消' }

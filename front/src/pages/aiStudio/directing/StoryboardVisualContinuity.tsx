@@ -7,9 +7,9 @@ import { useVideoSourceStatus } from '../generationCanvas/videoSourceStatus'
 import { buildFileDownloadUrl } from '../assets/utils'
 import type { WorkbenchModelMenuContext } from '../generationCanvas/GenerationCanvasWorkspace'
 import { StoryboardContinuityRemoval } from './StoryboardContinuityRemoval'
-import { directingError } from './common'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 import { activeVisualContinuity, applyVisualContinuity, continuityPorts, continuityResults, isAdoptedContinuityResult, newContinuityResult, planSubjectSuspension, storyboardShotIndex, subjectSuspensionLabels } from './visualContinuityRules'
 import type { ContinuityPort } from './visualContinuityRules'
 
@@ -63,7 +63,7 @@ function ContinuityPicker(context: WorkbenchModelMenuContext & {
     const request = Canvases.canvasModelCapability({ projectId, canvasId, modelId: target.model_id })
     let active = true
     void request.then(response => { if (active) setCapability(response.data ?? undefined) })
-      .catch(cause => { if (active) setError(directingError(cause)) })
+      .catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
   }, [projectId, canvasId, target.model_id])
   const ports = (Object.keys(continuityPorts) as ContinuityPort[]).filter(port => capability?.input_ports.includes(port))
@@ -141,7 +141,7 @@ function ContinuityPicker(context: WorkbenchModelMenuContext & {
         setError('承接尚未确认，请关闭浮层并核对画布保存状态后重试')
       }
     } catch (cause) {
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     } finally {
       submitting.current = false
       setBusy(false)

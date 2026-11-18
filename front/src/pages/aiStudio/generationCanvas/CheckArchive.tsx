@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Alert, Empty } from 'antd'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckReportRead } from '../../../services/generated'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
-import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDetails } from '../../../components/workbench/WorkbenchDetails'
 import { CheckReportDetails } from './CheckReportDetails'
 
 /** A deleted check card's reports are reachable from the canvas that owns them. */

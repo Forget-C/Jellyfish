@@ -5,7 +5,7 @@ import { Button, ConfigProvider, Menu } from 'antd'
 import type { MenuProps, MenuRef } from 'antd'
 import { LeftOutlined } from '@ant-design/icons'
 import { cardCategories, cardCategoryEntries, cardEntryIcon } from './CardList'
-import { useWorkbenchColors } from '../directing/ui/WorkbenchTheme'
+import { useWorkbenchColors } from '../../../components/workbench/WorkbenchTheme'
 import type { CanvasCatalog } from '../../../services/generated'
 
 export type ContextAction = { label: string; shortcut?: string; reason?: string; danger?: boolean; run: () => void }

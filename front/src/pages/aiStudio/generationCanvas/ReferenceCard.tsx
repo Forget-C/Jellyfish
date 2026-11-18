@@ -5,7 +5,7 @@ import { buildFileDownloadUrl } from '../assets/utils'
 import { GenerationCardFrame } from './GenerationCardFrame'
 import { ReferenceCardSummary } from './ReferenceCardSummary'
 import { CardComposer } from './CardComposer'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import './referenceCard.css'
 
 /** 四类参考卡共用显示基础；摘要展示本卡名称及角度，图片独立固定。 */

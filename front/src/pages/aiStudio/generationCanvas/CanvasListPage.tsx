@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { StudioGenerationCanvasesService as Canvases, type CanvasSummary } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
-import { directingError } from '../directing/common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { CanvasDeletionDialog } from './CanvasDeletionDialog'
 import './canvas-list.css'
 
@@ -29,14 +29,14 @@ export function CanvasListPage() {
     setLoading(true); setError('')
     const request = Canvases.canvasList({ q, page, pageSize: 24 })
     void request.then(({ data }) => { if (active && data) { setItems(data.items); setTotal(data.pagination.total) } })
-      .catch(reason => { if (active) setError(directingError(reason)) })
+      .catch(reason => { if (active) setError(apiErrorMessage(reason)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false; request.cancel() }
   }, [q, page, retry])
   const create = async () => {
     setBusy(true); setError('')
     try { const { data } = await Canvases.canvasCreate({ requestBody: {} }); if (data) navigate(`/canvases/${data.id}`) }
-    catch (reason) { setError(directingError(reason)) } finally { setBusy(false) }
+    catch (reason) { setError(apiErrorMessage(reason)) } finally { setBusy(false) }
   }
   const rename = async () => {
     if (!target || !name.trim()) return
@@ -44,7 +44,7 @@ export function CanvasListPage() {
     try {
       await Canvases.canvasRename({ canvasId: target.id, requestBody: { name, expected_revision: target.revision } })
       setTarget(undefined); setRetry(value => value + 1)
-    } catch (reason) { setRenameError(directingError(reason)) } finally { setBusy(false) }
+    } catch (reason) { setRenameError(apiErrorMessage(reason)) } finally { setBusy(false) }
   }
   return <WorkspaceLayout className="canvas-list-page" aria-label="画布列表">
     <PageToolbar title="画布"><Space wrap>

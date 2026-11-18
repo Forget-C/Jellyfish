@@ -9,10 +9,10 @@ import { ResourceCreateButton } from '../assets/components/ResourceCreateButton'
 import { ResourceEditorDrawer } from '../assets/components/ResourceEditorDrawer'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
-import { CanvasTextPreview } from './CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 import { SceneObjectCandidateReview } from './SceneObjectCandidateReview'
-import { directingError } from './common'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import './workbench-object-preparation.css'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
@@ -115,7 +115,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       accept(response.data)
       return response.data
     } catch (cause) {
-      if (generation === loadVersion.current) setError(directingError(cause))
+      if (generation === loadVersion.current) setError(apiErrorMessage(cause))
     } finally {
       if (generation === loadVersion.current) setLoading(false)
     }
@@ -138,7 +138,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     try {
       requestId = localStorage.getItem(requestKey) || pendingRequest || crypto.randomUUID()
       localStorage.setItem(requestKey, requestId)
-    } catch (cause) { setError(directingError(cause)); return }
+    } catch (cause) { setError(apiErrorMessage(cause)); return }
     setPendingRequest(requestId); setSubmitting(true); setError('')
     const clear = () => {
       try { if (localStorage.getItem(requestKey) === requestId) localStorage.removeItem(requestKey) }
@@ -157,7 +157,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         clear()
         if (cause.status === 409) await read()
       }
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     } finally { setSubmitting(false) }
   }
 
@@ -186,7 +186,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       if (selected && (selected.asset_id ?? undefined) === choice.assetId) return true
       if (!latest || selected) retry = choice
     }
-    reportChoiceError(choice.objectId, directingError(cause), retry)
+    reportChoiceError(choice.objectId, apiErrorMessage(cause), retry)
     return false
   }
   const save = async (objectId: string, assetId?: string) => {
@@ -237,7 +237,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       ])
       return [id, responses.some(response => !!response.data?.pagination.total)] as const
     })).then(matches => { if (current) setSameNames(Object.fromEntries(matches)) })
-      .catch(cause => { if (current) setSameNameError(directingError(cause)) })
+      .catch(cause => { if (current) setSameNameError(apiErrorMessage(cause)) })
     return () => { current = false }
   }, [sameNameKey, projectId, sameNameRetry])
 

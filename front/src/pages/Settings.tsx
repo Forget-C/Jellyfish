@@ -1,7 +1,7 @@
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../components'
 import { Form, Input, Select, Radio, Button, message } from 'antd'
 import { appearances, useAppStore } from '../store/useAppStore'
-import { CanvasAppearancePicker } from './aiStudio/directing/ui/CanvasAppearancePicker'
+import { CanvasAppearancePicker } from '../components/workbench/CanvasAppearancePicker'
 import { AppearancePreview } from '../layouts/AppearancePreview'
 import { useTranslation } from 'react-i18next'
 

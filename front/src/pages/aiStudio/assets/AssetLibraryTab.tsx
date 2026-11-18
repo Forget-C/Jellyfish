@@ -4,7 +4,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
-import { directingError } from '../directing/common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { ResourceCreateButton } from './components/ResourceCreateButton'
 import { ResourceEditorDrawer } from './components/ResourceEditorDrawer'
 import { AssetImageCard, type LibraryAsset, type LibraryAssetType } from './components/AssetImageCard'
@@ -113,7 +113,7 @@ export function AssetLibraryTab({ assetType }: { assetType: LibraryAssetType }) 
       if (page > 1 && result?.assets.length === 1) setPage(page - 1)
       else reload()
     } catch (cause) {
-      setDeleteError(directingError(cause))
+      setDeleteError(apiErrorMessage(cause))
       setDeleteFailed(true)
     } finally {
       deleteInFlight.current = false

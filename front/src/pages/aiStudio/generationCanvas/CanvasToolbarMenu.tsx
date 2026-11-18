@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { WorkbenchButton } from './ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 /** 工具菜单只改变可见性，子组件持续挂载，避免收起菜单中断任务或丢失输入。 */
 export function CanvasToolbarMenu({ label, children, icon, caption }: { label: string; children: ReactNode; icon?: ReactNode; caption?: ReactNode }) {

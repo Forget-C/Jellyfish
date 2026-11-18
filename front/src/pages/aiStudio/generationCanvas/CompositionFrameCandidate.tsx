@@ -1,6 +1,6 @@
 import { Alert, Select, Space } from 'antd'
 import type { CompositionCard, MovementCard, ReferenceDesignField } from '../../../services/generated'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 /** Stable frame identities remain independent of names and candidate connections. */
 export function movementFrameOptions(card?: MovementCard) {

@@ -1,6 +1,6 @@
 import { ConfigProvider, theme } from 'antd'
 import { createContext, useContext, type ReactNode } from 'react'
-import { useAppStore } from '../../../../store/useAppStore'
+import { useAppStore } from '../../store/useAppStore'
 import './workbenchUi.css'
 
 /** 工作台局部语义色；同源生成 AntD 配置和跨 portal 的 CSS 变量。 */

@@ -4,7 +4,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseOutlined, ExpandOutlined, ShrinkOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from './WorkbenchButton'
-import { useWorkbenchDesktop } from '../useWorkbenchDesktop'
+import { useWorkbenchDesktop } from './useWorkbenchDesktop'
 
 const DetailsContext = createContext<{ active?: string; select: Dispatch<SetStateAction<string | undefined>> } | undefined>(undefined)
 

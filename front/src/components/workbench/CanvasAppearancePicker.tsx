@@ -1,7 +1,7 @@
 import { Dropdown, Radio } from 'antd'
 import { BgColorsOutlined, CheckOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { canvasAppearances, useAppStore } from '../../../../store/useAppStore'
+import { canvasAppearances, useAppStore } from '../../store/useAppStore'
 import { WorkbenchIconButton } from './WorkbenchButton'
 
 /** 两种画布和设置页共享个人配色偏好，不进入画布历史。 */

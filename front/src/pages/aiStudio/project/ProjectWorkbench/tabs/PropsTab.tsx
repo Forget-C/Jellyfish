@@ -1,4 +1,4 @@
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PlusOutlined, SkinOutlined, TagOutlined } from '@ant-design/icons'
@@ -145,7 +145,7 @@ function LinkedAssetTab({
                         okText: '删除项目对象', cancelText: '取消', okButtonProps: { danger: true },
                         onOk: async () => {
                           try { await StudioEntitiesApi.remove(kind, assetId); await loadLinks() }
-                          catch (cause) { message.error(directingError(cause)); throw cause }
+                          catch (cause) { message.error(apiErrorMessage(cause)); throw cause }
                         },
                       })
                     } },

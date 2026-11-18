@@ -6,7 +6,7 @@ import type { InputRef } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService, type SceneCanvasSummary, type StoryboardTaskSummary } from '../../../services/generated'
 import { readChapterBrowse, sceneCanvasLocation, workbenchManagementLocation } from './chapterNavigation'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { SceneCanvasDeletion } from './SceneCanvasDeletion'
 import { WorkbenchCanvasCreation } from './WorkbenchCanvasCreation'
 import { WorkbenchCanvasRename } from './WorkbenchCanvasRename'
@@ -103,7 +103,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
       if (active) setLinkedTask({ id: targetTask, task: response.data })
     }).catch(cause => {
       if (active) setLinkedTask({ id: targetTask,
-        error: cause instanceof ApiError && cause.status === 404 ? '此分镜任务或原画布已不可用' : directingError(cause) })
+        error: cause instanceof ApiError && cause.status === 404 ? '此分镜任务或原画布已不可用' : apiErrorMessage(cause) })
     })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, targetTask, targetCanvas])
@@ -141,7 +141,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
         lastRead.current = undefined
         setCanvases(undefined)
       }
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     }).finally(() => { if (current) setLoading(false) })
     return () => { current = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, revision, notices])

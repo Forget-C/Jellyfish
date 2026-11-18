@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Modal, Space, Spin, Table, Tag } from 'antd'
 import { FilmService, StudioDirectingService, type DivisionAnalysisDetail, type DivisionHistoryEntry, type DivisionHistoryPage, type DivisionReceiptDetail, type DivisionVersionDetail } from '../../../services/generated'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 
 export type DivisionHistorySelection = { kind: 'version'; detail: DivisionVersionDetail } | { kind: 'analysis'; detail: DivisionAnalysisDetail }
 type HistoryDetail = DivisionHistorySelection | { kind: 'receipt'; detail: DivisionReceiptDetail }
@@ -40,7 +40,7 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
         if (!active) return
         setData(response.data); setError('')
         if (response.data.items.some(row => ['queued', 'running'].includes(row.status))) timer = setTimeout(() => { void load() }, 2500)
-      } catch (cause) { if (active) setError(directingError(cause)) }
+      } catch (cause) { if (active) setError(apiErrorMessage(cause)) }
       finally { if (active) setLoading(false) }
     }
     void load()
@@ -71,7 +71,7 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
         setDetails(value => ({ ...value, [key]: selection }))
         return selection
       }
-    } catch (cause) { if (isCurrent()) setErrors(value => ({ ...value, [key]: directingError(cause) })) }
+    } catch (cause) { if (isCurrent()) setErrors(value => ({ ...value, [key]: apiErrorMessage(cause) })) }
   }, [projectId, chapterId])
   const targetKey = `analysis:${targetTask}`
   const target = details[targetKey]
@@ -147,7 +147,7 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
         { title: '状态', render: (_, row) => <span>{statusLabel(row)}{row.progress != null && ['queued', 'running'].includes(row.status) ? ` ${row.progress}%` : ''}</span> },
         { title: '操作', render: (_, row) => ['queued', 'running'].includes(row.status) ? <Button size="small" onClick={async () => {
           try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: row.id, requestBody: { reason: '用户取消' } }); setRetry(value => value + 1) }
-          catch (cause) { setError(directingError(cause)) }
+          catch (cause) { setError(apiErrorMessage(cause)) }
         }}>取消分析</Button> : <Button size="small" aria-label="展开" onClick={() => { setExpanded(keys => [...new Set([...keys, `${row.kind}:${row.id}`])]); void readDetail(row) }}>展开</Button> },
       ]} />
   </Modal>

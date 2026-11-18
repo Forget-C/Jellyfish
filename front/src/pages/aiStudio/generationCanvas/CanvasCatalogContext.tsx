@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Alert } from 'antd'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog } from '../../../services/generated'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { createGraphRules } from './graphRules'
 
 const CatalogContext = createContext<ReturnType<typeof createGraphRules> | undefined>(undefined)

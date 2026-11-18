@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Alert, Input } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckReportRead } from '../../../services/generated'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 
 export type RecheckContext = {
   projectId: string

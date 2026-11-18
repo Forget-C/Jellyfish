@@ -3,7 +3,7 @@ import { createPortal, flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
 import { HistoryOutlined, SaveOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { sourceSlice } from './sourceSelection'
 import { analysisDivision, divisionBaselineMatches, divisionRequest, initialDivision, orderedDivisionMembers, versionDivision, type ChapterDivisionDraft } from './chapterDivision'
 import { ChapterDivisionEditor, type DivisionInteraction, type DivisionInteractionStatus } from './ChapterDivisionEditor'
@@ -60,7 +60,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       if (!response.data) throw new Error('章节原文读取失败')
       if (identity.current === key) { setChapter(response.data); setLoadError('') }
       return response.data
-    } catch (cause) { if (identity.current === key) setLoadError(directingError(cause)); return undefined }
+    } catch (cause) { if (identity.current === key) setLoadError(apiErrorMessage(cause)); return undefined }
   }, [projectId, chapterId])
   useEffect(() => {
     const editingEpoch = epoch
@@ -90,7 +90,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         if (!active) return
         setActiveTasks(response.data.active_task_ids || []); setTasksReady(true)
         if (response.data.active_task_ids?.length) timer = setTimeout(() => { void read() }, 2500)
-      } catch (cause) { if (active) { setAnalysisError(directingError(cause)); timer = setTimeout(() => { void read() }, 5000) } }
+      } catch (cause) { if (active) { setAnalysisError(apiErrorMessage(cause)); timer = setTimeout(() => { void read() }, 5000) } }
     }
     void read()
     return () => { active = false; clearTimeout(timer) }
@@ -125,7 +125,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       if (cause instanceof ApiError && cause.status >= 400 && cause.status < 500) {
         setPendingSave(undefined); setPreview(undefined); setIdentityConfirmed(false); void reload()
       }
-      setError(directingError(cause)); return false
+      setError(apiErrorMessage(cause)); return false
     } finally { writing.current = false; setBusy(false) }
   }
   const save = async () => {
@@ -153,7 +153,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       const response = await StudioDirectingService.directingPreviewDivision({ projectId, chapterId, requestBody: draft })
       if (!response.data) throw new Error('没有取得划分预览，请重试')
       setPreview({ value: response.data, draft }); setIdentityConfirmed(false); return true
-    } catch (cause) { setError(directingError(cause)); if (cause instanceof ApiError && cause.status === 409) void reload(); return false }
+    } catch (cause) { setError(apiErrorMessage(cause)); if (cause instanceof ApiError && cause.status === 409) void reload(); return false }
     finally { setBusy(false) }
   }
   const recover = async () => {
@@ -163,7 +163,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       const response = await StudioDirectingService.directingDivisionReceipt({ projectId, chapterId, requestId: pendingSave.request_id })
       if (response.data) acceptSaved(response.data)
       else { setRetryReady(true); setNotice('尚无提交回执，可以使用同一请求安全重试。') }
-    } catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
+    } catch (cause) { setError(apiErrorMessage(cause)) } finally { setBusy(false) }
   }
   const startAnalysis = async () => {
     if (!editor || busy || running || activeTasks.length || !tasksReady || writing.current) return
@@ -174,7 +174,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       if (!response.data) throw new Error('未收到分析任务，请从历史版本核对受理情况')
       setRunning({ id: response.data.task_id, epoch: startedEpoch, chapter: startedChapter }); setHistoryRefresh(value => value + 1)
       setNotice('正在分析，可以继续编辑；分析期间有新修改时，结果会保留到历史版本。')
-    } catch (cause) { setError(directingError(cause)) }
+    } catch (cause) { setError(apiErrorMessage(cause)) }
     finally { writing.current = false; setBusy(false) }
   }
   useEffect(() => {
@@ -203,7 +203,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
           } else setNotice('新 AI 方案已保留到历史版本；当前草稿未被覆盖，可展开核对后载入编辑。')
         } else setNotice(detail.analysis.status === 'cancelled' ? '分析已取消，原草稿保持不变。' : '分析失败，原草稿保持不变；可在历史版本查看记录。')
         setRunning(undefined); setHistoryRefresh(value => value + 1)
-      } catch (cause) { if (active) { setAnalysisError(directingError(cause)); timer = setTimeout(() => { void poll() }, 5000) } }
+      } catch (cause) { if (active) { setAnalysisError(apiErrorMessage(cause)); timer = setTimeout(() => { void poll() }, 5000) } }
     }
     void poll()
     return () => { active = false; clearTimeout(timer) }
@@ -226,7 +226,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         epoch.current++; setEditor({ chapter: latest, draft, history: version }); setActiveId(draft.members[0]?.key)
         setViewing(undefined); setHistoryOpen(false); setPreview(undefined); setError(''); setNotice('历史方案已载入草稿。请核对范围与身份，保存将形成新版本。')
         if (targetTask) onCloseTask?.()
-      } catch (cause) { setError(directingError(cause)) } finally { writing.current = false; setBusy(false) }
+      } catch (cause) { setError(apiErrorMessage(cause)) } finally { writing.current = false; setBusy(false) }
     }
     if (draftDirty) Modal.confirm({ title: '替换当前未保存草稿？', content: '载入历史方案会替换当前输入；正式版本保持不变。', okText: '替换草稿', cancelText: '取消', onOk: apply })
     else void apply()

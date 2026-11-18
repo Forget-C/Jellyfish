@@ -3,7 +3,7 @@ import { Alert, Button, ConfigProvider, Modal, Space, Spin, theme } from 'antd'
 import { ExclamationCircleOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneObjectCandidate, SceneObjectCandidateReview as CandidateReview } from '../../../services/generated'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 
 function Changes({ label, objects, note }: {
   label: string; objects: SceneObjectCandidate[]; note?: (object: SceneObjectCandidate) => string;
@@ -55,7 +55,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
           timer = window.setTimeout(() => setRefresh(value => value + 1), 1200)
         }
       }
-    }).catch(cause => { if (active) setReadError(directingError(cause)) })
+    }).catch(cause => { if (active) setReadError(apiErrorMessage(cause)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false; window.clearTimeout(timer); request.cancel() }
   }, [projectId, chapterId, sequenceId, taskId, refresh])
@@ -75,7 +75,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
     } catch (cause) {
       if (!mounted.current) return
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) {
-        setApplyError(directingError(cause)); reread()
+        setApplyError(apiErrorMessage(cause)); reread()
       } else {
         setUnknown(true); setApplyError('应用结果待核实，可使用原确认再次核实。')
       }
@@ -87,7 +87,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
     try {
       await StudioDirectingService.directingSceneObjectCandidateDiscard({ projectId, chapterId, sequenceId, taskId })
       if (mounted.current) onClose()
-    } catch (cause) { if (mounted.current) setApplyError(directingError(cause)) }
+    } catch (cause) { if (mounted.current) setApplyError(apiErrorMessage(cause)) }
     finally { if (mounted.current) setApplying(false) }
   }
   const adopted = typeof preview?.applied_revision === 'number'

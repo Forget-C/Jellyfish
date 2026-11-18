@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Modal, Spin } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases, type CanvasRead } from '../../../services/generated'
-import { directingError } from '../directing/common'
-import { WorkbenchModal } from '../directing/ui/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
 /** 两个入口共同核对保存修订，提交未知时只核实原画布。 */
 export function CanvasDeletionDialog({ projectId, canvasId, workbench, checking, blockedReason, errorAction, canDelete, onClose, onDeleted, onFailure }: {
@@ -34,7 +34,7 @@ export function CanvasDeletionDialog({ projectId, canvasId, workbench, checking,
     }).catch(reason => {
       if (!active) return
       if (reason instanceof ApiError && reason.status === 404) callbacks.current.onDeleted()
-      else callbacks.current.onFailure(directingError(reason))
+      else callbacks.current.onFailure(apiErrorMessage(reason))
       callbacks.current.onClose()
     })
     return () => { active = false }
@@ -57,10 +57,10 @@ export function CanvasDeletionDialog({ projectId, canvasId, workbench, checking,
       callbacks.current.onClose()
     } catch (reason) {
       if (!live.current) return
-      if (!submitted) setError(directingError(reason))
+      if (!submitted) setError(apiErrorMessage(reason))
       else if (reason instanceof ApiError && reason.status < 500) {
         if (reason.status === 404) callbacks.current.onDeleted()
-        else callbacks.current.onFailure(directingError(reason))
+        else callbacks.current.onFailure(apiErrorMessage(reason))
         callbacks.current.onClose()
       } else {
         setUnknown(true)

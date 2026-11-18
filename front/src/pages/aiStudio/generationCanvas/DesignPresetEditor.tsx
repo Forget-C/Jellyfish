@@ -10,9 +10,9 @@ import { CanvasEditorFooter, CanvasEditorHeader } from './CanvasCardEditor'
 import { designFieldMetadata } from './designFieldMetadata'
 import { PresetIllustration } from './PresetIllustration'
 import type { VisualPreset } from './visualPresets'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
-import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions } from '../../../components/workbench/WorkbenchModal'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 import './designPresetEditor.css'
 
 type Props = {

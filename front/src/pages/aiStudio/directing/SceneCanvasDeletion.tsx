@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { Button } from 'antd'
 import { CanvasDeletionDialog } from '../generationCanvas/CanvasDeletionDialog'
 import { canvasRecoveryKey } from '../generationCanvas/useGenerationCanvasEditor'
-import { generationCanvasEditScope, useSceneEditOwnership } from './useSceneEditOwnership'
+import { generationCanvasEditScope, useCanvasEditOwnership } from '../generationCanvas/useCanvasEditOwnership'
 
 /** 管理卡片操作期间临时取得与编辑画布相同的浏览器编辑权。 */
 export function SceneCanvasDeletion({ projectId, canvasId, onClose, onDeleted, onFailure, onOpen }: {
   projectId: string; canvasId: string; onClose: () => void; onDeleted: () => void; onFailure: (reason: string) => void; onOpen: () => void
 }) {
-  const ownership = useSceneEditOwnership(generationCanvasEditScope(projectId, canvasId))
+  const ownership = useCanvasEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [recoveryBlocked, setRecoveryBlocked] = useState(false)
   const checking = ownership.state === 'checking'
   const blockedReason = checking || ownership.editable ? undefined : ownership.state === 'unsupported'

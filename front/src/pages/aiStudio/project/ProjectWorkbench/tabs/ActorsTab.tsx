@@ -1,4 +1,4 @@
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Modal, Space, message, Pagination } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
@@ -128,7 +128,7 @@ export function ActorsTab() {
                         okText: '删除项目对象', cancelText: '取消', okButtonProps: { danger: true },
                         onOk: async () => {
                           try { await StudioEntitiesApi.remove('actor', l.actor_id); await loadLinks() }
-                          catch (cause) { message.error(directingError(cause)); throw cause }
+                          catch (cause) { message.error(apiErrorMessage(cause)); throw cause }
                         },
                       })
                     } },

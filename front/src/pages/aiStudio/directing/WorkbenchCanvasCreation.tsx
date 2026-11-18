@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { SceneCanvasCreate, StoryboardBasis, StoryboardRequest } from '../../../services/generated'
 import { workbenchManagementLocation } from './chapterNavigation'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { StoryboardBasisPreview } from './StoryboardBasisPreview'
 import './workbench-canvas-creation.css'
 import { useWorkspaceDraft, useWorkspaceDraftStatus } from './WorkspaceDrafts'
@@ -71,7 +71,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
       if (!active) return
       if (!response.data) throw new Error('无法读取分镜依据')
       setBasis(response.data)
-    }).catch(cause => { if (active) setBasisError(directingError(cause)) })
+    }).catch(cause => { if (active) setBasisError(apiErrorMessage(cause)) })
       .finally(() => { if (active) setBasisLoading(false) })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, needsBasis])
@@ -96,7 +96,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
         throw new Error('请先核实此前的画布提交')
       }
       localStorage.setItem(key, JSON.stringify(intent))
-    } catch (cause) { setError(directingError(cause)); return }
+    } catch (cause) { setError(apiErrorMessage(cause)); return }
     sending.current = true
     setSubmitting(true); setPending(intent); setError('')
     try {
@@ -120,7 +120,7 @@ export function WorkbenchCanvasCreation({ projectId, chapterId, sequenceId, scen
           setBasis(undefined); setUseSaved(false); setStage('configure')
         }
       }
-      if (mounted.current) setError(cause instanceof ApiError && cause.status === 409 && intent.kind === 'storyboard' ? '依据已变化，请关闭后重新打开核对。' : directingError(cause))
+      if (mounted.current) setError(cause instanceof ApiError && cause.status === 409 && intent.kind === 'storyboard' ? '依据已变化，请关闭后重新打开核对。' : apiErrorMessage(cause))
     } finally {
       sending.current = false
       if (mounted.current) setSubmitting(false)

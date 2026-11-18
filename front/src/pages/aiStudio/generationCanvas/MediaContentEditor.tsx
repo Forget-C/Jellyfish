@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Pagination, Space } from 'antd'
 import { PictureOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
-import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'

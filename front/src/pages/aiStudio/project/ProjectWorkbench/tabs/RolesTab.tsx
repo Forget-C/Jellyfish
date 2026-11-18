@@ -11,7 +11,7 @@ import { ResourceEditorDrawer } from '../../../assets/components/ResourceEditorD
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { useProjectAssetDetail } from '../useProjectAssetDetail'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import './project-roles.css'
 
 type CreateSeed = { name?: string; description?: string; visual_style?: '现实' | '动漫'; style?: string }
@@ -51,7 +51,7 @@ export function RolesTab() {
     try {
       await StudioEntitiesApi.remove('character', deleteTarget.id)
       message.success('已删除'); setDeleteTarget(undefined); await refresh()
-    } catch (cause) { setDeleteError(directingError(cause)) }
+    } catch (cause) { setDeleteError(apiErrorMessage(cause)) }
     finally { deletePending.current = false; setDeleting(false) }
   }
   const { openDetail, detailView } = useProjectAssetDetail('character', refresh)

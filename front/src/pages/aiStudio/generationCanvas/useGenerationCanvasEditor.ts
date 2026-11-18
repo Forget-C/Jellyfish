@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave, StoryboardApplication, StoryboardCandidate } from '../../../services/generated'
 import { cleanObjectSources } from './objectSourceCleanup'
-import { generationCanvasEditScope, useSceneEditOwnership } from '../directing/useSceneEditOwnership'
+import { generationCanvasEditScope, useCanvasEditOwnership } from './useCanvasEditOwnership'
 
 export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
   `jellyfish:generation:${projectId}:${canvasId}:recovery`
@@ -57,7 +57,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
 export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true, sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>) {
   const key = canvasRecoveryKey(projectId, canvasId)
-  const ownership = useSceneEditOwnership(generationCanvasEditScope(projectId, canvasId))
+  const ownership = useCanvasEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [current, setCurrent] = useState<CanvasRead>()
   const [document, setDocument] = useState<CanvasDocument>()
   const [saving, setSaving] = useState(false)

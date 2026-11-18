@@ -6,7 +6,7 @@ import { ResourceSelectionDrawer } from './ResourceSelectionDrawer'
 import { ResourceEditorFrame } from './ResourceEditorFrame'
 import { AssetDetailLeaveGuard } from './AssetDetailLeaveGuard'
 import { useWorkspaceDraft, useWorkspaceDraftStatus } from '../../directing/WorkspaceDrafts'
-import { directingError } from '../../directing/common'
+import { apiErrorMessage } from '../../../../services/apiErrorMessage'
 import { buildFileDownloadUrl } from '../utils'
 import type { ResourceKind } from './ResourceEditorDrawer'
 import './resourceCreate.css'
@@ -49,7 +49,7 @@ function ImageSourceDrawer({ kind, projectId, onClose, onCreated, projectUpload 
       const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: row.file as unknown as string, ...(projectUpload ? { project_id: projectId, usage_kind: 'generation_upload' } : {}) } })
       if (!response.data?.id) throw new Error('上传未返回图片')
       if (active.current) setRows(current => current.map(item => item.id === row.id ? { ...item, uploading: false, fileId: response.data!.id } : item))
-    } catch (cause) { if (active.current) setRows(current => current.map(item => item.id === row.id ? { ...item, uploading: false, error: directingError(cause) } : item)) }
+    } catch (cause) { if (active.current) setRows(current => current.map(item => item.id === row.id ? { ...item, uploading: false, error: apiErrorMessage(cause) } : item)) }
   }
   const save = async () => {
     if (lock.current || uploading) return false
@@ -64,7 +64,7 @@ function ImageSourceDrawer({ kind, projectId, onClose, onCreated, projectUpload 
       }
       await onCreated(requestId.current)
       return true
-    } catch (cause) { setError((accepted.current ? projectUpload ? '资源已创建，选用或刷新失败；重试不会重复创建。' : '资源已创建，列表刷新失败；重试不会重复创建。' : '') + directingError(cause)); return false }
+    } catch (cause) { setError((accepted.current ? projectUpload ? '资源已创建，选用或刷新失败；重试不会重复创建。' : '资源已创建，列表刷新失败；重试不会重复创建。' : '') + apiErrorMessage(cause)); return false }
     finally { lock.current = false; setBusy(false) }
   }
   const host = useWorkspaceDraftStatus()
@@ -118,6 +118,6 @@ function LibraryImportDrawer({ kind, projectId, onClose, onCreated }: { kind: Re
       }
       await onCreated(importedId.current)
       return { complete: true, created: true }
-    } catch (cause) { return { complete: false, created: !!importedId.current, error: (importedId.current ? '资源已创建，列表刷新失败；重试不会重复创建。' : '') + directingError(cause) } }
+    } catch (cause) { return { complete: false, created: !!importedId.current, error: (importedId.current ? '资源已创建，列表刷新失败；重试不会重复创建。' : '') + apiErrorMessage(cause) } }
   }} />
 }

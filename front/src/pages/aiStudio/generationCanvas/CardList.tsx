@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Input } from 'antd'
 import { AppstoreOutlined, CloseOutlined, IdcardOutlined, ThunderboltOutlined, CameraOutlined, NodeIndexOutlined, VideoCameraOutlined, SoundOutlined, SafetyCertificateOutlined, FileTextOutlined, PictureOutlined, PlaySquareOutlined, FileSearchOutlined } from '@ant-design/icons'
 import type { CanvasCatalog } from '../../../services/generated'
-import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 
 type CardEntry = { type: string; title: string; entry?: string; modality: string }
 

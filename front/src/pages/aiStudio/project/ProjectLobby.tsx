@@ -13,7 +13,7 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../com
 import { chapters as mockChapters } from '../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
 import type { ProjectRead, ProjectStyle, ProjectVisualStyle } from '../../../services/generated'
-import { directingError } from '../directing/common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { ProjectCover } from './ProjectCover'
 import { summarizeProjectChapters, type ProjectStageSummary } from './projectStageSummary'
 import {
@@ -302,7 +302,7 @@ function ProjectLobby() {
       setDeleteTarget(null)
       message.success('已删除')
     } catch (cause) {
-      setDeleteError(directingError(cause))
+      setDeleteError(apiErrorMessage(cause))
     } finally {
       deletePending.current = false
       setDeleting(false)

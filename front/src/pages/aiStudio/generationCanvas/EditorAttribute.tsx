@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { ConfigProvider, Tooltip, theme } from 'antd'
-import { useWorkbenchColors } from '../directing/ui/WorkbenchTheme'
+import { useWorkbenchColors } from '../../../components/workbench/WorkbenchTheme'
 import './editorAttribute.css'
 
 /** 顶部属性共享标签和稳定提示位；控件保留各自的提交与校验行为。 */

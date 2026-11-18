@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Checkbox, Radio } from 'antd'
 import { StudioFilesService } from '../../../services/generated'
 import { zip } from 'fflate'
-import { WorkbenchModal, WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchModal, WorkbenchDialogActions } from '../../../components/workbench/WorkbenchModal'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import { buildFileDownloadUrl } from '../assets/utils'
 export type DownloadOutput = { key: string; name: string; fileId?: string; text?: string; modality: string; stale?: boolean }
 function saveBlob(blob: Blob, name: string) {

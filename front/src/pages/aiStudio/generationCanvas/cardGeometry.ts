@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import type { GraphSize } from '../directing/graphLayout'
+import type { GraphSize } from './graphLayout'
 import { compactDesignFields, structuredDesignFields } from './designSummaryFields'
 import { visualDesignTypes } from './designFieldReferences'
 

@@ -44,7 +44,7 @@ function ProjectEntry() {
   return <ProjectWorkbench key={projectId} />
 }
 
-const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStudio/directing/ui/WorkbenchExamples')) : undefined
+const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./components/workbench/WorkbenchExamples')) : undefined
 
 const router = createBrowserRouter(createRoutesFromElements(
       <>

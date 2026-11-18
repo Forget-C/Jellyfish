@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 
-const lockName = 'jellyfish:scene-editor:local-user'
 export const generationCanvasEditScope = (projectId: string, canvasId: string | null) => `jellyfish:generation-editor:${projectId}:${canvasId}`
 type HandoffAction = 'request' | 'save' | 'discard' | 'cancel'
 type HandoffResult = 'ready' | 'choice' | 'failed'
@@ -8,7 +7,7 @@ type OwnershipState = 'checking' | 'editing' | 'readonly' | 'waiting' | 'choice'
 type Message = { kind: 'ask' | 'choose' | 'reply' | 'queued' | 'cancel' | 'locate' | 'here' | 'focus'; from: string; to?: string; id: string; action?: HandoffAction; result?: HandoffResult; href?: string }
 
 /** 浏览器锁决定唯一编辑能力；消息只协调保存与交接，不用心跳或超时抢占。 */
-export function useSceneEditOwnership(scope = lockName) {
+export function useCanvasEditOwnership(scope: string) {
   const [state, setState] = useState<OwnershipState>('checking')
   const [message, setMessage] = useState('')
   const [ownerUrl, setOwnerUrl] = useState('')
@@ -152,4 +151,4 @@ export function useSceneEditOwnership(scope = lockName) {
     cancelHandoff: () => actions.current.cancel(), locateOwner: () => actions.current.locate() }
 }
 
-export type SceneEditOwnership = ReturnType<typeof useSceneEditOwnership>
+export type CanvasEditOwnership = ReturnType<typeof useCanvasEditOwnership>

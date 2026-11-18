@@ -6,9 +6,9 @@ import { ApiError, StudioDirectingService as Directing } from '../../../services
 import type { StoryboardApplication, StoryboardCandidate, StoryboardConflictChoice, StoryboardDiff, StoryboardDiffCard,
   StoryboardReviewIssue, StoryboardReviewReport, StoryboardRetry, StoryboardTaskRead } from '../../../services/generated'
 import type { StoryboardReviewPreparation, StoryboardScope } from '../generationCanvas/useGenerationCanvasEditor'
-import { directingError } from './common'
-import { WorkbenchButton as ButtonBase } from './ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as ButtonBase } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
 function ReviewButton({ light, variant, ...props }: ComponentProps<typeof ButtonBase> & { light: boolean }) {
   return light ? <LightButton {...props} type={variant === 'primary' ? 'primary' : variant === 'quiet' ? 'text' : 'default'} />
@@ -84,7 +84,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     void request.then(response => {
       if (!response.data) throw new Error('无法读取分镜差异')
       if (active) setReview({ choice, diff: response.data })
-    }).catch(cause => { if (active) setError(directingError(cause)) })
+    }).catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
   }, [baseline, selected, projectId, chapterId, sequenceId, taskId])
   const open = async (refresh = false) => {
@@ -131,7 +131,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
         } else if (result.stage !== repairTask.stage) {
           setRepairTask(result)
         }
-      } catch (cause) { if (!cancelled) setError(directingError(cause)) }
+      } catch (cause) { if (!cancelled) setError(apiErrorMessage(cause)) }
     }
     const timer = window.setInterval(() => void read(), 700)
     return () => { cancelled = true; window.clearInterval(timer) }
@@ -149,7 +149,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       setRepairTask(response.data); setRepairIntent(undefined)
       if (inline) localStorage.removeItem(repairKey)
     } catch (cause) {
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) {
         setRepairIntent(undefined)
         if (inline) localStorage.removeItem(repairKey)

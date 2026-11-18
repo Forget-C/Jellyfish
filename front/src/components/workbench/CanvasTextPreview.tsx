@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { DownOutlined, UpOutlined } from '@ant-design/icons'
-import { WorkbenchButton } from './ui/WorkbenchButton'
+import { WorkbenchButton } from './WorkbenchButton'
 
 /** 单一正文按实际行数原位展开；响应宽度变化，不改变业务内容。 */
 export function CanvasTextPreview({ text, label, lines = 6, paragraphClassName = '' }: { text: string; label: string; lines?: number; paragraphClassName?: string }) {
