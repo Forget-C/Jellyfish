@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-canvas-check-model-')
 const api = 'http://127.0.0.1:8311'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const json = { 'Content-Type': 'application/json' }
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'),
@@ -37,8 +38,8 @@ try {
   page = await context.newPage()
   page.setDefaultTimeout(12000)
   await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '独立文字检查' }) })).json()).data
-  const canvasUrl = `${base}/${canvas.id}`
+  const canvas = await createStoryboardCanvas(base, '独立文字检查')
+  const canvasUrl = storyboardCanvasApi(base, canvas.id)
   const document = { ...canvas.document, cards: [
     { id: 'shot', type: 'direction.shot', estimated_duration: { text: '12 秒', state: 'proposal' },
       visible_result: { text: '保留灯光', state: 'fact' } },
@@ -54,9 +55,9 @@ try {
     { id: 'adopt-upstream', source_card: 'upstream', source_port: 'text', target_card: 'target', target_port: 'text' },
     { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
   ], input_order: { target: { text: ['adopt', 'adopt-upstream'] }, check: { check_basis: ['observe'] } } }
-  const seed = await fetch(canvasUrl, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seed = await fetch(canvasUrl, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seed.ok, await seed.text())
-  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4311${storyboardCanvasPath(canvas)}`)
   await page.getByRole('toolbar', { name: '卡片分类' }).getByRole('button', { name: '检查', exact: true }).click()
   const menu = page.getByRole('navigation', { name: '添加卡片' })
   assert.ok((await menu.boundingBox()).width >= 240, 'short check category keeps a usable search width')
@@ -89,7 +90,7 @@ try {
   assert.equal(await editor.count(), 0, 'quick check does not open the editor')
   await face.getByRole('button', { name: '取消本轮检查', exact: true }).waitFor()
   const frozenOrder = await face.getByRole('button', { name: /^查看检查项：/ }).evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
-  await page.waitForResponse(response => response.request().method() === 'GET' && response.url().endsWith(`${canvas.id}/checks/check/reports`))
+  await page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname.endsWith(`${canvas.id}/checks/check/reports`))
   assert.deepEqual(await face.getByRole('button', { name: /^查看检查项：/ }).evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), frozenOrder, 'running checks keep their row positions')
   assert.ok(frozenOrder.length <= 4, 'face has a finite item list')
   await page.screenshot({ path: join(output, 'check-face-running.png') })
@@ -103,7 +104,7 @@ try {
   await prepareCanvasCard(page, 'check')
   await face.getByRole('button', { name: /查看检查项：.*可见结果/ }).locator('[data-check-status="待重查"]').waitFor()
   await fetch(controlUrl, { method: 'POST', headers: json, body: JSON.stringify({ check_release: true }) })
-  await page.waitForResponse(response => response.request().method() === 'GET' && response.url().endsWith(`${canvas.id}/checks/check/reports`))
+  await page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname.endsWith(`${canvas.id}/checks/check/reports`))
   await face.locator('[data-check-status="待重查"]').first().waitFor()
   assert.equal(await editor.count(), 0, 'closed detail does not interrupt report polling')
   await face.getByRole('button', { name: '查看卡片问题' }).click()
@@ -148,46 +149,60 @@ try {
   assert.equal(calls.length, 3)
   assert.equal(calls.filter(field => field === 'visible_result').length, 1)
   assert.equal(calls.filter(field => field === 'estimated_duration').length, 2)
-  const history = await (await fetch(`${canvasUrl}/checks/check/reports`)).json()
+  const history = await (await fetch(storyboardCanvasApi(base, canvas.id, `/checks/check/reports`))).json()
   assert.equal(history.data.length, 2)
   assert.equal(history.data[1].results.length, 2)
   assert.ok(history.data[1].executions.some(execution => execution.status === 'failed'))
-  const currentBasis = (await (await fetch(`${canvasUrl}/checks/check`)).json()).data.basis
+  const currentBasis = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/checks/check`))).json()).data.basis
   assert.deepEqual(currentBasis.observed_model_inputs, ['upstream'])
   await editor.getByRole('tab', { name: '生成前检查', exact: true }).click()
   const basisRequests = []
+  const readsCheckBasis = request => request.method() === 'GET' && new URL(request.url()).pathname.endsWith(`/${canvas.id}/checks/check`)
   page.on('request', request => {
-    if (request.method() === 'GET' && request.url().endsWith(`${canvas.id}/checks/check`)) basisRequests.push(request.url())
+    if (readsCheckBasis(request)) basisRequests.push(request.url())
   })
   for (let attempt = 0; ; attempt++) {
     assert.ok(attempt < 50, 'canvas SSE was not connected')
     if ((await (await fetch(controlUrl)).json()).stream_connections > 0) break
     await delay(100)
   }
-  const upstream = await (await fetch(`${canvasUrl}/precheck`, { method: 'POST', headers: json,
+  const upstream = await (await fetch(storyboardCanvasApi(base, canvas.id, `/precheck`), { method: 'POST', headers: json,
     body: JSON.stringify({ card_id: 'upstream' }) })).json()
   assert.ok(upstream.data.can_run)
-  const generated = await fetch(`${canvasUrl}/runs`, { method: 'POST', headers: json,
+  const generated = await fetch(storyboardCanvasApi(base, canvas.id, `/runs`), { method: 'POST', headers: json,
     body: JSON.stringify({ request_id: 'upstream-output', preview_token: upstream.data.preview_token }) })
-  assert.ok(generated.ok, await generated.text())
+  assert.ok(generated.ok, await generated.clone().text())
   await fetch(controlUrl, { method: 'POST', headers: json, body: JSON.stringify({ release: 1 }) })
   for (let attempt = 0; ; attempt++) {
     assert.ok(attempt < 50)
-    const runtime = (await (await fetch(`${canvasUrl}/runtime`)).json()).data
+    const runtime = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/runtime`))).json()).data
     if (JSON.stringify(runtime.runs).includes('第二段')) break
     await delay(100)
   }
   assert.equal(basisRequests.length, 0, 'provisional upstream text does not reload the check basis')
-  const refreshed = page.waitForResponse(response => response.url().endsWith(`${canvas.id}/checks/check`))
+  const refreshed = page.waitForResponse(response => readsCheckBasis(response.request()))
   await fetch(controlUrl, { method: 'POST', headers: json, body: JSON.stringify({ release: 2 }) })
   assert.ok((await refreshed).ok())
   await editor.getByText('生成检查依据', { exact: true }).click()
   await editor.getByRole('region', { name: '实际提交文本' }).getByText(/第一段第二段第三段/).waitFor()
+  const { run_id: runId } = (await generated.json()).data
+  const runtime = (await (await fetch(storyboardCanvasApi(base, canvas.id, '/runtime'))).json()).data
+  const nodeId = runtime.runs.find(run => run.id === runId).nodes[0].id
+  const pageUrl = `http://127.0.0.1:4311${storyboardCanvasPath(canvas)}`
+  await page.goto(`${pageUrl}&${new URLSearchParams({ run: runId, node: nodeId, context: 'kept' })}`)
+  await page.getByRole('region', { name: '画布运行历史' }).locator(`[data-history-run="${runId}"][open] [data-history-node="${nodeId}"]`).waitFor()
+  await page.getByRole('button', { name: '运行历史', exact: true }).click()
+  await page.waitForURL(url => !url.searchParams.has('run') && !url.searchParams.has('node'))
+  assert.equal(new URL(page.url()).searchParams.get('canvas'), canvas.id)
+  assert.equal(new URL(page.url()).searchParams.get('context'), 'kept')
+  await page.reload()
+  await page.getByRole('button', { name: '运行历史', exact: true }).waitFor()
+  assert.equal(await page.getByRole('region', { name: '画布运行历史' }).isVisible(), false)
   const taskList = (await (await fetch(`${api}/api/v1/film/tasks?project_id=canvas-project&target_id=${history.data[1].id}`)).json()).data
   assert.equal(taskList.items[0].source.check_report_id, history.data[1].id)
-  const params = new URLSearchParams({ tab: 'generation', canvas: canvas.id, check: taskList.items[0].source.check_card_id,
+  const params = new URLSearchParams({ check: taskList.items[0].source.check_card_id,
     report: taskList.items[0].source.check_report_id })
-  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?${params}`)
+  await page.goto(`${pageUrl}&${params}`)
   await report.getByText(/整卡检查/).waitFor()
   await page.screenshot({ path: join(output, 'check-task-link-desktop.png') })
   await page.setViewportSize({ width: 390, height: 844 })
@@ -205,10 +220,10 @@ try {
   await menu.getByRole('button', { name: '关闭卡片列表' }).click()
   await page.setViewportSize({ width: 1440, height: 1000 })
   params.set('report', '00000000-0000-0000-0000-000000000000')
-  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?${params}`)
+  await page.goto(`${pageUrl}&${params}`)
   await report.getByText('指定报告暂不可用', { exact: true }).waitFor()
   assert.equal(await report.getByRole('list', { name: '模型检查执行状态' }).count(), 0, 'missing explicit report does not show actions for another report')
-  const sound = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '声音能力检查' }) })).json()).data
+  const sound = await createStoryboardCanvas(base, '声音能力检查')
   const soundDocument = { ...sound.document, cards: [
     { id: 'sound', type: 'direction.guidance', sound_strategy: { text: '使用音频参考', state: 'fact' } },
     { id: 'target', type: 'model.text', model_id: 'canvas-runtime-text' },
@@ -217,10 +232,10 @@ try {
     { id: 'adopt', source_card: 'sound', source_port: 'text', target_card: 'target', target_port: 'text' },
     { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
   ], input_order: { target: { text: ['adopt'] }, check: { check_basis: ['observe'] } } }
-  const soundSaved = await fetch(`${base}/${sound.id}`, { method: 'PUT', headers: json,
-    body: JSON.stringify({ request_id: 'seed-sound', expected_revision: 0, document: soundDocument }) })
+  const soundSaved = await fetch(storyboardCanvasApi(base, sound.id), { method: 'PUT', headers: json,
+    body: JSON.stringify({ request_id: 'seed-sound', expected_revision: 0, document: withFixedSource(sound, soundDocument) }) })
   assert.ok(soundSaved.ok, await soundSaved.text())
-  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${sound.id}`)
+  await page.goto(`http://127.0.0.1:4311${storyboardCanvasPath(sound)}`)
   await openCanvasCard(page, 'check')
   await editor.getByRole('switch', { name: '启用类别：声音要求与已声明能力匹配', exact: true }).waitFor()
   await editor.getByRole('button', { name: '检查', exact: true }).click()
@@ -235,15 +250,15 @@ try {
   await report.getByText(/原报告复核 · /).waitFor()
   await report.getByText(/音频参考输入：明确不支持/).filter({ visible: true }).waitFor()
   assert.equal((await (await fetch(controlUrl)).json()).check_calls.length, 3, 'explicit P08 and recheck required no provider call')
-  const many = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '检查清单边界' }) })).json()).data
-  const manyUrl = `${base}/${many.id}`
+  const many = await createStoryboardCanvas(base, '检查清单边界')
+  const manyUrl = storyboardCanvasApi(base, many.id)
   const shots = Array.from({ length: 6 }, (_, index) => ({ id: `shot-${index}`, name: `镜头${index + 1}`, type: 'direction.shot', estimated_duration: { text: '12 秒', state: 'proposal' } }))
   const manyDocument = { ...many.document, cards: [...shots, { id: 'target', type: 'model.video', config: { seconds: 5 } }, { id: 'check', type: 'review.check', enabled_categories: ['P06'] }],
     edges: [...shots.map(shot => ({ id: `adopt-${shot.id}`, source_card: shot.id, source_port: 'text', target_card: 'target', target_port: 'text' })), { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' }],
     input_order: { target: { text: shots.map(shot => `adopt-${shot.id}`) }, check: { check_basis: ['observe'] } } }
-  const seeded = await fetch(manyUrl, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'seed-many', expected_revision: 0, document: manyDocument }) })
+  const seeded = await fetch(manyUrl, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'seed-many', expected_revision: 0, document: withFixedSource(many, manyDocument) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${many.id}`)
+  await page.goto(`http://127.0.0.1:4311${storyboardCanvasPath(many)}`)
   await face.getByText(/已启用 6 项/).waitFor()
   assert.equal(await face.getByRole('button', { name: /^查看检查项：/ }).count(), 4)
   await openCanvasCard(page, 'check')
@@ -287,15 +302,15 @@ try {
   await other.getByRole('tab', { name: '生成前检查', exact: true }).click()
   assert.equal(await other.locator('.generation-card-editor:visible').getByRole('button', { name: '检查', exact: true }).isDisabled(), true)
   await other.close()
-  const single = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '未纳入整卡的单项检查' }) })).json()).data
-  const singleSeed = await fetch(`${base}/${single.id}`, { method: 'PUT', headers: json, body: JSON.stringify({
+  const single = await createStoryboardCanvas(base, '未纳入整卡的单项检查')
+  const singleSeed = await fetch(storyboardCanvasApi(base, single.id), { method: 'PUT', headers: json, body: JSON.stringify({
     request_id: 'seed-single', expected_revision: 0,
-    document: { ...single.document, cards: [shots[0], ...manyDocument.cards.slice(-2)],
+    document: { ...single.document, cards: [...single.document.cards, shots[0], ...manyDocument.cards.slice(-2)],
       edges: manyDocument.edges.filter(edge => ['adopt-shot-0', 'observe'].includes(edge.id)),
       input_order: { target: { text: ['adopt-shot-0'] }, check: { check_basis: ['observe'] } } },
   }) })
   assert.ok(singleSeed.ok, await singleSeed.text())
-  await page.goto(`http://127.0.0.1:4311/projects/canvas-project?tab=generation&canvas=${single.id}`)
+  await page.goto(`http://127.0.0.1:4311${storyboardCanvasPath(single)}`)
   await face.getByText(/已启用 1 项/).waitFor()
   await openCanvasCard(page, 'check')
   await itemSwitch.uncheck()

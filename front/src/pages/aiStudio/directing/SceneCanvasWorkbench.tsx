@@ -1,3 +1,4 @@
+import { withoutRunTarget } from '../generationCanvas/navigation'
 import { CheckArchive } from '../generationCanvas/CheckArchive'
 import { persistSceneChange } from './sceneCanvasPersistence'
 import { SceneCanvasFeedback } from './SceneCanvasFeedback'
@@ -28,7 +29,7 @@ const videoActionLabels: Record<string, string> = {
 
 /** 打开经过场次归属核对的共同画布，返回时带上当前画布和任务。 */
 function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope & { canvasId: string }) {
-  const [query] = useSearchParams()
+  const [query, setQuery] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
   const selectedTaskId = query.get('storyboardTask')
@@ -71,6 +72,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       { canvas: canvasId, storyboardTask: selectedTaskId ?? summary.latest_storyboard?.task_id })} />
   if (summary && scene) {
     return <GenerationCanvasWorkspace sceneSave={persistSceneChange} renderFeedback={current => <SceneCanvasFeedback current={current} />} key={canvasId} projectId={projectId} canvasId={canvasId}
+      onCloseRunHistory={() => setQuery(withoutRunTarget, { replace: true, state: location.state })}
+      targetRun={query.get('run')} targetNode={query.get('node')} targetCheck={query.get('check')} targetReport={query.get('report')}
       layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       onCanvasRead={rememberOpened}
