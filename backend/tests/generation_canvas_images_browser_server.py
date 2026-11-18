@@ -5,6 +5,7 @@ import struct
 import zlib
 import os
 from contextlib import asynccontextmanager
+from hashlib import sha256
 from pathlib import Path
 import httpx
 import uvicorn
@@ -142,10 +143,13 @@ async def prepare():
         if os.environ.get('CANVAS_BROWSER_DYNAMIC_REFERENCE'):
             from app.models.studio import Chapter, Character
             from app.models.directing import Sequence
-            db.add(Chapter(id='angle-chapter', project_id='canvas-project', index=1, title='角度'))
+            text = '张三转身。'
+            db.add(Chapter(id='angle-chapter', project_id='canvas-project', index=1, title='角度', raw_text=text))
             db.add(Character(id='angle-person', project_id='canvas-project', name='青年男子', style='真人都市'))
             await db.flush()
-            db.add(Sequence(id='angle-scene', chapter_id='angle-chapter', position=0, title='角度', source={},
+            db.add(Sequence(id='angle-scene', chapter_id='angle-chapter', position=0, title='角度',
+                source_start=0, source_end=len(text), source_text=text,
+                source={'kind': 'chapter', 'reference': 'angle-chapter', 'version': sha256(text.encode()).hexdigest()},
                 object_preparation={'revision': 1, 'objects': [{'id': 'zhang', 'kind': 'character', 'asset_id': 'angle-person'}]}))
         db.add(Model(id='canvas-image-model', name='image-model', provider_id='canvas-image-provider', category='image'))
         db.add(Model(id='canvas-carried-video-model', name='video-model', provider_id='canvas-image-provider', category='video'))
