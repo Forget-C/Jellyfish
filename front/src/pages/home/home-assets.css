@@ -23,7 +23,6 @@
   text-align: start;
   cursor: pointer;
 }
-.home-asset-card:hover { box-shadow: 0 2px 12px #2632441a; }
 .home-asset-card:focus-visible { outline: 2px solid var(--app-accent, #245fc5); outline-offset: 2px; }
 .home-asset-image {
   display: grid;

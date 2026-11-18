@@ -14,6 +14,7 @@
 .home-sample-label { padding: 2px 7px; border-radius: 4px; background: #e7edf5; color: var(--app-muted); font-size: 12px; }
 .home-canvas-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .home-canvas-card { min-width: 0; overflow: hidden; border-radius: 12px; background: #fff; }
+.home-canvas-card:hover, .home-asset-card:hover { box-shadow: 0 2px 12px #2632441a; }
 .home-canvas-cover { display: block; width: 100%; height: 142px; object-fit: cover; }
 .home-canvas-placeholder { display: grid; place-items: center; background: #e7edf5; color: var(--app-muted); font-size: 24px; }
 .home-canvas-caption { display: grid; gap: 4px; padding: 16px; line-height: 1.5; }
@@ -61,10 +62,14 @@
   min-width: 0;
   min-height: 58px;
   padding: 6px 5px;
+  border-radius: 8px;
 }
 
-.home-session-row { border-radius: 8px; color: var(--app-text); text-decoration: none; }
-.home-session-row:hover { background: var(--app-selected); color: var(--app-accent); }
+.home-session-row { color: var(--app-text); text-decoration: none; }
+.home-session-row:hover, .home-activity-list > .home-project-row:hover {
+  background: var(--app-selected);
+  color: var(--app-accent);
+}
 .app-shell .home-session-row[href]:focus-visible { outline-offset: -2px; }
 .home-activity-icon {
   display: grid;
@@ -78,7 +83,7 @@
 .home-activity-copy { display: grid; gap: 4px; min-width: 0; }
 .home-activity-title { min-width: 0; font-size: 14px; font-weight: 650; }
 .home-project-link { width: fit-content; max-width: 100%; color: var(--app-text); text-decoration: none; }
-.home-project-link:hover { color: var(--app-accent); }
+.home-project-row:hover .home-project-link { color: inherit; }
 .home-project-meta { display: flex; align-items: center; gap: 4px 8px; color: var(--app-muted); font-size: 12px; }
 .home-activity-title, .home-project-chapter, .home-session-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
