@@ -51,7 +51,7 @@
 
 ## 验证与接口同步
 
-保留的后端投影校验由 `backend/tests/directing/test_canvas_graph.py` 和相关场次依赖 HTTP 测试覆盖。旧四画布浏览器用例及 `test:canvas-graph`、`test:design-scope` 命令已移除，不再作为验收入口。现行前端测试以 [测试清单](../../../front/tests/browser-suites.json) 为准。
+旧四画布图投影、单元范围计算及专属浏览器用例已退出常规回归。后端继续验证[章节重新划分后历史方案及固定原文的保留](../../../backend/tests/directing/test_scene_versions.py)，以及[旧路由退役和历史导出文件的保护](../../../backend/tests/directing/test_api.py)。现行前端测试以[测试清单](../../../front/tests/browser-suites.json)为准。
 
 对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](../standards/workbench-design.md)。
 
