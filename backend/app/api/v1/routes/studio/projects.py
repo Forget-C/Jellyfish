@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.dependencies import get_db
 from app.models.studio import Project
 from app.models.types import ProjectStyle, ProjectVisualStyle
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
+from app.schemas.studio.projects import (
+    ProjectCreate,
+    ProjectRead,
+    ProjectStyleOptionsRead,
+    ProjectUpdate,
+    StyleOption,
+)
 from app.services.common import (
     create_and_refresh,
     delete_if_exists,
@@ -21,17 +28,9 @@ from app.services.common import (
     get_or_404,
     patch_model,
 )
-from app.schemas.studio.projects import (
-    ProjectCreate,
-    ProjectRead,
-    ProjectStyleOptionsRead,
-    ProjectUpdate,
-    StyleOption,
-)
+from app.services.studio.project_listing import list_project_page
 
 router = APIRouter()
-
-PROJECT_ORDER_FIELDS = {"name", "created_at", "updated_at", "progress"}
 
 
 def _build_project_style_options() -> tuple[dict[ProjectVisualStyle, list[ProjectStyle]], dict[ProjectVisualStyle, ProjectStyle]]:
@@ -88,15 +87,16 @@ async def get_project_style_options(
 async def list_projects(
     db: AsyncSession = Depends(get_db),
     q: str | None = Query(None, description="关键字，过滤 name/description"),
-    order: str | None = Query(None, description="排序字段"),
+    stage: Literal["edit_raw"] | None = Query(None, description="待补原文：无章节，或至少一章原文为空"),
+    order: str | None = Query(None, description="排序字段，支持 chapter_count（章节数量）"),
     is_desc: bool = Query(False, description="是否倒序"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ) -> ApiResponse[PaginatedData[ProjectRead]]:
-    stmt = select(Project)
-    stmt = apply_keyword_filter(stmt, q=q, fields=[Project.name, Project.description])
-    stmt = apply_order(stmt, model=Project, order=order, is_desc=is_desc, allow_fields=PROJECT_ORDER_FIELDS, default="created_at")
-    items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
+    items, total = await list_project_page(
+        db, q=q, order=order, is_desc=is_desc, missing_source=stage == "edit_raw",
+        page=page, page_size=page_size,
+    )
     return paginated_response([ProjectRead.model_validate(x) for x in items], page=page, page_size=page_size, total=total)
 
 

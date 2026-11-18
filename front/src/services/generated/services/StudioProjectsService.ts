@@ -30,6 +30,7 @@ export class StudioProjectsService {
      */
     public static listProjectsApiV1StudioProjectsGet({
         q,
+        stage,
         order,
         isDesc = false,
         page = 1,
@@ -40,7 +41,11 @@ export class StudioProjectsService {
          */
         q?: (string | null),
         /**
-         * 排序字段
+         * 待补原文：无章节，或至少一章原文为空
+         */
+        stage?: (string | null),
+        /**
+         * 排序字段，支持 chapter_count（章节数量）
          */
         order?: (string | null),
         /**
@@ -55,6 +60,7 @@ export class StudioProjectsService {
             url: '/api/v1/studio/projects',
             query: {
                 'q': q,
+                'stage': stage,
                 'order': order,
                 'is_desc': isDesc,
                 'page': page,

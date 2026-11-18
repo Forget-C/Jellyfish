@@ -14,6 +14,8 @@ import { activeMainNavigation, mainNavigation } from './navigation'
 import { useNavigationTitles } from './pageTitle'
 import './shell.css'
 
+const projectQueryStorageKey = 'jellyfish_project_list_query'
+
 const ordinaryPageTheme = {
   token: {
     colorPrimary: '#245FC5', colorPrimaryBg: '#E4EDFB', colorBgLayout: '#F7F8FB',
@@ -24,7 +26,7 @@ const ordinaryPageTheme = {
 /** 普通路由的导航与主题在独立画布之外应用。 */
 function OrdinaryLayout() {
   const { t, i18n } = useTranslation('layout')
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const projectId = useMatches().find(match => match.id === 'project-navigation')?.params.projectId
   const navigate = useNavigate()
   const user = useAppStore(state => state.user)
@@ -44,6 +46,23 @@ function OrdinaryLayout() {
 
   const activeNavigation = activeMainNavigation(pathname)
   const lastManagementPage = useLastManagementPage(pathname)
+  const [lastProjectQuery, setLastProjectQuery] = useState(() => {
+    try {
+      return sessionStorage.getItem(projectQueryStorageKey) ?? ''
+    } catch {
+      return ''
+    }
+  })
+  useEffect(() => {
+    if (pathname !== '/projects') return
+    setLastProjectQuery(search)
+    try {
+      sessionStorage.setItem(projectQueryStorageKey, search)
+    } catch {
+      // 当前会话仍可使用内存中的查询条件。
+    }
+  }, [pathname, search])
+  const projectsLink = projectId ? { pathname: '/projects', search: lastProjectQuery } : '/projects'
   const routeContent = <main className="app-route-viewport" id="main-content">
     <Outlet />
   </main>
@@ -53,7 +72,7 @@ function OrdinaryLayout() {
       <header className="app-topbar">
         <Link to="/" className="app-brand" aria-label={t('brandHome')}><img src={brandLogo} alt="" /><span>Jellyfish</span></Link>
         <nav aria-label={t('primaryNavigation')} className="app-primary-navigation">
-          {mainNavigation.map(item => <Link key={item.key} to={item.key === 'management' ? lastManagementPage : item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
+          {mainNavigation.map(item => <Link key={item.key} to={item.key === 'management' ? lastManagementPage : item.key === 'projects' ? projectsLink : item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
         </nav>
         <div className="app-global-actions">
           <TaskCenter />
