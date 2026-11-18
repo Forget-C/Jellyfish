@@ -1,6 +1,6 @@
 # 场次设计、生产与交付设计
 
-本文记录已确认的交互与业务边界。实现见[场次工作台架构](../architecture/directing-foundation.md)、[场次版本](../architecture/scene-versions.md)与[素材、剪辑与交付](../architecture/directing-edit-delivery.md)。
+本文保留旧四画布的交互设计与业务边界，相关前端已退役，不作为当前产品操作指南。当前入口及退役范围见[场次工作台架构](../architecture/directing-foundation.md#旧四画布退役范围)，现行分镜方案见[场次工作台与共同画布设计](shared-canvas-workbench.md)。后端及存量记录保护继续保留，下文前端交互仅供历史参考。实现见[场次工作台架构](../architecture/directing-foundation.md)、[场次版本](../architecture/scene-versions.md)与[素材、剪辑与交付](../architecture/directing-edit-delivery.md)。
 
 ## 导演画布
 

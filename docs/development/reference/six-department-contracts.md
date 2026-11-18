@@ -1,6 +1,6 @@
 # 六部门专业输出契约
 
-本文保留六岗工作单、审稿、审片与返工的专业语义。当前四画布的数据与执行边界见[场次架构](../architecture/directing-foundation.md)。旧 `SceneDesignRevision`、`PromptRevision` 和 `ReviewPacket` 表述属于仍可读取的固定版本契约，不表示当前画布需要逐层确认版本。
+本文保留六岗工作单、审稿、审片与返工的专业语义。现行场次画布及旧四画布退役边界见[场次架构](../architecture/directing-foundation.md#旧四画布退役范围)。下文专业语义不表示旧前端仍可操作。旧 `SceneDesignRevision`、`PromptRevision` 和 `ReviewPacket` 表述属于仍可读取的固定版本契约，不表示当前画布需要逐层确认版本。
 
 工作单、界面和执行文本使用同一份有来源的业务内容；模型输出不等于用户批准，生成成功不等于素材采用。声音设计不等于声音已生成；自动视频理解和自动会议提炼不由这些人工工作单能力推定为已实现。
 
