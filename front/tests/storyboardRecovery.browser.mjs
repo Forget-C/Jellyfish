@@ -196,6 +196,20 @@ try {
   assert.equal(await undo.isDisabled(), true)
   assert.equal(await redo.isDisabled(), true)
   await page.getByText(latestName, { exact: true }).first().waitFor()
+
+  await control({ storyboard_repair_release: true })
+  await page.getByRole('button', { name: '检查分镜连续性', exact: true }).click()
+  await page.getByText('检查发现设计冲突', { exact: true }).waitFor()
+  const reviewCheck = page.getByRole('button', { name: '核对检查差异', exact: true })
+  const checkDialog = page.getByRole('dialog', { name: '核对分镜差异', exact: true })
+  await reviewCheck.click()
+  await checkDialog.getByRole('button', { name: '定向修正', exact: true }).click()
+  await page.getByText('检查修正待确认', { exact: true }).waitFor()
+  await reviewCheck.click()
+  await checkDialog.getByRole('button', { name: '应用分镜', exact: true }).click()
+  await poll(() => data(canvas(original.canvas_id)), row => !!row.document.storyboard.continuity_check_task_id)
+  await undo.click()
+  await poll(() => data(canvas(original.canvas_id)), row => !row.document.storyboard.continuity_check_task_id)
   process.stdout.write(JSON.stringify({ output, passed: true }) + '\n')
 
 } finally {
