@@ -68,7 +68,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [storageError, setStorageError] = useState('')
   const [recovery, setRecovery] = useState<Recovery>()
   const [conflict, setConflict] = useState(false)
-  const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: PendingSave; blocked?: CanvasDocument; recovery?: Recovery; initialBefore?: CanvasDocument; historySide?: HistorySide; conflict: boolean }>({ scope: key, conflict: false })
+  const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: PendingSave; blocked?: CanvasDocument; recovery?: Recovery; initialBefore?: CanvasDocument; conflict: boolean }>({ scope: key, conflict: false })
   const cleaner = useRef<(value: CanvasDocument) => CanvasDocument>()
   const configureCatalog = useCallback((catalog: CanvasCatalog) => {
     const clean = createCanvasOperations(createGraphRules(catalog)).clean
@@ -131,6 +131,21 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     arrangement?.redo(); setDocument(s.document); persist()
   }
   const [, refreshHistory] = useState(0)
+  // 普通保存保留会话历史，刷新恢复先清空历史，再按同一条命令重建一步。
+  const recordConfirmedSave = (command: PendingSave, before: CanvasDocument, after: CanvasDocument) => {
+    const applied = storyboardApplicationReceipt(command, before, after)
+    if (applied) setStoryboardApplication(applied)
+    const entry = { document: before, scene: command.scene }
+    const action = command.scene?.action
+    if (action === 'undo' || action === 'redo') {
+      const from = action === 'undo' ? 'past' : 'future'
+      const to = action === 'undo' ? 'future' : 'past'
+      history.current[from].pop()
+      history.current[to].push(entry)
+    } else {
+      history.current = { scope: key, past: [...history.current.past.slice(-49), entry], future: [] }
+    }
+  }
   const recordAction = (undo: () => void, redo: () => void) => {
     if (!ownership.canEdit() || state.current.scope !== key || state.current.recovery || state.current.initialBefore) return
     history.current = { scope: key, past: [...history.current.past.slice(-49), { apply: undo, reverse: redo }], future: [] }
@@ -148,7 +163,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         if (!await save() || s !== state.current || h[direction][h[direction].length - 1] !== next || !s.current || !s.document ||
             !same(s.document, s.current.document) || s.pending || !ownership.canEdit()) return
         s.initialBefore = s.document
-        s.historySide = direction
         s.pending = { request_id: crypto.randomUUID(), expected_revision: s.current.revision, document: next.document,
           scene: { ...scene, action: direction === 'past' ? 'undo' : 'redo' } }
         setInitialApplying(true); persist()
@@ -189,17 +203,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           const committed = await send(s.current!, command)
           if (s !== state.current) return false
           if (s.initialBefore) {
-            const applied = storyboardApplicationReceipt(command, s.initialBefore, committed.document)
-            if (applied) setStoryboardApplication(applied)
-            const entry = { document: s.initialBefore, scene: command.scene }
-            if (s.historySide) {
-              history.current[s.historySide].pop()
-              history.current[s.historySide === 'past' ? 'future' : 'past'].push(entry)
-            } else {
-              history.current = { scope: key, past: [...history.current.past.slice(-49), entry], future: [] }
-            }
+            recordConfirmedSave(command, s.initialBefore, committed.document)
             s.document = committed.document
-            s.initialBefore = undefined; s.historySide = undefined
+            s.initialBefore = undefined
             setDocument(s.document); setInitialApplying(false)
           }
           s.current = committed; s.pending = undefined; s.blocked = undefined
@@ -212,7 +218,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
           s.pending = undefined
           if (s.initialBefore) {
-            s.initialBefore = undefined; s.historySide = undefined; setInitialApplying(false)
+            s.initialBefore = undefined; setInitialApplying(false)
           } else if (reason.status === 409) { s.conflict = true; setConflict(true) }
         }
         // 暂停相同失败正文；未知结果保留原请求，手动保存可随时核实。
@@ -257,13 +263,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
       s.current = response.data; s.document = cleaner.current!(recovered); s.pending = undefined; s.recovery = undefined
-      if (!changed && saved.pending) {
-        const applied = storyboardApplicationReceipt(saved.pending, saved.baseline.document, s.document)
-        if (applied) setStoryboardApplication(applied)
+      history.current = { scope: key, past: [], future: [] }
+      if (!changed && staged && saved.pending) {
+        recordConfirmedSave(saved.pending, saved.baseline.document, s.document)
       }
-      const entry = { document: saved.baseline.document, scene: saved.pending?.scene }
-      history.current = { scope: key, past: staged && !changed && saved.pending?.scene?.action !== 'undo' ? [entry] : [],
-        future: staged && !changed && saved.pending?.scene?.action === 'undo' ? [entry] : [] }
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
       return true
     } catch (reason) {

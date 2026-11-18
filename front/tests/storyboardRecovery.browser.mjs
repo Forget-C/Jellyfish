@@ -41,7 +41,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${api}/test/runtime-controls`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -51,7 +51,7 @@ try {
     source_version: createHash('sha256').update(excerpt).digest('hex'), span: { start: 0, end: Array.from(excerpt).length } })
   const scene = `${scenes}/${sequence.id}`
   const tasks = `${scene}/storyboards`
-  const canvas = id => `${studio}/generation-canvases/${project}/${id}`
+  const canvas = (id, suffix = '') => `${studio}/generation-canvases/${id}${suffix}?project_id=${project}`
   const prep = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench`
   const control = body => http(api + '/test/runtime-controls', body ? 'POST' : 'GET', body)
   const other = await data(`${scene}/canvases`, 'POST', { name: '继续编辑的画布' })
@@ -96,13 +96,10 @@ try {
 
   await page.goto(management)
   const original = await data(tasks, 'POST', { request_id: 'blocked-first', name: '管理页采用分镜' })
-  for (const url of [`${prep}?canvas=${original.canvas_id}`,
-    `${origin}/projects/${project}/generation-canvas?canvas=${original.canvas_id}`]) {
-    await page.goto(url)
-    await page.waitForURL(url => url.pathname.endsWith('/workbench-management'))
-    await page.getByRole('dialog', { name: '处理分镜提取结果', exact: true }).waitFor()
-    assert.equal(await page.getByRole('region', { name: '生成画布工作台' }).count(), 0)
-  }
+  await page.goto(`${prep}?canvas=${original.canvas_id}`)
+  await page.waitForURL(url => url.pathname.endsWith('/workbench-management'))
+  await page.getByRole('dialog', { name: '处理分镜提取结果', exact: true }).waitFor()
+  assert.equal(await page.getByRole('region', { name: '生成画布工作台' }).count(), 0)
   await control({ storyboard_release: 1 })
   await poll(() => data(`${tasks}/${original.task_id}`), row => row.status === 'succeeded')
   await page.goto(management)
@@ -153,11 +150,52 @@ try {
   await restore.click()
   assert.deepEqual((await replay).postDataJSON(), dropped)
   await restore.waitFor({ state: 'hidden' })
-  assert.deepEqual((await data(canvas(original.canvas_id) + '/runtime')).runs, [])
+  assert.deepEqual((await data(canvas(original.canvas_id, '/runtime'))).runs, [])
   assert.deepEqual((await data(`${scene}/objects`)).objects, prepared.objects)
   await page.screenshot({ path: join(output, 'management-recovery-desktop.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: join(output, 'management-recovery-narrow.png'), animations: 'disabled' })
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
+  const undo = page.getByRole('button', { name: '撤销操作', exact: true })
+  const redo = page.getByRole('button', { name: '重做操作', exact: true })
+  const loseUndoReply = async () => {
+    let intent
+    await page.route('**/restore', async route => {
+      intent = route.request().postDataJSON()
+      const response = await route.fetch()
+      assert.ok(response.ok(), await response.text())
+      await route.abort('failed')
+    }, { times: 1 })
+    await undo.click()
+    await page.getByText(/请求结果未知/).first().waitFor()
+    return intent
+  }
+  const undoIntent = await loseUndoReply()
+  const undone = await data(canvas(original.canvas_id))
+  assert.equal(undone.document.storyboard.task_id, original.task_id)
+  await page.reload()
+  const undoReplay = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/restore'))
+  await restore.click()
+  assert.deepEqual((await undoReplay).postDataJSON(), undoIntent)
+  await restore.waitFor({ state: 'hidden' })
+  assert.equal(await undo.isDisabled(), true)
+  await redo.click()
+  await poll(() => data(canvas(original.canvas_id)), row => row.revision === undone.revision + 1)
+
+  await loseUndoReply()
+  const previous = await data(canvas(original.canvas_id))
+  const latestName = '服务端已更新分镜画布'
+  await data(canvas(original.canvas_id), 'PUT', {
+    request_id: 'newer-server-document', expected_revision: previous.revision,
+    document: { ...previous.document, name: latestName },
+  })
+  await page.reload()
+  await restore.click()
+  await restore.waitFor({ state: 'hidden' })
+  assert.equal(await undo.isDisabled(), true)
+  assert.equal(await redo.isDisabled(), true)
+  await page.getByText(latestName, { exact: true }).first().waitFor()
   process.stdout.write(JSON.stringify({ output, passed: true }) + '\n')
 
 } finally {
