@@ -14,3 +14,7 @@ status: accepted
 保留历史任务记录、已生成的导出成品及其 `scene-export:<task.id>` 文件引用。旧导出的专用删除接口随本次退役移除。由于通用文件管理无法解除这类引用，用户将无法从文件管理中删除仍受引用保护的历史成品。
 
 本工作树已移除旧场次版本 HTTP 接口，并同步 OpenAPI 和生成客户端。当前仓库状态见[场次工作台架构](../architecture/directing-foundation.md#旧四画布退役范围)。
+
+## 退役历史交付查询
+
+旧场次版本的交付提交接口退役后，章节当前交付与场次交付历史只剩独立查询接口。现行前端业务无调用，已移除 `GET /chapters/{chapter_id}/deliveries` 和 `GET /sequences/{sequence_id}/deliveries`（相对于项目的 directing 路径），并同步 OpenAPI 和生成客户端。两条查询是上述 46 个操作之外的新增退役范围。历史交付记录、章节使用指向及 `scene-delivery:<id>` 文件引用继续保留。

@@ -1,48 +1,18 @@
-"""当前方案可浏览同场次素材，生产来源不随复用改变。"""
+"""固定的 Take 复核依据。"""
 from datetime import UTC
 
 from sqlalchemy import or_, select
 
 from app.core.contracts.directing.scene_take_review import SceneTakeReviewRead
 from app.core.contracts.directing.scene_version import SceneVersionContent
-from app.core.contracts.directing.production import ProductionPlan, Prompt
-from app.core.contracts.directing.scene_video import SceneVideoPreparation
-from app.core.contracts.directing.scene_take_library import SceneTakeLibraryRead
-from app.models.directing import Take, SceneTakeRecord, SceneVideoExecution, SceneVersionRecord, SceneTakeReviewRecord
-from app.models.studio import Chapter, FileItem
+from app.models.directing import SceneTakeReviewRecord
+from app.models.studio import Chapter
 from app.services.directing.store import DirectingStore, RevisionConflict
 from app.services.directing.scene_take_evidence import take_review_matches
 
 
 class SceneTakeService(DirectingStore):
-    """汇集固定生产来源，独立保存人工复核记录，不改写共享 Take。"""
-
-    async def _library_item(self, take, *, kind, origin_id, unit_id, **source):
-        file = await self.db.get(FileItem, take.file_id)
-        available = bool(file and file.type == 'video' and file.deleted_at is None and file.delete_requested_at is None)
-        return SceneTakeLibraryRead(take_kind=kind, take_id=take.id, file_id=take.file_id,
-            origin_id=origin_id, unit_id=unit_id, task_id=take.task_id, available=available,
-            duration_ms=file.duration_ms if file else None,
-            media_url=f'/api/v1/studio/files/{take.file_id}/download' if available else None, **source)
-
-    async def list_scene_takes(self, sequence_id, version_id):
-        """通过目标版本校验项目和场次归属，再只读取同场次原记录。"""
-        await self.read_scene_version(sequence_id, version_id)
-        rows = []
-        legacy = await self.db.scalars(select(Take).where(Take.sequence_id == sequence_id).order_by(Take.created_at, Take.id))
-        for take in legacy:
-            prompt = await self.revision(take.prompt_revision_id, kind='prompt', sequence_id=sequence_id, confirmed=True)
-            plan = await self.revision(take.plan_revision_id, kind='plan', sequence_id=sequence_id, confirmed=True)
-            rows.append(await self._library_item(take, kind='production_plan', origin_id=take.plan_revision_id,
-                unit_id=take.unit_id, prompt=Prompt.model_validate(prompt.payload), production_plan=ProductionPlan.model_validate(plan.payload)))
-        current = await self.db.execute(select(SceneTakeRecord, SceneVideoExecution).join(
-            SceneVideoExecution, SceneVideoExecution.id == SceneTakeRecord.execution_id).join(
-            SceneVersionRecord, SceneVersionRecord.id == SceneVideoExecution.version_id).where(
-            SceneVersionRecord.sequence_id == sequence_id).order_by(SceneTakeRecord.created_at, SceneTakeRecord.id))
-        for take, execution in current:
-            rows.append(await self._library_item(take, kind='scene_video', origin_id=execution.version_id,
-                unit_id=execution.unit_id, video_preparation=SceneVideoPreparation.model_validate(execution.preparation)))
-        return rows
+    """读取和保存固定的 Take 复核记录。"""
 
     async def list_take_reviews(self, sequence_id, version_id):
         """读取固定审片依据，与当前已保存方案比较；不回写历史结论。"""

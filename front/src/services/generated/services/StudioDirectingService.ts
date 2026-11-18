@@ -7,7 +7,6 @@ import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSumma
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
-import type { ApiResponse_ChapterDeliveriesRead_ } from '../models/ApiResponse_ChapterDeliveriesRead_';
 import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_ChapterWorkbenchManagement_ } from '../models/ApiResponse_ChapterWorkbenchManagement_';
@@ -28,7 +27,6 @@ import type { ApiResponse_LedgerRead_ } from '../models/ApiResponse_LedgerRead_'
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
 import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_BatchRead__';
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
-import type { ApiResponse_list_SceneDeliveryRead__ } from '../models/ApiResponse_list_SceneDeliveryRead__';
 import type { ApiResponse_list_SequenceRead__ } from '../models/ApiResponse_list_SequenceRead__';
 import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
 import type { ApiResponse_list_StoryboardTaskSummary__ } from '../models/ApiResponse_list_StoryboardTaskSummary__';
@@ -2116,56 +2114,6 @@ export class StudioDirectingService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/ledger',
-            path: {
-                'project_id': projectId,
-                'sequence_id': sequenceId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Chapter Deliveries
-     * 读取章节明确使用的固定场次内容。
-     * @returns ApiResponse_ChapterDeliveriesRead_ Successful Response
-     * @throws ApiError
-     */
-    public static directingChapterDeliveries({
-        projectId,
-        chapterId,
-    }: {
-        projectId: string,
-        chapterId: string,
-    }): CancelablePromise<ApiResponse_ChapterDeliveriesRead_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/deliveries',
-            path: {
-                'project_id': projectId,
-                'chapter_id': chapterId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Scene Deliveries
-     * 读取原场次的全部固定交付来源。
-     * @returns ApiResponse_list_SceneDeliveryRead__ Successful Response
-     * @throws ApiError
-     */
-    public static directingSceneDeliveries({
-        projectId,
-        sequenceId,
-    }: {
-        projectId: string,
-        sequenceId: string,
-    }): CancelablePromise<ApiResponse_list_SceneDeliveryRead__> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/deliveries',
             path: {
                 'project_id': projectId,
                 'sequence_id': sequenceId,

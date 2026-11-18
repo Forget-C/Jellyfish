@@ -1,5 +1,5 @@
 import { StudioGenerationPromptsService, StudioGenerationTasksService } from '../../../services/generated'
-import type { AssetPromptReference, AssetPromptAudit, AssetImagePromptRenderBody, GenerationSubmitRequest_Input, RenderedPromptSnapshot } from '../../../services/generated'
+import type { AssetPromptReference, AssetPromptAudit, AssetImagePromptRenderBody, GenerationSubmitRequest, RenderedPromptSnapshot } from '../../../services/generated'
 import { readResourceImages } from './resourceImages'
 type ImageGenerationPayload = { modelId?: string; prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit; references?: AssetPromptReference[] }
 
@@ -16,7 +16,7 @@ type AdapterConfig = {
  * 预览接口仍负责读取资产事实和渲染提示词；提交阶段只冻结最终提示词与
  * FileItem 标识，避免把可变 URL 或资产目标再次放入请求体。
  */
-function createImageGenerationRequest(payload: ImageGenerationPayload): GenerationSubmitRequest_Input {
+function createImageGenerationRequest(payload: ImageGenerationPayload): GenerationSubmitRequest {
   return {
     model_id: payload.modelId ?? null,
     asset_references: payload.references,

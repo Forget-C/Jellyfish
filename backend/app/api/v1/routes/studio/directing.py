@@ -39,8 +39,6 @@ from app.core.contracts.directing.continuity import ContinuityRead, CutFrameRequ
 from app.core.contracts.directing.batch import BatchPrepare, BatchRead
 from app.services.studio.files import require_available_file
 from app.services.directing.store import RevisionConflict
-from app.core.contracts.directing.scene_delivery import SceneDeliveryRead, ChapterDeliveriesRead
-from app.services.directing.scene_delivery import SceneDeliveryService
 from app.services.directing.provenance import ProvenanceService
 from app.core.contracts.directing.provenance import SourceRead, SourceResolveRequest
 
@@ -569,18 +567,6 @@ async def confirm_feedback(project_id: str, sequence_id: str, revision_id: str, 
 async def ledger(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
     """只读汇总三本账，不提供第二份台账编辑入口。"""
     return success_response(await _call(FeedbackService(db, project_id).ledger(sequence_id)))
-
-
-@router.get('/chapters/{chapter_id}/deliveries', response_model=ApiResponse[ChapterDeliveriesRead], operation_id='directing_chapter_deliveries')
-async def chapter_deliveries(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """读取章节明确使用的固定场次内容。"""
-    return success_response(await _call(SceneDeliveryService(db, project_id).chapter_deliveries(chapter_id)))
-
-
-@router.get('/sequences/{sequence_id}/deliveries', response_model=ApiResponse[list[SceneDeliveryRead]], operation_id='directing_scene_deliveries')
-async def scene_deliveries(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """读取原场次的全部固定交付来源。"""
-    return success_response(await _call(SceneDeliveryService(db, project_id).list_deliveries(sequence_id)))
 
 
 @router.get('/chapters/{chapter_id}/assembly', response_model=ApiResponse[ChapterAssemblyRead], operation_id='directing_chapter_assembly')

@@ -103,27 +103,33 @@ def object_path(key: str) -> Path:
 @app.post('/browser-test/legacy-delivery/{sequence_id}')
 async def seed_legacy_delivery(sequence_id: str):
     """通过隔离库准备已交付的旧版本，供现行工作台回归使用。"""
-    from app.core.contracts.directing.scene_delivery import SceneDeliveryCreate
     from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionSave
-    from app.services.directing.scene_delivery import SceneDeliveryService
+    from app.models.directing import SceneDeliveryRecord, SceneDeliveryUse, Take
+    from sqlalchemy import select
 
     async with sessions.begin() as db:
-        service = SceneDeliveryService(db, 'canvas-project')
-        first = await service.create_scene_version(
+        store = DirectingStore(db, 'canvas-project')
+        first = await store.create_scene_version(
             sequence_id, SceneVersionCreate(request_id='legacy-version-a', title='旧版交付甲'))
-        library = await service.list_scene_takes(sequence_id, first.id)
-        take = next(item for item in library if item.task_id == 'legacy-video-task')
+        take = (await db.scalars(select(Take).where(
+            Take.sequence_id == sequence_id, Take.task_id == 'legacy-video-task'))).one()
         content = first.content.model_dump(mode='json')
         content['timeline']['items'] = [{
-            'kind': 'media', 'id': 'retained-clip', 'take_kind': take.take_kind, 'take_id': take.take_id,
+            'kind': 'media', 'id': 'retained-clip', 'take_kind': 'production_plan', 'take_id': take.id,
             'file_id': take.file_id, 'fit': 'contain', 'timeline_start_ms': 0,
             'media_range': {'source_in_ms': 0, 'source_out_ms': 1000},
         }]
-        saved = await service.save_scene_version(sequence_id, first.id, SceneVersionSave(
+        saved = await store.save_scene_version(sequence_id, first.id, SceneVersionSave(
             request_id='legacy-timeline', expected_revision=first.revision, content=content))
-        delivery = await service.create_delivery(sequence_id, first.id, SceneDeliveryCreate(
-            request_id='legacy-delivery', expected_revision=saved.revision))
-        return {'data': {'delivery': delivery, 'file_id': take.file_id}}
+        record = SceneDeliveryRecord(id='legacy-delivery', sequence_id=sequence_id, version_id=saved.id,
+            request_id='legacy-delivery', revision=saved.revision, version_title=saved.title,
+            content=saved.content.model_dump(mode='json'))
+        db.add(record)
+        await db.flush()
+        db.add(SceneDeliveryUse(sequence_id=sequence_id, delivery_id=record.id))
+        await store.protect_scene_review_files(await store.sequence(sequence_id), record.content,
+            'scene-delivery:' + record.id)
+        return {'data': {'delivery_id': record.id, 'version_id': saved.id, 'file_id': take.file_id}}
 
 
 @app.post('/browser-test/legacy-takes/{take_id}/candidate')

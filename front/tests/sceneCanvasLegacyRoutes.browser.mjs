@@ -38,15 +38,14 @@ try {
   assert.ok(data)
   const sequence = data.sequences[0]
   const versions = `${directing}/sequences/${sequence.id}/versions`
-  const { delivery, file_id: fileId } = await request(`${api}/browser-test/legacy-delivery/${sequence.id}`, 'POST')
+  const { delivery_id: deliveryId, version_id: versionId, file_id: fileId } = await request(`${api}/browser-test/legacy-delivery/${sequence.id}`, 'POST')
   assert.equal((await fetch(versions)).status, 404)
-  assert.equal((await fetch(`${versions}/${delivery.version_id}`)).status, 404)
+  assert.equal((await fetch(`${versions}/${versionId}`)).status, 404)
   const chapters = `${origin}/projects/${project}?tab=chapters`
   const chapterPage = chapters + '&chapter=' + chapter
   const managementPath = `/projects/${project}/chapters/${chapter}/workbench-management`
   const old = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}`
   const prep = old + '/canvas-workbench'
-  const used = async () => (await request(`${directing}/chapters/${chapter}/deliveries`)).sequences[0].delivery
 
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: {
     host: '127.0.0.1', port: 4331, strictPort: true, proxy: { '/api': api },
@@ -74,7 +73,7 @@ try {
   await newHost.getByRole('button', { name: '生成新分镜画布', exact: true }).waitFor()
   assert.equal(await newHost.getByRole('button', { name: '场次更多操作', exact: true }).count(), 0)
   assert.deepEqual(versionReads, [])
-  await page.goto(`${prep}?version=${delivery.version_id}&canvas=edit`)
+  await page.goto(`${prep}?version=${versionId}&canvas=edit`)
   await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
   assert.deepEqual(versionReads, [])
 
@@ -91,14 +90,12 @@ try {
   await page.waitForURL(url => url.pathname === managementPath.replace(project, 'wrong-project'))
   await management.getByText('章节不属于当前项目', { exact: true }).waitFor()
   assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
-  assert.equal((await used()).id, delivery.id)
-  assert.equal((await used()).version_id, delivery.version_id)
-  const history = await request(`${directing}/sequences/${sequence.id}/deliveries`)
-  assert.deepEqual(history.map(item => item.id), [delivery.id])
+  assert.equal((await fetch(`${directing}/chapters/${chapter}/deliveries`)).status, 404)
+  assert.equal((await fetch(`${directing}/sequences/${sequence.id}/deliveries`)).status, 404)
   const file = await request(`${api}/api/v1/studio/files/${fileId}`)
-  assert.ok(file.usages.some(usage => usage.source_ref === 'scene-delivery:' + delivery.id))
-  assert.equal(history[0].revision, delivery.revision)
-  console.log('management routes and retained backend records verified', output)
+  assert.ok(file.usages.some(usage => usage.source_ref === 'scene-delivery:' + deliveryId))
+  assert.equal((await fetch(`${api}/api/v1/studio/files/${fileId}`, { method: 'DELETE' })).status, 409)
+  console.log('management routes and retained file protection verified', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   throw error
