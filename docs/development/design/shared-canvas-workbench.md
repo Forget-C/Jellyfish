@@ -127,7 +127,7 @@ description: "记录场次提取、对象参考、共同卡片编辑与单卡生
 
 代表样本的初步映射有 12 张用途或范围混合的卡片，其中 4 张仅用途不同，可保留现有字段级用途；其余 8 张按适用目标、阶段和条件静态分组可拆为 17 张，净增 9 张。这支持优先评估按范围拆卡的更小方案，但只是映射计数，尚未完成拆卡后的编译与交互验证。
 
-场次已有关联资产与准备图片的入口，见 [SceneAssets](../../../front/src/pages/aiStudio/directing/SceneAssets.tsx)。当前资产关联不等于选入生成参考；共享对象映射及镜头默认继承属于新增行为。诊断展示和执行许可已有分离机制，见 [CardIssueIndicator](../../../front/src/pages/aiStudio/generationCanvas/CardIssueIndicator.tsx) 与 [RunPreview](../../../front/src/pages/aiStudio/generationCanvas/RunPreview.tsx)。
+现行工作台的[对象与参考](../../../front/src/pages/aiStudio/directing/SceneObjectPreparation.tsx)提供对象提取、资源选用与参考图片准备。画布实际采用的生成参考仍按卡片输入核对。诊断展示和执行许可已有分离机制，见 [CardIssueIndicator](../../../front/src/pages/aiStudio/generationCanvas/CardIssueIndicator.tsx) 与 [RunPreview](../../../front/src/pages/aiStudio/generationCanvas/RunPreview.tsx)。
 
 此前临时转换、序列化及编译核对不等于真实媒体生成验收；尚未验证完整交互，不据此宣称共同基础已具备无损承载能力。存量迁移与旧数据兼容已明确排除，不作为本次验收要求。
 
@@ -187,7 +187,7 @@ description: "记录场次提取、对象参考、共同卡片编辑与单卡生
 
 - 原场次宿主 `CanvasSequenceWorkbench` 及四视图已退役；当前场次入口为 [SceneCanvasWorkbench](../../../front/src/pages/aiStudio/directing/SceneCanvasWorkbench.tsx)。
 - [GenerationCanvasPage](../../../front/src/pages/aiStudio/generationCanvas/GenerationCanvasPage.tsx)已有画布管理、自动保存、详情和运行入口；新的工作台壳层应复用这些能力。
-- [SceneAssets](../../../front/src/pages/aiStudio/directing/SceneAssets.tsx)提供资产关联与嵌入式图片准备，可复用交互；其旧 `SceneDesign` 输入和草稿保存依赖需解耦。
+- [SceneObjectPreparation](../../../front/src/pages/aiStudio/directing/SceneObjectPreparation.tsx)承载现行场次对象与参考准备。
 - UI/UX 技能的局部检索支持步骤反馈、明确恢复操作与可访问错误说明；颜色、尺寸、组件和详情行为仍以项目规范为准。
 
 ## 实施替换路径（已确认）

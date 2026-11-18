@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { browserCleanup, browserOutput } from './browser-runtime.mjs'
-import { makeWorkspace } from './directing-fixtures.mjs'
+import { makeSequence } from './directing-fixtures.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-appearance-')
@@ -21,7 +21,7 @@ try {
   page = await context.newPage()
   page.setDefaultTimeout(8000)
   const errors = []
-  const workspace = makeWorkspace()
+  const sequence = makeSequence()
   let sceneUnavailable = false
   const installFixtures = async target => {
     target.on('pageerror', error => errors.push(error.message))
@@ -29,12 +29,11 @@ try {
     await target.route('**/api/**', route => {
       const { pathname } = new URL(route.request().url())
       const respond = data => route.fulfill({ json: { code: 200, data } })
-      if (pathname.endsWith('/sequences/s1/canvases')) return respond({ sequence: workspace.sequence, canvases: sceneUnavailable ? [] : [{ id: 'storyboard-appearance', name: '分镜配色验收', can_open: true }] })
+      if (pathname.endsWith('/sequences/s1/canvases')) return respond({ sequence, canvases: sceneUnavailable ? [] : [{ id: 'storyboard-appearance', name: '分镜配色验收', can_open: true }] })
       if (pathname.endsWith('/generation-canvases/p1/storyboard-appearance')) return respond({ id: 'storyboard-appearance', project_id: 'p1', revision: 0, document: { id: 'storyboard-appearance', project_id: 'p1', name: '分镜配色验收', cards: [], edges: [], input_order: {} } })
       if (pathname.endsWith('/catalog')) return respond({ cards: [], connection_policies: [] })
       if (pathname.endsWith('/runtime')) return respond({ cursor: 0, runs: [], nodes: [] })
-      if (pathname.endsWith('/directing/sequences/s1')) return respond(workspace)
-      if (pathname.endsWith('/versions') || pathname.includes('/generation-canvases/')) return respond([])
+      if (pathname.includes('/generation-canvases/')) return respond([])
       return respond({ items: [], next_cursor: null })
     })
   }
