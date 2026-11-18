@@ -1,0 +1,35 @@
+removed_case	baseline_file	baseline_suites
+browse-controls	front/tests/sceneBrowseControls.browser.mjs	graph
+candidate-refresh	front/tests/sceneCandidateRefresh.browser.mjs	instruction-video
+canvas-graph	front/tests/sceneCanvasGraph.browser.mjs	graph
+default-assets	front/tests/sceneDefaultAssets.browser.mjs	instruction-video | references
+design-scope	front/tests/designScopeCompleteness.browser.mjs	workbench
+director-layout	front/tests/directorLayout.browser.mjs	graph
+edit-cut-evidence	front/tests/sceneEditCutEvidence.browser.mjs	graph
+edit-graph	front/tests/sceneEditGraph.browser.mjs	graph
+edit-seams-graph	front/tests/sceneEditSeamsGraph.browser.mjs	graph
+frame-dependencies	front/tests/sceneFrameDependencies.browser.mjs	instruction-video
+frame-inputs	front/tests/sceneFrameInputs.browser.mjs	instruction-video | references
+generation-canvas-alignment-baseline	front/tests/generationCanvasAlignmentBaseline.browser.mjs	canvas-layout
+generation-canvas-chrome-baseline	front/tests/generationCanvasChromeBaseline.browser.mjs	—
+generation-canvas-filters-baseline	front/tests/generationCanvasFiltersBaseline.browser.mjs	—
+graph-navigation	front/tests/sceneGraphNavigation.browser.mjs	graph
+graph-summary	front/tests/sceneGraphSummary.browser.mjs	graph
+instruction-card	front/tests/sceneInstructionCard.browser.mjs	instruction-video
+instruction-design	front/tests/sceneInstructionDesign.browser.mjs	instructions | workbench
+instruction-evidence	front/tests/sceneInstructionEvidence.browser.mjs	graph | instructions
+instruction-inputs	front/tests/sceneInstructionInputs.browser.mjs	instruction-video | instructions
+instruction-preparation	front/tests/sceneInstructionPreparation.browser.mjs	instructions | workbench
+instruction-primary	front/tests/sceneInstructionPrimary.browser.mjs	instructions
+instruction-suggestions	front/tests/sceneInstructionSuggestions.browser.mjs	instructions
+legacy-graph	front/tests/sceneLegacyGraph.browser.mjs	graph
+legacy-take-library	front/tests/sceneLegacyTakeLibrary.browser.mjs	graph
+periodic-save	front/tests/scenePeriodicSave.browser.mjs	graph
+reference-source	front/tests/sceneReferenceSource.browser.mjs	instruction-video | references
+scene-video	front/tests/sceneVideo.browser.mjs	instruction-video
+source-provenance	front/tests/sourceProvenance.browser.mjs	workbench
+take-library	front/tests/sceneTakeLibrary.browser.mjs	graph
+take-library-graph	front/tests/sceneTakeLibraryGraph.browser.mjs	graph
+timeline	front/tests/sceneTimeline.browser.mjs	graph
+unit-design	front/tests/sceneUnitDesign.browser.mjs	workbench
+workbench-style	front/tests/sceneWorkbenchStyle.browser.mjs	workbench

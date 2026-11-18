@@ -78,6 +78,7 @@
 ## 技术参考
 
 - [接口与 OpenAPI](reference/api.md)
+- [旧四画布退役清单（接口、函数与类、测试、文件）](reference/four-canvas-retirement/README.md)
 - [数据模型](reference/data-model.md)
 - [环境变量](reference/env.md)
 - [六部门专业输出契约](reference/six-department-contracts.md)
