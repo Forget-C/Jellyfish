@@ -58,11 +58,12 @@ class ShootingIssue(Contract):
     """生成前疑点，不引用尚不存在的镜头。"""
     id: Identity
     category: Literal['position', 'path', 'visibility', 'continuity', 'source']
-    kind: Literal['conflict', 'insufficient_basis', 'optional']
+    kind: Literal['conflict', 'insufficient_basis', 'optional', 'supported']
     excerpt: str = ''
     note_id: Identity | None = None
     problem: Text
     suggestion: str = ''
+    proposed_change: Literal['add', 'update'] | None = None
 
 
 class ShootingCheckReport(Contract):

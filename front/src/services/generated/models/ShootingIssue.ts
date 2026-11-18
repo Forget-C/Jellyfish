@@ -8,9 +8,10 @@
 export type ShootingIssue = {
     id: string;
     category: 'position' | 'path' | 'visibility' | 'continuity' | 'source';
-    kind: 'conflict' | 'insufficient_basis' | 'optional';
+    kind: 'conflict' | 'insufficient_basis' | 'optional' | 'supported';
     excerpt?: string;
     note_id?: (string | null);
     problem: string;
     suggestion?: string;
+    proposed_change?: ('add' | 'update' | null);
 };

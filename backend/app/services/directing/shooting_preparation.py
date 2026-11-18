@@ -58,6 +58,21 @@ class ShootingPreparationService(DivisionService):
                     note.previous_scope_text or (note.excerpt and note.excerpt not in text)):
                 raise ValueError('请先核对拍摄解释的适用范围和引用依据')
 
+    @staticmethod
+    def _validate_new_scopes(preparation, baseline):
+        """Keep historical overlaps while rejecting new intersecting ranges."""
+        old_scopes = {(note.scope.start, note.scope.end) for note in baseline.notes if note.scope}
+        located = sorted((note for note in preparation.notes if note.scope), key=lambda note: note.scope.start)
+        for index, left in enumerate(located):
+            for right in located[index + 1:]:
+                if right.scope.start >= left.scope.end:
+                    break
+                if left.scope == right.scope:
+                    continue
+                if (left.scope.start, left.scope.end) in old_scopes and (right.scope.start, right.scope.end) in old_scopes:
+                    continue
+                raise ValueError('拍摄解释选段相交，请使用已有选段或重新选择')
+
     async def save_preparation(self, chapter_id: str, body: ShootingExplanationSave) -> ShootingExplanationRead:
         """Save one source version using optimistic concurrency and safe immediate retry."""
         chapter = await self._lock_chapter(chapter_id)
@@ -73,6 +88,12 @@ class ShootingPreparationService(DivisionService):
             raise RevisionConflict('拍摄解释已修改，请保留输入并核对最新内容')
         value = body.preparation.model_copy(deep=True)
         self._validate_notes(text, value)
+        baseline = ShootingPreparation()
+        if record:
+            baseline = ShootingPreparation.model_validate(record.preparation)
+        elif sha256(chapter.raw_text.encode()).hexdigest() == body.source_version:
+            baseline = await inherited_preparation(self.db, chapter_id, body.source_version, text, locked=True)
+        self._validate_new_scopes(value, baseline)
         value.check_covered = None
         if value.check_task_id:
             report = await self.read_check(chapter_id, value.check_task_id)

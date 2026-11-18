@@ -3,7 +3,7 @@ import { createPortal, flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
 import { HistoryOutlined, SaveOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
-import { ShootingPreparationModal } from './ShootingPreparationModal'
+import { ShootingExplanationDrawer } from './ShootingExplanationDrawer'
 import { directingError, excerptMatches } from './common'
 import { sourceSlice } from './sourceSelection'
 import { analysisDivision, divisionBaselineMatches, divisionRequest, initialDivision, orderedDivisionMembers, versionDivision, type ChapterDivisionDraft } from './chapterDivision'
@@ -28,6 +28,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   const [interaction, setInteraction] = useState<DivisionInteractionStatus>({ dirty: false })
   const interactionChanged = useCallback((status: DivisionInteractionStatus) => { epoch.current++; setInteraction(status) }, [])
   const [preparationOpen, setPreparationOpen] = useState(false)
+  const preparationTrigger = useRef<HTMLElement>(null)
   const [sourceChoosing, setSourceChoosing] = useState(false)
   const [sourceChoice, setSourceChoice] = useState<ChapterSequences>()
   const [chapter, setChapter] = useState<ChapterSequences>()
@@ -283,7 +284,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing || interaction.dirty || !!interaction.blocked} onClick={() => {
       Modal.confirm({ title: '确认智能划分？', content: draftDirty ? '将调用 AI 分析本章原文，分析成功后替换当前草稿；若分析期间继续编辑，AI 结果将保留到历史版本。' : '将调用 AI 分析本章原文并生成场次划分草稿，确认后开始任务。', okText: '开始划分', cancelText: '取消', onOk: startAnalysis })
     }}>{running || activeTasks.length ? '划分中…' : '智能划分'}</Button>
-    <Button icon={<VideoCameraOutlined aria-hidden />} disabled={!!sourceChoice || !((viewing?.chapter || editor.chapter).raw_text.trim())} onClick={() => { epoch.current++; setPreparationOpen(true) }}>拍摄解释</Button>
+    <Button ref={preparationTrigger} icon={<VideoCameraOutlined aria-hidden />} disabled={!!sourceChoice || !((viewing?.chapter || editor.chapter).raw_text.trim())} onClick={() => { epoch.current++; setPreparationOpen(true) }}>拍摄解释</Button>
     <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
     {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>保存为新版本</Button>}
   </Space>
@@ -311,10 +312,13 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />
 
     </WorkspaceWriteBoundary>
-    {preparationOpen && <ShootingPreparationModal projectId={projectId} chapterId={chapterId}
+    {preparationOpen && <ShootingExplanationDrawer projectId={projectId} chapterId={chapterId}
       sourceVersion={(viewing?.chapter || editor.chapter).source_version} sourceText={(viewing?.chapter || editor.chapter).raw_text}
       isLatest={(viewing?.chapter || editor.chapter).source_version === chapter.source_version}
-      readOnly={!!viewing} onClose={() => setPreparationOpen(false)} />}
+      readOnly={!!viewing} onClose={() => {
+        setPreparationOpen(false)
+        requestAnimationFrame(() => preparationTrigger.current?.focus({ preventScroll: true }))
+      }} />}
     <Modal title="原文有变动，是否使用最新原文" open={!!sourceChoice} closable={false} maskClosable={false} keyboard={false}
       footer={<Space><Button disabled={sourceChoosing || !sourceChoice?.current_version} onClick={() => void chooseSource(false)}>不使用，沿用原版本</Button><Button disabled={sourceChoosing} type="primary" onClick={() => void chooseSource(true)}>使用最新原文</Button></Space>}>
       <p>使用最新原文后需核对场次范围；沿用原版本可继续维护已有场次及该版拍摄解释。</p>

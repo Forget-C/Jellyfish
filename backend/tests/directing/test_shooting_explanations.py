@@ -1,9 +1,11 @@
 """拍摄解释通过章节接口独立保存。"""
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
 
+from app.models.directing import ChapterShootingExplanation
 from app.models.llm import Model, Provider
 from app.models.studio import Chapter
 from app.task_worker import TaskWorker
@@ -52,8 +54,12 @@ async def test_whole_chapter_check_keeps_original_report(tmp_path, monkeypatch):
         def invoke(self, messages):
             assert '整章拍摄检查' in messages[0].content
             assert '甲在车旁。乙从另一侧下车。' in messages[1].content
-            return SimpleNamespace(content='{"issues":[{"id":"route","category":"path","kind":"optional",'
-                                           '"excerpt":"乙从另一侧下车","problem":"可选择出车后的路线"}]}')
+            return SimpleNamespace(content=json.dumps({'issues': [
+                {'id': 'position', 'category': 'position', 'kind': 'supported', 'excerpt': '甲在车旁',
+                 'problem': '明确甲的站位', 'suggestion': '甲靠近车辆站立', 'proposed_change': 'add'},
+                {'id': 'route', 'category': 'path', 'kind': 'insufficient_basis', 'excerpt': '乙从另一侧下车',
+                 'problem': '下车后是否已有预想路线？'},
+            ]}))
 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
@@ -75,8 +81,47 @@ async def test_whole_chapter_check_keeps_original_report(tmp_path, monkeypatch):
             worker.text_pool.shutdown(wait=False)
         result = (await client.get(path, params={'source_version': chapter['source_version']})).json()['data']
         assert result['status'] == 'succeeded', result
-        assert result['report']['issues'][0]['excerpt'] == '乙从另一侧下车'
+        supported, question = result['report']['issues']
+        assert (supported['kind'], supported['proposed_change'], supported['excerpt']) == ('supported', 'add', '甲在车旁')
+        assert question['excerpt'] == '乙从另一侧下车'
+        assert question['proposed_change'] is None
         assert (await client.get(BASE)).json()['data']['sequences'] == []
+
+
+@pytest.mark.asyncio
+async def test_shooting_explanation_save_allows_shared_ranges_and_preserves_historical_overlaps(tmp_path):
+    raw = '甲绕过车尾，乙走到车旁。'
+    same = {'start': 0, 'end': 5}
+    historical = {'start': 3, 'end': 8}
+    new_overlap = {'start': 4, 'end': 10}
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            (await db.get(Chapter, 'ch1')).raw_text = raw
+        version = (await client.get(BASE)).json()['data']['source_version']
+        path = BASE + '/shooting-explanations'
+        original = [{'id': 'route', 'text': '绕车时保持步行', 'scope': same},
+                    {'id': 'step', 'text': '走到车尾处停顿', 'scope': same}]
+
+        async def put(request_id, expected, notes):
+            return await client.put(path, json={'source_version': version, 'request_id': request_id,
+                                                'expected_version': expected, 'preparation': {'notes': notes}})
+
+        first = await put('same-range', 0, original)
+        assert first.status_code == 200, first.text
+        legacy = {'id': 'legacy', 'text': '走近后打招呼', 'scope': historical}
+        rejected = await put('new-overlap', 1, original + [legacy])
+        assert rejected.status_code == 422, rejected.text
+        async with sessions.begin() as db:
+            record = await db.get(ChapterShootingExplanation, ('ch1', version))
+            record.preparation = {'notes': original + [legacy]}
+
+        preserved = await put('edit-with-old-overlap', 1, original + [legacy, {'id': 'all', 'text': '通用解释'}])
+        assert preserved.status_code == 200, preserved.text
+        notes = preserved.json()['data']['preparation']['notes']
+        assert [note['scope'] for note in notes] == [same, same, historical, None]
+        rejected = await put('new-range', 2, notes + [{'id': 'new', 'text': '另一动作', 'scope': new_overlap}])
+        assert rejected.status_code == 422, rejected.text
+        assert (await client.get(path, params={'source_version': version})).json()['data']['preparation']['notes'] == notes
 
 
 @pytest.mark.asyncio

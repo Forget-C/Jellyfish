@@ -26,7 +26,13 @@ class ControlledTextModel:
         arguments = json.loads(messages[1].content)
         if 'shooting_preparation' in arguments:
             payload = {'issues': [{'id': 'route', 'category': 'path', 'kind': 'optional',
-                'excerpt': '', 'problem': '路线可由生成设计', 'suggestion': '可由生成安排可行路线'}]}
+                'excerpt': '前厅点灯。', 'problem': '点灯动作可以补充说明', 'suggestion': '人物走到灯旁再点灯',
+                'proposed_change': 'add'}]}
+            notes = arguments['shooting_preparation']['notes']
+            if notes:
+                payload['issues'].append({'id': 'revise', 'category': 'position', 'kind': 'supported',
+                    'excerpt': '前厅点灯。', 'note_id': notes[0]['id'], 'problem': '明确点灯位置',
+                    'suggestion': '人物在前厅的灯旁点灯', 'proposed_change': 'update'})
         elif 'existing_assets' in arguments:
             assert arguments['script_text'] == '前厅点灯。'
             payload = {'objects': [{'kind': 'scene', 'name': '前厅', 'description': '灯光亮起', 'excerpt': '前厅'}]}

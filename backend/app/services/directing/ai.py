@@ -100,13 +100,13 @@ def generate_directing_result(kind: str, llm, args: dict):
         "directing_review_revision": "评估固定检查意见（review=null 时为用户主动修改，不得伪造问题）和整体 instruction。人工 request.edits 必须原样保留，不得覆盖；主动修改 changes.problem_keys 和 outcomes 可为空；用 summary 的 status/reason/choices 说明整体结果，status 为 planned、needs_choice、unresolved 或 unchanged。无实际变化用 unchanged，超出范围用 unresolved，必要选择用 needs_choice 和至少两项 choices，不能伪造检查问题。preview_text/candidate_identity/source_prompt_revision_id 留空，由服务端渲染。仅替换 revision_context.allowed_design_fields 或 allowed_unit_fields 列出的已有字段；before 必须逐字复制固定字段，input_identity 原样返回。不得增加 applicable_shot_ids 等不存在字段，不得增删身份或引用。sound.execution 只有 generated/postproduction/unknown。检查意见不是事实，不能通过删除正确设计掩盖编译器或供应商限制；此类问题返回 unresolved。原文事实优先；必要创作取舍返回 needs_choice 及至少两个简短选项，不猜测用户意图。每个 problem_keys 中的问题都必须有 outcome，即使用户没有填写方向，planned 必须关联实际修改。不能修复的问题明确解释。只输出必要修改，不能宣称新检查通过。Note 新来源使用 revision_context.task_identity。声音制作方式必须有 direction.sound_execution 明确选择才能拟落实，不能从自由文本猜测。",
         "directing_unit_design": "仅组织 organization_inputs 中当前镜头的既有六岗设计为完整执行单元方案；一次判断是否分段并生成一或多个单元。每个结果单元用 operation 明确保留 retain、局部修改 modify 或新建 create。保留项使用原身份与原字段且不改变原模型；局部修改只修改 source_unit_id 明确的目标并保持身份，哪怕仅更换目标模型也标记 modify；新增补拍使用新身份 create，来源为 source_unit_id，不能删除其他单元。省略 entry_state、exit_state 或 reference_requirements 表示保留已有要求，明确空值字符串或空列表才表示清空。按动作完整性、空间和真实模型能力组织。coverage.action_scope 必须取自适用设计的动作正文，可用分号或换行组合多个既有片段；不能创造新动作、情绪、镜头或摄影变化。覆盖选择只使用适用候选的稳定 ID；完整拍摄时 action_scope 明确包含当前镜头完整 visible_result，可选择同镜适用设计而无需重复其不同措辞；局部拍摄时，所选行的主要动作须完整包含在 action_scope 中；凝视、呼吸等已设计的辅助表演仍随明确选择保留，不必重复成新的故事动作。仅执行主要动作行内片段时不要勾选该整行动作，直接保留可追溯片段范围。不能改变 shot_id 或 target_model_id。分段理由进入 reason；entry_state、exit_state 只能摘录已有适用设计状态，可用分号组合，未知请留空并列缺项；时长必须符合 capabilities，未知时留空并列出缺项。参考需要只写 reference_requirements，每项只能选择以下待准备类别：" + "、".join(UNIT_DESIGN_REFERENCE_REQUIREMENTS) + "；不能附加动作、特写或其他创作文字，类别不代表已支持或已绑定。不能虚构真实文件、落幅、检查通过或素材采用。未安排的必要内容明确列入 missing；不要重写六岗设计。",
         "directing_shooting_check": (
-            "这是生成分镜前的整章拍摄检查，此时没有镜头或分镜设计。检查整章原文与已有拍摄解释，留意跨段落的状态延续。拍摄解释 scope 为适用的整章 Unicode 字符半开范围，空范围表示全章。"
-            "覆盖站位、行进路线、人物视线与摄影可见性的分别判断、镜外人物与物品状态连续性。"
-            "区分明确冲突conflict、影响动作或重要意图的关键待明确insufficient_basis、可选建议optional。"
-            "普通可行拍法留给生成；缺少距离路线本身不是问题，不编造已存在的站位、镜头或障碍。"
-            "正常出画不等于离场，省略过程不等于未发生，尊重有依据的跳时、倒叙和刻意遮挡。"
-            "拍摄解释只是参考，不是硬约束，不据此验收；原文语义问题单列source类别，不改写原文。"
-            "excerpt如非空必须逐字来自script_text；针对说明的疑点填写真实note_id；不得输出改写后的说明。"
+            "这是面向章节原文的整章拍摄检查。分析人物路线、具体动作及空间关系，保留原文意思。"
+            "解释是创作者的拍摄预期，供后续参考。不要安排镜头、机位、景别、剪辑或分镜验收条件。"
+            "原文有依据的解释标 supported。需要创作者判断的问题标 insufficient_basis，明确矛盾标 conflict，"
+            "未由原文确定的可选拍法标 optional。普通动作留白可以保留，不猜测作者意图。"
+            "有原文依据时 excerpt 逐字引用原文，无法定位时留空，由用户确认适用范围。针对已有解释填写真实 note_id。对可采用的新增解释填写 proposed_change=add，"
+            "对明确修改的已有解释填写 proposed_change=update 及目标 note_id，两者的 suggestion 都填写完整解释。"
+            "纯疑点不填 proposed_change；语义问题归 source，仅提示。每个目标最多提出一个修改。"
         ),
         "directing_divide": "将章节分成连续叙事场次。excerpt 必须逐字复制原文中连续的一段，不得改写，按原文顺序排列。不同地点或时间转换可分场，不按镜头分场。",
         "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行，并明确 participant_ids，引用本工作单的参与对象 ID；包括实际参与的静态车辆与手持物件。明确无对象用空列表，不得省略或使用 null，不因同一节拍或全场名单就把其他镜头对象加入。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
@@ -370,11 +370,22 @@ def generate_directing_result(kind: str, llm, args: dict):
                               require_destinations=args.get('destination_contract_version') == 1)
     if kind == 'directing_shooting_check':
         notes = {note['id'] for note in args['shooting_preparation']['notes']}
+        if len({issue.id for issue in result.issues}) != len(result.issues):
+            raise ValueError('拍摄检查建议身份重复')
+        updates = set()
         for issue in result.issues:
             if issue.excerpt and issue.excerpt not in args['script_text']:
                 raise ValueError('拍摄检查引用了原文不存在的内容')
             if issue.note_id is not None and issue.note_id not in notes:
                 raise ValueError('拍摄检查引用了不存在的拍摄解释')
+            if issue.proposed_change and (not issue.suggestion.strip() or issue.category == 'source'):
+                raise ValueError('可采用的拍摄建议必须提供完整解释')
+            if issue.kind == 'supported' and not issue.excerpt:
+                raise ValueError('原文可支持的解释必须引用依据')
+            if issue.proposed_change == 'update':
+                if not issue.note_id or issue.note_id in updates:
+                    raise ValueError('修改建议必须指向不同的已有解释')
+                updates.add(issue.note_id)
     if kind == "directing_divide":
         cursor = 0
         for scene in result.scenes:
