@@ -1,4 +1,4 @@
-import { openCanvasManagement, openCardList, openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList, openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
@@ -13,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-media-')
 const api = 'http://127.0.0.1:8275'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8275' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -35,9 +35,10 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  await page.goto('http://127.0.0.1:4275/projects/canvas-project/generation-canvas')
-  await openCanvasManagement(page)
-  await page.getByRole('button', { name: '新建画布', exact: true }).click()
+  await page.goto('http://127.0.0.1:4275/canvases')
+
+  await page.getByRole('button', { name: /新建画布/ }).click()
+  await page.waitForURL(/\/canvases\/[^/]+$/)
 
   await openCardList(page)
   await page.getByRole('button', { name: '图片卡', exact: true }).click()
@@ -87,8 +88,8 @@ try {
   release()
   await delay(250)
   assert.equal(await page.locator('[data-card-id]').count(), 0, 'late upload cannot revive removed card')
-  const library = (await (await fetch(`${api}/api/v1/studio/files?project_id=canvas-project`)).json()).data.items
-  assert.ok(library.some(file => file.name === 'late'), 'successful late upload remains in project library')
+  const library = (await (await fetch(`${api}/api/v1/studio/files`)).json()).data.items
+  assert.ok(library.some(file => file.name === 'late'), 'successful late upload remains in the file library')
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', join(output, 'voice.wav')])
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', join(output, 'clip.mp4')])
   for (const [label, filename, mimeType, preview] of [
@@ -111,7 +112,7 @@ try {
     }))
     await mediaCard.locator(preview).evaluate(async media => { await media.play(); media.pause() })
     await mediaCard.getByRole('button', { name: '添加媒体', exact: true }).click()
-    await page.getByRole('menuitem', { name: '从项目文件选择', exact: true }).click()
+    await page.getByRole('menuitem', { name: '从文件管理选择', exact: true }).click()
     await page.getByRole('button', { name: `选用 ${filename.split('.')[0]}`, exact: true }).click()
     assert.equal(await mediaCard.locator(preview).getAttribute('src'), src)
   }
@@ -121,7 +122,7 @@ try {
   await detail.locator('img[alt="图片预览"]').waitFor()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const canvasId = new URL(page.url()).searchParams.get('canvas')
+  const canvasId = new URL(page.url()).pathname.split('/').at(-1)
   const saved = (await (await fetch(`${base}/${canvasId}`)).json()).data
   const savedSources = saved.document.cards.map(card => ({ id: card.id, file_id: card.file_id, type: card.type }))
   await page.reload()

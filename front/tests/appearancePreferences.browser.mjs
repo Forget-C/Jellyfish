@@ -27,13 +27,16 @@ try {
     target.on('pageerror', error => errors.push(error.message))
     await target.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
     await target.route('**/api/**', route => {
-      const { pathname } = new URL(route.request().url())
+      const { pathname, searchParams } = new URL(route.request().url())
       const respond = data => route.fulfill({ json: { code: 200, data } })
       if (pathname.endsWith('/sequences/s1/canvases')) return respond({ sequence, canvases: sceneUnavailable ? [] : [{ id: 'storyboard-appearance', name: '分镜配色验收', can_open: true }] })
-      if (pathname.endsWith('/generation-canvases/p1/storyboard-appearance')) return respond({ id: 'storyboard-appearance', project_id: 'p1', revision: 0, document: { id: 'storyboard-appearance', project_id: 'p1', name: '分镜配色验收', cards: [], edges: [], input_order: {} } })
+      if (pathname.endsWith('/generation-canvases/free-appearance') || pathname.endsWith('/generation-canvases/storyboard-appearance')) {
+        const id = pathname.split('/').at(-1)
+        const project_id = searchParams.get('project_id') || ''
+        return respond({ id, project_id, revision: 0, document: { id, project_id, name: '画布配色验收', cards: [], edges: [], input_order: {} } })
+      }
       if (pathname.endsWith('/catalog')) return respond({ cards: [], connection_policies: [] })
       if (pathname.endsWith('/runtime')) return respond({ cursor: 0, runs: [], nodes: [] })
-      if (pathname.includes('/generation-canvases/')) return respond([])
       return respond({ items: [], next_cursor: null })
     })
   }
@@ -44,7 +47,7 @@ try {
   })
   const solidBackground = { backgroundColor: 'rgb(247, 248, 251)', backgroundImage: 'none', color: 'rgb(38, 50, 68)' }
   const canvases = [
-    ['/projects/p1/generation-canvas', '生成画布工作台'],
+    ['/canvases/free-appearance', '生成画布工作台'],
     ['/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=storyboard-appearance', '生成画布工作台'],
   ]
   const canvasColors = async (path, label) => {
@@ -60,7 +63,7 @@ try {
       const { backgroundColor, backgroundImage, color } = getComputedStyle(element)
       return { backgroundColor, backgroundImage, color }
     }
-    const colors = { canvas: await canvas.evaluate(readColors), overlay: await overlay.evaluate(readColors) }
+    const colors = { canvas: await canvas.locator('.generation-surface').evaluate(readColors), overlay: await overlay.evaluate(readColors) }
     await overlay.getByRole('button', { name: /Close|关闭/ }).click()
     await overlay.waitFor({ state: 'hidden' })
     return colors
@@ -128,7 +131,8 @@ try {
 
   for (const [index, [path, label]] of canvases.entries()) {
     const colors = await canvasColors(path, label)
-    assert.deepEqual(colors.canvas, solidBackground, 'default follows the current site appearance')
+    assert.equal(colors.canvas.backgroundColor, solidBackground.backgroundColor)
+    assert.doesNotMatch(colors.canvas.backgroundImage, /linear-gradient/, 'default follows the current site appearance')
     assert.notDeepEqual(colors.canvas, originalCanvasColors[index].canvas)
     assert.equal(colors.overlay.backgroundColor, 'rgb(237, 242, 248)', 'task portal follows light theme')
     const picker = page.getByRole('button', { name: '画布配色', exact: true })
@@ -154,7 +158,7 @@ try {
     assert.equal(await page.getByRole('menuitemradio', { name: '雾蓝微渐变', exact: true }).getAttribute('aria-checked'), 'true')
     await page.keyboard.press('Escape')
     await choose('雾蓝纯色')
-    assert.deepEqual((await canvasColors(path, label)).canvas, solidBackground)
+    assert.deepEqual((await canvasColors(path, label)).canvas, colors.canvas)
     await page.setViewportSize({ width: 390, height: 844 })
     await picker.press('Enter')
     const palette = page.getByRole('menu')

@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-graph-')
 const api = 'http://127.0.0.1:8274'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_graph_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8274' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -43,7 +43,7 @@ try {
   ] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4274/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4274/canvases/${canvas.id}`)
   const card = id => page.locator(`[data-card-id="${id}"]`)
   await openCanvasCard(page, 'a')
   await page.getByRole('textbox', { name: '文本内容', exact: true }).waitFor()
@@ -145,7 +145,7 @@ try {
   ] }
   const modelSave = await fetch(`${base}/${second.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed-model', expected_revision: 0, document: modelDoc }) })
   assert.ok(modelSave.ok, await modelSave.text())
-  await page.goto(`http://127.0.0.1:4274/projects/canvas-project?tab=generation&canvas=${second.id}`)
+  await page.goto(`http://127.0.0.1:4274/canvases/${second.id}`)
   await card('v').waitFor()
   await card('v').press('Enter')
   await page.getByRole('textbox', { name: '模型正文', exact: true }).waitFor()

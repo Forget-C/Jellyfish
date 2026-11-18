@@ -1,3 +1,4 @@
+import { prepareCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8497'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8497' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -41,7 +42,7 @@ try {
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seed.ok,await seed.text())
   const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const value=await read();if(predicate(value))return value;await delay(100)}throw Error('save did not arrive')}
-  await page.goto(`http://127.0.0.1:4497/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4497/canvases/${canvas.id}`)
   const source=page.locator('[data-card-id="source"]')
   const captureSource=async name=>{const b=await source.boundingBox();await page.screenshot({path:join(output,name),clip:{x:Math.max(0,b.x-24),y:Math.max(0,b.y-4),width:b.width+48,height:b.height+8},animations:'disabled'})}
   await source.waitFor()
@@ -99,7 +100,7 @@ try {
     await page.setViewportSize({width,height});await source.press('Enter');await detail.waitFor()
     await page.screenshot({path:join(output,`import-full-${width}.png`),animations:'disabled'})
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
-    await source.hover();await page.screenshot({path:join(output,`plus-full-${width}.png`),animations:'disabled'})
+    await prepareCanvasCard(page, 'source');await source.hover();await page.screenshot({path:join(output,`plus-full-${width}.png`),animations:'disabled'})
   }
   const observer=await context.newPage()
   await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()

@@ -133,6 +133,7 @@ export async function openCanvasManagement(page) {
   const trigger = page.getByRole('button', { name: '画布管理', exact: true })
   if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
 }
+
 export async function openCardList(page, category = '基础卡') {
   const details = page.locator('.wb-details:visible')
   if (await details.count() && await details.getAttribute('aria-modal') === 'true') await closeCanvasDetails(page)
@@ -156,17 +157,9 @@ export async function openSummaryMenu(summary) {
 }
 
 export async function selectCanvasByName(page, name) {
-  await openCanvasManagement(page)
-  const chooser = page.getByRole('combobox', { name: '选择画布', exact: true })
-  await chooser.press('ArrowDown')
-  for (let index = 0; index < 30; index++) {
-    const active = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-active')
-    if (await active.count() && (await active.innerText()).trim() === name) { await chooser.press('Enter'); return }
-    await chooser.press('ArrowDown')
-  }
-  throw new Error(`画布选项不可达：${name}`)
+  await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
+  await page.getByRole('link', { name: new RegExp(name) }).click()
 }
-
 /** Older behavior journeys explicitly open the now on-demand model management surfaces. */
 export async function openModelInspection(page) {
   const editor = page.locator('.wb-details:visible')

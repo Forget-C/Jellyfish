@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8633', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8633', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8633' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -44,7 +44,7 @@ try {
   const files=await Promise.all(['first.png','second.png','third.png'].map(upload))
   const results=[]
   const fixture=async(name,{refs=[{id:'ref',type:'reference.character',name:'张三',angle:'正面',image_binding:{file_id:files[0]}}],extra=[],modelType='model.image',bindings=[],segments=[],config={}}={})=>{
-    const canvas=await request('/api/v1/studio/generation-canvases/canvas-project','POST',{name}),endpoint=`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`
+    const canvas=await request('/api/v1/studio/generation-canvases','POST',{name}),endpoint=`/api/v1/studio/generation-canvases/${canvas.id}`
     const referenceImages=refs.filter(ref=>ref.image_binding).map(ref=>({id:ref.id+'-image',type:'content.image',file_id:ref.image_binding.file_id}))
     const fixedRefs=refs.map(ref=>ref.image_binding?{...ref,image_binding:{...ref.image_binding,source:{canvas_id:canvas.id,card_id:ref.id+'-image',port_id:'image',position:0}}}:ref)
     const cards=[...fixedRefs,{id:'plain',type:'content.image',file_id:files[1]},...extra,{id:'model',type:modelType,model_id:modelType==='model.image'?'canvas-image-model':'canvas-subject-model',prompt:{segments},input_bindings:bindings.map(binding=>({...binding,source:{...binding.source,canvas_id:canvas.id}})),config}]
@@ -53,8 +53,8 @@ try {
     cards.push(...referenceImages)
     await request(endpoint,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:[...edges,...referenceEdges],input_order:{model:{[modelType==='model.video'?'first_frame':'image']:edges.map(edge=>edge.id)},...Object.fromEntries(referenceEdges.map(edge=>[edge.target_card,{image_source:[edge.id]}]))}}})
     const context=await browser.newContext({viewport:{width:1920,height:1000},reducedMotion:'reduce'});page=await context.newPage();page.setDefaultTimeout(8000)
-    await page.addInitScript(({key,ids})=>{window.__ENV={BACKEND_URL:location.origin};if(!sessionStorage.getItem(key)){sessionStorage.setItem(key,'seeded');localStorage.setItem(key,JSON.stringify({schema:1,positions:Object.fromEntries(ids.map((id,i)=>[id,id==='model'?{x:400,y:250}:{x:1200+i*350,y:250}])),sizes:{},transform:{x:0,y:0,scale:.8}}))}},{key:`jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`,ids:cards.map(card=>card.id)})
-    await page.goto(`http://127.0.0.1:4633/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+    await page.addInitScript(({key,ids})=>{window.__ENV={BACKEND_URL:location.origin};if(!sessionStorage.getItem(key)){sessionStorage.setItem(key,'seeded');localStorage.setItem(key,JSON.stringify({schema:1,positions:Object.fromEntries(ids.map((id,i)=>[id,id==='model'?{x:400,y:250}:{x:1200+i*350,y:250}])),sizes:{},transform:{x:0,y:0,scale:.8}}))}},{key:`jellyfish:generation-layout::${canvas.id}:view:canvas`,ids:cards.map(card=>card.id)})
+    await page.goto(`http://127.0.0.1:4633/canvases/${canvas.id}`)
     const card=page.locator('[data-card-id="model"]');await card.press('Enter')
     const editor=page.locator('.generation-card-editor:visible'),input=editor.getByRole('textbox',{name:'模型正文',exact:true});await input.waitFor()
     await editor.locator('.generation-material-reference > small').filter({hasText:/^@图片\d+$/}).first().waitFor();await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
@@ -93,17 +93,17 @@ try {
   await probe('candidate refresh keeps highlighted source and clears unavailable selection without sending',async()=>{
     const f=await fixture('候选身份刷新')
     let unavailable=false
-    await page.route('**/cards/model/outputs',async route=>{
+    await page.route('**/cards/model/outputs?project_id=*',async route=>{
       const response=await route.fetch(),json=await response.json()
       json.data.candidates.reverse()
       if(unavailable) for(const item of json.data.candidates) if(item.source.card_id==='ref') item.available=false
       await route.fulfill({response,json})
     })
-    let refreshed=page.waitForResponse(r=>r.url().endsWith('/cards/model/outputs')&&r.ok())
+    let refreshed=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/cards/model/outputs')&&r.ok())
     await f.input.fill('@');await refreshed;await page.getByRole('listbox',{name:'引用候选',exact:true}).waitFor()
     const list=page.getByRole('listbox',{name:'引用候选',exact:true})
     assert.equal(await list.locator('[aria-selected="true"]').getAttribute('aria-label'),'@张三')
-    unavailable=true;refreshed=page.waitForResponse(r=>r.url().endsWith('/cards/model/outputs')&&r.ok())
+    unavailable=true;refreshed=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/cards/model/outputs')&&r.ok())
     await f.input.press('End');await f.input.press('@');await refreshed;await delay(150)
     assert.equal(await list.locator('[aria-selected="true"]').count(),0)
     await f.input.press('Enter');assert.equal(await f.input.innerText(),'@@')
@@ -160,7 +160,7 @@ try {
     assert.equal(compiled.mapping.find(item=>item.token).token,'@图片1')
     assert.equal(compiled.mapping.find(item=>item.token).media_position,1)
     assert.equal(compiled.media[0].source.card_id,'ref')
-    const accepted=page.waitForResponse(r=>r.url().endsWith('/runs')&&r.request().method()==='POST')
+    const accepted=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/runs')&&r.request().method()==='POST')
     await preview.getByRole('button',{name:'确认执行',exact:true}).click()
     const runId=(await(await accepted).json()).data.run_id
     await saved(async()=>(await request(f.endpoint+'/runtime')).runs.some(run=>run.id===runId&&run.nodes.every(node=>node.status==='succeeded')))
@@ -192,7 +192,7 @@ try {
     const f=await fixture('组合输入候选更新')
     let release,started
     const gate=new Promise(resolve=>{release=resolve}),pending=new Promise(resolve=>{started=resolve})
-    await page.route('**/cards/model/outputs',async route=>{
+    await page.route('**/cards/model/outputs?project_id=*',async route=>{
       const response=await route.fetch(),json=await response.json();started();await gate
       for(const item of json.data.candidates) if(item.source.card_id==='ref') item.available=false
       await route.fulfill({response,json})
@@ -202,7 +202,7 @@ try {
     await f.input.dispatchEvent('compositionstart',{data:''})
     const caret=()=>f.input.evaluate(element=>{const s=getSelection();return {text:element.textContent,offset:s.anchorOffset,focus:s.focusOffset}})
     const before=await caret(),snapshot=await f.read()
-    const response=page.waitForResponse(r=>r.url().endsWith('/cards/model/outputs')&&r.ok());release();await response;await delay(150)
+    const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/cards/model/outputs')&&r.ok());release();await response;await delay(150)
     assert.equal(await list.getByRole('option',{name:'@张三',exact:true}).getAttribute('aria-selected'),'true')
     assert.equal(await list.getByRole('option',{name:'@张三',exact:true}).isDisabled(),false)
     assert.deepEqual(await caret(),before)
@@ -234,9 +234,9 @@ try {
   await probe('IME delimiter confirmation uses refreshed availability instead of frozen candidates',async()=>{
     const f=await fixture('组合输入结束确认')
     let release,started;const gate=new Promise(resolve=>{release=resolve}),pending=new Promise(resolve=>{started=resolve})
-    await page.route('**/cards/model/outputs',async route=>{const response=await route.fetch(),json=await response.json();started();await gate;for(const item of json.data.candidates) if(item.source.card_id==='ref') item.available=false;await route.fulfill({response,json})})
+    await page.route('**/cards/model/outputs?project_id=*',async route=>{const response=await route.fetch(),json=await response.json();started();await gate;for(const item of json.data.candidates) if(item.source.card_id==='ref') item.available=false;await route.fulfill({response,json})})
     await f.input.dispatchEvent('compositionstart',{data:''});await f.input.fill('@图片1 ');await pending
-    const refreshed=page.waitForResponse(r=>r.url().endsWith('/cards/model/outputs')&&r.ok());release();await refreshed;await delay(150)
+    const refreshed=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/cards/model/outputs')&&r.ok());release();await refreshed;await delay(150)
     await f.input.dispatchEvent('compositionend',{data:' '});await delay(150)
     assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
     assert.equal(await f.input.innerText(),'@图片1 ')
@@ -245,8 +245,8 @@ try {
   })
   await probe('a highlighted candidate which stops matching never transfers Enter to another source',async()=>{
     const f=await fixture('候选不再匹配')
-    await page.route('**/cards/model/outputs',async route=>{const response=await route.fetch(),json=await response.json();for(const item of json.data.candidates) if(item.source.card_id==='ref') item.token='@图片9';await route.fulfill({response,json})})
-    const refreshed=page.waitForResponse(async r=>r.url().endsWith('/cards/model/outputs')&&r.ok()&&(await r.json()).data.candidates.some(item=>item.token==='@图片9'))
+    await page.route('**/cards/model/outputs?project_id=*',async route=>{const response=await route.fetch(),json=await response.json();for(const item of json.data.candidates) if(item.source.card_id==='ref') item.token='@图片9';await route.fulfill({response,json})})
+    const refreshed=page.waitForResponse(async r=>new URL(r.url()).pathname.endsWith('/cards/model/outputs')&&r.ok()&&(await r.json()).data.candidates.some(item=>item.token==='@图片9'))
     await f.input.fill('@图片1');await refreshed;await delay(150)
     const list=page.getByRole('listbox',{name:'引用候选',exact:true})
     await list.getByText('没有匹配候选，将保留为普通文本',{exact:true}).waitFor()

@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-named-')
-const api = 'http://127.0.0.1:8621', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8621', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8621' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,7 +35,7 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const json=async(path,method='GET',body)=>{const response=await fetch(api+path,{method,headers:{'Content-Type':'application/json'},body:body&&JSON.stringify(body)});assert.ok(response.ok,await response.clone().text());return(await response.json()).data}
-  const canvas=await json('/api/v1/studio/generation-canvases/canvas-project','POST',{name:'大图完整缩放'})
+  const canvas=await json('/api/v1/studio/generation-canvases','POST',{name:'大图完整缩放'})
   const cards=[],modelOutputs={}
   for(const [shape,size] of [['landscape','3000x2000'],['portrait','2000x3000'],['panorama','6000x300']]){
     const file=join(output,shape+'.png')
@@ -45,8 +45,8 @@ try {
     modelOutputs['model-'+shape]=[{source:{canvas_id:canvas.id,card_id:'model-'+shape,port_id:'image',position:0},modality:'image',available:true,basis_current:true,file_id:fileId}]
     cards.push({id:'model-'+shape,type:'model.image',model_id:null},{id:'image-'+shape,type:'content.image',file_id:fileId},{id:'reference-'+shape,type:'reference.place',name:shape,angle:'正面',image_binding:{file_id:fileId,source:{canvas_id:canvas.id,card_id:'image-'+shape,port_id:'image',position:0}}})
   }
-  await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:cards.filter(card=>card.type==='reference.place').map(card=>({id:card.id,source_card:card.id.replace('reference-','image-'),source_port:'image',target_card:card.id,target_port:'image_source'})),input_order:Object.fromEntries(cards.filter(card=>card.type==='reference.place').map(card=>[card.id,{image_source:[card.id]}]))}})
-  await page.route('**/runtime',route=>route.fulfill({json:{code:200,message:'success',data:{cursor:0,runs:[],current_outputs:modelOutputs},meta:null}}))
+  await json(`/api/v1/studio/generation-canvases/${canvas.id}`,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:cards.filter(card=>card.type==='reference.place').map(card=>({id:card.id,source_card:card.id.replace('reference-','image-'),source_port:'image',target_card:card.id,target_port:'image_source'})),input_order:Object.fromEntries(cards.filter(card=>card.type==='reference.place').map(card=>[card.id,{image_source:[card.id]}]))}})
+  await page.route('**/runtime?project_id=*',route=>route.fulfill({json:{code:200,message:'success',data:{cursor:0,runs:[],current_outputs:modelOutputs},meta:null}}))
   const failures=[],measurements=[]
   const editor=page.locator('.generation-card-editor:visible')
   const close=async()=>{for(let i=0;i<3&&await editor.isVisible();i++){await page.keyboard.press('Escape');await delay(100)}assert.equal(await editor.isVisible(),false)}
@@ -58,7 +58,7 @@ try {
     if(info.fit!=='contain')failures.push(label+': image is cropped ('+info.fit+')')
     if(info.rect.width>bounds.width+1||info.rect.height>bounds.height+1)failures.push(label+': intrinsic dimensions overflow the preview')
   }
-  const url=`http://127.0.0.1:4621/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  const url=`http://127.0.0.1:4621/canvases/${canvas.id}`
   await page.goto(url)
   for(const [width,height]of[[1440,960],[390,844]]){
     await close();await page.setViewportSize({width,height});await page.getByRole('button',{name:'适应全部',exact:true}).click()

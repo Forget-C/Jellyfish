@@ -1,4 +1,5 @@
-import { closeCanvasDetails, openCanvasManagement, openCardList, openCanvasCard, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
+import { closeCanvasDetails, openCardList, openCanvasCard, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8271'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8271' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -23,8 +24,8 @@ const cleanup = browserCleanup(() => ({ browser, server, backend }))
 
 /** 通过实际保存、恢复和历史入口观察卡面，不从尺寸计算器生成期望值。 */
 async function verifyDerivedCardHeight() {
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '设计卡高度与恢复' }) })).json()).data
-  const endpoint = `${base}/${canvas.id}`
+  const canvas = await createStoryboardCanvas(base, '设计卡高度与恢复')
+  const endpoint = storyboardCanvasApi(base, canvas.id)
   const read = async () => (await (await fetch(endpoint)).json()).data
   const save = (revision, document) => fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: revision, document }) })
@@ -35,9 +36,9 @@ async function verifyDerivedCardHeight() {
     { id: 'source', type: 'content.text', text: '镜头内有一把钥匙' },
   ], edges: [{ id: 'basis', source_card: 'source', source_port: 'text', target_card: 'criterion', target_port: 'text' }],
   input_order: { criterion: { text: ['basis'] } }, groups: [{ id: 'requirements', name: '验收依据', card_ids: ['source', 'criterion'] }] }
-  const seeded = await save(canvas.revision, document)
+  const seeded = await save(canvas.revision, withFixedSource(canvas, document))
   assert.ok(seeded.ok, await seeded.text())
-  const url = `http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  const url = `http://127.0.0.1:4271${storyboardCanvasPath(canvas)}`
   const open = async (viewport, legacy) => {
     const page = await browser.newPage({ viewport })
     page.setDefaultTimeout(12000)
@@ -131,7 +132,7 @@ async function verifyDerivedCardHeight() {
   await undo.click()
   assert.deepEqual(await placement(), originalPlacement)
 
-  const routeURL = `**/generation-canvases/canvas-project/${canvas.id}`
+  const routeURL = `**/generation-canvases/${canvas.id}?project_id=canvas-project`
   let release, arrived, calls = 0
   const gate = new Promise(resolve => { release = resolve })
   const inFlight = new Promise(resolve => { arrived = resolve })
@@ -202,11 +203,12 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
   const page = await context.newPage()
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  await page.goto('http://127.0.0.1:4271/projects/canvas-project?tab=generation')
-  await openCanvasManagement(page)
-  await page.getByRole('button', { name: '新建画布', exact: true }).click()
+  await page.goto('http://127.0.0.1:4271/canvases')
+
+  await page.getByRole('button', { name: /新建画布/ }).click()
+  await page.waitForURL(/\/canvases\/[^/]+$/)
   const name = page.getByRole('textbox', { name: '画布名称' })
-  await openCanvasManagement(page)
+
   await name.fill('第一张独立画布 A')
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
@@ -214,39 +216,41 @@ try {
   // The editor remains usable while snapshot A is in flight; response A cannot erase B.
   let releaseSave
   const saveGate = new Promise(resolve => { releaseSave = resolve })
-  await page.route('**/generation-canvases/canvas-project/*', async route => {
+  await page.route('**/generation-canvases/*', async route => {
     if (route.request().method() !== 'PUT') return route.continue()
     await saveGate
     await route.continue()
   })
   await page.getByRole('button', { name: '保存画布' }).click()
-  await openCanvasManagement(page)
+
   await page.getByRole('textbox', { name: '画布名称' }).fill('第一张独立画布 B')
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('保存中继续输入 B')
   releaseSave()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
-  await page.unroute('**/generation-canvases/canvas-project/*')
+  await page.unroute('**/generation-canvases/*')
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const firstId = new URL(page.url()).searchParams.get('canvas')
+  const firstId = new URL(page.url()).pathname.split('/').at(-1)
   const first = (await (await fetch(`${base}/${firstId}`)).json()).data
   assert.equal(first.revision, 2)
   assert.equal(first.document.cards[0].text, '保存中继续输入 B')
-  await openCanvasManagement(page)
-  await page.getByRole('button', { name: '新建画布', exact: true }).click()
+
+  await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
+  await page.getByRole('button', { name: /新建画布/ }).click()
+  await page.waitForURL(/\/canvases\/[^/]+$/)
   await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]')?.value === '未命名画布')
-  await openCanvasManagement(page)
+
   await name.fill('第二张独立画布')
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const secondId = new URL(page.url()).searchParams.get('canvas')
+  const secondId = new URL(page.url()).pathname.split('/').at(-1)
   assert.notEqual(firstId, secondId)
-  await openCanvasManagement(page)
+
   await selectCanvasByName(page, '第一张独立画布 B')
   await openCanvasCard(page, first.document.cards[0].id)
   await page.reload()
-  await openCanvasManagement(page)
+
   await name.waitFor()
   assert.equal(await name.inputValue(), '第一张独立画布 B')
   await name.press('Escape')
@@ -258,7 +262,7 @@ try {
   assert.equal(second.document.name, '第二张独立画布')
   // Unknown reply: the server committed A, the client kept B and the original request.
   let unknownRequest
-  await page.route(`**/generation-canvases/canvas-project/${firstId}`, async route => {
+  await page.route(`**/generation-canvases/${firstId}?project_id=`, async route => {
     if (route.request().method() !== 'PUT') return route.continue()
     unknownRequest = route.request().postDataJSON()
     await route.fetch()
@@ -268,7 +272,7 @@ try {
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('alert').getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('回执之后输入 B')
-  await page.unroute(`**/generation-canvases/canvas-project/${firstId}`)
+  await page.unroute(`**/generation-canvases/${firstId}?project_id=`)
   page.once('dialog', dialog => dialog.accept())
   await page.reload()
   await page.getByRole('button', { name: '恢复本地内容' }).click()
@@ -298,14 +302,14 @@ try {
   await other.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   await other.goto(page.url())
   await other.getByText('此画布当前只读', { exact: true }).waitFor()
-  await openCanvasManagement(other)
+
   assert.equal(await other.getByRole('textbox', { name: '画布名称' }).isDisabled(), true)
   await other.getByRole('button', { name: '取得编辑权' }).click()
-  await openCanvasManagement(other)
+
   await other.getByRole('textbox', { name: '画布名称' }).waitFor()
   await other.waitForFunction(() => document.querySelector('[aria-label="画布名称"]') && !document.querySelector('[aria-label="画布名称"]').disabled)
   await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]').disabled)
-  await page.goto(`http://127.0.0.1:4271/projects/canvas-project?tab=generation&canvas=${secondId}`)
+  await page.goto(`http://127.0.0.1:4271/canvases/${secondId}`)
   await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]') && !document.querySelector('[aria-label="画布名称"]').disabled)
   await openCanvasCard(page, (await (await fetch(`${base}/${secondId}`)).json()).data.document.cards[0].id)
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('五秒自动保存')
@@ -319,9 +323,9 @@ try {
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('离开前保护保存')
-  await openCanvasManagement(page)
+
   await selectCanvasByName(page, '第一张独立画布 B')
-  await page.waitForURL(url => url.searchParams.get('canvas') === firstId)
+  await page.waitForURL(url => url.pathname === `/canvases/${firstId}`)
   assert.equal((await (await fetch(`${base}/${secondId}`)).json()).data.document.cards[0].text, '离开前保护保存')
   await page.screenshot({ path: join(output, 'generation-canvas.png'), fullPage: true })
   await verifyDerivedCardHeight()

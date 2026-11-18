@@ -11,7 +11,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8462'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8462' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -32,7 +32,7 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await page.addInitScript(() => { localStorage.setItem('jellyfish_canvas_appearance', 'dark');  window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas=(await(await fetch(base,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选高亮与组织'})})).json()).data
   const source={canvas_id:canvas.id,card_id:'source',port_id:'text',position:0}
   const document={...canvas.document,cards:[
@@ -46,7 +46,7 @@ try {
   const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seeded.ok,await seeded.text())
   const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
-  await page.goto(`http://127.0.0.1:4462/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4462/canvases/${canvas.id}`)
   const card=id=>page.locator(`[data-card-id="${id}"]`)
   await card('source').waitFor()
   const modifier=await page.evaluate(()=>navigator.platform.includes('Mac')?'Meta':'Control')

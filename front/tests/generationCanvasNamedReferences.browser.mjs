@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-named-')
-const api = 'http://127.0.0.1:8281', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8281', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8281' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -34,13 +34,13 @@ try {
   page = await context.newPage()
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await page.addInitScript(() => { localStorage.setItem('jellyfish_canvas_appearance', 'dark');  window.__ENV = { BACKEND_URL: window.location.origin } })
   const json = async (path, method = 'GET', body) => {
     const response = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
     assert.ok(response.ok, await response.clone().text()); return (await response.json()).data
   }
-  const canvas=await json('/api/v1/studio/generation-canvases/canvas-project','POST',{name:'参考来源统一'})
-  const endpoint=`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`
+  const canvas=await json('/api/v1/studio/generation-canvases','POST',{name:'参考来源统一'})
+  const endpoint=`/api/v1/studio/generation-canvases/${canvas.id}`
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')
   const upload=async name=>{const form=new FormData();form.set('file',new Blob([Buffer.concat([png,Buffer.from(name)])],{type:'image/png'}),name);form.set('project_id','canvas-project');form.set('usage_kind','generation_upload');const response=await fetch(api+'/api/v1/studio/files/upload',{method:'POST',body:form});assert.ok(response.ok);return(await response.json()).data.id}
   const image=await upload('reference-main.png'),secondImage=await upload('reference-side.png')
@@ -65,7 +65,7 @@ try {
   let produced
   for(let i=0;i<100;i++){const state=await json(endpoint+'/runtime');if(state.runs.some(run=>run.id===accepted.run_id&&run.nodes.every(node=>node.status==='succeeded'))){produced=state.current_outputs.model[1];break}await delay(100)}
   assert.ok(produced,'real model result is available, but cannot be newly selected by references')
-  execFileSync(join(root,'../backend/.venv/bin/python'),['-c',`
+  execFileSync(process.env.CANVAS_TEST_PYTHON || join(root,'../backend/.venv/bin/python'),['-c',`
 import json,sqlite3,sys
 with sqlite3.connect(sys.argv[1]) as db:
     document=json.loads(db.execute('SELECT document FROM generation_canvases WHERE id=?',(sys.argv[2],)).fetchone()[0])
@@ -79,10 +79,10 @@ with sqlite3.connect(sys.argv[1]) as db:
         document['input_order'].setdefault(target,{})['image_source']=[key]
     db.execute('UPDATE generation_canvases SET document=? WHERE id=?',(json.dumps(document),sys.argv[2]))
 `,join(output,'browser.sqlite'),canvas.id,image,secondImage,JSON.stringify({file_id:produced.file_id,source:produced.source,result_set_id:produced.result_set_id})])
-  const layoutKey=`jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
+  const layoutKey=`jellyfish:generation-layout::${canvas.id}:view:canvas`
   const positions=Object.fromEntries(cards.map((card,index)=>[card.id,{x:100+(index%4)*380,y:180+Math.floor(index/4)*320}]))
   await page.addInitScript(({layoutKey,positions})=>{if(!sessionStorage.getItem('seeded')){localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions,sizes:{},transform:{x:0,y:0,scale:.8},manuallyPlaced:['character']}));sessionStorage.setItem('seeded','1')}},{layoutKey,positions})
-  await page.goto(`http://127.0.0.1:4281/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4281/canvases/${canvas.id}`)
   const editor=page.locator('.wb-details:visible'),read=()=>json(endpoint)
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('save not observed')}
   const open=async id=>{await closeCanvasDetails(page);await page.getByRole('button',{name:'适应全部',exact:true}).click();await openCanvasCard(page,id)}
@@ -146,7 +146,7 @@ with sqlite3.connect(sys.argv[1]) as db:
   const thirdFile=state.document.cards.find(card=>card.id==='third').file_id
   await open('character');await choose('third');await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.file_id===thirdFile)
   await open('third');await editor.getByRole('button',{name:'选择素材',exact:true}).click()
-  const library=page.getByRole('dialog',{name:'项目文件库',exact:true});await library.getByRole('button',{name:'选用 reference-side',exact:true}).click();await library.waitFor({state:'hidden'})
+  const library=page.getByRole('dialog',{name:'文件管理',exact:true});await library.getByRole('button',{name:'选用 reference-side',exact:true}).click();await library.waitFor({state:'hidden'})
   state=await poll(state=>state.document.cards.find(card=>card.id==='third').file_id===secondImage)
   assert.equal(state.document.cards.find(card=>card.id==='character').image_binding.file_id,thirdFile,'changing the picture card keeps the adopted fixed file')
   await open('character');await pictureSelect.press('ArrowDown');await options.nth(2).click()
