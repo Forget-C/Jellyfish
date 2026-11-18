@@ -27,7 +27,7 @@ from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.file_cleanup import FileCleaner
-from app.services.directing.ai import DirectingOutputError
+from app.services.directing.errors import DirectingOutputError
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
 from app.services.directing.storyboard_prompt import prompt_units

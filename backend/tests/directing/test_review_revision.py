@@ -363,7 +363,8 @@ def test_revision_ai_pipeline_validates_output_retries_schema_and_propagates_fai
     import json
     from types import SimpleNamespace
     from unittest.mock import Mock
-    from app.services.directing.ai import DirectingOutputError, generate_directing_result
+    from app.services.directing.ai import generate_directing_result
+    from app.services.directing.errors import DirectingOutputError
 
     design = design_sample()
     context = {'design': design, 'unit': plan_sample('design1')['units'][0], 'input_identity': 'frozen', 'directions': [], 'problem_keys': ['problem']}

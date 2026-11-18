@@ -1,17 +1,11 @@
-"""导演设计历史候选与分镜任务诊断。"""
+"""旧场次版本的导演设计候选。"""
 
 from pydantic import Field
 
 from app.core.contracts.directing.common import Contract
 from app.core.contracts.directing.design_scope import DesignScopeIssue
+from app.core.contracts.directing.diagnostics import DirectingOutputDiagnostics
 from app.core.contracts.directing.scene_version import EditableSceneDesign
-
-
-class SceneDesignDiagnostics(Contract):
-    """失败输出仅供核对，不属于可应用的类型化设计。"""
-
-    output: str
-    issues: list[str]
 
 
 class SceneDesignCandidate(Contract):
@@ -24,7 +18,7 @@ class SceneDesignCandidate(Contract):
     design: EditableSceneDesign
     issues: list[DesignScopeIssue]
     attempt: int = Field(ge=1, le=2)
-    diagnostics: SceneDesignDiagnostics | None = None
+    diagnostics: DirectingOutputDiagnostics | None = None
 
 
 def parse_scene_design_candidate(value: dict, run_args: dict) -> SceneDesignCandidate | None:

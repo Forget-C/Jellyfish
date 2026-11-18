@@ -11,7 +11,6 @@ from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
-from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
 from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.scene_objects import SceneObjectExtraction
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardOrganization
@@ -24,6 +23,7 @@ from app.models.directing import DirectingRevision, Sequence
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+from app.services.directing.errors import DirectingOutputError
 from app.services.directing.scene_objects import OBJECT_EXTRACTION_KIND, object_candidates
 from app.services.directing.workspace import WorkspaceService
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -41,16 +41,6 @@ RESULT_CONTRACTS = {
     'directing_review': ReviewPacket,
     'directing_review_revision': ReviewRevisionCandidate,
 }
-
-
-class DirectingOutputError(ValueError):
-    """可显示的错误摘要；模型输出仅保存在任务内部诊断中。"""
-
-    def __init__(self, message: str, diagnostics: SceneDesignDiagnostics | None = None):
-        """模型主动返回的工作单另存只读诊断，不混入错误摘要或成功结果。"""
-        super().__init__(message)
-        self.diagnostics = diagnostics
-        self.storyboard_structure: dict | None = None
 
 
 def generate_directing_result(kind: str, llm, args: dict):

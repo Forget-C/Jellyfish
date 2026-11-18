@@ -65,7 +65,8 @@ def repair_storyboard(llm, inputs: dict) -> StoryboardRepairResult:
         '优先保留原文事实、人工决定与共享空间安排，选择影响字段最少的方案；修正朝向后核对持物可见性。不同解会明显改变视觉意图且无法判断时不要擅自取舍。'
         '不能确定如何修正时省略该项；无安全修改时返回空 edits。只返回符合结构的 JSON：'
     )
-    return invoke_storyboard_json(llm, inputs, StoryboardRepairResult, instruction, '分镜修正返回无效，原草案已保留')
+    return invoke_storyboard_json(llm, inputs, StoryboardRepairResult, instruction,
+                                  '分镜修正返回无效，原草案已保留', response_label='修正响应')
 
 
 def apply_repair(draft: SceneStoryboard, repair: StoryboardRepairResult, allowed: dict[tuple, RepairField]) -> list[str]:
