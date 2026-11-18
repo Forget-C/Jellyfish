@@ -1,5 +1,5 @@
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
-import { openCanvasManagement, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -13,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8271'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8271' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -38,7 +38,7 @@ try {
   const create = async name => (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })).json()).data
   const read = async id => (await (await fetch(`${base}/${id}`)).json()).data
   const canvas = await create('持续编辑')
-  await page.goto(`http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4271/canvases/${canvas.id}`)
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
   const text = page.getByRole('textbox', { name: '文本内容', exact: true })
@@ -56,15 +56,21 @@ try {
   assert.equal((await read(canvas.id)).revision, settled.revision, 'idle canvas sends no redundant saves')
   // Invalid input stays visible, and an unchanged rejected document is not retried each tick.
   let rejected = 0
+  const savePath = url => url.pathname === `/api/v1/studio/generation-canvases/${canvas.id}`
+  await page.route(savePath, route => route.request().method() === 'PUT' && route.request().postDataJSON().document.cards.some(card => card.text === '服务端拒绝的正文')
+    ? route.fulfill({ status: 422, json: { code: 422, message: '受控保存失败' } })
+    : route.continue())
   page.on('response', response => { if (response.request().method() === 'PUT' && response.status() === 422) rejected++ })
   const invalid = page.waitForResponse(response => response.request().method() === 'PUT' && response.status() === 422)
-  await openCanvasManagement(page)
-  await page.getByRole('textbox', { name: '画布名称' }).fill('')
+
+  await text.fill('服务端拒绝的正文')
   await invalid
   await delay(2300)
   assert.equal(rejected, 1, 'same invalid document is attempted only once automatically')
-  assert.equal(await text.inputValue(), '持续输入 6')
-  await openCanvasManagement(page)
+  await page.unroute(savePath)
+  assert.equal(await text.inputValue(), '服务端拒绝的正文')
+  await text.fill('持续输入 6')
+
   await page.getByRole('textbox', { name: '画布名称' }).fill('已纠正')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   // A delayed save keeps one network request active and coalesces B/C into latest C.
@@ -73,7 +79,7 @@ try {
   const gate = new Promise(resolve => { release = resolve })
   const firstArrived = new Promise(resolve => { arrived = resolve })
   let active = 0, maximum = 0
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}`, async route => {
+  await page.route(`**/generation-canvases/${canvas.id}?project_id=`, async route => {
     if (route.request().method() !== 'PUT') return route.continue()
     active++; maximum = Math.max(maximum, active)
     commands.push(route.request().postDataJSON())
@@ -93,10 +99,10 @@ try {
   assert.equal(maximum, 1, 'canvas saves are serialized')
   assert.deepEqual(commands.map(command => command.document.cards[0].text), ['在途快照 A', '最新编辑 C'])
   assert.equal(await text.inputValue(), '最新编辑 C', 'old receipt cannot replace local edits')
-  await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}`)
+  await page.unroute(`**/generation-canvases/${canvas.id}?project_id=`)
   // A lost reply is retried with exactly the original identity before newer edits are saved.
   let unknown
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}`, async route => {
+  await page.route(`**/generation-canvases/${canvas.id}?project_id=`, async route => {
     if (route.request().method() !== 'PUT') return route.continue()
     unknown = route.request().postDataJSON(); await route.fetch(); await route.abort('failed')
   })
@@ -104,8 +110,8 @@ try {
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('alert').getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
   const verified = []
-  await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}`)
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}`, async route => {
+  await page.unroute(`**/generation-canvases/${canvas.id}?project_id=`)
+  await page.route(`**/generation-canvases/${canvas.id}?project_id=`, async route => {
     if (route.request().method() === 'PUT') verified.push(route.request().postDataJSON())
     await route.continue()
   })
@@ -114,7 +120,7 @@ try {
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   assert.deepEqual(verified[0], unknown, 'retry verifies original command before new save intent')
   assert.equal((await read(canvas.id)).document.cards[0].text, '未知回执之后的新编辑')
-  await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}`)
+  await page.unroute(`**/generation-canvases/${canvas.id}?project_id=`)
   const downstream = await create('保存后下游刷新')
   const document = { ...downstream.document, cards: [
     { id: 'source', type: 'content.text', text: '原已保存来源' },
@@ -122,7 +128,7 @@ try {
   ], edges: [{ id: 'edge', source_card: 'source', source_port: 'text', target_card: 'm', target_port: 'text' }], input_order: { m: { text: ['edge'] } } }
   const seed = await fetch(`${base}/${downstream.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seed.ok, await seed.text())
-  await page.goto(`http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${downstream.id}`)
+  await page.goto(`http://127.0.0.1:4271/canvases/${downstream.id}`)
   const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor(); await openModelInspection(page) }
   await open('m')
   const adopted = page.getByRole('region', { name: '已保存直接输入' })
@@ -143,7 +149,7 @@ try {
   const outputGate = new Promise(resolve => { releaseOutput = resolve })
   const outputStarted = new Promise(resolve => { outputArrived = resolve })
   let held = false
-  await page.route(`**/generation-canvases/canvas-project/${downstream.id}/cards/m/outputs`, async route => {
+  await page.route(`**/generation-canvases/${downstream.id}/cards/m/outputs?project_id=`, async route => {
     if (held) return route.continue()
     held = true
     const response = await route.fetch()
@@ -152,7 +158,7 @@ try {
   await open('source'); await text.fill('旧响应中的正文')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await open('m'); await outputStarted
-  await openCanvasManagement(page)
+
   await page.getByRole('textbox', { name: '画布名称' }).fill('触发较新修订')
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
@@ -160,7 +166,7 @@ try {
   const newest = await read(downstream.id)
   releaseOutput(); await delay(250)
   assert.match(await adopted.textContent(), new RegExp(`已保存 revision ${newest.revision}`), 'late response never replaces newer revision')
-  await page.unroute(`**/generation-canvases/canvas-project/${downstream.id}/cards/m/outputs`)
+  await page.unroute(`**/generation-canvases/${downstream.id}/cards/m/outputs?project_id=`)
   const preserved = await read(downstream.id)
   assert.equal(preserved.document.cards[1].input_bindings.length, 1, 'refresh preserves actual adoption')
   // Real runtime publication stays independent from document saves and output refresh.
@@ -179,7 +185,7 @@ try {
   // Precheck flushes local changes immediately, without waiting for a periodic tick.
   const changed = page.getByRole('textbox', { name: '模型正文', exact: true })
   await changed.fill('立即预检的最新输入')
-  const precheckReply = page.waitForResponse(response => response.url().endsWith('/precheck'))
+  const precheckReply = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/precheck'))
   await page.getByRole('button', { name: '预检运行', exact: true }).click()
   await precheckReply
   assert.match(JSON.stringify((await read(downstream.id)).document.cards[1].prompt), /立即预检的最新输入/)

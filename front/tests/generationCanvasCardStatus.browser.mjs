@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8573', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8573', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8573' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -42,7 +42,7 @@ try {
     edges: [{ id: 'text-edge', source_card: 'text', source_port: 'text', target_card: 'm', target_port: 'text' }], input_order: {m:{text:['text-edge']}} }
   const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seeded.ok,await seeded.text())
-  await page.goto(`http://127.0.0.1:4573/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4573/canvases/${canvas.id}`)
   const shell=page.locator('[data-card-id="m"]')
   const status=shell.getByRole('region',{name:'模型状态摘要',exact:true})
   await status.getByText('已采用 0',{exact:true}).waitFor()

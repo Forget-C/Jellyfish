@@ -6,7 +6,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { StudioChaptersService } from '../../../../../services/generated'
 import { useChapters, newId } from '../hooks/useProjectData'
 import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { chapterAction, chapterActionLocation, chapterLocation, readChapterBrowse, saveChapterBrowse, workbenchManagementLocation } from '../../../directing/chapterNavigation'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { chapterProduction } from '../../chapterProduction'
@@ -114,7 +114,7 @@ function ChaptersContent() {
       void refresh()
       if (enter) navigate(hasText ? workbenchManagementLocation(projectId, id, undefined, 'division') : `${chapterLocation(projectId)}&edit=${id}`)
       return true
-    } catch (cause) { message.error(directingError(cause)); return false } finally { setBusy(false) }
+    } catch (cause) { message.error(apiErrorMessage(cause)); return false } finally { setBusy(false) }
   }
   const guardCreate = useWorkspaceDraft({ name: '新建章节', dirty: creating && !!(title || content), busy, save: () => create(false),
     discard: () => { setTitle(''); setContent('') } })

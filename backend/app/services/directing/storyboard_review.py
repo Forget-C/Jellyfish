@@ -5,14 +5,15 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
+from app.core.contracts.directing.diagnostics import DirectingOutputDiagnostics
 from app.core.contracts.directing.scene_storyboard import StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
+from app.services.directing.errors import DirectingOutputError
 from app.services.generation_canvas.errors import diagnostic
 
 
 def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str, *, include_output: bool = False, response_label: str = '审查响应'):
-    """One provider call, strict JSON and a stable failure message."""
-    from app.services.directing.ai import DirectingOutputError
+    """单次调用校验 JSON，失败时将阶段和响应正文保存在技术诊断中。"""
     response = llm.invoke([
         SystemMessage(content=instruction + '\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(inputs, ensure_ascii=False)),
@@ -26,15 +27,13 @@ def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_
         parsed = contract.model_validate_json(content)
         return (parsed, content) if include_output else parsed
     except (ValidationError, TypeError) as error:
-        from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
-        raise DirectingOutputError(error_message, SceneDesignDiagnostics(
+        raise DirectingOutputError(error_message, DirectingOutputDiagnostics(
             output=content if isinstance(content, str) else '',
-            issues=['审查响应格式无效：' + type(error).__name__])) from error
+            issues=[f'{response_label}格式无效：{type(error).__name__}'])) from error
 
 
 def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
     """Make one semantic review request and reject unresolvable shot identities."""
-    from app.services.directing.ai import DirectingOutputError
     instruction = (
         '审查固定分镜草案，不重写分镜，不批准应用。逐镜核对可执行性，并对比相邻镜头前态和后态。'
         '实际矛盾标为 conflict，例如同时要求入场和静止，头手双脚必须同框却规定不可能容纳的景别，'
@@ -77,9 +76,8 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         if repeated:
             errors.append(f'issues.{index}.shot_ids 重复引用镜头：{repeated}')
     if errors:
-        from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
         raise DirectingOutputError('审查结果包含不存在或重复的镜头引用，请重试审查',
-            SceneDesignDiagnostics(output=output, issues=[*errors, f'合法镜头：{sorted(known)}']))
+            DirectingOutputDiagnostics(output=output, issues=[*errors, f'合法镜头：{sorted(known)}']))
     return report
 
 

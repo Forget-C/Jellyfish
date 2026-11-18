@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { SceneCanvasSummary, StoryboardRetry, StoryboardRetryBasis } from '../../../services/generated'
 import { workbenchManagementLocation } from './chapterNavigation'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { StoryboardBasisPreview } from './StoryboardBasisPreview'
 
 type RetryIntent = { taskId: string; body: StoryboardRetry }
@@ -22,7 +22,7 @@ function readDraftNotes(key: string) {
 }
 
 function retryError(cause: unknown) {
-  const reason = directingError(cause)
+  const reason = apiErrorMessage(cause)
   if (!(cause instanceof ApiError) || cause.status !== 404) return reason
   return /model not found/i.test(reason) ? '原文本模型已不可用。' : '原画布或任务已不可用'
 }
@@ -105,7 +105,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
         throw new Error('请先核实此前的分镜重试')
       }
       localStorage.setItem(key, JSON.stringify(intent))
-    } catch (cause) { setError(directingError(cause)); return }
+    } catch (cause) { setError(apiErrorMessage(cause)); return }
     sending.current = true
     setSubmitting(true); setPending(intent); setError('')
     onSubmissionChange(true)

@@ -25,7 +25,7 @@ import { handleTaskResultSafely } from '../../components/taskResultHelpers'
 import { useRelationTaskNotification } from '../../components/taskNotificationHelpers'
 import { useTaskPageContext } from '../../components/taskPageContext'
 import { TASK_COPY } from '../../components/taskCopy'
-import { directingError } from '../../directing/common'
+import { apiErrorMessage } from '../../../../services/apiErrorMessage'
 import { useWorkspaceDraft } from '../../directing/WorkspaceDrafts'
 
 type EditorMode = 'raw' | 'condensed' | 'compare'
@@ -243,7 +243,7 @@ export function ChapterRawTextEditorModal({
         setConsistencyResult(null)
       })
       .catch(cause => {
-        if (active) setLoadError(directingError(cause))
+        if (active) setLoadError(apiErrorMessage(cause))
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -494,7 +494,7 @@ export function ChapterRawTextEditorModal({
       onSaved?.({ title: chapterTitle.trim(), rawText: rawText, condensedText: condensedText })
       message.success('章节已保存')
       return true
-    } catch (cause) { setSaveError(directingError(cause)); return false }
+    } catch (cause) { setSaveError(apiErrorMessage(cause)); return false }
     finally { setSaving(false) }
   }
   const guard = useWorkspaceDraft({ name: '章节编辑', dirty: open && !loadError && hasUnsavedChanges,

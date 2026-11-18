@@ -12,7 +12,7 @@ import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEdi
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard
 

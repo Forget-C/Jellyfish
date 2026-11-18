@@ -238,8 +238,11 @@ try {
     await generation.waitFor({state:'hidden'})
     for(const [width,height] of [[1440,900],[1366,768],[1024,440],[375,768]]) {
       await page.setViewportSize({width,height})
-      if (width <= 1024) await page.getByRole('tab', { name: '图片', exact: true }).click()
-      await page.getByRole('button',{name:/^查看全部/}).waitFor()
+      const imagesTab = page.getByRole('tab', { name: '图片', exact: true })
+      const gallery = page.getByRole('button', { name: /^查看全部/ })
+      await Promise.race([imagesTab.waitFor(), gallery.waitFor()])
+      if (await imagesTab.isVisible()) await imagesTab.click()
+      await gallery.waitFor()
       assert.equal(await page.locator('.project-workbench-content').evaluate(panel => {
         const body = panel.querySelector('.resource-editor-body')
         const content = body.firstElementChild

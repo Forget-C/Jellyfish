@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-result-cards-')
-const api = 'http://127.0.0.1:8302', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8302', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8302', CANVAS_BROWSER_VARIABLE_IMAGE_COUNT: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,26 +36,26 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '显示正式结果卡' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '显示正式结果卡')
   const document = { ...canvas.document, cards: [
     { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'p', kind: 'text', text: '三张完整图片' }] }, config: { count: 3, target_ratio: '1:1', resolution_profile: 'standard' } },
     { id: 'text', type: 'content.text', text: 'Literal 图片3 [media:1]' },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: { count: 3 } },
     { id: 'single', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: { count: 3 } }],
     edges: [{ id: 'downstream', source_card: 'm', source_port: 'image', target_card: 'consumer', target_port: 'image' }, { id: 'text-edge', source_card: 'text', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { consumer: { image: ['downstream'], text: ['text-edge'] } } }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4302/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4302${storyboardCanvasPath(canvas)}`)
   const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor(); await openModelInspection(page) }
   await open('m')
   const card = page.locator('.wb-details:not([hidden])')
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const control = async body => (await fetch(`${api}/test/image-controls`, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
-  const runtime = async () => (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data
-  const readDocument = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const runtime = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id, `/runtime`))).json()).data
+  const readDocument = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const start = async () => {
     await card.getByRole('button', { name: '预检运行', exact: true }).click()
-    const received = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+    const received = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
     await preview.getByRole('button', { name: '确认执行', exact: true }).click()
     return (await (await received).json()).data
   }
@@ -119,8 +120,8 @@ try {
   await inputs.getByRole('button', { name: '采用 @图片1', exact: true }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   const readInputs = async () => {
-    const { data: outputs } = await (await fetch(`${base}/${canvas.id}/cards/consumer/outputs`)).json()
-    const { data: compiled } = await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()
+    const { data: outputs } = await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/consumer/outputs`))).json()
+    const { data: compiled } = await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/consumer/compile`))).json()
     return { candidates: outputs.candidates, used: compiled.used, media: compiled.media, text: compiled.text }
   }
   const visibleInputs = await readInputs()
@@ -184,7 +185,7 @@ try {
   const saved = page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' })
   await saved.waitFor()
   const positions = async id => {
-    const { data } = await (await fetch(`${base}/${canvas.id}/cards/${id}/outputs`)).json()
+    const { data } = await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/${id}/outputs`))).json()
     return data.candidates.filter(item => item.source.card_id === 'm').map(item => [item.source.position, item.available])
   }
   assert.deepEqual(await positions('single'), [[1, true]])
@@ -215,9 +216,9 @@ try {
   await showResults.click()
   await saved.waitFor()
   const changeCount = async count => {
-    const { data } = await (await fetch(`${base}/${canvas.id}`)).json()
+    const { data } = await (await fetch(storyboardCanvasApi(base, canvas.id))).json()
     data.document.cards[0].config.count = count
-    const updated = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    const updated = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request_id: 'count-' + count, expected_revision: data.revision, document: data.document }) })
     assert.ok(updated.ok, await updated.text())
     // The settings are changed through public save, then loaded by the normal editor route.
@@ -278,7 +279,7 @@ try {
     setup.document.edges.find(edge => edge.source_card === 'm' && edge.target_card === id).result_scope = scope
     setup.document.cards.find(card => card.id === id).input_bindings = [{ id: 'keep-result', input_port: 'image', source: identity }]
   }
-  const wired = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  const wired = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id: 'wire-before-detach', expected_revision: setup.revision, document: setup.document }) })
   assert.ok(wired.ok, await wired.text())
   await page.reload()
@@ -296,7 +297,7 @@ try {
   await independent.waitFor()
   assert.deepEqual(await box(independent), fixedBox, 'detaching preserves the whole card box')
   for (const id of ['consumer', 'single']) {
-    const { data } = await (await fetch(`${base}/${canvas.id}/cards/${id}/compile`)).json()
+    const { data } = await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/${id}/compile`))).json()
     assert.deepEqual(data.media.map(item => [item.source.card_id, item.file_id]), [[fixed.id, fixed.file_id]])
   }
 
@@ -325,7 +326,7 @@ try {
   const delayedOutput = (await runtime()).current_outputs.m[1]
   const delayedImage = resultTwo.getByRole('img', { name: '图片预览', exact: true })
   const delayedSrc = await delayedImage.getAttribute('src')
-  const historyUrl = /\/runs\/[^/]+\/nodes\/[^/]+\/outputs\/1\/content$/
+  const historyUrl = url => /\/runs\/[^/]+\/nodes\/[^/]+\/outputs\/1\/content$/.test(url.pathname)
   let releaseHistory, requestHistory
   const historyGate = new Promise(resolve => { releaseHistory = resolve })
   const historyRequested = new Promise(resolve => { requestHistory = resolve })
@@ -370,7 +371,7 @@ try {
     id: 'keep-model-result', input_port: 'image', source: { ...identity, position: 2 },
   })
   deletionSetup.groups = [{ id: 'deletion-group', name: '删除测试编组', card_ids: ['m', 'consumer', 'text'] }]
-  const saveDeletion = (request_id, expected_revision, document) => fetch(`${base}/${canvas.id}`, {
+  const saveDeletion = (request_id, expected_revision, document) => fetch(storyboardCanvasApi(base, canvas.id), {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id, expected_revision, document }),
   })
@@ -417,13 +418,13 @@ try {
   await saved.waitFor()
   await independent.waitFor()
   const deleted = (await readDocument()).document
-  assert.deepEqual(deleted.cards.map(item => item.id).sort(), ['single', 'text', ...beforeDeletion.document.cards
+  assert.deepEqual(deleted.cards.map(item => item.id).sort(), ['single', 'text', deleted.fixed_source.card_id, ...beforeDeletion.document.cards
     .filter(item => item.origin).map(item => item.id)].sort())
   assert.deepEqual(deleted.groups[0].card_ids, ['text'])
   assert.ok(deleted.edges.every(edge => edge.source_card !== 'm' && edge.target_card !== 'consumer'))
   assert.equal(deleted.input_order.consumer, undefined)
   assert.deepEqual((await runtime()).runs.map(run => run.id), runsBeforeDeletion, 'deleting cards retains all run history')
-  const singleInputs = async () => (await (await fetch(`${base}/${canvas.id}/cards/single/compile`)).json()).data.media
+  const singleInputs = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/single/compile`))).json()).data.media
   assert.deepEqual((await singleInputs()).map(item => item.file_id), [fixed.file_id])
 
   await independent.press('ControlOrMeta+z')
@@ -503,7 +504,7 @@ try {
   assert.ok(summarySaved.ok, await summarySaved.text())
   let releaseRuntime
   const pendingRuntime = new Promise(resolve => { releaseRuntime = resolve })
-  await page.route('**/runtime', async route => {
+  await page.route('**/runtime?project_id=canvas-project', async route => {
     await pendingRuntime
     const response = await route.fetch()
     const body = await response.json()

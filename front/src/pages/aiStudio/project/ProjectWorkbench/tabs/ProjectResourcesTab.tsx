@@ -7,7 +7,7 @@ import { WorkspaceScrollPanel } from '../../../../../components/layout/PageLayou
 import { useCardPageSize } from '../../../../../components/layout/useCardPageSize'
 import { StudioEntitiesService } from '../../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ResourceCardMetadata } from '../../../assets/components/ResourceCardMetadata'
 import { ResourceCreateButton } from '../../../assets/components/ResourceCreateButton'
@@ -227,7 +227,7 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
       setDeleteTarget(undefined)
       message.success('已删除')
       await load()
-    } catch (reason) { setDeleteError(directingError(reason)) }
+    } catch (reason) { setDeleteError(apiErrorMessage(reason)) }
     finally { deletePending.current = false; setDeleting(false) }
   }
 

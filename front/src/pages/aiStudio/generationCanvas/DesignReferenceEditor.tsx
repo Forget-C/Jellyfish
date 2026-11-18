@@ -6,7 +6,7 @@ import { SoundReferenceCandidate } from './SoundReferenceCandidate'
 import { AnchorReferenceCandidate } from './AnchorReferenceCandidate'
 import { DesignCandidateRelations } from './DesignCandidateRelations'
 import { CompositionFrameCandidate, movementFrameOptions } from './CompositionFrameCandidate'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { Typography } from 'antd'
 import type { DialogueCard, SoundArrangementCard, SpatialAnchorCard, CompositionCard, MovementCard, DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
@@ -22,7 +22,7 @@ import { useCardCandidates } from './useCardCandidates'
 import { referenceLabels } from './referenceLabels'
 import { MediaPreview } from './MediaContentEditor'
 import { AcceptanceBasisDetails } from './AcceptanceBasisDetails'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 
 type TargetField = { fieldId: string; segmentId?: string; serial: number }
 interface ReferenceContext {

@@ -1,4 +1,4 @@
-import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
+import { WorkbenchDialogActions } from '../../../components/workbench/WorkbenchModal'
 import { createPortal } from 'react-dom'
 import { CanvasEditorFooter } from './CanvasCardEditor'
 import { CheckReportDetails } from './CheckReportDetails'
@@ -7,7 +7,7 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { Alert, Switch, Select } from 'antd'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckProduct, CanvasCheckReportRead, CanvasPostCheckPreview, CheckCard } from '../../../services/generated'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import { HistoricalCheckProduct, historicalProductOptionLabel } from './HistoricalCheckProduct'
 
 const postCategories = [

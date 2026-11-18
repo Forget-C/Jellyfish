@@ -1,3 +1,4 @@
+import { withoutRunTarget } from '../generationCanvas/navigation'
 import { CheckArchive } from '../generationCanvas/CheckArchive'
 import { persistSceneChange } from './sceneCanvasPersistence'
 import { SceneCanvasFeedback } from './SceneCanvasFeedback'
@@ -11,9 +12,9 @@ import { GenerationCanvasWorkspace } from '../generationCanvas/GenerationCanvasW
 import { SceneStoryboardPreparation } from './SceneStoryboardPreparation'
 import { SceneStoryboardCheck } from './SceneStoryboardCheck'
 import { saveChapterBrowse, workbenchManagementLocation } from './chapterNavigation'
-import { directingError } from './common'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
-import { WorkbenchTheme } from './ui/WorkbenchTheme'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchTheme } from '../../../components/workbench/WorkbenchTheme'
 import { storyboardCanvasLayout } from './storyboardCanvasLayout'
 import { StoryboardVisualContinuity } from './StoryboardVisualContinuity'
 import { activeVisualContinuity, continuityResults, newContinuityResult, storyboardShotIndex, visualContinuitySources } from './visualContinuityRules'
@@ -28,7 +29,7 @@ const videoActionLabels: Record<string, string> = {
 
 /** 打开经过场次归属核对的共同画布，返回时带上当前画布和任务。 */
 function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope & { canvasId: string }) {
-  const [query] = useSearchParams()
+  const [query, setQuery] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
   const selectedTaskId = query.get('storyboardTask')
@@ -46,7 +47,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       setScene(response.data)
     }).catch(cause => {
       if (!active) return
-      setLoadError(directingError(cause))
+      setLoadError(apiErrorMessage(cause))
       if (cause instanceof ApiError && cause.status === 404) setScene(undefined)
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false; request.cancel() }
@@ -71,6 +72,8 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       { canvas: canvasId, storyboardTask: selectedTaskId ?? summary.latest_storyboard?.task_id })} />
   if (summary && scene) {
     return <GenerationCanvasWorkspace sceneSave={persistSceneChange} renderFeedback={current => <SceneCanvasFeedback current={current} />} key={canvasId} projectId={projectId} canvasId={canvasId}
+      onCloseRunHistory={() => setQuery(withoutRunTarget, { replace: true, state: location.state })}
+      targetRun={query.get('run')} targetNode={query.get('node')} targetCheck={query.get('check')} targetReport={query.get('report')}
       layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       onCanvasRead={rememberOpened}

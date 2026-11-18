@@ -1,6 +1,6 @@
 import { Alert } from 'antd'
 import type { CameraCard, LightingCard, FocusCard, MovementCard, CompositionCard, CanvasDocument, CanvasResolvedOutput } from '../../../services/generated'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
 import type { GenerationCard } from './graphRules'

@@ -5,7 +5,7 @@ import { StudioDirectingService as Directing, type SceneCanvasSummary, type Stor
 import { useGenerationCanvasEditor } from '../generationCanvas/useGenerationCanvasEditor'
 import { SceneStoryboardReview, StoryboardReviewFindings } from './SceneStoryboardReview'
 import { WorkbenchStoryboardRetry } from './WorkbenchStoryboardRetry'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 
 /** 管理页处理候选；共同编辑器保留保存、修订、应用回执与撤销校验。 */
 export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onSubmissionChange, onEnter, onReviewSource, quickEntry = false }: {
@@ -29,7 +29,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
     setError('')
     const request = Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId })
     void request.then(({ data }) => { if (active && data) setTask(data) })
-      .catch(cause => { if (active) setError(directingError(cause)) })
+      .catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, taskId, canvas.latest_storyboard?.status, canvas.latest_storyboard?.stage, refresh])
   const task = loadedTask?.task_id === taskId ? loadedTask : undefined

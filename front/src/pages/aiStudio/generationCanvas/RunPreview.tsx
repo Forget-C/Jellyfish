@@ -1,12 +1,12 @@
 import { Alert, Space } from 'antd'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import type { CanvasCatalog, CanvasDocument, CanvasPrecheck } from '../../../services/generated'
 import { referenceLabels } from './referenceLabels'
 import { sourceKey } from './promptRules'
 import { diagnosticCardAction } from './canvasDiagnosticNavigation'
 import { diagnosticRelatedCards } from './canvasRelationNavigation'
 import { MediaPreview } from './MediaContentEditor'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
 export function RunPreview({ preview, canvas, catalog, submitting, disabled, onSubmit, onLocate }: { preview: CanvasPrecheck; canvas?: CanvasDocument; catalog?: CanvasCatalog; submitting: boolean; disabled: boolean; onSubmit: () => void; onLocate: (target: Record<string, unknown>) => void }) {

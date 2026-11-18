@@ -1,4 +1,4 @@
-import { openCanvasManagement, openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCanvasCard, closeCanvasDetails, closePrecheck, assertVisibleInDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-runtime-')
-const api = 'http://127.0.0.1:8276', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8276', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8276' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -37,7 +37,7 @@ try {
   const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.text', model_id: 'canvas-runtime-text', prompt: { segments: [{ id: 'p', kind: 'text', text: '原始提示词' }] }, config: {} }, { id: 'consumer', type: 'model.text', model_id: 'canvas-runtime-text', prompt: { segments: [] }, config: {} }], edges: [{ id: 'downstream', source_card: 'm', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { consumer: { text: ['downstream'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4276/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4276/canvases/${canvas.id}`)
   const sourceSummary = page.locator('[data-card-id="m"]')
   const card = page.locator('.wb-details:visible')
   const runStatus = text => card.getByRole('region', { name: '本次运行', exact: true }).getByRole('status').filter({ hasText: text })
@@ -68,8 +68,8 @@ try {
   // After closing the operation, changed content cannot run if its save fails.
   let submitCount = 0, connections = 0
   page.on('request', request => { if (/\/events(?:\?|$)/.test(request.url())) connections++ })
-  page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/runs')) submitCount++ })
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}`, route => route.request().method() === 'PUT' ? route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ code: 'error', message: 'validation', data: { code: 'CONTROLLED_SAVE_FAILURE', message: '受控保存失败', target: {}, blocks: ['save'] } }) }) : route.continue())
+  page.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/runs')) submitCount++ })
+  await page.route(`**/generation-canvases/${canvas.id}?project_id=`, route => route.request().method() === 'PUT' ? route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ code: 'error', message: 'validation', data: { code: 'CONTROLLED_SAVE_FAILURE', message: '受控保存失败', target: {}, blocks: ['save'] } }) }) : route.continue())
   await prompt.fill('编辑后的提示词')
   assert.equal(await preview.isVisible(), false)
   // A failed save cannot run the previously saved content.
@@ -77,11 +77,11 @@ try {
   await page.getByRole('alert').filter({ hasText: 'CONTROLLED_SAVE_FAILURE' }).waitFor()
   assert.equal(await preview.isVisible(), false)
   assert.equal(submitCount, 0)
-  await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}`)
+  await page.unroute(`**/generation-canvases/${canvas.id}?project_id=`)
   // A late response for an older edit never restores execute eligibility.
   let releasePreview, enteredPreview
   const entered = new Promise(resolve => { enteredPreview = resolve })
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}/precheck`, async route => {
+  await page.route(`**/generation-canvases/${canvas.id}/precheck?project_id=`, async route => {
     const response = await route.fetch()
     enteredPreview()
     await new Promise(resolve => { releasePreview = resolve })
@@ -91,7 +91,7 @@ try {
   await prompt.fill('固定输入正文')
   releasePreview()
   await precheck().waitFor()
-  await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}/precheck`)
+  await page.unroute(`**/generation-canvases/${canvas.id}/precheck?project_id=`)
   assert.equal(await preview.isVisible(), false, 'stale precheck is discarded')
   await precheck().click(); await preview.waitFor()
   assert.equal(await page.getByRole('region', { name: '实际提交文本' }).textContent(), '固定输入正文')
@@ -99,7 +99,7 @@ try {
   // Drop a committed submission response; verification replays the exact request.
   const submissions = []
   let drop = true
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}/runs`, async route => {
+  await page.route(`**/generation-canvases/${canvas.id}/runs?project_id=`, async route => {
     submissions.push(route.request().postDataJSON())
     const response = await route.fetch()
     if (drop) { drop = false; await route.abort('failed') } else await route.fulfill({ response })
@@ -111,7 +111,7 @@ try {
   assert.equal(await card.getByRole('region', { name: '当前正式输出' }).count(), 0)
   await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isDisabled(), true)
-  await openCanvasManagement(page)
+
   assert.equal(await page.getByRole('button', { name: '删除画布', exact: true }).isDisabled(), true)
   assert.equal((await control()).calls.length, 1)
   assert.equal((await control()).calls[0].text, '固定输入正文')
@@ -163,7 +163,7 @@ try {
   assert.equal((await control()).calls.length, 2)
   await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isEnabled(), true, 'terminal failure releases card activity guard')
-  await openCanvasManagement(page)
+
   assert.equal(await page.getByRole('button', { name: '删除画布', exact: true }).isEnabled(), true, 'terminal failure releases canvas activity guard')
   assert.equal(await prompt.textContent(), '运行期间的后续编辑')
   assert.equal((await control()).calls[1].text, '固定输入正文', 'accepted run keeps the frozen input')
@@ -202,7 +202,7 @@ try {
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   const task = page.locator('.app-task-card').filter({ hasText: '流式文本' }).first()
   await task.getByRole('button', { name: /查看/ }).click()
-  await page.waitForURL(url => url.pathname === '/projects/canvas-project/generation-canvas' && url.searchParams.get('canvas') === canvas.id && url.searchParams.has('run') && url.searchParams.has('node'))
+  await page.waitForURL(url => url.pathname === '/canvases/' + canvas.id && url.searchParams.has('run') && url.searchParams.has('node'))
   await openCanvasCard(page, 'm')
   await runStatus('失败 · 未完成').waitFor()
   console.log(JSON.stringify({ output, success: true, calls: (await control()).calls.length }))

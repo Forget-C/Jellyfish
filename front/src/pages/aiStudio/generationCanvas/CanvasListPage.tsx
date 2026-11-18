@@ -7,7 +7,7 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../com
 import { useCardPageSize } from '../../../components/layout/useCardPageSize'
 import { StudioGenerationCanvasesService as Canvases, type CanvasSummary } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
-import { directingError } from '../directing/common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { CanvasDeletionDialog } from './CanvasDeletionDialog'
 import './canvas-list.css'
 
@@ -78,7 +78,7 @@ export function CanvasListPage() {
       setLoading(false)
     }).catch(reason => {
       if (active) {
-        setLoadError(directingError(reason))
+        setLoadError(apiErrorMessage(reason))
         setLoading(false)
       }
     })
@@ -97,7 +97,7 @@ export function CanvasListPage() {
       const { data } = await Canvases.canvasCreate({ requestBody: {} })
       if (data) navigate(`/canvases/${data.id}`, { state: returnState })
     } catch (reason) {
-      setActionError(directingError(reason))
+      setActionError(apiErrorMessage(reason))
     } finally {
       setBusy(false)
     }
@@ -111,7 +111,7 @@ export function CanvasListPage() {
       setTarget(undefined)
       setRetry(value => value + 1)
     } catch (reason) {
-      setRenameError(directingError(reason))
+      setRenameError(apiErrorMessage(reason))
     } finally {
       setBusy(false)
     }

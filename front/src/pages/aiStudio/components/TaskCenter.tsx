@@ -1,5 +1,5 @@
 import type { ButtonProps } from 'antd'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { Button, Drawer, Empty, Progress, Segmented, Select, Tag } from 'antd'
 import {
   ArrowLeftOutlined,

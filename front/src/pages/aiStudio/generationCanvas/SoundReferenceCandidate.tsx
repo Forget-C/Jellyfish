@@ -5,7 +5,7 @@ import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 import { MediaPreview } from './MediaContentEditor'
 import { DesignMediaReferenceSettings } from './DesignMediaReferenceSettings'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 type SoundCard = DialogueCard | SoundArrangementCard
 const rangeLabel = (start?: number | null, end?: number | null) => (start === null || start === undefined) ? '全片' : `${(start / 1000).toFixed(3)}–${((end || 0) / 1000).toFixed(3)} 秒`

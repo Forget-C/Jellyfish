@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from app.core.contracts.directing.storyboard_prompt import GeneratedVideoPrompt, StoryboardPromptOutput
 from app.schemas.generation_canvas import CanvasDocument, PromptDocument, VideoModelCard
-from app.services.directing.ai import DirectingOutputError
+from app.services.directing.errors import DirectingOutputError
 from app.services.directing.storyboard_review import invoke_storyboard_json
 
 

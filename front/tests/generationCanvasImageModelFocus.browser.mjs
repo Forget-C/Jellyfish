@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url)), output = await browserOutput('jellyfish-c59-image-model-')
-const api='http://127.0.0.1:8459', base=`${api}/api/v1/studio/generation-canvases/canvas-project`
+const api='http://127.0.0.1:8459', base=`${api}/api/v1/studio/generation-canvases`
 const backend=spawn('uv',['run','--no-sync','python','-m','tests.generation_canvas_images_browser_server'],{cwd:join(root,'../backend'),env:{...process.env,PYTHONPATH:join(root,'../backend'),UV_CACHE_DIR:'/tmp/jellyfish-uv-cache',CANVAS_BROWSER_DATABASE:join(output,'browser.sqlite'),CANVAS_BROWSER_MEDIA_STORAGE:join(output,'media'),CANVAS_BROWSER_PORT:'8459'},stdio:['ignore','pipe','pipe']})
 captureBackend(backend,output)
 let server,browser,page
@@ -31,7 +31,7 @@ try{
   await request(`${base}/${canvas.id}`,{request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[{id:'source-text',type:'content.text',text:'保持人物身份、自然步态与柔和侧光。'},{id:'source-image',type:'content.image',file_id:file.id},model('m',prompt),model('empty'),{...model('unselected'),model_id:null}],edges:[{id:'text-edge',source_card:'source-text',source_port:'text',target_card:'m',target_port:'text'},{id:'image-edge',source_card:'source-image',source_port:'image',target_card:'m',target_port:'image'}],input_order:{m:{text:['text-edge'],image:['image-edge']}}}},'PUT')
   const read=async()=>(await request(`${base}/${canvas.id}`)).data
   const runtime=async()=>(await request(`${base}/${canvas.id}/runtime`)).data
-  await page.goto(`http://127.0.0.1:4459/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4459/canvases/${canvas.id}`)
   const editor=page.locator('.wb-details:not([hidden])'), card=page.locator('[data-card-id="m"]')
   const close=()=>closeCanvasDetails(page)
   const open=async id=>{await close();await page.locator(`[data-card-id="${id}"]`).press('Enter');await editor.waitFor();await delay(150)}

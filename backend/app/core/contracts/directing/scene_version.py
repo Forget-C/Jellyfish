@@ -1,14 +1,11 @@
 """持续编辑的场次方案；未完成内容与固定执行契约分别校验。"""
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import ConfigDict, Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Note, Source, Text, references, unique
-from app.core.contracts.directing.canvas_graph import DirectorCanvasGraph, UnitCanvasGraph, InstructionCanvasGraph, EditCanvasGraph
 from app.core.contracts.directing.design_applicability import DesignApplicability, validate_design_applicability
-from app.core.contracts.directing.relationship_graph import SceneRelationshipGraph
 from app.core.contracts.directing.production import GenerationUnit, ModelCapability, ReferenceBinding
 from app.core.contracts.directing.scene_take import SceneTakeJudgment
 from app.core.contracts.directing.scene_timeline import SceneTimeline
@@ -76,20 +73,6 @@ class EditableSceneDesign(SceneDesign):
         """适用性只能指向当前工作单中仍存在的字段和镜头。"""
         validate_design_applicability(self)
         return self
-
-
-def validate_new_design_row_ids(current: EditableSceneDesign, previous: EditableSceneDesign) -> None:
-    """历史无 ID 行可保留；本次新增的独立行必须有稳定身份。"""
-    for label, current_rows, old_rows in (
-        ('不可改事实', current.direction.immutable_facts, previous.direction.immutable_facts),
-        ('待确定问题', current.direction.open_questions, previous.direction.open_questions),
-        ('角色情境', current.performance.situations, previous.performance.situations),
-        ('节拍表演', current.performance.beats, previous.performance.beats),
-        ('镜内活动', current.staging.activities, previous.staging.activities),
-        ('摄影工作单', current.cinematography, previous.cinematography),
-    ):
-        if sum(row.id is None for row in current_rows) > sum(row.id is None for row in old_rows):
-            raise ValueError(f'新增{label}缺少稳定身份')
 
 
 class SceneVersionSource(Contract):
@@ -266,54 +249,3 @@ class SceneVersionContent(Contract):
                 references(binding.participant_ids, [row.id for row in self.design.participants],
                            f'单元 {unit.id} 参考 {binding.id} 参与对象')
         return self
-
-
-class SceneVersionCreate(Contract):
-    """只有显式创建才产生新方案，请求身份供重复提交核实。"""
-
-    request_id: Identity
-    title: str = Field(min_length=1, max_length=255, pattern=r'\S')
-
-
-class SceneVersionSave(Contract):
-    """保存沿用方案身份，revision 仅用于并发保护，不是可选历史版本。"""
-
-    request_id: Identity
-    expected_revision: int = Field(gt=0)
-    content: SceneVersionContent
-
-
-class SceneIdentityCleanup(Contract):
-    """显式整理已保存身份参考；不接受待清理的新内容。"""
-
-    request_id: Identity
-    expected_revision: int = Field(gt=0)
-
-
-class SceneUnitCanvasPreview(Contract):
-    """按保存基线投影当前编辑；不保存、不确认依据或授权生成。"""
-
-    expected_revision: int = Field(gt=0)
-    content: SceneVersionContent
-
-
-class SceneVersionRead(Contract):
-    """带归属与保存状态的场次版本，不向用户暴露多层草稿确认。"""
-
-    id: Identity
-    project_id: Identity
-    chapter_id: Identity
-    sequence_id: Identity
-    title: str
-    revision: int = Field(gt=0)
-    source: SceneVersionSource
-    content: SceneVersionContent
-    relationship_graph: SceneRelationshipGraph
-    director_graph: DirectorCanvasGraph
-    unit_graph: UnitCanvasGraph
-    instruction_graph: InstructionCanvasGraph
-    edit_graph: EditCanvasGraph
-    copied_from_version_id: Identity | None
-    last_save_request_id: Identity | None
-    created_at: datetime
-    updated_at: datetime

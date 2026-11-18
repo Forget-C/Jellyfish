@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Form, Input, InputNumber, Select, Space, Switch, message } from 'antd'
 import { type ProjectRead, type ProjectUpdate } from '../../../../../services/generated'
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { ProjectVisualStyleAndStyleFields } from '../../ProjectVisualStyleAndStyleFields'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import './project-settings.css'
@@ -43,7 +43,7 @@ export function SettingsTab({ project, saving, onSave }: {
         message.success('项目已更新')
       }
     } catch (cause) {
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     }
   }
 

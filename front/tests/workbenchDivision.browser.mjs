@@ -31,7 +31,7 @@ const request = async (url, method = 'GET', body) => {
 try {
   for (let attempt = 0; ; attempt++) {
     if (backend.exitCode !== null || attempt >= 80) throw new Error('isolated backend did not start')
-    try { if ((await fetch(studio + '/generation-canvases/' + project)).ok) break } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) break } catch {}
     await delay(250)
   }
   const chapterApi = studio + '/projects/' + project + '/directing/chapters/' + chapter
@@ -44,7 +44,7 @@ try {
   const second = await scene('后院', 0, 5, 10)
   const firstApi = chapterApi + '/sequences/' + first.id
   const fixedCanvas = await request(firstApi + '/canvases', 'POST', { name: '固定原文方案' })
-  const readCanvas = () => request(studio + '/generation-canvases/' + project + '/' + fixedCanvas.id)
+  const readCanvas = () => request(`${studio}/generation-canvases/${fixedCanvas.id}?project_id=${project}`)
   const originalCanvas = await readCanvas()
   const extraction = await request(firstApi + '/objects/extractions', 'POST', { request_id: 'initial-preparation' })
   for (let attempt = 0; ; attempt++) {
@@ -212,7 +212,7 @@ try {
   await preview.getByRole('button', { name: '保存本章划分' }).click()
   await page.getByText('原场次“后院雨夜”已转入历史').waitFor()
   await page.getByRole('button', { name: '查看该历史场次' }).click()
-  await page.getByText('历史场次：后院雨夜', { exact: true }).waitFor()
+  await page.getByRole('button', { name: /历史场次：.*后院雨夜/ }).waitFor()
   await openDivision.click()
   await page.getByRole('button', { name: '历史版本', exact: true }).click()
   const history = page.getByRole('dialog', { name: '历史版本' })

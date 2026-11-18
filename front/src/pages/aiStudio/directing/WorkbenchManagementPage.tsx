@@ -10,7 +10,7 @@ import {
   managementStep, readChapterBrowse,
   saveChapterBrowse, type WorkbenchManagementStep,
 } from './chapterNavigation'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { SceneObjectPreparation } from './SceneObjectPreparation'
 import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
 import { WorkbenchDivisionStep } from './WorkbenchDivisionStep'
@@ -148,7 +148,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
         setError('')
         setUpdatingDivision(false)
       }
-    }).catch(cause => { if (active) setError(directingError(cause)) })
+    }).catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false }
   }, [projectId, chapterId, revision])
 

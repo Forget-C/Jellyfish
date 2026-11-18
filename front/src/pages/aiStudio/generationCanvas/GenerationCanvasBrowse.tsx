@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Select, Switch } from 'antd'
 import { LeftOutlined, SearchOutlined } from '@ant-design/icons'
-import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 
 export type CanvasDisplayFilter = { group: string; modality: string; problems: boolean }
 

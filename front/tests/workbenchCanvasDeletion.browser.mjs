@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openCanvasManagement, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -30,9 +30,9 @@ const request = async (url, method = 'GET', body) => {
   assert.ok(response.ok, await response.clone().text())
   return (await response.json()).data
 }
-const base = studio + '/generation-canvases/' + project
-const canvasUrl = id => base + '/' + id
-const rename = (canvas, name, requestId) => request(canvasUrl(canvas.id), 'PUT', {
+const base = studio + '/generation-canvases'
+const canvasUrl = (id, suffix = '', owner = project) => `${base}/${id}${suffix}${owner ? `?project_id=${owner}` : ''}`
+const rename = (canvas, name, requestId) => request(canvasUrl(canvas.id, '', canvas.project_id), 'PUT', {
   request_id: requestId, expected_revision: canvas.revision, document: { ...canvas.document, name },
 })
 
@@ -68,9 +68,9 @@ try {
       id: 'text-run', type: 'model.text', model_id: 'canvas-runtime-text',
       prompt: { segments: [{ id: 'body', kind: 'text', text: '保持执行中' }] },
     }] } })
-  const checked = await request(canvasUrl(running.id) + '/precheck', 'POST', { card_id: 'text-run' })
+  const checked = await request(canvasUrl(running.id, '/precheck'), 'POST', { card_id: 'text-run' })
   assert.equal(checked.can_run, true)
-  await request(canvasUrl(running.id) + '/runs', 'POST', { request_id: 'active-model', preview_token: checked.preview_token })
+  await request(canvasUrl(running.id, '/runs'), 'POST', { request_id: 'active-model', preview_token: checked.preview_token })
 
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: {
     host: '127.0.0.1', port: 4390, strictPort: true, proxy: { '/api': api },
@@ -83,14 +83,13 @@ try {
   page.setDefaultTimeout(12000)
   const origin = 'http://127.0.0.1:4390'
   const management = origin + '/projects/' + project + '/chapters/' + chapter + '/workbench-management?sequence=' + scene.id + '&step=storyboard'
-  const free = id => origin + '/projects/' + project + '/generation-canvas?canvas=' + id
+  const free = id => origin + '/canvases/' + id
   const managedDelete = async name => {
     await page.getByRole('menuitem', { name: '删除画布' }).waitFor({ state: 'hidden' })
     await page.getByRole('button', { name }).click()
     await page.getByRole('menuitem', { name: '删除画布' }).click()
   }
   const freeDelete = async () => {
-    await openCanvasManagement(page)
     await page.getByRole('button', { name: '删除画布', exact: true }).click()
   }
   const dialog = page.getByRole('dialog', { name: '删除画布' })
@@ -104,23 +103,16 @@ try {
   await confirm()
   await page.getByText('画布仍有活动运行，任务结束后可删除').waitFor()
 
-  await page.goto(free(active.canvas_id))
-  await freeDelete()
-  await confirm()
-  await page.getByText('画布仍有活动分镜任务，任务结束后可删除').waitFor()
-  const editor = page
+  const sceneCanvasPage = id => `${origin}/projects/${project}/chapters/${chapter}/sequences/${scene.id}/canvas-workbench?canvas=${id}`
+  await page.goto(sceneCanvasPage(running.id))
+  await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
   const manager = await context.newPage()
   manager.setDefaultTimeout(12000)
   await manager.goto(management)
-  await manager.getByRole('button', { name: '活动分镜更多操作' }).click()
+  await manager.getByRole('button', { name: '活动模型更多操作' }).click()
   await manager.getByRole('menuitem', { name: '删除画布' }).click()
   await manager.getByText('画布正在其他页面编辑，请先在原页面处理并释放编辑权。').waitFor()
   await manager.close()
-
-  await editor.goto(free(running.id))
-  await openCanvasManagement(editor)
-  await editor.getByText('任务结束后可删除', { exact: true }).waitFor()
-  assert.equal(await editor.getByRole('button', { name: '删除画布', exact: true }).isDisabled(), true)
 
   await page.goto(free(ordinary.id))
   await freeDelete()
@@ -128,12 +120,12 @@ try {
   await rename(ordinary, '自由入口并发保存', 'ordinary-concurrent')
   await confirm()
   await page.getByText('画布已保存新修订，请重新核对并确认删除').waitFor()
-  assert.equal((await request(canvasUrl(ordinary.id))).document.name, '自由入口并发保存')
+  assert.equal((await request(canvasUrl(ordinary.id, '', ''))).document.name, '自由入口并发保存')
 
   // A failed save leaves recoverable local work even after releasing editor ownership.
   const recoverable = await request(sceneApi + '/canvases', 'POST', { name: '本地草稿目标' })
-  const failedSave = url => url.pathname === '/api/v1/studio/generation-canvases/' + project + '/' + recoverable.id
-  await page.goto(free(recoverable.id))
+  const failedSave = url => url.pathname === '/api/v1/studio/generation-canvases/' + recoverable.id
+  await page.goto(sceneCanvasPage(recoverable.id))
   await page.locator('[data-card-type="content.basis"]').waitFor()
   await page.route(failedSave, route => route.request().method() === 'PUT' ? route.abort('failed') : route.fallback())
   await openCardList(page)
@@ -162,7 +154,7 @@ try {
   await managedDelete('管理入口并发保存更多操作')
   await dialog.getByText(/管理入口并发保存/).waitFor()
   await page.screenshot({ path: join(output, 'confirm-delete.png') })
-  const deletion = url => url.pathname === '/api/v1/studio/generation-canvases/' + project + '/' + managed.id
+  const deletion = url => url.pathname === '/api/v1/studio/generation-canvases/' + managed.id
   await page.route(deletion, async route => {
     if (route.request().method() !== 'DELETE') { await route.continue(); return }
     assert.equal(new URL(route.request().url()).searchParams.get('expected_revision'), '1')
@@ -176,12 +168,12 @@ try {
   await dialog.waitFor({ state: 'hidden' })
   await page.getByRole('heading', { name: '管理入口并发保存', exact: true }).waitFor({ state: 'hidden' })
   assert.equal((await fetch(canvasUrl(managed.id))).status, 404)
-  assert.ok((await request(base)).every(canvas => canvas.id !== managed.id))
+  assert.ok((await request(base)).items.every(canvas => canvas.id !== managed.id))
   assert.equal((await request(sceneApi + '/canvases')).canvases.length, 3)
   assert.equal((await request(sceneApi + '/storyboards/' + active.task_id)).status, 'running')
   await request(api + '/test/runtime-controls', 'POST', { storyboard_release: 1, release: 3 })
-  await page.goto(free(managed.id))
-  await page.getByText('此画布已不可用', { exact: true }).waitFor()
+  await page.goto(sceneCanvasPage(managed.id))
+  await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
 } finally {
   await cleanup()
 }

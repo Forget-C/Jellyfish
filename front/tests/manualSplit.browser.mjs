@@ -31,7 +31,7 @@ const request = async (url, method = 'GET', body) => {
 try {
   for (let attempt = 0; ; attempt++) {
     if (backend.exitCode !== null || attempt >= 80) throw new Error('isolated backend did not start')
-    try { if ((await fetch(studio + '/generation-canvases/' + project)).ok) break } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) break } catch {}
     await delay(250)
   }
   const chapterApi = studio + '/projects/' + project + '/directing/chapters/' + chapter

@@ -1,4 +1,4 @@
-import { openCanvasManagement, openCardList, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList, openCanvasCard, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8271'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8271' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -35,15 +35,16 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const chapterRequests = []
   page.on('request', request => { if (/chapters/.test(request.url())) chapterRequests.push(request.url()) })
-  await page.goto('http://127.0.0.1:4271/projects/canvas-project/generation-canvas')
-  await openCanvasManagement(page)
-  await page.getByRole('button', { name: '新建画布', exact: true }).click()
+  await page.goto('http://127.0.0.1:4271/canvases')
+
+  await page.getByRole('button', { name: /新建画布/ }).click()
+  await page.waitForURL(/\/canvases\/[^/]+$/)
   assert.equal(chapterRequests.length, 0, 'standalone canvas must not load chapters')
   assert.equal(await page.locator('.app-shell').count(), 0, 'standalone canvas hides global shell')
   const surface = await page.getByLabel('生成画布视口').boundingBox()
   assert.ok(surface.height >= 780, 'canvas uses remaining viewport instead of a fixed embedded height')
   const name = page.getByRole('textbox', { name: '画布名称' })
-  await openCanvasManagement(page)
+
   await name.fill('第一张独立画布')
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
@@ -60,27 +61,28 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '文本内容', exact: true }).inputValue(), '刷新后仍然存在的正文')
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const firstId = new URL(page.url()).searchParams.get('canvas')
+  const firstId = new URL(page.url()).pathname.split('/').at(-1)
   const first = (await (await fetch(`${base}/${firstId}`)).json()).data
   assert.equal(first.revision, 1)
   assert.equal(first.document.cards[0].text, '刷新后仍然存在的正文')
-  await openCanvasManagement(page)
-  await page.getByRole('button', { name: '新建画布', exact: true }).click()
+
+  await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
+  await page.getByRole('button', { name: /新建画布/ }).click()
+  await page.waitForURL(/\/canvases\/[^/]+$/)
   await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]')?.value === '未命名画布')
-  await openCanvasManagement(page)
+
   await name.fill('第二张独立画布')
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const secondId = new URL(page.url()).searchParams.get('canvas')
+  const secondId = new URL(page.url()).pathname.split('/').at(-1)
   assert.notEqual(firstId, secondId)
-  await openCanvasManagement(page)
-  await page.getByRole('combobox', { name: '选择画布' }).press('ArrowDown')
-  await page.getByText('第一张独立画布', { exact: true }).last().click()
+
+  await selectCanvasByName(page, '第一张独立画布')
   await openCanvasCard(page, first.document.cards[0].id)
   await page.reload()
-  await openCanvasManagement(page)
+
   await name.waitFor()
   assert.equal(await name.inputValue(), '第一张独立画布')
   await name.press('Escape')
@@ -101,18 +103,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow page has no horizontal overflow')
   await page.screenshot({ path: join(output, 'generation-canvas-narrow.png'), fullPage: true })
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
-  await page.getByRole('button', { name: '返回项目', exact: true }).waitFor()
-  const legacy = await browser.newPage({ viewport: { width: 1440, height: 960 } })
-  await legacy.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  await legacy.goto(`http://127.0.0.1:4271/projects/canvas-project?tab=generation&canvas=${firstId}&run=history-location&node=history-node`)
-  await openCanvasManagement(legacy)
-  await legacy.getByRole('textbox', { name: '画布名称' }).waitFor()
-  const migrated = new URL(legacy.url())
-  assert.equal(migrated.pathname, '/projects/canvas-project/generation-canvas')
-  assert.equal(migrated.searchParams.get('canvas'), firstId)
-  assert.equal(migrated.searchParams.get('run'), 'history-location')
-  assert.equal(migrated.searchParams.get('node'), 'history-node')
-  await legacy.close()
+  await page.getByRole('button', { name: '返回画布列表', exact: true }).waitFor()
   await page.setViewportSize({ width: 1440, height: 960 })
   await openCardList(page, '模型生成')
   await page.getByRole('button', { name: '文本模型卡', exact: true }).click()

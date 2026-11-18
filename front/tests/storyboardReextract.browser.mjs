@@ -31,7 +31,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -74,7 +74,7 @@ try {
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
-  const canvas = `${studio}/generation-canvases/${project}/${id}`
+  const canvas = `${studio}/generation-canvases/${id}?project_id=${project}`
   const read = () => request(canvas)
   const poll = async (predicate, readState = read) => {
     for (let attempt = 0; attempt < 130; attempt++) {

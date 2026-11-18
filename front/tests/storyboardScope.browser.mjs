@@ -1,3 +1,4 @@
+import { selectPreparedCharacter, storyboardCanvasApi } from './storyboard-canvas-fixture.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -32,7 +33,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -49,13 +50,13 @@ try {
   const prep = `${origin}/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
   await page.goto(prep.replace('step=storyboard', 'step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   const object = page.getByRole('region', { name: '林舟 · 林舟在码头', exact: true })
-  await object.getByRole('combobox', { name: '关联资产' }).click()
-  await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await object.getByRole('button', { name: '选择参考图' }).click()
-  await page.getByText('参考图 1', { exact: true }).click()
-  await object.getByText('已选参考图', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '继续到分镜与画布', exact: true }).click()
+  const resourceImages = `${studio}/entities/character/object-browser-character/images`
+  const referenceImage = (await request(resourceImages)).items[0]
+  await request(`${resourceImages}/${referenceImage.id}`, 'PATCH', { is_primary: true })
+  await selectPreparedCharacter(page, object, '已有角色')
+  await page.getByRole('navigation', { name: '制作步骤' }).getByRole('button', { name: '分镜画布', exact: true }).click()
   // 使用已指定生产模型的任务验证历史/API 客户端的模型分段契约。
   const storyboardName = '分段分镜验收'
   const task = await request(`${sequences}/${sequence.id}/storyboards`, 'POST', {
@@ -72,7 +73,7 @@ try {
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
-  const path = `${studio}/generation-canvases/${project}/${id}`
+  const path = `${studio}/generation-canvases/${id}?project_id=${project}`
   const poll = async predicate => {
     for (let attempt = 0; attempt < 150; attempt++) {
       const state = await request(path)
@@ -99,7 +100,7 @@ try {
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   for (const name of names) await page.getByRole('button', { name: '选择编组 ' + name, exact: true }).waitFor()
   for (const [index, segment] of second.segments.entries()) {
-    const checked = await request(path + '/precheck', 'POST', { card_id: segment.model_card_id })
+    const checked = await request(storyboardCanvasApi(`${studio}/generation-canvases`, id, '/precheck', project), 'POST', { card_id: segment.model_card_id })
     const [yes, no] = index ? ['分段动作举高', '分段动作取出'] : ['分段动作取出', '分段动作举高']
     assert.ok(checked.can_run, JSON.stringify(checked.diagnostics))
     assert.ok(checked.input.text.includes(yes) && !checked.input.text.includes(no))

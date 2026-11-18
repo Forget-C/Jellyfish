@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-design-metadata-audit-')
-const api = 'http://127.0.0.1:8691', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8691', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8691' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -32,8 +33,8 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '全部设计卡元信息验收' }) })).json()).data
-  const definitions = (await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards.filter(card => card.type.startsWith('direction.'))
+  const canvas = await createStoryboardCanvas(base, '全部设计卡元信息验收')
+  const definitions = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/catalog`))).json()).data.cards.filter(card => card.type.startsWith('direction.'))
   assert.equal(definitions.length, 25)
   const visual = new Set(['style', 'composition', 'camera', 'movement', 'lighting', 'focus'])
   const document = { ...canvas.document, cards: definitions.map(definition => {
@@ -41,31 +42,44 @@ try {
     const fields = Object.fromEntries(definition.fields.map((field, index) => [field.id, index === 0 ? { text: '模型提取的设计参数', state: 'proposal', purpose: 'background', source_locator: '模型提取定位', authorship: 'model', metadata_fields: ['state', 'purpose', 'source_locator'] } : { text: '自行填写的设计参数', state: 'fact', purpose: 'design', authorship: 'user' }]))
     return { id, type: definition.type, source_locator: '卡片原始定位', ...(id === 'dialogue' ? { dialogue_id: 'audit-dialogue' } : {}), ...(visual.has(id) ? { fields } : fields) }
   }) }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 100; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('design metadata save timeout') }
-  await page.goto(`http://127.0.0.1:4691/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4691${storyboardCanvasPath(canvas)}`)
   const savedCard = async id => (await read()).document.cards.find(card => card.id === id)
   const valueOf = (card, key) => visual.has(card.id) ? card.fields[key] : card[key]
+  const showField = async (detail, type, field) => {
+    if (type === 'direction.movement' && ['movement_start', 'end_frame'].includes(field.id)) {
+      await detail.getByRole('tab', { name: field.id === 'end_frame' ? '结束' : '起始', exact: true }).click()
+    }
+    const panel = detail.locator('.design-parameter-tabs .ant-tabs-tabpane').filter({
+      has: page.getByRole('textbox', { name: field.label + '内容', exact: true, includeHidden: true }),
+    })
+    if (await panel.count() === 1 && !await panel.isVisible()) {
+      const tabId = await panel.getAttribute('aria-labelledby')
+      if (tabId) await detail.locator(`[id="${tabId}"]`).click()
+    }
+  }
   const assertFields = async (detail, saved) => {
     const definition = definitions.find(item => item.type === saved.type)
     for (const field of definition.fields) {
-      if (saved.type === 'direction.movement' && ['movement_start', 'end_frame'].includes(field.id)) await detail.getByRole('tab', { name: field.id === 'end_frame' ? '结束' : '起始', exact: true }).click()
+      await showField(detail, saved.type, field)
       const text = await detail.getByRole('textbox', { name: field.label + '内容', exact: true }).innerText()
       assert.equal(text.trim(), valueOf(saved, field.id).text.trim(), `${definition.title}: reopened ${field.label} matches saved content`)
     }
-    if (saved.type === 'direction.movement') await detail.getByRole('tab', { name: '起始', exact: true }).click()
+    await showField(detail, saved.type, definition.fields[0])
   }
   const reopen = async id => {
     await closeCanvasDetails(page)
     const detail = await openCanvasCard(page, id)
     const advanced = detail.getByRole('button', { name: '高级设置', exact: true })
     if (await advanced.count()) await advanced.click()
-    await detail.getByRole('button', { name: /^整卡适用限制/ }).click()
+    const scopeToggle = detail.getByRole('button', { name: /^整卡适用限制/ })
+    await scopeToggle.click()
     const scope = detail.locator('.design-scope-panel')
     await scope.getByText('卡片原始来源：卡片原始定位', { exact: true }).waitFor()
-    await scope.getByRole('combobox').first().press('Escape')
+    await scopeToggle.click()
     await scope.waitFor({ state: 'hidden' })
     await assertFields(detail, await savedCard(id))
     return detail

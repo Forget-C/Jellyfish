@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-c56-text-')
-const api = 'http://127.0.0.1:8456', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8456', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8456' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -37,7 +37,7 @@ try {
     page.setDefaultTimeout(5000)
     const canvas = await request(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '基础文本视觉验证' }) })
     await request(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...canvas.document, cards: [{ id: 'text', type: 'content.text', text: sample }], edges: [] } }) })
-    const url = `http://127.0.0.1:4456/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+    const url = `http://127.0.0.1:4456/canvases/${canvas.id}`
     await page.goto(url)
     const card = page.locator('[data-card-id="text"]')
     const editor = page.locator('.generation-card-editor:visible')

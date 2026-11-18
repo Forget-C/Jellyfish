@@ -3,12 +3,12 @@ import { Alert, Button, Input, Modal, Select, Space, Spin } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { ApiError, FilmService, StudioDirectingService, type ShootingCheckRead, type ShootingExplanationRead, type ShootingNote, type SourceSpan, type ShootingPreparation_Input as ShootingPreparation } from '../../../services/generated'
 import { useWorkspaceDraft } from './WorkspaceDrafts'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { sameSpan, sourceSlice } from './sourceSelection'
 import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
 import { explanationScopes, intersectingScopes, ShootingExplanationSource } from './ShootingExplanationSource'
 import { ShootingExplanationReview } from './ShootingExplanationReview'
-import './ui/workbenchUi.css'
+import '../../../components/workbench/workbenchUi.css'
 import '../assets/components/resourceEditor.css'
 import './shooting-explanation.css'
 
@@ -45,7 +45,7 @@ export function ShootingExplanationDrawer(props: Props) {
     void StudioDirectingService.directingShootingExplanations({ projectId, chapterId, sourceVersion }).then(response => {
       if (!response.data) throw new Error('拍摄解释读取失败')
       if (live) setValue(response.data)
-    }).catch(cause => { if (live) setError(directingError(cause)) })
+    }).catch(cause => { if (live) setError(apiErrorMessage(cause)) })
     return () => { live = false }
   }, [projectId, chapterId, sourceVersion, attempt])
   if (value) return <ShootingExplanationEditor {...props} id={id} value={value} />
@@ -91,7 +91,7 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
     let live = true
     void StudioDirectingService.directingShootingCheckLatest({ projectId, chapterId, sourceVersion }).then(response => {
       if (live && !submittedHere.current && response.data) { setDiscoveredId(response.data.task_id); setCheck(response.data) }
-    }).catch(cause => { if (live && !submittedHere.current) setError(directingError(cause)) })
+    }).catch(cause => { if (live && !submittedHere.current) setError(apiErrorMessage(cause)) })
     return () => { live = false }
   }, [projectId, chapterId, sourceVersion, preparation.check_task_id, readOnly])
   const active = check?.status === 'queued' || check?.status === 'running'
@@ -117,7 +117,7 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
         if (!response.data) throw new Error('检查状态读取失败')
         setCheck(response.data); setError('')
         if (['queued', 'running'].includes(response.data.status)) timer = setTimeout(() => void read(), 1200)
-      } catch (cause) { if (live) { setError(directingError(cause)); timer = setTimeout(() => void read(), 3000) } }
+      } catch (cause) { if (live) { setError(apiErrorMessage(cause)); timer = setTimeout(() => void read(), 3000) } }
     }
     void read()
     return () => { live = false; clearTimeout(timer) }
@@ -144,7 +144,7 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
       setDiscoveredId(response.data.task_id)
       autoReview.current = response.data.task_id
       setCheck(response.data)
-    } catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
+    } catch (cause) { setError(apiErrorMessage(cause)) } finally { setBusy(false) }
   }
   const save = async () => {
     if (conflict || editing || review) return false
@@ -162,12 +162,12 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
       const unknown = !(cause instanceof ApiError && cause.status >= 400 && cause.status < 500)
       if (!unknown) frozenSave.current = undefined
       setUncertain(unknown)
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
       if (cause instanceof ApiError && cause.status === 409) {
         try {
           const response = await StudioDirectingService.directingShootingExplanations({ projectId, chapterId, sourceVersion })
           if (response.data) setConflict(response.data)
-        } catch (readError) { setError(directingError(readError)) }
+        } catch (readError) { setError(apiErrorMessage(readError)) }
       }
       return false
     } finally { setBusy(false) }

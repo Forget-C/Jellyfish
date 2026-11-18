@@ -257,9 +257,9 @@ def structure_attempt(task) -> dict:
         detail = result.get('design_diagnostics') or {}
         diagnostics = detail.get('issues', [])
         if detail.get('output'):
-            diagnostics = [*diagnostics, '审查响应：' + detail['output']]
+            diagnostics = [*diagnostics, '模型响应：' + detail['output']]
         elif not diagnostics:
-            diagnostics = [task.error_message or '审查未完成', '该轮未记录审查原始响应。']
+            diagnostics = [task.error_message or '审查未完成', '该轮未记录模型原始响应。']
     if result.get('prompt_state') == 'pending' and task.status in ('failed', 'cancelled'):
         title = '设计已完成，提示词生成未完成'
         reason = '已保留设计与已完成单元，可仅重试未完成的提示词。'

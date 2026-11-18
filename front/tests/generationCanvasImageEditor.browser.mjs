@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-c50-image-editor-')
 const api = 'http://127.0.0.1:8560'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8560' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -42,7 +42,7 @@ try {
   assert.ok(seeded.ok,await seeded.text())
   const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
   const saved=async()=>{for(let i=0;i<80;i++){const v=await read();if(v.document.cards[0].file_id)return v;await delay(100)}throw Error('image was not saved')}
-  await page.goto(`http://127.0.0.1:4560/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4560/canvases/${canvas.id}`)
   await page.locator('[data-card-id="image"]').press('Enter')
   const detail=page.locator('.wb-details:not([hidden])')
   await detail.getByText('添加一张图片',{exact:true}).waitFor({timeout:2000})
@@ -165,7 +165,7 @@ try {
   assert.equal(await detail.locator('img[alt="图片预览"]').getAttribute('src'),original)
   await detail.getByRole('button',{name:'选择素材',exact:true}).click()
   await page.getByRole('button',{name:'选用 街道素材-原始图片',exact:true}).click()
-  await page.getByRole('dialog',{name:'项目文件库',exact:true}).waitFor({state:'hidden'})
+  await page.getByRole('dialog',{name:'文件管理',exact:true}).waitFor({state:'hidden'})
   const observer=await page.context().newPage()
   await observer.goto(page.url())
   await observer.getByText('此画布当前只读',{exact:true}).waitFor()

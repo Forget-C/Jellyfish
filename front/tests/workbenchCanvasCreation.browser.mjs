@@ -33,7 +33,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(studio + '/generation-canvases/' + project)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -235,7 +235,7 @@ try {
   const summaries = (await data(sceneApi + '/canvases')).canvases
   assert.equal(summaries.length, 3)
   const row = summaries.find(item => item.name === '空白方案')
-  const document = (await data(studio + '/generation-canvases/' + project + '/' + row.id)).document
+  const document = (await data(`${studio}/generation-canvases/${row.id}?project_id=${project}`)).document
   assert.deepEqual(document.cards.map(card => card.type), ['content.basis'])
   assert.equal(page.url(), productionLocation)
   await openDivision.click()

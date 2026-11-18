@@ -31,7 +31,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -45,7 +45,7 @@ try {
   const objectsUrl = `${scenes}/${sequence.id}/objects`
   const read = () => request(objectsUrl)
   const canvas = await request(`${scenes}/${sequence.id}/canvases`, 'POST', { name: '已有方案' })
-  const canvasUrl = `${studio}/generation-canvases/${project}/${canvas.id}`
+  const canvasUrl = `${studio}/generation-canvases/${canvas.id}?project_id=${project}`
   const canvasBefore = await request(canvasUrl)
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4268, strictPort: true, proxy: { '/api': api } } })
   await server.listen()
@@ -58,8 +58,8 @@ try {
   await page.getByRole('navigation', { name: '制作步骤' }).waitFor()
   const extract = page.getByRole('button', { name: '提取对象', exact: true })
   await page.getByText(/^尚未提取对象/).waitFor()
-  await extract.focus()
-  await page.keyboard.press('Enter')
+  await extract.press('Enter')
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
   const back = page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true })
   await front.waitFor()
@@ -75,54 +75,40 @@ try {
   const slots = await request(`${studio}/entities/actor/library-actor/images`)
   await request(`${studio}/entities/actor/library-actor/images/${slots.items[0].id}`, 'PATCH', { file_id: image })
   assert.equal((await request(`${studio}/entities/character?project_id=${project}`)).items.length, 1, '提取对象不创建项目资源')
-  await front.getByRole('button', { name: '对象更多操作' }).click()
-  await page.getByRole('menuitem', { name: '新建并关联', exact: true }).click()
+  await front.getByRole('button', { name: /^(创建|重新创建)$/ }).click()
+  await page.getByRole('button', { name: /^填写设定/ }).click()
   const draft = page.getByRole('dialog', { name: '新建角色', exact: true })
   await draft.getByRole('textbox', { name: '名称', exact: true }).waitFor()
   assert.equal(await draft.getByRole('textbox', { name: '名称', exact: true }).inputValue(), '阿同')
   await draft.getByRole('button', { name: '返回', exact: true }).click()
   assert.equal((await request(`${studio}/entities/character?project_id=${project}`)).items.length, 1)
-  await front.getByRole('button', { name: '对象更多操作' }).click()
-  await page.getByRole('menuitem', { name: '新建并关联', exact: true }).click()
-  await draft.getByText('参考图片 · 未选择', { exact: true }).click()
-  await draft.getByRole('button', { name: '选择参考主体', exact: true }).click()
-  await draft.getByRole('button', { name: '选择参考演员 资产库演员', exact: true }).click()
-  await draft.getByRole('button', { name: '使用所选图片', exact: true }).click()
-  await draft.getByRole('button', { name: '仅创建', exact: true }).click()
-  await draft.getByRole('button', { name: '采用并创建', exact: true }).click()
-  await draft.waitFor({ state: 'hidden' })
-  await front.getByRole('img', { name: '阿同已选参考图', exact: true }).waitFor()
+  await front.getByRole('button', { name: /^(创建|重新创建)$/ }).click()
+  await page.getByRole('button', { name: /^填写设定/ }).click()
+  await draft.getByRole('button', { name: '保存设定', exact: true }).click()
+  const saved = page.getByRole('dialog', { name: '阿同', exact: true })
+  await saved.getByRole('button', { name: '返回', exact: true }).click()
+  await saved.waitFor({ state: 'hidden' })
   let selected = (await read()).objects[0]
-  assert.notEqual(selected.image_file_id, image, '未生成而采用主体作为主图必须复制文件')
+  assert.ok(selected.asset_id, '保存设定后立即关联当前场次对象')
   assert.notEqual(selected.asset_id, 'library-actor')
   const roleId = selected.asset_id
-  const selectedFile = selected.image_file_id
-  const roleImage = await uploadImage('role.png')
-  await request(`${studio}/entities/character/${roleId}/images`, 'POST', { view_angle: 'LEFT', file_id: roleImage, is_primary: true })
-  const newerRoleImage = await uploadImage('role-newer.png')
-  const newerRoleRecord = await request(`${studio}/entities/character/${roleId}/images`, 'POST', {view_angle:'LEFT',file_id:newerRoleImage,is_primary:true})
-  assert.equal(newerRoleRecord.is_view_default,false)
+  // Reference copying is seeded through the current API so the browser can verify reuse of the resulting main image.
+  const copied = await request(`${studio}/entities/character/${roleId}/adopt-reference-main`, 'POST', {
+    reference: { file_id: image, source_kind: 'actor', source_id: 'library-actor', source_image_id: slots.items[0].id, view_angle: 'FRONT', role: 'identity' },
+  })
+  assert.notEqual(copied.file_id, image, '采用主体作为主图复制文件')
   await page.reload()
-  assert.equal((await read()).objects[0].image_file_id, selectedFile, '已明确选择的场次文件不随主图变化')
-  await front.getByRole('combobox', { name: '参考视角' }).press('ArrowDown')
-  await Promise.all([page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/objects/')),
-    page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('左侧', { exact: true }).click()])
-  assert.equal((await read()).objects[0].image_file_id, roleImage,'按视角使用默认图，独立于更新的对象主图')
-  await request(`${studio}/entities/character/${roleId}/images/${newerRoleRecord.id}`, 'PATCH', {is_view_default:true})
-  assert.equal((await read()).objects[0].image_file_id,roleImage,'更换视角默认图不改变已经保存的场次图片')
-  await back.getByRole('button', { name: '对象更多操作' }).click()
-  await page.getByRole('menuitem', { name: '修改关联资产', exact: true }).click()
-  await page.getByRole('combobox', { name: '使用已有项目对象' }).click()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('阿同', { exact: true }).click()
+  await front.getByRole('img', { name: '阿同已选参考图', exact: true }).waitFor()
+  await back.getByRole('button', { name: '选用', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: '选用项目资源', exact: true })
+  await picker.getByRole('button', { name: '选择阿同', exact: true }).click()
+  await picker.getByRole('button', { name: '确认选用', exact: true }).click()
   await back.getByRole('img', { name: '阿同已选参考图', exact: true }).waitFor()
   selected = (await read()).objects[1]
   assert.equal(selected.asset_id, roleId)
-  assert.equal(selected.image_file_id, newerRoleImage, '明确复用已有项目对象时默认采用主图')
+  assert.equal(selected.image_file_id, (await read()).objects[0].image_file_id, '两处场次对象读取同一已选项目资源的当前主图')
   assert.equal((await request(`${studio}/entities/character?project_id=${project}`)).items.length, 2)
   assert.deepEqual((await request(canvasUrl)).cards, canvasBefore.cards, '对象创建不修改已有画布')
-  const frame = await front.locator('.management-reference-frame').boundingBox()
-  const angleControl = await front.locator('.management-reference-angle').boundingBox()
-  assert.ok(angleControl.y >= frame.y && angleControl.y + angleControl.height <= frame.y + frame.height, '角度控件位于图片区，不遮挡资产名称')
   await page.screenshot({ path: join(output, 'actor-reference.png'), animations: 'disabled' })
-  console.log('PASS extraction creates nothing, common creation/adoption, independent main and explicit project reuse')
+  console.log('PASS extraction creates nothing, common creation, independent main and explicit project reuse')
 } finally { await cleanup() }

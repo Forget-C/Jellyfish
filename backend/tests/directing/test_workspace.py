@@ -135,7 +135,7 @@ def test_ai_repairs_semantic_schema_error_once():
 def test_ai_structure_repair_is_bounded_and_error_omits_body():
     """持续错误最多调用两次，用户错误不包含模型原始正文。"""
     from types import SimpleNamespace
-    from app.services.directing.ai import DirectingOutputError
+    from app.services.directing.errors import DirectingOutputError
 
     calls = []
 

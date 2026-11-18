@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-design-focus-audit-')
-const api = 'http://127.0.0.1:8694', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8694', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8694' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -32,8 +33,8 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '全部设计卡焦点轮廓检查' }) })).json()).data
-  const definitions = (await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards.filter(card => card.type.startsWith('direction.'))
+  const canvas = await createStoryboardCanvas(base, '全部设计卡焦点轮廓检查')
+  const definitions = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/catalog`))).json()).data.cards.filter(card => card.type.startsWith('direction.'))
   assert.equal(definitions.length, 25)
   const visual = new Set(['style', 'composition', 'camera', 'movement', 'lighting', 'focus'])
   const document = { ...canvas.document, cards: definitions.map(definition => {
@@ -49,9 +50,9 @@ try {
   criterion.standard.document = { segments: [{ id: 'intro', kind: 'text', text: '参考：' }, { id: 'source', kind: 'reference', source: { canvas_id: canvas.id, card_id: 'candidate-anchor', port_id: 'text', position: 0 } }] }
   document.edges.push({ id: 'criterion-reference', source_card: 'candidate-anchor', source_port: 'text', target_card: 'criterion', target_port: 'text' })
   document.input_order.criterion = { text: ['criterion-reference'] }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4694/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4694${storyboardCanvasPath(canvas)}`)
   const failures = []
   let checked = 0
   const inspectFocus = async (control, kind, viewport) => {

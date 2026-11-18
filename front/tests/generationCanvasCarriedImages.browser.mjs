@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -9,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-carried-images-')
-const api = 'http://127.0.0.1:8667', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8667', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8667' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -31,7 +32,7 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '摄影设计')
   const form = new FormData()
   form.set('project_id','canvas-project');form.set('usage_kind','generation_upload')
   form.set('file',new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+lmN8AAAAASUVORK5CYII=','base64')],{type:'image/png'}),'reference.png')
@@ -47,11 +48,11 @@ try {
       {id:'direct-criterion',source_card:'criterion',source_port:'text',target_card:'image',target_port:'text'},
       {id:'direct-image-edge',source_card:'reference',source_port:'image',target_card:'image',target_port:'image'}],
     input_order:{style:{image:['ref'],acceptance_basis:['acceptance']},image:{text:['design','direct-criterion'],image:['direct-image-edge']}}}
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seed.ok,await seed.text())
-  const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})});assert.ok(seed.ok,await seed.text())
+  const read=async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('carried save did not arrive')}
-  const compiled=async()=> (await (await fetch(`${base}/${canvas.id}/cards/image/compile`)).json()).data
-  await page.goto(`http://127.0.0.1:4667/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const compiled=async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/image/compile`))).json()).data
+  await page.goto(`http://127.0.0.1:4667${storyboardCanvasPath(canvas)}`)
   await page.locator('[data-card-id="image"]').press('Enter')
   await page.getByRole('region',{name:'关联来源',exact:true}).getByRole('button',{name:/机位与视角卡/}).click()
   // A sole independent design connection is adopted immediately.

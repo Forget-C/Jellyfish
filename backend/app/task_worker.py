@@ -27,9 +27,7 @@ from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.file_cleanup import FileCleaner
-from app.services.directing.ai import DirectingOutputError
-from app.services.directing.scene_export_execution import execute_scene_export
-from app.services.directing.scene_export_render import render_scene_cut
+from app.services.directing.errors import DirectingOutputError
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
 from app.services.directing.storyboard_prompt import prompt_units
@@ -45,7 +43,10 @@ from app.services.generation.media_execution import build_media_input, deliver_m
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
-from app.services.task_service import AUTO_CHECK_DISPATCH, MEDIA_KINDS, TASK_KINDS, TaskService, utcnow
+from app.services.task_service import (
+    AUTO_CHECK_DISPATCH, MEDIA_KINDS, RETIRED_SCENE_TASK_KINDS, TASK_KINDS,
+    TaskService, is_retired_scene_task, utcnow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,8 @@ class TaskWorker:
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(
                 Task.status == "running", Task.execution_mode == "remote",
             )) or 0
-            for phase, kinds, capacity in (("text", TASK_KINDS - MEDIA_KINDS, self.limits.text),
+            # 仍领取已入队的退役类型，由 _load 核对并写入终态。
+            for phase, kinds, capacity in (("text", (TASK_KINDS - MEDIA_KINDS) | RETIRED_SCENE_TASK_KINDS, self.limits.text),
                                            ("submit", MEDIA_KINDS, self.limits.submit)):
                 occupied = {task_id for task_id, current in self.phases.items() if current == phase}
                 if phase == "text":
@@ -208,6 +210,10 @@ class TaskWorker:
                 await TaskService(db).finish(task_id, cancelled=True)
                 await db.commit()
                 return None
+            if is_retired_scene_task(task.kind, task.target_type, task.input_snapshot):
+                await TaskService(db).finish(task_id, error_code="scene_version_retired", error="旧场次版本任务已退役")
+                await db.commit()
+                return None
             return task
 
     async def _execute(self, task_id: str) -> None:
@@ -234,11 +240,6 @@ class TaskWorker:
                     async with self.sessions.begin() as db:
                         await dispatch_automatic_checks(db, task)
                     return
-                if task.kind == 'scene_export':
-                    await execute_scene_export(self.sessions, task,
-                        lambda content, sources, profile: self._render_scene(task, content, sources, profile),
-                        lambda: self._load(task.id))
-                    return
                 if task.kind not in MEDIA_KINDS:
                     await self._text(task)
                     return
@@ -248,7 +249,7 @@ class TaskWorker:
                 inp = await build_media_input(task, snapshot, files)
                 if await self._load(task_id) is None:
                     return
-                if task.target_type in {"directing_unit", "scene_video"}:
+                if task.target_type == "directing_unit":
                     async with self.sessions() as db:
                         await DirectingStore(db, task.project_id).validate_task_continuity(task)
                 result = await MediaProvider(self.client).submit(cfg, inp)
@@ -350,7 +351,7 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            directing = task.kind in {"directing_storyboard", STORYBOARD_CHECK_KIND, "directing_object_extract", "directing_unit_design", "directing_shooting_check", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
+            directing = task.kind in {"directing_storyboard", STORYBOARD_CHECK_KIND, "directing_object_extract", "directing_shooting_check", "directing_divide", "directing_design", "directing_review", "directing_review_revision"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
@@ -901,19 +902,6 @@ class TaskWorker:
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result={'text': text, 'model_id': task.input_snapshot['model_id']})
             await db.commit()
-
-    async def _render_scene(self, task, content, sources, profile):
-        """FFmpeg 在线程池执行；超时后仍保留名额至临时文件实际清理完成。"""
-        future = asyncio.wrap_future(self.text_pool.submit(render_scene_cut, content, sources, profile))
-        self.text_threads[task.id] = future
-
-        def done(completed):
-            self.text_threads.pop(task.id, None)
-            if not completed.cancelled():
-                completed.exception()
-
-        future.add_done_callback(done)
-        return await asyncio.shield(future)
 
     async def _run_script(self, task: Task, llm, args: dict, stopped: Event, *, execute=None):
         """等待超时不代表线程退出；线程实际结束前继续占用文本名额。"""

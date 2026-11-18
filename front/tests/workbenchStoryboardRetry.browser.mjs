@@ -43,7 +43,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(studio + '/generation-canvases/' + project)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -78,7 +78,7 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(14000)
   const management = origin + '/projects/' + project + '/chapters/' + chapter + '/workbench-management?sequence=' + scene.id + '&step=storyboard'
-  const canvas = studio + '/generation-canvases/' + project + '/' + original.canvas_id
+  const canvas = `${studio}/generation-canvases/${original.canvas_id}?project_id=${project}`
   await page.goto(management)
   assert.equal(await page.getByRole('button', { name: '打开画布', exact: true }).count(), 0)
   await page.getByRole('button', { name: '处理提取问题', exact: true }).click()
@@ -131,7 +131,7 @@ try {
   assert.equal(page.url(), management)
 
   const ordinary = await context.newPage()
-  await ordinary.goto(origin + '/projects/' + project + '/generation-canvas?canvas=' + original.canvas_id)
+  await ordinary.goto(origin + '/projects/' + project + '/chapters/' + chapter + '/sequences/' + scene.id + '/canvas-workbench?canvas=' + original.canvas_id)
   await ordinary.getByRole('dialog', { name: '处理分镜提取结果', exact: true }).waitFor()
   assert.equal(await ordinary.locator('[data-card-type="direction.shot"]').count(), 0)
   await ordinary.close()
@@ -145,7 +145,7 @@ try {
   const reviewTask = await data(sceneApi + '/storyboards', 'POST', {
     name: '审查恢复画布', request_id: 'review-original', mode: 'faithful',
   })
-  const reviewCanvas = studio + '/generation-canvases/' + project + '/' + reviewTask.canvas_id
+  const reviewCanvas = `${studio}/generation-canvases/${reviewTask.canvas_id}?project_id=${project}`
   const untouched = await data(reviewCanvas)
   await page.goto(management)
   const reviewCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '审查恢复画布', exact: true }) })
@@ -231,13 +231,13 @@ try {
   const repairTask = await data(sceneApi + '/storyboards', 'POST', {
     name: '定向修正画布', request_id: 'targeted-repair', mode: 'complete',
   })
-  const repairCanvas = studio + '/generation-canvases/' + project + '/' + repairTask.canvas_id
+  const repairCanvas = `${studio}/generation-canvases/${repairTask.canvas_id}?project_id=${project}`
   await page.goto(management)
   const repairCard = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '定向修正画布', exact: true }) })
   await repairCard.getByText('正在定向修正分镜', { exact: true }).waitFor()
   assert.equal((await data(repairCanvas)).revision, 0)
   await control({ storyboard_repair_release: true })
-  await repairCard.getByText('正在复核分镜连续性', { exact: true }).waitFor()
+  await repairCard.getByText('正在审查分镜连续性', { exact: true }).waitFor()
   assert.equal((await data(repairCanvas)).revision, 0)
   await control({ storyboard_recheck_release: true })
   await repairCard.getByRole('button', { name: '查看并采用分镜', exact: true }).click()
@@ -271,11 +271,6 @@ try {
   assert.equal(await page.getByText('检查依据已变', { exact: true }).count(), 0)
   await page.getByRole('button', { name: '查看检查报告', exact: true }).click()
   await page.getByRole('dialog', { name: '分镜连续性检查报告', exact: true }).waitFor()
-  const ordinaryChecked = await context.newPage()
-  await ordinaryChecked.goto(origin + '/projects/' + project + '/generation-canvas?canvas=' + repairTask.canvas_id)
-  await ordinaryChecked.locator('[data-card-type="direction.shot"]').first().waitFor()
-  assert.equal(await ordinaryChecked.getByRole('button', { name: '检查分镜连续性', exact: true }).count(), 0)
-  await ordinaryChecked.close()
 
   await control({ storyboard_structure_choices: true, storyboard_repair_on: 0 })
   const structureTask = await data(sceneApi + '/storyboards', 'POST', {
@@ -315,7 +310,7 @@ try {
   await correct.click()
   assert.equal((await submission).postDataJSON().correction_notes, '保留等待设计，仅补齐参与对象关联')
   await structureCard.getByRole('button', { name: '核对分镜', exact: true }).waitFor()
-  assert.equal((await data(studio + '/generation-canvases/' + project + '/' + structureTask.canvas_id)).revision, 0)
+  assert.equal((await data(`${studio}/generation-canvases/${structureTask.canvas_id}?project_id=${project}`)).revision, 0)
 
   const historyTask = await data(sceneApi + '/storyboards', 'POST', {
     name: '历史记录区分', request_id: 'history-separation', mode: 'complete',

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Input, Space } from 'antd'
 import type { CanvasModelCapability, CanvasResolvedOutput, DesignMediaUse, VideoModelCard } from '../../../services/generated'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
 

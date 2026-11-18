@@ -12,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8439', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8439', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8439' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -36,10 +36,10 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '多图与未完成成果' }) })).json()).data
-  const document = { ...canvas.document, cards: [{ id: 'text', type: 'content.text', text: '下方编辑内容' }, { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{id:'p',kind:'text',text:'portrait'}] }, config: {count:3} }, { id: 'image', type: 'content.image' }, { id: 'ref', type: 'reference.character', title: '参考人物', angle: '正面', objects: [] }, ...['content.basis','content.object','content.place','content.video','content.audio','reference.place','reference.prop','reference.costume','model.text','model.video'].map((type,index)=>({id:`kind-${index}`,type}))], edges: [] }
+  const document = { ...canvas.document, cards: [{ id: 'text', type: 'content.text', text: '下方编辑内容' }, { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{id:'p',kind:'text',text:'portrait'}] }, config: {count:3} }, { id: 'image', type: 'content.image' }, { id: 'ref', type: 'reference.character', name: '参考人物', angle: '正面' }, ...['content.basis','content.character','content.place','content.video','content.audio','reference.place','reference.prop','reference.costume','model.text','model.video'].map((type,index)=>({id:`kind-${index}`,type}))], edges: [] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4439/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4439/canvases/${canvas.id}`)
   await page.locator('[data-card-id="m"]').press('Enter')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const editor = page.locator('.wb-details:not([hidden])')
@@ -69,7 +69,7 @@ try {
   const preview=page.getByRole('dialog',{name:'运行预检',exact:true})
   await preview.waitFor()
   await page.screenshot({path:join(output,'single-model-precheck.png')})
-  const accepted=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/runs'))
+  const accepted=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/runs'))
   await preview.getByRole('button',{name:'确认执行',exact:true}).click()
   const run=(await (await accepted).json()).data
   await editor.getByRole('region',{name:'当前正式输出',exact:true}).waitFor()
@@ -84,7 +84,7 @@ try {
   await editor.getByRole('button',{name:'添加模型来源',exact:true}).click()
   await page.locator('.ant-dropdown-menu-submenu-title').filter({hasText:'从素材库添加'}).hover()
   await page.getByRole('menuitem',{name:'选择参考图片素材',exact:true}).click()
-  const library = page.getByRole('dialog',{name:'项目文件库',exact:true})
+  const library = page.getByRole('dialog',{name:'文件管理',exact:true})
   await library.getByRole('button',{name:'选用 tiny',exact:true}).click()
   await upload.getByRole('img',{name:'图片预览',exact:true}).waitFor()
   await upload.getByRole('button',{name:'Close',exact:true}).click()

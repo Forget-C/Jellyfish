@@ -4,7 +4,7 @@ import type { ShootingCheckRead, ShootingIssue, ShootingNote, SourceSpan } from 
 import { excerptMatches } from './common'
 import { sameSpan, sourceSlice, textareaSpan } from './sourceSelection'
 import { explanationScopes, intersectingScopes } from './ShootingExplanationSource'
-import { WorkbenchDialogActions } from './ui/WorkbenchModal'
+import { WorkbenchDialogActions } from '../../../components/workbench/WorkbenchModal'
 
 type Row = {
   issue: ShootingIssue

@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-graph-')
 const api = 'http://127.0.0.1:8460'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8460' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -44,7 +44,7 @@ try {
   ], input_order:{b:{text:['internal','incoming']}}, edges: [{id:'internal',source_card:'a',source_port:'text',target_card:'b',target_port:'text'}, {id:'incoming',source_card:'m',source_port:'text',target_card:'b',target_port:'text'}] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4460/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4460/canvases/${canvas.id}`)
   const card = id => page.locator(`[data-card-id="${id}"]`)
   const selected = () => page.locator('[data-card-id][data-selected="true"]')
   await card('a').waitFor()

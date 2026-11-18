@@ -3,15 +3,14 @@ import { createRequire } from 'node:module'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
-import { makeWorkspace } from './directing-fixtures.mjs'
+import { makeSequence } from './directing-fixtures.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = process.env.SHELL_EVIDENCE_DIR || '/tmp/jellyfish-shell-acceptance'
 await mkdir(output, { recursive: true })
 process.chdir(root)
-const workspace = makeWorkspace()
-workspace.sequence.title = '旧信重逢'
+const sequence = makeSequence('旧信重逢')
 const project = { id: 'p1', name: '旧信', description: '布局验收项目', style: '现实主义', visual_style: '现实', progress: 25, stats: { chapters: 1, roles: 1, updated_at: '2026-09-15 10:00' } }
 const chapter = { id: 'ch1', project_id: 'p1', index: 2, title: '第二章', raw_text: '他递出旧信，她认出了他。', status: 'draft', sequence_count: 1 }
 const asset = { id: 'a1', name: '旧信档案', description: '用于检查长表单和工作区滚动。'.repeat(20), tags: ['验收'], visual_style: '现实', style: '现实主义', view_count: 1 }
@@ -48,12 +47,8 @@ try {
     if (path.endsWith('/projects/p1')) return failProject ? route.fulfill({ status: 503, json: { detail: '测试加载失败' } }) : respond(project)
     if (path.endsWith('/chapters/ch1') && !path.includes('/directing/')) return respond(chapter)
     if (path.endsWith('/chapters')) return respond(list([chapter]))
-    if (path.endsWith('/s1')) return respond(workspace)
-    if (path.endsWith('/directing/chapters/ch1/assembly')) return respond({ chapter_id: 'ch1', title: chapter.title, sequences: [], transitions: [], gaps: [] })
-    if (path.endsWith('/directing/chapters/ch1/overview')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [workspace.sequence], task_ids: [] })
-    if (path.endsWith('/directing/chapters/ch1')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [workspace.sequence], task_ids: [] })
-    if (path.endsWith('/s1/feedback')) return respond({ active_cut_revision_id: 'c-active', current_review_id: null, reviews: [], repairs: [], knowledge: [] })
-    if (path.endsWith('/s1/continuity')) return respond({ active_cut_revision_id: 'c-active', frames: [], seams: [], units: [] })
+    if (path.endsWith('/directing/chapters/ch1/overview')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [sequence], task_ids: [] })
+    if (path.endsWith('/directing/chapters/ch1')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [sequence], task_ids: [] })
     if (/\/entities\/[^/]+\/a1$/.test(path)) { if (request.method() === 'PATCH') Object.assign(asset, request.postDataJSON()); return respond({...asset,project_id:path.includes('/character/')?'p1':null}) }
     if (/\/entities\/[^/]+$/.test(path)) return respond(list([asset]))
     if (path.endsWith('/images')) return respond(list([{ id: 1, view_angle: 'FRONT', file_id: 'test-image', width: 192, height: 288, format: 'svg' }]))
@@ -130,7 +125,7 @@ try {
   const projectNavigation = page.getByRole('navigation', { name: '项目导航', exact: true })
   await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
   assert.deepEqual(await projectNavigation.getByRole('link').allTextContents(), [
-    '项目概览', '画布生成', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
+    '项目概览', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
   ])
   await projectNavigation.getByText('旧信', { exact: true }).waitFor()
   for (const label of ['章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置', '项目概览']) {

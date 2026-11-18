@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { browserCleanup, browserOutput } from './browser-runtime.mjs'
-import { makeWorkspace } from './directing-fixtures.mjs'
+import { makeSequence } from './directing-fixtures.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-appearance-')
@@ -21,7 +21,7 @@ try {
   page = await context.newPage()
   page.setDefaultTimeout(8000)
   const errors = []
-  const workspace = makeWorkspace()
+  const sequence = makeSequence()
   const canvases = [
     { path: '/canvases/free-appearance', id: 'free-appearance', projectId: null, name: '自由画布配色验收' },
     { path: '/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=storyboard-appearance',
@@ -36,7 +36,7 @@ try {
       const { pathname, searchParams } = new URL(route.request().url())
       const respond = data => route.fulfill({ json: { code: 200, data } })
       if (pathname === '/api/v1/studio/projects/p1/directing/chapters/ch1/sequences/s1/canvases') {
-        return respond({ sequence: workspace.sequence, canvases: sceneUnavailable ? [] : [
+        return respond({ sequence, canvases: sceneUnavailable ? [] : [
           { id: sceneCanvas.id, name: sceneCanvas.name, can_open: true },
         ] })
       }
@@ -77,7 +77,7 @@ try {
       const { backgroundColor, backgroundImage, color } = getComputedStyle(element)
       return { backgroundColor, backgroundImage, color }
     }
-    const colors = { canvas: await canvas.evaluate(readColors), overlay: await overlay.evaluate(readColors) }
+    const colors = { canvas: await canvas.locator('.generation-surface').evaluate(readColors), overlay: await overlay.evaluate(readColors) }
     await overlay.getByRole('button', { name: /Close|关闭/ }).click()
     await overlay.waitFor({ state: 'hidden' })
     return colors
@@ -145,7 +145,8 @@ try {
 
   for (const [index, canvas] of canvases.entries()) {
     const colors = await canvasColors(canvas)
-    assert.deepEqual(colors.canvas, solidBackground, 'default follows the current site appearance')
+    assert.equal(colors.canvas.backgroundColor, solidBackground.backgroundColor)
+    assert.doesNotMatch(colors.canvas.backgroundImage, /linear-gradient/, 'default follows the current site appearance')
     assert.notDeepEqual(colors.canvas, originalCanvasColors[index].canvas)
     assert.equal(colors.overlay.backgroundColor, 'rgb(237, 242, 248)', 'task portal follows light theme')
     const picker = page.getByRole('button', { name: '画布配色', exact: true })
@@ -171,7 +172,7 @@ try {
     assert.equal(await page.getByRole('menuitemradio', { name: '雾蓝微渐变', exact: true }).getAttribute('aria-checked'), 'true')
     await page.keyboard.press('Escape')
     await choose('雾蓝纯色')
-    assert.deepEqual((await canvasColors(canvas)).canvas, solidBackground)
+    assert.deepEqual((await canvasColors(canvas)).canvas, colors.canvas)
     await page.setViewportSize({ width: 390, height: 844 })
     await picker.press('Enter')
     const palette = page.getByRole('menu')

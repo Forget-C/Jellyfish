@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openModelInspection, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8479'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8479' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -34,8 +35,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
-  const canvas=(await response.json()).data
+  const canvas = await createStoryboardCanvas(base, '筛选保持采用')
   const imageForm = new FormData()
   imageForm.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')], {type:'image/png'}), 'reference.png')
   imageForm.append('project_id', 'canvas-project'); imageForm.append('usage_kind', 'generation_upload')
@@ -43,14 +43,14 @@ try {
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'被隐藏但明确采用的内容'},
     {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}},{id:'dense',type:'direction.performance',input_bindings:[],examples:[],scope:{}},{id:'person',type:'content.character',object_id:'actor',name:'张三',text:'人物描述'},{id:'photo',type:'direction.focus',input_bindings:[],examples:[],scope:{}},{id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}},{id:'image',type:'content.image',file_id:fileId},{id:'unknown',type:'model.text',model_id:null,prompt:{segments:[]},config:{}}],
     edges:[],input_order:{}}
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok,await seed.clone().text())
-  const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
+  const read=async()=>(await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const before=await read()
-  const precheck=async()=>(await(await fetch(`${base}/${canvas.id}/precheck`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:'model'})})).json()).data
+  const precheck=async()=>(await(await fetch(storyboardCanvasApi(base, canvas.id, `/precheck`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:'model'})})).json()).data
   const initialPreview=await precheck()
   assert.doesNotMatch(initialPreview.input.text,/被隐藏但明确采用的内容/)
-  await page.goto(`http://127.0.0.1:4479/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4479${storyboardCanvasPath(canvas)}`)
   const sourceCard=page.locator('[data-card-id="source"]'), modelCard=page.locator('[data-card-id="model"]')
   await modelCard.waitFor()
   const side = (id, edge) => page.locator(`[data-card-id="${id}"] [data-connection-side="${edge}"]`)

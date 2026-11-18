@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { omitMissingStoryboardImages, closePrecheck, enterStoryboardCanvas } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -17,7 +17,8 @@ execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i
   '-c:v', 'libx264', '-y', fixture])
 const api = 'http://127.0.0.1:8733', studio = api + '/api/v1/studio'
 const project = 'canvas-project', chapter = 'storyboard-reference-switch-chapter', text = '前门的阿同拿着信封。后门的阿同等待。'
-const base = studio + '/generation-canvases/' + project
+const base = studio + '/generation-canvases'
+const canvasUrl = (id, suffix = '') => `${base}/${id}${suffix}?project_id=${project}`
 const controls = api + '/test/runtime-controls'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
@@ -67,17 +68,24 @@ try {
   const scene = `${chapterApi}/sequences/${sequence.id}`
   await page.goto(`${projectUrl}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=objects`)
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   await page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
   const task = await request(scene + '/storyboards', 'POST', { request_id: randomUUID(), name: '视觉承接',
     mode: 'faithful', production_model_id: 'story-video-model', pending_modality: 'video' })
   const ready = await poll(() => request(scene + '/storyboards/' + task.task_id),
     item => ['succeeded', 'failed'].includes(item.status), 'storyboard did not finish')
   assert.equal(ready.status, 'succeeded', JSON.stringify(ready))
-  const canvas = base + '/' + task.canvas_id
+  const canvas = task.canvas_id
   await page.goto(`${projectUrl}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${task.canvas_id}&storyboardTask=${task.task_id}`)
-  const state = await poll(() => request(canvas), item => item.document.storyboard, 'storyboard was not saved')
+  await enterStoryboardCanvas(page)
+  const state = await poll(() => request(canvasUrl(canvas)), item => item.document.storyboard, 'storyboard was not saved')
   const [first, later] = state.document.storyboard.shots.map(item => item.model_card_ids[0])
   assert.ok(first && later)
+  const omitImages = (id, names, targetCanvas = canvas) => omitMissingStoryboardImages(page, id,
+    () => request(canvasUrl(targetCanvas)),
+    () => request(canvasUrl(targetCanvas, '/precheck'), 'POST', { card_id: id }), names)
+  await omitImages(first, ['阿同', '信封'])
+  await omitImages(later, ['阿同（2）'])
   const model = page.locator(`[data-card-id="${later}"]`)
   const open = async () => {
     await model.getByRole('button', { name: '卡片操作' }).click()
@@ -92,10 +100,10 @@ try {
   assert.equal(await preview.getByRole('button', { name: '确认执行' }).isEnabled(), true)
   await closePrecheck(page)
   const run = async (id) => {
-    const checked = await request(canvas + '/precheck', 'POST', { card_id: id })
+    const checked = await request(canvasUrl(canvas, '/precheck'), 'POST', { card_id: id })
     assert.ok(checked.can_run, JSON.stringify(checked.diagnostics))
-    const result = await request(canvas + '/runs', 'POST', { request_id: randomUUID(), preview_token: checked.preview_token })
-    const runtime = await poll(() => request(canvas + '/runtime'), item => item.runs.find(r => r.id === result.run_id)?.lifecycle === 'finished', 'video did not finish')
+    const result = await request(canvasUrl(canvas, '/runs'), 'POST', { request_id: randomUUID(), preview_token: checked.preview_token })
+    const runtime = await poll(() => request(canvasUrl(canvas, '/runtime')), item => item.runs.find(r => r.id === result.run_id)?.lifecycle === 'finished', 'video did not finish')
     const node = runtime.runs.find(r => r.id === result.run_id).nodes[0]
     assert.equal(node.status, 'succeeded')
     return node
@@ -109,7 +117,7 @@ try {
   const uploaded = await fetch(studio + '/files/upload', { method: 'POST', body: form })
   assert.ok(uploaded.ok, await uploaded.clone().text())
   const subjectFile = (await uploaded.json()).data.id
-  const seed = await request(canvas)
+  const seed = await request(canvasUrl(canvas))
   const doc = seed.document
   const target = doc.cards.find(card => card.id === later)
   const subjectSource = { canvas_id: doc.id, card_id: 'existing-subject', port_id: 'image', position: 0 }
@@ -122,7 +130,8 @@ try {
       references: [{ id: 'subject-command-reference', kind: 'reference', binding_id: subjectBinding.id }] })
   doc.edges.push({ id: 'existing-subject-edge', source_card: subjectSource.card_id, source_port: 'image',
     target_card: later, target_port: 'subject_image' })
-  doc.input_order[later] = { ...doc.input_order[later], subject_image: ['existing-subject-edge'] }
+  doc.input_order[later] = { ...doc.input_order[later],
+    subject_image: [...(doc.input_order[later].subject_image || []), 'existing-subject-edge'] }
   const carriedSource = { ...subjectSource, card_id: 'carried-source' }
   doc.cards.push({ id: 'carried-source', type: 'content.image', file_id: subjectFile },
     { id: 'shared-style', type: 'direction.style', fields: { direction: { state: 'proposal', document: { segments: [
@@ -138,9 +147,9 @@ try {
   doc.input_order[later].text = [...(doc.input_order[later].text || []), 'target-style-edge']
   doc.input_order['shared-style'] = { image: ['style-carried-edge'] }
   doc.input_order['other-model'] = { text: ['other-style-edge'] }
-  await request(canvas, 'PUT', { request_id: randomUUID(), expected_revision: seed.revision, document: doc })
-  const original = await request(canvas)
-  assert.equal((await request(canvas + '/cards/' + later + '/compile')).video_media.subjects[0].name, '阿同')
+  await request(canvasUrl(canvas), 'PUT', { request_id: randomUUID(), expected_revision: seed.revision, document: doc })
+  const original = await request(canvasUrl(canvas))
+  assert.equal((await request(canvasUrl(canvas, '/cards/' + later + '/compile'))).video_media.subjects[0].name, '阿同')
   const choose = async () => {
     await open()
     await page.waitForFunction(() => !document.querySelector('[aria-label="视频时间位置"]')?.disabled)
@@ -153,24 +162,24 @@ try {
   }
   await page.reload()
   await choose()
-  assert.deepEqual(await request(canvas), original, 'opening the conflict choice does not save or extract')
+  assert.deepEqual(await request(canvasUrl(canvas)), original, 'opening the conflict choice does not save or extract')
   await dialog.getByRole('button', { name: '保留主体参考并取消采用', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
-  assert.deepEqual(await request(canvas), original)
+  assert.deepEqual(await request(canvasUrl(canvas)), original)
   await choose()
   await request(api + '/api/v1/llm/models', 'POST', { id: 'alternate-vidu', name: 'viduq2-pro', category: 'video', provider_id: 'story-video-provider' })
-  const concurrent = await request(canvas)
+  const concurrent = await request(canvasUrl(canvas))
   concurrent.document.cards.find(card => card.id === later).model_id = 'alternate-vidu'
-  await request(canvas, 'PUT', { request_id: randomUUID(), expected_revision: concurrent.revision, document: concurrent.document })
-  const changed = await request(canvas)
+  await request(canvasUrl(canvas), 'PUT', { request_id: randomUUID(), expected_revision: concurrent.revision, document: concurrent.document })
+  const changed = await request(canvasUrl(canvas))
   const switchButton = dialog.getByRole('button', { name: '切换为首帧并停用主体参考', exact: true })
   await switchButton.click()
   await dialog.getByText('画布已有新修订，请重新打开后采用').waitFor()
-  assert.deepEqual(await request(canvas), changed)
+  assert.deepEqual(await request(canvasUrl(canvas)), changed)
   await dialog.getByRole('button', { name: '取消', exact: true }).click()
   await page.reload()
   await choose()
-  const matchSave = url => url.pathname === new URL(canvas).pathname
+  const matchSave = url => url.pathname === new URL(canvasUrl(canvas)).pathname
   let corrupted = false
   const tamper = async route => {
     if (corrupted || route.request().method() !== 'PUT') return route.continue()
@@ -182,11 +191,11 @@ try {
   await page.route(matchSave, tamper)
   await switchButton.click()
   await dialog.getByText(/承接尚未确认/).waitFor()
-  assert.deepEqual(await request(canvas), changed, 'invalid suspension does not leave a partial switch')
+  assert.deepEqual(await request(canvasUrl(canvas)), changed, 'invalid suspension does not leave a partial switch')
   await page.unroute(matchSave, tamper)
   await switchButton.click()
   await dialog.waitFor({ state: 'hidden' })
-  const switched = await request(canvas)
+  const switched = await request(canvasUrl(canvas))
   assert.equal(switched.revision, changed.revision + 1)
   const after = switched.document.cards.find(card => card.id === later)
   const frame = switched.document.cards.find(card => card.frame_origin?.source_file_id === predecessor.outputs[0].file_id)
@@ -202,8 +211,8 @@ try {
   assert.equal(Object.values(relation.suspended.design_media_uses)[0].id, 'carried-subject-use')
   assert.equal(after.design_media_uses.length, 0)
   assert.deepEqual(switched.document.cards.find(card => card.id === 'shared-style'), original.document.cards.find(card => card.id === 'shared-style'))
-  assert.ok((await request(canvas + '/cards/other-model/compile')).diagnostics.some(item => item.code === 'DESIGN_MEDIA_PURPOSE_REQUIRED'))
-  const compiled = await request(canvas + '/cards/' + later + '/compile')
+  assert.ok((await request(canvasUrl(canvas, '/cards/other-model/compile'))).diagnostics.some(item => item.code === 'DESIGN_MEDIA_PURPOSE_REQUIRED'))
+  const compiled = await request(canvasUrl(canvas, '/cards/' + later + '/compile'))
   assert.equal(compiled.video_media.frames.first.file_id, frame.file_id)
   assert.equal(compiled.video_media.subjects.length, 0)
   assert.equal(compiled.diagnostics.some(item => item.code === 'DESIGN_MEDIA_PURPOSE_REQUIRED'), false)
@@ -212,27 +221,27 @@ try {
   await run(later)
   assert.equal((await request(controls)).media_calls.at(-1).path, '/ent/v2/img2video')
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
-  const undone = await poll(() => request(canvas), item => !item.document.cards.some(card => card.id === frame.id), 'undo did not save')
+  const undone = await poll(() => request(canvasUrl(canvas)), item => !item.document.cards.some(card => card.id === frame.id), 'undo did not save')
   assert.deepEqual(undone.document.cards.find(card => card.id === later).prompt, original.document.cards.find(card => card.id === later).prompt)
   assert.deepEqual(undone.document.cards.find(card => card.id === later).input_bindings, original.document.cards.find(card => card.id === later).input_bindings)
   await page.getByRole('button', { name: '重做操作', exact: true }).click()
-  await poll(() => request(canvas), item => item.document.storyboard.visual_continuity?.[later]?.suspended, 'redo did not save')
-  const active = await request(canvas)
+  await poll(() => request(canvasUrl(canvas)), item => item.document.storyboard.visual_continuity?.[later]?.suspended, 'redo did not save')
+  const active = await request(canvasUrl(canvas))
   await open()
   const remove = dialog.getByRole('button', { name: '移除承接', exact: true })
   await remove.click()
   const removal = dialog.getByRole('region', { name: '移除视觉承接', exact: true })
   await removal.getByText(/阿同造型.*主体图片/).waitFor()
   await removal.getByRole('button', { name: '取消移除', exact: true }).click()
-  assert.deepEqual(await request(canvas), active)
+  assert.deepEqual(await request(canvasUrl(canvas)), active)
   await remove.click()
   await removal.getByRole('button', { name: '仅移除承接', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
-  const inactive = await request(canvas)
+  const inactive = await request(canvasUrl(canvas))
   assert.equal(inactive.revision, active.revision + 1)
   assert.equal(inactive.document.storyboard.visual_continuity[later].binding_id, null)
   assert.ok(inactive.document.cards.some(card => card.id === frame.id), 'removal retains still')
-  const noFrame = await request(canvas + '/cards/' + later + '/compile')
+  const noFrame = await request(canvasUrl(canvas, '/cards/' + later + '/compile'))
   assert.equal(noFrame.video_media.frames.first, null)
   assert.equal(noFrame.video_media.subjects.length, 0)
   assert.equal(noFrame.diagnostics.some(item => item.code === 'DESIGN_MEDIA_PURPOSE_REQUIRED'), false)
@@ -241,7 +250,7 @@ try {
   const reviewRestore = dialog.getByRole('button', { name: '核对并恢复原参考', exact: true })
   await reviewRestore.click()
   await removal.getByRole('button', { name: '取消恢复', exact: true }).click()
-  assert.deepEqual(await request(canvas), inactive)
+  assert.deepEqual(await request(canvasUrl(canvas)), inactive)
   await reviewRestore.click()
   const restore = removal.getByRole('button', { name: '确认恢复原参考', exact: true })
   let invalidRestore = false
@@ -256,39 +265,39 @@ try {
   await page.route(matchSave, tamperRestore)
   await restore.click()
   await dialog.getByText(/操作尚未确认/).waitFor()
-  assert.deepEqual(await request(canvas), inactive, 'failed restore preserves the pending suspension and still')
+  assert.deepEqual(await request(canvasUrl(canvas)), inactive, 'failed restore preserves the pending suspension and still')
   await page.unroute(matchSave, tamperRestore)
   await restore.click()
   await dialog.waitFor({ state: 'hidden' })
-  const restoredLater = await request(canvas)
+  const restoredLater = await request(canvasUrl(canvas))
   assert.equal(restoredLater.revision, inactive.revision + 1)
   assert.equal(restoredLater.document.storyboard.visual_continuity?.[later]?.restored, true)
   assert.ok(restoredLater.document.cards.some(card => card.id === frame.id))
-  const subjects = await request(canvas + '/cards/' + later + '/compile')
+  const subjects = await request(canvasUrl(canvas, '/cards/' + later + '/compile'))
   assert.deepEqual(subjects.video_media.subjects.map(item => item.name), ['阿同', '阿同造型'])
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
-  await poll(() => request(canvas), item => item.document.storyboard.visual_continuity?.[later]?.restored !== true
+  await poll(() => request(canvasUrl(canvas)), item => item.document.storyboard.visual_continuity?.[later]?.restored !== true
     && item.document.storyboard.visual_continuity?.[later]?.binding_id === null, 'undo should return to inactive suspension')
   await page.getByRole('button', { name: '重做操作', exact: true }).click()
-  await poll(() => request(canvas), item => item.document.storyboard.visual_continuity?.[later]?.restored, 'redo should restore subject inputs')
+  await poll(() => request(canvasUrl(canvas)), item => item.document.storyboard.visual_continuity?.[later]?.restored, 'redo should restore subject inputs')
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
-  await poll(() => request(canvas), item => item.document.storyboard.visual_continuity?.[later]?.restored !== true
+  await poll(() => request(canvasUrl(canvas)), item => item.document.storyboard.visual_continuity?.[later]?.restored !== true
     && item.document.storyboard.visual_continuity?.[later]?.binding_id === null, 'second undo should return to inactive suspension')
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
-  await poll(() => request(canvas), item => item.document.storyboard.visual_continuity?.[later]?.binding_id, 'undo should restore active frame')
+  await poll(() => request(canvasUrl(canvas)), item => item.document.storyboard.visual_continuity?.[later]?.binding_id, 'undo should restore active frame')
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()
-  await poll(() => request(canvas), item => !item.document.storyboard.visual_continuity?.[later], 'second undo did not save')
+  await poll(() => request(canvasUrl(canvas)), item => !item.document.storyboard.visual_continuity?.[later], 'second undo did not save')
   await page.reload()
-  const restored = await request(canvas + '/cards/' + later + '/compile')
+  const restored = await request(canvasUrl(canvas, '/cards/' + later + '/compile'))
   assert.equal(restored.video_media.subjects[0].name, '阿同')
   assert.equal(restored.video_media.frames.first, null)
-  const revived = await request(canvas)
-  await request(canvas, 'PUT', { request_id: randomUUID(), expected_revision: revived.revision, document: active.document })
-  const edited = await request(canvas)
+  const revived = await request(canvasUrl(canvas))
+  await request(canvasUrl(canvas), 'PUT', { request_id: randomUUID(), expected_revision: revived.revision, document: active.document })
+  const edited = await request(canvasUrl(canvas))
   const editedModel = edited.document.cards.find(card => card.id === later)
   editedModel.model_id = 'story-video-model'
   editedModel.prompt.segments.unshift({ id: 'new-user-text', kind: 'text', text: '采用后新增的创作要求。' })
-  await request(canvas, 'PUT', { request_id: randomUUID(), expected_revision: edited.revision, document: edited.document })
+  await request(canvasUrl(canvas), 'PUT', { request_id: randomUUID(), expected_revision: edited.revision, document: edited.document })
   await page.reload()
   await open()
   await remove.click()
@@ -297,7 +306,7 @@ try {
   assert.equal(await removal.getByRole('button', { name: '移除并恢复原参考' }).isDisabled(), true)
   await removal.getByRole('button', { name: '仅移除承接', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
-  const kept = await request(canvas)
+  const kept = await request(canvasUrl(canvas))
   assert.equal(kept.document.cards.find(card => card.id === later).prompt.segments[0].id, 'new-user-text')
   assert.equal(kept.document.cards.find(card => card.id === later).model_id, 'story-video-model')
   assert.ok(kept.document.cards.some(card => card.id === frame.id))

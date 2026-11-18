@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-independent-designs-')
-const api = 'http://127.0.0.1:8298', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8298', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8298' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -33,14 +34,14 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '摄影设计')
   const document = { ...canvas.document, cards: [{ id:'consumer',type:'model.text' }] }
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok,await seed.text())
-  const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
+  const read=async()=>(await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('independent design save did not arrive')}
   const errors=[];page.on('pageerror',error=>errors.push(error.message))
-  await page.goto(`http://127.0.0.1:4298/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4298${storyboardCanvasPath(canvas)}`)
   const detail=page.locator('.wb-details:visible')
   const cases=[['camera','机位与视角卡','平视机位','观察视点','支撑方式'],['lighting','光影与色彩卡','侧光塑形','光线方向','色彩关系'],['focus','焦点与成像卡','浅景深','景深与焦点','禁止项']]
   const created=[]
@@ -80,7 +81,7 @@ try {
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   }
   const saved=(await read()).document
-  assert.equal(saved.cards.length,4,'only explicitly created cards exist')
+  assert.equal(saved.cards.filter(card => card.id !== canvas.document.fixed_source.card_id).length,4,'only explicitly created cards exist')
   assert.equal(saved.cards.filter(c=>c.type==='direction.photography').length,0,'new entries never create a hidden photography owner')
   assert.equal(new Set(created).size,3)
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})

@@ -15,7 +15,7 @@ export async function verifyLinkedResultCopy(modality, port, apiPort) {
   const fixture = join(output, 'video.mp4')
   if (video) execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=1', '-c:v', 'libx264', '-y', fixture])
   const api = `http://127.0.0.1:${apiPort}`
-  const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+  const base = `${api}/api/v1/studio/generation-canvases`
   const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', video ? 'tests.generation_canvas_video_browser_server' : 'tests.generation_canvas_runtime_browser_server'], {
     cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: String(apiPort), CANVAS_VIDEO_FIXTURE: fixture }, stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -55,7 +55,7 @@ export async function verifyLinkedResultCopy(modality, port, apiPort) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
     page.setDefaultTimeout(15000)
     await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-    await page.goto(`http://127.0.0.1:${port}/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+    await page.goto(`http://127.0.0.1:${port}/canvases/${canvas.id}`)
     const linked = page.getByRole('article', { name: `${label}生成结果 1`, exact: true })
     if (video) {
       await linked.getByRole('button', { name: '卡片操作', exact: true }).press('Enter')

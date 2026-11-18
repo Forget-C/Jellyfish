@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -9,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-candidate-states-')
-const api = 'http://127.0.0.1:8693', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8693', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8693' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -31,7 +32,7 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'候选采用状态'})})).json()).data
+  const canvas = await createStoryboardCanvas(base, '候选采用状态')
   const source=(card_id,port_id,object_id)=>({canvas_id:canvas.id,card_id,port_id,position:0,...(object_id?{object_id}:{})})
   const document={...canvas.document,cards:[
     {id:'person',type:'content.character',object_id:'person-id',name:'张三',text:'窗边人物'},
@@ -43,9 +44,9 @@ try {
   for(const port of ['focus_object','attention_object']) document.edges.push({id:port,source_card:'person',source_port:'object',target_card:'movement',target_port:port})
   document.edges.push({id:'inactive-text',source_card:'person',source_port:'text',target_card:'inactive',target_port:'text'})
   for(const edge of document.edges){document.input_order[edge.target_card] ||= {};document.input_order[edge.target_card][edge.target_port] ||= [edge.id]}
-  const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seeded.ok,await seeded.text())
-  const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
-  await page.goto(`http://127.0.0.1:4693/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const seeded=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})});assert.ok(seeded.ok,await seeded.text())
+  const read=async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
+  await page.goto(`http://127.0.0.1:4693${storyboardCanvasPath(canvas)}`)
   const detail=page.locator('.wb-details:visible')
   await page.locator('[data-card-id="dialogue"]').press('Enter')
   await detail.getByRole('button',{name:/候选 张三 · 已用作说话对象/}).waitFor()
@@ -83,14 +84,14 @@ try {
   await observer.locator('.ant-popover:visible').getByText(/已用作说话对象/).waitFor()
   const observerState=await read();await delay(200);assert.equal((await read()).revision,observerState.revision)
   await observer.close()
-  await page.route('**/cards/dialogue/outputs',async route=>{await delay(1200);await route.continue()})
+  await page.route('**/cards/dialogue/outputs?project_id=*',async route=>{await delay(1200);await route.continue()})
   await page.reload()
   await page.locator('[data-card-id="dialogue"]').press('Enter')
   await detail.getByText('正在读取候选来源…',{exact:true}).waitFor()
   await detail.getByRole('button',{name:/候选 张三 · 已用作说话对象/}).waitFor()
-  await page.unroute('**/cards/dialogue/outputs')
+  await page.unroute('**/cards/dialogue/outputs?project_id=*')
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
-  await page.route('**/cards/dialogue/outputs',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}))
+  await page.route('**/cards/dialogue/outputs?project_id=*',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}))
   await page.reload()
   await page.locator('[data-card-id="dialogue"]').press('Enter')
   await detail.getByText('已保存输入读取失败，请保存或重开后重试',{exact:true}).waitFor()

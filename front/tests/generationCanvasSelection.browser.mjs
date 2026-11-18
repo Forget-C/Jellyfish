@@ -11,7 +11,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-selection-')
 const projectId = `canvas-selection-${Date.now()}`, modelId = `${projectId}-text`
-const api = 'http://127.0.0.1:8281', base = `${api}/api/v1/studio/generation-canvases/${projectId}`
+const api = 'http://127.0.0.1:8281', base = `${api}/api/v1/studio/generation-canvases`
 assert.ok(process.env.JELLYFISH_TEST_MYSQL_URL, 'parallel browser requires explicit isolated MySQL')
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8281', CANVAS_BROWSER_DATABASE_URL: process.env.JELLYFISH_TEST_MYSQL_URL, CANVAS_BROWSER_PROJECT_ID: projectId }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -73,7 +73,7 @@ try {
   await control({ release: 0 })
   let streamConnections = 0
   page.on('request', request => { if (/\/events(?:\?|$)/.test(request.url())) streamConnections++ })
-  await page.goto(`http://127.0.0.1:4281/projects/${projectId}?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4281/canvases/${canvas.id}`)
   for (let attempt = 0; attempt < 4; attempt++) await page.getByRole('button', { name: '缩小', exact: true }).click()
   const a = page.locator('[data-card-id="A"]'), b = page.locator('[data-card-id="B"]')
   await a.waitFor()
@@ -95,7 +95,7 @@ try {
     const details = await openCanvasCard(page, id)
     await details.getByRole('button', { name: '预检运行', exact: true }).click()
     await preview.waitFor()
-    const [response] = await Promise.all([page.waitForResponse(response => response.url().endsWith('/runs') && response.request().method() === 'POST'),
+    const [response] = await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/runs') && response.request().method() === 'POST'),
       preview.getByRole('button', { name: '确认执行', exact: true }).click()])
     const accepted = (await response.json()).data
     await closePrecheck(page)

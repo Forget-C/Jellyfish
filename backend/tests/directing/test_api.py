@@ -10,8 +10,10 @@ from app.api.v1.routes.studio.directing import router
 from app.api.v1.routes.studio.files import router as file_router
 from app.api.v1.routes.studio.generation_canvases import router as canvas_router
 from app.api.v1.routes.film.task_status import router as task_router
+from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.dependencies import get_db
-from app.models.studio import FileUsage
+from app.models.studio import FileItem, FileUsage
+from app.models.task import Task, TaskOutput
 from app.services.directing.store import DirectingStore
 from tests.directing.samples import design_sample, plan_sample
 from tests.directing.test_store import database, frozen
@@ -74,6 +76,93 @@ async def client_for(sessions):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.canvas_sessions = sessions
         yield client
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_tasks_keep_typed_results(tmp_path):
+    """旧任务停止执行后仍可通过项目任务详情读取已保存结果。"""
+    design = EditableSceneDesign(sources=[
+        {'kind': 'chapter', 'reference': 'ch1', 'version': 'historical-source'},
+    ]).model_dump(mode='json')
+    snapshot = {'scene_design': {'version_id': 'old-version'}}
+    instruction = {'unit_id': 'unit', 'text': '人物递出旧信。'}
+    check = {'unit_id': 'unit', 'destinations': None, 'rows': [
+        {'role': 'direction', 'occurrence_id': 'shot', 'verdict': 'pass',
+         'rationale': '动作与固定指令一致。', 'findings': []},
+    ]}
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add_all([
+                Task(id='old-design-flat', kind='directing_design', input_snapshot=snapshot, result=design,
+                     target_type='directing_sequence', project_id='p1', status='succeeded'),
+                Task(id='old-design-candidate', kind='directing_design', target_type='directing_sequence',
+                     input_snapshot={**snapshot, 'run_args': {'design_candidate_version': 1}},
+                     result={'design': design, 'issues': [], 'attempt': 1,
+                             'diagnostics': {'output': '旧纠错响应', 'issues': ['结构无效']}}, project_id='p1', status='succeeded'),
+                Task(id='old-instruction', kind='directing_instruction', target_type='directing_sequence',
+                     result=instruction, project_id='p1', status='succeeded'),
+                Task(id='old-check', kind='directing_instruction_check', target_type='directing_sequence',
+                     result=check, project_id='p1', status='succeeded'),
+            ])
+        base = '/api/v1/studio/projects/p1/directing/tasks'
+        for task_id, field, expected in [
+            ('old-design-flat', 'scene_design', design),
+            ('old-design-candidate', 'scene_design', design),
+            ('old-instruction', 'scene_instruction', instruction),
+            ('old-check', 'instruction_check', check),
+        ]:
+            response = await client.get(f'{base}/{task_id}')
+            assert response.status_code == 200, response.text
+            assert response.json()['data'][field] == expected
+        denied = await client.get('/api/v1/studio/projects/p2/directing/tasks/old-design-candidate')
+        assert denied.status_code == 422
+        assert '任务不属于当前工作区' in denied.text
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_versions_are_not_routed(tmp_path):
+    """旧场次版本接口已退役，场次读取接口仍可处理请求。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            scene = await DirectingStore(db, "p1").create_sequence(chapter_id="ch1", title="店内", position=0)
+        path = f"/api/v1/studio/projects/p1/directing/sequences/{scene.id}"
+        assert (await client.get(path)).status_code == 200
+        assert (await client.get(path + "/versions")).status_code == 404
+        assert (await client.post(path + "/versions/version/exports", json={})).status_code == 404
+        contract = (await client.get("/openapi.json")).json()
+        assert not any("/sequences/{sequence_id}/versions" in path for path in contract["paths"])
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_delivery_queries_are_not_routed(tmp_path):
+    """章节和场次的旧交付查询退役，章节组合仍可读取。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            scene = await DirectingStore(db, "p1").create_sequence(chapter_id="ch1", title="店内", position=0)
+        base = "/api/v1/studio/projects/p1/directing"
+        chapter = f"{base}/chapters/ch1"
+        assert (await client.get(chapter + "/assembly")).status_code == 200
+        assert (await client.get(chapter + "/deliveries")).status_code == 404
+        assert (await client.get(f"{base}/sequences/{scene.id}/deliveries")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_retired_scene_export_keeps_its_file_protected(tmp_path):
+    """历史导出仍可由通用任务接口查询，文件仍受原业务引用保护。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(FileItem(id="legacy-export", type="video", name="历史导出", storage_key="legacy/export.mp4"))
+            db.add(Task(id="old-export", kind="scene_export", project_id="p1", status="succeeded",
+                        result={"file_id": "legacy-export"}))
+            await db.flush()
+            db.add(TaskOutput(task_id="old-export", file_id="legacy-export", ordinal=0,
+                              delivery_status="published"))
+            db.add(FileUsage(file_id="legacy-export", project_id="p1", usage_kind="generated_video",
+                             source_ref="scene-export:old-export"))
+        result = await client.get("/api/v1/film/tasks/old-export/result")
+        assert result.status_code == 200
+        assert (await client.delete("/api/v1/studio/files/legacy-export")).status_code == 409
+        assert (await client.get("/api/v1/studio/files/legacy-export")).status_code == 200
 
 
 @pytest.mark.asyncio

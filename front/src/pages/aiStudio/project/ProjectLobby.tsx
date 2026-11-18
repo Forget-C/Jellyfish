@@ -12,7 +12,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
 import type { ProjectRead, ProjectStyle, ProjectVisualStyle } from '../../../services/generated'
-import { directingError } from '../directing/common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { ProjectCover } from './ProjectCover'
 import { summarizeProjectChapters, type ProjectStageSummary } from './projectStageSummary'
 import {
@@ -324,7 +324,7 @@ function ProjectLobby() {
       setDeleteTarget(null)
       message.success('已删除')
     } catch (cause) {
-      setDeleteError(directingError(cause))
+      setDeleteError(apiErrorMessage(cause))
     } finally {
       deletePending.current = false
       setDeleting(false)

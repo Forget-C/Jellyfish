@@ -1,6 +1,6 @@
 import type { CanvasResolvedOutput, CanvasDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
 import { candidateRelationPorts, withDesignRelation } from './designRelationRules'

@@ -17,16 +17,26 @@ from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
 AUTO_CHECK_DISPATCH = 'canvas_auto_check'
+RETIRED_SCENE_TASK_KINDS = frozenset({
+    'scene_export', 'directing_unit_design', 'directing_instruction', 'directing_instruction_check',
+})
 
 TASK_KINDS = frozenset({
-    "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation", "scene_export",
+    "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation",
     "script_consistency",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
-    "directing_storyboard", "directing_storyboard_check", "directing_object_extract", "directing_unit_design", "directing_shooting_check", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check",
+    "directing_storyboard", "directing_storyboard_check", "directing_object_extract", "directing_shooting_check", "directing_divide",
+    "directing_design", "directing_review", "directing_review_revision",
 })
 MEDIA_KINDS = frozenset({"image_generation", "video_generation"})
 Delivery = Callable[[AsyncSession, Task], Awaitable[None]]
+
+
+def is_retired_scene_task(kind: str, target_type: str | None, snapshot: dict) -> bool:
+    """通过旧任务类型和固定输入区分仍可执行的同名任务。"""
+    return (kind in RETIRED_SCENE_TASK_KINDS or target_type == 'scene_video'
+            or (kind == 'directing_design' and bool(snapshot.get('scene_design'))))
 
 
 def utcnow() -> datetime:
@@ -49,6 +59,8 @@ class TaskService:
         inputs: Sequence[tuple[str, int, str]] = (), queue_timeout_seconds: int = 86400,
     ) -> Task:
         """在提交业务事务中冻结一份输入，并登记受删除保护的参考文件。"""
+        if is_retired_scene_task(kind, target_type, snapshot):
+            raise ValueError('旧场次版本任务已退役')
         if kind not in TASK_KINDS:
             raise ValueError(f"unsupported task kind: {kind}")
         mode = TaskExecutionMode(execution_mode)

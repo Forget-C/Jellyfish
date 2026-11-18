@@ -1,0 +1,302 @@
+kind	name	baseline_count	end_count	candidate_paths
+backend-test	test_ai_preserves_unchanged_stale_defaults_but_cannot_move_them_to_new_objects	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_ai_whole_design_cannot_remove_a_shot_used_by_current_unit	1	0	backend/tests/directing/test_scene_units.py
+backend-test	test_asset_rename_does_not_split_a_subject_group	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_basis_receipt_is_explicit_immutable_and_unit_owned	1	0	backend/tests/directing/test_instruction_basis.py
+backend-test	test_builder_does_not_silently_replace_registered_objects	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_business_error_repair_preserves_valid_partial_scope	1	0	backend/tests/directing/test_scene_unit_design_scope.py
+backend-test	test_camera_inherits_shot_ownership_without_duplicate_applicability	1	0	backend/tests/directing/test_design_completeness.py
+backend-test	test_captured_failure_remains_readable_and_cannot_be_applied	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_captured_output_retry_supplies_field_choices_and_actual_row_identities	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_chapter_delivery_is_explicit_fixed_and_original_retry_does_not_reactivate	1	0	backend/tests/directing/test_scene_delivery.py
+backend-test	test_check_freezes_confirmed_inputs_and_does_not_apply_results	1	0	backend/tests/directing/test_instruction_checks.py
+backend-test	test_check_requires_complete_video_destinations	1	0	backend/tests/directing/test_instruction_destinations.py
+backend-test	test_cleanup_classifies_original_groups_and_is_idempotent	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_cleanup_database_failure_rolls_back_all_input_changes	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_cleanup_preserves_compliant_multimedia_but_crops_original_ungrouped	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_cleanup_releases_only_its_unused_file_usage	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_cleanup_stale_revision_and_retired_sequence_are_rejected	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_cleanup_uses_original_classification_and_first_valid_survivor	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_common_graph_contract_rejects_invalid_references	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_complete_shot_scope_accepts_related_design_without_verbatim_duplication	1	0	backend/tests/directing/test_scene_unit_design_scope.py
+backend-test	test_copy_freezes_review_links_without_following_later_origin_reviews	1	0	backend/tests/directing/test_scene_copy.py
+backend-test	test_copy_keeps_unsaved_content_and_original_revision_with_idempotent_receipt	1	0	backend/tests/directing/test_scene_copy.py
+backend-test	test_copy_preserves_take_and_seam_review_links_independently	1	0	backend/tests/directing/test_scene_copy_review_links.py
+backend-test	test_copy_rechecks_tasks_after_readiness_and_accepts_failed_terminal	1	0	backend/tests/directing/test_scene_copy.py
+backend-test	test_default_preference_changes_preserve_instruction_and_preflight	1	0	backend/tests/directing/test_scene_video.py
+backend-test	test_delivery_freezes_only_review_matching_actual_content	1	0	backend/tests/directing/test_scene_delivery.py
+backend-test	test_design_applicability_saves_explicit_scope_and_rejects_invalid_targets	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_design_preview_rejects_file_source_deleted_after_task_finishes	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_design_row_ids_survive_edit_reorder_and_reject_duplicates	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_design_suggestion_applies_real_scope_for_every_retained_row	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_director_global_cards_read_and_save_the_same_revision	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_director_shot_views_have_shared_readonly_members_and_real_edges	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_distinct_seams_keep_independent_addresses_when_clip_ids_contain_colons	1	0	backend/tests/directing/test_scene_seam_reviews.py
+backend-test	test_explicit_beat_background_does_not_leak_to_another_shot	1	0	backend/tests/directing/test_unit_scope_projection.py
+backend-test	test_explicit_modify_can_change_only_model_while_retained_unit_keeps_model	1	0	backend/tests/directing/test_scene_unit_design.py
+backend-test	test_explicit_scene_version_can_save_incomplete_design_and_reload	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_export_freezes_saved_cut_and_blocks_copy_until_terminal	1	0	backend/tests/directing/test_scene_exports.py
+backend-test	test_export_identifies_damaged_clip_among_readable_sources	1	0	backend/tests/directing/test_scene_export_render.py
+backend-test	test_export_keeps_leading_gap_and_outputs_fixed_mp4	1	0	backend/tests/directing/test_scene_export_render.py
+backend-test	test_export_mixed_rates_keeps_gaps_source_ranges_and_per_clip_fit	1	0	backend/tests/directing/test_scene_export_render.py
+backend-test	test_failed_repair_keeps_previous_candidate_and_its_own_issues	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_first_application_preserves_independent_and_mixed_units_and_rejects_manual_target	1	0	backend/tests/directing/test_scene_unit_design.py
+backend-test	test_first_unit_design_freezes_unsaved_input_and_previews_without_save	1	0	backend/tests/directing/test_scene_unit_design.py
+backend-test	test_fixed_constraints_keep_phase_and_only_reach_applicable_units	1	0	backend/tests/directing/test_unit_scope_projection.py
+backend-test	test_frame_preview_preserves_positions_and_exposes_input_guards	1	0	backend/tests/directing/test_unit_canvas_preview.py
+backend-test	test_generation_records_task_provenance_for_chapter_facts	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_generation_retries_foreign_asset_before_finishing_task	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_generation_retries_invalid_occurrence_scope_against_frozen_version	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_generation_retries_invalid_task_sources_before_returning_success	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_graph_generation_uses_actual_model_input_validation_without_submitting_tasks	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_graph_read_keeps_one_snapshot_when_dependency_refreshes_the_same_version	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_graph_rejects_edit_target_for_an_undeclared_field	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_group_images_keep_order_and_fixed_identity_through_worker	1	0	backend/tests/directing/test_reference_group_generation.py
+backend-test	test_historical_sequence_scene_versions_remain_read_only	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_historical_source_requires_explicit_external_context	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_identity_frame_and_other_purposes_keep_existing_rules	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_identity_requirement_can_use_bound_reference_for_video	1	0	backend/tests/directing/test_scene_video.py
+backend-test	test_identity_save_rejects_invalid_groups_without_changing_record	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_identity_single_source_multimedia_and_conflicts	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_incomplete_scene_design_still_validates_filled_references	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_incomplete_units_save_independently_and_protect_referenced_shot	1	0	backend/tests/directing/test_scene_units.py
+backend-test	test_incomplete_worker_candidate_can_be_previewed_and_saved_without_clearing_issues	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_inspection_measures_actual_landscape_crop_before_portrait_export	1	0	backend/tests/directing/test_scene_export_render.py
+backend-test	test_instruction_destinations_reject_missing_or_unbound_evidence	1	0	backend/tests/directing/test_instruction_destinations.py
+backend-test	test_instruction_graph_keeps_bound_and_active_records_without_expanding_history	1	0	backend/tests/directing/test_scene_instructions.py
+backend-test	test_instruction_graph_rejects_edit_target_outside_the_free_text_body	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_instruction_input_card_links_each_frame_and_group_without_guessing	1	0	backend/tests/directing/test_instruction_inputs_canvas.py
+backend-test	test_instruction_preview_is_unit_scoped_and_rechecks_manual_input	1	0	backend/tests/directing/test_scene_instructions.py
+backend-test	test_invalid_model_output_identifies_its_stage	0	1	backend/tests/directing/test_storyboard_review.py
+backend-test	test_legacy_rows_remain_readonly_identities_scoped_to_their_revision	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_legacy_unidentified_question_cannot_be_hidden_by_numeric_row_id	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_malformed_output_keeps_original_validation_diagnostics	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_manual_instruction_saves_on_its_unit_without_executing	1	0	backend/tests/directing/test_scene_units.py
+backend-test	test_manual_shot_can_save_before_beat_assignment_but_cannot_leave_dangling_links	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_multi_unit_repair_preserves_each_partial_scope	1	0	backend/tests/directing/test_scene_unit_design_scope.py
+backend-test	test_new_unit_cannot_reuse_removed_historical_identity	1	0	backend/tests/directing/test_scene_unit_design.py
+backend-test	test_open_question_reordering_preserves_identity	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_open_retired_sequence_preserves_saved_legacy_references	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_open_version_upgrades_saved_identity_groups_before_graph_projection	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_open_versions_during_saves_does_not_report_a_stale_cleanup_conflict	1	0	backend/tests/directing/test_identity_reference_groups.py
+backend-test	test_partial_scope_repairs_once_without_expanding_execution	1	0	backend/tests/directing/test_scene_unit_design_scope.py
+backend-test	test_partial_unit_compiles_and_checks_only_selected_execution	1	0	backend/tests/directing/test_scene_instructions.py
+backend-test	test_phase_only_repair_still_rejects_invalid_subjects	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_plan_frame_graph_rechecks_actual_adoption_without_changing_scene_revision	1	0	backend/tests/directing/test_scene_dependencies.py
+backend-test	test_preview_rejects_stale_baselines_and_foreign_or_invalid_targets	1	0	backend/tests/directing/test_unit_canvas_preview.py
+backend-test	test_real_empty_performance_is_retained_as_incomplete_candidate	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_reference_group_cards_preserve_multiple_images_and_edit_targets	1	0	backend/tests/directing/test_reference_group_canvas.py
+backend-test	test_regroup_removes_omitted_units_and_rechecks_removal_on_save	1	0	backend/tests/directing/test_scene_unit_design.py
+backend-test	test_removing_empty_row_preserves_existing_none_reasons	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_repair_cannot_delete_existing_open_question	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_retired_scene_delivery_queries_are_not_routed	0	1	backend/tests/directing/test_api.py
+backend-test	test_retired_scene_export_keeps_its_file_protected	0	1	backend/tests/directing/test_api.py
+backend-test	test_retired_scene_tasks_keep_typed_results	0	1	backend/tests/directing/test_api.py
+backend-test	test_retired_scene_versions_are_not_routed	0	1	backend/tests/directing/test_api.py
+backend-test	test_retry_inspection_rejects_truncated_packets_with_readable_header	1	0	backend/tests/directing/test_scene_export_render.py
+backend-test	test_same_shot_units_select_distinct_execution_items_and_reject_invalid_scope	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_save_retry_is_idempotent_and_stale_writer_cannot_overwrite	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_saved_asset_origin_survives_rename_but_new_binding_is_checked	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_scene_cut_review_freezes_basis_and_rechecks_actual_composition	1	0	backend/tests/directing/test_scene_cut_reviews.py
+backend-test	test_scene_end_frame_rejects_empty_planned_and_stale_sources	1	0	backend/tests/directing/test_scene_end_frames.py
+backend-test	test_scene_save_limits_new_predecessors_but_preserves_legacy_multiple	1	0	backend/tests/directing/test_scene_dependencies.py
+backend-test	test_scene_source_rejects_unverified_excerpt_without_changing_version	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_scene_timeline_preserves_clip_identity_positions_and_real_ranges	1	0	backend/tests/directing/test_scene_timeline.py
+backend-test	test_scene_version_cannot_cross_project_or_rewrite_frozen_design	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_scene_version_create_retry_keeps_identity_and_rejects_changed_request	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_scene_version_rejects_other_project_file_without_overwriting_content	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_scene_versions_choose_source_independently_and_can_undo_basis_change	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_scope_completeness_checks_each_field_and_keeps_global_facts	1	0	backend/tests/directing/test_design_completeness.py
+backend-test	test_scoped_design_changes_only_second_of_six_shots_and_rejects_outside_edits	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_seam_reviews_only_depend_on_the_original_adjacent_media_pair	1	0	backend/tests/directing/test_scene_seam_reviews.py
+backend-test	test_seam_summaries_restore_old_basis_without_loading_history_timelines	1	0	backend/tests/directing/test_scene_seam_reviews.py
+backend-test	test_selected_nonfinal_unit_revision_preserves_identity_and_other_configuration	1	0	backend/tests/directing/test_scene_unit_design.py
+backend-test	test_selected_task_and_source_identity_keep_newest_match_semantics	1	0	backend/tests/directing/test_unit_design_task_context.py
+backend-test	test_source_check_does_not_authorize_a_different_application_marker	1	0	backend/tests/directing/test_unit_design_task_context.py
+backend-test	test_stale_defaults_are_retained_but_new_invalid_defaults_rejected	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_supplement_preserves_source_and_inherits_preparation	1	0	backend/tests/directing/test_scene_unit_supplement.py
+backend-test	test_task_rejection_precedes_changed_input_and_preserves_version	1	0	backend/tests/directing/test_unit_design_task_context.py
+backend-test	test_unassigned_actions_are_visible_and_only_consuming_units_need_scope_review	1	0	backend/tests/directing/test_design_completeness.py
+backend-test	test_unbound_scene_dependency_only_blocks_its_unit_and_rejects_forged_evidence	1	0	backend/tests/directing/test_scene_dependencies.py
+backend-test	test_unit_basis_separates_selected_actions_constraints_and_consumed_background	1	0	backend/tests/directing/test_unit_scope_projection.py
+backend-test	test_unit_dependency_can_be_declared_unready_but_must_name_frozen_source	1	0	backend/tests/directing/test_scene_units.py
+backend-test	test_unit_graph_basis_keeps_partial_execution_background_and_production_phases	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_unit_graph_filters_share_one_unit_and_keep_its_complete_subgraph	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_unit_reference_graph_preserves_binding_roles_order_and_live_file_evidence	1	0	backend/tests/directing/test_canvas_graph.py
+backend-test	test_unit_reference_is_independent_of_director_default	1	0	backend/tests/directing/test_scene_versions.py
+backend-test	test_unit_reference_requires_real_file_type_project_and_asset_origin	1	0	backend/tests/directing/test_scene_units.py
+backend-test	test_unit_scope_repair_budget_and_partial_target_are_preserved	1	0	backend/tests/directing/test_scene_unit_design_scope.py
+backend-test	test_unknown_participant_scope_can_save_but_blocks_instruction_check	1	0	backend/tests/directing/test_unit_scope_projection.py
+backend-test	test_unsaved_units_are_visible_without_saving_the_version	1	0	backend/tests/directing/test_unit_canvas_preview.py
+backend-test	test_version_lists_restore_oldest_applicable_cut_summary_after_many_other_bases	1	0	backend/tests/directing/test_scene_cut_reviews.py
+backend-test	test_versions_keep_independent_judgments_on_existing_take	1	0	backend/tests/directing/test_scene_take_judgments.py
+backend-test	test_video_submission_freezes_original_unit_and_registers_only_candidate	1	0	backend/tests/directing/test_scene_video.py
+backend-test	test_whole_design_explains_phase_field_and_identity_rules_to_model	1	0	backend/tests/directing/test_scene_design_protocol.py
+backend-test	test_whole_design_preview_preserves_version_and_rejects_new_manual_edit	1	0	backend/tests/directing/test_scene_design_suggestions.py
+backend-test	test_whole_generation_repairs_scope_once_and_preserves_failed_output	1	0	backend/tests/directing/test_design_completeness.py
+backend-test	test_worker_stops_retired_scene_version_tasks_before_provider_requests	0	1	backend/tests/services/test_task_worker.py
+frontend-test	a saved vertical overview is rebuilt once and only recorded manual positions survive	1	0	front/tests/directorLayout.test.mjs
+frontend-test	accepted tasks block duplicates before the workspace list catches up, but not another selected prompt	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	actual compiler primitive list labels retain type context when IDs collide	1	0	front/tests/readableText.test.mjs
+frontend-test	all adopted source ranges are shown, with no fabricated range from the planned item	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	all drawn relation labels keep their category, including compressed paths	1	0	front/tests/directorLayout.test.mjs
+frontend-test	all existing business links resolve to their stage without losing their target	1	0	front/tests/workspaceNavigation.test.mjs
+frontend-test	all issues submitted even with blank direction; stale keys never cross checks	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	all prose reconstructs exactly and repeated occurrences keep coordinates and expression boundaries	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	all six continuity domains use the actual contract vocabulary	1	0	front/tests/readableText.test.mjs
+frontend-test	already-selected outside participants survive scope reduction and missing identities remain explicit	1	0	front/tests/productionGraph.test.mjs
+frontend-test	an explicit temporary target is visible in its home without expanding current-shot membership	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	any direction, source or fixed version change invalidates candidate identity including late results	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	asset availability and fixed selected inputs coexist instead of overwriting each other	1	0	front/tests/productionGraph.test.mjs
+frontend-test	auxiliary browsing restores only current node and relation identities, preserving safe disclosures	1	0	front/tests/instructionContent.test.mjs
+frontend-test	beat ranges retain shared shot identities and expose unassigned or missing beats	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	camera and performance layout follow their unique business keys across reordering	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	candidate issue links never cross review sources even with identical occurrence keys	1	0	front/tests/instructionContent.test.mjs
+frontend-test	candidate reference differences require actual changed snapshots, never positions or coincidental shared entities	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	card association explains activity and continuity selected through a covered beat event	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	card issues distinguish unknown, missing references and intentional absence	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	changing a model reports incompatible inputs without changing them	1	0	front/tests/referenceInput.test.mjs
+frontend-test	chapter revision changes do not redirect away from a version with fixed basis; unknown stages are ignored	1	0	front/tests/chapterNavigation.test.mjs
+frontend-test	compact density is default and explicit standard density restores even at the top	1	0	front/tests/workspaceContext.test.mjs
+frontend-test	compile recovery retains each exact plan and unit request independently	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	compiled blocks preserve every byte and distinguish background from execution	1	0	front/tests/instructionContent.test.mjs
+frontend-test	compiler fields, typed identities, groups and coverage keep exact original ranges	1	0	front/tests/readableText.test.mjs
+frontend-test	concurrent response never chooses the last new version as this operation result	1	0	front/tests/workspaceProduction.test.mjs
+frontend-test	confirmation and current/historical adoption are separate labels	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	conflicting plan/design is explicit, while cross-plan cut sources do not constrain selection	1	0	front/tests/workspaceVersions.test.mjs
+frontend-test	corrupt storage is ignored and deletion preserves hidden-but-valid positions	1	0	front/tests/directorLayout.test.mjs
+frontend-test	counts only resolvable project assets by kind and identity, not participant names or duplicate references	1	0	front/tests/sceneAssetSummary.test.mjs
+frontend-test	current review results precede old candidates and require exact unit identity	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	current unit graph retains precise historical dependency and never infers adjacency	1	0	front/tests/productionGraph.test.mjs
+frontend-test	current-shot domains follow explicit beat and event references without collecting every shared person consumer	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	declared reference, omitted source and malformed mappings stay distinct; missing data never gains precise coordinates	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	dependency validity distinguishes unknown, missing binding and stale actual frames	1	0	front/tests/productionGraph.test.mjs
+frontend-test	design cards share one performance across shots and retain the real beat path	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	design drafts lead to confirmation and confirmed designs lead to preparation	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	design scrolling is restored only for matching revision and range	1	0	front/tests/workspaceContext.test.mjs
+frontend-test	direct and indirect design participants are distinguished without introducing the whole cast	1	0	front/tests/productionGraph.test.mjs
+frontend-test	direct edits preserve frozen values, convert seconds, omit unchanged fields and keep explicit sound choice	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	director graph gives seven design domains and keeps shared objects editable outside	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	display sorting preserves original numbering input and missing-date order	1	0	front/tests/workspaceVersions.test.mjs
+frontend-test	domain projection keeps direction and original fields of cross-domain relations	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	domain summaries count explicit core content without treating empty shapes as filled	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	draft browsing and explicit empty selection are legal; missing and foreign versions never become latest	1	0	front/tests/workspaceVersions.test.mjs
+frontend-test	each unit remembers explicit versions independently across plans and handles broken storage	1	0	front/tests/workspaceContext.test.mjs
+frontend-test	editing a recorded suggestion does not make its task pending again when model provenance remains	1	0	front/tests/workspaceProduction.test.mjs
+frontend-test	editing and saving a new cut does not replace the adopted cut	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	editing validates the target and fixed design without blocking recovery on unrelated broken links	1	0	front/tests/workspaceVersions.test.mjs
+frontend-test	empty and populated collections retain interface-only append nodes without mutating payload	1	0	front/tests/productionGraph.test.mjs
+frontend-test	every finding and row without findings has distinct immutable key; passes omitted	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	explicit business context wins; stale or deliberately empty selection never becomes latest	1	0	front/tests/workspaceContext.test.mjs
+frontend-test	explicit empty scope excludes legacy inference while unknown scope preserves marked evidence	1	0	front/tests/productionGraph.test.mjs
+frontend-test	explicit groups use the default subject role, legacy references remain separate	1	0	front/tests/referenceInput.test.mjs
+frontend-test	explicit shot objects include an unbound van without adding the other shot baton or shared performance	1	0	front/tests/productionGraph.test.mjs
+frontend-test	failed or mismatched responses can be retried without caching another identity	1	0	front/tests/sourceResolver.test.mjs
+frontend-test	first entry describes an output and proposes generation without performing it	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	five criteria use 3+2 / 2+2+1 / one column without overlapping variable-height cards	1	0	front/tests/directorLayout.test.mjs
+frontend-test	fixed context is read-only and never borrows a newer design, plan or same-name unit	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	fixed inputs retain every parameter, media role, ordinal, group, source and dependency identity	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	fixed prompt and review identities govern the proposed action	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	fixed unit input requires exact compiler text and remains separate from design paths	1	0	front/tests/instructionContent.test.mjs
+frontend-test	frame positions, group limits and unsupported sound are checked separately	1	0	front/tests/referenceInput.test.mjs
+frontend-test	frame references do not collapse into subject groups and all non-person media remain visible	1	0	front/tests/productionGraph.test.mjs
+frontend-test	free prose preserves words, short substrings, natural pronouns and ambiguous identities	1	0	front/tests/readableText.test.mjs
+frontend-test	graph branches represent actual direct and indirect references, including missing IDs	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	historical cut reading preserves exact source ranges and distinguishes planned duration	1	0	front/tests/cutItems.test.mjs
+frontend-test	historical cut reading shows an empty list without inventing footage	1	0	front/tests/cutItems.test.mjs
+frontend-test	history and unknown adoption reads preserve source data and never infer current references	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	identified design rows keep canvas identity after text edits and reordering	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	identified work cards edit their original direct references	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	incomplete or duplicate passing rows cannot promise entry into shooting	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	indirect instruction edges retain actual intermediate fields independent of issue or draft status	1	0	front/tests/instructionContent.test.mjs
+frontend-test	indirect relation navigation targets the object that owns the original reference	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	large explicit groups keep all stable reference identities in one input node	1	0	front/tests/productionGraph.test.mjs
+frontend-test	legacy and unknown text remain readable without a fabricated source or local scope	1	0	front/tests/instructionContent.test.mjs
+frontend-test	legacy candidate without mappings preserves full changes but makes no relation repair claim; field equality ignores object key ordering	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	legacy references remain distinct while explicit subject groups preserve every file and ordinal	1	0	front/tests/productionGraph.test.mjs
+frontend-test	legacy saved auto placement migrates to the source ring while manual shot positions remain	1	0	front/tests/directorLayout.test.mjs
+frontend-test	legal dotted and colon identities are resolved whole, never as shorter prefixes	1	0	front/tests/readableText.test.mjs
+frontend-test	loading and errors never claim a take is not adopted	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	loading and failed catalogs are unverified, not missing assets; names alone are not links	1	0	front/tests/sceneAssetSummary.test.mjs
+frontend-test	local preparations retain recognized fields, isolate scope, and never mutate defaults	1	0	front/tests/workspacePreparation.test.mjs
+frontend-test	local scope survives storage and corrupt or duplicate scope cannot silently grant whole instruction	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	missing fixed design and invalid selected unit do not substitute another version or unit	1	0	front/tests/productionGraph.test.mjs
+frontend-test	missing indirect participants remain issues with a real path to their owner	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	missing pointer, unknown cut, unconfirmed cut and another sequence remain unknown	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	mixed cuts retain repeated Take ranges and keep estimated duration separate from real media	1	0	front/tests/workspaceCut.test.mjs
+frontend-test	multi-coverage and shared objects preserve identity while unrelated cast do not become execution	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	multi-occurrence completeness distinguishes pending, missing rows and duplicate identities	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	multiple shot headers keep distinct ordered camera cards and scopes	1	0	front/tests/instructionContent.test.mjs
+frontend-test	multiple submitted unit identities survive refresh and stay scoped to project and scene	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	multiple unsaved checks require a choice and do not override a saved review being inspected	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	new cards fill free slots without moving retained cards, even after manual movement	1	0	front/tests/directorLayout.test.mjs
+frontend-test	new draft cannot link to stale candidate; whole request does not fan out as a local target	1	0	front/tests/instructionContent.test.mjs
+frontend-test	numeric or ordinary names used as IDs cannot rewrite timings or prose	1	0	front/tests/readableText.test.mjs
+frontend-test	object editing retains untouched roles, shared identities, sources and Note states	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	old designs and plans retain their actual current-media and preview references	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	one explicit object links to every coverage occurrence and survives removing its last reference	1	0	front/tests/productionGraph.test.mjs
+frontend-test	one unit covering several shots keeps independent coverage identities and fixed design numbering	1	0	front/tests/productionGraph.test.mjs
+frontend-test	one unit spanning shots and one shot shared by units keep object identity apart from appearances and missing references	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	optimization separates explicit scope, real indirect background and all actual field changes without mutating snapshots	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	out-of-scope, forbidden, stale, foreign and mismatched-before changes all remain visible and cannot project relations	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	paragraph editing only offers related allowed fields and never falls back for shared paths	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	participant labels require an asset type and keep unclassified objects neutral	1	0	front/tests/productionGraph.test.mjs
+frontend-test	path boundaries, target ownership, allowed scope and findings match actual data	1	0	front/tests/instructionContent.test.mjs
+frontend-test	paths use actual fixed objects and never invent a match for missing indexes	1	0	front/tests/readableText.test.mjs
+frontend-test	plan overview shows explicit branching dependencies and boundary identities with no input expansion	1	0	front/tests/productionGraph.test.mjs
+frontend-test	plan selection follows its fixed design while cut stays independent	1	0	front/tests/workspaceVersions.test.mjs
+frontend-test	preparation never projects edited draft as the source of historical prompts and candidates	1	0	front/tests/productionGraph.test.mjs
+frontend-test	primary action follows review, adopted cut, design and production preparation	1	0	front/tests/chapterNavigation.test.mjs
+frontend-test	provider rejection is scoped to its plan and unit; empty references alone are not a blocker	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	readable action names are derived from the Take’s fixed plan and unit	1	0	front/tests/workspaceCut.test.mjs
+frontend-test	real reference bindings stay direct even when the design participant is indirect	1	0	front/tests/productionGraph.test.mjs
+frontend-test	recovery action is based on persisted products, not only generic blocked stage	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	reference-only and unexpressed decisions never create fake text edges or missing bindings	1	0	front/tests/instructionContent.test.mjs
+frontend-test	relation editing changes only legal direct references and distinguishes unlinking from deletion	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	relation evidence follows actual fixed coverage and space bindings without inventing asset origins	1	0	front/tests/productionGraph.test.mjs
+frontend-test	relation identities retain colon segments and stale edges cannot add references	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	relations require frozen excerpts, check occurrence and explicit problem identity	1	0	front/tests/instructionContent.test.mjs
+frontend-test	reordering a filtered range preserves hidden slots, references and immutable source data	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	repair links pin the exact cut and item and retain the feedback return identity	1	0	front/tests/workspaceCut.test.mjs
+frontend-test	repeated and overlapping excerpts retain all source decisions in raw coordinates	1	0	front/tests/readableText.test.mjs
+frontend-test	repeated overlapping excerpts retain all source decisions and real positions	1	0	front/tests/instructionContent.test.mjs
+frontend-test	review field paths resolve to fixed objects and missing prompt cannot borrow current selection	1	0	front/tests/readableText.test.mjs
+frontend-test	review pass, previous adoption, and new generation do not imply current adoption	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	review recovery preserves exact prompt requests independently and rejects corrupt storage	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	revision compare distinguishes adding/removing objects and never mutates either snapshot	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	revision compare uses stable identities and separately reports reordering and Note/source changes	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	same names are distinguished and snapshots never use current asset data	1	0	front/tests/readableText.test.mjs
+frontend-test	same unit name in different plans never mixes prompts, reviews or videos	1	0	front/tests/workspaceProduction.test.mjs
+frontend-test	saved browsing position is isolated by project and scene and merges independent panels	1	0	front/tests/workspaceContext.test.mjs
+frontend-test	saved checks match their task identity even when another task produced identical text	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	saved original review continues source task draft; manual derivative stays isolated	1	0	front/tests/reviewRevision.test.mjs
+frontend-test	scene overview keeps real shared identities, unassigned rows and explanatory paths	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	scoped prompt and candidate labels use persistent numbers, not visible ordering	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	semantic edges use typed references and retain textual order as a gap rather than invented chronology	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	shared cards project only their fields and saved comparisons follow object identity	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	shoot preparation directs missing models and edited confirmed plans to the exact next input	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	shot entries surround the source without a group, while outer zones and retained positions stay clear	1	0	front/tests/directorLayout.test.mjs
+frontend-test	shot grouping counts a shared anchor reached through blocking and activity in different shots	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	shot grouping follows zero, one and multiple shot relations without changing object identity	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	shot grouping keeps one editable original and only direct shared references	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	shot participant relations are explicit, editable and independent of background evidence	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	shot production destinations preserve design and plan identities and every matching unit	1	0	front/tests/workspaceProduction.test.mjs
+frontend-test	source and concurrent versions precede generation; existing media remains accessible	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	source requests deduplicate complete identities and batch at most 100	1	0	front/tests/sourceResolver.test.mjs
+frontend-test	split coverage keeps only declared events and beats in each occurrence while cross-range context remains traceable	1	0	front/tests/generationInstructionGraph.test.mjs
+frontend-test	stage changes preserve frozen input and return context and do not mutate the original URL	1	0	front/tests/workspaceNavigation.test.mjs
+frontend-test	task progress is only primary for the submitted unit; matching candidates lead to review	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	task recovery uses actual identities and refuses to invent a plan for an unknown task	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	timeline endpoint includes existing gaps without counting them as real coverage	1	0	front/tests/workspaceCut.test.mjs
+frontend-test	unclassified design objects remain visible and actionable before selecting references	1	0	front/tests/productionGraph.test.mjs
+frontend-test	unidentified work cards retain layout only while their content is unambiguous	1	0	front/tests/designWorkspace.test.mjs
+frontend-test	unit task summary distinguishes review from video execution and preserves concurrent tasks	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	unit task summary separates plan versions and includes explicit multi-unit review occurrences	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	unknown typed references and absent snapshots remain visible, unsupported format keeps field text	1	0	front/tests/readableText.test.mjs
+frontend-test	unlinked location remains actionable and temporary space input binds without fabricating a design asset	1	0	front/tests/productionGraph.test.mjs
+frontend-test	unread task state cannot recommend a duplicate submission and remains scoped to its unit	1	0	front/tests/workspaceGuidance.test.mjs
+frontend-test	unverified shooting identities survive refresh, remain scoped and fail closed on broken storage	1	0	front/tests/workspaceTaskContext.test.mjs
+frontend-test	uses the active pointer, not the newest draft or another confirmed revision	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	v4 unmapped decisions remain selectable without invented text or endpoint edges	1	0	front/tests/instructionContent.test.mjs
+frontend-test	version labels use the full collection, without renumbering filtered versions	1	0	front/tests/workspaceUsage.test.mjs
+frontend-test	whole-scene graph retains each step of a derived field path	1	0	front/tests/designWorkspace.test.mjs

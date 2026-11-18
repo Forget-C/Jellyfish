@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCardList, openCardMenu, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-graph-')
 const api = 'http://127.0.0.1:8458'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8458' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -36,15 +37,15 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   // Navigator overrides cannot change Chrome's native macOS Control-click gesture.
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '类型化画布' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '类型化画布')
   const doc = { ...canvas.document, cards: [
     { id: 'a', type: 'content.text', text: '第一份来源' },
     { id: 'b', type: 'content.text', text: '第二份来源' },
     { id: 'm', type: 'model.text', model_id: 'graph-text', prompt: { segments: [] }, config: {} },
   ] }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, doc) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4458/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4458${storyboardCanvasPath(canvas)}`)
   const card = id => page.locator(`[data-card-id="${id}"]`)
   const selected = () => page.locator('[data-card-id][data-selected="true"]')
   await card('a').waitFor()
@@ -62,7 +63,7 @@ try {
   assert.equal(await group.getByRole('button', { name: '折叠组', exact: true }).count(), 0, 'visual group is not an editable collapse container')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  const saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const saved = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   assert.deepEqual(saved.document.groups[0].card_ids, ['a', 'b'])
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   assert.equal(await group.getByRole('textbox', { name: '分组名称', exact: true }).count(), 0, 'unselected group has no persistent management fields')
@@ -74,17 +75,17 @@ try {
   await page.getByRole('menu').waitFor({ state: 'hidden' })
   const members = group.getByRole('combobox', { name: '分组成员 新编组', exact: true })
   await page.screenshot({ path: join(output, 'group-member-editor.png'), fullPage: true })
-  await members.click()
+  await members.press('ArrowDown')
   await page.locator('.ant-select-item-option').filter({ hasText: '文本模型卡 m' }).click()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  const added = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  const added = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document
   assert.deepEqual(added.groups[0].card_ids, ['a', 'b', 'm'], 'membership is explicitly saved')
   await members.press('Backspace')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  const removed = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  const removed = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document
   assert.deepEqual(removed.groups[0].card_ids, ['a', 'b'], 'explicit member removal preserves other owners')
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   const beforeA = await card('a').boundingBox(), beforeB = await card('b').boundingBox(), groupBox = await group.boundingBox()
@@ -185,10 +186,10 @@ try {
   await menu.getByRole('button', { name: '编组', exact: true }).click()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  const finalDoc = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  const finalDoc = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document
   assert.deepEqual(finalDoc.groups[0].card_ids, ['a', 'b'])
   assert.equal(finalDoc.edges.length, 0)
-  assert.deepEqual(finalDoc.cards.map(item => item.id), ['a', 'b', 'm'])
+  assert.deepEqual(finalDoc.cards.map(item => item.id), ['a', 'b', 'm', canvas.document.fixed_source.card_id])
   await page.reload()
   await group.waitFor()
   assert.equal(await card('a').count(), 1)
@@ -215,18 +216,17 @@ try {
   assert.ok(mobileMenu.x >= 0 && mobileMenu.x + mobileMenu.width <= 390)
   await page.screenshot({ path: join(output, 'multi-group-mobile.png'), fullPage: true })
   const openLayoutFixture = async (name, cards, positions, groups = [], outputs) => {
-    const fresh = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
-    const { data: fixture } = await fresh.json()
-    const seeded = await fetch(`${base}/${fixture.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...fixture.document, cards, groups } }) })
+    const fixture = await createStoryboardCanvas(base, name)
+    const seeded = await fetch(storyboardCanvasApi(base, fixture.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...fixture.document, cards: [...cards, ...fixture.document.cards], groups } }) })
     assert.ok(seeded.ok, await seeded.text())
-    if (outputs) await page.route(`**/${fixture.id}/runtime`, route => route.fulfill({
+    if (outputs) await page.route(`**/${fixture.id}/runtime?project_id=canvas-project`, route => route.fulfill({
       json: { code: 200, data: { cursor: 0, runs: [], current_outputs: outputs(fixture.id) } },
     }))
     await page.addInitScript(({ key, positions }) => {
       localStorage.setItem(key, JSON.stringify({ schema: 1, positions, sizes: {}, transform: { x: 18, y: 12, scale: .8 } }))
     }, { key: `jellyfish:generation-layout:canvas-project:${fixture.id}:view:canvas`, positions })
-    await page.goto(`http://127.0.0.1:4458/projects/canvas-project/generation-canvas?canvas=${fixture.id}`)
+    await page.goto(`http://127.0.0.1:4458${storyboardCanvasPath(fixture)}`)
     await page.getByRole('button', { name: '布局', exact: true }).waitFor()
   }
   const arrangeFrame = node => node.evaluate(element => ({

@@ -275,7 +275,12 @@ async def test_task_source_api_restores_request_and_blocks_unresolved_adoption(t
             task.status = 'succeeded'
             task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'design', 'path': '/sound/execution', 'before': 'postproduction', 'after': 'unknown', 'reason': '拟改动', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'unresolved', 'reason': '必须先修复编译器，不能删除正确设计', 'choices': []} for key in context['problem_keys']]}
         async with client_for(sessions) as client:
-            detail = (await client.get(f'/api/v1/studio/projects/p1/directing/tasks/{task_id}')).json()['data']
+            task_url = f'/api/v1/studio/projects/p1/directing/tasks/{task_id}'
+            detail = (await client.get(task_url)).json()['data']
+            async with sessions() as db:
+                task = await db.get(Task, task_id)
+                assert task.input_snapshot['revision_preview'] == detail['revision']
+            assert (await client.get(task_url)).json()['data'] == detail
             assert detail['revision_request'] == {**body, 'instruction': '', 'edits': [], 'scope': None}
             assert detail['revision']['outcomes'][0]['status'] == 'unresolved'
             response = await client.post(base + '/apply', json={'task_id': task_id, 'input_identity': context['input_identity'], 'request_id': 'api-adopt', 'directions': [], 'candidate_identity': detail['revision']['candidate_identity']})
@@ -358,7 +363,8 @@ def test_revision_ai_pipeline_validates_output_retries_schema_and_propagates_fai
     import json
     from types import SimpleNamespace
     from unittest.mock import Mock
-    from app.services.directing.ai import DirectingOutputError, generate_directing_result
+    from app.services.directing.ai import generate_directing_result
+    from app.services.directing.errors import DirectingOutputError
 
     design = design_sample()
     context = {'design': design, 'unit': plan_sample('design1')['units'][0], 'input_identity': 'frozen', 'directions': [], 'problem_keys': ['problem']}

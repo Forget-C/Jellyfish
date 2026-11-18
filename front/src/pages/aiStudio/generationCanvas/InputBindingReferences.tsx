@@ -1,6 +1,6 @@
 import type { GenerationCard } from './graphRules'
 import { bindingReferences } from './inputBindings'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 /** 复用编辑器的片段定位标记，不通过取消采用删除正文或指令。 */
 export function InputBindingReferences({ card, bindingId, onLocate }: { card: GenerationCard; bindingId: string; onLocate?: () => void }) {

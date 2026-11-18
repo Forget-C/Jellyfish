@@ -1,3 +1,4 @@
+import { withoutRunTarget } from './navigation'
 import { Button } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
@@ -17,7 +18,7 @@ export function GenerationCanvasPage() {
   return <GenerationCanvasWorkspace projectId="" canvasId={canvasId || null}
     back={{ label: '返回画布列表', onClick: () => navigate(listLocation) }} hostError={error}
     targetRun={search.get('run')} targetNode={search.get('node')} targetCheck={null} targetReport={null}
-    onCloseRunHistory={() => setSearch({}, { replace: true, state })}
+    onCloseRunHistory={() => setSearch(withoutRunTarget, { replace: true, state })}
     renderCanvasManagement={({ current, running, editable, saving, nameEditor, requestLeave, canEdit }) => <>
       {nameEditor}
       <Button danger disabled={!current || running || !editable || saving} onClick={() => {

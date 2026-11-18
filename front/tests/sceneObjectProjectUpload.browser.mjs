@@ -31,7 +31,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -45,7 +45,7 @@ try {
   const objectsUrl = `${scenes}/${sequence.id}/objects`
   const read = () => request(objectsUrl)
   const canvas = await request(`${scenes}/${sequence.id}/canvases`, 'POST', { name: '已有方案' })
-  const canvasUrl = `${studio}/generation-canvases/${project}/${canvas.id}`
+  const canvasUrl = `${studio}/generation-canvases/${canvas.id}?project_id=${project}`
   const canvasBefore = await request(canvasUrl)
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4304, strictPort: true, proxy: { '/api': api } } })
   await server.listen()
@@ -58,8 +58,8 @@ try {
   await page.getByRole('navigation', { name: '制作步骤' }).waitFor()
   const extract = page.getByRole('button', { name: '提取对象', exact: true })
   await page.getByText(/^尚未提取对象/).waitFor()
-  await extract.focus()
-  await page.keyboard.press('Enter')
+  await extract.press('Enter')
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
   const back = page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true })
   await front.waitFor()

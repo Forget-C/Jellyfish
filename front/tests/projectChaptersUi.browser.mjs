@@ -46,14 +46,6 @@ try {
     if (chapter && path.endsWith('/objects')) return respond({ revision: 0, objects: [], assets: [] })
     if (chapter && path.includes('/directing/')) return respond({ chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, sequences: chapter.id === 'manage' ? [sequence] : [] })
     if (chapter) return respond(chapter)
-    if (path.endsWith('/generation-canvases/p-failed')) return route.fulfill({ status: 503, json: { detail: '画布暂不可用' } })
-    if (path.includes('/generation-canvases/')) return respond(path.endsWith('/p-manage') ? [
-      { id: 'c1', project_id: 'p-manage', revision: 1, document: { id: 'c1', project_id: 'p-manage', name: '真实生成画布', cover_file_id: 'cover-1' } },
-    ] : [])
-    if (path.endsWith('/files/cover-1/download')) return route.fulfill({
-      contentType: 'image/svg+xml',
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="navy"/></svg>',
-    })
     return respond({ items: [], next_cursor: null })
   })
 

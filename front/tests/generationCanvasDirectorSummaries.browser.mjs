@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8484'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     PYTHONPATH: join(root, '../backend'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8484' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -33,13 +34,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const created = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '导演输出与键盘提示' }) })).json()).data
+  const created = await createStoryboardCanvas(base, '导演输出与键盘提示')
   const id = created.id
   const field = (text, state = 'proposal') => ({ text, state, purpose: 'design' })
   const samples = [
-    ['photo-light','direction.photography',{fields:{light_sources:field('窗边柔光')}} ,'窗边柔光'],
-    ['photo-camera','direction.photography',{fields:{viewpoint:field('低角度观察')}} ,'低角度观察'],
-    ['photo-focus','direction.photography',{fields:{focus_change:field('焦点移向远处')}} ,'焦点移向远处'],
+    ['photo-light','direction.lighting',{fields:{light_sources:field('窗边柔光')}} ,'窗边柔光'],
+    ['photo-camera','direction.camera',{fields:{viewpoint:field('低角度观察')}} ,'低角度观察'],
+    ['photo-focus','direction.focus',{fields:{focus_change:field('焦点移向远处')}} ,'焦点移向远处'],
     ['performance','direction.performance',{gaze:field('目光避开对方')},'目光避开对方'],
     ['sound','direction.sound',{action_sound:field('脚步踏过积水')},'脚步踏过积水'],
     ['guidance','direction.guidance',{prohibitions:field('禁止出现字幕')},'禁止出现字幕'],
@@ -53,16 +54,16 @@ try {
     ['activity','direction.activity',{attention:field('留意窗外声音')},'留意窗外声音'],
     ['environment','direction.environment',{reason:field('以空场突出孤立')},'以空场突出孤立'],
     ['continuity','direction.continuity',{following_constraints:field('后续保持左手持杯')},'后续保持左手持杯'],
-    ['phase','direction.photography',{phases:[{id:'one',frame:field('阶段结束在门框')} ]},'阶段结束在门框'],
-    ['framing','direction.photography',{fields:{shot_size:{...field('', 'fact'),size:'close_up'}}},'特写'],
-    ['metadata','direction.guidance',{source_locator:'不能作为设计摘要',scope:{description:'也不是正文'}},'内容待定'],
-    ['negative','direction.photography',{fields:{light_sources:field('', 'absent')}},'明确没有'],
+    ['phase','direction.movement',{phases:[{id:'one',frame:field('阶段结束在门框')} ]},'阶段结束在门框'],
+    ['framing','direction.composition',{fields:{shot_size:{...field('', 'fact'),size:'close_up'}}},'特写'],
+    ['metadata','direction.guidance',{source_locator:'不能作为设计摘要',scope:{description:'也不是正文'}},'尚未填写生成指导'],
+    ['negative','direction.lighting',{fields:{light_sources:field('', 'absent')}},'明确没有'],
     ['open','direction.guidance',{prohibitions:field('可尝试留白','undecided')},'待确定'],
   ]
   const cards = samples.map(([id,type,values])=>({id,type,input_bindings:[],examples:[],scope:{},...values}))
-  const save = await fetch(`${base}/${id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:created.revision,document:{...created.document,cards}})})
+  const save = await fetch(storyboardCanvasApi(base, id), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:created.revision,document:{...created.document, cards: [...cards, ...created.document.cards]}})})
   assert.ok(save.ok,await save.clone().text())
-  await page.goto(`http://127.0.0.1:4484/projects/canvas-project/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4484${storyboardCanvasPath(created)}`)
   for(const [cardId,, , expected] of samples){
     const card=page.locator(`[data-card-id="${cardId}"]`)
     await card.waitFor()
@@ -71,7 +72,8 @@ try {
   const photo=page.locator('[data-card-id="photo-light"]')
   await photo.press('Enter')
   const details=page.locator('.wb-details:visible')
-  await details.getByRole('button',{name:'编辑光影与色彩',exact:true}).click()
+  const advanced = details.getByRole('button',{name:'高级设置',exact:true})
+  if (await advanced.isVisible()) await advanced.click()
   await details.getByRole('textbox',{name:'光源内容',exact:true}).fill('即时改为夜间轮廓光')
   assert.ok((await photo.innerText()).includes('即时改为夜间轮廓光'),'card reflects own edit immediately')
   await page.getByRole('button',{name:'关闭详情',exact:true}).click()

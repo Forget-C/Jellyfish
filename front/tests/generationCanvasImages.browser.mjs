@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8277', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8277', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8277' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -42,7 +42,7 @@ try {
     edges: [{ id: 'downstream', source_card: 'm', source_port: 'image', target_card: 'consumer', target_port: 'image' }, { id: 'text-edge', source_card: 'text', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { consumer: { image: ['downstream'], text: ['text-edge'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4277/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4277/canvases/${canvas.id}`)
   const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor(); await openModelInspection(page) }
   await open('m')
   const card = page.locator('.wb-details:not([hidden])'), consumer = card
@@ -51,7 +51,7 @@ try {
   const runtime = async () => (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data
   const start = async () => {
     await card.getByRole('button', { name: '预检运行', exact: true }).click()
-    const received = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+    const received = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
     await preview.getByRole('button', { name: '确认执行', exact: true }).click()
     return (await (await received).json()).data
   }
@@ -120,7 +120,7 @@ try {
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   await open('consumer')
   await consumer.getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(`图片内容卡 · ${copy.id.slice(0, 8)} → 参考图片`, { exact: true }).click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(new RegExp(`${copy.id.slice(0, 8)}$`)).click()
   await inputs.getByRole('button', { name: '采用 @图片4', exact: true }).click()
   await consumer.getByRole('button', { name: '预检运行', exact: true }).click()
   await preview.waitFor()

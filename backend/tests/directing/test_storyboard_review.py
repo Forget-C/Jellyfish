@@ -12,10 +12,27 @@ import pytest
 from app.models.llm import Model, Provider
 from app.models.studio import Chapter
 from app.models.task import Task
+from app.services.directing.errors import DirectingOutputError
+from app.services.directing.storyboard_prompt import write_video_prompt
+from app.services.directing.storyboard_repair import repair_storyboard
+from app.services.directing.storyboard_review import review_storyboard
 from app.task_worker import TaskWorker
 from tests.directing.test_api import client_for
 from tests.directing.test_store import database
 from tests.directing.test_storyboard_scope import read_data
+
+
+@pytest.mark.parametrize(('operation', 'label'), [
+    (review_storyboard, '审查响应'), (repair_storyboard, '修正响应'), (write_video_prompt, '提示词响应'),
+])
+def test_invalid_model_output_identifies_its_stage(operation, label):
+    model = SimpleNamespace(invoke=lambda _messages: SimpleNamespace(content='invalid model output'))
+    with pytest.raises(DirectingOutputError) as failure:
+        operation(model, {'storyboard_draft': {'shots': []}})
+    assert 'invalid model output' not in str(failure.value)
+    assert failure.value.diagnostics.model_dump() == {
+        'output': 'invalid model output', 'issues': [label + '格式无效：ValidationError'],
+    }
 
 
 @pytest.mark.asyncio
@@ -86,7 +103,10 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
             assert basis['current_attempt']['title'] == '候选已保留，审查未完成'
             assert basis['user_issues'] == []
             if failure in ('unknown_shot', 'duplicate_shot', 'invalid'):
-                assert any('审查响应' in entry for entry in basis['current_attempt']['diagnostics'])
+                assert any(entry.startswith('模型响应：') for entry in basis['current_attempt']['diagnostics'])
+            if failure == 'invalid':
+                assert first['error'] == '分镜审查返回无效，请重试审查'
+                assert '模型响应：unparseable review' in basis['current_attempt']['diagnostics']
             if failure == 'duplicate_shot':
                 async with sessions.begin() as db:
                     source_task = await db.get(Task, task['task_id'])
@@ -134,7 +154,7 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('outcome', [
-    'repaired', 'still_conflict', 'recheck_timeout', 'repair_timeout', 'out_of_scope', 'manual_protected',
+    'repaired', 'still_conflict', 'recheck_timeout', 'repair_timeout', 'repair_invalid', 'out_of_scope', 'manual_protected',
 ])
 async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, monkeypatch, outcome):
     first, second, third = '张三站在车旁。', '他低头看手。', '街角灯亮了。'
@@ -166,6 +186,8 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
             args = json.loads(messages[1].content)
             if 'repair_targets' in args:
                 repairs.append(args)
+                if outcome == 'repair_invalid':
+                    return SimpleNamespace(content='unparseable repair')
                 if outcome == 'repair_timeout':
                     raise httpx.ReadTimeout('controlled repair failure')
                 target = conflicts['issues'][0]['repair_targets'][0]
@@ -226,7 +248,13 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 task = await read_data(client, 'POST', target, {'request_id': 'repair-reextract', 'text_model_id': 'repair-text'})
             result = await complete(task)
             assert len(repairs) == (0 if outcome == 'manual_protected' else 1)
-            if outcome in ('recheck_timeout', 'repair_timeout'):
+            if outcome == 'repair_invalid':
+                basis = await read_data(client, 'GET', path + '/' + task['task_id'] + '/retry/basis')
+                assert result['error'] == '分镜修正返回无效，原草案已保留'
+                assert basis['current_attempt']['diagnostics'] == [
+                    '修正响应格式无效：ValidationError', '模型响应：unparseable repair',
+                ]
+            if outcome in ('recheck_timeout', 'repair_timeout', 'repair_invalid'):
                 assert result['status'] == 'failed' and result['review_state'] == 'incomplete'
                 assert (await read_data(client, 'GET', canvas_path)) == before
                 task = await read_data(client, 'POST', path + '/' + task['task_id'] + '/retry', {'request_id': 'recheck-only'})

@@ -1,432 +1,74 @@
-"""浏览器验收使用的真实 API 与独立临时数据库，不连接用户项目数据库。"""
+"""为退役路由与历史交付保护回归启动隔离的真实 API。"""
 
 import asyncio
 import os
-from pathlib import Path
-from hashlib import sha256
-import mimetypes
-import subprocess
-import json
-
-import httpx
-
-# 对象存储只指向此隔离服务；不继承开发机的远程桶或凭据。
-os.environ.update({
-    'S3_ENDPOINT_URL': f"http://127.0.0.1:{os.environ['SCENE_BROWSER_TEST_PORT']}/browser-test-storage",
-    'S3_BUCKET_NAME': 'scene-test', 'S3_ACCESS_KEY_ID': 'fixture', 'S3_SECRET_ACCESS_KEY': 'fixture',
-    'S3_REGION_NAME': 'us-east-1', 'S3_ADDRESSING_STYLE': 'path', 'S3_BASE_PATH': '',
-    'S3_PUBLIC_BASE_URL': '', 'AWS_REQUEST_CHECKSUM_CALCULATION': 'when_required',
-})
 
 import uvicorn
-from fastapi import HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent, SceneVersionSource
 from app.core.db import Base
 from app.dependencies import get_db
 from app.main import app
-from app.models.studio import Chapter, Project, FileItem
-from app.models.llm import Model, ModelSettings, Provider
-from app.models.task import Task, TaskOutput
-from app.services.generation.media_execution import deliver_media, store_media_output
-from app.core.integrations.media_provider import MediaResult
-from app.services.task_service import TaskService
-from copy import deepcopy
+from app.models.directing import SceneDeliveryRecord, SceneDeliveryUse, SceneVersionRecord
+from app.models.studio import Chapter, FileItem, FileUsage, Project
+from app.models.types import FileUsageKind
 from app.services.directing.store import DirectingStore
-from tests.directing.samples import SOURCE, design_sample, plan_sample
-from tests.directing.test_store import frozen
 
 
+PROJECT_ID = 'canvas-project'
+CHAPTER_ID = 'canvas-chapter'
 engine = create_async_engine('sqlite+aiosqlite:///' + os.environ['SCENE_BROWSER_TEST_DATABASE'])
 sessions = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def request_db():
-    """每个浏览器请求独立提交，刷新通过 HTTP 重读实际落盘内容。"""
+    """每个浏览器请求使用独立测试事务。"""
     async with sessions.begin() as db:
         yield db
 
 
 async def prepare():
-    """只在新建的测试库中准备项目、章节和空场次。"""
+    """建立项目、章节和没有现行画布的场次。"""
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with sessions.begin() as db:
-        db.add(Provider(id='browser-text-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+        db.add(Project(id=PROJECT_ID, name='画布验收', style='真人都市'))
         await db.flush()
-        if os.environ.get('SCENE_BROWSER_TEST_SUBJECTS') == '1':
-            db.add(Provider(id='browser-subject-provider', name='Vidu', base_url='https://api.vidu.cn', api_key='fixture'))
-            await db.flush()
-            db.add(Model(id='browser-subject-model', name='viduq2', category='video', provider_id='browser-subject-provider', params={}))
-        db.add(Model(id='browser-video-model', name='test-video-model', category='video', provider_id='browser-text-provider', params={}))
-        db.add(Model(id='browser-text-model', name='test-design-model', category='text', provider_id='browser-text-provider', params={}))
-        await db.flush()
-        db.add(ModelSettings(id=1, default_text_model_id='browser-text-model'))
-        db.add(Project(id='canvas-project', name='画布验收', style='真人都市'))
-        await db.flush()
-        db.add(Chapter(id='canvas-chapter', project_id='canvas-project', index=1,
+        db.add(Chapter(id=CHAPTER_ID, project_id=PROJECT_ID, index=1,
                        title='旧信', raw_text='他把旧信放在桌上，她缓缓抬头。'))
         await db.flush()
-        store = DirectingStore(db, 'canvas-project')
-        sequence = await store.create_sequence(chapter_id='canvas-chapter', title='旧信重逢', position=0)
-        design = await frozen(store, sequence.id, 'design', design_sample('dialogue'))
-        plan = await frozen(store, sequence.id, 'plan', plan_sample(design.id))
-        if os.environ.get('SCENE_BROWSER_TEST_LEGACY_TAKE') == '1':
-            # 初始既有生产记录只作为夹具；后续预览与方案判断走真实公开接口。
-            prompt = await frozen(store, sequence.id, 'prompt', {'plan_revision_id': plan.id, 'unit_id': 'u1',
-                'format_version': 'fixture', 'text': '旧生产计划的固定拍摄指令', 'sources': [SOURCE], 'decisions': []})
-            seconds = int(os.environ.get('SCENE_BROWSER_TEST_LEGACY_DURATION', '2'))
-            media = object_path('files/legacy-take.mp4')
-            media.parent.mkdir(parents=True, exist_ok=True)
-            frame_filter = ['-vf', 'drawbox=x=0:y=0:w=40:h=90:color=red:t=fill,drawbox=x=120:y=0:w=40:h=90:color=blue:t=fill'] if os.environ.get('SCENE_BROWSER_TEST_LEGACY_FRAMING') == '1' else []
-            audio_input = ['-f', 'lavfi', '-i', f'sine=frequency=440:duration={seconds}', '-c:a', 'aac'] if os.environ.get('SCENE_BROWSER_TEST_LEGACY_AUDIO') == '1' else []
-            await asyncio.to_thread(subprocess.run, ['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
-                f'color=c=green:s=160x90:r=25:d={seconds}', *audio_input, *frame_filter, '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-                '-movflags', '+faststart', '-y', str(media)], check=True, capture_output=True, timeout=30)
-            db.add(FileItem(id='legacy-take-file', type='video', name='既有生产素材', storage_key='files/legacy-take.mp4', duration_ms=seconds * 1000))
-            db.add(Task(id='legacy-video-task', kind='video', project_id='canvas-project', status='succeeded', input_snapshot={'prompt_revision_id': prompt.id}))
-            await db.flush()
-            db.add(TaskOutput(task_id='legacy-video-task', ordinal=0, file_id='legacy-take-file'))
-            await db.flush()
-            await store.register_take(prompt_revision_id=prompt.id, task_id='legacy-video-task', output_ordinal=0)
+        await DirectingStore(db, PROJECT_ID).create_sequence(chapter_id=CHAPTER_ID, title='旧信重逢', position=0)
 
 
-def object_path(key: str) -> Path:
-    """外部 S3 边界的磁盘夹具，仅允许测试临时目录中的对象。"""
-    root = Path(os.environ['SCENE_BROWSER_TEST_DATABASE']).parent / 'objects'
-    path = (root / key).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise HTTPException(status_code=400, detail='Invalid fixture key')
-    return path
-
-
-@app.post('/browser-test/legacy-takes/{take_id}/candidate')
-async def add_take_candidate_fixture(take_id: str):
-    """外部生成完成边界：同文件的新独立输出经正式登记，不修改场次revision。"""
-    from uuid import uuid4
-    from app.models.directing import Take
+@app.post('/browser-test/legacy-delivery/{sequence_id}')
+async def seed_legacy_delivery(sequence_id: str):
+    """直接准备历史交付和唯一的文件保护引用。"""
     async with sessions.begin() as db:
-        source = await db.get(Take, take_id)
-        task_id = uuid4().hex
-        db.add(Task(id=task_id, kind='video', project_id='canvas-project', status='succeeded',
-            input_snapshot={'prompt_revision_id': source.prompt_revision_id}))
+        sequence = await DirectingStore(db, PROJECT_ID).sequence(sequence_id)
+        basis = SceneVersionSource(source=sequence.source, start=sequence.source_start,
+                                   end=sequence.source_end, text=sequence.source_text)
+        content = SceneVersionContent(basis=basis, design=EditableSceneDesign(sources=[basis.source]))
+        version = SceneVersionRecord(id='legacy-version', sequence_id=sequence.id, title='旧版交付甲',
+            revision=1, create_request_id='legacy-version', source_bases=[basis.model_dump(mode='json')],
+            content=content.model_dump(mode='json'))
+        file = FileItem(id='legacy-delivery-file', type='video', name='历史交付素材',
+                        storage_key='files/legacy-delivery.mp4')
+        db.add_all([version, file])
         await db.flush()
-        db.add(TaskOutput(task_id=task_id, ordinal=0, file_id=source.file_id))
+        delivery = SceneDeliveryRecord(id='legacy-delivery', sequence_id=sequence.id, version_id=version.id,
+            request_id='legacy-delivery', revision=version.revision, version_title=version.title, content=version.content)
+        db.add(delivery)
         await db.flush()
-        candidate = await DirectingStore(db, 'canvas-project').register_take(
-            prompt_revision_id=source.prompt_revision_id, task_id=task_id, output_ordinal=0)
-        return {'take_id': candidate.id}
-
-
-@app.post('/browser-test/scene-versions/{version_id}/duplicate-legacy-activities')
-async def duplicate_legacy_activities_fixture(version_id: str):
-    """仅在隔离数据库构造旧无 ID 重复行，后续编辑与保存走正式 API。"""
-    from app.models.directing import SceneVersionRecord
-
-    async with sessions.begin() as db:
-        version = await db.get(SceneVersionRecord, version_id)
-        content = deepcopy(version.content)
-        content['design']['participants'] = [{'id': 'reader', 'name': '读信者'}]
-        activity = {'participant_id': 'reader', 'ongoing_task': {
-            'state': 'proposal', 'text': '手指停在旧信上',
-            'sources': [{'kind': 'human', 'reference': 'legacy', 'version': '1'}]}}
-        for field in ['depth', 'path', 'attention', 'reaction_delay', 'intensity',
-                      'entrances_exits', 'narrative_support', 'end_state']:
-            activity[field] = {'state': 'unset'}
-        content['design']['staging']['activities'] = [activity, deepcopy(activity)]
-        version.content = content
-    return {'ok': True}
-
-
-@app.post('/browser-test/scene-versions/{version_id}/duplicate-legacy-identity')
-async def duplicate_legacy_identity_fixture(version_id: str):
-    """只在隔离库注入旧主体分组，首次工作台打开仍走正式读取入口。"""
-    from app.models.directing import SceneVersionRecord
-
-    async with sessions.begin() as db:
-        version = await db.get(SceneVersionRecord, version_id)
-        content = deepcopy(version.content)
-        unit = content['units'][0]
-        original = next(ref for ref in unit['references'] if ref['purpose'] == 'identity'
-            and ref.get('input_role', 'subject') == 'subject' and ref['participant_ids'] == ['reader'])
-        extra = deepcopy(original)
-        extra.update(id='legacy-extra', subject_group_id='legacy-second',
-            ordinal=max(ref['ordinal'] for ref in unit['references']) + 1)
-        unit['references'].append(extra)
-        version.content = content
-        return {'revision': version.revision, 'survivor_id': original['id']}
-
-
-@app.put('/browser-test-storage/scene-test/{key:path}')
-async def put_object_fixture(key: str, request: Request):
-    """真实上传接口仍经过 boto3 HTTP；只替代外部对象存储，不替代业务服务。"""
-    path = object_path(key)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = await request.body()
-    path.write_bytes(data)
-    path.with_name(path.name + '.metadata.json').write_text(json.dumps({
-        'content-type': request.headers.get('content-type', 'application/octet-stream'),
-        **{key: value for key, value in request.headers.items() if key.startswith('x-amz-meta-')},
-    }))
-    return Response(headers={'ETag': '"' + sha256(data).hexdigest() + '"'})
-
-
-@app.api_route('/browser-test-storage/scene-test/{key:path}', methods=['GET', 'HEAD'])
-async def get_object_fixture(key: str):
-    """返回真实图片／媒体字节，供应用下载与浏览器解码核对。"""
-    path = object_path(key)
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail='Fixture object not found')
-    metadata_path = path.with_name(path.name + '.metadata.json')
-    headers = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
-    return Response(path.read_bytes(), headers=headers, media_type=headers.get('content-type') or mimetypes.guess_type(key)[0] or 'application/octet-stream')
-
-
-@app.post('/browser-test/unit-design-tasks/{task_id}/complete')
-async def complete_unit_design_fixture(task_id: str, multiple: bool = False, revise: bool = False):
-    """仅替代外部组织模型，仍经实际结构校验和任务生命周期。"""
-    from types import SimpleNamespace
-    from app.services.directing.ai import generate_directing_result
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.input_snapshot.get('scene_unit_design')
-        args = task.input_snapshot['run_args']
-        text = args['organization_inputs']['shot']['visible_result']['text']
-        result = {'shot_id': args['shot_id'], 'target_model_id': args['target_model_id'],
-            'organization': '完整动作，单段拍摄' if not multiple else '多个独立执行段',
-            'units': [{'id': f'ai-unit-{index}', 'coverage': [{'id': f'ai-coverage-{index}',
-                'shot_id': args['shot_id'], 'action_scope': text}], 'duration_ms': None,
-                'ratio': '16:9', 'reason': '已有动作的执行组织', 'entry_state': '', 'exit_state': '',
-                'reference_requirements': ['人物身份参考'], 'missing': []} for index in range(2 if multiple else 1)],
-            'missing': []}
-        if revise:
-            result['organization'] = '局部调整明确目标，其余单元保留'
-            result['units'] = [{'id': unit['id'], 'coverage': deepcopy(unit['coverage']),
-                'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '保留原样'}
-                for unit in args['organization_inputs']['units']]
-            target = next(unit for unit in result['units'] if unit['id'] == args['source_unit_id'])
-            target['coverage'][0]['action_scope'] = text.split('；')[-1]
-            target['reason'] = '局部执行既有动作'
-        service = TaskService(db)
-        assert await service.claim(task_id, worker_id='browser-unit-design')
-        generated = generate_directing_result('directing_unit_design', SimpleNamespace(
-            invoke=lambda _: SimpleNamespace(content=json.dumps(result))), args)
-        await service.finish(task_id, result=generated.model_dump(mode='json'))
-    return {'ok': True}
-
-
-@app.post('/browser-test/design-tasks/{task_id}/complete')
-async def complete_design_fixture(task_id: str, remove_shot_id: str | None = None, relations: bool = False,
-                                  incomplete: bool = False, empty_row: bool = False):
-    """仅测试服务提供工作器结果夹具；验证 UI 消费真实任务，不测试外部模型质量。"""
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.project_id == 'canvas-project' and task.input_snapshot.get('scene_design')
-        args = task.input_snapshot['run_args']
-        result = deepcopy(args['previous_design'])
-        target = result
-        parts = (args.get('design_scope') or ['/direction/viewpoint'])[0].strip('/').split('/')
-        for part in parts[:-1]:
-            target = target[int(part)] if isinstance(target, list) else target[part]
-        target[parts[-1]] = {'state': 'proposal', 'text': '从她停顿的目光展开整场',
-            'sources': [{'kind': 'model', 'reference': args['task_identity'], 'version': '1'}]}
-        if relations:
-            shot_id = result['direction']['shots'][0]['id']
-            camera_id = result['cinematography'][0]['id']
-            result['applicability'].append({'subject': {'kind': 'camera', 'id': camera_id, 'field': 'composition'},
-                'purpose': 'design', 'scope': 'shots', 'shot_ids': [shot_id]})
-            result['applicability'].append({'subject': {'kind': 'prompt', 'field': 'prohibitions'},
-                'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'})
-            result['criteria'].append({'id': 'ai-orphan-criterion', 'requirement':
-                {'state': 'proposal', 'text': '观察手指是否迟疑',
-                 'sources': [{'kind': 'model', 'reference': args['task_identity'], 'version': '1'}]}})
-        if remove_shot_id is not None:
-            result['direction']['shots'] = [shot for shot in result['direction']['shots'] if shot['id'] != remove_shot_id]
-        service = TaskService(db)
-        assert await service.claim(task_id, worker_id='browser-result-fixture')
-        if incomplete:
-            from types import SimpleNamespace
-            from app.services.directing.ai import DirectingOutputError, generate_directing_result
-            if not result['participants']:
-                result['participants'] = [{'id': 'participant-incomplete', 'name': '路人'}]
-            activity = {name: {} for name in ('depth', 'ongoing_task', 'path', 'attention', 'reaction_delay',
-                'intensity', 'entrances_exits', 'narrative_support', 'end_state')}
-            activity.update(id='activity-incomplete', participant_id=result['participants'][0]['id'],
-                ongoing_task={'state': 'proposal', 'text': '在门口等待', 'sources': [
-                    {'kind': 'model', 'reference': args['task_identity'], 'version': '1'}]})
-            if empty_row:
-                activity['ongoing_task'] = {}
-            result['staging']['activities'].append(activity)
-            try:
-                generated = generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(
-                    content=json.dumps(result, ensure_ascii=False))), args)
-            except DirectingOutputError as error:
-                assert error.diagnostics is not None
-                await service.finish(task_id, error=str(error), result={
-                    'design_diagnostics': error.diagnostics.model_dump(mode='json')})
-                return {'completed': True}
-            await service.finish(task_id, result=generated.model_dump(mode='json'))
-            return {'completed': True}
-        await service.finish(task_id, result=result)
-    return {'completed': True}
-
-
-@app.post('/browser-test/instruction-tasks/{task_id}/complete')
-async def complete_instruction_fixture(task_id: str, text: str = '固定中景，手指拆开信封，人物抬眼看向门口。'):
-    """模型边界夹具完成真实指令任务，不代表供应商质量验收。"""
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.project_id == 'canvas-project' and task.kind == 'directing_instruction'
-        service = TaskService(db)
-        assert await service.claim(task_id, worker_id='browser-instruction-fixture')
-        await service.finish(task_id, result={'unit_id': task.input_snapshot['scene_instruction']['unit_id'],
-            'text': text})
-    return {'completed': True}
-
-
-@app.post('/browser-test/instruction-checks/{task_id}/complete')
-async def complete_check_fixture(task_id: str, outcome: str = 'pass'):
-    """外部模型结果夹具；真实任务事务仍负责领取与完成。"""
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.project_id == 'canvas-project' and task.kind == 'directing_instruction_check'
-        unit = task.input_snapshot['run_args']['inputs']['unit']
-        args = task.input_snapshot['run_args']
-        scope = args['inputs'].get('scope') or {}
-        result = {'unit_id': unit['id'], 'rows': [{'role': role, 'occurrence_id': item['id'], 'verdict': 'pass', 'rationale': '检查夹具：动作表达一致', 'findings': []}
-            for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt'] for item in unit['coverage']],
-            'destinations': [{'owner': use['owner'], 'field': use['field'],
-                'coverage_item_ids': use['coverage_item_ids'], 'destination': 'instruction',
-                'instruction_excerpt': args['instruction'], 'rationale': '检查夹具：本次正文覆盖'}
-                for use in [*scope.get('execution', []), *scope.get('constraints', [])]
-                if use['phase'] == 'video' and use['text'].strip()]}
-        service = TaskService(db)
-        assert await service.claim(task_id, worker_id='browser-check-fixture')
-        assert outcome in {'pass', 'revise', 'failed', 'cancelled'}
-        if outcome in {'failed', 'cancelled'}:
-            await service.finish(task_id, error='检查夹具：供应商失败' if outcome == 'failed' else None, cancelled=outcome == 'cancelled')
-        else:
-            if outcome == 'revise':
-                result['rows'][0]['verdict'] = 'revise'
-                result['rows'][0]['rationale'] = '检查夹具：需修改动作表达'
-            await service.finish(task_id, result=result)
-    return {'completed': True}
-
-
-@app.post('/browser-test/video-tasks/{task_id}/start')
-async def start_video_fixture(task_id: str):
-    """模拟外部执行开始，保留运行窗口供真实取消接口登记意图。"""
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.project_id == 'canvas-project' and task.target_type == 'scene_video'
-        assert await TaskService(db).claim(task_id, worker_id='browser-video-fixture')
-    return {'started': True}
-
-
-@app.post('/browser-test/video-tasks/{task_id}/finish-cancellation')
-async def finish_video_cancellation_fixture(task_id: str):
-    """模拟执行器结束；统一终结规则决定取消状态，不直接修改 Task。"""
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.project_id == 'canvas-project' and task.target_type == 'scene_video'
-        assert task.status == 'running' and task.cancel_requested_at is not None
-        await TaskService(db).finish(task_id, cancelled=True)
-    return {'completed': True}
-
-
-@app.post('/browser-test/video-tasks/{task_id}/complete')
-async def complete_video_fixture(task_id: str, outcome: str = "succeeded"):
-    """外部视频 URL 夹具；真实下载、S3 上传、测量及完成事务登记候选。"""
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        assert task and task.project_id == 'canvas-project' and task.target_type == 'scene_video'
-        assert await TaskService(db).claim(task_id, worker_id='browser-video-fixture')
-        assert outcome in {'succeeded', 'failed'}
-        if outcome == 'failed':
-            await TaskService(db).finish(task_id, error='视频供应商返回失败')
-            return {'completed': True}
-    # 与预计五秒不同的真实两秒视频，防止把计划时长当作实测结果。
-    path = object_path(f'provider/{task_id}.mp4')
-    path.parent.mkdir(parents=True, exist_ok=True)
-    await asyncio.to_thread(subprocess.run, ['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
-        'color=c=blue:s=160x90:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart', '-y', str(path)], check=True, capture_output=True, timeout=30)
-    output = MediaResult(url=f"http://127.0.0.1:{os.environ['SCENE_BROWSER_TEST_PORT']}/browser-test-storage/scene-test/provider/{task_id}.mp4")
-    async with httpx.AsyncClient() as client:
-        await store_media_output(sessions, client, task_id=task_id, ordinal=0, kind='video_generation', output=output)
-        await store_media_output(sessions, client, task_id=task_id, ordinal=0, kind='video_generation', output=output)
-    async with sessions.begin() as db:
-        await TaskService(db).finish(task_id, deliver=deliver_media)
-    return {'completed': True}
-
-
-@app.post('/browser-test/exports/{task_id}/run')
-async def run_export(task_id: str):
-    """执行真实本地渲染与对象存储，不能用成功夹具代替成片。"""
-    from app.task_worker import TaskWorker
-    async with sessions.begin() as db:
-        assert await TaskService(db).claim(task_id, worker_id='browser-export-worker')
-    worker = TaskWorker(sessions)
-    try:
-        await worker._execute(task_id)
-    finally:
-        worker.text_pool.shutdown(wait=True)
-    return {'executed': True}
-
-
-@app.post('/browser-test/unit-design-tasks/{task_id}/complete-supplement')
-async def complete_unit_supplement_fixture(task_id: str):
-    """补拍仅替代外部模型，保留真实来源、组织校验及任务生命周期。"""
-    from types import SimpleNamespace
-    from app.services.directing.ai import generate_directing_result
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        args = task.input_snapshot['run_args']
-        original = args['organization_inputs']['units']
-        result = {'shot_id': args['shot_id'], 'target_model_id': args['target_model_id'],
-            'organization': '保留原单元，仅补拍抬头', 'units': [
-                {'id': unit['id'], 'coverage': unit['coverage'], 'duration_ms': unit['duration_ms'],
-                 'ratio': unit['ratio'], 'reason': '保留来源', 'operation': 'retain'} for unit in original] + [
-                {'id': 'browser-supplement', 'ratio': '16:9', 'reason': '只补抬头', 'operation': 'create',
-                 'coverage': [{'id': 'browser-supplement-coverage', 'shot_id': args['shot_id'], 'action_scope': '抬头'}]}]}
-        generated = generate_directing_result('directing_unit_design', SimpleNamespace(
-            invoke=lambda _: SimpleNamespace(content=json.dumps(result))), args)
-        service = TaskService(db)
-        assert await service.claim(task_id, worker_id='browser-supplement')
-        await service.finish(task_id, result=generated.model_dump(mode='json'))
-    return {'ok': True}
-
-
-@app.post('/browser-test/unit-design-tasks/{task_id}/complete-regroup')
-async def complete_unit_regroup_fixture(task_id: str, mode: str = 'reduce'):
-    """仅控制外部模型响应；拆并移除均走真实任务、预览与保存。"""
-    from types import SimpleNamespace
-    from app.services.directing.ai import generate_directing_result
-    async with sessions.begin() as db:
-        task = await db.get(Task, task_id)
-        args = task.input_snapshot['run_args']
-        originals = [unit for unit in args['organization_inputs']['units']
-                     if all(item['shot_id'] == args['shot_id'] for item in unit['coverage'])]
-        retained = originals[:-1] if mode == 'reduce' else [unit for unit in originals if unit['id'] != args['source_unit_id']] if mode == 'split' else []
-        units = [{'id': unit['id'], 'operation': 'retain', 'coverage': unit['coverage'],
-                  'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '保留原单元'} for unit in retained]
-        text = args['organization_inputs']['shot']['visible_result']['text']
-        scopes = [text.split('；')[0], '；'.join(text.split('；')[1:])] if mode == 'split' else [text] if mode == 'merge' else []
-        units.extend({'id': f'{mode}-{task_id}-{index}', 'operation': 'create', 'coverage': [
-            {'id': f'coverage-{index}', 'shot_id': args['shot_id'], 'action_scope': scope}],
-            'ratio': '16:9', 'reason': '拆分新工作' if mode == 'split' else '合并新工作'} for index, scope in enumerate(scopes))
-        result = {'shot_id': args['shot_id'], 'target_model_id': args['target_model_id'], 'organization': '整份方案重组', 'units': units}
-        generated = generate_directing_result('directing_unit_design', SimpleNamespace(
-            invoke=lambda _: SimpleNamespace(content=json.dumps(result))), args)
-        service = TaskService(db)
-        assert await service.claim(task_id, worker_id='browser-unit-regroup')
-        await service.finish(task_id, result=generated.model_dump(mode='json'))
-    return {'ok': True}
+        db.add_all([
+            SceneDeliveryUse(sequence_id=sequence.id, delivery_id=delivery.id),
+            FileUsage(file_id=file.id, project_id=PROJECT_ID, chapter_id=sequence.chapter_id,
+                      usage_kind=FileUsageKind.directing_reference, source_ref=f'scene-delivery:{delivery.id}'),
+        ])
+        return {'data': {'delivery_id': delivery.id, 'version_id': version.id, 'file_id': file.id}}
 
 
 if __name__ == '__main__':
     asyncio.run(prepare())
     app.dependency_overrides[get_db] = request_db
-    uvicorn.run(app, host='127.0.0.1', port=int(os.environ['SCENE_BROWSER_TEST_PORT']),
-                log_level='warning')
-
+    uvicorn.run(app, host='127.0.0.1', port=int(os.environ['SCENE_BROWSER_TEST_PORT']), log_level='warning')

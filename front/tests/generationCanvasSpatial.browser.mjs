@@ -1,4 +1,5 @@
-import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
+import { openDesignAssociation, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-spatial-')
-const api = 'http://127.0.0.1:8287', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8287', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8287' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -34,7 +35,7 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '命名图片参考')
 
   const upload = new FormData()
   upload.append('project_id', 'canvas-project')
@@ -56,35 +57,39 @@ try {
       { id: 'position', source_card: 'anchor', source_port: 'anchor', target_card: 'blocking', target_port: 'position_anchor' },
       { id: 'design', source_card: 'blocking', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
     input_order: { anchor: { space: ['space'], image_example: ['image'] }, blocking: { position_anchor: ['position'] }, consumer: { text: ['design'] } } }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4287/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4287${storyboardCanvasPath(canvas)}`)
   const card = page.locator('.wb-details:not([hidden])')
   const open = async (id, advanced = true) => {
     await openCanvasCard(page, id)
     if (advanced && await card.getByRole('button', { name: '高级设置', exact: true }).count()) await card.getByRole('button', { name: '高级设置', exact: true }).click()
   }
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('anchor')
-  await card.getByRole('button', { name: '选择所属空间 大厅', exact: true }).click()
+  await openDesignAssociation(card, /候选.*大厅/)
+  await page.getByRole('button', { name: '用作所属空间', exact: true }).click()
   await card.getByRole('textbox', { name: '位置内容', exact: true }).fill('东墙门口')
   await poll(state => state.document.cards.find(item => item.id === 'anchor').position?.text === '东墙门口')
-  assert.equal(await card.getByRole('button', { name: '关联素材 @图片1', exact: true }).isVisible(), true, 'anchor reference marking opens directly')
-  await card.getByRole('button', { name: '关联素材 @图片1', exact: true }).click()
-  await card.getByRole('spinbutton', { name: '标记横坐标', exact: true }).fill('0.25')
-  await card.getByRole('spinbutton', { name: '标记纵坐标', exact: true }).fill('0.75')
+  await openDesignAssociation(card, /候选.*图片/)
+  await page.getByRole('button', { name: '设为本地参考', exact: true }).click()
+  await page.getByText('精确坐标', { exact: true }).click()
+  await page.getByRole('spinbutton', { name: '标记横坐标百分比', exact: true }).fill('25')
+  await page.getByRole('spinbutton', { name: '标记纵坐标百分比', exact: true }).fill('75')
   await poll(state => state.document.cards.find(item => item.id === 'anchor').markers?.[0]?.y === 0.75)
-  await card.getByLabel('锚点图片标记 门边', { exact: true }).waitFor()
+  await page.getByLabel('锚点图片标记', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'anchor-marker.png'), fullPage: true })
   await open('blocking')
-  await card.getByRole('button', { name: '选择位置锚点 门边', exact: true }).click()
+  await openDesignAssociation(card, /候选.*门边/)
+  await page.getByRole('button', { name: '用作位置锚点', exact: true }).click()
   await card.getByRole('textbox', { name: '路径内容', exact: true }).fill('从门边走向窗前')
   await poll(state => state.document.cards.find(item => item.id === 'blocking').path?.text === '从门边走向窗前')
   await page.screenshot({ path: join(output, 'spatial-desktop.png'), fullPage: true })
   await open('activity')
   await card.getByRole('textbox', { name: '持续任务内容', exact: true }).fill('整理书架')
 
+  await card.getByRole('tab', { name: /空间与时序/ }).click()
   await card.getByRole('spinbutton', { name: '反应延迟毫秒', exact: true }).fill('350')
   await poll(state => state.document.cards.find(item => item.id === 'activity').delay_ms === 350)
   await open('environment')
@@ -93,14 +98,15 @@ try {
   await poll(state => state.document.cards.find(item => item.id === 'environment').empty_space?.text === '门口无人')
   await open('consumer')
   await poll(state => state.document.cards.find(item => item.id === 'consumer').input_bindings?.length === 1)
-  const compiled = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
+  const compiled = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/consumer/compile`))).json()).data
   assert.match(compiled.text, /从门边走向窗前/)
   assert.match(compiled.text, /秘密场所正文/)
   assert.match(compiled.text, /东墙门口/)
   await page.reload()
   await open('blocking')
   assert.equal(await card.getByRole('textbox', { name: '路径内容', exact: true }).innerText(), '从门边走向窗前')
-  await card.getByRole('button', { name: '取消位置锚点 门边', exact: true }).waitFor()
+  await openDesignAssociation(card, /候选.*门边/)
+  await page.getByRole('button', { name: '解除位置锚点', exact: true }).waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true, 'narrow editor has no horizontal overflow')
   await page.screenshot({ path: join(output, 'spatial-mobile.png'), fullPage: true })

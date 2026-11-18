@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Popover, theme } from 'antd'
 import { ExclamationCircleOutlined } from '@ant-design/icons'
 import type { CanvasDiagnostic } from '../../../services/generated'
-import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 
 /** 标题图标只负责展开说明，跳转由用户选择具体问题的入口触发。 */
 export function CardIssueIndicator({ issues, onLocate, actionFor, relatedActionsFor }: {

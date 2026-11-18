@@ -6,7 +6,7 @@ import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { CardListPagination } from '../../../components/layout/CardListPagination'
 import { useCardPageSize } from '../../../components/layout/useCardPageSize'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
-import { directingError } from '../directing/common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { ResourceCreateButton } from './components/ResourceCreateButton'
 import { ResourceEditorDrawer } from './components/ResourceEditorDrawer'
 import { AssetImageCard, type LibraryAsset, type LibraryAssetType } from './components/AssetImageCard'
@@ -238,7 +238,7 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
       message.success(`已删除${label}`)
       reload()
     } catch (cause) {
-      setDeleteError(directingError(cause))
+      setDeleteError(apiErrorMessage(cause))
       setDeleteFailed(true)
     } finally {
       deleteInFlight.current = false

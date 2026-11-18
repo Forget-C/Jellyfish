@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { openCardList, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8437'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     PYTHONPATH: join(root, '../backend'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8437' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -34,14 +35,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const created = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '导演输出与键盘提示' }) })).json()).data
+  const created = await createStoryboardCanvas(base, '导演输出与键盘提示')
   const id = created.id
   const field = (text, state = 'proposal') => ({ text, state, purpose: 'design' })
   const types = ['lighting','composition','camera','movement','focus','style','situation','performance','performance_rule','anchor','blocking','activity','environment','narrative','beat','event','shot','dialogue','sound','space_rule','continuity','fact','creative_control','guidance','criterion']
   const cards = types.map(type => ({id:type,type:'direction.'+type,input_bindings:[],examples:[],scope:{},...(type==='dialogue'?{dialogue_id:'dialogue-one'}:{})}))
-  const save = await fetch(`${base}/${id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:created.revision,document:{...created.document,cards}})})
+  const save = await fetch(storyboardCanvasApi(base, id), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:created.revision,document:{...created.document, cards: [...cards, ...created.document.cards]}})})
   assert.ok(save.ok,await save.clone().text())
-  await page.goto(`http://127.0.0.1:4437/projects/canvas-project/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4437${storyboardCanvasPath(created)}`)
   const photo = page.locator('[data-card-id="lighting"]')
   await photo.locator('.generation-card-body').click()
   const details=page.locator('.wb-details:visible')
@@ -69,7 +70,7 @@ try {
   await page.screenshot({path:join(output,'director-modal-mobile.png')})
   await page.keyboard.press('Escape');await details.waitFor({state:'hidden'})
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
-  const saved=(await (await fetch(`${base}/${id}`)).json()).data
+  const saved=(await (await fetch(storyboardCanvasApi(base, id))).json()).data
   assert.equal(saved.document.cards.find(c=>c.id==='lighting').fields.light_sources.text,'保存后的夜间轮廓光')
   await page.reload();await photo.press('Enter')
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).evaluate(element => 'value' in element ? element.value : element.innerText),'保存后的夜间轮廓光')
@@ -84,7 +85,7 @@ try {
     await added.press('Enter')
     await details.getByRole('button',{name:'高级设置',exact:true}).waitFor({state:'visible'})
     await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
-    const latest=(await (await fetch(`${base}/${id}`)).json()).data
+    const latest=(await (await fetch(storyboardCanvasApi(base, id))).json()).data
     assert.equal(latest.document.cards.find(c=>c.id===addedId).type,'direction.'+kind)
     await closeCanvasDetails(page)
   }

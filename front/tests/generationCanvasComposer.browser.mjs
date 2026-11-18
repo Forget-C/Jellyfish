@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-graph-')
 const api = 'http://127.0.0.1:8275'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_composer_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8275' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -35,7 +36,7 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '类型化画布' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '类型化画布')
   const form = new FormData()
   form.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), 'reference.png')
   form.append('project_id', 'canvas-project'); form.append('usage_kind', 'generation_upload')
@@ -45,9 +46,9 @@ try {
   const edges = sources.map(source => ({ id: `e-${source.id}`, source_card: source.id, source_port: 'image', target_card: 'm', target_port: 'image' }))
   const doc = { ...canvas.document, cards: [{ id: 'm', type: 'model.image', model_id: 'graph-image', prompt: { segments: [] }, config: {} }, ...sources,
     { id: 'unavailable', type: 'content.image', file_id: file.id, uploading: true }, { id: 'person-description', type: 'content.character', name: '林夏', object_id: 'person', text: '角色描述' }, { id: 'other', type: 'model.image', model_id: 'graph-image', prompt: { segments: [] }, config: {} }, { id: 'empty', type: 'content.image' }], edges: [...edges, { id: 'e-unavailable', source_card: 'unavailable', source_port: 'image', target_card: 'm', target_port: 'image' }, { id: 'text-name', source_card: 'person-description', source_port: 'text', target_card: 'm', target_port: 'text' }], input_order: { m: { image: [...edges.map(edge => edge.id), 'e-unavailable'], text: ['text-name'] } } }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, doc) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4275/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4275${storyboardCanvasPath(canvas)}`)
   const save = () => page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
   const detail = () => page.locator('.wb-details:not([hidden])')
   const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor(); await openModelInspection(page) }
@@ -61,7 +62,7 @@ try {
     }
   }), await detail().evaluate(element => getComputedStyle(element).backgroundColor), 'model composer inherits workbench surface instead of the default white experiment frame')
   // 图片模型：默认列出图片候选，支持方向键、名称筛选、普通文本与光标处插入。
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 100; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('saved prompt not observed') }
   const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   const initialPositions = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).positions, layoutKey)
@@ -101,12 +102,14 @@ try {
   await menu.getByRole('option', { name: '@图片3', exact: true }).click()
   assert.equal(await editor.textContent(), '前缀 @图片3 后缀', 'query at the caret is replaced without dropping suffix text')
   const tokenStyle = await editor.locator('[data-segment]').evaluate(element => ({ color: getComputedStyle(element).color, decoration: getComputedStyle(element).textDecorationLine }))
-  assert.equal(tokenStyle.decoration, 'underline'); assert.equal(tokenStyle.color, 'rgb(105, 170, 255)')
+  assert.equal(tokenStyle.decoration, 'underline'); assert.equal(tokenStyle.color, 'rgb(36, 95, 197)')
   await editor.fill('前缀  后缀')
   await editor.evaluate(element => { element.focus(); const node = element.firstChild.nodeType === Node.TEXT_NODE ? element.firstChild : element.firstChild.firstChild; const range = document.createRange(); range.setStart(node, 3); range.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(range) })
   await association(4).focus(); await association(4).press('Enter')
+  await page.getByRole('button', { name: '引用到正文 @图片4', exact: true }).click()
   assert.equal(await editor.textContent(), '前缀 @图片4 后缀', 'association inserts at retained selection')
   await association(4).click()
+  await page.getByRole('button', { name: '引用到正文 @图片4', exact: true }).click()
   let state = await poll(state => model(state).prompt.segments.filter(segment => segment.kind === 'reference').length === 2)
   assert.equal(model(state).input_bindings.filter(binding => binding.source.card_id === 's4').length, 1, 'repeated references reuse one binding')
   await editor.fill('@图片999')
@@ -132,6 +135,7 @@ try {
   state = await poll(state => model(state).input_bindings.some(binding => binding.source.card_id === 's5'))
   const independentId = model(state).input_bindings.find(binding => binding.source.card_id === 's5').id
   await closeManagement(); await association(5).click()
+  await page.getByRole('button', { name: '引用到正文 @图片5', exact: true }).click()
   await poll(state => model(state).prompt.segments.some(segment => segment.kind === 'reference'))
   await page.reload(); await open('m')
   await editor.fill('删除正文后保留独立采用')
@@ -170,7 +174,7 @@ try {
   assert.equal(await editor.locator('[data-segment]').count(), 1)
   await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  let saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  let saved = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const savedReference = saved.document.cards[0].prompt.segments.find(segment => segment.kind === 'reference')
   assert.equal(saved.document.cards[0].input_bindings.find(binding => binding.id === savedReference.binding_id).source.card_id, 's10')
   assert.equal(savedReference.source, undefined, 'source has one persisted authority in input bindings')
@@ -194,7 +198,7 @@ try {
   let selectedExisting = false
   for (let index = 0; index < 40; index++) {
     const active = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-active')
-    if (await active.count() && (await active.innerText()).trim() === '图片内容卡 · empty → 参考图片') {
+    if (await active.count() && (await active.innerText()).trim() === '图片内容卡 · empty') {
       await existing.press('Enter'); selectedExisting = true; break
     }
     await existing.press('ArrowDown')
@@ -272,7 +276,7 @@ try {
   await editor.press('End'); await editor.press(navigatorNewline); await editor.pressSequentially('second line')
   await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  saved = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   assert.equal(saved.document.cards[0].prompt.segments.map(segment => segment.text || '').join(''), '第一行\nsecond line')
   await page.reload(); await open('m'); await editor.waitFor()
   assert.equal(await editor.textContent(), '第一行\nsecond line')
@@ -281,7 +285,7 @@ try {
   assert.equal(await editor.locator('[data-segment]').count(), 0, 'escaped reserved words stay literal')
   await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const escaped = (await (await fetch(`${base}/${canvas.id}/cards/m/compile`)).json()).data
+  const escaped = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/m/compile`))).json()).data
   assert.equal(escaped.text, '@图片10 /首帧参考')
   // Re-establish a reference for the final guarded disconnect check.
   await editor.fill('@图片10 '); await editor.press('Tab')
@@ -291,7 +295,7 @@ try {
   await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
   await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  saved = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   assert.ok(!saved.document.edges.some(edge => edge.id === 'e-s10'))
   assert.equal(saved.document.cards[0].prompt.segments[0].text, '清理后只保留普通文字')
   // New protocol tracer: explicitly import creative basis, save, adopt and reopen.
@@ -300,7 +304,7 @@ try {
     { id: 'text-model', type: 'model.text', model_id: 'graph-text', prompt: { segments: [] } },
   ], groups: [], edges: [{ id: 'basis-edge', source_card: 'basis', source_port: 'text', target_card: 'text-model', target_port: 'text' }],
   input_order: { 'text-model': { text: ['basis-edge'] } } }
-  const basisSaved = await fetch(base + '/' + canvas.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  const basisSaved = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id: 'basis-tracer', expected_revision: saved.revision, document: basisDocument }) })
   assert.ok(basisSaved.ok, await basisSaved.text())
   await page.reload()
@@ -316,7 +320,7 @@ try {
   await textModel.getByRole('button', { name: '@文本1', exact: true }).click()
   await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  const basisCompiled = (await (await fetch(base + '/' + canvas.id + '/cards/text-model/compile')).json()).data
+  const basisCompiled = (await (await fetch(storyboardCanvasApi(base, canvas.id, '/cards/text-model/compile'))).json()).data
   assert.equal(basisCompiled.text, '张三望向门口。 ')
   await page.reload()
   await open('basis')

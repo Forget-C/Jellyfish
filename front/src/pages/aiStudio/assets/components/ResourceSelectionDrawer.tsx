@@ -4,7 +4,7 @@ import { CheckCircleFilled } from '@ant-design/icons'
 import { StudioEntitiesService } from '../../../../services/generated'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../utils'
 import { readResourceImages, type ResourcePicture } from '../resourceImages'
-import { directingError } from '../../directing/common'
+import { apiErrorMessage } from '../../../../services/apiErrorMessage'
 import { DisplayImageCard } from './DisplayImageCard'
 import { ResourceCardMetadata } from './ResourceCardMetadata'
 import type { LibraryAsset } from './AssetImageCard'
@@ -54,7 +54,7 @@ export function ResourceSelectionDrawer({ mode, projectId, kind, objectName, ass
         q: query, exactName: sameName ? objectName : undefined, page, pageSize: 12 })
       return { items: ((response.data?.items ?? []) as ResourceChoice[]).map(row => ({ ...row, source: currentSource })), total: response.data?.pagination.total ?? 0 }
     })).then(results => { if (current) { setRows(results.flatMap(value => value.items)); setTotal(sameName ? Math.max(...results.map(value => value.total)) : results[0].total) } })
-      .catch(cause => { if (current) setError(directingError(cause)) })
+      .catch(cause => { if (current) setError(apiErrorMessage(cause)) })
       .finally(() => { if (current) setLoading(false) })
     return () => { current = false }
   }, [projectId, kind, objectName, sameName, source, query, page, retry])
@@ -63,7 +63,7 @@ export function ResourceSelectionDrawer({ mode, projectId, kind, objectName, ass
     let current = true
     setPictures([]); setPicturesLoading(true); setPictureError('')
     void readResourceImages(selected.source === 'library' && kind === 'character' ? 'actor' : kind, selected.id).then(value => { if (current) setPictures(value.filter(image => image.file_id)) })
-      .catch(cause => { if (current) setPictureError(directingError(cause)) })
+      .catch(cause => { if (current) setPictureError(apiErrorMessage(cause)) })
       .finally(() => { if (current) setPicturesLoading(false) })
     return () => { current = false }
   }, [kind, selected, pictureRetry])
@@ -77,7 +77,7 @@ export function ResourceSelectionDrawer({ mode, projectId, kind, objectName, ass
       if (result.complete) { accepted.current = true; return true }
       setError(result.error || '操作未完成，请重试。')
       return false
-    } catch (cause) { setError(directingError(cause)); return false }
+    } catch (cause) { setError(apiErrorMessage(cause)); return false }
     finally { lock.current = false; setPending(false) }
   }
   const title = importing ? '从资产库导入' : sameName ? '选用同名资源' : source === 'library' ? '选用资产库资源' : '选用项目资源'

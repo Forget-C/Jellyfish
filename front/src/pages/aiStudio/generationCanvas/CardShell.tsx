@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CanvasCard } from '../../../components/canvas/Canvas'
 import { MoreOutlined, FileTextOutlined, PictureOutlined, VideoCameraOutlined, AudioOutlined, CameraOutlined, CheckSquareOutlined, CommentOutlined, LockOutlined, ProfileOutlined, ThunderboltOutlined, ControlOutlined, CompassOutlined, ReadOutlined, FlagOutlined, TeamOutlined, UserOutlined, AimOutlined, ScheduleOutlined, EnvironmentOutlined, SoundOutlined, BorderOuterOutlined, BranchesOutlined } from '@ant-design/icons'
-import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 const designIcons = {

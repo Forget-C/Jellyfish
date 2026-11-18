@@ -16,7 +16,8 @@ execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i
   '-c:v', 'libx264', '-y', fixture])
 const api = 'http://127.0.0.1:8328', studio = api + '/api/v1/studio'
 const project = 'canvas-project', chapter = 'storyboard-media-chapter', text = '前门的阿同拿着信封。后门的阿同等待。'
-const base = studio + '/generation-canvases/' + project
+const base = studio + '/generation-canvases'
+const canvasUrl = (id, suffix = '') => `${base}/${id}${suffix}?project_id=${project}`
 const controls = api + '/test/runtime-controls'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
@@ -146,8 +147,8 @@ try {
         .getByRole('button', { name: '应用并进入画布', exact: true }).click()
     } else await openReadyStoryboard(page, defaultName)
     await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
-    const canvas = base + '/' + new URL(page.url()).searchParams.get('canvas')
-    const state = await poll(() => request(canvas), data => data.document.storyboard, 'storyboard was not saved')
+    const canvas = new URL(page.url()).searchParams.get('canvas')
+    const state = await poll(() => request(canvasUrl(canvas)), data => data.document.storyboard, 'storyboard was not saved')
     const { shots, objects } = state.document.storyboard
     if (modality === 'image') {
       const edited = '阿同继续拿着信封。'
@@ -155,7 +156,7 @@ try {
       await page.getByRole('textbox', { name: '可见结果内容', exact: true }).fill(edited)
       await closeCanvasDetails(page)
       const noteSaved = row => row.document.cards.find(item => item.id === shots[0].card_id)?.visible_result?.text === edited
-      await poll(() => request(canvas), noteSaved, 'edited storyboard did not auto-save')
+      await poll(() => request(canvasUrl(canvas)), noteSaved, 'edited storyboard did not auto-save')
       const opened = new URL(page.url())
       await page.getByRole('button', { name: '返回工作台管理', exact: true }).click()
       await card.getByText('当前定位', { exact: true }).waitFor()
@@ -163,7 +164,7 @@ try {
       assert.equal(new URL(page.url()).searchParams.get('storyboardTask'), opened.searchParams.get('storyboardTask'))
       await card.getByRole('button', { name: defaultName, exact: true }).press('Enter')
       await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
-      assert.ok(noteSaved(await request(canvas)))
+      assert.ok(noteSaved(await request(canvasUrl(canvas))))
     }
     const assign = async (cardId, useDefault, beforeSave) => {
       const pending = state.document.cards.find(card => card.id === cardId)
@@ -183,7 +184,7 @@ try {
         assert.equal(await chooser.getAttribute('aria-expanded'), 'false')
       }
       await beforeSave?.()
-      await poll(() => request(canvas), saved => {
+      await poll(() => request(canvasUrl(canvas)), saved => {
         const model = saved.document.cards.find(card => card.id === cardId)
         return model?.model_id === `story-${modality}-model` && (modality !== 'video' || model.config?.ratio === '16:9')
       },
@@ -192,7 +193,7 @@ try {
     const preparedModel = shots[0].model_card_ids[0]
     const shot = shots[1], cardId = shot.model_card_ids[0]
     if (modality === 'video') {
-      const saveRoute = `**${new URL(canvas).pathname}`
+      const saveRoute = url => url.pathname === new URL(canvasUrl(canvas)).pathname
       let allowSave
       const blockedSave = new Promise(resolve => { allowSave = resolve })
       const delaySave = async route => {
@@ -202,7 +203,7 @@ try {
       await page.route(saveRoute, delaySave)
       try {
         await assign(cardId, true, async () => {
-          assert.equal((await request(canvas)).document.cards.find(card => card.id === cardId).model_id, null)
+          assert.equal((await request(canvasUrl(canvas))).document.cards.find(card => card.id === cardId).model_id, null)
           await closeCanvasDetails(page)
           assert.equal(await page.getByRole('button', { name: '重新提取', exact: true }).count(), 0)
           allowSave()
@@ -216,25 +217,25 @@ try {
       await page.getByRole('region', { name: '生成画布工作台', exact: true }).waitFor()
     }
     await assign(preparedModel, modality === 'image')
-    const preparedPreview = await request(canvas + '/precheck', 'POST', { card_id: preparedModel })
+    const preparedPreview = await request(canvasUrl(canvas, '/precheck'), 'POST', { card_id: preparedModel })
     assert.deepEqual(preparedPreview.input.media.map(media => media.file_id), ['object-browser-image'])
     if(modality==='image') {
       const frontReference=objects.find(item=>item.object_id===shots[0].object_ids[0]).reference_card_id
       const primarySourceKey=JSON.stringify([state.id,frontReference,'image',0])
       const primaryChoice=page.locator('.wb-details:visible').locator(`[data-reference-source=${JSON.stringify(primarySourceKey)}]`)
       await primaryChoice.getByRole('button',{name:/^取消采用 /}).click()
-      await poll(()=>request(canvas),saved=>!saved.document.cards.find(card=>card.id===preparedModel).input_bindings.some(binding=>binding.source.card_id===frontReference),'valid reference was not unadopted')
-      const withoutValidReference=await request(canvas+'/precheck','POST',{card_id:preparedModel})
+      await poll(()=>request(canvasUrl(canvas)),saved=>!saved.document.cards.find(card=>card.id===preparedModel).input_bindings.some(binding=>binding.source.card_id===frontReference),'valid reference was not unadopted')
+      const withoutValidReference=await request(canvasUrl(canvas, '/precheck'),'POST',{card_id:preparedModel})
       assert.equal(withoutValidReference.diagnostics.some(issue=>issue.code==='CREATIVE_REFERENCE_IMAGE_MISSING'&&issue.target.card_id===frontReference),false,'an available dynamic main image is not an empty placeholder')
       await primaryChoice.getByRole('button',{name:/^采用 /}).click()
-      await poll(()=>request(canvas),saved=>saved.document.cards.find(card=>card.id===preparedModel).input_bindings.some(binding=>binding.source.card_id===frontReference),'valid reference was not restored')
+      await poll(()=>request(canvasUrl(canvas)),saved=>saved.document.cards.find(card=>card.id===preparedModel).input_bindings.some(binding=>binding.source.card_id===frontReference),'valid reference was not restored')
 
     }
     const preparedEditor=page.locator('.wb-details:visible')
     const missingAttribute=modality==='video'?'data-input-binding-id':'data-reference-source'
     const cancelName=modality==='video'?/^取消主体图片 /:/^取消采用 /
     const missingRows=preparedEditor.locator(`[${missingAttribute}]`).filter({hasText:'来源输出缺失'}).filter({has:page.getByRole('button',{name:cancelName})})
-    const missingCount=(await request(canvas+'/precheck','POST',{card_id:preparedModel})).diagnostics.filter(issue=>issue.code==='OUTPUT_MISSING').length
+    const missingCount=(await request(canvasUrl(canvas, '/precheck'),'POST',{card_id:preparedModel})).diagnostics.filter(issue=>issue.code==='OUTPUT_MISSING').length
     for(let index=0;index<missingCount;index++) {
       await missingRows.first().waitFor()
       const identity=await missingRows.first().getAttribute(missingAttribute)
@@ -242,7 +243,7 @@ try {
       await cancel.click()
       await cancel.waitFor({state:'hidden'})
     }
-    await poll(async()=>{const result=await request(canvas+'/precheck','POST',{card_id:preparedModel});return {can_run:result.can_run,diagnostics:result.diagnostics}},result=>result.can_run,'prepared shot still has an adopted empty input')
+    await poll(async()=>{const result=await request(canvasUrl(canvas, '/precheck'),'POST',{card_id:preparedModel});return {can_run:result.can_run,diagnostics:result.diagnostics}},result=>result.can_run,'prepared shot still has an adopted empty input')
     await closeCanvasDetails(page)
 
     if (modality === 'image') {
@@ -253,21 +254,21 @@ try {
     assert.equal(state.document.cards.find(card => card.id === referenceId).image_binding, null)
     // 动态对象出口保留已采用关系；空出口必须先显式取消采用，才能按无创作参考继续。
     const missingReference=state.document.cards.find(card=>card.id===referenceId)
-    const missingPrecheck=await request(canvas+'/precheck','POST',{card_id:cardId})
+    const missingPrecheck=await request(canvasUrl(canvas, '/precheck'),'POST',{card_id:cardId})
     assert.ok(missingPrecheck.diagnostics.some(issue=>issue.code==='OUTPUT_MISSING'))
     const missingEditor=await openCanvasCard(page,cardId)
     if(modality==='video') {
-      const missingBinding=(await request(canvas)).document.cards.find(card=>card.id===cardId).input_bindings.find(binding=>binding.source.card_id===referenceId)
+      const missingBinding=(await request(canvasUrl(canvas))).document.cards.find(card=>card.id===cardId).input_bindings.find(binding=>binding.source.card_id===referenceId)
       await missingEditor.locator(`[data-input-binding-id=${JSON.stringify(missingBinding.id)}]`).getByRole('button',{name:/^取消主体图片 /}).click()
     } else await missingEditor.locator('[data-reference-source]').filter({hasText:missingReference.name}).getByRole('button',{name:/^取消采用 /}).click()
-    await poll(()=>request(canvas),saved=>!saved.document.cards.find(card=>card.id===cardId).input_bindings.some(binding=>binding.source.card_id===referenceId),'empty adopted reference was not removed')
+    await poll(()=>request(canvasUrl(canvas)),saved=>!saved.document.cards.find(card=>card.id===cardId).input_bindings.some(binding=>binding.source.card_id===referenceId),'empty adopted reference was not removed')
     await closeCanvasDetails(page)
 
-    const readRuntime = () => request(canvas + '/runtime')
+    const readRuntime = () => request(canvasUrl(canvas, '/runtime'))
     const videoAction = (id, name = '生成视频') => page.locator(`[data-card-id="${id}"]`).getByRole('button', { name, exact: true })
     if (modality === 'video') {
       const workbenchUrl = page.url()
-      const ordinary = projectUrl + '/generation-canvas?canvas='
+      const ordinary = new URL('/canvases/', projectUrl).href
       const openOrdinary = async (id, modelId) => {
         await page.goto(ordinary + id)
         await page.locator(`[data-card-id="${modelId}"]`).waitFor()
@@ -278,11 +279,10 @@ try {
         await closePrecheck(page)
         await closeCanvasDetails(page)
       }
-      await openOrdinary(state.id, cardId)
       const free = await request(base, 'POST', { name: '独立视频画布' })
       free.document.cards = [{ id: 'free-video', type: 'model.video', model_id: 'story-video-model',
         config: { ratio: '16:9', seconds: 5 }, prompt: { segments: [{ id: 'text', kind: 'text', text: '独立视频' }] } }]
-      await request(base + '/' + free.id, 'PUT', { request_id: 'configure-free-video',
+      await request(`${base}/${free.id}`, 'PUT', { request_id: 'configure-free-video',
         expected_revision: free.revision, document: free.document })
       await openOrdinary(free.id, 'free-video')
       await page.goto(workbenchUrl)
@@ -321,7 +321,7 @@ try {
     assert.equal((await request(controls)).media_calls.length, callCount)
 
     const submit = async () => {
-      const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+      const accepted = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
       await confirm.click()
       const response = await accepted
       assert.ok(response.ok(), await response.text())
@@ -362,7 +362,7 @@ try {
         assert.equal(await running.isDisabled(), true, 'another queued run does not change this card')
         const queuedRun = (await readRuntime()).runs.find(item => item.id === queuedId)
         assert.equal(queuedRun.nodes[0].status, 'queued')
-        await request(`${canvas}/runs/${queuedId}/cancel`, 'POST')
+        await request(canvasUrl(canvas, `/runs/${queuedId}/cancel`), 'POST')
       } finally {
         await request(controls, 'POST', { media_hold: false })
       }
@@ -403,10 +403,10 @@ try {
     }
 
     if (modality === 'video') {
-      const current = await request(canvas)
+      const current = await request(canvasUrl(canvas))
       const model = current.document.cards.find(card => card.id === cardId)
       model.prompt.segments.push({ id: 'required-frame', kind: 'instruction', command: '首帧参考', references: [] })
-      await request(canvas, 'PUT', { request_id: 'explicit-required-frame', expected_revision: current.revision, document: current.document })
+      await request(canvasUrl(canvas), 'PUT', { request_id: 'explicit-required-frame', expected_revision: current.revision, document: current.document })
       await page.reload()
       await precheck('再次生成')
       await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).waitFor()

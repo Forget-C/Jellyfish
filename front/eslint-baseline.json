@@ -471,14 +471,14 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/graphLayout.ts",
+      "file": "src/pages/aiStudio/generationCanvas/graphLayout.ts",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "2c7584b9d457cdccfb1b70e212886e0b6ca850c689590df7ffdf1984792e992a",
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/graphLayout.ts",
+      "file": "src/pages/aiStudio/generationCanvas/graphLayout.ts",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "fd61efc855474f9c2df13ac9f943225ee357decddebf3997bf04c81150e59c9c",
@@ -1080,28 +1080,28 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/ui/WorkbenchDetails.tsx",
+      "file": "src/components/workbench/WorkbenchDetails.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "517ede19ad3ec025f572686de973a0c455c3c387ed91627fb0468cefd4e1cf33",
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/useGraphBrowse.ts",
+      "file": "src/pages/aiStudio/generationCanvas/useGraphBrowse.ts",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "2b44d6169a26101fd4e80fcdd69d1fc1b0872103329a5477ced98d1559622c4f",
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/useGraphLayout.ts",
+      "file": "src/pages/aiStudio/generationCanvas/useGraphLayout.ts",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "85ed0067e265d70ab22c088f1f89d25d4f6c9dc692e05dbb52c060ccb16e826e",
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/useGraphLayout.ts",
+      "file": "src/pages/aiStudio/generationCanvas/useGraphLayout.ts",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "a5364a241df691fd1cf3cb9040af23a73e7ecda16aaba85c1ccea57934af8876",

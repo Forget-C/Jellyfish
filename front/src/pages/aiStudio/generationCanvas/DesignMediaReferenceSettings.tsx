@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { DesignMediaExample } from '../../../services/generated'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 /** Reference ranges are a local draft until both endpoints are explicitly applied. */
 export function DesignMediaReferenceSettings({ example, fields, disabled, duration, onChange }: { example: DesignMediaExample; fields: { id: string; label: string }[]; disabled?: boolean; duration?: number; onChange: (patch: Partial<DesignMediaExample>) => void }) {

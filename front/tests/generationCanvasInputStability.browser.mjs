@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8587'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8587' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -47,7 +47,7 @@ try {
   const pending = new Promise(resolve => { started = resolve })
   const completed = new Promise(resolve => { finished = resolve })
   const initialReady = new Promise(resolve => { initialResolved = resolve })
-  await page.route('**/cards/model/outputs', async route => {
+  await page.route('**/cards/model/outputs?project_id=*', async route => {
     const refreshing = hold
     const response = await route.fetch()
     if (refreshing) { started(); await gate }
@@ -56,8 +56,8 @@ try {
     else initialResolved()
   })
   try {
-    const initialCompile = page.waitForResponse(response => response.url().endsWith('/cards/model/compile') && response.ok())
-    await page.goto(`http://127.0.0.1:4587/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+    const initialCompile = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/cards/model/compile') && response.ok())
+    await page.goto(`http://127.0.0.1:4587/canvases/${canvas.id}`)
     await page.locator('[data-card-id="model"]').press('Enter')
     const editor = page.locator('.generation-card-editor:not([hidden])')
     const input = editor.getByRole('textbox', { name: '模型正文', exact: true })
@@ -89,7 +89,7 @@ try {
     assert.deepEqual(await geometry(), before, 'background candidate refresh must not move or resize the text input')
     assert.equal(await editor.getByText('正在读取直接候选', { exact: true }).count(), 0)
     hold = false
-    const refreshed = page.waitForResponse(response => response.url().endsWith('/cards/model/outputs') && response.ok())
+    const refreshed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/cards/model/outputs') && response.ok())
     await input.fill('第二次编辑对应最新候选修订。')
     const savedInputs = editor.getByRole('region', { name: '已保存直接输入', exact: true })
     await editor.getByLabel('管理候选与采用', { exact: true }).click()

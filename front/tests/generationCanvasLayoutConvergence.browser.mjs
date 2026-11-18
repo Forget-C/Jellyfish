@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-layout-convergence-')
-const api = 'http://127.0.0.1:8638', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8638', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8638' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -55,20 +55,20 @@ try {
   const results = []
   const pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
-  const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '画布交互回归' })
+  const canvas = await request('/api/v1/studio/generation-canvases', { name: '画布交互回归' })
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...canvas.document, cards: [
           { id: 'place', type: 'reference.place', name: '', angle: '正面' },
           { id: 'spare', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: {} },
         ], edges: [], input_order: {} } }) })
   assert.ok(seeded.ok, await seeded.text())
-  const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
+  const layoutKey = `jellyfish:generation-layout::${canvas.id}:view:canvas`
   await page.addInitScript(({ layoutKey }) => {
     if (!sessionStorage.getItem('interaction-seeded')) {
       sessionStorage.setItem('interaction-seeded', '1')
       localStorage.setItem(layoutKey, JSON.stringify({ schema: 1, positions: { place: { x: 400, y: 250 }, spare: { x: 2200, y: 700 } }, sizes: { place: { width: 300, height: 251 } }, transform: { x: 0, y: 0, scale: .8 } }))
     }
   }, { layoutKey })
-  await page.goto(`http://127.0.0.1:4638/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4638/canvases/${canvas.id}`)
   const card = page.locator('[data-card-id="place"]')
   await card.waitFor()
   const check = async (name, fn) => {

@@ -3,7 +3,7 @@
 从项目根目录运行既有纯行为回归，使用现有 TypeScript 编译器与 Node.js 内置测试工具：
 
 ```bash
-node --test front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs front/tests/workspaceCut.test.mjs
+node --test front/tests/chapterNavigation.test.mjs front/tests/sourceSelection.test.mjs
 ```
 
 ## 统一检查与浏览器入口
@@ -19,37 +19,23 @@ pnpm --dir front run test:browser
 
 `lint` 保留未过滤的原始输出。`lint:check` 只允许 `front/eslint-baseline.json` 中已知的存量问题，新增问题、解析错误及工具错误均失败；修复旧问题后运行 `pnpm --dir front run lint:baseline` 收缩豁免。维护命令不能接纳新问题；源代码行发生变化后仍存在的诊断也需要解决，不靠行号维持旧豁免。首次基线包含 181 个错误、117 个警告，不表示这些问题已经修复。
 
-`test:workbench-ui` 还登记了 `unit-design` 和 `instruction-preparation`：验证 AI 明确应用后未保存卡片、保存失败恢复、当前编辑投影，以及顶部准备清单的定位和独立生成门禁。
-
 `test:unit` 运行全部纯逻辑及公开 CLI 回归，也执行浏览器清单检查及其正反例。可从项目根目录单独运行 `node front/tests/check-browser-manifest.mjs`；`--manifest <文件>` 用于检查独立夹具，扫描范围为清单所在目录及子目录。
 
 `browser-suites.json` 的 `cases` 登记文件、端口和超时，`suites` 的并集决定默认 `all` 执行范围。每个 `*.browser.mjs` 必须登记，或在 `excludedFiles` 按精确相对路径填写非空理由；已登记但不在任何套件中的用例，必须在 `nonDefaultCases` 按用例名说明原因。检查会拒绝失效引用、重复登记、登记与排除冲突、空理由及无说明的套件不可达。排除项不是通配模式，不提供自动刷新命令。
 
-清单保留 64 个未登记文件和 9 个已登记但套件不可达的存量项，逐项记录尚未核验状态或已确认的承接缺口，不表示废弃或已被替代，也不据此扩大 CI 执行范围。新增文件应登记并接入适用套件；确需排除时必须人工说明具体理由。核验存量后应逐项接入或修订原因，移除失效豁免。
+清单在 `excludedFiles` 和 `nonDefaultCases` 保留仍存在的未登记或套件不可达项，逐项记录尚未核验状态或已确认的承接缺口，不表示废弃或已被替代，也不据此扩大 CI 执行范围。新增文件应登记并接入适用套件；确需排除时必须人工说明具体理由。核验存量后应逐项接入或修订原因，移除失效豁免。
 
 `generation-canvas-chrome-baseline` 是保留的导演工作台对照基准，可通过 `pnpm --dir front run test:browser generation-canvas-chrome-baseline` 单独运行。原 ToolsBaseline 除前后端端口外与它全文相同，重复脚本和登记已移除；历史验收记录仍保留当时使用的名称。
 
-以下两个旧脚本暂留作迁移依据，不作为当前可直接通过的验收入口，也未纳入默认套件：
-
-| 旧脚本 | 已核查状态与未证明承接的保护 |
-| --- | --- |
-| `sequenceWorkbench.browser.mjs` | 旧导航尺寸与设计视图切换失配；1／60／200 镜头的 End 键定位和挂载数量限制尚无等价覆盖证明。 |
-| `workspaceAcceptance.browser.mjs` | 旧导航、保存与采用按钮失配；四尺寸 ×16 状态的实际容器溢出、主动作命中、键盘与候选媒体保护，仅有部分现行测试覆盖。 |
-
-下文涉及这两个脚本的命令与覆盖描述用于说明原断言；删除前须证明仍适用的保护已承接，或明确确认相应行为退役。来源媒体回归不等价于候选播放器回归。
-
-现有 CI 的 `test:unit` 阶段检查清单，通过后浏览器阶段运行默认 `all`；`workbench` 已包含 `chapter-list-editor` 和 `source-provenance`。无需新增 CI 作业或改变全局时间预算。
+现有 CI 的 `test:unit` 阶段检查清单，通过后浏览器阶段运行默认 `all`；`workbench` 已包含 `chapter-list-editor` 和 `scene-canvas-legacy-routes`。无需新增 CI 作业或改变全局时间预算。
 
 `test:browser` 先调用现有 preflight，再运行清单中的用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
 
 ```bash
 pnpm --dir front run test:workbench-ui
-pnpm --dir front run test:canvas-graph
-pnpm --dir front run test:design-scope
 pnpm --dir front run test:browser management-ui
 pnpm --dir front run test:browser home-project-layout
 pnpm --dir front run test:browser lab-ui
-pnpm --dir front run test:browser -- graph-summary
 pnpm --dir front run test:browser -- --list
 ```
 
@@ -65,37 +51,13 @@ pnpm --dir front run test:browser -- --list
 
 `--manifest <文件>` 可使用同一 CLI 运行明确声明的本地清单；相对文件路径从清单目录解析，清单需包含 preflight、cases 和 suites。公开命令回归使用隔离清单验证成功、失败、超时、中断和端口占用，不启动真实模型。直接运行原 `.browser.mjs` 文件仍可用，但不会获得统一入口的预检／端口保护；没有指定统一证据目录时仍使用原有临时目录。
 
-`sceneBrowseControls.browser.mjs` 通过真实选择器、导航按钮和卡片编辑覆盖四画布布局、明确对象传递、概览退出单元操作、紧凑横条与收起偏好、面包屑不占视口、底部状态的范围／零值／窄屏排布、失效目标及预览失败恢复；服务端图地址改名，避免依赖地址前缀。
-
 新增或迁移用例时复用 `browser-runtime.mjs` 的证据目录、后端日志与幂等清理。graph 地址异常夹具复用 `canvas-graph-fixtures.mjs`：同时改名节点／边／视图和所有引用，保留 object、record、shot、unit 业务身份；跨画布来源只映射当前快照。长文本、多参考、历史重复行与并发读取继续由真实旅程／HTTP 回归验证。
 
 `.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 运行 lint 基线、纯逻辑、typecheck 和清单中注册的浏览器套件，并上传截图／JSON／日志。后端既有 pytest、Pylint CI 继续独立执行。本地通过不等同于 GitHub runner 已执行。
 
-浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
-
 章节列表与编辑器使用 `pnpm --dir front run test:browser chapter-list-editor`（默认 4205 端口），通过隔离接口覆盖分页搜索、滚动恢复、未知场次数量、章节编辑、保存失败、创建及归属校验。工作台管理、划分和旧路由通过 `pnpm --dir front run test:browser workbench` 中的真实浏览器用例验证。`node --test front/tests/sourceSelection.test.mjs` 补充反向范围、空白、越界与半个代理对的异常输入。当前契约见[章节划分架构](../../docs/development/architecture/chapter-division.md)。
 
-```bash
-node front/tests/workspaceUsage.browser.mjs
-node front/tests/workspaceGuidance.browser.mjs
-node front/tests/workspaceProduction.browser.mjs
-node front/tests/workspaceCut.browser.mjs
-node front/tests/workspaceAcceptance.browser.mjs
-node front/tests/workspaceWrite.browser.mjs
-```
-
-六个脚本分别启动仅监听 `127.0.0.1:4178` 至 `127.0.0.1:4183` 的临时 Vite，在真实页面中拦截业务接口，不连接生产后端，不调用真实生成模型。运行结束关闭浏览器和临时服务，并输出截图证据目录。`workspaceAcceptance.browser.mjs` 同样需要 ffmpeg。
-
-| 脚本 | 覆盖 |
-| --- | --- |
-| `workspaceUsage.browser.mjs` | A01–A04 采用与区间；八种旧入口、辅助定位、版本刷新、保存/放弃/取消、保存失败重试、不同草稿编辑器、并发审片及采用替换时的接缝保留。媒体为 ffmpeg 生成的六秒色卡。 |
-| `workspaceGuidance.browser.mjs` | A05–A08 首次进入、下一步、来源变化、参考/能力拒绝定位、单元隔离、任务轮询与结果查看、焦点、章节/资产/任务往返、固定输入恢复和准备输入暂存及失败兜底。 |
-| `workspaceProduction.browser.mjs` | A09–A12 及 A17 排队转执行：同源设计摘要、六岗与声音各字段编辑/保存/刷新、其他字段及 Note 状态/来源完整保留、保存和写入失败、迟到建议、成功/失败/取消任务与完整历史、跨计划同名单元隔离、多个指令显式选择、固定参数与媒体类型，以及验证图/批量/重组的实际请求。 |
-| `workspaceCut.browser.mjs` | A13–A16：候选与采用并排、同一 Take 多区间、真实片段/预演混合播放、准确跳转提帧、重排/替换/保存刷新、采用替换后的局部依赖、画面/声音分开、问题及历史返工的精确往返、当前返工的局部计划和三类台账。六秒合成媒体支持 HTTP Range，以验证真实跳转位置。 |
-| `workspaceAcceptance.browser.mjs` | A18：1440/1024/768/375 宽度 × 16 个页面状态，检查文档和路由实际滚动宽度、主要动作无遮挡、键盘焦点/折叠/选择/导航、窄屏主导航打开关闭及桌面侧栏。每个组合保留首屏和内容截图及 `results.json`，使用合成视频，不发业务写入。 |
-| `workspaceWrite.browser.mjs` | A08/A09/A14 延迟写入保护：设计、计划、风格、反馈、剪辑、审片和接缝的成功/失败恢复；保存中后退、取消与完成后继续，媒体提示与整页恢复。不调用真实模型。 |
-
-测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。A17 的场景矩阵由前四组综合覆盖；A18 为 Chromium CSS 视口检查，不宣称真实手机硬件或全部浏览器通过。这些脚本不证明真实模型艺术质量或目标用户理解。A19 五秒用户测试已由用户明确取消，不再作为本次 UX5 门槛。
+测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。浏览器回归仅声明实际执行的 Chromium CSS 视口检查，不代表真实手机硬件或全部浏览器。这些脚本不证明真实模型艺术质量或目标用户理解。A19 五秒用户测试已由用户明确取消，不再作为本次 UX5 门槛。
 
 ## 全站布局框架回归（A1–A3）
 
@@ -107,116 +69,13 @@ node front/tests/shellFocus.browser.mjs
 
 `shellAcceptance.browser.mjs` 使用同样的 Node.js / Playwright 环境，临时监听 `127.0.0.1:4184`。接口请求由测试替身隔离，不连接真实服务或调用模型。默认截图与测量数据位于 `/tmp/jellyfish-shell-acceptance`，可通过 `SHELL_EVIDENCE_DIR` 指定输出目录。
 
-覆盖全部路由族、项目与资产页签、五种规定尺寸、全局导航、真实标题回跳、任务抽屉、资产与 Agent 保存、实验室历史与固定输入区，以及旧入口参数恢复。原场次回归继续负责业务草稿、采用、离开保护与复杂写入失败场景。
+覆盖全部路由族、项目与资产页签、五种规定尺寸、全局导航、真实标题回跳、任务抽屉、资产与 Agent 保存、实验室历史与固定输入区，以及现行入口参数恢复。
 
 `shellFocus.browser.mjs` 临时监听 `127.0.0.1:4185`，验证桌面与手机导航的 Tab 往返、2px 可见焦点及 Escape 关闭；手机导航位于应用壳外的抽屉门户中，因此单独覆盖其焦点样式。
 
-## 新场次工作台回归（B 阶段）
-
-当前四画布投影、导航和保存的回归范围见[共享画布接入指南](../../docs/development/guides/canvas-graph.md#验证与接口同步)。
-
-```bash
-node --test front/tests/designWorkspace.test.mjs front/tests/workspaceTaskContext.test.mjs
-node front/tests/sequenceWorkbench.browser.mjs
-node front/tests/workspaceDesignViews.browser.mjs
-node front/tests/workspaceJourney.browser.mjs
-```
-
-纯行为测试覆盖真实关联图、对象编辑时其他字段与来源保留、稳定身份版本比较。浏览器脚本使用 `127.0.0.1:4186`，检查参考 A 的布局边界、共享对象选择、1/60/200 镜头虚拟定位和1279/1024/768/375px 导航与详情抽屉。默认输出 `/tmp/jellyfish-sequence-workbench`，可通过 `SEQUENCE_EVIDENCE_DIR` 指定目录。此脚本的试拍与剪辑截图仅验证布局；完整媒体、采用及编辑保护仍由上述专门回归验证。B5 的最终证据与未完成项维护在全站布局和场次工作台计划中。
-
-`workspaceDesignViews.browser.mjs` 使用4187端口，覆盖200镜头的节拍聚合、搜索和问题过滤、错版与多来源预演选择、稳定身份历史比较、版本切换后的选择恢复；只读浏览不产生业务写入。`workspaceJourney.browser.mjs` 使用4188端口和ffmpeg合成媒体，从新建项目、章节、场次连续执行到设计/计划确认、编译审稿、生成候选、人工审片、精确区间粗剪及局部返工。其接口替身按实际请求推进数据，不预先填充后续产出。
-
-试拍回归还检查跨计划同名单元的运行/失败摘要及冻结来源抽屉；剪辑回归检查所选接缝两端实际区间和抽屉关闭、切换后的输入保留。综合响应式回归直接检查首屏按钮的尺寸和命中位置，不先滚动按钮以掩盖裁切。
-
-布局截图也需要 `ffmpeg`：`sequenceWorkbench.browser.mjs` 生成六秒合成视频，并等待真实播放后暂停截图，避免把加载中的原生播放器作为最终视觉证据。
-
-B5 响应式回归使用 1440×900、1024×768、768×1024、375×812，检查顶部保存/确认与底部播放控件的完整边界及实际命中，按钮不能进入状态栏覆盖范围。
-
-### C 阶段交互与可读来源（已完成）
-
-- `node --test front/tests/designWorkspace.test.mjs front/tests/sourceResolver.test.mjs`：范围、过滤编排、合法关联、完整来源身份去重、合批与失败重试。
-- `node front/tests/workspaceRefinement.browser.mjs`：12镜头范围/视图/选择联动、节点布局与聚焦恢复、合法关联添加/解除、缺失引用修复、间接边定位、一对多试拍回跳、试拍筛选/滚动恢复及窄屏布局。
-- `pnpm --dir front run test:browser source-provenance`：五类来源、历史原文与模型名称、失败重试、只读历史、返回保留编辑、迟到响应隔离。使用现有隔离后端生成场次版本与画布投影，在 HTTP 边界模拟来源响应，并用 ffmpeg 合成媒体验证读取失败后重试、真实入点播放和出点暂停；不验证生成内容质量。
-
-直接运行的 `workspaceRefinement` 沿用上文 Playwright `NODE_PATH` 配置，使用 4192 端口并输出到独立临时目录；`source-provenance` 使用前端 4193、隔离后端 8193 端口，沿用统一入口的浏览器配置，证据写入 `front/test-results/browser-*/source-provenance` 或指定的 `--output` 目录。`workspaceDesignViews`另覆盖1/12/60/200镜头、表格/分镜滚动与版本隔离；`workspaceCut`核对精确片段、筛选、缩放及时间线重载恢复。
-
-
-### D阶段镜头视图与全场关系总览
-
-```bash
-node --test front/tests/*.test.mjs
-node front/tests/workspaceSceneOverview.browser.mjs
-node front/tests/workspaceDesignViews.browser.mjs
-node front/tests/workspaceRefinement.browser.mjs
-```
-
-新增`workspaceSceneOverview.browser.mjs`沿用Node.js 20+、Playwright和上述`NODE_PATH`配置，监听本地4194端口，使用隔离接口替身，不调用真实模型。覆盖旧视图记忆映射、交错节拍的真实镜头顺序、未保存正文跨展示保留、共享高亮及真实路径、清除后重新选择、总览展开和滚动恢复、单节拍200镜头、无节拍及空场次创建。五种尺寸（1586×992、1440×900、1024×768、768×1024、375×812）分别检查分镜、清单、全场总览和节拍图的实际边界与主要控件命中，并保存20张截图及结果。
-
-既有浏览器回归已适配“镜头 / 关系”和“分镜 / 清单”入口；全场不能再直接使用详细图缩放，测试需明确进入节拍。最终结果归档于`site/static/images/directing-workbench/scene-overview/`，与C阶段历史证据分开。
-
-`node front/tests/workspaceAssets.browser.mjs`使用同一运行环境，在4195端口隔离验证本场资产有效计数、未保存内容保留、问题面板、刷新后筛选恢复、三种展示的空结果恢复、无效引用、加载失败重试、问题定位和375px资产入口。业务请求均由接口替身处理。
-
-### E阶段资产与试拍衔接
-
-沿用上述Node.js 20+和Playwright环境，运行：
-
-```bash
-node front/tests/workspaceShootStart.browser.mjs
-node front/tests/workspaceAssetFlow.browser.mjs
-node front/tests/workspaceShootSteps.browser.mjs
-```
-
-三个脚本分别监听4196–4198端口，所有业务接口由隔离替身处理，不修改真实项目或调用模型。起步回归检查设计状态、精确计划匹配、显式镜头选择、刷新和草稿往返；资产回归检查类型选择、创建结果不明的同身份重试、详情只读、编辑返回保护及确认版本派生；步骤回归检查统一选图、同主体多图和来源、模型能力失败重试、模型切换不丢图、素材读取失败恢复、关闭后的上传迟到保护、保存成功但确认失败后的重试，以及三步骤切换。均覆盖1440/1024/768/375宽度并输出独立截图目录。`node --test front/tests/referenceInput.test.mjs`验证分组、历史默认值、摘要及能力冲突；真实后端资产身份及媒体判定由`backend/tests/directing/test_store.py`、`test_production.py`和`test_visual.py`补充验证。
-
-
-### 拍摄指令与检查结果可读化
-
-`node --test front/tests/readableText.test.mjs` 验证固定快照名称、字段与枚举、主体组、同名对象、镜头与单元顺序、完整合法 ID 边界、数字／普通词保护、缺失降级、字段路径以及重复编译摘录的原文坐标。
-
-`workspaceShootProgress.browser.mjs` 还覆盖易读／原文切换及两种复制、名称详情与焦点返回、历史预览隔离、单条检查原始数据、检查回跳与重复片段高亮、无映射提示、只读操作不写入、375px 名称详情；原有检查与试拍流程、四尺寸回归继续保留。沿用上文 Playwright 环境，所有业务接口均为隔离替身，不调用真实视频模型。
-
-### 检查问题方向与 AI 修订
-
-`node --test front/tests/reviewRevision.test.mjs front/tests/workspacePreparation.test.mjs` 验证逐项身份、同源检查保存后的方向延续、版本隔离、空方向、过期输入及草稿存储。
-
-`node front/tests/workspaceReviewRevision.browser.mjs` 沿用上述 Playwright 环境并监听 4197 端口，不能与占用该端口的资产回归同时运行。使用隔离接口验证方向刷新恢复、空方向生成、迟到方案禁止采用、明确声音选择、真实前后预览、固定编辑区与单次建议消费、采用中断和响应丢失后同身份继续、新检查衔接及 1440／1024／768／375px 控件与边界。结果及截图保存在输出的临时目录，不调用真实模型。
-
-后端 `tests/directing/test_review_revision.py` 负责真实契约、数据库版本隔离、声音选择、错误建议、并发与分步恢复，接口替身不能代替这些验证。
-
-### 指令全生命周期
-
-`node front/tests/workspaceInstructionLifecycle.browser.mjs` 使用 4196 端口及隔离数据，覆盖默认结构化正文、固定编辑区和检查侧栏、未检查主动修改、结果不抢占面板、人工字段直接预览、采用复检、跨计划历史、通过后修改与无变化不采用。四尺寸默认页面截图与请求记录写入测试输出目录。
-
-`reviewRevision.test.mjs` 同时覆盖人工字段原值和单位换算、精确字段映射、已保存产物对应的恢复动作。`workspaceReviewRevision.browser.mjs` 验证在固定主区修改方向、声音选择及更新方案。浏览器替身只验证交互和请求契约；真实预览不写版本、候选身份和采用一致性由后端 directing 测试验证。
-
 ### 章节场次入口与连续划场
 
-`node --test front/tests/chapterNavigation.test.mjs` 验证场次建议入口及新旧路由。运行 `pnpm --dir front run test:browser workbench-management`、`workbench-division` 和 `scene-canvas-legacy-routes` 验证管理步骤、划分与历史、窄屏步骤导航与场次选择、旧入口重定向与仍受支持的旧宿主。`scene-storyboard-media` 从章节列表贯通划分、对象参考、后台分镜、画布编辑保存和明确单卡执行。
-
-### 工作台统一版本
-
-`node --test front/tests/workspaceVersions.test.mjs` 验证待选设计／计划／剪辑关联、空选择、失效与跨场身份。`node front/tests/workspaceVersions.browser.mjs` 使用 4202 端口和隔离接口，验证取消不生效、计划固定设计联动、剪辑独立、历史内嵌比较、创建及派生信息、预演时长说明，以及浏览不发业务写请求。覆盖保存失败保持原上下文、保存派生后应用待选对象、失效身份修复、四尺寸与键盘选项／Escape／焦点返回。AI 修订后依据同步由 `workspaceReviewRevision.browser.mjs` 覆盖。
-
-### 试拍关系图
-
-`node --test front/tests/productionGraph.test.mjs` 验证历史计划身份、多分支依赖与缺失来源、一单元多镜头、参考独立性、多指令候选归属和当前草稿不能替代固定指令依据。`node front/tests/workspaceProductionGraph.browser.mjs` 使用 4203 端口与隔离接口，验证输入节点复用详情表单、历史单元只读、候选回跳、四种宽度及浏览零写入。图形组件使用 `ProductionRelationGraph.tsx`，避免与纯规则 `productionGraph.ts` 在大小写不敏感文件系统上冲突。保存／确认、参考及模型变更由 `workspaceShootSteps.browser.mjs` 覆盖；固定指令恢复由 `workspaceShootContext.browser.mjs` 覆盖；验证图、批量拍摄和重组由 `workspaceProduction.browser.mjs` 覆盖。这些隔离回归不证明真实供应商可用性或生成内容质量。
-
-
-### 工作台五层框架与试拍布局统一
-
-旧 `workspaceLayout` 测试已退役：三阶段宿主没有真实挂载入口，因此旧试拍步骤滚动、刷新恢复及 `shootScroll` 单条格式兼容不再迁移为页面验收。本次不删除兼容实现或浏览记录。当前画布的独立保护通过统一入口运行 `workbench-style`（窄屏键盘打开详情、Escape 回到实际入口、重开保留草稿）、`timeline`（实际非零滚动后跨画布保留位置、片段草稿与视角）和 `browse-controls`（画布选择与前进后退）。这些验证不表示旧滚动格式已被等价承接。
-
-`workspaceShootSteps.browser.mjs` 在 1440／1280／1024／768／375px 五种宽度逐步比较单元标题、主操作、步骤栏、内容起点及桌面 344px 辅助栏；`workspaceShootFlow.browser.mjs` 验证预览打开后候选网格宽度不变。`workspaceCompactReview.browser.mjs` 验证窄屏检查抽屉处理后关闭，再阅读完整指令；主操作断言位于统一标题栏。共享滚动存储以 `positions[identity]` 保留多个对象／视图位置，剪辑回归继续验证刷新后的实际位置。
-
-旧布局验收记录已随历史计划清理；本节列出的脚本范围不代表当前工作树已重新执行。接口替身不验证真实供应商、模型生成质量或全部浏览器。
-
-### 单元指令内容区（实施中）
-
-`node --test front/tests/instructionContent.test.mjs front/tests/reviewRevision.test.mjs` 覆盖固定正文全量保留、背景与执行边界、重复和重叠映射、字段归属、路径层级匹配、局部范围存储及损坏范围阻止提交。`node front/tests/workspaceInstructionContent.browser.mjs` 使用 4216 端口，验证真实分块正文、从摄影卡片选择范围、刷新恢复、提交精确 scope、切回整体范围保留输入、原文切换、四尺寸和零采用／拍摄写入。运行环境沿用上文 Codex Node.js / Playwright。专项还覆盖关联图节点查看、真实候选与过期草稿分离、图视图刷新恢复、返回正文焦点、1920px 三列及窄屏纵向布局；检查问题定位由 compact-review 回归验证。图只读关系的证据约束由 instructionContent 单元测试验证，包括无正文决定、固定单元参数和跨检查来源隔离。浏览器专项验证超过三项的展开／收起、键盘选择节点和内容、来源直接编辑、生成中编辑与迟到候选不抢焦点；compact-review 覆盖多处正文定位、精确片段高亮及历史关联图只读。
-
-### 默认资产与单元身份参考
-
-`pnpm --dir front run test:browser -- references` 通过真实导演／单元画布、独立 HTTP 后端、数据库和对象存储验证默认候选解耦与身份参考来源。`reference-source`（4258／8258）验证明确更换来源、整组应用／取消、逐图跨源拒绝、非目标输入及单元隔离；模型请求不调用付费服务。
+`node --test front/tests/chapterNavigation.test.mjs` 验证现行章节与场次管理导航。运行 `pnpm --dir front run test:browser workbench-management`、`workbench-division` 和 `scene-canvas-legacy-routes` 验证管理步骤、划分与历史、窄屏步骤导航与场次选择、现行管理入口、无画布身份的准备链接和保留的后端记录保护。`scene-storyboard-media` 从章节列表贯通划分、对象参考、后台分镜、画布编辑保存和明确单卡执行。
 
 ### 生成画布综合验收
 
@@ -224,7 +83,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 
 `backend/tests/test_generation_canvas_journey.py` 使用显式 `JELLYFISH_TEST_MYSQL_URL` 的隔离MySQL库，依次真实生成文本、图片、视频，前一成果完成后才创建下一引用，并比对预检与真实供应商payload；无真实模型费用。
 
-应用壳的项目/资产/三类实验室交互通过注册用例运行：`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs legacy-labs`（4184端口）。该入口明确设置`SHELL_INTERACTIONS_ONLY=1 SHELL_LAB_REGRESSION_ONLY=1`，默认完整壳脚本的原断言仍保持启用。此范围明确不含末段旧场次壳断言；当前场次工作台使用统一runner的`canvas-graph`单独回归。完整规格证据与实际限制见`.scratch/generation-canvas/acceptance.md`。
+`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs legacy-labs` 验证三个退役实验室地址显示 404。应用壳的项目、资产和实验室交互可从 `front` 目录运行 `PLAYWRIGHT_CHANNEL=chrome node tests/shellAcceptance.browser.mjs` 单独检查。现行场次画布与管理入口由 `independent-canvas` 和 `scene-canvas-legacy-routes` 覆盖，后者使用只有一条历史交付引用的文件验证删除保护。
 
 `generation-canvas-guidance` 验证创作控制、生成指导、验收要求的真实编辑，拖拽建立验收候选、三类使用方明确关联及取消、只读采用记录、完整标准的模型直接采用、保存重开和窄屏。测试只替换供应商与媒体存储边界。
 

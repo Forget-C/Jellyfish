@@ -13,6 +13,50 @@ export async function openCanvasCard(page, id) {
   return page.locator('.wb-details:visible')
 }
 
+export async function openDesignAssociation(detail, name) {
+  const source = detail.getByRole('region', { name: '关联来源', exact: true }).getByRole('button', { name })
+  if (await source.getAttribute('aria-expanded') !== 'true') await source.click()
+}
+
+/** 仅取消本用例明确预期为空的动态主图，保留其余输入校验。 */
+export async function omitMissingStoryboardImages(page, cardId, read, precheck, expectedNames) {
+  const { document } = await read()
+  const model = document.cards.find(card => card.id === cardId)
+  const port = model.type === 'model.video' ? 'subject_image' : 'image'
+  const blocked = await precheck()
+  assert.equal(blocked.can_run, false, 'an adopted empty main image blocks precheck')
+  const missing = blocked.diagnostics.filter(issue => issue.code === 'OUTPUT_MISSING')
+  const inputs = missing.map(issue => {
+    assert.equal(issue.target.path[0], 'input_bindings')
+    const binding = model.input_bindings.find(item => item.id === issue.target.segment_id)
+    assert.ok(binding)
+    assert.equal(binding.input_port, port)
+    assert.equal(binding.source.port_id, 'image')
+    assert.equal(binding.source.position, 0)
+    const reference = document.cards.find(card => card.id === binding.source.card_id)
+    assert.ok(reference?.scene_object_source)
+    return { binding, name: reference.name }
+  })
+  assert.deepEqual(inputs.map(input => input.name).sort(), [...expectedNames].sort())
+  const detail = await openCanvasCard(page, cardId)
+  for (const { binding } of inputs) {
+    const source = binding.source
+    const key = JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.position])
+    const row = port === 'subject_image'
+      ? detail.locator(`[data-input-binding-id=${JSON.stringify(binding.id)}]`)
+      : detail.locator(`[data-reference-source=${JSON.stringify(key)}]`)
+    const cancel = row.getByRole('button', { name: port === 'subject_image' ? /^取消主体图片 / : /^取消采用 / })
+    await cancel.click()
+    await cancel.waitFor({ state: 'hidden' })
+  }
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status', { name: '画布保存状态', exact: true }).filter({ hasText: '已保存' }).waitFor()
+  await closeCanvasDetails(page)
+  const result = await precheck()
+  assert.ok(result.can_run, JSON.stringify(result.diagnostics))
+  return result
+}
+
 /** 等待展开时的默认选模，以便后续用例检查真实生成输入。 */
 export async function openStoryboardDefaultModels(page, cardIds, modelName) {
   for (const cardId of cardIds) {
@@ -85,10 +129,6 @@ export async function assertVisibleInDetails(locator) {
 }
 
 /** 使用真实菜单和目录入口，避免依赖旧的常驻控件。 */
-export async function openCanvasManagement(page) {
-  const trigger = page.getByRole('button', { name: '画布管理', exact: true })
-  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
-}
 export async function openCardList(page, category = '基础卡') {
   const details = page.locator('.wb-details:visible')
   if (await details.count() && await details.getAttribute('aria-modal') === 'true') await closeCanvasDetails(page)
@@ -112,17 +152,9 @@ export async function openSummaryMenu(summary) {
 }
 
 export async function selectCanvasByName(page, name) {
-  await openCanvasManagement(page)
-  const chooser = page.getByRole('combobox', { name: '选择画布', exact: true })
-  await chooser.press('ArrowDown')
-  for (let index = 0; index < 30; index++) {
-    const active = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-active')
-    if (await active.count() && (await active.innerText()).trim() === name) { await chooser.press('Enter'); return }
-    await chooser.press('ArrowDown')
-  }
-  throw new Error(`画布选项不可达：${name}`)
+  await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
+  await page.getByRole('link', { name: new RegExp(name) }).click()
 }
-
 /** Older behavior journeys explicitly open the now on-demand model management surfaces. */
 export async function openModelInspection(page) {
   const editor = page.locator('.wb-details:visible')
@@ -326,7 +358,9 @@ export async function openStoryboardReview(page) {
   if (!await drawer.isVisible()) {
     const reextract = page.getByRole('dialog', { name: '重新提取', exact: true })
     const back = page.getByRole('button', { name: '返回工作台管理', exact: true })
-    if (await reextract.isVisible()) await drawer.waitFor()
+    const url = new URL(page.url())
+    const linkedReview = url.pathname.endsWith('/workbench-management') && url.searchParams.has('storyboardTask')
+    if (linkedReview || await reextract.isVisible()) await drawer.waitFor()
     else {
       if (await back.isVisible()) {
         await back.click()

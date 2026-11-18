@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8533', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8533', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8533' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -41,17 +41,17 @@ try {
   const textModel = await json('/api/v1/llm/models', 'POST', { id: 'canvas-text-model', name: 'text-model', category: 'text', provider_id: 'canvas-image-provider' })
   const videoModel = await json('/api/v1/llm/models', 'POST', { id: 'canvas-video-model', name: 'sora-2', category: 'video', provider_id: 'canvas-image-provider' })
   await json('/api/v1/llm/model-settings', 'PUT', { default_text_model_id: textModel.id, default_image_model_id: 'canvas-image-model', default_video_model_id: videoModel.id })
-  const canvas = await json('/api/v1/studio/generation-canvases/canvas-project', 'POST', { name: 'A 紧凑模型编辑卡' })
+  const canvas = await json('/api/v1/studio/generation-canvases', 'POST', { name: 'A 紧凑模型编辑卡' })
   const document = { ...canvas.document, cards: [
     { id: 'source', type: 'content.text', text: '雨夜车站，两人重逢。' },
     ...['text','image','video'].map(kind => ({ id: kind, type: `model.${kind}`, prompt: { segments: [] } })),
   ], edges: ['text','image','video'].map(kind => ({ id: `edge-${kind}`, source_card: 'source', source_port: 'text', target_card: kind, target_port: 'text' })), input_order: Object.fromEntries(['text','image','video'].map(kind => [kind, { text: [`edge-${kind}`] }])) }
-  await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`, 'PUT', { request_id: 'seed', expected_revision: 0, document })
-  const url = `http://127.0.0.1:4533/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  await json(`/api/v1/studio/generation-canvases/${canvas.id}`, 'PUT', { request_id: 'seed', expected_revision: 0, document })
+  const url = `http://127.0.0.1:4533/canvases/${canvas.id}`
   const editor = page.locator('.wb-details:not([hidden])')
   const input = editor.getByRole('textbox', { name: '模型正文', exact: true })
   const saved = () => page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
-  const read = () => json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`, 'GET')
+  const read = () => json(`/api/v1/studio/generation-canvases/${canvas.id}`, 'GET')
   const open = async kind => {
     if (await editor.isVisible()) { if (await editor.locator('.generation-material-candidates[open]').count()) await editor.getByLabel('管理候选与采用', { exact: true }).press('Escape'); await editor.press('Escape') }
     // 连续编辑会按需平移画布；先把下一张卡带回视口，再从真实可见入口打开。
@@ -92,7 +92,7 @@ try {
   }
   await open('image')
   const requests = []
-  page.on('request', request => { if (request.url().endsWith('/precheck')) requests.push(request) })
+  page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/precheck')) requests.push(request) })
   await input.evaluate(element => {
     element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
     element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true }))
@@ -102,7 +102,7 @@ try {
   })
   assert.equal(requests.length, 0, 'IME confirmation never submits')
   await input.fill('保存最新正文后预检')
-  const checked = page.waitForResponse(response => response.url().endsWith('/precheck'))
+  const checked = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/precheck'))
   await input.press('Enter'); assert.ok((await checked).ok())
   await page.getByRole('dialog', { name: '运行预检', exact: true }).waitFor()
   assert.equal((await read()).document.cards.find(card => card.id === 'image').prompt.segments[0].text, '保存最新正文后预检')

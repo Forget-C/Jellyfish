@@ -1,7 +1,7 @@
 /** Shared composer frame for submitting prompts in every experiment modality. */
 import type { ReactNode } from 'react'
 import { Button } from 'antd'
-import { WorkbenchButton } from '../../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../../components/workbench/WorkbenchButton'
 import { SendOutlined } from '@ant-design/icons'
 
 type ExperimentComposerProps = {

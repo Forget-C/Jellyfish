@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-video-')
 const fixture = join(output, 'audio-video.mp4')
 execFileSync('/opt/homebrew/bin/ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-y', fixture])
-const api = 'http://127.0.0.1:8481', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8481', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_video_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8481', CANVAS_VIDEO_FIXTURE: fixture }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -58,12 +58,12 @@ try {
     input_order: { m: { first_frame: ['first'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 230, scale: .85 }, positions: { s: { x: 30, y: 0 }, m: { x: 800, y: 0 }, t: { x: 30, y: 400 } }, sizes: {} })), canvas.id)
-  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-connection-sides:canvas-project:${id}`, JSON.stringify({ first: { source: 'bottom', target: 'top' } })), canvas.id)
-  await page.route('**/catalog', route => route.abort())
-  await page.goto(`http://127.0.0.1:4481/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout::${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 230, scale: .85 }, positions: { s: { x: 30, y: 0 }, m: { x: 800, y: 0 }, t: { x: 30, y: 400 } }, sizes: {} })), canvas.id)
+  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-connection-sides::${id}`, JSON.stringify({ first: { source: 'bottom', target: 'top' } })), canvas.id)
+  await page.route('**/catalog?project_id=*', route => route.abort())
+  await page.goto(`http://127.0.0.1:4481/canvases/${canvas.id}`)
   await page.getByRole('alert').filter({ hasText: '卡片目录读取失败' }).waitFor()
-  await page.unroute('**/catalog')
+  await page.unroute('**/catalog?project_id=*')
   await page.getByRole('button', { name: '重试卡片目录', exact: true }).click()
 
   const source = page.locator('[data-card-id="s"]'), target = page.locator('[data-card-id="m"]')
@@ -81,8 +81,10 @@ try {
     assert.equal(await page.getByRole('menu', { name: '选择连接用途', exact: true }).count(), 0)
   }
   // A duplicate locates the existing source connection directly.
-  const restored = await page.evaluate(id => JSON.parse(localStorage.getItem(`jellyfish:generation-connection-sides:canvas-project:${id}`)), canvas.id)
-  assert.deepEqual(restored.first, { source: 'right', target: 'left' }, 'legacy vertical sides restore on bilateral geometry')
+  await page.waitForFunction(id => {
+    const sides = JSON.parse(localStorage.getItem(`jellyfish:generation-connection-sides::${id}`)).first
+    return sides?.source === 'right' && sides?.target === 'left'
+  }, canvas.id)
   await source.press('Enter')
   await page.locator('.generation-card-editor:not([hidden])').waitFor()
   const before = await read()
@@ -192,7 +194,7 @@ try {
   await page.locator('.wb-details:visible').waitFor()
   await page.locator('.wb-details:visible').getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
-  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   await accepted
   await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
