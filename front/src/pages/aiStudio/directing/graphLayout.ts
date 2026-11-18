@@ -21,8 +21,7 @@ export function readGraphView(raw: string | null): GraphView | undefined {
 }
 
 /** 只清理失效显示身份；隐藏但仍属于图的节点保留个人位置。 */
-export function pruneGraphView(view: GraphView, valid: Set<string>, aliases: Record<string, string> = {}): GraphView {
-  const retain = <T,>(items: Record<string, T>) => Object.fromEntries(Object.entries(items)
-    .map(([id, value]) => [aliases[id] || id, value] as const).filter(([id]) => valid.has(id)))
-  return { ...view, positions: retain(view.positions), sizes: retain(view.sizes), manuallyPlaced: view.manuallyPlaced?.map(id => aliases[id] || id).filter(id => valid.has(id)) }
+export function pruneGraphView(view: GraphView, valid: Set<string>): GraphView {
+  const retain = <T,>(items: Record<string, T>) => Object.fromEntries(Object.entries(items).filter(([id]) => valid.has(id)))
+  return { ...view, positions: retain(view.positions), sizes: retain(view.sizes), manuallyPlaced: view.manuallyPlaced?.filter(id => valid.has(id)) }
 }

@@ -4,32 +4,30 @@ import type { GraphArrange, GraphLayoutNode, GraphSize, GraphView } from './grap
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 export type GraphLayoutScope = {
-  storageKey: string; viewId: string; anchorId: string; validIds: string[]; validViewIds?: string[]
-  initialTop?: number; initialLeft?: number; focusUnplacedAnchor?: () => { left: number; top: number; scale: number }; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
+  storageKey: string; viewId: string; anchorId: string; validIds: string[]
+  initialTop?: number; initialLeft?: number; focusUnplacedAnchor?: () => { left: number; top: number; scale: number }
   rearrangeTarget?: { anchorId: string; focus: (sizes: Record<string, GraphSize>) => { left: number; top: number; scale: number } }
   onStorageError?: (message: string) => void
   arrange: GraphArrange
-  parseView?: (raw: string | null) => GraphView | undefined
-  migrate?: (view: GraphView, nodes: GraphLayoutNode[], sizes: Record<string, GraphSize>) => { view: GraphView; undo?: GraphView } | undefined
 }
 type LayoutState = { key: string; anchor: string; view: GraphView; ready: boolean; anchorScreen?: CanvasPoint; undo?: GraphView }
 const memory = new Map<string, GraphView>()
 const undoMemory = new Map<string, GraphView>()
 
 /** 预览只读缓存；实际视图才创建或写入布局。 */
-export const readStoredGraphView = (key: string, parse = readGraphView) => {
-  try { return memory.get(key) || parse(localStorage.getItem(key)) } catch { return memory.get(key) }
+export const readStoredGraphView = (key: string) => {
+  try { return memory.get(key) || readGraphView(localStorage.getItem(key)) } catch { return memory.get(key) }
 }
 const storeView = (key: string, view: GraphView, onStorageError?: (message: string) => void) => {
   memory.set(key, view)
   try { localStorage.setItem(key, JSON.stringify({ schema: 1, ...view })) } catch { onStorageError?.('浏览器存储不可用，布局仅在本次会话保留') }
 }
 
-/** 共用布局缓存、手动位置及整理撤销；排布与旧缓存迁移由具体画布提供。 */
+/** 共用布局缓存、手动位置及整理撤销；排布由具体画布提供。 */
 export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: GraphLayoutNode[], measured: Record<string, GraphSize>, viewportWidth: number) {
   const key = scope ? `${scope.storageKey}:view:${scope.viewId}` : ''
   const initial = (previous?: LayoutState): LayoutState => {
-    const saved = key ? readStoredGraphView(key, scope?.parseView) : undefined
+    const saved = key ? readStoredGraphView(key) : undefined
     const anchor = scope?.anchorId || ''
     const point = previous?.view.positions[previous.anchor]
     const transform = previous?.view.transform || { x: 16, y: scope?.initialTop || 64, scale: Math.min(1, Math.max(.15, (viewportWidth - 32) / 360)) }
@@ -43,62 +41,55 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
   latest.current = state
   const latestScope = useRef(scope)
   latestScope.current = scope
-  const aliasIdentity = JSON.stringify(scope?.identityAliases || {})
   const validIdentity = scope?.validIds.join('|')
   useLayoutEffect(() => {
     if (!scope || state.key !== key || !nodes.length || nodes.some(node => !measured[node.id])) return
     const synchronize = (previous: LayoutState): LayoutState => {
-      const cleaned = pruneGraphView(previous.view, new Set(scope.validIds), scope.identityAliases)
+      const cleaned = pruneGraphView(previous.view, new Set(scope.validIds))
       const sizes = { ...cleaned.sizes }
       nodes.forEach(node => { sizes[node.id] = node.size || sizes[node.id] || measured[node.id] })
-      const migration = scope.migrate?.(cleaned, nodes, sizes)
-      const prepared = migration?.view || cleaned
-      const positions = scope.arrange(nodes, sizes, viewportWidth, scope.anchorId, prepared.positions, cleaned.sizes)
-      let transform = prepared.transform
+      const positions = scope.arrange(nodes, sizes, viewportWidth, scope.anchorId, cleaned.positions, cleaned.sizes)
+      let transform = cleaned.transform
       // 首次加入宿主指定的主卡时，也允许从已显示的初始文档转到该卡。
-      const focus = !prepared.positions[scope.anchorId] ? scope.focusUnplacedAnchor?.() : undefined
+      const focus = !cleaned.positions[scope.anchorId] ? scope.focusUnplacedAnchor?.() : undefined
       if (focus) {
         const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
         transform = { x: focus.left - anchor.x * focus.scale, y: focus.top - anchor.y * focus.scale, scale: focus.scale }
-      } else if (!previous.ready || migration) {
+      } else if (!previous.ready) {
         const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
-        const screen = !migration && previous.anchorScreen || { x: scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16), y: scope.initialTop || 64 }
+        const screen = previous.anchorScreen || { x: scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16), y: scope.initialTop || 64 }
         transform = { ...transform, x: screen.x - anchor.x * transform.scale, y: screen.y - anchor.y * transform.scale }
       }
-      const view = { ...prepared, transform, positions, sizes }
+      const view = { ...cleaned, transform, positions, sizes }
       if (previous.ready && previous.anchor === scope.anchorId && JSON.stringify(view) === JSON.stringify(previous.view)) return previous
-      return { ...previous, anchor: scope.anchorId, ready: true, view, undo: migration?.undo || previous.undo }
+      return { ...previous, anchor: scope.anchorId, ready: true, view }
     }
     // Skip no-op dispatches; a queued update still resolves against the latest state.
     if (synchronize(state) !== state) setState(synchronize)
   }, [key, nodes, scope, measured, viewportWidth, state])
   useEffect(() => {
     if (state.key && state.ready) {
-      storeView(state.key, pruneGraphView(state.view, new Set(scope?.validIds), scope?.identityAliases), latestScope.current?.onStorageError)
+      const currentScope = latestScope.current
+      storeView(state.key, pruneGraphView(state.view, new Set(currentScope?.validIds)), currentScope?.onStorageError)
       if (state.undo) undoMemory.set(state.key, state.undo)
       else undoMemory.delete(state.key)
     }
-  }, [state, validIdentity, aliasIdentity])
-  const validViews = scope?.validViewIds?.join('|')
+  }, [state, validIdentity])
   useEffect(() => {
-    if (!scope) return
-    const prefix = `${scope.storageKey}:view:`, valid = new Set(scope.validIds)
+    const currentScope = latestScope.current
+    if (!currentScope) return
+    const prefix = `${currentScope.storageKey}:view:`, valid = new Set(currentScope.validIds)
     const keys = new Set([...memory.keys()].filter(item => item.startsWith(prefix)))
     try { Object.keys(localStorage).filter(item => item.startsWith(prefix)).forEach(item => keys.add(item)) } catch { /* 使用会话缓存。 */ }
     keys.forEach(item => {
-      if (scope.validViewIds && !scope.validViewIds.includes(item.slice(prefix.length))) {
-        memory.delete(item); undoMemory.delete(item)
-        try { localStorage.removeItem(item) } catch { /* 使用会话缓存。 */ }
-      } else {
-        const view = readStoredGraphView(item, scope.parseView)
-        if (view) storeView(item, pruneGraphView(view, valid, scope.identityAliases), scope.onStorageError)
-      }
+      const view = readStoredGraphView(item)
+      if (view) storeView(item, pruneGraphView(view, valid), currentScope.onStorageError)
     })
-  }, [scope?.storageKey, validIdentity, aliasIdentity, validViews])
+  }, [scope?.storageKey, validIdentity])
   useEffect(() => {
     const save = () => {
       const current = latest.current, currentScope = latestScope.current
-      if (current.key && current.ready) storeView(current.key, pruneGraphView(current.view, new Set(currentScope?.validIds), currentScope?.identityAliases), currentScope?.onStorageError)
+      if (current.key && current.ready) storeView(current.key, pruneGraphView(current.view, new Set(currentScope?.validIds)), currentScope?.onStorageError)
     }
     window.addEventListener('pagehide', save)
     return () => { save(); window.removeEventListener('pagehide', save) }
@@ -124,6 +115,6 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
     return view ? { ...previous, undo: previous.view, view, ready: true } : previous
   })
   const applyArrangement = (view: GraphView) => setState(previous => ({ ...previous, view, undo: undefined, ready: true }))
-  const undo = () => setState(previous => previous.undo ? { ...previous, view: pruneGraphView(previous.undo, new Set(scope?.validIds), scope?.identityAliases), undo: undefined } : previous)
+  const undo = () => setState(previous => previous.undo ? { ...previous, view: pruneGraphView(previous.undo, new Set(scope?.validIds)), undo: undefined } : previous)
   return { view: state.view, ready: state.ready && state.key === key, setView, move, arrangedView, applyArrangement, rearrange, undo, canUndo: !!state.undo }
 }
