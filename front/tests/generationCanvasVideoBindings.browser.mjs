@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -13,7 +14,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-video-')
 const fixture = join(output, 'audio-video.mp4')
 execFileSync('/opt/homebrew/bin/ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-y', fixture])
-const api = 'http://127.0.0.1:8279', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8279', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_video_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8279', CANVAS_VIDEO_FIXTURE: fixture }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -40,7 +41,7 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '视频用途' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '视频用途')
   const fileIds = []
   for (let i = 0; i < 2; i++) {
     const form = new FormData()
@@ -51,20 +52,20 @@ try {
   const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.video', model_id: 'video-frames', prompt: { segments: [] }, config: { ratio: '16:9', seconds: 5, seed: 7 } }, ...fileIds.map((file_id, i) => ({ id: `s${i}`, type: 'content.image', file_id })), { id: 'text-source', type: 'content.text', text: '原文' }],
     edges: fileIds.map((_, i) => ({ id: `e${i}`, source_card: `s${i}`, source_port: 'image', target_card: 'm', target_port: i ? 'key_frame' : 'first_frame' })), input_order: { m: { first_frame: ['e0'], key_frame: ['e1'], text: ['et'] } } }
   document.edges.push({ id: 'et', source_card: 'text-source', source_port: 'text', target_card: 'm', target_port: 'text' })
-  assert.ok((await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })).ok)
+  assert.ok((await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })).ok)
   await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
-  await page.goto(`http://127.0.0.1:4279/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4279${storyboardCanvasPath(canvas)}`)
   await page.locator('[data-card-id="m"]').click()
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const details = page.getByRole('complementary', { name: '视频模型卡' })
   const uses = details.getByRole('region', { name: '视频实际输入' })
   await uses.waitFor()
-  assert.equal((await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards[0].input_bindings.length, 0, 'connection remains candidate')
+  assert.equal((await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document.cards[0].input_bindings.length, 0, 'connection remains candidate')
   await uses.getByRole('button', { name: '采用 @图片1 为首帧', exact: true }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
-  const saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards[0]
+  const saved = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document.cards[0]
   assert.equal(saved.input_bindings[0].input_port, 'first_frame')
-  const compiled = (await (await fetch(`${base}/${canvas.id}/cards/m/compile`)).json()).data
+  const compiled = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/m/compile`))).json()).data
   assert.equal(compiled.video_media.frames.first.file_id, fileIds[0])
   await uses.getByRole('button', { name: '采用 @图片2 为关键帧', exact: true }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
@@ -75,11 +76,11 @@ try {
   await uses.getByText('关键帧 · @图片2', { exact: true }).waitFor()
   await uses.getByRole('button', { name: '取消首帧 @图片1', exact: true }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
-  assert.equal((await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards[0].input_bindings.length, 1)
+  assert.equal((await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document.cards[0].input_bindings.length, 1)
   await details.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   await preview.waitFor()
-  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   const run = (await (await accepted).json()).data
   await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
@@ -104,10 +105,10 @@ try {
   await slider.fill('800')
   await picker.getByRole('button', { name: '保存为图片' }).click()
   await picker.waitFor({ state: 'hidden' })
-  const result = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  const result = (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document
   assert.equal(result.cards.filter(card => card.type === 'content.video' && card.origin?.run_id === run.run_id).length, 1)
   const frame = result.cards.find(card => card.frame_origin?.result?.run_id === run.run_id)
-  const historyNode = (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data.runs
+  const historyNode = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/runtime`))).json()).data.runs
     .find(item => item.id === run.run_id).nodes[0]
   assert.equal(frame.frame_origin.result_set_id, historyNode.result_set_id)
   assert.equal(frame.frame_origin.source_file_id, historyNode.outputs[0].file_id)
@@ -123,15 +124,15 @@ try {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await page.screenshot({ path: join(output, 'video-inputs-narrow.png'), fullPage: true })
   const fixed = result.cards.find(card => card.type === 'content.video' && card.origin?.run_id === run.run_id)
-  const subjectCanvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '主体视频采用' }) })).json()).data
+  const subjectCanvas = await createStoryboardCanvas(base, '主体视频采用')
   const subjectDoc = { ...subjectCanvas.document, cards: [
     { id: 'subject-model', type: 'model.video', model_id: 'video-subjects', config: { ratio: '16:9', seconds: 5 }, prompt: { segments: [] } },
     { id: 'saved-video', type: 'content.video', file_id: fixed.file_id }],
     edges: [{ id: 'subject-edge', source_card: 'saved-video', source_port: 'video', target_card: 'subject-model', target_port: 'subject_video' }],
     input_order: { 'subject-model': { subject_video: ['subject-edge'] } } }
-  assert.ok((await fetch(`${base}/${subjectCanvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'subject-seed', expected_revision: 0, document: subjectDoc }) })).ok)
+  assert.ok((await fetch(storyboardCanvasApi(base, subjectCanvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'subject-seed', expected_revision: 0, document: withFixedSource(subjectCanvas, subjectDoc) }) })).ok)
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.goto(`http://127.0.0.1:4279/projects/canvas-project/generation-canvas?canvas=${subjectCanvas.id}`)
+  await page.goto(`http://127.0.0.1:4279${storyboardCanvasPath(subjectCanvas)}`)
   await page.locator('[data-card-id="subject-model"]').press('Enter')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const subjectUses = page.getByRole('region', { name: '视频实际输入' })
@@ -140,7 +141,7 @@ try {
   await subjectUses.getByRole('textbox', { name: '主体分组 @视频1', exact: true }).fill('主人公')
   await adopt.click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
-  const subjectPreview = (await (await fetch(`${base}/${subjectCanvas.id}/cards/subject-model/compile`)).json()).data
+  const subjectPreview = (await (await fetch(storyboardCanvasApi(base, subjectCanvas.id, `/cards/subject-model/compile`))).json()).data
   assert.equal(subjectPreview.video_media.subjects[0].name, '主人公')
   assert.equal(subjectPreview.video_media.subjects[0].media[0].media_kind, 'video')
   assert.equal((await (await fetch(`${api}/test/video-controls`)).json()).calls.filter(call => call.method === 'POST').length, 1, 'adoption does not run upstream or downstream')

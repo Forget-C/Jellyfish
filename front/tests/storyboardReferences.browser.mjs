@@ -1,3 +1,4 @@
+import { selectPreparedCharacter, storyboardCanvasApi } from './storyboard-canvas-fixture.mjs'
 import { openStoryboardDefaultModels, openReadyStoryboard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -31,7 +32,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -48,12 +49,12 @@ try {
   const prep = `http://127.0.0.1:4264/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
   await page.goto(prep.replace('step=storyboard', 'step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
-  await front.getByRole('combobox', { name: '关联资产' }).click()
-  await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await front.getByRole('button', { name: '选择参考图' }).click()
-  await page.getByText('参考图 1', { exact: true }).click()
-  await front.getByText('已选参考图', { exact: true }).waitFor()
+  const resourceImages = `${studio}/entities/character/object-browser-character/images`
+  const referenceImage = (await request(resourceImages)).items[0]
+  await request(`${resourceImages}/${referenceImage.id}`, 'PATCH', { is_primary: true })
+  await selectPreparedCharacter(page, front, '已有角色')
   // 通过公开接口建立旧图片分镜，验证现有画布的编辑与引用契约。
   const storyboardName = '已有图片分镜'
   await request(`${scenes}/${sequence.id}/storyboards`, 'POST', {
@@ -62,7 +63,7 @@ try {
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
-  const canvas = `${studio}/generation-canvases/${project}/${id}`
+  const canvas = `${studio}/generation-canvases/${id}?project_id=${project}`
   const read = () => request(canvas)
   const poll = async predicate => {
     for (let attempt = 0; attempt < 130; attempt++) {
@@ -109,7 +110,7 @@ try {
     await region.getByRole('combobox', { name: label, exact: true }).press('ArrowDown')
     await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(imageLabels[text], { exact: true }).click()
   }
-  const precheck = index => request(canvas + '/precheck', 'POST', { card_id: shots[index].model_card_ids[0] })
+  const precheck = index => request(`${studio}/generation-canvases/${id}/precheck?project_id=${project}`, 'POST', { card_id: shots[index].model_card_ids[0] })
   const media = async index => (await precheck(index)).input.media.map(item => item.file_id)
   assert.deepEqual(await media(0), ['object-browser-image'])
   assert.deepEqual(await media(1), [])
@@ -125,16 +126,16 @@ try {
     await delay(100)
   }
   assert.ok(other.candidate)
-  const otherCanvas = `${studio}/generation-canvases/${project}/${otherTask.canvas_id}`
-  await request(otherCanvas, 'PUT', { request_id: 'storyboard:' + otherTask.task_id,
-    expected_revision: other.candidate.base_revision, document: other.candidate.document })
+  await request(`${taskPath}/${otherTask.task_id}/apply`, 'POST', {
+    expected_revision: other.candidate.base_revision, overwrite_card_ids: [],
+  })
   const otherShot = other.candidate.document.storyboard.shots[0]
   const preview = await precheck(2)
   assert.ok(preview.can_run, JSON.stringify(preview.diagnostics))
-  const run = await request(canvas + '/runs', 'POST', { request_id: 'frozen-reference', preview_token: preview.preview_token })
+  const run = await request(`${studio}/generation-canvases/${id}/runs?project_id=${project}`, 'POST', { request_id: 'frozen-reference', preview_token: preview.preview_token })
   let frozen
   for (let attempt = 0; attempt < 130; attempt++) {
-    const runtime = await request(canvas + '/runtime')
+    const runtime = await request(`${studio}/generation-canvases/${id}/runtime?project_id=${project}`)
     frozen = runtime.runs.find(item => item.id === run.run_id)
     if (frozen?.nodes[0]?.status === 'succeeded') break
     assert.notEqual(frozen?.nodes[0]?.status, 'failed', JSON.stringify(frozen))
@@ -152,13 +153,13 @@ try {
   await poll(state => state.document.cards.find(card => card.id === objects[0].reference_card_id)?.image_binding?.file_id === files['新默认图'])
   assert.deepEqual(await media(0), [files['替代图']])
   assert.deepEqual(await media(2), [files['新默认图']])
-  const unaffected = await request(otherCanvas + '/precheck', 'POST', { card_id: otherShot.model_card_ids[0] })
+  const unaffected = await request(storyboardCanvasApi(`${studio}/generation-canvases`, otherTask.canvas_id, '/precheck', project), 'POST', { card_id: otherShot.model_card_ids[0] })
   assert.deepEqual(unaffected.input.media.map(item => item.file_id), ['object-browser-image'])
   assert.deepEqual(await media(1), [])
   await option(dialog.getByRole('region', { name: '阿同（2）默认参考', exact: true }), '选择默认参考图', '补齐图')
   await poll(state => state.document.cards.find(card => card.id === objects[1].reference_card_id)?.image_binding?.file_id === files['补齐图'])
   assert.deepEqual(await media(1), [files['补齐图']])
-  assert.deepEqual((await request(canvas + '/runtime')).runs.find(item => item.id === run.run_id), frozen)
+  assert.deepEqual((await request(`${studio}/generation-canvases/${id}/runtime?project_id=${project}`)).runs.find(item => item.id === run.run_id), frozen)
 
   await shoot.getByRole('button', { name: '恢复继承', exact: true }).click()
   await poll(state => !state.document.storyboard.shots[0].reference_overrides?.[objects[0].object_id])
@@ -168,7 +169,7 @@ try {
   await poll(state => !!state.document.storyboard.shots[0].reference_overrides?.[objects[0].object_id])
   assert.deepEqual(await media(0), [files['替代图']])
 
-  await page.goto(`http://127.0.0.1:4264/projects/${project}/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4264/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${id}`)
   await references.click()
   await shoot.getByText('镜头指定', { exact: true }).waitFor()
   const waitForReferenceDialog = width => page.waitForFunction(viewport => {

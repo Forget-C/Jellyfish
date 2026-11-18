@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-canvas-post-check-')
 const api = 'http://127.0.0.1:8317'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const json = { 'Content-Type': 'application/json' }
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'),
@@ -42,8 +43,8 @@ try {
     const payload = await response.json()
     return payload.data ?? payload
   }
-  const canvas = await request(base, 'POST', { name: '固定历史文字检查' })
-  const canvasUrl = `${base}/${canvas.id}`
+  const canvas = await createStoryboardCanvas(base, '固定历史文字检查')
+  const canvasUrl = storyboardCanvasApi(base, canvas.id)
   const controlUrl = `${api}/test/runtime-controls`
   const document = { ...canvas.document, cards: [
     { id: 'shot', type: 'direction.shot', visible_result: { text: '保留红伞', state: 'fact' } },
@@ -53,14 +54,14 @@ try {
     { id: 'adopt', source_card: 'shot', source_port: 'text', target_card: 'target', target_port: 'text' },
     { id: 'observe', source_card: 'target', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
   ], input_order: { target: { text: ['adopt'] }, check: { check_basis: ['observe'] } } }
-  await request(canvasUrl, 'PUT', { request_id: 'seed', expected_revision: 0, document })
+  await request(canvasUrl, 'PUT', { request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) })
   await request(controlUrl, 'POST', { release: 2 })
   const run = async (id, partial = false) => {
     if (partial) await request(controlUrl, 'POST', { fail_next: true })
-    const preview = await request(`${canvasUrl}/precheck`, 'POST', { card_id: 'target' })
-    const run = await request(`${canvasUrl}/runs`, 'POST', { request_id: id, preview_token: preview.preview_token })
+    const preview = await request(storyboardCanvasApi(base, canvas.id, `/precheck`), 'POST', { card_id: 'target' })
+    const run = await request(storyboardCanvasApi(base, canvas.id, `/runs`), 'POST', { request_id: id, preview_token: preview.preview_token })
     for (let attempt = 0; attempt < 40; attempt++) {
-      const runtime = await request(`${canvasUrl}/runtime`)
+      const runtime = await request(storyboardCanvasApi(base, canvas.id, `/runtime`))
       const node = runtime.runs.find(row => row.id === run.run_id)?.nodes[0]
       if (node?.status === (partial ? 'failed' : 'succeeded')) return run
       await delay(100)
@@ -69,11 +70,11 @@ try {
   }
   const original = await run('first')
   document.cards[0].visible_result.text = '换成蓝伞'
-  await request(canvasUrl, 'PUT', { request_id: 'edit', expected_revision: 1, document })
+  await request(canvasUrl, 'PUT', { request_id: 'edit', expected_revision: 1, document: withFixedSource(canvas, document) })
   await run('partial', true)
   assert.deepEqual((await request(controlUrl)).check_calls, [])
 
-  await page.goto(`http://127.0.0.1:4317/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4317${storyboardCanvasPath(canvas)}`)
   await openCanvasCard(page, 'check')
   const editor = page.locator('.generation-card-editor:visible')
   await editor.getByRole('tab', { name: '生成后检查', exact: true }).click()
@@ -92,7 +93,7 @@ try {
   const report = page.getByRole('region', { name: '检查报告', exact: true })
   await report.getByText('此结论仅适用于固定历史产物', { exact: true }).waitFor()
   await report.getByText('第一段第二段第三段', { exact: true }).filter({ visible: true }).waitFor()
-  const history = await request(`${canvasUrl}/checks/check/reports`)
+  const history = await request(storyboardCanvasApi(base, canvas.id, `/checks/check/reports`))
   assert.equal(history[0].product.run_id, original.run_id)
   await editor.getByRole('tab', { name: '生成后检查', exact: true }).click()
   await choose(/修订 2.*生成失败/)
@@ -107,7 +108,7 @@ try {
   await report.getByText(/原报告复核 · /).click()
   await report.getByText('本次复核说明 请重新核对原产物第三段', { exact: true }).waitFor()
   await report.getByText('第一段第二段第三段', { exact: true }).filter({ visible: true }).waitFor()
-  const afterReview = await request(`${canvasUrl}/checks/check/reports`)
+  const afterReview = await request(storyboardCanvasApi(base, canvas.id, `/checks/check/reports`))
   assert.equal(afterReview[0].product.run_id, original.run_id)
   assert.equal(afterReview[0].recheck.report_id, history[0].id)
   assert.deepEqual(afterReview[1], history[0])

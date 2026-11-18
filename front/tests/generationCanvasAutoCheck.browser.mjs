@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard, closeCanvasDetails, prepareCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-auto-check-')
-const api = 'http://127.0.0.1:8324', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8324', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8324', CANVAS_BROWSER_AUTO_CHECKS: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -39,8 +40,8 @@ try {
     const payload = await response.json()
     return payload.data ?? payload
   }
-  const canvas = await request(base, 'POST', { name: '完整交付后自动检查' })
-  const canvasUrl = `${base}/${canvas.id}`
+  const canvas = await createStoryboardCanvas(base, '完整交付后自动检查')
+  const canvasUrl = storyboardCanvasApi(base, canvas.id)
   const document = { ...canvas.document, cards: [
     { id: 'm', type: 'model.image', model_id: 'canvas-image-model', config: { count: 3 } },
     { id: 'shot', type: 'direction.shot', visible_result: { state: 'fact', text: '保持红色背景' } },
@@ -49,9 +50,9 @@ try {
     { id: 'adopt', source_card: 'shot', source_port: 'text', target_card: 'm', target_port: 'text' },
     { id: 'observe', source_card: 'm', source_port: 'check_basis', target_card: 'check', target_port: 'check_basis' },
   ], input_order: { m: { text: ['adopt'] }, check: { check_basis: ['observe'] } } }
-  await request(canvasUrl, 'PUT', { request_id: 'seed', expected_revision: 0, document })
+  await request(canvasUrl, 'PUT', { request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) })
   await request(`${api}/test/image-controls`, 'POST', { response_delay: 3 })
-  await page.goto(`http://127.0.0.1:4324/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4324${storyboardCanvasPath(canvas)}`)
   await openCanvasCard(page, 'check')
   await page.getByRole('tab', { name: '生成后检查', exact: true }).click()
   const editor = page.getByRole('region', { name: '生成后检查', exact: true })
@@ -75,12 +76,12 @@ try {
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   await preview.waitFor({ state: 'hidden' })
   await openCanvasCard(page, 'check')
-  assert.deepEqual(await request(`${canvasUrl}/checks/check/reports`), [])
+  assert.deepEqual(await request(storyboardCanvasApi(base, canvas.id, `/checks/check/reports`)), [])
   await page.getByRole('tab', { name: '检查记录', exact: true }).click()
   const report = page.getByRole('region', { name: '检查报告', exact: true })
   await report.getByText('完整交付后自动检查', { exact: true }).waitFor()
   await report.getByText('仅核对当前固定图片', { exact: true }).waitFor()
-  const reports = await request(`${canvasUrl}/checks/check/reports`)
+  const reports = await request(storyboardCanvasApi(base, canvas.id, `/checks/check/reports`))
   assert.equal(reports.length, 3)
   assert.deepEqual(reports.map(row => row.product.position).sort(), [0, 1, 2])
   assert.ok(reports.every(row => row.automatic))
@@ -103,7 +104,7 @@ try {
       ? { ...row, results: row.results.map(result => ({ ...result, outcome: 'indeterminate' })) } : row)
     await route.fulfill({ response, json: payload })
   }
-  const reportUrl = `**/${canvas.id}/checks/check/reports`
+  const reportUrl = url => url.pathname.endsWith(`/${canvas.id}/checks/check/reports`)
   const fixedDownload = `**/files/${observedReport.product.file_id}/download`
   const missingFile = route => route.fulfill({ status: 404, body: 'fixture withdrawn' })
   await page.route(reportUrl, observeIssues)
@@ -112,7 +113,7 @@ try {
   await prepareCanvasCard(page, 'check')
   const navigationWrites = []
   const recordNavigationWrite = request => {
-    if (request.url().includes(`/generation-canvases/canvas-project/${canvas.id}`) && !['GET', 'HEAD'].includes(request.method())) navigationWrites.push(request.url())
+    if (request.url().includes(`/generation-canvases/${canvas.id}`) && !['GET', 'HEAD'].includes(request.method())) navigationWrites.push(request.url())
   }
   page.on('request', recordNavigationWrite)
   await page.locator('[data-card-id="check"]').getByRole('button', { name: '查看卡片问题' }).click()
@@ -134,20 +135,20 @@ try {
   page.off('request', recordNavigationWrite)
   await page.unroute(reportUrl, observeIssues)
 
-  const skipped = await request(base, 'POST', { name: '已失效自动检查计划' })
-  const skippedUrl = `${base}/${skipped.id}`
-  const skippedDocument = { ...skipped.document, cards: document.cards.map(card => card.id === 'check' ? { ...card, auto_post_check: true } : card), edges: document.edges, input_order: document.input_order }
+  const skipped = await createStoryboardCanvas(base, '已失效自动检查计划')
+  const skippedUrl = storyboardCanvasApi(base, skipped.id)
+  const skippedDocument = withFixedSource(skipped, { ...skipped.document, cards: document.cards.map(card => card.id === 'check' ? { ...card, auto_post_check: true } : card), edges: document.edges, input_order: document.input_order })
   await request(skippedUrl, 'PUT', { request_id: 'skip-seed', expected_revision: 0, document: skippedDocument })
-  const skippedPreview = await request(`${skippedUrl}/precheck`, 'POST', { card_id: 'm' })
-  await request(`${skippedUrl}/runs`, 'POST', { request_id: 'skip-run', preview_token: skippedPreview.preview_token })
+  const skippedPreview = await request(storyboardCanvasApi(base, skipped.id, `/precheck`), 'POST', { card_id: 'm' })
+  await request(storyboardCanvasApi(base, skipped.id, `/runs`), 'POST', { request_id: 'skip-run', preview_token: skippedPreview.preview_token })
   await request(skippedUrl, 'PUT', { request_id: 'disconnect', expected_revision: 1, document: { ...skippedDocument, edges: skippedDocument.edges.filter(edge => edge.id !== 'observe'), input_order: { ...skippedDocument.input_order, check: { check_basis: [] } } } })
   await request(skippedUrl, 'PUT', { request_id: 'reconnect', expected_revision: 2, document: skippedDocument })
   const reportReads = []
-  page.on('request', request => { if (request.url().endsWith(`${skipped.id}/checks/check/reports`)) reportReads.push(request.url()) })
-  await page.goto(`http://127.0.0.1:4324/projects/canvas-project?tab=generation&canvas=${skipped.id}`)
+  page.on('request', request => { if (new URL(request.url()).pathname.endsWith(`/${skipped.id}/checks/check/reports`)) reportReads.push(request.url()) })
+  await page.goto(`http://127.0.0.1:4324${storyboardCanvasPath(skipped)}`)
   const expired = page.locator('[data-card-id="check"]').getByRole('button', { name: /自动报告待刷新/ })
   await expired.waitFor({ timeout: 45000 })
-  assert.deepEqual(await request(`${skippedUrl}/checks/check/reports`), [], 'invalidated original automatic plan produces no report')
+  assert.deepEqual(await request(storyboardCanvasApi(base, skipped.id, `/checks/check/reports`)), [], 'invalidated original automatic plan produces no report')
   const stoppedAt = reportReads.length
   await delay(1600)
   assert.equal(reportReads.length, stoppedAt, 'missing automatic reports do not poll indefinitely')

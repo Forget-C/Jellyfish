@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8630', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8630', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8630' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,25 +36,21 @@ try {
   page.on('console', message => { if (message.type() === 'error') console.log('BROWSER ERROR', message.text()) })
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const request = async (path, body) => {
-    const response = await fetch(api + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined)
-    assert.ok(response.ok, await response.clone().text()); return (await response.json()).data
-  }
 
 
   const results=[]
   const probe=async(name,run,documentOverrides={},contextOptions={},prepare)=>{
     const facts={}
-    const fixture=await request('/api/v1/studio/generation-canvases/canvas-project',{name})
+    const fixture=await createStoryboardCanvas(base, name)
     const cards=[{id:'place',type:'reference.place',name:'场所',angle:'正面'}, {id:'other',type:'reference.place',name:'其他场所',angle:'正面'}, {id:'director',type:'direction.fact',scope:{},examples:[],input_bindings:[]}]
     const overrides=typeof documentOverrides==='function'?documentOverrides(fixture.id):documentOverrides
-    const seeded=await fetch(`${base}/${fixture.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...fixture.document,cards,edges:[],...overrides}})})
+    const seeded=await fetch(storyboardCanvasApi(base, fixture.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(fixture, { ...fixture.document, cards, edges: [], ...overrides })})})
     assert.ok(seeded.ok,await seeded.text())
     const isolated=await browser.newContext({viewport:{width:1920,height:790},...contextOptions})
     page=await isolated.newPage();page.setDefaultTimeout(6000)
     const prepared=await prepare?.(fixture.id)
     await page.addInitScript(({key})=>{window.__ENV={BACKEND_URL:location.origin};localStorage.setItem(key,JSON.stringify({schema:1,positions:{place:{x:innerWidth<700?120:400,y:innerWidth<700?300:250},other:{x:1000,y:250},director:{x:1800,y:250}},sizes:{},transform:{x:0,y:0,scale:.8}}))},{key:`jellyfish:generation-layout:canvas-project:${fixture.id}:view:canvas`})
-    await page.goto(`http://127.0.0.1:4630/projects/canvas-project/generation-canvas?canvas=${fixture.id}`)
+    await page.goto(`http://127.0.0.1:4630${storyboardCanvasPath(fixture)}`)
     const card=page.locator('[data-card-id="place"]');await page.locator('[data-card-id], [data-stack-id]').first().waitFor();await delay(100)
     const position=(target=card)=>target.evaluate(e=>({x:parseFloat(e.style.left),y:parseFloat(e.style.top)}))
     const view=()=>page.locator('.generation-world').getAttribute('style')
@@ -561,7 +558,7 @@ try {
   const referenceRuntime=async canvasId=>{
     let current=true,cursor=0
     const outputs=()=>({provider:[{source:referenceSource(canvasId),modality:'text',available:true,basis_current:current,text:'真实来源'}]})
-    await page.route('**/runtime',route=>route.fulfill({json:{code:200,data:{cursor,runs:[],current_outputs:outputs()}}}))
+    await page.route('**/runtime?project_id=*',route=>route.fulfill({json:{code:200,data:{cursor,runs:[],current_outputs:outputs()}}}))
     await page.route(/\/events(?:\?|$)/,route=>{
       const previous=Number(new URL(route.request().url()).searchParams.get('cursor')||0)
       const event={version:1,canvas_id:canvasId,type:'run.finished',cursor,payload:{run_id:'fixture-run',current_outputs:outputs()}}

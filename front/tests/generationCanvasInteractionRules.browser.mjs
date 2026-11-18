@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-rules-')
-const api = 'http://127.0.0.1:8611', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8611', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8611' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -50,7 +51,7 @@ try {
     window.__ENV = { BACKEND_URL: window.location.origin }
   })
   const request = async (path, body) => {
-    const response = await fetch(api + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined)
+    const response = await fetch(new URL(path, api), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined)
     assert.ok(response.ok, await response.clone().text())
     return (await response.json()).data
   }
@@ -60,8 +61,8 @@ try {
   page.on('pageerror', error => pageErrors.push(error.message))
   const mainPage = page
   for (const [side, x, y, width, height] of [['bottom', 200, 180, 1920, 1100], ['lower-edge', 200, 650, 1920, 1100], ['short-desktop', 200, 300, 1920, 850], ['right-edge', 1300, 300, 1920, 850], ['narrow', 200, 250, 900, 650]]) {
-    const fixture = await request('/api/v1/studio/generation-canvases/canvas-project', { name: `Q1 ${side}` })
-    const seeded = await fetch(`${base}/${fixture.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...fixture.document, cards: [
+    const fixture = await createStoryboardCanvas(base, `Q1 ${side}`)
+    const seeded = await fetch(storyboardCanvasApi(base, fixture.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...fixture.document, cards: [...fixture.document.cards,
             { id: 'anchor', type: 'reference.place', name: '场所', angle: '正面' }
           ], edges: [] } }) })
     assert.ok(seeded.ok, await seeded.text())
@@ -73,7 +74,7 @@ try {
       window.__ENV = { BACKEND_URL: window.location.origin }
       localStorage.setItem(key, JSON.stringify({ schema: 1, positions: { anchor: { x, y } }, sizes: {}, transform: { x: 0, y: 0, scale: 1 } }))
     }, { key: `jellyfish:generation-layout:canvas-project:${fixture.id}:view:canvas`, x, y })
-    await page.goto(`http://127.0.0.1:4611/projects/canvas-project/generation-canvas?canvas=${fixture.id}`)
+    await page.goto(`http://127.0.0.1:4611${storyboardCanvasPath(fixture)}`)
     const anchor = page.locator('[data-card-id="anchor"]')
     await anchor.waitFor()
     const initial = await anchor.boundingBox(), view = await page.locator('.generation-world').getAttribute('style')
@@ -183,9 +184,9 @@ try {
   const uploaded = await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: mediaForm })
   assert.ok(uploaded.ok, await uploaded.clone().text())
   const mediaFile = (await uploaded.json()).data
-  const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '画布交互回归' })
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...canvas.document, cards: [
-          { id: 'place', type: 'reference.place', title: '', angle: '正面', objects: [] },
+  const canvas = await createStoryboardCanvas(base, '画布交互回归')
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...canvas.document, cards: [...canvas.document.cards,
+          { id: 'place', type: 'reference.place', angle: '正面' },
           { id: 'other', type: 'content.image', file_id: mediaFile.id },
           { id: 'spare', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'ready', kind: 'text', text: '三张完整图片' }] }, config: { count: 3, target_ratio: '1:1', resolution_profile: 'standard' } },
           { id: 'note', type: 'content.text', text: '编辑输入测试' },
@@ -202,7 +203,7 @@ try {
       localStorage.setItem(layoutKey, JSON.stringify({ schema: 1, positions: { place: { x: 400, y: 250 }, other: { x: 1000, y: 250 }, note: { x: 1500, y: 250 }, dependent: { x: 1800, y: 700 }, spare: { x: 2200, y: 700 } }, sizes: { place: { width: 300, height: 251 } }, transform: { x: 0, y: 0, scale: .8 } }))
     }
   }, { layoutKey })
-  await page.goto(`http://127.0.0.1:4611/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4611${storyboardCanvasPath(canvas)}`)
   const card = page.locator('[data-card-id="place"]')
   await card.waitFor()
   const check = async (name, fn) => {
@@ -482,7 +483,7 @@ try {
     await other.click({ modifiers: ['ControlOrMeta'] })
     await page.getByRole('toolbar', { name: '所选卡片操作', exact: true }).getByRole('button', { name: '编组', exact: true }).click()
     await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
-    const doc = await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`)
+    const doc = await request(storyboardCanvasApi(base, canvas.id))
     const group = page.locator('[data-group-id]')
     await group.waitFor()
     await card.click({ modifiers: ['ControlOrMeta'] })
@@ -494,7 +495,7 @@ try {
     await card.waitFor({ state: 'detached' })
     await other.waitFor({ state: 'detached' })
     await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
-    const deleted = await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`)
+    const deleted = await request(storyboardCanvasApi(base, canvas.id))
     assert.equal(deleted.document.edges.some(edge => edge.id === 'image-candidate'), false, 'related candidate is deleted')
     assert.ok((await fetch(`${api}/api/v1/studio/files/${mediaFile.id}/download`)).ok, 'card deletion retains media file')
     await page.getByRole('button', { name: '确认删除', exact: true }).waitFor({ state: 'hidden' })
@@ -503,7 +504,7 @@ try {
     await card.waitFor()
     assert.deepEqual(await pos(), before)
     await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
-    const restored = await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`)
+    const restored = await request(storyboardCanvasApi(base, canvas.id))
     assert.deepEqual(restored.document.groups, doc.document.groups)
     assert.deepEqual(restored.document.edges, doc.document.edges)
     assert.deepEqual(restored.document.input_order, doc.document.input_order)
@@ -520,7 +521,7 @@ try {
     const stack = page.locator('[data-stack-id]')
     await stack.waitFor()
     await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
-    const before = await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`)
+    const before = await request(storyboardCanvasApi(base, canvas.id))
     await card.click({ modifiers: ['ControlOrMeta'] })
     await other.click({ modifiers: ['ControlOrMeta'] })
     await card.focus()
@@ -529,7 +530,7 @@ try {
     assert.equal(await page.getByRole('button', { name: '确认删除', exact: true }).count(), 0)
     assert.equal(await card.count(), 1)
     assert.equal(await other.count(), 1)
-    assert.deepEqual((await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`)).document, before.document)
+    assert.deepEqual((await request(storyboardCanvasApi(base, canvas.id))).document, before.document)
     await stack.hover()
     await stack.getByRole('button', { name: '解除堆叠', exact: true }).click()
     await spare.waitFor()
@@ -563,7 +564,7 @@ try {
     assert.equal(await card.count(), 1)
     assert.equal(await spare.count(), 1)
     await spare.getByLabel('模型状态摘要').getByText('已完成', { exact: true }).waitFor()
-    const snapshot = await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/runtime`)
+    const snapshot = await request(storyboardCanvasApi(base, canvas.id, '/runtime'))
     const file = snapshot.current_outputs.spare[0].file_id
     await card.focus()
     await page.keyboard.press('Delete')
@@ -577,8 +578,8 @@ try {
     await page.keyboard.press('Backspace')
     await confirmation.waitFor()
     // Another accepted run may start while the user is reviewing deletion.
-    const accepted = await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/precheck`, {card_id:'spare'})
-    await request(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/runs`, {request_id:'delete-race',preview_token:accepted.preview_token})
+    const accepted = await request(storyboardCanvasApi(base, canvas.id, '/precheck'), {card_id:'spare'})
+    await request(storyboardCanvasApi(base, canvas.id, '/runs'), {request_id:'delete-race',preview_token:accepted.preview_token})
     await spare.getByLabel('模型状态摘要').getByText('运行中',{exact:true}).waitFor()
     await confirmation.getByRole('button', {name:'确认删除',exact:true}).click()
     await confirmation.waitFor({state:'hidden'})

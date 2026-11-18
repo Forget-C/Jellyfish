@@ -1,4 +1,5 @@
-import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
+import { openDesignAssociation, openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-narrative-spatial-objects-')
-const api = 'http://127.0.0.1:8744', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8744', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8744' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -32,7 +33,7 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '叙事空间旧对象恢复' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '叙事空间旧对象恢复')
   const cases = [['overview', 'direction.narrative', 'viewpoint', '观察视点'], ['event', 'direction.event', 'action_change', '动作或变化说明'], ['rule', 'direction.space_rule', 'spatial_basis', '空间依据'], ['anchor', 'direction.anchor', 'position', '位置']]
   const source = port => ({ canvas_id: canvas.id, card_id: 'place', port_id: port, position: 0, ...(port === 'object' ? { object_id: 'hall' } : {}) })
   const document = { ...canvas.document, cards: [{ id: 'place', type: 'content.place', object_id: 'hall', name: '大厅', text: '完整大厅描述' }, ...cases.map(([id, type, key]) => ({ id, type, ...(id === 'rule' ? {} : { name: id }), ...(id === 'event' ? { event_id: 'stable-event' } : id === 'anchor' ? { anchor_id: 'stable-anchor' } : {}), [key]: { text: '普通文字不产生引用', authorship: 'user' } }))], edges: [], input_order: {} }
@@ -45,11 +46,11 @@ try {
       document.input_order[id].space = [id + '-space']
     }
   }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
-  await page.goto(`http://127.0.0.1:4744/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4744${storyboardCanvasPath(canvas)}`)
   const baseline = await read(), recovered = structuredClone(baseline.document)
   for (const [id, , key] of cases) {
     const card = recovered.cards.find(item => item.id === id)
@@ -80,8 +81,9 @@ try {
     assert.equal(await detail.getByRole('button', { name: /(?:选择|取消)作用对象/ }).count(), 0)
     if (id === 'overview' || id === 'event') assert.equal(await detail.locator('summary').filter({ hasText: /^叙事关系/ }).count(), 0)
     else {
-      if (id === 'rule') await detail.locator('summary').filter({ hasText: '对象与制作关系' }).click()
-      await detail.getByRole('button', { name: '取消所属空间 大厅', exact: true }).waitFor()
+      await openDesignAssociation(detail, /候选.*大厅/)
+      await page.getByRole('button', { name: '解除所属空间', exact: true }).waitFor()
+      await page.keyboard.press('Escape')
     }
     const field = detail.getByRole('textbox', { name: label + '内容', exact: true })
     await field.fill('')

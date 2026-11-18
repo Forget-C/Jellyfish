@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-design-field-references-')
-const api = 'http://127.0.0.1:8666', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8666', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8666' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -34,16 +35,16 @@ try {
   debugPage = page
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '摄影设计')
   const kinds=[['style','direction','风格方向','notes','自定义说明'],['camera','viewpoint','观察视点','support','支撑方式'],['lighting','light_sources','光源','color_relationship','色彩关系'],['focus','depth_focus','景深与焦点','prohibitions','禁止项'],['composition','composition','构图重心','negative_space','留白'],['movement','movement_path','运动路径','end_frame','结束画面']]
   const source={canvas_id:canvas.id,card_id:'brief',port_id:'text',position:0}
   const document={...canvas.document,cards:[{id:'brief',type:'content.text',text:'张三'},{id:'loose',type:'content.text',text:'画布已有候选'},...kinds.map(([kind,key])=>({id:kind,type:'direction.'+kind,fields:{[key]:{text:'基线',state:'proposal'}}}))],edges:kinds.map(([kind])=>({id:'edge-'+kind,source_card:'brief',source_port:'text',target_card:kind,target_port:'text'})),input_order:Object.fromEntries(kinds.map(([kind])=>[kind,{text:['edge-'+kind]}]))}
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok,await seed.text())
-  const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
+  const read=async()=>(await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('field reference save did not arrive')}
   const errors=[];page.on('pageerror',error=>errors.push(error.message))
-  await page.goto(`http://127.0.0.1:4666/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4666${storyboardCanvasPath(canvas)}`)
   const detail=page.locator('.wb-details:visible')
   for(const [kind,key,label,other,otherLabel] of kinds){
     await page.locator(`[data-card-id="${kind}"]`).press('Enter')

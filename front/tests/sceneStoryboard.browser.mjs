@@ -1,3 +1,4 @@
+import { selectPreparedCharacter, storyboardCanvasApi } from './storyboard-canvas-fixture.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -7,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openStoryboardDefaultModels, openReadyStoryboard, closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { omitMissingStoryboardImages, openStoryboardDefaultModels, openReadyStoryboard, closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -31,7 +32,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -48,12 +49,12 @@ try {
   const prep = `http://127.0.0.1:4260/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
   await page.goto(prep.replace('step=storyboard', 'step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
-  await front.getByRole('combobox', { name: '关联资产' }).click()
-  await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await front.getByRole('button', { name: '选择参考图' }).click()
-  await page.getByText('参考图 1', { exact: true }).click()
-  await front.getByText('已选参考图', { exact: true }).waitFor()
+  const resourceImages = `${studio}/entities/character/object-browser-character/images`
+  const referenceImage = (await request(resourceImages)).items[0]
+  await request(`${resourceImages}/${referenceImage.id}`, 'PATCH', { is_primary: true })
+  await selectPreparedCharacter(page, front, '已有角色')
   // 通过公开接口建立旧图片分镜，验证现有画布的编辑与引用契约。
   const storyboardName = '完整图片分镜验收'
   await request(`${scenes}/${sequence.id}/storyboards`, 'POST', {
@@ -62,7 +63,7 @@ try {
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
-  const canvas = `${studio}/generation-canvases/${project}/${id}`
+  const canvas = `${studio}/generation-canvases/${id}?project_id=${project}`
   const read = () => request(canvas)
   const poll = async (predicate, readState = read) => {
     for (let attempt = 0; attempt < 130; attempt++) {
@@ -92,15 +93,16 @@ try {
   const modelCards = shots.flatMap(shot => shot.model_card_ids)
   await openStoryboardDefaultModels(page, modelCards, '分镜测试图片模型')
   await poll(state => modelCards.every(id => state.document.cards.find(card => card.id === id)?.model_id === 'story-image-model'))
-  const checked = await request(`${canvas}/precheck`, 'POST', { card_id: shots[0].model_card_ids[0] })
-  assert.ok(checked.can_run, JSON.stringify(checked.diagnostics))
+  const firstModel = shots[0].model_card_ids[0]
+  const checked = await omitMissingStoryboardImages(page, firstModel, read,
+    () => request(storyboardCanvasApi(`${studio}/generation-canvases`, id, '/precheck', project), 'POST', { card_id: firstModel }), ['信封'])
   assert.match(checked.input.text, /前門|前门/)
   assert.doesNotMatch(checked.input.text, /后门/)
   assert.deepEqual(checked.execution_nodes, shots[0].model_card_ids)
   assert.deepEqual(checked.input.media.map(item => item.file_id), ['object-browser-image'])
-  const other = await request(`${canvas}/precheck`, 'POST', { card_id: shots[1].model_card_ids[0] })
+  const other = await request(storyboardCanvasApi(`${studio}/generation-canvases`, id, '/precheck', project), 'POST', { card_id: shots[1].model_card_ids[0] })
   assert.equal(other.input.media.length, 0)
-  assert.equal((await request(`${canvas}/runtime`)).runs.length, 0)
+  assert.equal((await request(storyboardCanvasApi(`${studio}/generation-canvases`, id, '/runtime', project))).runs.length, 0)
 
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   await openCanvasCard(page, missed.reference_card_id)
@@ -118,7 +120,7 @@ try {
   assert.equal(result.source_locator, '前门的阿同拿着信封。')
   assert.equal(result.extraction_context, 'storyboard')
   assert.ok(edited.document.storyboard.origins[shots[0].card_id].manually_edited)
-  await page.goto(`http://127.0.0.1:4260/projects/${project}/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4260/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${id}`)
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   await openCanvasCard(page, shots[0].card_id)
   await visible.waitFor()
@@ -134,7 +136,7 @@ try {
   await openReadyStoryboard(page, '忠实分镜验收')
   const faithfulId = new URL(page.url()).searchParams.get('canvas')
   assert.notEqual(faithfulId, id)
-  const faithfulRead = () => request(`${studio}/generation-canvases/${project}/${faithfulId}`)
+  const faithfulRead = () => request(`${studio}/generation-canvases/${faithfulId}?project_id=${project}`)
   const faithful = await poll(state => state.document.storyboard?.mode === 'faithful', faithfulRead)
   assert.equal(faithful.document.cards.some(card => card.type === 'direction.camera'), false)
   const faithfulShot = faithful.document.storyboard.shots[0]

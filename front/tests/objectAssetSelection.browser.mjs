@@ -31,7 +31,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -45,7 +45,7 @@ try {
   const objectsUrl = `${scenes}/${sequence.id}/objects`
   const read = () => request(objectsUrl)
   const canvas = await request(`${scenes}/${sequence.id}/canvases`, 'POST', { name: '已有方案' })
-  const canvasUrl = `${studio}/generation-canvases/${project}/${canvas.id}`
+  const canvasUrl = `${studio}/generation-canvases/${canvas.id}?project_id=${project}`
   const canvasBefore = await request(canvasUrl)
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4268, strictPort: true, proxy: { '/api': api } } })
   await server.listen()

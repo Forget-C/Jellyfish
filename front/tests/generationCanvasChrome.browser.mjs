@@ -1,4 +1,5 @@
-import { closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
+import { closeCanvasDetails, closePrecheck, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -13,7 +14,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8420'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8420' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -38,16 +39,16 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const chapterRequests = []
   page.on('request', request => { if (/chapters/.test(request.url())) chapterRequests.push(request.url()) })
-  await page.goto('http://127.0.0.1:4420/projects/canvas-project/generation-canvas')
-  await page.getByRole('button', { name: '画布管理', exact: true }).click()
-  await page.getByRole('button', { name: '新建画布', exact: true }).click()
-  await page.getByRole('button', { name: '画布管理', exact: true }).click()
+  await page.goto('http://127.0.0.1:4420/canvases')
+  await page.getByRole('button', { name: /新建画布/ }).click()
+  await page.waitForURL(/\/canvases\/[^/]+$/)
+  const savedName = page.waitForResponse(response => response.request().method() === 'PUT' && response.ok())
   await page.getByRole('textbox', { name: '画布名称' }).fill('菜单中的画布')
-  await page.getByRole('textbox', { name: '画布名称' }).press('Escape')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await savedName
   await page.getByLabel('画布保存状态').filter({ hasText: '已保存' }).waitFor()
-  const id = new URL(page.url()).searchParams.get('canvas')
-  assert.equal((await (await fetch(`${base}/${id}`)).json()).data.document.name, '菜单中的画布')
+  const freeId = new URL(page.url()).pathname.split('/').at(-1)
+  assert.equal((await (await fetch(`${base}/${freeId}`)).json()).data.document.name, '菜单中的画布')
   assert.equal(await page.getByRole('button', { name: '后退', exact: true }).isDisabled(), true)
   assert.equal(await page.getByRole('button', { name: '前进', exact: true }).isDisabled(), true)
   const surface = await page.getByLabel('生成画布视口').boundingBox()
@@ -79,8 +80,10 @@ try {
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '选择模型')
   await closeCanvasDetails(page)
   await page.screenshot({ path: join(output, 'chrome-desktop.png'), animations: 'disabled' })
-  const saved = (await (await fetch(`${base}/${id}`)).json()).data
-  const model = saved.document.cards.find(item => item.type === 'model.text')
+  const independent = (await (await fetch(`${base}/${freeId}`)).json()).data
+  const saved = await createStoryboardCanvas(base, '设计诊断工作台')
+  const id = saved.id
+  const model = independent.document.cards.find(item => item.type === 'model.text')
   const modelId = model.id
   const promptSegmentId = model.prompt.segments[0].id
   const groupedCard = { id: 'grouped', type: 'direction.criterion', name: '编组内验收' }
@@ -95,13 +98,13 @@ try {
     ] } } },
   ] }
   const edge = { id: 'phase-source-edge', source_card: source.id, source_port: 'text', target_card: movement.id, target_port: 'text' }
-  const seeded = await fetch(`${base}/${id}`, {
+  const seeded = await fetch(storyboardCanvasApi(base, id), {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request_id: 'diagnostic-targets', expected_revision: saved.revision, document: { ...saved.document, cards: [...saved.document.cards, criterion, performance, source, movement, groupedCard], groups: [...(saved.document.groups || []), collapsed], edges: [...saved.document.edges, edge], input_order: { ...saved.document.input_order, [movement.id]: { text: [edge.id] } } } }),
+    body: JSON.stringify({ request_id: 'diagnostic-targets', expected_revision: saved.revision, document: { ...saved.document, cards: [...saved.document.cards, model, criterion, performance, source, movement, groupedCard], groups: [...(saved.document.groups || []), collapsed], edges: [...saved.document.edges, edge], input_order: { ...saved.document.input_order, [movement.id]: { text: [edge.id] } } } }),
   })
   assert.ok(seeded.ok, await seeded.text())
-  await page.reload()
-  await page.route('**/precheck', async route => {
+  await page.goto(`http://127.0.0.1:4420${storyboardCanvasPath(saved)}`)
+  await page.route('**/precheck?project_id=*', async route => {
     const response = await route.fetch(), payload = await response.json()
     payload.data.diagnostics = [
       { code: 'TITLE_REVIEW', message: '需要核对验收要求名称', severity: 'error', blocks: ['run'], target: { card_id: criterion.id, path: ['name'] } },
@@ -118,8 +121,7 @@ try {
     ]
     await route.fulfill({ response, json: payload })
   })
-  await page.locator(`[data-card-id="${modelId}"]`).press('Enter')
-  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  await (await openCanvasCard(page, modelId)).getByRole('button', { name: '预检运行', exact: true }).click()
   const precheck = page.getByRole('dialog', { name: '运行预检', exact: true })
   const globalIssue = precheck.getByRole('alert').filter({ hasText: '当前请求需要核实' })
   await globalIssue.waitFor()
@@ -138,8 +140,7 @@ try {
   await issueList.getByRole('button', { name: '定位正文片段', exact: true }).click()
   await page.waitForFunction(id => document.activeElement?.getAttribute('data-segment-id') === id, promptSegmentId)
   await closeCanvasDetails(page)
-  await page.locator(`[data-card-id="${modelId}"]`).press('Enter')
-  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  await (await openCanvasCard(page, modelId)).getByRole('button', { name: '预检运行', exact: true }).click()
   await precheck.getByRole('alert').filter({ hasText: '请核对编组内名称' }).getByRole('button', { name: '定位问题', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '问题所指的卡片位于已折叠的编组内' }).waitFor()
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-group-id') === 'collapsed')
@@ -149,7 +150,7 @@ try {
   await issueList.getByText('错误', { exact: true }).waitFor()
   await issueList.getByText('警告', { exact: true }).waitFor()
   assert.equal(await issueList.getByRole('button').count(), 1, 'unstructured warning has no field action')
-  await issueList.getByRole('button', { name: '定位名称', exact: true }).click()
+  await issueList.getByRole('button', { name: '定位名称', exact: true }).press('Enter')
   await page.waitForFunction(() => document.activeElement?.closest('[data-diagnostic-name]') !== null && document.activeElement?.tagName === 'BUTTON')
   assert.equal(await page.getByRole('button', { name: '高级设置', exact: true }).isVisible(), true, 'name location leaves the preset page open')
   await closeCanvasDetails(page)
@@ -164,15 +165,14 @@ try {
   await closeCanvasDetails(page)
   const movementCard = page.locator('[data-card-id="movement"]')
   await movementCard.waitFor({ state: 'attached' })
-  assert.equal((await (await fetch(`${base}/${id}`)).json()).data.revision, saved.revision + 1, 'field navigation does not write the canvas')
+  assert.equal((await (await fetch(storyboardCanvasApi(base, id))).json()).data.revision, saved.revision + 1, 'field navigation does not write the canvas')
   const movementIssues = movementCard.getByRole('button', { name: '查看卡片问题', exact: true })
   await movementIssues.press('Enter')
   await issueList.getByRole('button', { name: '查看卡片', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '无法定位原位置' }).waitFor()
   assert.equal(await page.getByRole('tab', { name: '起始', exact: true }).getAttribute('aria-selected'), 'true')
   await closeCanvasDetails(page)
-  await page.locator(`[data-card-id="${modelId}"]`).press('Enter')
-  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  await (await openCanvasCard(page, modelId)).getByRole('button', { name: '预检运行', exact: true }).click()
   const deletedIssue = precheck.getByRole('alert').filter({ hasText: '原设计卡已删除' })
   assert.equal(await deletedIssue.getByRole('button').count(), 0, 'a deleted card has no action')
   await deletedIssue.getByText('问题所指的卡片已不可用', { exact: true }).waitFor()
@@ -197,15 +197,13 @@ try {
   }), true, 'the structured reference and its focus ring are visible on a narrow screen')
   await page.screenshot({ path: join(output, 'diagnostic-phase-mobile.png'), animations: 'disabled' })
   await observer.close()
-  assert.equal((await (await fetch(`${base}/${id}`)).json()).data.revision, saved.revision + 1, 'reading diagnostics does not write the canvas')
+  assert.equal((await (await fetch(storyboardCanvasApi(base, id))).json()).data.revision, saved.revision + 1, 'reading diagnostics does not write the canvas')
   await closeCanvasDetails(page)
-  await page.reload()
-  await page.getByRole('button', { name: '画布管理', exact: true }).click()
+  await page.goto(`http://127.0.0.1:4420/canvases/${freeId}`)
   assert.equal(await page.getByRole('textbox', { name: '画布名称' }).inputValue(), '菜单中的画布')
   await page.getByRole('textbox', { name: '画布名称' }).press('Escape')
   if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: '画布管理', exact: true }).click()
   await page.getByRole('textbox', { name: '画布名称' }).waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: join(output, 'chrome-mobile.png'), animations: 'disabled' })

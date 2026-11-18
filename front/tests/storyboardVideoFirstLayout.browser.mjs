@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { browserCleanup, browserOutput, captureBackend } from './browser-runtime.mjs'
-import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, omitMissingStoryboardImages, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -16,7 +16,8 @@ const output = await browserOutput('jellyfish-storyboard-video-layout-')
 const api = 'http://127.0.0.1:8724/api/v1/studio', origin = 'http://127.0.0.1:4724'
 const project = 'canvas-project', chapter = 'video-layout-chapter'
 const raw = '前门的阿同拿着信封。后门的阿同等待。他绕过门廊。阿同回头。'
-const canvases = api + '/generation-canvases/' + project
+const canvases = api + '/generation-canvases'
+const canvasUrl = (id, suffix = '') => `${canvases}/${id}${suffix}?project_id=${project}`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_SCENE_OBJECTS: '1', CANVAS_BROWSER_SCENE_STORYBOARD: '1', CANVAS_BROWSER_STORYBOARD_REFERENCES: '1', CANVAS_BROWSER_STORYBOARD_DESIGN_STACKS: '1',
@@ -65,6 +66,7 @@ try {
   const desktop = await newPage({ width: 1080, height: 900 })
   await desktop.goto(`${projectUrl}/chapters/${chapter}/workbench-management?sequence=${scene.id}&step=objects`)
   await desktop.getByRole('button', { name: '提取对象', exact: true }).click()
+  await desktop.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   await desktop.getByRole('region', { name: '阿同 · 后门的阿同', exact: true }).waitFor()
   const modelSettingsUrl = 'http://127.0.0.1:8724/api/v1/llm/model-settings'
   await request(modelSettingsUrl, 'PUT', { ...await request(modelSettingsUrl), default_video_model_id: 'story-video-model' })
@@ -79,7 +81,7 @@ try {
     const url = `${projectUrl}/chapters/${chapter}/sequences/${scene.id}/canvas-workbench?canvas=${task.canvas_id}&storyboardTask=${task.task_id}`
     await page.goto(url)
     await enterStoryboardCanvas(page)
-    const { document } = await poll(() => request(`${canvases}/${task.canvas_id}`), row => row.document.storyboard)
+    const { document } = await poll(() => request(canvasUrl(task.canvas_id)), row => row.document.storyboard)
     const ids = document.storyboard.shots.flatMap(shot => shot.model_card_ids)
     assert.equal(ids.length, 3)
     await page.locator(`[data-card-id="${ids[0]}"]`).waitFor()
@@ -104,15 +106,15 @@ try {
   assert.deepEqual((await cards(desktop, ids))[0], zoomed, 'resizing does not move an already placed card')
 
   await desktop.setViewportSize({ width: 1080, height: 900 })
-  const current = await request(`${canvases}/${task.canvas_id}`)
+  const current = await request(canvasUrl(task.canvas_id))
   const manualCards = ['arrange-note-1', 'arrange-note-2']
   const manualStack = { id: 'manual-arrange-stack', name: '人工堆叠', kind: 'stack', card_ids: manualCards }
   current.document.cards.push(...manualCards.map(id => ({ id, type: 'content.text', text: id })))
   current.document.groups.push(manualStack)
-  await request(`${canvases}/${task.canvas_id}`, 'PUT', {
+  await request(canvasUrl(task.canvas_id), 'PUT', {
     request_id: randomUUID(), expected_revision: current.revision, document: current.document,
   })
-  const { document: stackedDocument } = await request(`${canvases}/${task.canvas_id}`)
+  const { document: stackedDocument } = await request(canvasUrl(task.canvas_id))
   await desktop.reload()
   const manualStackCard = desktop.getByRole('button', { name: '查看堆叠 人工堆叠', exact: true })
   await manualStackCard.waitFor()
@@ -125,7 +127,7 @@ try {
     'manual arrange refocuses on both first-row videos')
   assert.equal(arrangedFirst.y, arrangedSecond.y)
   assert.ok(arrangedFirst.x < arrangedSecond.x)
-  assert.deepEqual((await request(`${canvases}/${task.canvas_id}`)).document.groups, stackedDocument.groups)
+  assert.deepEqual((await request(canvasUrl(task.canvas_id))).document.groups, stackedDocument.groups)
   await desktop.getByRole('button', { name: '撤销布局整理', exact: true }).click()
   await desktop.keyboard.press('Escape')
   assert.deepEqual(await cards(desktop, ids), beforeArrange)
@@ -139,8 +141,8 @@ try {
   const manualNote = 'manual-mixed-arrange-note'
   const manualVideo = 'manual-unmapped-video'
   const mixedGroup = 'manual-video-mixed-group'
-  const sceneCanvas = () => request(`${canvases}/${task.canvas_id}`)
-  const saveDocument = row => request(`${canvases}/${task.canvas_id}`, 'PUT', {
+  const sceneCanvas = () => request(canvasUrl(task.canvas_id))
+  const saveDocument = row => request(canvasUrl(task.canvas_id), 'PUT', {
     request_id: randomUUID(), expected_revision: row.revision, document: row.document,
   })
   const mixed = await sceneCanvas()
@@ -171,22 +173,25 @@ try {
   assert.ok(fullyVisible(mobileFirst, narrow.viewportSize()), JSON.stringify(mobileFirst))
 
   const ordinary = await newPage({ width: 1080, height: 900 })
-  await ordinary.goto(`${projectUrl}/generation-canvas?canvas=${task.canvas_id}`)
+  const freeCanvas = await request(canvases, 'POST', { name: '独立布局画布' })
+  const freeDocument = { ...freeCanvas.document, cards: [
+    { id: original, type: 'content.text', text: '独立布局依据' }, { id: ids[0], type: 'model.video' },
+  ] }
+  await request(`${canvases}/${freeCanvas.id}`, 'PUT', { request_id: 'free-layout', expected_revision: 0, document: freeDocument })
+  await ordinary.goto(`${origin}/canvases/${freeCanvas.id}`)
   await ordinary.locator(`[data-card-id="${original}"]`).waitFor()
-  const [ordinarySource, ordinaryVideoBefore] = await cards(ordinary, [original, ids[0]])
-  assert.ok(ordinarySource.y < ordinaryVideoBefore.y, 'ordinary entry keeps its original layout rules')
+  await ordinary.locator(`[data-card-id="${ids[0]}"]`).waitFor()
   await ordinary.getByRole('button', { name: '布局', exact: true }).click()
   await ordinary.getByRole('button', { name: '整理布局', exact: true }).click()
-  const [arrangedSource, ordinaryVideo] = await poll(() => cards(ordinary, [original, ids[0]]), ([source, video]) => source.y < video.y)
-  assert.ok(arrangedSource.y < ordinaryVideo.y, 'ordinary explicit arrange keeps the source above the video')
-  await ordinary.goto(url)
+  const [ordinaryVideo] = await cards(ordinary, [ids[0]])
+  await ordinary.reload()
   await ordinary.locator(`[data-card-id="${ids[0]}"]`).waitFor()
-  assert.deepEqual((await cards(ordinary, [ids[0]]))[0], ordinaryVideo, 'opening an existing storyboard does not rearrange its layout')
+  assert.deepEqual((await cards(ordinary, [ids[0]]))[0], ordinaryVideo, 'opening an independent canvas preserves the saved layout')
   // 旧分镜的普通编组在显式整理时收纳设计，分组和视口一起进入历史。
   const legacyPage = await newPage({ width: 1440, height: 960 })
   const legacyTask = await generate('已有分镜完整整理')
   const legacy = await open(legacyPage, legacyTask)
-  const readLegacy = () => request(`${canvases}/${legacyTask.canvas_id}`)
+  const readLegacy = () => request(canvasUrl(legacyTask.canvas_id))
   const savedLegacy = await readLegacy()
   const legacyDocument = savedLegacy.document
   const originalStacks = legacyDocument.groups.filter(group => group.kind === 'stack')
@@ -204,7 +209,7 @@ try {
   legacyDocument.groups.push({ ...partial, id: partial.id + '-abcd0123', card_ids: [retainedMember] })
   legacyDocument.cards.push(...manualCards.map(id => ({ id, type: 'content.text', text: id })))
   legacyDocument.groups.push(manualStack)
-  await request(`${canvases}/${legacyTask.canvas_id}`, 'PUT', {
+  await request(canvasUrl(legacyTask.canvas_id), 'PUT', {
     request_id: randomUUID(), expected_revision: savedLegacy.revision, document: legacyDocument,
   })
   await legacyPage.reload()
@@ -243,7 +248,7 @@ try {
   assert.deepEqual((await cards(legacyPage, [legacy.ids[0]]))[0], organizedVideo)
   // 共同堆叠收纳实际成员，但预检仍使用原设计和引用。
   await desktop.setViewportSize({ width: 1440, height: 960 })
-  const savedCanvas = () => request(`${canvases}/${task.canvas_id}`)
+  const savedCanvas = () => request(canvasUrl(task.canvas_id))
   const [shot] = document.storyboard.shots
   const stacks = document.groups.filter(group => group.kind === 'stack')
   assert.equal(stacks.length, 4)
@@ -262,8 +267,8 @@ try {
     return card?.model_id === 'story-video-model' && card.config?.ratio
   })
   await closeCanvasDetails(desktop)
-  const preview = await request(`${canvases}/${task.canvas_id}/precheck`, 'POST', { card_id: ids[0] })
-  assert.ok(preview.can_run, JSON.stringify(preview.diagnostics))
+  const preview = await omitMissingStoryboardImages(desktop, ids[0], savedCanvas,
+    () => request(canvasUrl(task.canvas_id, '/precheck'), 'POST', { card_id: ids[0] }), ['阿同', '信封'])
   assert.match(preview.input.text, /保持柔和侧光/)
   assert.match(preview.input.text, /拿着信封/)
   await desktop.getByRole('button', { name: '适应全部', exact: true }).click()

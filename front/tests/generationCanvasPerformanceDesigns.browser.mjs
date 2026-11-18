@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-performance-designs-')
-const api = 'http://127.0.0.1:8452', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8452', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8452' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -40,18 +41,18 @@ try {
   image.append('project_id', 'canvas-project'); image.append('usage_kind', 'generation_upload')
   image.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64')], {type:'image/png'}), 'reference.png')
   const file = (await (await fetch(`${api}/api/v1/studio/files/upload`, {method:'POST', body:image})).json()).data
-  const canvas = (await (await fetch(base, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:'表演与调度引用'})})).json()).data
+  const canvas = await createStoryboardCanvas(base, '表演与调度引用')
   const source = (id, port) => ({canvas_id:canvas.id, card_id:id, port_id:port, position:0})
   const edges = cases.flatMap(([id])=>['text','image'].map(port=>({id:id+port, source_card:port==='text'?'brief':'image', source_port:port, target_card:id, target_port:port})))
   edges.push({id:'legacy-image',source_card:'image',source_port:'image',target_card:'legacy',target_port:'image'})
   edges.push({id:'location',source_card:'location',source_port:'anchor',target_card:'blocking',target_port:'anchor'})
   edges.push({id:'adopt',source_card:'environment',source_port:'text',target_card:'model',target_port:'text'})
   const document = {...canvas.document, cards:[{id:'legacy',type:'direction.performance_rule',applicability:{state:'proposal',text:'旧文字 @图片1 /首帧参考'}},{id:'location',type:'direction.anchor',name:'吧台左侧',anchor_id:'location-stable',position:{state:'proposal',text:'东墙前两步'}},{id:'brief',type:'content.text',text:'吧台旁'}, {id:'image',type:'content.image',file_id:file.id}, ...cases.map(([id])=>({id,type:'direction.'+id,...(id==='anchor'?{name:'东侧位置',anchor_id:'stable'}:{})})), {id:'model',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'adopt',input_port:'text',source:source('environment','text')}]}], edges, input_order:Object.fromEntries([...cases.map(([id])=>[id,{text:[id+'text'],image:[id+'image'],...(id==='blocking'?{anchor:['location']}:{})}]),['legacy',{image:['legacy-image']}],['model',{text:['adopt']}]])}
-  const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seeded.ok,await seeded.text())
-  const read=async()=>(await(await fetch(`${base}/${canvas.id}`)).json()).data
+  const read=async()=>(await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll=async predicate=>{for(let i=0;i<100;i++){const value=await read();if(predicate(value))return value;await delay(120)}throw Error('save did not reach expected state')}
-  await page.goto(`http://127.0.0.1:4452/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4452${storyboardCanvasPath(canvas)}`)
   const detail=page.locator('.wb-details:not([hidden])')
   const close=()=>detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   const open=async id=>{await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
@@ -100,7 +101,7 @@ try {
     }
     const saved=(await read()).document.cards.find(c=>c.id===id)
     assert.equal(saved.input_bindings.length,0,'field refs do not infer participant or other relationships')
-    const published=(await(await fetch(`${base}/${canvas.id}/cards/${id}/outputs`)).json()).data.outputs.find(x=>x.source.port_id==='text')
+    const published=(await(await fetch(storyboardCanvasApi(base, canvas.id, `/cards/${id}/outputs`))).json()).data.outputs.find(x=>x.source.port_id==='text')
     assert.match(published.text,/吧台旁/)
     if(id==='blocking')assert.match(published.text,/\[设计引用：location\]/)
     assert.equal(published.payload.material_references.length,1)
@@ -113,7 +114,7 @@ try {
     await close()
     await card.getByRole('definition').filter({hasText:'@文本内容卡'}).waitFor({state:'attached'})
   }
-  const compiled=(await(await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data
+  const compiled=(await(await fetch(storyboardCanvasApi(base, canvas.id, `/cards/model/compile`))).json()).data
   assert.deepEqual(compiled.media.map(item=>item.file_id),[file.id])
   assert.match(compiled.text,/image 1/)
   assert.deepEqual((await read()).document.edges.filter(edge=>edge.target_card==='model').map(edge=>edge.source_card),['environment'],'carried media requires no extra model connections')

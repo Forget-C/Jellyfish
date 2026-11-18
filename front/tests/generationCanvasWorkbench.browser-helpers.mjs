@@ -129,11 +129,6 @@ export async function assertVisibleInDetails(locator) {
 }
 
 /** 使用真实菜单和目录入口，避免依赖旧的常驻控件。 */
-export async function openCanvasManagement(page) {
-  const trigger = page.getByRole('button', { name: '画布管理', exact: true })
-  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
-}
-
 export async function openCardList(page, category = '基础卡') {
   const details = page.locator('.wb-details:visible')
   if (await details.count() && await details.getAttribute('aria-modal') === 'true') await closeCanvasDetails(page)

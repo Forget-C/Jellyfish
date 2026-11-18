@@ -34,7 +34,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(studio + '/generation-canvases/' + project)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -107,8 +107,11 @@ try {
   assert.equal(await card('新分镜方案').getByText('最近打开', { exact: true }).count(), 0)
   await card('旧空白方案').getByText('最近打开', { exact: true }).waitFor()
   await search.fill('')
-  await card('新分镜方案').getByRole('button', { name: '新分镜方案', exact: true }).click()
+  const creation = page.getByRole('dialog', { name: '生成新分镜画布', exact: true })
+  await creation.getByRole('button', { name: '取消', exact: true }).click()
   await discard.getByRole('button', { name: '放弃配置' }).click()
+  await creation.waitFor({ state: 'hidden' })
+  await card('新分镜方案').getByRole('button', { name: '新分镜方案', exact: true }).click()
   await page.locator('[data-card-type="direction.shot"]').first().waitFor()
   await page.goBack()
   await card('新分镜方案').getByText('最近打开', { exact: true }).waitFor()
