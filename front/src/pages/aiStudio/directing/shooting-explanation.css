@@ -1,10 +1,8 @@
-.shooting-explanation-drawer,
 .shooting-review-modal { --wb-border: var(--app-border); --wb-spacing: 8px; }
-.shooting-explanation-drawer .ant-drawer-footer { border-top: 0; }
 .shooting-explanation-drawer .ant-drawer-body { display: flex; flex-direction: column; }
+.shooting-explanation-drawer .resource-editor-drawer-content { display: flex; flex: 1; min-height: 0; }
 .shooting-drawer-body { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.shooting-drawer-section { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow-wrap: anywhere; }
-.shooting-drawer-section + .shooting-drawer-section { border-top: 1px solid var(--app-border); padding-top: 12px; }
+.shooting-drawer-section { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere; padding: var(--app-detail-content-gap); background: #fff; border: 1px solid var(--app-border); border-radius: 12px; }
 .shooting-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .shooting-heading h3 { font-size: 14px; font-weight: 600; margin: 0; }
 .shooting-drawer-body p,
@@ -33,6 +31,7 @@
 .shooting-explanation-drawer .shooting-range-option { max-width: 100%; height: auto; white-space: normal; text-align: start; overflow-wrap: anywhere; }
 
 @media (max-width: 767px) {
+  .shooting-explanation-drawer .resource-editor-drawer-content { display: block; }
   .shooting-drawer-body { display: flex; flex-direction: column; flex: none; }
   .shooting-section-scroll { overflow: visible; }
   .shooting-review-compare { grid-template-columns: 1fr; }

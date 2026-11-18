@@ -1,19 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Drawer, Input, Modal, Select, Space, Spin } from 'antd'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Alert, Button, Input, Modal, Select, Space, Spin } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { ApiError, StudioDirectingService, type ShootingCheckRead, type ShootingExplanationRead, type ShootingNote, type SourceSpan, type ShootingPreparation_Input as ShootingPreparation } from '../../../services/generated'
+import { ApiError, FilmService, StudioDirectingService, type ShootingCheckRead, type ShootingExplanationRead, type ShootingNote, type SourceSpan, type ShootingPreparation_Input as ShootingPreparation } from '../../../services/generated'
 import { useWorkspaceDraft } from './WorkspaceDrafts'
 import { directingError } from './common'
 import { sameSpan, sourceSlice } from './sourceSelection'
-import { WorkbenchDialogActions } from './ui/WorkbenchModal'
+import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
 import { explanationScopes, intersectingScopes, ShootingExplanationSource } from './ShootingExplanationSource'
 import { ShootingExplanationReview } from './ShootingExplanationReview'
 import './ui/workbenchUi.css'
+import '../assets/components/resourceEditor.css'
 import './shooting-explanation.css'
 
-const notesBasis = (value: ShootingPreparation) => JSON.stringify((value.notes || []).map(note => ({ id: note.id, text: note.text, excerpt: note.excerpt || '', scope: note.scope || null, previous_scope_text: note.previous_scope_text || '', choice: note.choice || 'adopt', source: note.source || 'user' })))
 const choices = [{ value: 'adopt', label: '采用为参考' }, { value: 'delegate', label: '交由生成设计' }, { value: 'skip', label: '暂不处理' }, { value: 'review', label: '待复核' }]
-const labelDrawer = (node: HTMLDivElement | null) => node?.closest('[role="dialog"]')?.setAttribute('aria-label', '本章拍摄解释')
+const analysisTime = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
+type ReviewedResult = { taskId: string; issueIds: string[] }
+
+function readReviewedResult(key: string): ReviewedResult | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || 'null')
+    if (typeof value?.taskId === 'string' && Array.isArray(value.issueIds)) return value
+  } catch { return undefined }
+  return undefined
+}
 
 type Props = {
   projectId: string; chapterId: string; sourceVersion: string; sourceText: string
@@ -23,6 +36,7 @@ type Props = {
 /** Read the selected basis before allowing edits. */
 export function ShootingExplanationDrawer(props: Props) {
   const { projectId, chapterId, sourceVersion, onClose } = props
+  const id = useId()
   const [value, setValue] = useState<ShootingExplanationRead>()
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -34,13 +48,13 @@ export function ShootingExplanationDrawer(props: Props) {
     }).catch(cause => { if (live) setError(directingError(cause)) })
     return () => { live = false }
   }, [projectId, chapterId, sourceVersion, attempt])
-  if (value) return <ShootingExplanationEditor {...props} value={value} />
-  return <Drawer className="app-detail-drawer shooting-explanation-drawer" width="min(840px, 100vw)" title="本章拍摄解释" aria-label="本章拍摄解释" zIndex={1900} open onClose={onClose}>
-    <div ref={labelDrawer}>{error ? <Alert showIcon type="error" message={error} action={<Button onClick={() => { setError(''); setAttempt(current => current + 1) }}>重试</Button>} /> : <div className="shooting-explanation-loading" role="status" aria-label="读取拍摄解释"><Spin /></div>}</div>
-  </Drawer>
+  if (value) return <ShootingExplanationEditor {...props} id={id} value={value} />
+  return <ResourceEditorFrame id={id} open drawer drawerWidth={840} title="本章拍摄解释" backLabel="返回" onClose={onClose} actions={null}>
+    {error ? <Alert showIcon type="error" message={error} action={<Button onClick={() => { setError(''); setAttempt(current => current + 1) }}>重试</Button>} /> : <div className="shooting-explanation-loading" role="status" aria-label="读取拍摄解释"><Spin /></div>}
+  </ResourceEditorFrame>
 }
 
-function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVersion, isLatest, value, readOnly, onClose }: Props & { value: ShootingExplanationRead }) {
+function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourceVersion, isLatest, value, readOnly, onClose }: Props & { id: string; value: ShootingExplanationRead }) {
   const [baseline, setBaseline] = useState(value)
   const [conflict, setConflict] = useState<ShootingExplanationRead>()
   const [preparation, setPreparation] = useState(value.preparation)
@@ -50,6 +64,13 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
   const [editing, setEditing] = useState<{ id?: string; scope?: SourceSpan | null; preview?: SourceSpan; text: string }>()
   const [review, setReview] = useState(false)
   const [handled, setHandled] = useState<Record<string, string[]>>({})
+  const reviewKey = `jellyfish:shooting-review:${projectId}:${chapterId}:${sourceVersion}`
+  const [reviewed, setReviewed] = useState(() => readReviewedResult(reviewKey))
+  const markReviewed = (taskId: string, issueIds: string[]) => {
+    const next = { taskId, issueIds: [...new Set([...(reviewed?.taskId === taskId ? reviewed.issueIds : []), ...issueIds])] }
+    setReviewed(next)
+    try { localStorage.setItem(reviewKey, JSON.stringify(next)) } catch { return }
+  }
   const autoReview = useRef<string>()
   const intervened = useRef(false)
   const explanationList = useRef<HTMLElement>(null)
@@ -57,6 +78,7 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
   const editorCard = useRef<HTMLDivElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
   const [check, setCheck] = useState<ShootingCheckRead>()
+  const [lastStartedAt, setLastStartedAt] = useState<number>()
   const [busy, setBusy] = useState(false)
   const frozenSave = useRef<{ request_id: string; preparation: ShootingPreparation }>()
   const [uncertain, setUncertain] = useState(false)
@@ -73,6 +95,17 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
     return () => { live = false }
   }, [projectId, chapterId, sourceVersion, preparation.check_task_id, readOnly])
   const active = check?.status === 'queued' || check?.status === 'running'
+  const statusTaskId = check?.task_id
+  const status = check?.status
+  useEffect(() => {
+    if (!statusTaskId || status === 'queued') return
+    let live = true
+    const request = FilmService.getTaskStatusApiV1FilmTasksTaskIdStatusGet({ taskId: statusTaskId })
+    void request.then(({ data }) => {
+      if (live && data?.started_at_ts != null) setLastStartedAt(data.started_at_ts * 1000)
+    }).catch(() => undefined)
+    return () => { live = false; request.cancel() }
+  }, [statusTaskId, status])
   useEffect(() => {
     if (!checkId) { setCheck(undefined); return }
     let live = true
@@ -96,7 +129,7 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
   }, [check, editing, busy, uncertain, conflict])
   const dirty = !!editing || JSON.stringify(preparation) !== JSON.stringify(baseline.preparation)
   const close = () => {
-    if (uncertain) return
+    if (busy || uncertain || review) return
     if (!readOnly && dirty) Modal.confirm({ zIndex: 2000, title: '放弃未保存的拍摄解释？', okText: '放弃修改', cancelText: '继续编辑', onOk: onClose })
     else onClose()
   }
@@ -123,6 +156,7 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
       const response = await StudioDirectingService.directingShootingExplanationsSave({ projectId, chapterId, requestBody: {
         ...frozenSave.current, source_version: sourceVersion, expected_version: baseline.version } })
       if (!response.data) throw new Error('未收到保存结果')
+      if (checkId && handled[checkId]?.length) markReviewed(checkId, handled[checkId])
       frozenSave.current = undefined; setUncertain(false); onClose(); return true
     } catch (cause) {
       const unknown = !(cause instanceof ApiError && cause.status >= 400 && cause.status < 500)
@@ -189,9 +223,8 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
   const legacyScopes = scopes.filter(scope => scopes.some(other =>
     !sameSpan(scope, other) && scope.start < other.end && other.start < scope.end))
   const visibleNotes = position === undefined ? notes : notes.filter(note => note.scope && note.scope.start <= position && position < note.scope.end)
-  const covered = check?.basis_current !== false && (readOnly ? preparation.check_covered !== false : true)
-    && check?.source_text === sourceText && !!check && notesBasis(check.preparation) === notesBasis(preparation)
-  const issueCount = check?.report?.issues?.length || 0
+  const handledIds = check ? [...(handled[check.task_id] || []), ...(reviewed?.taskId === check.task_id ? reviewed.issueIds : [])] : []
+  const pendingIds = check?.report?.issues?.filter(issue => !handledIds.includes(issue.id)).map(issue => issue.id) || []
   const noteCard = (note: ShootingNote) => {
     const index = notes.findIndex(item => item.id === note.id)
     return <div key={note.id} className="shooting-card">
@@ -212,22 +245,24 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
     </div>
   }
   return <>
-    <Drawer className="app-detail-drawer shooting-explanation-drawer" width="min(840px, 100vw)"
-      title="本章拍摄解释" aria-label="本章拍摄解释" open zIndex={1900} onClose={close} closable={!busy && !uncertain}
-      keyboard={!busy && !uncertain && !review} maskClosable={false}
-      footer={<WorkbenchDialogActions secondary={<Button aria-label={readOnly ? '关闭' : '取消'} disabled={busy || uncertain} onClick={close}>{readOnly ? '关闭' : '取消'}</Button>}>
-        {!readOnly && <Button aria-label="保存" type="primary" loading={busy} disabled={!!conflict || !!editing} onClick={() => void save()}>保存</Button>}
-      </WorkbenchDialogActions>}>
-      <div className="shooting-drawer-body" ref={labelDrawer} onPointerDownCapture={() => { intervened.current = true }}
+    <ResourceEditorFrame id={id} className="shooting-explanation-drawer" drawerWidth={840}
+      title="本章拍摄解释" backLabel="返回" open drawer onClose={close}
+      actions={readOnly ? null : <Button aria-label="保存" type="primary" loading={busy} disabled={!!conflict || !!editing} onClick={() => void save()}>保存</Button>}>
+      <div className="shooting-drawer-body" onPointerDownCapture={() => { intervened.current = true }}
         onKeyDownCapture={() => { intervened.current = true }} onInputCapture={() => { intervened.current = true }}>
         <section className="shooting-drawer-section" ref={sourcePanel} aria-label="章节原文">
           <div className="shooting-heading">
             <div><h3>章节原文</h3><p className="shooting-meta">{isLatest ? '当前使用最新原文' : '当前使用历史版本原文'}</p></div>
-            {!readOnly && <Space wrap>
-              <Button loading={active} disabled={editingLocked || active || !!editing || !sourceText.trim() || notes.some(note => !note.text.trim())} onClick={() => void start()}>AI 分析全文</Button>
-              <Button icon={<PlusOutlined aria-hidden />} disabled={editingLocked || !!editing} onClick={() => begin(selection)}>选段添加解释</Button>
-            </Space>}
+            <Space wrap>
+              {lastStartedAt !== undefined && <span className="shooting-meta">
+                上次分析 <time dateTime={new Date(lastStartedAt).toISOString()}>{analysisTime.format(lastStartedAt)}</time>
+              </span>}
+              {pendingIds.length > 0 ? <Button disabled={busy || uncertain} onClick={() => setReview(true)}>查看分析结果（{pendingIds.length}）</Button>
+                : !readOnly && <Button loading={active} disabled={editingLocked || active || !!editing || !sourceText.trim() || notes.some(note => !note.text.trim())} onClick={() => void start()}>AI 分析全文</Button>}
+              {!readOnly && <Button icon={<PlusOutlined aria-hidden />} disabled={editingLocked || !!editing} onClick={() => begin(selection)}>选段添加解释</Button>}
+            </Space>
           </div>
+          {check?.error && <Alert type="warning" showIcon message={`分析失败：${check.error}`} />}
           {editing && <p role="status" className="shooting-meta">请选择连续原文，或在下方设为全章。</p>}
           <div className="shooting-section-scroll">
             <ShootingExplanationSource text={sourceText} notes={notes} focused={focused} selection={editing?.preview || selection}
@@ -244,14 +279,11 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
                   const target = returnFocus.current?.isConnected ? returnFocus.current : sourcePanel.current?.querySelector<HTMLElement>('[data-source-position]')
                   target?.scrollIntoView({ block: 'nearest' }); target?.focus({ preventScroll: true })
                 }}>返回原文</Button></>}
-              {issueCount > 0 && <Button disabled={editingLocked} onClick={() => setReview(true)}>查看分析结果（{issueCount}）</Button>}
             </Space>
           </div>
           <div className="shooting-section-scroll shooting-stack">
             {uncertain && <Alert type="warning" showIcon message="保存结果尚未确认，请再次点击保存以核对同一提交。" />}
             {error && <Alert type="error" showIcon message={error} />}
-            {check?.error && <Alert type="warning" showIcon message={`分析失败：${check.error}`} />}
-            {check?.report && <p className="shooting-meta" role="status">{issueCount ? covered ? '报告对应当前内容' : '当前解释已变动，请对照分析结果核对' : '本次分析没有发现需要确认的内容。'}</p>}
             {conflict && <Alert type="warning" showIcon message="核对其他编辑保存的内容" description={<div className="shooting-stack">
               {(conflict.preparation.notes || []).map(note => <p key={note.id}>{note.text}</p>)}
               <Space wrap><Button onClick={() => {
@@ -286,13 +318,14 @@ function ShootingExplanationEditor({ projectId, chapterId, sourceText, sourceVer
                 <strong>需整理的选段</strong>
                 {visibleNotes.filter(note => legacyScopes.some(scope => sameSpan(scope, note.scope))).map(noteCard)}
               </div>}
-            </> : <p className="shooting-meta">暂无拍摄解释。</p>}
+            </> : !editing && <p className="shooting-meta">暂无拍摄解释</p>}
           </div>
         </section>
       </div>
-    </Drawer>
+    </ResourceEditorFrame>
     {review && check?.report && <ShootingExplanationReview key={check.task_id} check={check} notes={notes}
-      readOnly={readOnly || check.source_text !== sourceText || busy || uncertain} handled={handled[check.task_id] || []}
+      readOnly={readOnly || check.source_text !== sourceText || busy || uncertain} handled={handledIds}
+      onDiscard={() => { markReviewed(check.task_id, pendingIds); setReview(false) }}
       onClose={() => setReview(false)} onApply={(updated, issueIds, keepOpen) => {
         setPreparation(current => ({ ...current, notes: updated, check_task_id: check.task_id }))
         setHandled(current => ({ ...current, [check.task_id]: [...(current[check.task_id] || []), ...issueIds] }))

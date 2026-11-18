@@ -24,7 +24,9 @@ class ControlledTextModel:
     def invoke(self, messages):
         """根据冻结的业务请求选择对应固定模型输出。"""
         arguments = json.loads(messages[1].content)
-        if 'shooting_preparation' in arguments:
+        if 'shooting_preparation' in arguments and arguments['script_text'] == '他走进前厅。':
+            payload = {'issues': []}
+        elif 'shooting_preparation' in arguments:
             payload = {'issues': [{'id': 'route', 'category': 'path', 'kind': 'optional',
                 'excerpt': '前厅点灯。', 'problem': '点灯动作可以补充说明', 'suggestion': '人物走到灯旁再点灯',
                 'proposed_change': 'add'}]}

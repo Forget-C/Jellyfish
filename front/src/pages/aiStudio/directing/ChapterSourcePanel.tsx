@@ -8,7 +8,7 @@ import { directingError, excerptMatches } from './common'
 import { sourceSlice } from './sourceSelection'
 import { analysisDivision, divisionBaselineMatches, divisionRequest, initialDivision, orderedDivisionMembers, versionDivision, type ChapterDivisionDraft } from './chapterDivision'
 import { ChapterDivisionEditor, type DivisionInteraction, type DivisionInteractionStatus } from './ChapterDivisionEditor'
-import { DivisionHistoryModal, type DivisionHistorySelection } from './DivisionHistoryModal'
+import { DivisionHistoryDrawer, type DivisionHistorySelection } from './DivisionHistoryDrawer'
 import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 
 type Editor = { chapter: ChapterSequences; draft: ChapterDivisionDraft; history?: DivisionVersionDetail }
@@ -288,9 +288,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
     {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>保存为新版本</Button>}
   </Space>
-  return <div className="chapter-division" onKeyDownCapture={event => {
-    if (historyOpen && event.key === 'Escape') { event.stopPropagation(); setHistoryOpen(false) }
-  }}>
+  return <div className="chapter-division">
     {interaction.blocked && <Alert type="info" message={interaction.blocked} />}
     {readFailure}{error && <Alert type="error" showIcon message={error} />}{notice && <Alert type="info" message={notice} />}
     {analysisError && <Alert type="warning" message={`分析状态读取失败，正在重试读取：${analysisError}`} />}
@@ -324,7 +322,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       <p>使用最新原文后需核对场次范围；沿用原版本可继续维护已有场次及该版拍摄解释。</p>
       {error && <Alert type="error" message={error} />}
     </Modal>
-    <DivisionHistoryModal open={historyOpen || !!targetTask} targetTask={targetTask} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh}
+    <DivisionHistoryDrawer open={historyOpen || !!targetTask} targetTask={targetTask} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh}
       onClose={() => { setHistoryOpen(false); if (targetTask) onCloseTask?.() }}
       onView={detail => { if (busy || pendingSave) return; epoch.current++; setViewing(detail); setHistoryActiveId(detail.chapter.sequences[0]?.id); setHistoryOpen(false) }} onLoad={loadHistory} />
     <Modal zIndex={2100} title="划分变更预览" open={!!preview && !pendingSave} width={800} onCancel={() => { setPreview(undefined); saveApproval.current?.(false); saveApproval.current = undefined }} footer={<Space wrap>

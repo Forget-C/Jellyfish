@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Alert, Button, Modal, Space, Spin, Table, Tag } from 'antd'
 import { FilmService, StudioDirectingService, type DivisionAnalysisDetail, type DivisionHistoryEntry, type DivisionHistoryPage, type DivisionReceiptDetail, type DivisionVersionDetail } from '../../../services/generated'
 import { directingError } from './common'
+import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
+import '../assets/components/resourceEditor.css'
 
 export type DivisionHistorySelection = { kind: 'version'; detail: DivisionVersionDetail } | { kind: 'analysis'; detail: DivisionAnalysisDetail }
 type HistoryDetail = DivisionHistorySelection | { kind: 'receipt'; detail: DivisionReceiptDetail }
@@ -10,11 +12,12 @@ const statuses: Record<string, string> = { queued: '等待执行', running: '分
 const statusLabel = (row: DivisionHistoryEntry) => row.status === 'succeeded' ? (row.save_relation === 'unknown' ? '保存关系未知' : row.save_relation === 'saved' ? '已保存' : '待保存方案') : statuses[row.status] || row.status
 
 /** 摘要分页、展开才读正文；查看和载入均由父页面维护草稿保护。 */
-export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, onClose, onView, onLoad, targetTask }: {
+export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, onClose, onView, onLoad, targetTask }: {
   open: boolean; projectId: string; chapterId: string; refreshKey: number; onClose: () => void
   targetTask?: string | null
   onView: (detail: DivisionVersionDetail) => void; onLoad: (selection: DivisionHistorySelection) => void
 }) {
+  const drawerId = useId()
   const [page, setPage] = useState(1)
   const [data, setData] = useState<DivisionHistoryPage>()
   const [loading, setLoading] = useState(false)
@@ -134,7 +137,8 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
       action={<Button onClick={() => setRetry(value => value + 1)}>重试详情</Button>} />
       : target?.kind === 'analysis' ? renderDetail(target.detail.analysis) : <Spin aria-label="正在读取划分任务" />}
   </Modal>
-  return <Modal title="历史版本" open={open} width={1000} onCancel={onClose} footer={<Button aria-label="关闭" onClick={onClose}>关闭</Button>}>
+  return <ResourceEditorFrame id={drawerId} title="历史版本" drawer open={open} drawerWidth={900}
+    backLabel="关闭" onClose={onClose} actions={null}>
     {error && <Alert type="error" message={error} action={<Button onClick={() => setRetry(value => value + 1)}>重试列表</Button>} />}
     <Table<DivisionHistoryEntry> className="division-history-table" size="small" loading={loading} dataSource={data?.items || []} rowKey={row => `${row.kind}:${row.id}`}
       locale={{ emptyText: '暂无历史版本或分析记录' }} pagination={{ current: page, pageSize: 10, total: data?.total || 0, showSizeChanger: false, onChange: setPage }}
@@ -150,5 +154,5 @@ export function DivisionHistoryModal({ open, projectId, chapterId, refreshKey, o
           catch (cause) { setError(directingError(cause)) }
         }}>取消分析</Button> : <Button size="small" aria-label="展开" onClick={() => { setExpanded(keys => [...new Set([...keys, `${row.kind}:${row.id}`])]); void readDetail(row) }}>展开</Button> },
       ]} />
-  </Modal>
+  </ResourceEditorFrame>
 }

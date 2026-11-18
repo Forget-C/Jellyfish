@@ -22,12 +22,12 @@ function candidate(row: Row): boolean {
     && (row.issue.proposed_change !== 'update' || !!row.target)
 }
 
-export function ShootingExplanationReview({ check, notes, readOnly, handled, onClose, onApply }: {
+export function ShootingExplanationReview({ check, notes, readOnly, handled, onClose, onDiscard, onApply }: {
   check: ShootingCheckRead; notes: ShootingNote[]; readOnly: boolean; handled: string[]
-  onClose: () => void; onApply: (notes: ShootingNote[], issueIds: string[], keepOpen: boolean) => void
+  onClose: () => void; onDiscard: () => void; onApply: (notes: ShootingNote[], issueIds: string[], keepOpen: boolean) => void
 }) {
   const text = check.source_text
-  const [rows, setRows] = useState<Row[]>(() => (check.report?.issues || []).map(issue => {
+  const [rows, setRows] = useState<Row[]>(() => (check.report?.issues || []).filter(issue => !handled.includes(issue.id)).map(issue => {
     const target = issue.proposed_change === 'update' ? notes.find(note => note.id === issue.note_id) : undefined
     const matches = issue.excerpt ? excerptMatches(text, issue.excerpt) : []
     return { issue, target, text: issue.suggestion || '', selected: false,
@@ -66,9 +66,10 @@ export function ShootingExplanationReview({ check, notes, readOnly, handled, onC
     if (keepOpen) setRows(current => current.map(row => ids.includes(row.issue.id) ? { ...row, selected: false } : row))
     onApply(result, ids, keepOpen)
   }
-  return <Modal open centered width={880} zIndex={1980} className="management-scene-dialog shooting-review-modal"
+  return <Modal open centered width={840} zIndex={1980} className="management-scene-dialog shooting-review-modal"
     title="核对 AI 拍摄解释" onCancel={onClose} maskClosable={false}
-    footer={<WorkbenchDialogActions secondary={<Button onClick={onClose}>返回解释</Button>}>
+    footer={<WorkbenchDialogActions secondary={<Space wrap><Button onClick={onClose}>返回解释</Button>
+      {!readOnly && <Button type="text" danger onClick={onDiscard}>丢弃剩余结果</Button>}</Space>}>
       {!readOnly && <Button type="primary" disabled={!applicable.length} onClick={apply}>将选中项加入草稿（{applicable.length}）</Button>}
     </WorkbenchDialogActions>}>
     <div className="shooting-stack">
