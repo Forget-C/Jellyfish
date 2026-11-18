@@ -4,3 +4,11 @@ export function generationCanvasLocation(canvasId: string, parameters = new URLS
   query.delete('tab')
   return `/canvases/${encodeURIComponent(canvasId)}${query.size ? `?${query}` : ''}`
 }
+
+/** 关闭运行历史只消费本次定位，保留宿主与其他面板参数。 */
+export function withoutRunTarget(parameters: URLSearchParams) {
+  const next = new URLSearchParams(parameters)
+  next.delete('run')
+  next.delete('node')
+  return next
+}
