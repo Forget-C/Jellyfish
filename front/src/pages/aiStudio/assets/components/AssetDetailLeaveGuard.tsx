@@ -68,10 +68,17 @@ function AssetLeaveDialog({ closeRequested = false, onContinue, onClose, dirty, 
 
 function StandaloneAssetLeaveGuard(props: Props) {
   const { dirty, busy, detecting, partialSave } = props
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search)
-    && (dirty || busy || detecting || partialSave),
-  )
+  const blocker = useBlocker(({ currentLocation, nextLocation, historyAction }) => {
+    // The list can repaginate after a save or resize while its drawer stays open.
+    if (historyAction === 'REPLACE' && currentLocation.pathname === '/assets'
+      && nextLocation.pathname === '/assets' && nextLocation.state?.assetLibraryPagination) {
+      const currentTab = new URLSearchParams(currentLocation.search).get('tab') ?? 'actor'
+      const nextTab = new URLSearchParams(nextLocation.search).get('tab') ?? 'actor'
+      if (currentTab === nextTab) return false
+    }
+    return (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search)
+      && (dirty || busy || detecting || partialSave)
+  })
   useBeforeUnload(useCallback(event => {
     if (dirty || busy || detecting || partialSave) { event.preventDefault(); event.returnValue = '' }
   }, [dirty, busy, detecting, partialSave]))

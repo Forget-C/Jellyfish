@@ -77,6 +77,8 @@ async def list_entities_paginated(
         allow_fields=ENTITY_ORDER_FIELDS,
         default="created_at",
     )
+    if project_id is None and entity_type_norm in {"actor", "scene", "prop", "costume"}:
+        stmt = stmt.order_by(spec.model.id)
     items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
 
     thumbnails = await resolve_thumbnails(

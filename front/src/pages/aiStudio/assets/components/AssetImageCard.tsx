@@ -38,11 +38,12 @@ function preferredImage(images: AssetImage[]) {
 }
 
 /** 资产库卡片提供封面预览和详情入口，档案和项目卡片由各自组件负责。 */
-export function AssetImageCard({ asset, assetType, label, editPath, onDelete }: {
+export function AssetImageCard({ asset, assetType, label, editPath, onOpen, onDelete }: {
   asset: LibraryAsset
   assetType: LibraryAssetType
   label: string
   editPath: string
+  onOpen: () => void
   onDelete: () => void
 }) {
   const adapter = assetAdapters[assetType]
@@ -93,7 +94,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onDelete }: 
       <div className="asset-library-card-content">
         <div className="project-resource-title-row">
         <h2>
-          <Link to={editPath} className="asset-library-name">
+          <Link to={editPath} className="asset-library-name" data-library-asset={asset.id} onClick={onOpen}>
             <span title={asset.name}>{asset.name}</span><ArrowRightOutlined aria-hidden="true" />
           </Link>
         </h2>
