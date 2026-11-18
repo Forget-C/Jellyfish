@@ -59,8 +59,8 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
         scene = await client.post(base + '/sequences', json={'title': '场次', 'position': 0,
             'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
         assert scene.status_code == 200, scene.text
-        prep = await client.put(base + '/sequences/' + scene.json()['data']['id'] + '/shooting-preparation',
-            json={'request_id': 'prep-save', 'expected_version': scene.json()['data']['version'],
+        prep = await client.put(base + '/shooting-explanations',
+            json={'request_id': 'prep-save', 'expected_version': 0, 'source_version': chapter['source_version'],
                   'preparation': {'notes': [{'id': 'carry', 'text': '切换细节时人物仍在场'}]}})
         assert prep.status_code == 200, prep.text
         path = base + '/sequences/' + scene.json()['data']['id'] + '/storyboards'
@@ -320,6 +320,10 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
             'source_version': chapter['source_version'], 'span': {'start': 0, 'end': len(original)}})
         assert scene.status_code == 200, scene.text
         path = base + '/sequences/' + scene.json()['data']['id'] + '/storyboards'
+        note = {'id': 'space', 'text': '动作之间维持人物位置', 'scope': {'start': 0, 'end': 2}}
+        stored = await client.put(base + '/shooting-explanations', json={'request_id': 'local-explanation',
+            'expected_version': 0, 'source_version': chapter['source_version'], 'preparation': {'notes': [note]}})
+        assert stored.status_code == 200, stored.text
         worker = TaskWorker(sessions)
         try:
             async def extract(request_id, **config):
@@ -335,6 +339,7 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
             assert expanded['status'] == 'succeeded', expanded
             candidate = expanded['candidate']
             assert candidate['document']['storyboard']['mode'] == 'complete'
+            assert candidate['document']['fixed_source']['shooting_notes'][0]['text'] == note['text']
             canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + expanded['canvas_id']
             applied = await client.put(canvas_path, json={'request_id': 'storyboard:' + expanded['task_id'],
                 'expected_revision': candidate['base_revision'], 'document': candidate['document']})
@@ -355,6 +360,7 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
             faithful = await extract('explicit-faithful', mode='faithful')
             assert faithful['status'] == 'succeeded', faithful
             assert faithful['candidate']['document']['storyboard']['mode'] == 'faithful'
+            assert faithful['candidate']['document']['fixed_source']['shooting_notes'][0]['text'] == note['text']
             assert not any(card['type'] == 'direction.camera' for card in faithful['candidate']['document']['cards'])
             assert calls == ['complete', 'complete', 'faithful', 'faithful']
 

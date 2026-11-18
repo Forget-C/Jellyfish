@@ -55,7 +55,8 @@
 - [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
 - [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
 - [原文异常修复与补充解释的边界](adr/0011-chapter-source-explanations.md)
-- [分镜生成前拍摄准备的归属与固定采用（已在本地实现）](adr/0012-pre-generation-shooting-preparation.md)
+- [分镜生成前拍摄准备的归属与固定采用（历史决策）](adr/0012-pre-generation-shooting-preparation.md)
+- [拍摄解释按章节原文版本维护](adr/0013-chapter-shooting-explanations.md)
 
 ## 开发与维护指南
 

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type MutableRefObject, type FocusEvent } from 'react'
 import { Button, Drawer, Input, Modal, Select, Space, Tooltip, Alert, message, Dropdown } from 'antd'
-import { PlusOutlined, SelectOutlined, ScissorOutlined, MergeCellsOutlined, EditOutlined, CheckOutlined, CloseOutlined, UndoOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { PlusOutlined, SelectOutlined, ScissorOutlined, MergeCellsOutlined, EditOutlined, CheckOutlined, CloseOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ChapterSequences, DivisionBaseline, SequenceRead, SourceSpan } from '../../../services/generated'
 import { ChapterSourceSelection } from './ChapterSourceSelection'
-import { WorkbenchIconButton } from './ui/WorkbenchButton'
 import { WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { excerptMatches } from './common'
 import { orderedDivisionMembers, removeDivisionMember, type ChapterDivisionDraft } from './chapterDivision'
@@ -15,10 +14,9 @@ export type DivisionInteraction = { prepare: () => ChapterDivisionDraft | undefi
 export type DivisionInteractionStatus = { dirty: boolean; blocked?: string }
 
 /** 手动、AI 和历史方案共用原文选区与场次编辑；历史浏览只改变选中项。 */
-export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, activeId, onActive, onChange, interactionRef, onInteractionChange, readOnly = false, management = false, busy = false, historicalMembers = [], restoredBaseline = [], onPreparation }: {
+export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, activeId, onActive, onChange, interactionRef, onInteractionChange, readOnly = false, management = false, busy = false, historicalMembers = [], restoredBaseline = [] }: {
   projectId: string; chapter: ChapterSequences; draft: ChapterDivisionDraft; activeId?: string
   interactionRef?: MutableRefObject<DivisionInteraction | undefined>; onInteractionChange?: (status: DivisionInteractionStatus) => void
-  onPreparation?: (key: string) => void
   onActive: (id?: string) => void
   onChange: (draft: ChapterDivisionDraft) => void; readOnly?: boolean; management?: boolean; busy?: boolean; historicalMembers?: SequenceRead[]; restoredBaseline?: DivisionBaseline[]
 }) {
@@ -195,7 +193,6 @@ export function ChapterDivisionEditor({ projectId, chapter, draft: inputDraft, a
           </> : <>
             <Button className="chapter-scene-select" aria-pressed={current?.key === row.key} onClick={() => selectScene(row.key)}>{index + 1}. {row.title || '未命名'}{!row.span ? ' · 待定位' : ''}</Button>
             {!readOnly && <Button aria-label="编辑场次名称" icon={<EditOutlined aria-hidden />} onClick={() => transition(() => { onActive(row.key); setRename({ key: row.key, value: row.title, original: row.title }) })} />}
-            {onPreparation && <WorkbenchIconButton label="拍摄准备" icon={<VideoCameraOutlined aria-hidden />} onClick={() => transition(() => { onActive(row.key); onPreparation(row.key) })} />}
           </>}
         </div>
         {rename?.key === row.key && nameError && <small role="alert">{nameError}</small>}

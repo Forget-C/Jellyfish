@@ -2,16 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ShootingPreparation } from './ShootingPreparation';
-/**
- * 草稿可无场次数据库身份；检查冻结实际摘录和说明。
- */
+import type { ShootingPreparation_Input } from './ShootingPreparation_Input';
 export type ShootingCheckRequest = {
     request_id: string;
-    draft_key: string;
-    source_text: string;
-    preparation?: ShootingPreparation;
-    source_version?: (string | null);
-    source_start?: (number | null);
+    source_version: string;
+    preparation?: ShootingPreparation_Input;
     model_id?: (string | null);
 };

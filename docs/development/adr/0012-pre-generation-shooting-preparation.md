@@ -1,11 +1,11 @@
 ---
 title: 分镜生成前拍摄准备的归属与固定采用
-status: accepted
+status: superseded by ADR-0013
 ---
 
 # 分镜生成前拍摄准备的归属与固定采用
 
-2026-11-17，完整方案已最终确认，已在本地实现。概念见[术语表](../../../GLOSSARY.md)。
+2026-11-17，完整方案已最终确认并实现。章节拍摄解释的归属与维护方式见 [ADR 0013](0013-chapter-shooting-explanations.md)。概念见[术语表](../../../GLOSSARY.md)。
 
 ## 检查与说明的边界
 

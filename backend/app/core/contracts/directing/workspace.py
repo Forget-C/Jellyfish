@@ -5,7 +5,6 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, Role
-from app.core.contracts.directing.shooting_preparation import ShootingPreparation
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
@@ -62,7 +61,14 @@ class SequenceRead(Contract):
     source_text: str
     source_changed: bool
     is_current: bool = True
-    shooting_preparation: ShootingPreparation = Field(default_factory=ShootingPreparation)
+
+    @model_validator(mode='before')
+    @classmethod
+    def ignore_legacy_shooting_preparation(cls, data):
+        """Historical division snapshots may contain retired scene-level data."""
+        if isinstance(data, dict) and 'shooting_preparation' in data:
+            return {key: value for key, value in data.items() if key != 'shooting_preparation'}
+        return data
 
 
 class DivisionVersionRef(Contract):

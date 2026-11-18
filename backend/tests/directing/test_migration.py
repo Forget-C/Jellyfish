@@ -133,7 +133,12 @@ def test_foundation_migration_and_next_upgrade():
         shooting = revision_module('f7a3c9e215b0_scene_shooting_preparation.py')
         shooting.op = migration.op
         shooting.upgrade()
-        assert connection.scalar(sa.text("SELECT shooting_preparation FROM directing_sequences WHERE id='seq'")) is None
+        connection.execute(sa.text("UPDATE directing_sequences SET shooting_preparation='{}' WHERE id='seq'"))
+        explanations = revision_module('a8d42f5e620c_chapter_shooting_explanations.py')
+        explanations.op = migration.op
+        explanations.upgrade()
+        assert 'shooting_preparation' not in {column['name'] for column in sa.inspect(connection).get_columns('directing_sequences')}
+        assert connection.scalar(sa.text('SELECT COUNT(*) FROM directing_chapter_shooting_explanations')) == 0
         assert not compare_metadata(context, Base.metadata)
         for statement in (
             "INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('bad','missing',1,'scene','{}',1)",

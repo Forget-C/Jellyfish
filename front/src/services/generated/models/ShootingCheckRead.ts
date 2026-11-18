@@ -3,13 +3,14 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ShootingCheckReport } from './ShootingCheckReport';
-import type { ShootingPreparation } from './ShootingPreparation';
+import type { ShootingPreparation_Output } from './ShootingPreparation_Output';
 export type ShootingCheckRead = {
     task_id: string;
     status: string;
     error?: (string | null);
     source_text: string;
-    preparation: ShootingPreparation;
+    preparation: ShootingPreparation_Output;
     report?: (ShootingCheckReport | null);
     basis_current?: boolean;
+    previous_scope_text?: string;
 };

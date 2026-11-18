@@ -4,9 +4,9 @@
 /* eslint-disable */
 import type { ShootingNote } from './ShootingNote';
 /**
- * 随场次版本保存的说明与报告引用；报告原文由任务保存。
+ * 按原文版本保存的解释与报告引用。
  */
-export type ShootingPreparation = {
+export type ShootingPreparation_Output = {
     notes?: Array<ShootingNote>;
     check_task_id?: (string | null);
     check_covered?: (boolean | null);

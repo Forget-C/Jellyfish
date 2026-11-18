@@ -15,9 +15,9 @@ export function StoryboardBasisPreview({ basis, useSaved, onUseSaved, onRefresh,
       <summary>{sourceLabel}</summary>
       {compact ? <Typography.Paragraph className="management-excerpt" ellipsis={{ rows: 6, expandable: true, symbol: '展开全文' }}>{basis.source_text}</Typography.Paragraph> : <p className="management-excerpt">{basis.source_text}</p>}
     </details>
-    {!!basis.shooting_notes?.length && <details open><summary>本次采用的场次拍摄说明</summary>
+    {!!basis.shooting_notes?.length && <details open><summary>本次采用的拍摄解释</summary>
       <ul>{basis.shooting_notes.map((note, index) => <li key={note.id || index}>{note.choice === 'delegate' ? '交由生成设计：' : ''}{note.text}</li>)}</ul>
-      <p>作为场次参考说明使用。</p>{!readOnly && <Button size="small" onClick={onOpenSource}>编辑场次拍摄说明</Button>}
+      {!readOnly && <Button size="small" onClick={onOpenSource}>编辑拍摄解释</Button>}
     </details>}
     {basis.preparation_stale ? <Alert showIcon type="warning" message="已保存对象与当前场次摘录不符，请先刷新对象准备。"
       action={!readOnly && <Button size="small" onClick={onOpenObjects}>前往对象与参考</Button>} />

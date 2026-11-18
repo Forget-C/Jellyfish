@@ -72,6 +72,7 @@ import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_S
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_ShootingCheckRead_ } from '../models/ApiResponse_ShootingCheckRead_';
+import type { ApiResponse_ShootingExplanationRead_ } from '../models/ApiResponse_ShootingExplanationRead_';
 import type { ApiResponse_StoryboardBasis_ } from '../models/ApiResponse_StoryboardBasis_';
 import type { ApiResponse_StoryboardDiff_ } from '../models/ApiResponse_StoryboardDiff_';
 import type { ApiResponse_StoryboardRetryBasis_ } from '../models/ApiResponse_StoryboardRetryBasis_';
@@ -130,7 +131,7 @@ import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootingCheckRequest } from '../models/ShootingCheckRequest';
-import type { ShootingPreparationSave } from '../models/ShootingPreparationSave';
+import type { ShootingExplanationSave } from '../models/ShootingExplanationSave';
 import type { ShootRequest } from '../models/ShootRequest';
 import type { SourceResolveRequest } from '../models/SourceResolveRequest';
 import type { StoryboardApplication } from '../models/StoryboardApplication';
@@ -200,18 +201,18 @@ export class StudioDirectingService {
     }
     /**
      * Shooting Check Latest
-     * 重开场次弹窗时发现最近一次检查。
+     * 按原文版本读取最近一次整章检查。
      * @returns ApiResponse_Union_ShootingCheckRead__NoneType__ Successful Response
      * @throws ApiError
      */
     public static directingShootingCheckLatest({
         projectId,
         chapterId,
-        draftKey,
+        sourceVersion,
     }: {
         projectId: string,
         chapterId: string,
-        draftKey: string,
+        sourceVersion: string,
     }): CancelablePromise<ApiResponse_Union_ShootingCheckRead__NoneType__> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -221,7 +222,7 @@ export class StudioDirectingService {
                 'chapter_id': chapterId,
             },
             query: {
-                'draft_key': draftKey,
+                'source_version': sourceVersion,
             },
             errors: {
                 422: `Validation Error`,
@@ -230,7 +231,7 @@ export class StudioDirectingService {
     }
     /**
      * Shooting Check Submit
-     * 检查生成前场次草稿，不创建目标画布。
+     * 检查整章原文及其拍摄解释。
      * @returns ApiResponse_ShootingCheckRead_ Successful Response
      * @throws ApiError
      */
@@ -286,29 +287,56 @@ export class StudioDirectingService {
         });
     }
     /**
-     * Save Shooting Preparation
-     * 即时保存指定场次拍摄说明，并生成新划分版本。
-     * @returns ApiResponse_ChapterSequences_ Successful Response
+     * Shooting Explanations
+     * 读取当前选择的原文版本的拍摄解释。
+     * @returns ApiResponse_ShootingExplanationRead_ Successful Response
      * @throws ApiError
      */
-    public static directingShootingPreparationSave({
+    public static directingShootingExplanations({
         projectId,
         chapterId,
-        sequenceId,
+        sourceVersion,
+    }: {
+        projectId: string,
+        chapterId: string,
+        sourceVersion: string,
+    }): CancelablePromise<ApiResponse_ShootingExplanationRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/shooting-explanations',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            query: {
+                'source_version': sourceVersion,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Shooting Explanations
+     * 独立保存拍摄解释。
+     * @returns ApiResponse_ShootingExplanationRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingShootingExplanationsSave({
+        projectId,
+        chapterId,
         requestBody,
     }: {
         projectId: string,
         chapterId: string,
-        sequenceId: string,
-        requestBody: ShootingPreparationSave,
-    }): CancelablePromise<ApiResponse_ChapterSequences_> {
+        requestBody: ShootingExplanationSave,
+    }): CancelablePromise<ApiResponse_ShootingExplanationRead_> {
         return __request(OpenAPI, {
             method: 'PUT',
-            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/sequences/{sequence_id}/shooting-preparation',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/shooting-explanations',
             path: {
                 'project_id': projectId,
                 'chapter_id': chapterId,
-                'sequence_id': sequenceId,
             },
             body: requestBody,
             mediaType: 'application/json',

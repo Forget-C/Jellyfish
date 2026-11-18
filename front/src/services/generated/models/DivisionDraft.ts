@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { DivisionBaseline } from './DivisionBaseline';
 import type { DivisionLineage } from './DivisionLineage';
-import type { DivisionMember_Input } from './DivisionMember_Input';
+import type { DivisionMember } from './DivisionMember';
 /**
  * 最终整章方案；遗漏不等于退出，所有旧身份必须保留或明确退出。
  */
@@ -16,7 +16,7 @@ export type DivisionDraft = {
     restored_baseline?: Array<DivisionBaseline>;
     history_reconfirmed?: boolean;
     baseline: Array<DivisionBaseline>;
-    members: Array<DivisionMember_Input>;
+    members: Array<DivisionMember>;
     exited_sequence_ids: Array<string>;
     lineage: Array<DivisionLineage>;
 };

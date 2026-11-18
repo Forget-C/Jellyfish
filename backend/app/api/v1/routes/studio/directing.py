@@ -11,7 +11,7 @@ from app.core.contracts.directing.workspace import (
 from app.core.contracts.directing.division import DivisionDraft, DivisionPreview, DivisionSave, DivisionSaved
 from app.services.directing.division import DivisionService
 from app.services.directing.shooting_preparation import ShootingPreparationService
-from app.core.contracts.directing.shooting_preparation import ShootingPreparationSave, ShootingCheckRequest, ShootingCheckRead
+from app.core.contracts.directing.shooting_preparation import ShootingExplanationSave, ShootingExplanationRead, ShootingCheckRequest, ShootingCheckRead
 from app.core.contracts.directing.workbench_management import ChapterWorkbenchManagement
 from app.services.directing.workbench_management import WorkbenchManagementService
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead
@@ -104,17 +104,17 @@ async def chapter(project_id: str, chapter_id: str, db: AsyncSession = Depends(g
 
 @router.get("/chapters/{chapter_id}/shooting-checks", response_model=ApiResponse[ShootingCheckRead | None],
             operation_id="directing_shooting_check_latest")
-async def shooting_check_latest(project_id: str, chapter_id: str, draft_key: str = Query(min_length=1, max_length=64),
+async def shooting_check_latest(project_id: str, chapter_id: str, source_version: str = Query(min_length=1, max_length=64),
                                  db: AsyncSession = Depends(get_db, scope="function")):
-    """重开场次弹窗时发现最近一次检查。"""
-    return success_response(await _call(ShootingPreparationService(db, project_id).latest_check(chapter_id, draft_key)))
+    """按原文版本读取最近一次整章检查。"""
+    return success_response(await _call(ShootingPreparationService(db, project_id).latest_check(chapter_id, source_version)))
 
 
 @router.post("/chapters/{chapter_id}/shooting-checks", response_model=ApiResponse[ShootingCheckRead],
              operation_id="directing_shooting_check_submit")
 async def shooting_check_submit(project_id: str, chapter_id: str, body: ShootingCheckRequest,
                                  db: AsyncSession = Depends(get_db, scope="function")):
-    """检查生成前场次草稿，不创建目标画布。"""
+    """检查整章原文及其拍摄解释。"""
     return success_response(await _call(ShootingPreparationService(db, project_id).submit_check(chapter_id, body)))
 
 
@@ -126,12 +126,20 @@ async def shooting_check_read(project_id: str, chapter_id: str, task_id: str,
     return success_response(await _call(ShootingPreparationService(db, project_id).read_check(chapter_id, task_id)))
 
 
-@router.put("/chapters/{chapter_id}/sequences/{sequence_id}/shooting-preparation",
-            response_model=ApiResponse[ChapterSequences], operation_id="directing_shooting_preparation_save")
-async def save_shooting_preparation(project_id: str, chapter_id: str, sequence_id: str,
-                                    body: ShootingPreparationSave, db: AsyncSession = Depends(get_db, scope="function")):
-    """即时保存指定场次拍摄说明，并生成新划分版本。"""
-    return success_response(await _call(ShootingPreparationService(db, project_id).save_preparation(chapter_id, sequence_id, body)))
+@router.get("/chapters/{chapter_id}/shooting-explanations",
+            response_model=ApiResponse[ShootingExplanationRead], operation_id="directing_shooting_explanations")
+async def shooting_explanations(project_id: str, chapter_id: str, source_version: str = Query(min_length=1, max_length=64),
+                                db: AsyncSession = Depends(get_db, scope="function")):
+    """读取当前选择的原文版本的拍摄解释。"""
+    return success_response(await _call(ShootingPreparationService(db, project_id).read_preparation(chapter_id, source_version)))
+
+
+@router.put("/chapters/{chapter_id}/shooting-explanations",
+            response_model=ApiResponse[ShootingExplanationRead], operation_id="directing_shooting_explanations_save")
+async def save_shooting_explanations(project_id: str, chapter_id: str,
+                                     body: ShootingExplanationSave, db: AsyncSession = Depends(get_db, scope="function")):
+    """独立保存拍摄解释。"""
+    return success_response(await _call(ShootingPreparationService(db, project_id).save_preparation(chapter_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases",

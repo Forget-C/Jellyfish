@@ -4,11 +4,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Boolean, Computed, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, Index, JSON, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.mysql import DATETIME
+from sqlalchemy.dialects.mysql import DATETIME, MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
+
+
+def revision_created_at() -> datetime:
+    """应用侧保存微秒创建时间，保证连续创建版本的展示顺序。"""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Sequence(Base, TimestampMixin):
@@ -27,13 +32,28 @@ class Sequence(Base, TimestampMixin):
     source_end: Mapped[int | None] = mapped_column(Integer)
     source_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("('')"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    shooting_preparation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     object_preparation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("chapter_id", "current_position", name="uq_directing_sequence_current_position"),
         CheckConstraint("position >= 0 AND version > 0", name="ck_directing_sequence_numbers"),
     )
+
+
+class ChapterShootingExplanation(Base, TimestampMixin):
+    """One editable explanation set per chapter source version."""
+
+    __tablename__ = 'directing_chapter_shooting_explanations'
+
+    chapter_id: Mapped[str] = mapped_column(ForeignKey('chapters.id', ondelete='CASCADE'), primary_key=True)
+    source_version: Mapped[str] = mapped_column(String(64), primary_key=True)
+    raw_text: Mapped[str] = mapped_column(Text().with_variant(MEDIUMTEXT(), 'mysql'), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    preparation: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    last_request_id: Mapped[str | None] = mapped_column(String(64))
+    last_request_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'),
+                                                default=revision_created_at, server_default=func.now(), nullable=False)
 
 
 class DivisionCommit(Base, TimestampMixin):
@@ -45,11 +65,6 @@ class DivisionCommit(Base, TimestampMixin):
     request_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-
-
-def revision_created_at() -> datetime:
-    """应用侧保存微秒创建时间，保证连续创建版本的展示顺序。"""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class DivisionVersion(Base):

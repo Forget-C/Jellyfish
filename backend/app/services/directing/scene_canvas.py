@@ -16,6 +16,7 @@ from app.services.chapters.explanations import explanation_basis
 from app.schemas.generation_canvas import CanvasFixedSource, CanvasRead, CreativeBasisCard
 from app.services.directing.storyboard_assembly import STORYBOARD_KIND
 from app.services.directing.storyboard_review import review_state
+from app.services.directing.shooting_explanations import scene_shooting_notes
 from app.services.directing.workspace import WorkspaceService
 from app.services.generation_canvas.store import CanvasStore, SceneCanvasSeed
 
@@ -168,8 +169,7 @@ class SceneCanvasService(WorkspaceService):
             sequence_id=sequence.id, basis=basis, canvas_id=canvas_id, fixed_source=CanvasFixedSource(
                 card_id=basis.id, chapter_id=chapter.id, chapter_version=source.version,
                 source_explanations=explanation_basis(chapter)["items"] if source.version == sha256(chapter.raw_text.encode()).hexdigest() else [],
-                shooting_notes=[note for note in (sequence.shooting_preparation or {}).get('notes', [])
-                                if note.get('choice', 'adopt') in ('adopt', 'delegate')])))
+                shooting_notes=await scene_shooting_notes(self.db, sequence))))
         result = await store.read(canvas.id)
         if digest:
             self.db.add(CanvasSaveReceipt(canvas_id=canvas.id, request_id='scene-blank-create', request_hash=digest,

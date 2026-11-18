@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import ChapterSequences, DivisionVersionRef
-from app.models.directing import DivisionHead, DivisionVersion
+from app.models.directing import ChapterShootingExplanation, DivisionHead, DivisionVersion
+from app.services.directing.shooting_explanations import inherited_preparation
 
 
 async def current_version(db: AsyncSession, chapter_id: str, *, locked: bool = False) -> DivisionVersionRef | None:
@@ -27,6 +28,13 @@ async def record_version(db: AsyncSession, snapshot: ChapterSequences, *, origin
                          make_current: bool = True, created_at: datetime | None = None) -> ChapterSequences:
     """调用者须持章节锁并位于保存点内；快照、指向和业务写入一起回滚。"""
     head = await db.get(DivisionHead, snapshot.chapter_id, populate_existing=True, with_for_update=True)
+    if make_current and origin not in ('restore', 'baseline') and await db.get(
+            ChapterShootingExplanation, (snapshot.chapter_id, snapshot.source_version), with_for_update=True) is None:
+        value = await inherited_preparation(db, snapshot.chapter_id, snapshot.source_version, snapshot.raw_text, locked=True)
+        if value.notes:
+            db.add(ChapterShootingExplanation(chapter_id=snapshot.chapter_id,
+                source_version=snapshot.source_version, raw_text=snapshot.raw_text,
+                version=1, preparation=value.model_dump(mode='json')))
     # 版本行不会删除；章节锁序列化编号分配，不能用前端列表长度推算版本号。
     number = (await db.scalar(select(func.max(DivisionVersion.number)).where(
         DivisionVersion.chapter_id == snapshot.chapter_id).with_for_update()) or 0) + 1

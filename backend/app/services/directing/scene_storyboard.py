@@ -21,6 +21,7 @@ from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.studio import FileItem, FileUsage
 from app.models.task import Task
 from app.schemas.generation_canvas import CanvasDocument, CanvasFixedSource, CanvasModelCapability, CanvasRead, CanvasSave, CreativeBasisCard
+from app.services.directing.shooting_explanations import scene_shooting_notes
 from app.services.directing.scene_canvas import SCENE_TASK_ORDER
 from app.services.directing.existing_storyboard_check import STORYBOARD_CHECK_KIND, patch_saved_design, saved_repair_fields
 from app.services.directing.scene_objects import SceneObjectService
@@ -139,8 +140,9 @@ class SceneStoryboardService(SceneObjectService):
             target = {'canvas_id': canvas.id, 'revision': canvas.revision,
                       'fixed_source': fixed.model_dump(mode='json'), 'evidence': evidence.model_dump(mode='json'),
                       'settings': settings}
+        shooting_notes = fixed.shooting_notes if canvas else await scene_shooting_notes(self.db, sequence)
         token = CanvasStore.command_digest({
-            'scene_id': sequence.id, 'shooting_preparation': sequence.shooting_preparation, 'chapter_version': chapter_version, 'explanation_basis': explanation_basis(chapter), 'source': source, **target,
+            'scene_id': sequence.id, 'shooting_notes': shooting_notes, 'chapter_version': chapter_version, 'explanation_basis': explanation_basis(chapter), 'source': source, **target,
             'start': sequence.source_start, 'end': sequence.source_end, 'text': text,
             'preparation_revision': objects.revision, 'preparation_stale': objects.source_changed, 'objects': inputs,
             'active_task_id': active_task_id,
@@ -149,7 +151,7 @@ class SceneStoryboardService(SceneObjectService):
         # 当前状态仅供创建前核对，不参与依据身份，也不补写历史依据。
         states = {item.id: item.reference_state for item in objects.objects} if canvas is None else {}
         return StoryboardBasis(token=token, source_text=text,
-            shooting_notes=(fixed.shooting_notes if canvas else [note for note in (sequence.shooting_preparation or {}).get('notes', []) if note.get('choice', 'adopt') in ('adopt', 'delegate')]), source_changed=source_version != chapter_version,
+            shooting_notes=shooting_notes, source_changed=source_version != chapter_version,
             preparation_revision=objects.revision, preparation_stale=objects.source_changed,
             object_task_active=active_task_id is not None, objects=[StoryboardBasisObject(
                 id=item['id'], name=item['name'], excerpt=item['excerpt'], kind=item['kind'], asset_id=item['asset_id'],

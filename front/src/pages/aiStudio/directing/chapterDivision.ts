@@ -1,9 +1,8 @@
-import type { ChapterSequences, DivisionAnalysisDetail, DivisionDraft, DivisionMember_Input, DivisionVersionDetail, SourceSpan } from '../../../services/generated'
-import { reviewShootingPreparation } from './shootingPreparation'
+import type { ChapterSequences, DivisionAnalysisDetail, DivisionDraft, DivisionMember, DivisionVersionDetail, SourceSpan } from '../../../services/generated'
 import { excerptMatches } from './common'
 import { sameSpan, sourceSlice } from './sourceSelection'
 
-export type DraftMember = Omit<DivisionMember_Input, 'span'> & { span?: SourceSpan; suggested_excerpt?: string }
+export type DraftMember = Omit<DivisionMember, 'span'> & { span?: SourceSpan; suggested_excerpt?: string }
 export type ChapterDivisionDraft = Omit<DivisionDraft, 'members'> & { members: DraftMember[] }
 
 /** 已定位场次按原文起点排列；待定位场次稳定保留在末尾。 */
@@ -15,7 +14,7 @@ export function orderedDivisionMembers(members: DraftMember[]) {
 export function initialDivision(chapter: ChapterSequences): ChapterDivisionDraft {
   return { source_version: chapter.source_version,
     baseline: chapter.sequences.map(row => ({ sequence_id: row.id, version: row.version })),
-    members: chapter.sequences.map(row => ({ key: row.id, sequence_id: row.id, title: row.title, shooting_preparation: row.shooting_preparation, reconfirm_source: row.source_changed || undefined, span: row.source_changed ? undefined : row.span || undefined })),
+    members: chapter.sequences.map(row => ({ key: row.id, sequence_id: row.id, title: row.title, reconfirm_source: row.source_changed || undefined, span: row.source_changed ? undefined : row.span || undefined })),
     exited_sequence_ids: [], lineage: chapter.sequences.map(row => ({ sequence_id: row.id, target_keys: [row.id] })) }
 }
 
@@ -29,10 +28,10 @@ export function changeDivisionSpan(draft: ChapterDivisionDraft, key: string, spa
   const current = draft.members.find(row => row.key === key)
   if (!current || sameSpan(current.span, span)) return draft
   return { ...draft, members: draft.members.map(row => {
-    if (row.key === key) return { ...row, span, shooting_preparation: reviewShootingPreparation(row.shooting_preparation) }
+    if (row.key === key) return { ...row, span }
     if (!row.span || !current.span) return row
-    if (row.span.end === current.span.start && span.start !== current.span.start) return { ...row, shooting_preparation: reviewShootingPreparation(row.shooting_preparation), span: { ...row.span, end: span.start } }
-    if (row.span.start === current.span.end && span.end !== current.span.end) return { ...row, shooting_preparation: reviewShootingPreparation(row.shooting_preparation), span: { ...row.span, start: span.end } }
+    if (row.span.end === current.span.start && span.start !== current.span.start) return { ...row, span: { ...row.span, end: span.start } }
+    if (row.span.start === current.span.end && span.end !== current.span.end) return { ...row, span: { ...row.span, start: span.end } }
     return row
   }) }
 }
@@ -74,14 +73,14 @@ export function analysisDivision(chapter: ChapterSequences, detail: DivisionAnal
     lineage: draft.lineage.map(row => ({ ...row, target_keys: [] })) }
 }
 
-/** 历史内容以最新正式集合提交；旧原文范围必须在当前原文重新定位。 */
+/** 恢复历史范围和原文，以当前场次集合进行并发校验。 */
 export function versionDivision(chapter: ChapterSequences, detail: DivisionVersionDetail): ChapterDivisionDraft {
   const draft = initialDivision(chapter), sourceChanged = chapter.source_version !== detail.chapter.source_version
   const members = detail.chapter.sequences.map(row => ({ key: row.id, sequence_id: row.id, title: row.title,
-    span: sourceChanged || row.source_changed ? undefined : row.span || undefined,
-    shooting_preparation: row.shooting_preparation, reconfirm_source: sourceChanged || row.source_changed || undefined, suggested_excerpt: row.source_text }))
+    span: row.source_changed ? undefined : row.span || undefined,
+    reconfirm_source: row.source_changed || chapter.sequences.find(current => current.id === row.id)?.source?.version !== detail.chapter.source_version || undefined, suggested_excerpt: row.source_text }))
   const retained = new Set(members.map(row => row.sequence_id))
-  return { ...draft, source_revision_id: detail.version.id, history_reconfirmed: sourceChanged,
+  return { ...draft, source_version: detail.chapter.source_version, source_basis_id: sourceChanged ? detail.version.id : undefined, source_revision_id: detail.version.id,
     restored_baseline: detail.restored_baseline.filter(row => retained.has(row.sequence_id)), members,
     exited_sequence_ids: draft.baseline.filter(row => !retained.has(row.sequence_id)).map(row => row.sequence_id),
     lineage: draft.lineage.map(row => ({ ...row, target_keys: retained.has(row.sequence_id) ? [row.sequence_id] : [] })) }

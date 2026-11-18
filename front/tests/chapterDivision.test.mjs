@@ -6,8 +6,7 @@ import ts from 'typescript'
 const compile = name => readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8').then(source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText)
 const selection = `data:text/javascript;base64,${Buffer.from(await compile('sourceSelection')).toString('base64')}`
 const common = `data:text/javascript;base64,${Buffer.from(await compile('common')).toString('base64')}`
-const preparation = `data:text/javascript;base64,${Buffer.from(await compile('shootingPreparation')).toString('base64')}`
-const code = (await compile('chapterDivision')).replaceAll("'./sourceSelection'", JSON.stringify(selection)).replaceAll("'./common'", JSON.stringify(common)).replaceAll("'./shootingPreparation'", JSON.stringify(preparation))
+const code = (await compile('chapterDivision')).replaceAll("'./sourceSelection'", JSON.stringify(selection)).replaceAll("'./common'", JSON.stringify(common))
 const { initialDivision, changeDivisionSpan, divisionRequest, removeDivisionMember, divisionBaselineMatches, analysisDivision, versionDivision } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
 const chapter = { source_version: 'v1', raw_text: '前😀段。后段。尾段。', sequences: [
   { id: 's1', title: '前场', version: 1, source_changed: false, span: { start: 0, end: 4 } },
@@ -72,12 +71,13 @@ test('AI loading keeps ambiguous ranges unresolved and excludes local excerpts f
   assert.equal(draft.source_task_id, 'ai1')
 })
 
-test('historical loading preserves identities, uses current baseline and clears old source offsets', () => {
+test('historical loading preserves identities, uses current baseline and preserves old source offsets', () => {
   const detail = { version: { id: 'old' }, chapter: { ...chapter, source_version: 'old-source', sequences: [{ ...chapter.sequences[0], id: 'retired' }] }, restored_baseline: [{ sequence_id: 'retired', version: 7 }] }
   const draft = versionDivision(chapter, detail)
   assert.equal(draft.source_revision_id, 'old')
-  assert.equal(draft.history_reconfirmed, true)
-  assert.equal(draft.members[0].span, undefined)
+  assert.equal(draft.source_basis_id, 'old')
+  assert.equal(draft.source_version, 'old-source')
+  assert.deepEqual(draft.members[0].span, detail.chapter.sequences[0].span)
   assert.deepEqual(draft.restored_baseline, detail.restored_baseline)
   assert.deepEqual(draft.exited_sequence_ids, ['s1', 's2', 's3'])
   const removed = removeDivisionMember(draft, 'retired')

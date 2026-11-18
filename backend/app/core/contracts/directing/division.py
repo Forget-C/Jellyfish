@@ -2,10 +2,9 @@
 
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Text
-from app.core.contracts.directing.shooting_preparation import ShootingPreparation
 from app.core.contracts.directing.workspace import ChapterSequences, SequenceRead, SourceSpan
 
 
@@ -24,7 +23,18 @@ class DivisionMember(Contract):
     title: Text = Field(max_length=255)
     span: SourceSpan
     reconfirm_source: bool = False
-    shooting_preparation: ShootingPreparation = Field(default_factory=ShootingPreparation)
+    _legacy_preparation: dict | None = PrivateAttr(default=None)
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def ignore_legacy_shooting_preparation(cls, data, handler):
+        """Keep retired input only for recognizing a previously committed request."""
+        if isinstance(data, dict) and 'shooting_preparation' in data:
+            member = handler({key: value for key, value in data.items() if key != 'shooting_preparation'})
+            if isinstance(data['shooting_preparation'], dict):
+                member._legacy_preparation = data['shooting_preparation']
+            return member
+        return handler(data)
 
 
 class DivisionLineage(Contract):
@@ -88,7 +98,15 @@ class DivisionImpact(Contract):
     key: Identity
     before: SequenceRead | None
     after: DivisionMember | None
-    changes: list[Literal["added", "title", "position", "range", "source", "exited", "restored", "shooting_preparation"]]
+    changes: list[Literal["added", "title", "position", "range", "source", "exited", "restored"]]
+
+    @model_validator(mode='before')
+    @classmethod
+    def ignore_legacy_shooting_change(cls, data):
+        """Decode old receipts whose only change was a retired explanation."""
+        if isinstance(data, dict) and isinstance(data.get('changes'), list):
+            return {**data, 'changes': [item for item in data['changes'] if item != 'shooting_preparation']}
+        return data
     design_count: int = Field(ge=0)
     plan_count: int = Field(ge=0)
     take_count: int = Field(ge=0)

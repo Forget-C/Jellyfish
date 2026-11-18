@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
-import { HistoryOutlined, SaveOutlined } from '@ant-design/icons'
-import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail, type ShootingPreparation } from '../../../services/generated'
+import { HistoryOutlined, SaveOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { ApiError, StudioDirectingService, type ChapterSequences, type DivisionAnalysisDetail, type DivisionPreview, type DivisionSave, type DivisionSaved, type DivisionVersionDetail } from '../../../services/generated'
 import { ShootingPreparationModal } from './ShootingPreparationModal'
 import { directingError, excerptMatches } from './common'
 import { sourceSlice } from './sourceSelection'
@@ -13,7 +13,7 @@ import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 
 type Editor = { chapter: ChapterSequences; draft: ChapterDivisionDraft; history?: DivisionVersionDetail }
 type RunningAnalysis = { id: string; epoch: number; chapter: ChapterSequences }
-const changes = { added: '新增', title: '名称', position: '顺序', range: '范围', source: '重新确认来源', exited: '退出当前划分', restored: '恢复历史身份', shooting_preparation: '场次拍摄说明' }
+const changes = { added: '新增', title: '名称', position: '顺序', range: '范围', source: '重新确认来源', exited: '退出当前划分', restored: '恢复历史身份' }
 const MagicWandIcon = () => <span className="anticon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m4 20 13-13 3 3L7 23zM14 10l3 3M5 3v4M3 5h4M19 1v4M17 3h4M21 16v4M19 18h4" /></svg></span>
 const newKey = () => crypto.randomUUID()
 
@@ -27,8 +27,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   const interactionRef = useRef<DivisionInteraction>()
   const [interaction, setInteraction] = useState<DivisionInteractionStatus>({ dirty: false })
   const interactionChanged = useCallback((status: DivisionInteractionStatus) => { epoch.current++; setInteraction(status) }, [])
-  const preparationRequest = useRef<{ key: string; value: string; request: { request_id: string; expected_version: number; preparation: ShootingPreparation } }>()
-  const [preparationKey, setPreparationKey] = useState<string>()
+  const [preparationOpen, setPreparationOpen] = useState(false)
   const [sourceChoosing, setSourceChoosing] = useState(false)
   const [sourceChoice, setSourceChoice] = useState<ChapterSequences>()
   const [chapter, setChapter] = useState<ChapterSequences>()
@@ -85,7 +84,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       setActiveId(sequenceId)
     }
   }, [embedded, sequenceId])
-  const draftDirty = !!editor && JSON.stringify({ ...editor.draft, members: orderedDivisionMembers(editor.draft.members) }) !== JSON.stringify(initialDivision(editor.chapter))
+  const draftDirty = !!editor && JSON.stringify({ ...editor.draft, source_basis_id: undefined, members: orderedDivisionMembers(editor.draft.members) }) !== JSON.stringify(initialDivision(editor.chapter))
   useEffect(() => {
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -109,8 +108,12 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     epoch.current++
     const retainedId = editor?.draft.members.find(row => row.key === activeId)?.sequence_id
     const selected = saved.created_sequence_ids[activeId || ''] || (saved.chapter.sequences.some(row => row.id === retainedId) ? retainedId : saved.chapter.sequences[0]?.id)
+    const savedDraft = initialDivision(saved.chapter)
+    const historicalSource = chapter && saved.chapter.source_version !== chapter.source_version
+    if (historicalSource) savedDraft.source_basis_id = saved.chapter.current_version?.id
     flushSync(() => {
-      setChapter(saved.chapter); setEditor({ chapter: saved.chapter, draft: initialDivision(saved.chapter) }); setActiveId(selected)
+      setChapter(historicalSource ? { ...chapter, sequences: saved.chapter.sequences, current_version: saved.chapter.current_version } : saved.chapter)
+      setEditor({ chapter: saved.chapter, draft: savedDraft }); setActiveId(selected)
       setPendingSave(undefined); setRetryReady(false); setPreview(undefined); setBusy(false); setIdentityConfirmed(false); setViewing(undefined)
       setHistoryRefresh(value => value + 1); setNotice(''); setError('')
     })
@@ -143,11 +146,11 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     saveApproval.current?.(saved); saveApproval.current = undefined
     return saved
   }
-  const guard = useWorkspaceDraft({ name: '本章划分草稿', dirty: draftDirty || interaction.dirty, saveBlockedReason: preparationKey ? '请先保存或取消场次拍摄说明' : interaction.blocked, busy: busy || !!pendingSave, save: async () => {
+  const guard = useWorkspaceDraft({ name: '本章划分草稿', dirty: draftDirty || interaction.dirty, saveBlockedReason: preparationOpen ? '请先保存或取消拍摄解释' : interaction.blocked, busy: busy || !!pendingSave, save: async () => {
       if (!await previewChanges()) return false
       return new Promise<boolean>(resolve => { saveApproval.current = resolve })
     },
-    discard: () => { interactionRef.current?.discard(); if (editor) { epoch.current++; setEditor({ chapter: editor.chapter, draft: initialDivision(editor.chapter) }); setPreview(undefined) } } })
+    discard: () => { interactionRef.current?.discard(); if (editor) { epoch.current++; setEditor({ chapter: editor.chapter, draft: { ...initialDivision(editor.chapter), source_basis_id: editor.draft.source_basis_id } }); setPreview(undefined) } } })
   const previewChanges = async () => {
     if (!editor || !chapter || busy || interaction.blocked || !draftDirty && !interaction.dirty) return false
     setBusy(true); setError('')
@@ -229,7 +232,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         if (!detail) throw new Error('历史详情读取失败')
         const version = 'version' in detail ? detail : undefined
         const draft = version ? versionDivision(latest, version) : analysisDivision(latest, detail as DivisionAnalysisDetail)
-        epoch.current++; setEditor({ chapter: latest, draft, history: version }); setActiveId(draft.members[0]?.key)
+        epoch.current++; setEditor({ chapter: version ? { ...latest, raw_text: version.chapter.raw_text, source_version: version.chapter.source_version } : latest, draft, history: version }); setActiveId(draft.members[0]?.key)
         setViewing(undefined); setHistoryOpen(false); setPreview(undefined); setError(''); setNotice('历史方案已载入草稿。请核对范围与身份，保存将形成新版本。')
         if (targetTask) onCloseTask?.()
       } catch (cause) { setError(directingError(cause)) } finally { writing.current = false; setBusy(false) }
@@ -237,53 +240,27 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     if (draftDirty) Modal.confirm({ title: '替换当前未保存草稿？', content: '载入历史方案会替换当前输入；正式版本保持不变。', okText: '替换草稿', cancelText: '取消', onOk: apply })
     else void apply()
   }
-  const savePreparation = async (value: ShootingPreparation) => {
-    if (!editor || !preparationKey || busy || pendingSave) throw new Error('当前不可保存')
-    const member = editor.draft.members.find(row => row.key === preparationKey)
-    if (!member) throw new Error('场次已变化')
-    const original = initialDivision(editor.chapter).members.find(row => row.sequence_id === member.sequence_id)
-    const sameDivision = original && member.title === original.title &&
-      JSON.stringify(member.span) === JSON.stringify(original.span) && !member.reconfirm_source &&
-      orderedDivisionMembers(editor.draft.members).findIndex(row => row.key === member.key) === orderedDivisionMembers(initialDivision(editor.chapter).members).findIndex(row => row.sequence_id === member.sequence_id)
-    if (!sameDivision || !member.sequence_id) {
-      editDraft({ ...editor.draft, members: editor.draft.members.map(row => row.key === member.key ? { ...row, shooting_preparation: value } : row) })
-      return
-    }
-    if (!preparationRequest.current) preparationRequest.current = { key: member.key, value: JSON.stringify(value), request: {
-      request_id: crypto.randomUUID(), expected_version: editor.chapter.sequences.find(row => row.id === member.sequence_id)!.version, preparation: value } }
-    const pending = preparationRequest.current
-    if (pending.key !== member.key || pending.value !== JSON.stringify(value)) throw new Error('请先核对上次拍摄说明保存结果')
-    let saved
-    try {
-      saved = await StudioDirectingService.directingShootingPreparationSave({ projectId, chapterId, sequenceId: member.sequence_id, requestBody: pending.request })
-    } catch (cause) {
-      if (cause instanceof ApiError && cause.status >= 400 && cause.status < 500) preparationRequest.current = undefined
-      throw cause
-    }
-    if (!saved.data) throw new Error('未收到保存结果，请保留输入并核对')
-    preparationRequest.current = undefined
-    const latest = saved.data
-    const changed = latest.sequences.find(row => row.id === member.sequence_id)!
-    epoch.current++
-    setChapter(current => current ? { ...current, sequences: latest.sequences, current_version: latest.current_version } : latest)
-    setEditor({ ...editor, chapter: { ...editor.chapter, current_version: latest.current_version,
-      sequences: editor.chapter.sequences.map(row => row.id === changed.id ? changed : row) },
-      draft: { ...editor.draft, baseline: editor.draft.baseline.map(row => row.sequence_id === changed.id ? { ...row, version: changed.version } : row),
-        members: editor.draft.members.map(row => row.key === member.key ? { ...row, shooting_preparation: changed.shooting_preparation } : row) } })
-    setPreview(undefined); setHistoryRefresh(value => value + 1); setNotice('场次拍摄说明已保存为新版本')
-  }
   const chooseSource = async (useLatest: boolean) => {
     if (!sourceChoice || !editor || sourceChoosing) return
     if (!useLatest && sourceChoice.current_version) {
       setSourceChoosing(true)
       try {
-        const response = await StudioDirectingService.directingDivisionVersion({ projectId, chapterId, versionId: sourceChoice.current_version.id })
-        if (!response.data) throw new Error('原版本依据读取失败')
-        const basis = response.data.chapter
+        const wanted = sourceChoice.sequences.find(row => row.id === activeId && row.source_changed)
+          || sourceChoice.sequences.find(row => row.source_changed)
+        let versionId: string | undefined = sourceChoice.current_version.id
+        let detail: DivisionVersionDetail | undefined
+        while (versionId) {
+          const response = await StudioDirectingService.directingDivisionVersion({ projectId, chapterId, versionId })
+          if (!response.data) throw new Error('原版本依据读取失败')
+          if (!wanted || response.data.chapter.source_version === wanted.source.version) { detail = response.data; break }
+          versionId = response.data.base_revision_id || undefined
+        }
+        if (!detail) throw new Error('找不到场次原文快照，请使用最新原文并重新核对范围')
+        const basis = detail.chapter
         const preserved = { ...basis, current_version: sourceChoice.current_version,
           sequences: sourceChoice.sequences.map(row => ({ ...row, source_changed: row.source.version !== basis.source_version })) }
         const draft = initialDivision(preserved)
-        draft.source_basis_id = sourceChoice.current_version.id
+        draft.source_basis_id = detail.version.id
         setEditor({ chapter: preserved, draft }); setSourceChoice(undefined)
       } catch (cause) { setError(directingError(cause)) } finally { setSourceChoosing(false) }
     } else if (useLatest) {
@@ -306,6 +283,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing || interaction.dirty || !!interaction.blocked} onClick={() => {
       Modal.confirm({ title: '确认智能划分？', content: draftDirty ? '将调用 AI 分析本章原文，分析成功后替换当前草稿；若分析期间继续编辑，AI 结果将保留到历史版本。' : '将调用 AI 分析本章原文并生成场次划分草稿，确认后开始任务。', okText: '开始划分', cancelText: '取消', onOk: startAnalysis })
     }}>{running || activeTasks.length ? '划分中…' : '智能划分'}</Button>
+    <Button icon={<VideoCameraOutlined aria-hidden />} disabled={!!sourceChoice || !((viewing?.chapter || editor.chapter).raw_text.trim())} onClick={() => { epoch.current++; setPreparationOpen(true) }}>拍摄解释</Button>
     <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
     {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>保存为新版本</Button>}
   </Space>
@@ -326,28 +304,21 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       {viewing && <Alert type="info" message={`正在查看 v${viewing.version.number}（只读） · 当前${chapter.current_version ? ` v${chapter.current_version.number}` : '尚无版本'}，当前草稿已保留。`} action={<Space wrap>
         <Button onClick={() => { epoch.current++; setViewing(undefined) }}>返回当前编辑</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>基于此版本编辑</Button>
       </Space>} />}
-      {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message="此版本基于旧原文；当前显示保存时的原文，基于此版本编辑时需要重新定位。" />}
+      {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message="此版本使用保存时的原文，载入编辑将沿用该原文。" />}
       <ChapterDivisionEditor interactionRef={interactionRef} onInteractionChange={interactionChanged} busy={busy || !!pendingSave} management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
         chapter={viewing?.chapter || editor.chapter} draft={viewing ? initialDivision(viewing.chapter) : draft}
         activeId={viewing ? historyActiveId : activeId} onActive={viewing ? setHistoryActiveId : setActiveId}
-        onChange={editDraft} onPreparation={key => { epoch.current++; setPreparationKey(key) }} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />
+        onChange={editDraft} readOnly={!!viewing} historicalMembers={editor.history?.chapter.sequences} restoredBaseline={editor.history?.restored_baseline} />
 
     </WorkspaceWriteBoundary>
-    {preparationKey && (() => {
-      const shown = viewing ? initialDivision(viewing.chapter) : editor.draft
-      const member = shown.members.find(row => row.key === preparationKey)
-      const context = viewing?.chapter || editor.chapter
-      if (!member) return null
-      const original = initialDivision(editor.chapter).members.find(row => row.sequence_id === member.sequence_id)
-      const draftScene = !original || member.title !== original.title || JSON.stringify(member.span) !== JSON.stringify(original.span) || !!member.reconfirm_source ||
-        orderedDivisionMembers(shown.members).findIndex(row => row.key === member.key) !== orderedDivisionMembers(initialDivision(editor.chapter).members).findIndex(row => row.sequence_id === member.sequence_id)
-      return <ShootingPreparationModal key={`${viewing?.version.id || 'current'}:${member.key}`} projectId={projectId} chapterId={chapterId} sceneKey={member.key}
-        sourceVersion={context.source_version} sourceStart={member.span?.start} title={member.title} sourceText={member.span ? sourceSlice(context.raw_text, member.span) : ''} value={member.shooting_preparation}
-        readOnly={!!viewing} draft={draftScene} onClose={() => setPreparationKey(undefined)} onSave={savePreparation} />
-    })()}
+    {preparationOpen && <ShootingPreparationModal projectId={projectId} chapterId={chapterId}
+      sourceVersion={(viewing?.chapter || editor.chapter).source_version} sourceText={(viewing?.chapter || editor.chapter).raw_text}
+      isLatest={(viewing?.chapter || editor.chapter).source_version === chapter.source_version}
+      readOnly={!!viewing} onClose={() => setPreparationOpen(false)} />}
     <Modal title="原文有变动，是否使用最新原文" open={!!sourceChoice} closable={false} maskClosable={false} keyboard={false}
       footer={<Space><Button disabled={sourceChoosing || !sourceChoice?.current_version} onClick={() => void chooseSource(false)}>不使用，沿用原版本</Button><Button disabled={sourceChoosing} type="primary" onClick={() => void chooseSource(true)}>使用最新原文</Button></Space>}>
-      <p>使用最新原文后需核对场次范围；沿用原版本可继续维护已有场次及拍摄说明。</p>
+      <p>使用最新原文后需核对场次范围；沿用原版本可继续维护已有场次及该版拍摄解释。</p>
+      {error && <Alert type="error" message={error} />}
     </Modal>
     <DivisionHistoryModal open={historyOpen || !!targetTask} targetTask={targetTask} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh}
       onClose={() => { setHistoryOpen(false); if (targetTask) onCloseTask?.() }}
