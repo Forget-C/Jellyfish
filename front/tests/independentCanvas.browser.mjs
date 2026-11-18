@@ -113,6 +113,16 @@ try {
   const firstFooter = await pagination.boundingBox()
   assert.ok(firstFooter.x > 1000 && firstFooter.y > 900, '分页栏位于桌面右下角')
   assert.equal(await page.getByRole('article').count(), 12, '桌面四列三行显示 12 张')
+  const cards = page.getByRole('article')
+  const [first, second, nextRow] = await Promise.all([0, 1, 4].map(index => cards.nth(index).boundingBox()))
+  const cover = await cards.first().locator('.canvas-list-cover').boundingBox()
+  const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) <= 1,
+    `${message}（实际 ${actual}px，预期 ${expected}px）`)
+  near(second.x - first.x - first.width, 16, '卡片列间距')
+  near(nextRow.y - first.y - first.height, 16, '卡片行间距')
+  near(cover.x, first.x, '封面贴合卡片左边缘')
+  near(cover.y, first.y, '封面贴合卡片上边缘')
+  near(cover.width, first.width, '封面与卡片等宽')
   const summaries = (await (await fetch(`${studio}/generation-canvases?page_size=100`)).json()).data.items
   const lastName = summaries.at(-1).name
   const oldest = page.getByRole('link', { name: lastName, exact: true })
@@ -128,7 +138,10 @@ try {
   await pagination.getByText('2', { exact: true }).click()
   await oldest.waitFor()
   assert.equal((await pagination.boundingBox()).y, firstFooter.y)
-  assert.equal(await page.getByRole('article').count(), 1)
+  assert.equal(await cards.count(), 1)
+  const lastCard = await cards.first().boundingBox()
+  near(lastCard.width, first.width, '末页卡片与满页卡片等宽')
+  near(lastCard.x, first.x, '末页卡片保留网格首列位置')
   await oldest.click()
   await page.reload()
   await page.getByRole('button', { name: '返回画布列表', exact: true }).click()

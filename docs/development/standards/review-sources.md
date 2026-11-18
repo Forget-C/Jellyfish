@@ -8,6 +8,8 @@
 | 提交说明变化或审查提交规范 | [提交规范](commit-convention.md) |
 | 后端实现 | [后端说明](../guides/backend.md) |
 | 前端实现与布局 | [前端说明](../guides/frontend.md)、[前端基础布局](../architecture/frontend-layout.md) |
+| 一级画布列表 `/canvases` | [独立画布列表规范](home-project-ui.md#独立画布列表) |
+| 独立画布编辑器 `/canvases/:id` 的布局、控件与交互 | [工作台前端设计标准](workbench-design.md)、[独立画布入口与共同交互](../architecture/generation-canvas.md#独立入口与共同画布交互) |
 | 管理区页面或共用管理样式 | [管理页面前端规范](management-ui.md) |
 | 对外接口、响应 schema 或客户端 | [OpenAPI 同步指南](../guides/openapi.md)、[接口同步规范](development.md#接口与文档同步) |
 | 章节划分与场次版本 | [章节划分架构](../architecture/chapter-division.md)、[场次版本架构](../architecture/scene-versions.md) |

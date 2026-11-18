@@ -22,19 +22,39 @@ try {
   page.setDefaultTimeout(8000)
   const errors = []
   const workspace = makeWorkspace()
+  const canvases = [
+    { path: '/canvases/free-appearance', id: 'free-appearance', projectId: null, name: '自由画布配色验收' },
+    { path: '/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=storyboard-appearance',
+      id: 'storyboard-appearance', projectId: 'p1', name: '分镜配色验收' },
+  ]
+  const sceneCanvas = canvases[1]
   let sceneUnavailable = false
   const installFixtures = async target => {
     target.on('pageerror', error => errors.push(error.message))
     await target.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
     await target.route('**/api/**', route => {
-      const { pathname } = new URL(route.request().url())
+      const { pathname, searchParams } = new URL(route.request().url())
       const respond = data => route.fulfill({ json: { code: 200, data } })
-      if (pathname.endsWith('/sequences/s1/canvases')) return respond({ sequence: workspace.sequence, canvases: sceneUnavailable ? [] : [{ id: 'storyboard-appearance', name: '分镜配色验收', can_open: true }] })
-      if (pathname.endsWith('/generation-canvases/p1/storyboard-appearance')) return respond({ id: 'storyboard-appearance', project_id: 'p1', revision: 0, document: { id: 'storyboard-appearance', project_id: 'p1', name: '分镜配色验收', cards: [], edges: [], input_order: {} } })
-      if (pathname.endsWith('/catalog')) return respond({ cards: [], connection_policies: [] })
-      if (pathname.endsWith('/runtime')) return respond({ cursor: 0, runs: [], nodes: [] })
-      if (pathname.endsWith('/directing/sequences/s1')) return respond(workspace)
-      if (pathname.endsWith('/versions') || pathname.includes('/generation-canvases/')) return respond([])
+      if (pathname === '/api/v1/studio/projects/p1/directing/chapters/ch1/sequences/s1/canvases') {
+        return respond({ sequence: workspace.sequence, canvases: sceneUnavailable ? [] : [
+          { id: sceneCanvas.id, name: sceneCanvas.name, can_open: true },
+        ] })
+      }
+      const canvasRequest = pathname.match(/^\/api\/v1\/studio\/generation-canvases\/([^/]+)(.*)$/)
+      if (canvasRequest) {
+        const [, id, operation] = canvasRequest
+        const canvas = canvases.find(item => item.id === id && (item.projectId ?? '') === (searchParams.get('project_id') ?? ''))
+        if (!canvas) return route.fulfill({ status: 404, json: { code: 404, message: '画布不存在', data: null } })
+        if (!operation) return respond({
+          id, project_id: canvas.projectId, revision: 0,
+          document: { id, project_id: canvas.projectId, name: canvas.name, schema_version: 2, cards: [], edges: [], input_order: {}, groups: [] },
+          ...(canvas.projectId ? { scene: { chapter_id: 'ch1', sequence_id: 's1', is_current: true } } : {}),
+        })
+        if (operation === '/catalog') return respond({ cards: [], connection_policies: [] })
+        if (operation === '/runtime') return respond({ cursor: 0, runs: [], current_outputs: {} })
+        if (operation === '/events/connection') return respond({ url: `${origin}${pathname.replace(/\/connection$/, '')}?${searchParams}` })
+        if (operation === '/events') return route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' })
+      }
       return respond({ items: [], next_cursor: null })
     })
   }
@@ -44,14 +64,10 @@ try {
     return { backgroundColor, backgroundImage, color }
   })
   const solidBackground = { backgroundColor: 'rgb(247, 248, 251)', backgroundImage: 'none', color: 'rgb(38, 50, 68)' }
-  const canvases = [
-    ['/projects/p1/generation-canvas', '生成画布工作台'],
-    ['/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=storyboard-appearance', '生成画布工作台'],
-  ]
-  const canvasColors = async (path, label) => {
+  const canvasColors = async ({ path, name }) => {
     await page.goto(`${origin}${path}`)
-    const canvas = page.getByRole('region', { name: label, exact: true })
-    await canvas.waitFor()
+    const canvas = page.getByRole('region', { name: '生成画布工作台', exact: true })
+    await canvas.getByText(name, { exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: '用户与语言设置' }).count(), 0)
     const task = canvas.getByRole('button', { name: '任务中心', exact: true })
     await task.click()
@@ -67,7 +83,7 @@ try {
     return colors
   }
   const originalCanvasColors = []
-  for (const [path, label] of canvases) originalCanvasColors.push(await canvasColors(path, label))
+  for (const canvas of canvases) originalCanvasColors.push(await canvasColors(canvas))
   await page.goto(`${origin}/settings`)
 
   const settings = page.getByRole('radiogroup', { name: '外观' })
@@ -127,8 +143,8 @@ try {
   assert.deepEqual(await background(reopened), solidBackground)
   await reopened.close()
 
-  for (const [index, [path, label]] of canvases.entries()) {
-    const colors = await canvasColors(path, label)
+  for (const [index, canvas] of canvases.entries()) {
+    const colors = await canvasColors(canvas)
     assert.deepEqual(colors.canvas, solidBackground, 'default follows the current site appearance')
     assert.notDeepEqual(colors.canvas, originalCanvasColors[index].canvas)
     assert.equal(colors.overlay.backgroundColor, 'rgb(237, 242, 248)', 'task portal follows light theme')
@@ -141,12 +157,12 @@ try {
       await option.waitFor({ state: 'hidden' })
     }
     await choose('经典深色')
-    const dark = await canvasColors(path, label)
+    const dark = await canvasColors(canvas)
     assert.equal(dark.canvas.backgroundColor, 'rgb(13, 13, 13)')
     assert.equal(dark.canvas.color, 'rgb(229, 229, 229)')
     assert.equal(dark.overlay.backgroundColor, 'rgb(36, 36, 36)')
     await choose('雾蓝微渐变')
-    const light = await canvasColors(path, label)
+    const light = await canvasColors(canvas)
     assert.match(light.canvas.backgroundImage, /linear-gradient/)
     assert.equal(light.canvas.color, 'rgb(38, 50, 68)')
     await page.reload()
@@ -155,7 +171,7 @@ try {
     assert.equal(await page.getByRole('menuitemradio', { name: '雾蓝微渐变', exact: true }).getAttribute('aria-checked'), 'true')
     await page.keyboard.press('Escape')
     await choose('雾蓝纯色')
-    assert.deepEqual((await canvasColors(path, label)).canvas, solidBackground)
+    assert.deepEqual((await canvasColors(canvas)).canvas, solidBackground)
     await page.setViewportSize({ width: 390, height: 844 })
     await picker.press('Enter')
     const palette = page.getByRole('menu')
@@ -175,7 +191,7 @@ try {
   }
 
   sceneUnavailable = true
-  await page.goto(`${origin}${canvases[1][0]}`)
+  await page.goto(`${origin}${sceneCanvas.path}`)
   await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
   assert.equal(await page.locator('.workbench-ui').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(247, 248, 251)', 'storyboard unavailable state follows the same appearance')
   sceneUnavailable = false
