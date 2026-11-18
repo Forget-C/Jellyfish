@@ -14,6 +14,8 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
     const existing = document.edges?.find(edge => sameResultConnection(edge, endpoint(source, card, port)))
     if (!resultScopeIncludes(existing?.result_scope, source.position)) return false
     if (card.type?.startsWith('reference.') && (port === 'image_source' && origin.type !== 'content.image' || port === 'name' && origin.type !== card.type.replace('reference.', 'content.'))) return false
+    // 对白出口在位置 0 发布，稳定对白 ID 位于载荷中。
+    if (source.port_id === 'dialogue') return source.position === 0 && !source.object_id
     const record = origin as unknown as Record<string, unknown>
     // 命名参考在关联期间发布来源描述的对象 ID。
     const identity = origin.type?.startsWith('reference.')
