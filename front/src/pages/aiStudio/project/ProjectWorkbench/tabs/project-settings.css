@@ -20,3 +20,17 @@
 
 .project-settings-switch-row { display:flex; align-items:center; justify-content:space-between; gap:16px; font-size:13px; }
 .project-settings-switch-row p { margin:4px 0 0; color:var(--app-muted); font-size:12px; }
+
+.project-settings-basic-fields { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; }
+.project-settings-cover { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.project-settings-cover h3 { margin: 0; font-size: 13px; font-weight: 400; }
+.project-settings-cover .project-lobby-cover { height: auto; aspect-ratio: 2 / 1; border-radius: 8px; }
+.project-cover-library { display: grid; gap: 12px; }
+.project-cover-library-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.project-cover-library-grid .ant-btn { display: grid; gap: 4px; height: auto; min-width: 0; padding: 4px; }
+.project-cover-library-grid img { width: 100%; aspect-ratio: 2 / 1; object-fit: cover; border-radius: 4px; }
+.project-cover-library-grid .ant-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 767px) {
+  .project-settings-basic-fields { grid-template-columns: minmax(0, 1fr); }
+  .project-settings-cover { width: min(100%, 320px); }
+}

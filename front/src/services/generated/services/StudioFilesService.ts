@@ -8,6 +8,7 @@ import type { ApiResponse_FileRead_ } from '../models/ApiResponse_FileRead_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_FileRead__ } from '../models/ApiResponse_PaginatedData_FileRead__';
 import type { Body_upload_file_api_api_v1_studio_files_upload_post } from '../models/Body_upload_file_api_api_v1_studio_files_upload_post';
+import type { FileType } from '../models/FileType';
 import type { FileUpdate } from '../models/FileUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -25,6 +26,7 @@ export class StudioFilesService {
         page = 1,
         pageSize = 10,
         projectId,
+        fileType,
         chapterTitle,
     }: {
         /**
@@ -40,6 +42,10 @@ export class StudioFilesService {
          */
         projectId?: (string | null),
         /**
+         * 按文件类型筛选
+         */
+        fileType?: (FileType | null),
+        /**
          * 章节标题（精确匹配，与 project_id 联用）
          */
         chapterTitle?: (string | null),
@@ -54,6 +60,7 @@ export class StudioFilesService {
                 'page': page,
                 'page_size': pageSize,
                 'project_id': projectId,
+                'file_type': fileType,
                 'chapter_title': chapterTitle,
             },
             errors: {

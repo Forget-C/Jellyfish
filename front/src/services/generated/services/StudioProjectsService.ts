@@ -6,6 +6,7 @@ import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ProjectRead__ } from '../models/ApiResponse_PaginatedData_ProjectRead__';
 import type { ApiResponse_ProjectRead_ } from '../models/ApiResponse_ProjectRead_';
 import type { ApiResponse_ProjectStyleOptionsRead_ } from '../models/ApiResponse_ProjectStyleOptionsRead_';
+import type { Body_update_project_with_cover_upload_api_v1_studio_projects__project_id__cover_upload_patch } from '../models/Body_update_project_with_cover_upload_api_v1_studio_projects__project_id__cover_upload_patch';
 import type { ProjectCreate } from '../models/ProjectCreate';
 import type { ProjectUpdate } from '../models/ProjectUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -153,6 +154,32 @@ export class StudioProjectsService {
             path: {
                 'project_id': projectId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 上传项目封面并保存项目设置
+     * 在单次保存中提交图片和其他项目字段。
+     * @returns ApiResponse_ProjectRead_ Successful Response
+     * @throws ApiError
+     */
+    public static updateProjectWithCoverUploadApiV1StudioProjectsProjectIdCoverUploadPatch({
+        projectId,
+        formData,
+    }: {
+        projectId: string,
+        formData: Body_update_project_with_cover_upload_api_v1_studio_projects__project_id__cover_upload_patch,
+    }): CancelablePromise<ApiResponse_ProjectRead_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/projects/{project_id}/cover-upload',
+            path: {
+                'project_id': projectId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },

@@ -32,6 +32,8 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
+    cover_file_id: str | None = Field(None, min_length=1, max_length=64,
+        description="源图片 ID，保存时克隆；显式 null 恢复默认，省略保留当前封面")
     name: str | None = None
     description: str | None = None
     style: ProjectStyle | None = Field(None, description="题材/风格", examples=PROJECT_STYLE_EXAMPLES)
@@ -44,6 +46,7 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectRead(ProjectBase):
+    cover_file_id: str | None = Field(None, description="已保存的项目封面副本 ID")
     model_config = ConfigDict(from_attributes=True)
 
     id: str

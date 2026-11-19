@@ -165,8 +165,8 @@ async def upload_file(
     return StoredFileInfo(key=s3_key, url=url, etag=etag)
 
 
-async def download_file(*, key: str) -> bytes:
-    """下载文件内容（整个对象读入内存）。"""
+async def download_file(*, key: str, max_bytes: int | None = None) -> bytes:
+    """读取整个对象，或只读取调用方指定的字节数。"""
     client = _build_s3_client()
     bucket = settings.s3_bucket_name
     if bucket is None:
@@ -176,8 +176,13 @@ async def download_file(*, key: str) -> bytes:
 
     def _download() -> bytes:
         obj = client.get_object(Bucket=bucket, Key=s3_key)
-        body = obj["Body"].read()
-        return body  # type: ignore[no-any-return]
+        body = obj["Body"]
+        if max_bytes is None:
+            return body.read()
+        try:
+            return body.read(max_bytes)
+        finally:
+            body.close()
 
     return await to_thread.run_sync(_download)
 

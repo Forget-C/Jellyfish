@@ -5,6 +5,10 @@
 import type { ProjectStyle } from './ProjectStyle';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 export type ProjectUpdate = {
+    /**
+     * 源图片 ID，保存时克隆；显式 null 恢复默认，省略保留当前封面
+     */
+    cover_file_id?: (string | null);
     name?: (string | null);
     description?: (string | null);
     /**

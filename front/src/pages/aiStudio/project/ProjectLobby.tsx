@@ -1,3 +1,4 @@
+import { buildFileDownloadUrl } from '../assets/utils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert, Button, Checkbox, Dropdown, Empty, Form, Input, InputNumber,
@@ -29,7 +30,7 @@ type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'chapters'
 const projectOrder = { updatedAt: 'updated_at', name: 'name', chapters: 'chapter_count' } as const
 const desktopToolbar = '(min-width: 1024px)'
-type ProjectView = Pick<ProjectRead, 'id' | 'name'> & {
+type ProjectView = Pick<ProjectRead, 'id' | 'name' | 'cover_file_id'> & {
   style?: string
   updatedAt: string
 }
@@ -51,6 +52,7 @@ const toUIProject = (p: ProjectRead): ProjectView => {
   return {
     id: p.id,
     name: p.name,
+    cover_file_id: p.cover_file_id,
     style: p.style?.trim() || undefined,
     updatedAt,
   }
@@ -431,7 +433,7 @@ function ProjectLobby() {
                   const countText = stage?.chapterCount === undefined ? '章节数未知' : `共 ${stage.chapterCount} 章`
                   return (
                     <article className="project-lobby-card" key={project.id}>
-                      <ProjectCover projectId={project.id} demo={useMock} />
+                      <ProjectCover projectId={project.id} demo={useMock} source={buildFileDownloadUrl(project.cover_file_id)} />
                       <div className="project-lobby-card-body">
                         <h2 className="project-lobby-card-title" title={project.name}>
                           {multiSelectMode ? <span className="project-lobby-truncate">{project.name}</span> : (

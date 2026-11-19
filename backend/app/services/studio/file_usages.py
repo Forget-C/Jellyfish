@@ -125,6 +125,7 @@ async def list_files_by_scope_paginated(
     page_size: int = 10,
     allow_order_fields: set[str] | None = None,
     default_order: str = "created_at",
+    file_type: str | None = None,
 ) -> tuple[list[FileItem], int]:
     """按项目及可选章节标题过滤文件（标题多命中时并集），去重后分页。"""
     allow_fields = allow_order_fields or {"name", "created_at", "updated_at"}
@@ -146,9 +147,11 @@ async def list_files_by_scope_paginated(
     grouped = (
         select(FileItem.id, func.max(ord_attr).label("_ord_key"))
         .join(FileUsage, FileUsage.file_id == FileItem.id)
-        .where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None))
+        .where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None), FileItem.is_project_cover.is_(False))
     )
     grouped = _apply_scope_filters(grouped)
+    if file_type is not None:
+        grouped = grouped.where(FileItem.type == file_type)
     if qn:
         grouped = grouped.where(FileItem.name.ilike(f"%{qn}%"))
     grouped = grouped.group_by(FileItem.id)

@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
+from app.models.types import FileType
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
 from app.schemas.studio import FileDetailRead, FileRead, FileUpdate
 from app.services.studio.file_usages import list_files_by_scope_paginated
@@ -36,6 +37,7 @@ async def list_files_api(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     project_id: str | None = Query(None, description="按 file_usages 限定项目；提供后仅返回该项目下有关联记录的文件"),
+    file_type: FileType | None = Query(None, description="按文件类型筛选"),
     chapter_title: str | None = Query(None, description="章节标题（精确匹配，与 project_id 联用）"),
 
 ) -> ApiResponse[PaginatedData[FileRead]]:
@@ -57,6 +59,7 @@ async def list_files_api(
             is_desc=is_desc,
             page=page,
             page_size=page_size,
+            file_type=file_type,
         )
         return paginated_response(
             [FileRead.model_validate(x) for x in items],
@@ -71,6 +74,7 @@ async def list_files_api(
         is_desc=is_desc,
         page=page,
         page_size=page_size,
+        file_type=file_type,
     )
 
 

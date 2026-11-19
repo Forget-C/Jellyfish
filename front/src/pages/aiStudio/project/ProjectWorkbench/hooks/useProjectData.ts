@@ -57,15 +57,16 @@ export function useProject(projectId: string | undefined) {
   }, [projectId])
 
   // 持有设置页的保存锁，切换项目内页签时仍由同一个工作台处理返回结果。
-  async function saveProject(values: ProjectUpdate) {
+  async function saveProject(values: ProjectUpdate, coverUpload?: File) {
     if (!projectId || pendingSave.current) return false
     pendingSave.current = true
     setSaving(true)
     try {
-      const response = await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({
-        projectId,
-        requestBody: values,
-      })
+      const response = coverUpload
+        ? await StudioProjectsService.updateProjectWithCoverUploadApiV1StudioProjectsProjectIdCoverUploadPatch({
+          projectId, formData: { file: coverUpload as unknown as string, settings: JSON.stringify(values) },
+        })
+        : await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({ projectId, requestBody: values })
       const updated = response.data
       if (updated?.id !== projectId) throw new Error('未能确认保存结果，请重试')
       setProject(current => current?.id === updated.id ? updated : current)

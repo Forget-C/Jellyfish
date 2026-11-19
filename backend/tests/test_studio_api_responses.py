@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -25,7 +26,10 @@ class _FakeStudioDB:
         self.projects: dict[str, Project] = {}
         self.chapters: dict[str, Chapter] = {}
 
-    async def get(self, model: type, entity_id: str):  # noqa: ANN001
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+
+    async def get(self, model: type, entity_id: str, **_kwargs):  # noqa: ANN001
         if model is Project:
             return self.projects.get(entity_id)
         if model is Chapter:

@@ -23,6 +23,7 @@ dependencies = [
     "boto3",
     "python-multipart>=0.0.5",
     "jinja2",
+    "pillow>=12",
 ]
 
 [project.optional-dependencies]

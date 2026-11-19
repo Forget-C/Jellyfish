@@ -32,6 +32,10 @@ class Project(Base, TimestampMixin):
         default=ProjectVisualStyle.live_action,
         comment="画面表现形式（真人/动漫等）",
     )
+    cover_file_id: Mapped[str | None] = mapped_column(
+        ForeignKey("files.id", name="fk_projects_cover_file", ondelete="SET NULL"),
+        nullable=True,
+    )
     seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="随机种子")
     unify_style: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, comment="是否统一风格（跨章节）")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="进度百分比（0-100）")

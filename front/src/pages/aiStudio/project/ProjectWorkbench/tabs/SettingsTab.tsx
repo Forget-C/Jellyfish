@@ -4,6 +4,7 @@ import { type ProjectRead, type ProjectUpdate } from '../../../../../services/ge
 import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { ProjectVisualStyleAndStyleFields } from '../../ProjectVisualStyleAndStyleFields'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
+import { ProjectCoverField, type CoverDraft } from './ProjectCoverField'
 import './project-settings.css'
 import { useProjectStyleOptions } from '../../useProjectStyleOptions'
 
@@ -23,15 +24,16 @@ function settingsValues(project: ProjectRead): ProjectUpdate {
 export function SettingsTab({ project, saving, onSave }: {
   project: ProjectRead
   saving: boolean
-  onSave: (values: ProjectUpdate) => Promise<boolean>
+  onSave: (values: ProjectUpdate, coverUpload?: File) => Promise<boolean>
 }) {
   const [form] = Form.useForm<ProjectUpdate>()
   const { options, videoRatioOptions } = useProjectStyleOptions()
   const [error, setError] = useState('')
+  const [cover, setCover] = useState<CoverDraft>()
   const saved = settingsValues(project)
   const values = Form.useWatch([], form)
-  const dirty = values && Object.entries(saved).some(([key, value]) =>
-    (values[key as keyof ProjectUpdate] ?? null) !== (value ?? null))
+  const dirty = cover !== undefined || (values && Object.entries(saved).some(([key, value]) =>
+    (values[key as keyof ProjectUpdate] ?? null) !== (value ?? null)))
 
   useEffect(() => { form.setFieldsValue(settingsValues(project)) }, [form, project])
 
@@ -39,7 +41,10 @@ export function SettingsTab({ project, saving, onSave }: {
     if (!dirty || saving) return
     setError('')
     try {
-      if (await onSave({ ...values, default_video_ratio: values.default_video_ratio ?? null })) {
+      const update = { ...values, default_video_ratio: values.default_video_ratio ?? null }
+      if (typeof cover === 'string' || cover === null) update.cover_file_id = cover
+      if (await onSave(update, cover instanceof File ? cover : undefined)) {
+        setCover(undefined)
         message.success('项目已更新')
       }
     } catch (cause) {
@@ -48,6 +53,7 @@ export function SettingsTab({ project, saving, onSave }: {
   }
 
   function cancel() {
+    setCover(undefined)
     form.resetFields()
     form.setFieldsValue(saved)
     setError('')
@@ -59,13 +65,18 @@ export function SettingsTab({ project, saving, onSave }: {
       <Form aria-label="项目设置表单" form={form} layout="vertical" className="app-settings-form project-settings-form" initialValues={saved} onFinish={save} disabled={saving}>
         {error && <Alert type="error" showIcon message={error} className="mb-4" />}
         <section className="project-settings-group" aria-labelledby="project-settings-basic">
-        <h2 id="project-settings-basic">基本信息</h2>
-        <Form.Item name="name" label="项目名称" rules={[{ required: true, whitespace: true, message: '请输入项目名称' }]}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="description" label="项目简介">
-          <Input.TextArea rows={3} />
-        </Form.Item>
+          <h2 id="project-settings-basic">基本信息</h2>
+          <div className="project-settings-basic-fields">
+            <ProjectCoverField projectId={project.id} savedId={project.cover_file_id} draft={cover} disabled={saving} onChange={setCover} />
+            <div>
+              <Form.Item name="name" label="项目名称" rules={[{ required: true, whitespace: true, message: '请输入项目名称' }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="description" label="项目简介">
+                <Input.TextArea rows={3} />
+              </Form.Item>
+            </div>
+          </div>
         </section>
         <section className="project-settings-group" aria-labelledby="project-settings-generation">
         <h2 id="project-settings-generation">生成默认设置</h2>

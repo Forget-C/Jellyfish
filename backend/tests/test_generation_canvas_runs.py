@@ -453,11 +453,12 @@ async def test_runtime_migration_preserves_existing_scene_canvas_observation(tmp
     from alembic.operations import Operations
     from app.models.directing import Sequence
     from app.models.generation_canvas import GenerationCanvas, CanvasSaveReceipt
-    from app.models.studio import Chapter
+    from app.models.studio import Chapter, FileItem
     from app.services.generation_canvas.runtime import CanvasRuntime
     engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path}/upgrade.db')
     async with engine.begin() as db:
         def migrate(connection):
+            FileItem.__table__.create(connection)
             Project.__table__.create(connection)
             # The current canvas metadata can reference the earlier chapter and scene tables.
             Chapter.__table__.create(connection)

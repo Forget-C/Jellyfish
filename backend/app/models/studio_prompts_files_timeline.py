@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, JSON, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, JSON, Index, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -61,6 +61,7 @@ class FileItem(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    is_project_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
     content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="文件内容哈希")

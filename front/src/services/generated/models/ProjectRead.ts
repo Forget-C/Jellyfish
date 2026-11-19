@@ -41,6 +41,10 @@ export type ProjectRead = {
      * 聚合统计（JSON）
      */
     stats?: Record<string, any>;
+    /**
+     * 已保存的项目封面副本 ID
+     */
+    cover_file_id?: (string | null);
     id: string;
 };
 

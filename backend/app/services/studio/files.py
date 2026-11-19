@@ -82,9 +82,14 @@ async def list_files_paginated(
     is_desc: bool,
     page: int,
     page_size: int,
+    file_type: FileType | None = None,
 ) -> ApiResponse[PaginatedData[FileRead]]:
     """分页查询文件。"""
-    stmt = select(FileItem).where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None))
+    stmt = select(FileItem).where(
+        FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None), FileItem.is_project_cover.is_(False),
+    )
+    if file_type is not None:
+        stmt = stmt.where(FileItem.type == file_type)
     stmt = apply_keyword_filter(stmt, q=q, fields=[FileItem.name])
     stmt = apply_order(
         stmt,
@@ -94,7 +99,7 @@ async def list_files_paginated(
         allow_fields=FILE_ORDER_FIELDS,
         default="created_at",
     )
-    items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
+    items, total = await paginate(db, stmt=stmt.order_by(FileItem.id), page=page, page_size=page_size)
     return paginated_response(
         [FileRead.model_validate(x) for x in items],
         page=page,
@@ -112,7 +117,7 @@ async def get_file_detail(
     stmt = select(FileItem).options(selectinload(FileItem.usages)).where(FileItem.id == file_id)
     res = await db.execute(stmt)
     obj = res.scalars().first()
-    if obj is None:
+    if obj is None or obj.is_project_cover:
         raise HTTPException(status_code=404, detail=entity_not_found("File"))
     usages = [FileUsageRead.model_validate(u) for u in (obj.usages or [])]
     base = FileRead.model_validate(obj)
@@ -206,7 +211,7 @@ async def build_download_response(
     range_header: str | None = None,
 ) -> StreamingResponse:
     """下载文件并支持浏览器单区间读取，保证视频可跳转到真实入出点。"""
-    file_item = await require_available_file(db, file_id=file_id, lock=False)
+    file_item = await require_available_file(db, file_id=file_id, lock=False, allow_project_cover=True)
     content = await storage.download_file(key=file_item.storage_key)
     filename = Path(file_item.storage_key).name or "download"
     media_type = file_item.content_type if file_item.content_type != "application/octet-stream" else _resolve_download_media_type(filename)
@@ -255,6 +260,8 @@ async def delete_file(
     file_item = await db.get(FileItem, file_id, with_for_update=True, populate_existing=True)
     if file_item is None or file_item.delete_requested_at is not None:
         return
+    if file_item.is_project_cover:
+        raise HTTPException(status_code=409, detail="请在项目设置中管理封面")
     await _ensure_file_is_unreferenced(db, file_id=file_id)
     file_item.delete_requested_at = datetime.now(UTC).replace(tzinfo=None)
     await db.flush()
@@ -262,6 +269,7 @@ async def delete_file(
 
 async def require_available_file(
     db: AsyncSession, *, file_id: str, lock: bool = True, expected_type: str | None = None,
+    allow_project_cover: bool = False,
 ) -> FileItem:
     """新增使用关系前锁定文件，与删除登记串行化，拒绝再次使用已删除内容。"""
     file = await db.get(FileItem, file_id, with_for_update=lock, populate_existing=True)
@@ -269,6 +277,8 @@ async def require_available_file(
         raise HTTPException(status_code=404, detail=entity_not_found("File"))
     if file.delete_requested_at is not None or file.deleted_at is not None:
         raise HTTPException(status_code=410, detail="File deleted")
+    if file.is_project_cover and not allow_project_cover:
+        raise HTTPException(status_code=404, detail=entity_not_found("File"))
     if expected_type is not None and file.type != expected_type:
         raise HTTPException(status_code=422, detail=f"Expected {expected_type} file")
     return file
