@@ -1,10 +1,8 @@
-.chapter-create-fields { display: grid; gap: 16px; }
 .chapter-editor-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
 .chapter-editor-drawer .chapter-editor-field { margin-block: 12px; }
 .chapter-editor-field .ant-input { font-weight: 400; }
 .chapter-editor-label { margin-bottom: 6px; font-size: 14px; font-weight: 600; }
 .chapter-editor-drawer .chapter-editor-text,
-.chapter-create-drawer .chapter-editor-text,
 .chapter-editor-history .chapter-editor-text {
   font-family: inherit;
   font-size: 14px;
@@ -18,7 +16,6 @@
 .chapter-editor-drawer .ant-drawer-body .ant-btn,
 .chapter-editor-history .ant-btn { font-size: 13px; min-height: 32px; border-radius: 8px; }
 .chapter-editor-drawer .chapter-compare > * { min-width: 0; }
-.chapter-editor-drawer .resource-editor-drawer-content:has(.chapter-compare) { max-width: none; }
 .chapter-editor-drawer .ant-alert { overflow-wrap: anywhere; }
 .chapter-editor-drawer .ant-alert-message,
 .chapter-editor-drawer .ant-alert-description { font-size: 14px; }
@@ -29,15 +26,85 @@
 .chapter-editor-drawer .resource-editor-page-heading > .ant-btn { flex-shrink: 0; }
 @media (max-width: 767px) {
   .chapter-editor-drawer .resource-editor-page-heading { flex-basis: 100%; }
-  .chapter-editor-drawer .resource-editor-page-actions,
-  .chapter-create-drawer .resource-editor-page-actions { display: flex; justify-content: flex-end; }
+  .chapter-editor-drawer .resource-editor-page-actions { display: flex; justify-content: flex-end; }
   .chapter-editor-drawer .ant-drawer-body .ant-btn,
   .chapter-editor-history .ant-btn { min-height: 36px; }
-  .chapter-editor-drawer .chapter-compare,
   .chapter-editor-history .chapter-compare { grid-template-columns: minmax(0, 1fr); }
   .chapter-editor-drawer .ant-alert { flex-wrap: wrap; }
   .chapter-editor-drawer .ant-alert-action { margin: 8px 0 0; }
   .chapter-editor-drawer .ant-card-head-wrapper { flex-wrap: wrap; gap: 4px 8px; }
   .chapter-editor-drawer .ant-card-head-title { flex-basis: 100%; }
   .chapter-editor-drawer .ant-card-extra { margin-inline-start: 0; }
+}
+
+.chapter-editor-drawer .resource-editor-drawer-content {
+  max-width: 1200px;
+  container: chapter-editor / inline-size;
+}
+.chapter-editor-title-note {
+  color: var(--app-muted, #536174);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.chapter-editor-layout {
+  display: grid;
+  gap: 16px 24px;
+  align-items: start;
+  margin-block: 12px;
+}
+.chapter-editor-layout > * { min-width: 0; }
+.chapter-editor-pane-switch { display: flex; gap: 8px; }
+.chapter-editor-pane-switch .ant-btn[aria-pressed="true"] {
+  color: var(--app-accent, #245fc5);
+  background: var(--app-selected, #e4edfb);
+}
+.chapter-editor-texts { display: grid; gap: 16px; }
+.chapter-editor-texts > label { min-width: 0; }
+.chapter-editor-texts > label[hidden] { display: none; }
+.chapter-editor-label { display: block; }
+.chapter-editor-select { margin-bottom: 8px; }
+.chapter-editor-layout[data-compare="true"] .chapter-editor-explanations,
+.chapter-editor-layout[data-compare="true"] .chapter-editor-pane-switch { display: none; }
+.chapter-explanation-row { border-bottom: 1px solid var(--app-border, #dce2eb); margin-bottom: 8px; }
+.chapter-explanation-summary {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 8px 0;
+  text-align: left;
+  cursor: pointer;
+}
+.chapter-explanation-summary > span:first-child { display: flex; min-width: 0; gap: 8px; align-items: center; }
+.chapter-explanation-summary strong,
+.chapter-explanation-summary .ant-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-explanation-summary .ant-tag { margin-inline-end: 0; }
+.chapter-explanation-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chapter-explanation-details { display: grid; gap: 8px; padding-block: 4px 12px; }
+.chapter-explanation-details > label { display: grid; gap: 4px; }
+.chapter-explanation-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.chapter-explanation-comparison dt { font-weight: 600; }
+.chapter-explanation-comparison dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@container chapter-editor (width < 824px) {
+  .chapter-editor-layout { --chapter-editor-compact: 1; }
+  .chapter-editor-layout[data-compare="false"][data-pane="body"] .chapter-editor-explanations,
+  .chapter-editor-layout[data-compare="false"][data-pane="explanations"] .chapter-editor-body-pane,
+  .chapter-editor-checks[data-pane="explanations"] { display: none; }
+}
+@container chapter-editor (width >= 824px) {
+  .chapter-editor-layout[data-compare="false"] {
+    grid-template-columns: minmax(520px, 1fr) clamp(280px, 30%, 340px);
+  }
+  .chapter-editor-pane-switch { display: none; }
+  .chapter-editor-layout[data-compare="true"] .chapter-editor-texts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .chapter-editor-drawer .resource-editor-page-heading { flex-wrap: wrap; }
+  .chapter-editor-drawer .resource-editor-page-heading .app-page-title { flex: 1 1 0; }
+  .chapter-editor-title-note { flex-basis: 100%; }
 }

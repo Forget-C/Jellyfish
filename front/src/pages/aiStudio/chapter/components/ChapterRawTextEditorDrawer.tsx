@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
 import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Space, Spin, Tag, Select, message } from 'antd'
 import { flushSync } from 'react-dom'
 import {
@@ -9,7 +9,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { ScriptProcessingService, StudioChaptersService } from '../../../../services/generated'
-import type { SourceExplanation } from '../../../../services/generated'
+import type { ChapterCreate, SourceExplanation, SourceSpan } from '../../../../services/generated'
 import { SourceExplanationsEditor, sourceVersion, SOURCE_POLICY_VERSION } from './SourceExplanationsEditor'
 import type { ScriptConsistencyCheckResult } from './scriptConsistencyResult'
 import {
@@ -24,11 +24,14 @@ import { useRelationTaskNotification } from '../../components/taskNotificationHe
 import { useTaskPageContext } from '../../components/taskPageContext'
 import { TASK_COPY } from '../../components/taskCopy'
 import { apiErrorMessage } from '../../../../services/apiErrorMessage'
+import { sourceSlice, textareaSpan } from '../../directing/sourceSelection'
 import { useWorkspaceDraft } from '../../directing/WorkspaceDrafts'
 
 import { ResourceEditorFrame } from '../../assets/components/ResourceEditorFrame'
 import '../../assets/components/resourceEditor.css'
 import './chapter-editor.css'
+
+export type ChapterDraft = Pick<ChapterCreate, 'title' | 'raw_text' | 'condensed_text' | 'source_explanations'>
 
 type EditorMode = 'raw' | 'condensed' | 'compare'
 
@@ -45,22 +48,25 @@ export function ChapterRawTextEditorDrawer({
   chapterId,
   projectId,
   onSaved,
+  onCreate,
   onReviewSequences,
 }: {
   open: boolean
   onClose: () => void
-  chapterId: string | undefined
+  chapterId?: string
   projectId: string
   onSaved?: (next: { title?: string; rawText?: string; condensedText?: string }) => void
-  onReviewSequences: () => void
+  onReviewSequences?: () => void
+  onCreate?: (draft: ChapterDraft, enter: boolean) => Promise<void>
 }) {
+  const creating = !!onCreate
   const consistencyTaskCopy = TASK_COPY.consistencyCheck
   const simplifyTaskCopy = TASK_COPY.scriptSimplify
   const optimizeTaskCopy = TASK_COPY.scriptOptimize
   const drawerId = useId()
   const saveFeedback = useRef<HTMLDivElement>(null)
   const historyTrigger = useRef<HTMLButtonElement>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(!!chapterId)
   const [saving, setSaving] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [checkingConsistency, setCheckingConsistency] = useState(false)
@@ -76,8 +82,92 @@ export function ChapterRawTextEditorDrawer({
   const [needsReview, setNeedsReview] = useState(false)
 
   const [mode, setMode] = useState<EditorMode>('raw')
+  const compareReturn = useRef<'raw' | 'condensed'>('raw')
+  const [pane, setPane] = useState<'body' | 'explanations'>('body')
+  const layout = useRef<HTMLDivElement>(null)
+  const drawerBody = useRef<HTMLElement | null>(null)
+  const rememberDrawerBody = useCallback((node: HTMLElement | null) => { drawerBody.current = node }, [])
+  const readingPositions = useRef<Partial<Record<EditorMode | 'explanations', number>>>({})
+  const pendingScroll = useRef<number>()
+  const switchView = (nextMode: EditorMode, nextPane = pane) => {
+    const compact = layout.current && getComputedStyle(layout.current).getPropertyValue('--chapter-editor-compact').trim() === '1'
+    const readingView = (view: EditorMode, panel: typeof pane) =>
+      compact && view !== 'compare' && panel === 'explanations' ? 'explanations' : view
+    const previous = readingView(mode, pane)
+    const next = readingView(nextMode, nextPane)
+    if (drawerBody.current && previous !== next) {
+      readingPositions.current[previous] = drawerBody.current.scrollTop
+      pendingScroll.current = readingPositions.current[next] ?? 0
+    }
+    setMode(nextMode)
+    setPane(nextPane)
+  }
+  useLayoutEffect(() => {
+    if (drawerBody.current && pendingScroll.current !== undefined) {
+      drawerBody.current.scrollTop = pendingScroll.current
+      pendingScroll.current = undefined
+    }
+  }, [mode, pane])
+  const [expandedExplanation, setExpandedExplanation] = useState<string>()
+  const focusExplanation = useRef(false)
+  useLayoutEffect(() => {
+    if (!focusExplanation.current) return
+    layout.current?.querySelector<HTMLTextAreaElement>('textarea[data-explanation-editor]')?.focus()
+    focusExplanation.current = false
+  }, [expandedExplanation, pane])
+  const [selectingFor, setSelectingFor] = useState<string>()
+  const [selectionTarget, setSelectionTarget] = useState<{ span?: SourceSpan }>()
+  const rawInput = useRef<ComponentRef<typeof Input.TextArea>>(null)
   const [rawText, setRawText] = useState('')
   const [condensedText, setCondensedText] = useState('')
+  const selectInRaw = (span?: SourceSpan) => {
+    switchView('raw', 'body')
+    setSelectionTarget({ span })
+  }
+  useLayoutEffect(() => {
+    if (!selectionTarget) return
+    const input = rawInput.current?.resizableTextArea?.textArea
+    if (!input) return
+    input.scrollIntoView({ block: 'nearest' })
+    input.focus({ preventScroll: true })
+    const span = selectionTarget.span
+    if (span) {
+      const prefix = sourceSlice(rawText, { start: 0, end: span.start }).replace(/\r\n?/g, '\n')
+      const selected = sourceSlice(rawText, span).replace(/\r\n?/g, '\n')
+      input.setSelectionRange(prefix.length, prefix.length + selected.length)
+      // Measure the selected line with the same wrap and font as the editable text.
+      const mirror = document.createElement('div')
+      const style = getComputedStyle(input)
+      Object.assign(mirror.style, {
+        position: 'fixed', visibility: 'hidden', width: `${input.clientWidth}px`,
+        boxSizing: 'border-box', padding: style.padding, font: style.font,
+        letterSpacing: style.letterSpacing, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+      })
+      const marker = document.createElement('span')
+      marker.textContent = selected || '\u200b'
+      mirror.append(prefix, marker, input.value.slice(prefix.length + selected.length))
+      input.parentElement?.appendChild(mirror)
+      input.scrollTop = marker.offsetTop - input.clientHeight / 2
+      mirror.remove()
+    }
+    setSelectionTarget(undefined)
+  }, [rawText, selectionTarget])
+
+  const readRawSelection = () => {
+    const input = rawInput.current?.resizableTextArea?.textArea
+    return mode === 'raw' && input ? textareaSpan(rawText, input.selectionStart, input.selectionEnd) : undefined
+  }
+  const addExplanation = (span?: SourceSpan) => {
+    const id = crypto.randomUUID()
+    setExplanations(items => [...items, {
+      id, ...span, excerpt: span ? sourceSlice(rawText, span) : '', text: '',
+      source_version: span ? rawVersion : '',
+    }])
+    focusExplanation.current = true
+    setExpandedExplanation(id)
+    switchView(mode, 'explanations')
+  }
+
   const [savedRawText, setSavedRawText] = useState('')
   const [savedCondensedText, setSavedCondensedText] = useState('')
   const [explanations, setExplanations] = useState<SourceExplanation[]>([])
@@ -94,7 +184,16 @@ export function ChapterRawTextEditorDrawer({
     setRawVersion(''); setExplanationVersion('')
     void sourceVersion(rawText).then(async version => {
       const valid = explanations.filter(item => item.source_version === version && item.policy_version === SOURCE_POLICY_VERSION)
-      const canonical = (items: SourceExplanation[]) => JSON.stringify(items.map(item => ({ ...(item.end == null ? {} : { end: item.end }), excerpt: item.excerpt ?? '', id: item.id, kind: item.kind ?? 'explanation', ...(item.policy_version == null ? {} : { policy_version: item.policy_version }), source_version: item.source_version, ...(item.start == null ? {} : { start: item.start }), text: item.text })))
+      const canonical = (items: SourceExplanation[]) => JSON.stringify(items.map(item => ({
+        ...(typeof item.end === 'number' ? { end: item.end } : {}),
+        excerpt: item.excerpt ?? '',
+        id: item.id,
+        kind: item.kind ?? 'explanation',
+        ...(typeof item.policy_version === 'number' ? { policy_version: item.policy_version } : {}),
+        source_version: item.source_version,
+        ...(typeof item.start === 'number' ? { start: item.start } : {}),
+        text: item.text,
+      })))
       const stable = canonical(valid)
       const reviewHash = await sourceVersion(canonical(explanations))
       const explanationHash = await sourceVersion(stable)
@@ -218,7 +317,7 @@ export function ChapterRawTextEditorDrawer({
   const actionsLoading =
     loading || !!loadError || saving || extracting || checkingConsistency || optimizingScript || !!simplifyTask || !!optimizeTask || !!consistencyTask
   const consistencyIssues = useMemo(() => {
-    const list = (consistencyResult?.issues as any[] | undefined) ?? []
+    const list = consistencyResult?.issues ?? []
     return Array.isArray(list) ? list : []
   }, [consistencyResult])
 
@@ -453,6 +552,26 @@ export function ChapterRawTextEditorDrawer({
     onCancel: optimizeTask ? () => void handleCancelOptimizeTask() : null,
   })
 
+  const createChapter = async (enter: boolean): Promise<boolean> => {
+    if (!onCreate || actionsLoading) return false
+    if (!chapterTitle.trim()) { setSaveError('请输入章节名称'); return false }
+    setSaving(true); setSaveError('')
+    try {
+      await onCreate({
+        title: chapterTitle.trim(),
+        raw_text: rawText,
+        condensed_text: condensedText,
+        source_explanations: explanations,
+      }, enter)
+      return true
+    } catch (cause) {
+      setSaveError(apiErrorMessage(cause))
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const rawChanged = rawText !== savedRawText
   const hasUnsavedChanges = JSON.stringify(explanations) !== JSON.stringify(savedExplanations) || chapterTitle.trim() !== savedTitle || rawChanged || condensedText !== savedCondensedText
   const impact = rawChanged && !!sequenceCount
@@ -490,9 +609,9 @@ export function ChapterRawTextEditorDrawer({
     } catch (cause) { setSaveError(apiErrorMessage(cause)); return false }
     finally { setSaving(false) }
   }
-  const guard = useWorkspaceDraft({ name: '章节编辑', dirty: open && !loadError && hasUnsavedChanges,
+  const guard = useWorkspaceDraft({ name: creating ? '新建章节' : '章节编辑', dirty: open && !loadError && hasUnsavedChanges,
     busy: saving || extracting || checkingConsistency || optimizingScript || !!simplifyTask || !!optimizeTask || !!consistencyTask,
-    saveWarning: impact, save: () => handleSave(true), discard: () => {
+    saveWarning: impact, save: () => creating ? createChapter(false) : handleSave(true), discard: () => {
       flushSync(() => {
         setExplanations(savedExplanations); setChapterTitle(savedTitle); setRawText(savedRawText); setCondensedText(savedCondensedText); setConfirmRaw(undefined)
       })
@@ -526,17 +645,19 @@ export function ChapterRawTextEditorDrawer({
 
   return (
     <>
-      <ResourceEditorFrame id={drawerId} open={open} drawer className="chapter-editor-drawer"
-        title={savedTitle ? `编辑章节 · ${savedTitle}` : '编辑章节'}
+      <ResourceEditorFrame id={drawerId} open={open} drawer className="chapter-editor-drawer" onBodyReady={rememberDrawerBody}
+        title={creating ? '新建章节' : savedTitle ? `编辑章节 · ${savedTitle}` : '编辑章节'}
+        titleExtra={!!sequenceCount && <span className="chapter-editor-title-note">修改原文不会同步已有场次</span>}
         backLabel="返回" onClose={historyOpen ? () => setHistoryOpen(false) : handleRequestClose}
-        actions={<Space wrap>
+        actions={creating
+          ? <Button type="primary" loading={saving} onClick={() => void createChapter(true)}>创建并继续</Button>
+          : <Space wrap>
           <Button ref={historyTrigger} icon={<HistoryOutlined aria-hidden />} disabled={actionsLoading}
             onClick={() => setHistoryOpen(true)}>版本历史</Button>
           <Button aria-label="保存" type="primary" icon={<SaveOutlined aria-hidden />} loading={saving}
             disabled={actionsLoading || !hasUnsavedChanges} onClick={() => void handleSave()}>保存</Button>
         </Space>}
       >
-        <Alert type="info" showIcon message="改变章节内容后不会自动更新场次。" description="此处的章节内容指章节原文；仅修改名称或精简文本不会改变场次原文依据。" style={{ marginBottom: 12 }} />
         {loadError && <Alert type="error" showIcon message={loadError} action={<Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />}
         {!loading && !loadError && <label className="chapter-editor-field">章节名称<Input aria-label="章节名称" value={chapterTitle} disabled={actionsLoading} onChange={event => setChapterTitle(event.target.value)} /></label>}
         <div ref={saveFeedback}>
@@ -546,98 +667,107 @@ export function ChapterRawTextEditorDrawer({
             <Button type="primary" loading={saving} onClick={() => void handleSave(true)}>确认保存原文</Button>
           </Space>} style={{ marginBottom: 12 }} />}
         </div>
-        {needsReview && <Alert type="warning" message="原文已保存，请逐场核对原文范围及设计与计划依据。" action={<Button onClick={() => guard(onReviewSequences)}>查看本章场次并核对</Button>} style={{ marginBottom: 12 }} />}
-        {!loading && !loadError && <div className="chapter-editor-tools">
-          <Space wrap role="group" aria-label="正文视图">
-            <Button aria-label="原文" aria-pressed={mode === 'raw'} disabled={actionsLoading} onClick={() => setMode('raw')}>原文</Button>
-            <Button aria-pressed={mode === 'condensed'} disabled={actionsLoading || !condensedText.trim()} onClick={() => setMode('condensed')}>精简内容</Button>
-            <Button aria-label="对比" aria-pressed={mode === 'compare'} disabled={actionsLoading} onClick={() => setMode('compare')}>对比</Button>
-          </Space>
-          <Space wrap aria-label="原文工具" role="group">
-            <Button
-              icon={<ReloadOutlined aria-hidden />}
-              loading={checkingConsistency || !!consistencyTask}
-              disabled={actionsLoading || !!consistencyTask}
-              onClick={() => void handleCheckConsistency()}
-            >
-              {consistencyTask ? '检查中' : '原文一致性检查'}
-            </Button>
-            {consistencyTask ? (
-              <Button
-                danger
-                icon={<CloseCircleOutlined aria-hidden />}
-                disabled={consistencyTask.cancelRequested}
-                onClick={() => void handleCancelConsistencyTask()}
-              >
-                {consistencyTask.cancelRequested ? '正在取消' : '取消检查'}
-              </Button>
-            ) : null}
-            <Button
-              icon={<ThunderboltOutlined aria-hidden />}
-              loading={extracting || !!simplifyTask}
-              disabled={actionsLoading || !!simplifyTask}
-              onClick={() => void handleSmartSimplify()}
-            >
-              {simplifyTask ? '精简中' : '智能精简'}
-            </Button>
-            {simplifyTask ? (
-              <Button
-                danger
-                icon={<CloseCircleOutlined aria-hidden />}
-                disabled={simplifyTask.cancelRequested}
-                onClick={() => void handleCancelSimplifyTask()}
-              >
-                {simplifyTask.cancelRequested ? '正在取消' : '取消精简'}
-              </Button>
-            ) : null}
-          </Space>
-          <div className="chapter-editor-meta"><Tag>{plainWordCount} 字</Tag><Tag>{paragraphCount} 段</Tag></div>
-        </div>}
+        {needsReview && <Alert type="warning" message="原文已保存，请逐场核对原文范围及设计与计划依据。" action={<Button onClick={() => onReviewSequences && guard(onReviewSequences)}>查看本章场次并核对</Button>} style={{ marginBottom: 12 }} />}
         {loading ? (
-          <div className="flex justify-center items-center py-10">
-            <Spin />
-          </div>
-        ) : loadError ? null : mode === 'compare' ? (
-          <div className="chapter-compare grid grid-cols-2 gap-4">
-            <div className="flex flex-col">
-              <div className="chapter-editor-label">原文</div>
-              <Input.TextArea
-                aria-label="对比原文"
-                value={rawText}
-                onChange={event => setRawText(event.target.value)}
-                rows={14}
-                disabled={actionsLoading}
-                className="chapter-editor-text"
-              />
+          <div className="flex justify-center items-center py-10"><Spin /></div>
+        ) : !loadError && (
+          <div ref={layout} className="chapter-editor-layout" data-pane={pane} data-compare={mode === 'compare'}>
+            <div className="chapter-editor-pane-switch" role="group" aria-label="章节内容">
+              <Button aria-pressed={pane === 'body'} onClick={() => switchView(mode, 'body')}>正文</Button>
+              <Button aria-pressed={pane === 'explanations'} onClick={() => switchView(mode, 'explanations')}>解释（{explanations.length}）</Button>
             </div>
-            <div className="flex flex-col">
-              <div className="chapter-editor-label">精简内容</div>
-              <Input.TextArea
-                aria-label="对比精简内容"
-                value={condensedText}
-                onChange={event => setCondensedText(event.target.value)}
-                rows={14}
-                disabled={actionsLoading}
-                className="chapter-editor-text"
-              />
-            </div>
+            <section className="chapter-editor-body-pane" aria-label="正文编辑">
+              <div className="chapter-editor-tools">
+                <Space wrap role="group" aria-label="正文视图">
+                  <Button aria-label="原文" aria-pressed={mode === 'raw'} disabled={actionsLoading} onClick={() => switchView('raw')}>原文</Button>
+                  <Button aria-pressed={mode === 'condensed'} disabled={actionsLoading} onClick={() => switchView('condensed')}>精简内容</Button>
+                  <Button aria-label={mode === 'compare' ? '退出对比' : '对比'} aria-pressed={mode === 'compare'} disabled={actionsLoading} onClick={() => {
+                    if (mode === 'compare') switchView(compareReturn.current)
+                    else { compareReturn.current = mode; switchView('compare') }
+                  }}>{mode === 'compare' ? '退出对比' : '对比'}</Button>
+                </Space>
+                {!creating && <Space wrap aria-label="原文工具" role="group">
+                  <Button
+                    icon={<ReloadOutlined aria-hidden />}
+                    loading={checkingConsistency || !!consistencyTask}
+                    disabled={actionsLoading || !!consistencyTask}
+                    onClick={() => void handleCheckConsistency()}
+                  >
+                    {consistencyTask ? '检查中' : '原文一致性检查'}
+                  </Button>
+                  {consistencyTask ? (
+                    <Button
+                      danger
+                      icon={<CloseCircleOutlined aria-hidden />}
+                      disabled={consistencyTask.cancelRequested}
+                      onClick={() => void handleCancelConsistencyTask()}
+                    >
+                      {consistencyTask.cancelRequested ? '正在取消' : '取消检查'}
+                    </Button>
+                  ) : null}
+                  <Button
+                    icon={<ThunderboltOutlined aria-hidden />}
+                    loading={extracting || !!simplifyTask}
+                    disabled={actionsLoading || !!simplifyTask}
+                    onClick={() => void handleSmartSimplify()}
+                  >
+                    {simplifyTask ? '精简中' : '智能精简'}
+                  </Button>
+                  {simplifyTask ? (
+                    <Button
+                      danger
+                      icon={<CloseCircleOutlined aria-hidden />}
+                      disabled={simplifyTask.cancelRequested}
+                      onClick={() => void handleCancelSimplifyTask()}
+                    >
+                      {simplifyTask.cancelRequested ? '正在取消' : '取消精简'}
+                    </Button>
+                  ) : null}
+                </Space>}
+                <div className="chapter-editor-meta"><Tag>{plainWordCount} 字</Tag><Tag>{paragraphCount} 段</Tag></div>
+              </div>
+              {mode === 'raw' && !selectingFor && <Button className="chapter-editor-select" disabled={actionsLoading || !rawVersion || !rawText.trim()} onClick={() => {
+                const span = readRawSelection()
+                if (span) addExplanation(span)
+                else message.warning('请先选中一段原文')
+              }}>选段添加解释</Button>}
+              {selectingFor && mode === 'raw' && <Space wrap>
+                <Button disabled={actionsLoading || !rawVersion} onClick={() => {
+                  const span = readRawSelection()
+                  if (!span) { message.warning('请先选中一段原文'); return }
+                  setExplanations(items => items.map(item => item.id === selectingFor
+                    ? { ...item, ...span, excerpt: sourceSlice(rawText, span), source_version: rawVersion, policy_version: undefined }
+                    : item))
+                  setSelectingFor(undefined)
+                  focusExplanation.current = true
+                  switchView(mode, 'explanations')
+                }}>使用所选原文</Button>
+                <Button type="text" onClick={() => setSelectingFor(undefined)}>取消选段</Button>
+              </Space>}
+              <div className="chapter-editor-texts">
+                <label hidden={mode === 'condensed'}>
+                  {mode === 'compare' && <span className="chapter-editor-label">原文</span>}
+                  <Input.TextArea ref={rawInput} aria-label={mode === 'compare' ? '对比原文' : '章节原文'}
+                    value={rawText} onChange={event => setRawText(event.target.value)} disabled={actionsLoading}
+                    placeholder="编辑章节原文…" rows={16} className="chapter-editor-text" />
+                </label>
+                <label hidden={mode === 'raw'}>
+                  {mode === 'compare' && <span className="chapter-editor-label">精简内容</span>}
+                  <Input.TextArea aria-label={mode === 'compare' ? '对比精简内容' : '精简内容'}
+                    value={condensedText} onChange={event => setCondensedText(event.target.value)} disabled={actionsLoading}
+                    placeholder="编辑精简内容…" rows={16} className="chapter-editor-text" />
+                </label>
+              </div>
+            </section>
+            <aside className="chapter-editor-explanations" aria-label="原文补充解释">
+              <SourceExplanationsEditor items={explanations} savedItems={savedExplanations} version={rawVersion} rawText={rawText} disabled={actionsLoading}
+                onChange={setExplanations} expanded={expandedExplanation} onExpand={setExpandedExplanation}
+                onAdd={() => addExplanation()} onLocate={selectInRaw}
+                onReselect={id => { setSelectingFor(id); selectInRaw() }} />
+            </aside>
           </div>
-        ) : (
-          <div className="space-y-3">
-            <Input.TextArea
-              aria-label={mode === 'raw' ? '章节原文' : '精简内容'}
-              value={editorText}
-              onChange={(e) => {
-                const v = e.target.value
-                if (mode === 'raw') setRawText(v)
-                if (mode === 'condensed') setCondensedText(v)
-              }}
-            disabled={actionsLoading}
-              placeholder={mode === 'raw' ? '编辑章节原文…' : '编辑精简内容…'}
-              rows={16}
-              className="chapter-editor-text"
-            />
-            <SourceExplanationsEditor items={explanations} version={rawVersion} rawText={rawText} disabled={actionsLoading} onChange={setExplanations} />
+        )}
+        {!loading && !loadError && mode !== 'compare' && <div className="chapter-editor-checks space-y-3" data-pane={pane}>
             {consistencyResult && (consistencyResult.review_version !== reviewVersion || consistencyResult.policy_version !== SOURCE_POLICY_VERSION || consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) && <Alert type="warning" message="检查结果已过期或为旧版检查，请重新检查后修复" />}
             {repairPreview && <Card title="原文异常修复预览">
               <p>修改前</p><pre className="chapter-editor-text" style={{ whiteSpace: 'pre-wrap' }}>{repairPreview.source}</pre>
@@ -684,13 +814,13 @@ export function ChapterRawTextEditorDrawer({
                   <List
                     size="small"
                     dataSource={consistencyIssues}
-                    renderItem={(it: any, idx) => it.target === 'explanation' ? (
+                    renderItem={(it, idx) => it.target === 'explanation' ? (
                       <List.Item><Space direction="vertical">
                         <Tag>补充解释问题</Tag>
                         <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{explanations.find(item => item.id === it.explanation_id)?.text ?? '条目已移除'}</div>
                         <div>{it.description}</div><div>建议：{it.suggestion}</div>
                         <Button disabled={actionsLoading || consistencyResult.review_version !== reviewVersion || consistencyResult.policy_version !== SOURCE_POLICY_VERSION || consistencyResult.source_version !== rawVersion} onClick={() => {
-                          setExplanations(previous => previous.map(item => item.id === it.explanation_id ? { ...item, source_version: '', policy_version: undefined } : item))
+                          setExplanations(previous => previous.map(item => item.id === it.explanation_id ? { ...item, policy_version: undefined } : item))
                           message.info('已退出采用，解释内容保留待调整')
                         }}>确认越界，退出采用</Button>
                         <div>若判断不成立，可保留解释；AI 疑点不会自动作废解释。需要修改时请在上方解释条目中编辑。</div>
@@ -699,15 +829,16 @@ export function ChapterRawTextEditorDrawer({
                       <List.Item>
                         <div className="min-w-0">
                           <div className="font-medium">
-                            {({ language: '语言表达', semantics: '语义表达', character_confusion: '身份指代', spatial: '文字空间关系', action_time: '文字时序', prop_state: '道具描述', fact: '文本事实' } as Record<string, string>)[it.issue_type] ?? '文字问题'} · 问题 {idx + 1}
+                            {({ language: '语言表达', semantics: '语义表达', character_confusion: '身份指代', spatial: '文字空间关系', action_time: '文字时序', prop_state: '道具描述', fact: '文本事实' } as Record<string, string>)[it.issue_type ?? ''] ?? '文字问题'} · 问题 {idx + 1}
                           </div>
                           <div className="text-sm">{it?.description}</div>
-                          <Tag>{({ contradiction: '明确矛盾', ambiguity: '待确认歧义', optional: '可选补充' } as Record<string, string>)[it.classification] ?? '待确认'}</Tag>
+                          <Tag>{({ contradiction: '明确矛盾', ambiguity: '待确认歧义', optional: '可选补充' } as Record<string, string>)[it.classification ?? ''] ?? '待确认'}</Tag>
                           {it.excerpt && <blockquote>{it.excerpt}</blockquote>}
                           <Select aria-label={`问题${idx + 1}性质`} placeholder="确认问题性质" value={decisions[idx]} style={{ width: 210 }} onChange={value => {
                               setDecisions(previous => ({ ...previous, [idx]: value }))
                               setExplanations(previous => previous.filter(item => !(item.kind === 'normal' && item.excerpt === it.excerpt && item.source_version === rawVersion)))
-                              if (value === 'normal' && it.excerpt && rawVersion) setExplanations(previous => [...previous, { id: crypto.randomUUID(), policy_version: SOURCE_POLICY_VERSION, kind: 'normal', excerpt: it.excerpt, text: '用户确认此处表述正常，无需处理。', source_version: rawText.split(it.excerpt).length === 2 ? rawVersion : '' }])
+                              const excerpt = it.excerpt
+                              if (value === 'normal' && excerpt && rawVersion) setExplanations(previous => [...previous, { id: crypto.randomUUID(), policy_version: SOURCE_POLICY_VERSION, kind: 'normal', excerpt, text: '用户确认此处表述正常，无需处理。', source_version: rawText.split(excerpt).length === 2 ? rawVersion : '' }])
                             }}
                             options={[{ value: 'repair', label: '原文异常，需要修复' }, { value: 'explain', label: '正常表述，需要解释' }, { value: 'normal', label: '正常，无需处理' }, { value: 'unknown', label: '暂不确定' }]} />
                           {(decisions[idx] === 'repair' || decisions[idx] === 'explain') && <>
@@ -740,8 +871,7 @@ export function ChapterRawTextEditorDrawer({
                 ) : null}
               </Card>
             ) : null}
-          </div>
-        )}
+        </div>}
       </ResourceEditorFrame>
 
       <Modal className="chapter-editor-history"
