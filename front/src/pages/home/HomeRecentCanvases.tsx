@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PictureOutlined } from '@ant-design/icons'
 import { StudioHomeService } from '../../services/generated'
 import { buildFileDownloadUrl } from '../aiStudio/assets/utils'
@@ -7,9 +7,33 @@ import { HomePlaceholders } from './HomePlaceholders'
 
 function CanvasCover({ fileId }: { fileId: string | null }) {
   const [failed, setFailed] = useState(false)
-  return fileId && !failed
-    ? <img className="home-canvas-cover" alt="" src={buildFileDownloadUrl(fileId)} onError={() => setFailed(true)} />
-    : <div className="home-canvas-cover home-canvas-placeholder" aria-hidden="true"><PictureOutlined /></div>
+  const [showBackdrop, setShowBackdrop] = useState(false)
+  const imageRef = useRef<HTMLImageElement>(null)
+  const src = buildFileDownloadUrl(fileId)
+
+  useEffect(() => {
+    const image = imageRef.current
+    if (!image) return
+    const updateBackdrop = () => {
+      const { width, height } = image.getBoundingClientRect()
+      // With contain, a width of at most 70% at full height leaves at least 30% at the sides.
+      setShowBackdrop(image.naturalHeight > 0 && height > 0 &&
+        height * image.naturalWidth <= width * 0.7 * image.naturalHeight)
+    }
+    const observer = new ResizeObserver(updateBackdrop)
+    observer.observe(image)
+    image.addEventListener('load', updateBackdrop)
+    return () => {
+      observer.disconnect()
+      image.removeEventListener('load', updateBackdrop)
+    }
+  }, [src, failed])
+
+  if (!src || failed) return <div className="home-canvas-cover home-canvas-placeholder" aria-hidden="true"><PictureOutlined /></div>
+  return <div className="home-canvas-cover">
+    {showBackdrop && <span className="home-canvas-backdrop" aria-hidden="true" style={{ backgroundImage: `url("${src}")` }} />}
+    <img ref={imageRef} alt="" src={src} onError={() => setFailed(true)} />
+  </div>
 }
 
 export function HomeRecentCanvases() {

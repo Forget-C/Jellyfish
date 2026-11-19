@@ -24,7 +24,7 @@ const canvasRows = [
   { id: 'scene-canvas', kind: 'scene', name: '真实场次画布', project_name: project.name, cover_file_id: 'home-cover', updated_at },
   { id: 'free-canvas', kind: 'free', name: '真实生成画布', project_name: null, cover_file_id: null, updated_at },
 ]
-const coverSizes = [[480, 180], [180, 480], [240, 240]]
+const coverSizes = [[360, 180], [180, 480], [240, 240]]
 const mediaCanvases = coverSizes.map((_, index) => ({
   ...canvasRows[0], id: 'media-' + index, cover_file_id: 'corners-' + index,
   name: '超长画布名称'.repeat(10) + index, project_name: '超长项目名称'.repeat(10),
@@ -58,7 +58,7 @@ try {
       const [width, height] = coverSizes[Number(corners[1])]
       return route.fulfill({ contentType: 'image/svg+xml', body:
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-          <rect width="100%" height="100%" fill="white"/>
+          <rect width="100%" height="100%" fill="#088a48"/>
           <g fill="red"><rect width="32" height="32"/><rect x="${width - 32}" width="32" height="32"/>
           <rect y="${height - 32}" width="32" height="32"/><rect x="${width - 32}" y="${height - 32}" width="32" height="32"/></g>
         </svg>` })
@@ -155,8 +155,12 @@ try {
   await preview.waitFor({ state: 'hidden' })
   await page.waitForFunction(name => document.activeElement?.getAttribute('aria-label') === name, assetName)
   assert.equal(await assets.getByRole('link', { name: '查看资产库' }).getAttribute('href'), '/assets')
-  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 440]]) {
+  for (const [width, height] of [[1366, 768], [1366, 700], [1440, 900], [1920, 1080], [1024, 440]]) {
     await page.setViewportSize({ width, height })
+    if (height === 768 || height === 440) {
+      const cover = await canvasCard.locator('img').boundingBox()
+      assert.equal(Math.round(cover.height), height === 768 ? 120 : 64)
+    }
     const left = await progress.boundingBox()
     const right = await sessions.boundingBox()
     assert.ok(Math.abs(left.width - right.width) <= 1 && left.height === right.height)
@@ -258,18 +262,9 @@ try {
   state = 'media'
   await page.setViewportSize({ width: 480, height: 812 })
   await page.reload()
-  for (const item of mediaCanvases) {
-    const card = canvases.getByRole('article').filter({ hasText: item.name })
-    const name = await card.getByRole('heading').boundingBox()
-    const time = await card.locator('time').boundingBox()
-    const bounds = await card.boundingBox()
-    assert.ok(name.width > 0 && name.x + name.width <= time.x && time.y < name.y + name.height)
-    assert.ok(time.x + time.width <= bounds.x + bounds.width)
-    assert.equal(await card.getByText(item.project_name, { exact: true }).isVisible(), false)
-    const image = card.locator('img')
-    await image.evaluate(element => element.decode())
+  async function inspectCover(image) {
     const screenshot = await image.screenshot()
-    const cornersVisible = await page.evaluate(async base64 => {
+    return page.evaluate(async base64 => {
       const bitmap = new Image()
       bitmap.src = 'data:image/png;base64,' + base64
       await bitmap.decode()
@@ -286,10 +281,44 @@ try {
           quadrants.add(Number(pixel % canvas.width >= canvas.width / 2) + 2 * Number(pixel >= canvas.width * canvas.height / 2))
         }
       }
-      return quadrants.size
+      const sample = (x, y) => Array.from(context.getImageData(x, y, 1, 1).data).slice(0, 3)
+      return { corners: quadrants.size, side: sample(8, canvas.height / 2), top: sample(canvas.width / 2, 4) }
     }, screenshot.toString('base64'))
-    assert.equal(cornersVisible, 4, '横图、竖图和方图均应完整显示四角')
   }
+  function assertSoftBackdrop([red, green]) {
+    assert.ok(green - red > 12 && red > 70, '两侧应显示降低对比度的绿色底图')
+  }
+  for (const [index, item] of mediaCanvases.entries()) {
+    const card = canvases.getByRole('article').filter({ hasText: item.name })
+    const name = await card.getByRole('heading').boundingBox()
+    const time = await card.locator('time').boundingBox()
+    const bounds = await card.boundingBox()
+    assert.ok(name.width > 0 && name.x + name.width <= time.x && time.y < name.y + name.height)
+    assert.ok(time.x + time.width <= bounds.x + bounds.width)
+    assert.equal(await card.getByText(item.project_name, { exact: true }).isVisible(), false)
+    const image = card.locator('img')
+    await image.evaluate(element => element.decode())
+    const pixels = await inspectCover(image)
+    assert.equal(pixels.corners, 4, '横图、竖图和方图均应完整显示四角')
+    if (index > 0) assertSoftBackdrop(pixels.side)
+  }
+  // The 2:1 fixture occupies 224px in a 112px-high cover. A 320px card has exactly 30% side space.
+  const landscape = canvases.getByRole('article').first().locator('img')
+  const plain = [237, 241, 247]
+  for (const [width, softened] of [[682, false], [684, true], [686, true], [682, false]]) {
+    await page.setViewportSize({ width, height: 812 })
+    const { side, corners } = await inspectCover(landscape)
+    if (softened) {
+      assertSoftBackdrop(side)
+    } else {
+      assert.deepEqual(side, plain, '不足 30% 留白时保留纯色底')
+    }
+    assert.equal(corners, 4)
+  }
+  await page.setViewportSize({ width: 768, height: 812 })
+  assert.deepEqual((await inspectCover(landscape)).top, plain, '只有上下留白时保留纯色底')
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await canvases.screenshot({ path: output + '/mixed-canvas-covers.png' })
   await page.route('**/files/corners-0/download', failImage)
   await page.reload()
   await canvases.getByRole('heading', { name: mediaCanvases[0].name }).waitFor()
