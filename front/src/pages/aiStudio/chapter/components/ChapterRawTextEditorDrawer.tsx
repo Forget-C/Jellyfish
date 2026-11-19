@@ -85,8 +85,49 @@ export function ChapterRawTextEditorDrawer({
   const compareReturn = useRef<'raw' | 'condensed'>('raw')
   const [pane, setPane] = useState<'body' | 'explanations'>('body')
   const layout = useRef<HTMLDivElement>(null)
-  const drawerBody = useRef<HTMLElement | null>(null)
-  const rememberDrawerBody = useCallback((node: HTMLElement | null) => { drawerBody.current = node }, [])
+  const [drawerBody, setDrawerBody] = useState<HTMLElement | null>(null)
+  const [textFields, setTextFields] = useState<HTMLDivElement | null>(null)
+  const tools = useRef<HTMLDivElement>(null)
+  const textStats = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (!drawerBody || !textFields) return
+    const frame = drawerBody.parentElement
+    const fitTextToDrawer = () => {
+      const gutter = `${drawerBody.offsetWidth - drawerBody.clientWidth}px`
+      if (frame && frame.style.getPropertyValue('--chapter-scrollbar-width') !== gutter) {
+        frame.style.setProperty('--chapter-scrollbar-width', gutter)
+      }
+      const field = textFields.querySelector<HTMLElement>('label:not([hidden]) .chapter-editor-input')
+      if (!field?.getClientRects().length) return
+      const bottomPadding = parseFloat(getComputedStyle(drawerBody).paddingBottom)
+      const statsSpace = textStats.current
+        ? textStats.current.offsetHeight + parseFloat(getComputedStyle(textStats.current).marginTop)
+        : 0
+      const bottomGap = layout.current ? parseFloat(getComputedStyle(layout.current).marginBottom) : 0
+      // Measure in the drawer's content coordinates so scrolling does not resize the editor.
+      const fieldTop = field.getBoundingClientRect().top - drawerBody.getBoundingClientRect().top + drawerBody.scrollTop
+      const budget = drawerBody.clientHeight - bottomPadding - fieldTop - statsSpace - bottomGap
+      const cap = `${Math.max(0, Math.floor(budget))}px`
+      if (textFields.style.getPropertyValue('--chapter-text-budget') !== cap) {
+        textFields.style.setProperty('--chapter-text-budget', cap)
+      }
+    }
+    let nextFrame = 0
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(nextFrame)
+      nextFrame = requestAnimationFrame(fitTextToDrawer)
+    })
+    observer.observe(drawerBody)
+    observer.observe(textFields)
+    if (drawerBody.firstElementChild) observer.observe(drawerBody.firstElementChild)
+    if (tools.current) observer.observe(tools.current)
+    fitTextToDrawer()
+    return () => {
+      cancelAnimationFrame(nextFrame)
+      observer.disconnect()
+    }
+  }, [drawerBody, textFields, mode, pane])
   const readingPositions = useRef<Partial<Record<EditorMode | 'explanations', number>>>({})
   const pendingScroll = useRef<number>()
   const switchView = (nextMode: EditorMode, nextPane = pane) => {
@@ -95,19 +136,19 @@ export function ChapterRawTextEditorDrawer({
       compact && view !== 'compare' && panel === 'explanations' ? 'explanations' : view
     const previous = readingView(mode, pane)
     const next = readingView(nextMode, nextPane)
-    if (drawerBody.current && previous !== next) {
-      readingPositions.current[previous] = drawerBody.current.scrollTop
+    if (drawerBody && previous !== next) {
+      readingPositions.current[previous] = drawerBody.scrollTop
       pendingScroll.current = readingPositions.current[next] ?? 0
     }
     setMode(nextMode)
     setPane(nextPane)
   }
   useLayoutEffect(() => {
-    if (drawerBody.current && pendingScroll.current !== undefined) {
-      drawerBody.current.scrollTop = pendingScroll.current
+    if (drawerBody && pendingScroll.current !== undefined) {
+      drawerBody.scrollTop = pendingScroll.current
       pendingScroll.current = undefined
     }
-  }, [mode, pane])
+  }, [drawerBody, mode, pane])
   const [expandedExplanation, setExpandedExplanation] = useState<string>()
   const focusExplanation = useRef(false)
   useLayoutEffect(() => {
@@ -645,7 +686,7 @@ export function ChapterRawTextEditorDrawer({
 
   return (
     <>
-      <ResourceEditorFrame id={drawerId} open={open} drawer className="chapter-editor-drawer" onBodyReady={rememberDrawerBody}
+      <ResourceEditorFrame id={drawerId} open={open} drawer className="chapter-editor-drawer" onBodyReady={setDrawerBody}
         title={creating ? '新建章节' : savedTitle ? `编辑章节 · ${savedTitle}` : '编辑章节'}
         titleExtra={!!sequenceCount && <span className="chapter-editor-title-note">修改原文不会同步已有场次</span>}
         backLabel="返回" onClose={historyOpen ? () => setHistoryOpen(false) : handleRequestClose}
@@ -677,7 +718,7 @@ export function ChapterRawTextEditorDrawer({
               <Button aria-pressed={pane === 'explanations'} onClick={() => switchView(mode, 'explanations')}>解释（{explanations.length}）</Button>
             </div>
             <section className="chapter-editor-body-pane" aria-label="正文编辑">
-              <div className="chapter-editor-tools">
+              <div ref={tools} className="chapter-editor-tools">
                 <Space wrap role="group" aria-label="正文视图">
                   <Button aria-label="原文" aria-pressed={mode === 'raw'} disabled={actionsLoading} onClick={() => switchView('raw')}>原文</Button>
                   <Button aria-pressed={mode === 'condensed'} disabled={actionsLoading} onClick={() => switchView('condensed')}>精简内容</Button>
@@ -724,40 +765,44 @@ export function ChapterRawTextEditorDrawer({
                     </Button>
                   ) : null}
                 </Space>}
-                <div className="chapter-editor-meta"><Tag>{plainWordCount} 字</Tag><Tag>{paragraphCount} 段</Tag></div>
-              </div>
-              {mode === 'raw' && !selectingFor && <Button className="chapter-editor-select" disabled={actionsLoading || !rawVersion || !rawText.trim()} onClick={() => {
-                const span = readRawSelection()
-                if (span) addExplanation(span)
-                else message.warning('请先选中一段原文')
-              }}>选段添加解释</Button>}
-              {selectingFor && mode === 'raw' && <Space wrap>
-                <Button disabled={actionsLoading || !rawVersion} onClick={() => {
+                {mode === 'raw' && !selectingFor && <Button disabled={actionsLoading || !rawVersion || !rawText.trim()} onClick={() => {
                   const span = readRawSelection()
-                  if (!span) { message.warning('请先选中一段原文'); return }
-                  setExplanations(items => items.map(item => item.id === selectingFor
-                    ? { ...item, ...span, excerpt: sourceSlice(rawText, span), source_version: rawVersion, policy_version: undefined }
-                    : item))
-                  setSelectingFor(undefined)
-                  focusExplanation.current = true
-                  switchView(mode, 'explanations')
-                }}>使用所选原文</Button>
-                <Button type="text" onClick={() => setSelectingFor(undefined)}>取消选段</Button>
-              </Space>}
-              <div className="chapter-editor-texts">
+                  if (span) addExplanation(span)
+                  else message.warning('请先选中一段原文')
+                }}>选段添加解释</Button>}
+                {selectingFor && mode === 'raw' && <Space wrap>
+                  <Button disabled={actionsLoading || !rawVersion} onClick={() => {
+                    const span = readRawSelection()
+                    if (!span) { message.warning('请先选中一段原文'); return }
+                    setExplanations(items => items.map(item => item.id === selectingFor
+                      ? { ...item, ...span, excerpt: sourceSlice(rawText, span), source_version: rawVersion, policy_version: undefined }
+                      : item))
+                    setSelectingFor(undefined)
+                    focusExplanation.current = true
+                    switchView(mode, 'explanations')
+                  }}>使用所选原文</Button>
+                  <Button type="text" onClick={() => setSelectingFor(undefined)}>取消选段</Button>
+                </Space>}
+              </div>
+              <div ref={setTextFields} className="chapter-editor-texts">
                 <label hidden={mode === 'condensed'}>
                   {mode === 'compare' && <span className="chapter-editor-label">原文</span>}
-                  <Input.TextArea ref={rawInput} aria-label={mode === 'compare' ? '对比原文' : '章节原文'}
-                    value={rawText} onChange={event => setRawText(event.target.value)} disabled={actionsLoading}
-                    placeholder="编辑章节原文…" rows={16} className="chapter-editor-text" />
+                  <span className="chapter-editor-input" data-text={rawText}>
+                    <Input.TextArea ref={rawInput} aria-label={mode === 'compare' ? '对比原文' : '章节原文'}
+                      value={rawText} onChange={event => setRawText(event.target.value)} disabled={actionsLoading}
+                      placeholder="编辑章节原文…" className="chapter-editor-text" />
+                  </span>
                 </label>
                 <label hidden={mode === 'raw'}>
                   {mode === 'compare' && <span className="chapter-editor-label">精简内容</span>}
-                  <Input.TextArea aria-label={mode === 'compare' ? '对比精简内容' : '精简内容'}
-                    value={condensedText} onChange={event => setCondensedText(event.target.value)} disabled={actionsLoading}
-                    placeholder="编辑精简内容…" rows={16} className="chapter-editor-text" />
+                  <span className="chapter-editor-input" data-text={condensedText}>
+                    <Input.TextArea aria-label={mode === 'compare' ? '对比精简内容' : '精简内容'}
+                      value={condensedText} onChange={event => setCondensedText(event.target.value)} disabled={actionsLoading}
+                      placeholder="编辑精简内容…" className="chapter-editor-text" />
+                  </span>
                 </label>
               </div>
+              <div ref={textStats} className="chapter-editor-meta chapter-editor-stats">{plainWordCount} 字 · {paragraphCount} 段</div>
             </section>
             <aside className="chapter-editor-explanations" aria-label="原文补充解释">
               <SourceExplanationsEditor items={explanations} savedItems={savedExplanations} version={rawVersion} rawText={rawText} disabled={actionsLoading}

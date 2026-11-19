@@ -397,6 +397,68 @@ try {
   assert.equal(writes.at(-1).source_explanations[0].start, 6)
   assert.equal(writes.at(-1).source_explanations[0].excerpt, '她推门。')
   assert.equal(writes.at(-1).source_explanations[0].source_version, createHash('sha256').update('🌙她推门。\n她推门。').digest('hex'))
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 1920, height: 900 })
+  chapters[3].raw_text = '雨'.repeat(161) + '。'
+  await page.goto(`${base}&edit=ch4`)
+  const shortText = editor.getByRole('textbox', { name: '章节原文', exact: true })
+  await shortText.waitFor()
+  const saveButton = editor.getByRole('button', { name: '保存', exact: true })
+  const explanations = editor.getByRole('complementary', { name: '原文补充解释' })
+  const selectExcerpt = editor.getByRole('button', { name: '选段添加解释', exact: true })
+  const rawView = editor.getByRole('button', { name: '原文', exact: true })
+  const stats = editor.getByText('162 字 · 1 段')
+  const [shortBox, sideBox, saveBox, selectBox, rawButtonBox] = await Promise.all(
+    [shortText, explanations, saveButton, selectExcerpt, rawView].map(element => element.boundingBox()),
+  )
+  assert.ok(Math.abs(sideBox.x + sideBox.width - saveBox.x - saveBox.width) <= 2, '解释栏与保存按钮右边缘对齐')
+  assert.ok(sideBox.width > 340 && sideBox.width <= 520)
+  assert.ok(Math.abs(rawButtonBox.y - selectBox.y) <= 2, '宽屏工具同一行')
+  assert.ok(shortBox.height >= 190 && shortBox.height <= 212)
+  assert.ok((await stats.boundingBox()).y >= shortBox.y + shortBox.height)
+  await page.screenshot({ path: join(evidence, 'chapter-short-wide.png'), animations: 'disabled' })
+
+  chapters[4].raw_text = '雨停了。\n' + '他沿着路走。\n'.repeat(60)
+  chapters[4].source_explanations = [
+    { id: 'weather', excerpt: '雨停了。', text: '这里是时间转折。', source_version: 'previous' },
+    ...Array.from({ length: 24 }, (_, index) => ({
+      id: `whole-${index}`, excerpt: '', text: `全章说明 ${index + 1}。`, source_version: 'previous',
+    })),
+  ]
+  await page.goto(`${base}&edit=ch5`)
+  await page.addStyleTag({ content: '.chapter-editor-drawer .ant-drawer-body { scrollbar-gutter: stable; } .chapter-editor-drawer .ant-drawer-body::-webkit-scrollbar { width: 12px; }' })
+  await shortText.waitFor()
+  await page.waitForFunction(() => {
+    const pane = document.querySelector('.chapter-editor-drawer .ant-drawer-body')
+    return pane && pane.scrollHeight > pane.clientHeight && pane.offsetWidth > pane.clientWidth
+  })
+  const [longSideBox, longSaveBox] = await Promise.all([explanations.boundingBox(), saveButton.boundingBox()])
+  assert.ok(Math.abs(longSideBox.x + longSideBox.width - longSaveBox.x - longSaveBox.width) <= 2, '滚动条显示时右边缘仍对齐')
+  const longBox = await shortText.boundingBox()
+  assert.ok(longBox.height > shortBox.height && longBox.y + longBox.height < 885)
+  assert.equal(await shortText.evaluate(input => input.scrollHeight > input.clientHeight), true)
+  await explanations.getByRole('button', { name: /这里是时间转折/ }).click()
+  await explanations.getByText('保存时的摘录', { exact: true }).waitFor()
+  await explanations.getByText('当前选段', { exact: true }).waitFor()
+  await page.screenshot({ path: join(evidence, 'chapter-long-wide.png'), animations: 'disabled' })
+
+  await editor.getByRole('button', { name: '对比', exact: true }).click()
+  const compareRaw = editor.getByRole('textbox', { name: '对比原文', exact: true })
+  const compareCondensed = editor.getByRole('textbox', { name: '对比精简内容', exact: true })
+  const [rawCompareBox, condensedCompareBox] = await Promise.all([compareRaw.boundingBox(), compareCondensed.boundingBox()])
+  assert.ok(Math.abs(rawCompareBox.height - condensedCompareBox.height) <= 1)
+  assert.ok(Math.abs(rawCompareBox.width - condensedCompareBox.width) <= 1)
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.waitForFunction(() => {
+    const raw = document.querySelector('textarea[aria-label="对比原文"]')
+    const condensed = document.querySelector('textarea[aria-label="对比精简内容"]')
+    return raw && condensed && raw.getBoundingClientRect().bottom < condensed.getBoundingClientRect().top
+  })
+  assert.ok((await compareRaw.boundingBox()).height > (await compareCondensed.boundingBox()).height)
+  assert.equal(await compareRaw.evaluate(input => input.scrollHeight <= input.clientHeight + 1), true, '窄屏对比由抽屉滚动')
+  await editor.getByRole('button', { name: '退出对比', exact: true }).click()
+  await page.setViewportSize({ width: 1920, height: 400 })
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="章节原文"]')?.clientHeight < 190)
   assert.deepEqual(errors, [])
   console.log(`Chapter list/editor passed: pagination, lazy reads, save paths, failure recovery, count integrity, keyboard and four sizes. Evidence: ${evidence}`)
 } catch (error) { await page?.screenshot({ path: join(evidence, 'failure.png'), fullPage: true }); console.error('Evidence:', evidence); console.error(await page?.locator('body').innerText()); console.error(errors); throw error }

@@ -10,7 +10,7 @@
   resize: none;
   overflow-wrap: anywhere;
 }
-.chapter-editor-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-block: 12px; }
+.chapter-editor-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 8px; }
 .chapter-editor-meta { font-size: 12px; color: var(--app-muted, #536174); }
 .chapter-editor-tools .ant-btn[aria-pressed="true"] { color: var(--app-accent, #245fc5); background: var(--app-selected, #e4edfb); }
 .chapter-editor-drawer .ant-drawer-body .ant-btn,
@@ -19,7 +19,10 @@
 .chapter-editor-drawer .ant-alert-message,
 .chapter-editor-drawer .ant-alert-description { font-size: 14px; }
 .chapter-editor-drawer .ant-card-head-title { font-size: 14px; font-weight: 600; }
-.chapter-editor-drawer .app-page-toolbar { flex-wrap: wrap; }
+.resource-editor-drawer .chapter-editor-drawer .app-page-toolbar {
+  flex-wrap: wrap;
+  padding-inline-end: calc(var(--app-detail-inline-padding) + var(--chapter-scrollbar-width, 0px));
+}
 .chapter-editor-drawer .resource-editor-page-actions { flex-shrink: 0; }
 .chapter-editor-drawer .resource-editor-page-heading { flex: 1; }
 .chapter-editor-drawer .resource-editor-page-heading > .ant-btn { flex-shrink: 0; }
@@ -37,7 +40,7 @@
 }
 
 .chapter-editor-drawer .resource-editor-drawer-content {
-  max-width: 1200px;
+  max-width: none;
   container: chapter-editor / inline-size;
 }
 .chapter-editor-title-note {
@@ -58,10 +61,40 @@
   background: var(--app-selected, #e4edfb);
 }
 .chapter-editor-texts { display: grid; gap: 16px; }
-.chapter-editor-texts > label { min-width: 0; }
+.chapter-editor-texts > label { display: flex; flex-direction: column; min-width: 0; }
 .chapter-editor-texts > label[hidden] { display: none; }
 .chapter-editor-label { display: block; }
-.chapter-editor-select { margin-bottom: 8px; }
+.chapter-editor-stats { margin-top: 6px; }
+.chapter-editor-input {
+  --chapter-input-padding: 4px 11px;
+  --chapter-input-max: max(calc(2lh + 10px), var(--chapter-text-budget, 60dvh));
+  display: grid;
+  position: relative;
+  flex: 1;
+  min-height: min(calc(8lh + 10px), var(--chapter-input-max));
+  max-height: var(--chapter-input-max);
+  font-size: 14px;
+  line-height: 1.7;
+}
+/* A hidden copy supplies the wrapped text's intrinsic height without resizing or moving the native selection. */
+.chapter-editor-input::before {
+  content: attr(data-text) "\200b";
+  visibility: hidden;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid transparent;
+  padding: var(--chapter-input-padding);
+}
+.chapter-editor-drawer .chapter-editor-input .chapter-editor-text {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: var(--chapter-input-padding);
+  overflow-y: auto;
+}
 .chapter-editor-layout[data-compare="true"] .chapter-editor-explanations,
 .chapter-editor-layout[data-compare="true"] .chapter-editor-pane-switch { display: none; }
 .chapter-explanation-row { border-bottom: 1px solid var(--app-border, #dce2eb); margin-bottom: 8px; }
@@ -89,13 +122,19 @@
 
 @container chapter-editor (width < 824px) {
   .chapter-editor-layout { --chapter-editor-compact: 1; }
+  .chapter-editor-layout[data-compare="true"] .chapter-editor-input { --chapter-input-max: none; min-height: calc(8lh + 10px); }
   .chapter-editor-layout[data-compare="false"][data-pane="body"] .chapter-editor-explanations,
   .chapter-editor-layout[data-compare="false"][data-pane="explanations"] .chapter-editor-body-pane,
   .chapter-editor-checks[data-pane="explanations"] { display: none; }
 }
 @container chapter-editor (width >= 824px) {
+  .chapter-editor-drawer .chapter-editor-field {
+    grid-template-columns: max-content minmax(0, 360px);
+    align-items: center;
+    gap: 12px;
+  }
   .chapter-editor-layout[data-compare="false"] {
-    grid-template-columns: minmax(520px, 1fr) clamp(280px, 30%, 340px);
+    grid-template-columns: minmax(520px, 1fr) clamp(280px, 32%, 520px);
   }
   .chapter-editor-pane-switch { display: none; }
   .chapter-editor-layout[data-compare="true"] .chapter-editor-texts {
