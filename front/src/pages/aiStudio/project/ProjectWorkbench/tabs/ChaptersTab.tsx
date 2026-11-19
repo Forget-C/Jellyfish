@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Input, Modal, Space, Table, message } from 'antd'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Alert, Button, Empty, Input, Space, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { flushSync } from 'react-dom'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StudioChaptersService } from '../../../../../services/generated'
 import { useChapters, newId } from '../hooks/useProjectData'
-import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
+import { ChapterRawTextEditorDrawer } from '../../../chapter/components/ChapterRawTextEditorDrawer'
+import { ResourceEditorFrame } from '../../../assets/components/ResourceEditorFrame'
 import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { chapterAction, chapterActionLocation, chapterLocation, readChapterBrowse, saveChapterBrowse, workbenchManagementLocation } from '../../../directing/chapterNavigation'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
@@ -28,6 +29,7 @@ function ChaptersContent() {
   const [page, setPage] = useState(() => readChapterBrowse(projectId).page || 1)
   const [query, setQuery] = useState(() => readChapterBrowse(projectId).query || '')
   const { chapters, loading, total, totalKnown, error, refresh } = useChapters(projectId, { page, pageSize: 10, query })
+  const createDrawerId = useId()
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [title, setTitle] = useState('')
@@ -130,7 +132,7 @@ function ChaptersContent() {
         <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
           onChange={event => changePage(1, event.target.value)} />
       </div>
-      <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>
+      <Button type="primary" icon={<PlusOutlined />} onClick={event => { trigger.current = event.currentTarget; setCreating(true) }}>新建章节</Button>
     </ProjectContentToolbar>
     <div className="project-production-surface">
       {showOffPageChapter && <Alert type="info" message={`返回章节：${showOffPageChapter.title}`} action={<Space wrap>
@@ -165,14 +167,22 @@ function ChaptersContent() {
             } },
           ]} />}
     </div>
-    {editingId && <ChapterRawTextEditorModal open chapterId={editingId} projectId={projectId} onClose={closeEditor}
+    {editingId && <ChapterRawTextEditorDrawer open chapterId={editingId} projectId={projectId} onClose={closeEditor}
       onReviewSequences={() => navigate(workbenchManagementLocation(projectId, editingId, undefined, 'division'), { replace: true })}
       onSaved={() => void refresh()} />}
-    <Modal title="新建章节" open={creating} confirmLoading={busy} onCancel={() => guardCreate(() => setCreating(false))} onOk={() => void create()} okText="创建并继续" closable={!busy} maskClosable={!busy} keyboard={!busy}>
-      <Space direction="vertical" className="w-full">
-        <Input aria-label="章节标题" placeholder="章节标题" value={title} disabled={busy} onChange={event => setTitle(event.target.value)} />
-        <Input.TextArea aria-label="章节原文" placeholder="粘贴章节原文" rows={8} value={content} disabled={busy} onChange={event => setContent(event.target.value)} />
-      </Space>
-    </Modal>
+    <ResourceEditorFrame id={createDrawerId} open={creating} drawer className="chapter-create-drawer"
+      title="新建章节" backLabel="返回" onClose={() => guardCreate(() => setCreating(false))}
+      actions={<Button type="primary" loading={busy} onClick={() => void create()}>创建并继续</Button>}
+    >
+      <div className="chapter-create-fields">
+        <label className="chapter-editor-field">章节名称
+          <Input aria-label="章节名称" value={title} disabled={busy} onChange={event => setTitle(event.target.value)} />
+        </label>
+        <label className="chapter-editor-field">章节原文（选填）
+          <Input.TextArea className="chapter-editor-text" aria-label="章节原文" placeholder="粘贴章节原文"
+            rows={12} value={content} disabled={busy} onChange={event => setContent(event.target.value)} />
+        </label>
+      </div>
+    </ResourceEditorFrame>
   </div>
 }

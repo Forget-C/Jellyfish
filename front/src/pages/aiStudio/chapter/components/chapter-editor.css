@@ -1,0 +1,37 @@
+.chapter-create-fields { display: grid; gap: 16px; }
+.chapter-editor-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.chapter-editor-drawer .chapter-editor-field { margin-block: 12px; }
+.chapter-editor-field .ant-input { font-weight: 400; }
+.chapter-editor-label { margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+.chapter-editor-drawer .chapter-editor-text,
+.chapter-create-drawer .chapter-editor-text,
+.chapter-editor-history .chapter-editor-text {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+.chapter-editor-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-block: 12px; }
+.chapter-editor-meta { font-size: 12px; color: var(--app-muted, #536174); }
+.chapter-editor-tools .ant-btn[aria-pressed="true"] { color: var(--app-accent, #245fc5); background: var(--app-selected, #e4edfb); }
+.chapter-editor-drawer .ant-drawer-body .ant-btn,
+.chapter-editor-history .ant-btn { font-size: 13px; min-height: 32px; border-radius: 8px; }
+.chapter-editor-drawer .chapter-compare > * { min-width: 0; }
+.chapter-editor-drawer .resource-editor-drawer-content:has(.chapter-compare) { max-width: none; }
+.chapter-editor-drawer .ant-alert { overflow-wrap: anywhere; }
+.chapter-editor-drawer .app-page-toolbar { flex-wrap: wrap; }
+.chapter-editor-drawer .resource-editor-page-actions { flex-shrink: 0; }
+.chapter-editor-drawer .resource-editor-page-heading { flex: 1; }
+.chapter-editor-drawer .resource-editor-page-heading > .ant-btn { flex-shrink: 0; }
+@media (max-width: 767px) {
+  .chapter-editor-drawer .resource-editor-page-heading { flex-basis: 100%; }
+  .chapter-editor-drawer .resource-editor-page-actions,
+  .chapter-create-drawer .resource-editor-page-actions { display: flex; justify-content: flex-end; }
+  .chapter-editor-drawer .ant-drawer-body .ant-btn,
+  .chapter-editor-history .ant-btn { min-height: 36px; }
+  .chapter-editor-drawer .chapter-compare,
+  .chapter-editor-history .chapter-compare { grid-template-columns: minmax(0, 1fr); }
+  .chapter-editor-drawer .ant-alert { flex-wrap: wrap; }
+  .chapter-editor-drawer .ant-alert-action { margin: 8px 0 0; }
+}
