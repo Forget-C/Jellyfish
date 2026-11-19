@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { ArrowRightOutlined, EnvironmentOutlined, InboxOutlined, SkinOutlined, UserOutlined } from '@ant-design/icons'
 import { Drawer, Modal } from 'antd'
 import { Link } from 'react-router-dom'
@@ -6,6 +6,7 @@ import { StudioHomeService, type HomeRecentAsset } from '../../services/generate
 import { resolveAssetUrl } from '../aiStudio/assets/utils'
 import { HomeRecentFeedback, homeUpdatedAtFormat, useHomeRecentList } from './HomeRecentList'
 import './home-assets.css'
+import { HomePlaceholders } from './HomePlaceholders'
 
 const assetTypes = {
   actor: { label: '演员', Icon: UserOutlined },
@@ -26,7 +27,11 @@ function AssetImage({ asset, id, preview = false }: { asset: HomeRecentAsset; id
   </span>
 }
 
-function AssetCards({ assets, onSelect }: { assets: HomeRecentAsset[]; onSelect: (asset: HomeRecentAsset) => void }) {
+function AssetCards({ assets, onSelect, children }: {
+  assets: HomeRecentAsset[]
+  onSelect: (asset: HomeRecentAsset) => void
+  children?: ReactNode
+}) {
   const listId = useId()
   return <ul className="home-asset-grid">
     {assets.map((asset, index) => {
@@ -47,6 +52,7 @@ function AssetCards({ assets, onSelect }: { assets: HomeRecentAsset[]; onSelect:
         </button>
       </li>
     })}
+    {children}
   </ul>
 }
 
@@ -60,13 +66,16 @@ export function HomeRecentAssets() {
     <section className="home-recent-assets" aria-labelledby="home-recent-assets">
       <header className="home-section-heading home-assets-heading">
         <h2 id="home-recent-assets">最近资产</h2>
-        {assets.length > 0 && <button type="button" className="home-text-action home-assets-open" aria-haspopup="dialog" onClick={() => setDrawerOpen(true)}>
+        {assets.length ? <button type="button" className="home-text-action home-assets-open" aria-haspopup="dialog" onClick={() => setDrawerOpen(true)}>
           查看最近资产
-        </button>}
+        </button> : <HomeRecentFeedback status={result.status} label="资产" onRetry={retry} />}
         <Link className="home-text-action home-assets-library" to="/assets">查看资产库<ArrowRightOutlined aria-hidden /></Link>
       </header>
-      {assets.length ? <div className="home-assets-inline"><AssetCards assets={assets} onSelect={setPreview} /></div>
-        : <HomeRecentFeedback status={result.status} label="资产" onRetry={retry} />}
+      <div className="home-assets-inline">
+        <AssetCards assets={assets} onSelect={setPreview}>
+          <HomePlaceholders kind="asset" filled={assets.length} loading={result.status === 'loading'} />
+        </AssetCards>
+      </div>
     </section>
     <Drawer title="最近资产" width="min(560px, 100vw)" open={drawerOpen} onClose={() => setDrawerOpen(false)} className="home-assets-drawer app-detail-drawer">
       <AssetCards assets={assets} onSelect={setPreview} />

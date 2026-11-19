@@ -2,6 +2,7 @@
 .home-assets-heading { gap: 8px; }
 .home-assets-library { margin-inline-start: auto; }
 .home-assets-heading .home-assets-open { display: none; }
+.home-assets-heading .home-feedback { padding: 0; }
 .home-asset-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -43,6 +44,7 @@
 }
 .home-asset-placeholder .anticon { color: #647e9f; font-size: 23px; }
 .home-asset-caption { display: grid; gap: 4px; padding: 8px 12px 10px; }
+.home-assets-inline .home-asset-caption, .home-slot-asset .home-slot-lines { height: 58px; box-sizing: border-box; }
 .home-asset-name { overflow: hidden; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .home-asset-meta, .home-asset-type, .home-asset-preview-meta { display: flex; align-items: center; gap: 5px; }
 .home-asset-meta { justify-content: space-between; color: var(--app-muted, #536174); font-size: 12px; }
@@ -67,8 +69,8 @@
 @media (min-width: 1024px) and (height < 700px) {
   .home-assets-inline { display: none; }
   .home-assets-heading { margin-bottom: 0; }
-  .home-assets-heading .home-assets-open { display: inline-flex; margin-inline-start: auto; }
-  .home-assets-open + .home-assets-library { margin-inline-start: 0; }
+  .home-assets-heading .home-assets-open, .home-assets-heading .home-feedback { display: inline-flex; margin-inline-start: auto; }
+  .home-assets-heading .home-assets-library { margin-inline-start: 0; }
 }
 
 @media (width < 400px) {

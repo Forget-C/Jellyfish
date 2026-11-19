@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { ArrowRightOutlined, MessageOutlined, PictureOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { HomeRecentFeedback } from './HomeRecentList'
 import { Link } from 'react-router-dom'
 import { StudioExperimentSessionsService, type ExperimentSessionRead } from '../../services/generated'
+import { HomePlaceholders } from './HomePlaceholders'
 
 const sessionTypes = {
   text: { label: '文本', icon: <MessageOutlined /> },
@@ -37,35 +39,40 @@ export function HomeRecentSessions() {
     return () => { active = false }
   }, [retry])
 
+  const sessions = activity?.sessions ?? []
   return <section aria-labelledby="home-recent-sessions">
     <header className="home-section-heading">
       <h2 id="home-recent-sessions">最近实验室会话</h2>
     </header>
     <div className="home-activity-surface">
       <div className="home-activity-scroll">
-        {!activity && <p className="home-feedback" role="status">正在读取实验室会话…</p>}
-        {activity && activity.failedTypes > 0 && <div className="home-feedback home-feedback-error" role="alert">
-          <span>{activity.failedTypes === 3 ? '读取实验室会话失败' : '部分实验室会话读取失败'}</span>
-          <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>重试</button>
-        </div>}
-        {activity && (activity.sessions.length ? <ul className="home-activity-list">
-          {activity.sessions.map(session => {
-            const type = sessionTypes[session.lab_type]
-            const date = Date.parse(session.updated_at)
-            const preview = session.last_message_preview?.trim() || '暂无摘要'
-            return <li key={session.id}>
-              <Link className="home-session-row" to={`/lab?session=${encodeURIComponent(session.id)}`}>
-                <span className="home-activity-icon" aria-hidden="true">{type.icon}</span>
-                <div className="home-activity-copy">
-                  <span className="home-activity-title" title={session.title}>{session.title}</span>
-                  <p className="home-session-preview" title={preview}>{type.label} · {preview}</p>
-                </div>
-                {Number.isFinite(date) ? <time className="home-session-time" dateTime={session.updated_at}>{dateFormat.format(date)}</time>
-                  : <span className="home-session-time">更新时间未知</span>}
-              </Link>
-            </li>
-          })}
-        </ul> : !activity.failedTypes && <p className="home-feedback" role="status">暂无实验室会话</p>)}
+        <div className="home-slot-frame">
+          {activity && activity.failedTypes > 0 && <div className="home-feedback home-feedback-error" role="alert" data-partial={sessions.length > 0 || undefined}>
+            <span>{activity.failedTypes === 3 ? '读取实验室会话失败' : '部分实验室会话读取失败'}</span>
+            <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>重试</button>
+          </div>}
+          <ul className="home-activity-list">
+            {sessions.map(session => {
+              const type = sessionTypes[session.lab_type]
+              const date = Date.parse(session.updated_at)
+              const preview = session.last_message_preview?.trim() || '暂无摘要'
+              return <li key={session.id}>
+                <Link className="home-session-row" to={`/lab?session=${encodeURIComponent(session.id)}`}>
+                  <span className="home-activity-icon" aria-hidden="true">{type.icon}</span>
+                  <div className="home-activity-copy">
+                    <span className="home-activity-title" title={session.title}>{session.title}</span>
+                    <p className="home-session-preview" title={preview}>{type.label} · {preview}</p>
+                  </div>
+                  {Number.isFinite(date) ? <time className="home-session-time" dateTime={session.updated_at}>{dateFormat.format(date)}</time>
+                    : <span className="home-session-time">更新时间未知</span>}
+                </Link>
+              </li>
+            })}
+            <HomePlaceholders kind="activity" filled={sessions.length} loading={!activity} />
+          </ul>
+          {!sessions.length && !activity?.failedTypes && <HomeRecentFeedback status={activity ? 'ready' : 'loading'}
+            label="实验室会话" onRetry={() => setRetry(value => value + 1)} />}
+        </div>
       </div>
       <div className="home-activity-footer home-session-footer">
         <div className="home-quick-links" role="group" aria-label="新建实验">

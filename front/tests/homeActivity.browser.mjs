@@ -24,11 +24,17 @@ const canvasRows = [
   { id: 'scene-canvas', kind: 'scene', name: '真实场次画布', project_name: project.name, cover_file_id: 'home-cover', updated_at },
   { id: 'free-canvas', kind: 'free', name: '真实生成画布', project_name: null, cover_file_id: null, updated_at },
 ]
+const coverSizes = [[480, 180], [180, 480], [240, 240]]
+const mediaCanvases = coverSizes.map((_, index) => ({
+  ...canvasRows[0], id: 'media-' + index, cover_file_id: 'corners-' + index,
+  name: '超长画布名称'.repeat(10) + index, project_name: '超长项目名称'.repeat(10),
+}))
 const assetRows = ['actor', 'scene', 'prop', 'costume', 'actor', 'scene'].map((type, index) => ({
   id: String(index), type, name: '真实资产 ' + index, updated_at,
   thumbnail: index === 2 ? null : '/api/v1/studio/files/home-image/download',
 }))
 let state = 'loaded'
+let pendingActivity
 let failedHome = ''
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -38,13 +44,25 @@ try {
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(5000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
-  await page.route('**/api/**', route => {
+  await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     const { pathname } = url
+    if (/\/(recent-canvases|recent-assets|projects|experiment-sessions)$/.test(pathname)) await pendingActivity
+    const visibleRows = rows => state === 'empty' ? [] : state === 'single' ? rows.slice(0, 1) : rows
     const respond = data => route.fulfill({ json: { code: 200, data } })
     const fail = () => route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
-    if (pathname.endsWith('/recent-canvases')) return failedHome === 'canvases' ? fail() : respond(state === 'empty' ? [] : canvasRows)
-    if (pathname.endsWith('/recent-assets')) return failedHome === 'assets' ? fail() : respond(state === 'empty' ? [] : assetRows)
+    if (pathname.endsWith('/recent-canvases')) return failedHome === 'canvases' ? fail() : respond(state === 'media' ? mediaCanvases : visibleRows(canvasRows))
+    if (pathname.endsWith('/recent-assets')) return failedHome === 'assets' ? fail() : respond(visibleRows(assetRows))
+    const corners = pathname.match(/\/files\/corners-(\d)\/download$/)
+    if (corners) {
+      const [width, height] = coverSizes[Number(corners[1])]
+      return route.fulfill({ contentType: 'image/svg+xml', body:
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+          <rect width="100%" height="100%" fill="white"/>
+          <g fill="red"><rect width="32" height="32"/><rect x="${width - 32}" width="32" height="32"/>
+          <rect y="${height - 32}" width="32" height="32"/><rect x="${width - 32}" y="${height - 32}" width="32" height="32"/></g>
+        </svg>` })
+    }
     if (/\/files\/home-(?:image|cover)\/download$/.test(pathname)) return route.fulfill({
       contentType: 'image/png',
       body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6aYAAAAASUVORK5CYII=', 'base64'),
@@ -52,7 +70,7 @@ try {
     if (pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     if (pathname.endsWith('/projects')) {
       if (state === 'error') return fail()
-      return respond(list(state === 'empty' ? [] : [project, partialProject, newProject]))
+      return respond(list(visibleRows([project, partialProject, newProject])))
     }
     if (pathname.endsWith('/projects/p1')) return respond(project)
     if (pathname.endsWith('/chapters')) {
@@ -65,7 +83,7 @@ try {
       if (state === 'error') return fail()
       const type = url.searchParams.get('lab_type')
       if (state === 'partial-error' && type === 'text') return fail()
-      return respond(state !== 'empty' && type === 'image' ? [session, ...olderSessions] : [])
+      return respond(type === 'image' ? visibleRows([session, ...olderSessions]) : [])
     }
     if (pathname.endsWith('/messages')) return respond([])
     return respond(list([]))
@@ -106,6 +124,11 @@ try {
   const assetButton = assetCards.first().getByRole('button')
   const canvasCard = canvases.getByRole('article').first()
   const canvasBounds = await canvasCard.boundingBox()
+  const secondCanvas = await canvases.getByRole('article').nth(1).boundingBox()
+  assert.ok(Math.abs(canvasBounds.width - secondCanvas.width) <= 1, '画布卡应等宽')
+  const title = await canvasCard.getByRole('heading').boundingBox()
+  const timestamp = await canvasCard.locator('time').boundingBox()
+  assert.ok(title.x + title.width <= timestamp.x && timestamp.y < title.y + title.height, '名称和时间应同排')
   await assetButton.hover()
   const assetShadow = await assetButton.evaluate(element => getComputedStyle(element).boxShadow)
   await canvasCard.hover()
@@ -232,6 +255,92 @@ try {
     await region.getByText(failure === 'assets' ? assetRows[0].name : canvasRows[0].name, { exact: true }).waitFor()
   }
 
+  state = 'media'
+  await page.setViewportSize({ width: 480, height: 812 })
+  await page.reload()
+  for (const item of mediaCanvases) {
+    const card = canvases.getByRole('article').filter({ hasText: item.name })
+    const name = await card.getByRole('heading').boundingBox()
+    const time = await card.locator('time').boundingBox()
+    const bounds = await card.boundingBox()
+    assert.ok(name.width > 0 && name.x + name.width <= time.x && time.y < name.y + name.height)
+    assert.ok(time.x + time.width <= bounds.x + bounds.width)
+    assert.equal(await card.getByText(item.project_name, { exact: true }).isVisible(), false)
+    const image = card.locator('img')
+    await image.evaluate(element => element.decode())
+    const screenshot = await image.screenshot()
+    const cornersVisible = await page.evaluate(async base64 => {
+      const bitmap = new Image()
+      bitmap.src = 'data:image/png;base64,' + base64
+      await bitmap.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const context = canvas.getContext('2d')
+      context.drawImage(bitmap, 0, 0)
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+      const quadrants = new Set()
+      for (let pixel = 0; pixel < data.length / 4; pixel++) {
+        const i = pixel * 4
+        if (data[i] > 240 && data[i + 1] < 20 && data[i + 2] < 20) {
+          quadrants.add(Number(pixel % canvas.width >= canvas.width / 2) + 2 * Number(pixel >= canvas.width * canvas.height / 2))
+        }
+      }
+      return quadrants.size
+    }, screenshot.toString('base64'))
+    assert.equal(cornersVisible, 4, '横图、竖图和方图均应完整显示四角')
+  }
+  await page.route('**/files/corners-0/download', failImage)
+  await page.reload()
+  await canvases.getByRole('heading', { name: mediaCanvases[0].name }).waitFor()
+  await canvases.getByRole('article').first().locator('img').waitFor({ state: 'detached' })
+  assert.equal((await canvases.getByRole('article').first().boundingBox()).height,
+    (await canvases.getByRole('article').last().boundingBox()).height)
+  const layoutAnchors = [
+    canvases, progress, sessions, assets, progress.getByRole('link', { name: '查看全部项目' }),
+    sessions.getByRole('link', { name: '打开实验室' }), assets.getByRole('link', { name: '查看资产库' }),
+  ]
+  async function measureHome() {
+    return Promise.all(layoutAnchors.map(anchor => anchor.evaluate(element => {
+      const { top, height } = element.getBoundingClientRect()
+      return [top + element.closest('main').scrollTop, height]
+    })))
+  }
+  for (const [width, height] of [[1440, 900], [1024, 440], [375, 812]]) {
+    await page.setViewportSize({ width, height })
+    state = 'loaded'
+    await page.reload()
+    await progress.getByRole('link', { name: project.name }).waitFor()
+    await sessions.getByText(session.title).waitFor()
+    await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
+    const expectedLayout = await measureHome()
+    for (const next of ['single', 'empty', 'error']) {
+      state = next
+      failedHome = next === 'error' ? 'canvases' : ''
+      let release
+      pendingActivity = new Promise(resolve => { release = resolve })
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      try {
+        await progress.getByRole('status').waitFor()
+        assert.deepEqual(await measureHome(), expectedLayout, '请求中保持区块和底部入口的位置')
+      } finally {
+        release()
+        pendingActivity = undefined
+      }
+      if (next === 'single') {
+        await progress.getByRole('link', { name: project.name }).waitFor()
+        await sessions.getByText(session.title).waitFor()
+        await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
+        assert.equal(await canvases.getByRole('article').count(), 1)
+      } else {
+        await Promise.all([progress, sessions, canvases].map(region =>
+          region.getByRole(next === 'error' ? 'alert' : 'status')
+            .filter({ hasText: next === 'error' ? /失败/ : /暂无/ }).waitFor()))
+      }
+      assert.deepEqual(await measureHome(), expectedLayout, next + ' 状态保持首页布局')
+    }
+    failedHome = ''
+  }
   state = 'empty'
   await page.reload()
   await canvases.getByText('暂无画布', { exact: true }).waitFor()

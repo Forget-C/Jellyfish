@@ -3,7 +3,9 @@ import { ArrowRightOutlined, FolderOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { StudioChaptersService, StudioProjectsService } from '../../services/generated'
 import { summarizeProjectChapters, type ProjectStageSummary } from '../aiStudio/project/projectStageSummary'
+import { HomeRecentFeedback } from './HomeRecentList'
 import changanCover from './sample-covers/changan.svg'
+import { HomePlaceholders } from './HomePlaceholders'
 
 type ProjectRow = { id: string; name: string; stage: ProjectStageSummary | null }
 type ProjectActivity =
@@ -44,6 +46,7 @@ export function HomeProjectProgress() {
     return () => { active = false }
   }, [retry])
 
+  const rows = activity.status === 'ready' ? activity.rows : []
   const hasChapterFailure = activity.status === 'ready' && activity.rows.some(row => !row.stage)
   const showExample = activity.status === 'ready' && activity.rows.some(row => row.stage && !row.stage.tone)
 
@@ -53,14 +56,9 @@ export function HomeProjectProgress() {
     </header>
     <div className="home-activity-surface">
       <div className="home-activity-scroll">
-        {activity.status === 'loading' && <p className="home-feedback" role="status">正在读取项目…</p>}
-        {activity.status === 'error' && <div className="home-feedback home-feedback-error" role="alert">
-          <span>读取项目失败</span>
-          <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>重试</button>
-        </div>}
-        {activity.status === 'ready' && (
-          activity.rows.length ? <ul className="home-activity-list">
-            {activity.rows.map(({ id, name, stage }) => <li className="home-project-row" key={id}>
+        <div className="home-slot-frame">
+          <ul className="home-activity-list">
+            {rows.map(({ id, name, stage }) => <li className="home-project-row" key={id}>
               <span className="home-activity-icon" aria-hidden="true"><FolderOutlined /></span>
               <div className="home-activity-copy">
                 <Link className="home-activity-title home-project-link" title={name} to={`/projects/${encodeURIComponent(id)}`}>{name}</Link>
@@ -74,8 +72,10 @@ export function HomeProjectProgress() {
                 {stage.action}<ArrowRightOutlined aria-hidden="true" />
               </Link>}
             </li>)}
-          </ul> : <p className="home-feedback" role="status">暂无项目</p>
-        )}
+            <HomePlaceholders kind="activity" filled={rows.length} loading={activity.status === 'loading'} />
+          </ul>
+          {!rows.length && <HomeRecentFeedback status={activity.status} label="项目" onRetry={() => setRetry(value => value + 1)} />}
+        </div>
         {showExample && <section className="home-project-example" aria-label="项目进展示例">
           <div className="home-section-heading">
             <h3>项目进展示例</h3>
