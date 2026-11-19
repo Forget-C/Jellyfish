@@ -30,28 +30,28 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorModal.tsx",
+      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorDrawer.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "1195d416ac6809add303231cb742ba359f179f7cd71d0ea6ad46ded509e98166",
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorModal.tsx",
+      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorDrawer.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "12d20eb722c42e12fc6455ecab9308dd30bc001a8629edb2c3db1c47ee7506f2",
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorModal.tsx",
+      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorDrawer.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "5afe94d5908053156b841aeca0702382b432362d90be257608b80db11abd1fd4",
       "count": 3
     },
     {
-      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorModal.tsx",
+      "file": "src/pages/aiStudio/chapter/components/ChapterRawTextEditorDrawer.tsx",
       "rule": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "fingerprint": "8efb62188276f05dd596e1b8f0587b2832f225ac7d4cf53e1f89e7bddec4509f",

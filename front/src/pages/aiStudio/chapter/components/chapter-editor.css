@@ -20,6 +20,9 @@
 .chapter-editor-drawer .chapter-compare > * { min-width: 0; }
 .chapter-editor-drawer .resource-editor-drawer-content:has(.chapter-compare) { max-width: none; }
 .chapter-editor-drawer .ant-alert { overflow-wrap: anywhere; }
+.chapter-editor-drawer .ant-alert-message,
+.chapter-editor-drawer .ant-alert-description { font-size: 14px; }
+.chapter-editor-drawer .ant-card-head-title { font-size: 14px; font-weight: 600; }
 .chapter-editor-drawer .app-page-toolbar { flex-wrap: wrap; }
 .chapter-editor-drawer .resource-editor-page-actions { flex-shrink: 0; }
 .chapter-editor-drawer .resource-editor-page-heading { flex: 1; }
@@ -34,4 +37,7 @@
   .chapter-editor-history .chapter-compare { grid-template-columns: minmax(0, 1fr); }
   .chapter-editor-drawer .ant-alert { flex-wrap: wrap; }
   .chapter-editor-drawer .ant-alert-action { margin: 8px 0 0; }
+  .chapter-editor-drawer .ant-card-head-wrapper { flex-wrap: wrap; gap: 4px 8px; }
+  .chapter-editor-drawer .ant-card-head-title { flex-basis: 100%; }
+  .chapter-editor-drawer .ant-card-extra { margin-inline-start: 0; }
 }

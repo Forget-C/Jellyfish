@@ -32,7 +32,7 @@ export function SourceExplanationsEditor({ items, version, rawText, disabled, on
         options={occurrences(item.excerpt ?? '').map((span, i) => ({ value: span.start, label: `第${i + 1}处：${Array.from(rawText).slice(Math.max(0, span.start - 12), span.end + 12).join('')}` }))}
         onChange={value => patch(index, occurrences(item.excerpt ?? '').find(span => span.start === value) ?? {})} />}
       <Input.TextArea aria-label={`解释${index + 1}内容`} placeholder="补充解释" value={item.text} disabled={disabled} onChange={event => patch(index, { text: event.target.value })} />
-      <Space><Button disabled={disabled || !version || !canConfirm(item)} onClick={() => onChange(items.map((row, i) => i === index ? { ...row, source_version: version, policy_version: SOURCE_POLICY_VERSION } : row))}>确认此解释</Button>
+      <Space wrap><Button disabled={disabled || !version || !canConfirm(item)} onClick={() => onChange(items.map((row, i) => i === index ? { ...row, source_version: version, policy_version: SOURCE_POLICY_VERSION } : row))}>确认此解释</Button>
         <Button disabled={disabled} onClick={() => patch(index, { policy_version: undefined })}>退出采用，保留待调整</Button>
         <Button disabled={disabled} onClick={() => onChange(items.filter((_, i) => i !== index))}>删除解释</Button></Space>
     </Space>)}

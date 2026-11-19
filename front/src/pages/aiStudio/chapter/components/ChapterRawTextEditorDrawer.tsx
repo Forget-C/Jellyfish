@@ -498,11 +498,12 @@ export function ChapterRawTextEditorDrawer({
       })
     } })
   const handleRequestClose = () => guard(onClose)
+  const showRawConfirmation = confirmRaw === rawText && !!impact
   useEffect(() => {
-    if (saveError || (confirmRaw !== undefined && confirmRaw === rawText && impact)) {
+    if (saveError || showRawConfirmation) {
       saveFeedback.current?.scrollIntoView({ block: 'nearest' })
     }
-  }, [saveError, confirmRaw, rawText, impact])
+  }, [saveError, showRawConfirmation])
 
   const mockHistory: HistoryItem[] = useMemo(
     () => [
@@ -539,7 +540,7 @@ export function ChapterRawTextEditorDrawer({
         {!loading && !loadError && <label className="chapter-editor-field">章节名称<Input aria-label="章节名称" value={chapterTitle} disabled={actionsLoading} onChange={event => setChapterTitle(event.target.value)} /></label>}
         <div ref={saveFeedback}>
           {saveError && <Alert type="error" showIcon message={saveError} />}
-          {confirmRaw === rawText && impact && <Alert type="warning" showIcon message={impact} action={<Space wrap>
+          {showRawConfirmation && <Alert type="warning" showIcon message={impact} action={<Space wrap>
             <Button disabled={saving} onClick={() => setConfirmRaw(undefined)}>继续编辑</Button>
             <Button type="primary" loading={saving} onClick={() => void handleSave(true)}>确认保存原文</Button>
           </Space>} style={{ marginBottom: 12 }} />}
@@ -655,7 +656,6 @@ export function ChapterRawTextEditorDrawer({
                     <Tag>问题：{consistencyIssues.length}</Tag>
                     <Button
                       size="small"
-                      type="primary"
                       icon={<ThunderboltOutlined aria-hidden />}
                       loading={optimizingScript || !!optimizeTask}
                       disabled={actionsLoading || !!optimizeTask}

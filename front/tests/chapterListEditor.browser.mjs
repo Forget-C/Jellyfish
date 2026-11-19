@@ -279,6 +279,14 @@ try {
     assert.equal(await saveButton.evaluate(button => getComputedStyle(button).fontSize), '13px')
     assert.ok((await saveButton.boundingBox()).height >= (width < 768 ? 36 : 32))
     assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).evaluate(text => getComputedStyle(text).lineHeight), '23.8px')
+    assert.equal(await editor.getByText('改变章节内容后不会自动更新场次。', { exact: true }).evaluate(hint => getComputedStyle(hint).fontSize), '14px')
+    if (width === 375) {
+      await editor.getByRole('button', { name: '对比', exact: true }).click()
+      const raw = await editor.getByRole('textbox', { name: '对比原文', exact: true }).boundingBox()
+      const condensed = await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).boundingBox()
+      assert.ok(condensed.y >= raw.y + raw.height && condensed.x === raw.x)
+      await editor.getByRole('button', { name: '原文', exact: true }).click()
+    }
     assert.equal(await editor.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `${width}: editor overflow`)
     const close = editor.getByRole('button', { name: '返回', exact: true })
     await close.scrollIntoViewIfNeeded()
