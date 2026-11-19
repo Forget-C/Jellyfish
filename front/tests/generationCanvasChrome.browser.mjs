@@ -1,6 +1,6 @@
 import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, closePrecheck, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
-import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList, renameFreeCanvas } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -43,8 +43,7 @@ try {
   await page.getByRole('button', { name: /新建画布/ }).click()
   await page.waitForURL(/\/canvases\/[^/]+$/)
   const savedName = page.waitForResponse(response => response.request().method() === 'PUT' && response.ok())
-  await page.getByRole('textbox', { name: '画布名称' }).fill('菜单中的画布')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await renameFreeCanvas(page, '菜单中的画布')
   await savedName
   await page.getByLabel('画布保存状态').filter({ hasText: '已保存' }).waitFor()
   const freeId = new URL(page.url()).pathname.split('/').at(-1)
@@ -200,11 +199,10 @@ try {
   assert.equal((await (await fetch(storyboardCanvasApi(base, id))).json()).data.revision, saved.revision + 1, 'reading diagnostics does not write the canvas')
   await closeCanvasDetails(page)
   await page.goto(`http://127.0.0.1:4420/canvases/${freeId}`)
-  assert.equal(await page.getByRole('textbox', { name: '画布名称' }).inputValue(), '菜单中的画布')
-  await page.getByRole('textbox', { name: '画布名称' }).press('Escape')
+  await page.locator('.canvas-sequence-name').filter({ hasText: '菜单中的画布' }).waitFor()
   if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('textbox', { name: '画布名称' }).waitFor()
+  await page.getByRole('button', { name: '更多操作', exact: true }).waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: join(output, 'chrome-mobile.png'), animations: 'disabled' })
   console.log('floating chrome management, save/reopen, history and responsive layout verified')

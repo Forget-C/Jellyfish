@@ -369,3 +369,16 @@
 .generation-source-list button:hover { background: var(--wb-surface); }
 .generation-source-list small { color: var(--wb-muted); }
 @media (max-width: 700px) { .generation-source-list button { min-height: 36px; } }
+
+.canvas-settings-form, .canvas-settings-field { display: grid; gap: 8px; min-width: 0; }
+.canvas-settings-form { gap: 16px; }
+.canvas-settings-preview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--wb-inset);
+  color: var(--wb-muted);
+}
+.canvas-settings-preview img { width: 100%; height: 100%; min-height: 0; object-fit: cover; }

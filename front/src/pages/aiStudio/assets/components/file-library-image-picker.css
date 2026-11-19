@@ -1,0 +1,5 @@
+.file-library-image-picker { display: grid; gap: 12px; }
+.file-library-image-picker-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.file-library-image-picker-grid .ant-btn { display: grid; gap: 4px; height: auto; min-width: 0; padding: 4px; }
+.file-library-image-picker-grid img { width: 100%; aspect-ratio: 2 / 1; object-fit: cover; border-radius: 4px; }
+.file-library-image-picker-grid .ant-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

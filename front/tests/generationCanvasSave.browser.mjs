@@ -1,5 +1,5 @@
 import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
-import { closeCanvasDetails, openCardList, openCanvasCard, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { canvasSettingsAction, closeCanvasDetails, openCardList, openCanvasCard, renameFreeCanvas, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -207,9 +207,7 @@ try {
 
   await page.getByRole('button', { name: /新建画布/ }).click()
   await page.waitForURL(/\/canvases\/[^/]+$/)
-  const name = page.getByRole('textbox', { name: '画布名称' })
-
-  await name.fill('第一张独立画布 A')
+  await renameFreeCanvas(page, '第一张独立画布 B')
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('快照 A')
@@ -223,7 +221,6 @@ try {
   })
   await page.getByRole('button', { name: '保存画布' }).click()
 
-  await page.getByRole('textbox', { name: '画布名称' }).fill('第一张独立画布 B')
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('保存中继续输入 B')
   releaseSave()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
@@ -231,15 +228,14 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const firstId = new URL(page.url()).pathname.split('/').at(-1)
   const first = (await (await fetch(`${base}/${firstId}`)).json()).data
-  assert.equal(first.revision, 2)
+  assert.equal(first.revision, 3)
   assert.equal(first.document.cards[0].text, '保存中继续输入 B')
 
   await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
   await page.getByRole('button', { name: /新建画布/ }).click()
   await page.waitForURL(/\/canvases\/[^/]+$/)
-  await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]')?.value === '未命名画布')
-
-  await name.fill('第二张独立画布')
+  await page.locator('.canvas-sequence-name').filter({ hasText: '未命名画布' }).waitFor()
+  await renameFreeCanvas(page, '第二张独立画布')
   await openCardList(page)
   await page.getByRole('button', { name: '文本卡' }).click()
   await page.getByRole('button', { name: '保存画布' }).click()
@@ -251,9 +247,7 @@ try {
   await openCanvasCard(page, first.document.cards[0].id)
   await page.reload()
 
-  await name.waitFor()
-  assert.equal(await name.inputValue(), '第一张独立画布 B')
-  await name.press('Escape')
+  await page.locator('.canvas-sequence-name').filter({ hasText: '第一张独立画布 B' }).waitFor()
   await openCanvasCard(page, first.document.cards[0].id)
   assert.equal(await page.getByRole('textbox', { name: '文本内容', exact: true }).inputValue(), '保存中继续输入 B')
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
@@ -282,8 +276,8 @@ try {
   assert.equal((await (await fetch(`${base}/${firstId}`)).json()).data.document.cards[0].text, '回执丢失 A')
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
-  assert.equal((await (await fetch(`${base}/${firstId}`)).json()).data.revision, 4)
-  assert.equal(unknownRequest.expected_revision, 2)
+  assert.equal((await (await fetch(`${base}/${firstId}`)).json()).data.revision, first.revision + 2)
+  assert.equal(unknownRequest.expected_revision, first.revision)
 
   // External CAS conflict must retain current input until the user explicitly resolves it.
   const external = (await (await fetch(`${base}/${firstId}`)).json()).data
@@ -303,14 +297,18 @@ try {
   await other.goto(page.url())
   await other.getByText('此画布当前只读', { exact: true }).waitFor()
 
-  assert.equal(await other.getByRole('textbox', { name: '画布名称' }).isDisabled(), true)
+  const otherSettings = await canvasSettingsAction(other)
+  assert.equal(await otherSettings.isDisabled(), true)
+  await other.keyboard.press('Escape')
   await other.getByRole('button', { name: '取得编辑权' }).click()
-
-  await other.getByRole('textbox', { name: '画布名称' }).waitFor()
-  await other.waitForFunction(() => document.querySelector('[aria-label="画布名称"]') && !document.querySelector('[aria-label="画布名称"]').disabled)
-  await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]').disabled)
+  const transferred = await canvasSettingsAction(other)
+  await transferred.and(other.locator(':enabled')).waitFor()
+  const originalSettings = await canvasSettingsAction(page)
+  await originalSettings.and(page.locator(':disabled')).waitFor()
   await page.goto(`http://127.0.0.1:4271/canvases/${secondId}`)
-  await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]') && !document.querySelector('[aria-label="画布名称"]').disabled)
+  const secondSettings = await canvasSettingsAction(page)
+  await secondSettings.and(page.locator(':enabled')).waitFor()
+  await page.keyboard.press('Escape')
   await openCanvasCard(page, (await (await fetch(`${base}/${secondId}`)).json()).data.document.cards[0].id)
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('五秒自动保存')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '待保存' }).waitFor()

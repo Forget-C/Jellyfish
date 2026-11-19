@@ -1,11 +1,11 @@
 import { PromptEditingContext, PromptEditingActiveContext } from './PromptEditingContext'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Alert, Empty, Input, Space } from 'antd'
+import { Alert, Empty, Space } from 'antd'
 import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication } from '../../../services/generated'
-import { useGenerationCanvasEditor, type StoryboardReviewPreparation, type StoryboardScope, type PendingSave } from './useGenerationCanvasEditor'
+import { useGenerationCanvasEditor, type CanvasSettingsChanges, type StoryboardReviewPreparation, type StoryboardScope, type PendingSave } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph, type CanvasModelCardActionContext, type CanvasModelCardMenuContext } from './GenerationCanvasGraph'
 import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -47,7 +47,13 @@ interface CanvasManagementContext {
   running: boolean
   canEdit: () => boolean
   requestLeave: () => Promise<boolean>
-  nameEditor: ReactNode
+  document?: CanvasDocument
+  settingsBlocked: boolean
+  settingsPending: boolean
+  settingsDraft?: CanvasSettingsChanges
+  clearSettingsDraft: () => void
+  settingsError: string
+  saveSettings: (changes: CanvasSettingsChanges) => Promise<boolean>
 }
 
 type CanvasLayoutPolicy = (document: CanvasDocument, beforeApplication?: CanvasDocument) => GenerationCanvasLayoutPolicy | undefined
@@ -64,7 +70,7 @@ interface GenerationCanvasWorkspaceProps {
   projectId: string
   canvasId: string | null
   back: { label: string; onClick: () => void }
-  renderCanvasManagement?: (context: CanvasManagementContext) => ReactNode
+  renderCanvasManagement?: (context: CanvasManagementContext, focusMenu: () => void) => ReactNode
   renderSceneActions?: (context: CanvasManagementContext & { document?: CanvasDocument;
     prepareReview: () => Promise<StoryboardReviewPreparation | undefined>;
     applyReview: (scope: StoryboardScope, choice: StoryboardApplication) => Promise<boolean>;
@@ -177,16 +183,19 @@ export function GenerationCanvasWorkspace({
   const management: CanvasManagementContext = {
     current, saving, editable: ownership.editable,
     running: !!runtime.busyCards.size, canEdit: ownership.canEdit, requestLeave,
-    nameEditor: current?.id === canvasId && !current.scene && document && <Input aria-label="画布名称" value={document.name} maxLength={255}
-      disabled={!ownership.editable || !!editor.recovery || editor.initialApplying}
-      onChange={event => change({ ...document, name: event.target.value })} />,
+    document: current?.id === canvasId ? document : undefined,
+    settingsBlocked: !!promptEditors.size || !!editor.recovery || editor.conflict || (editor.initialApplying && !editor.pendingSettings),
+    settingsPending: editor.pendingSettings,
+    settingsDraft: editor.settingsDraft,
+    clearSettingsDraft: editor.clearSettingsDraft,
+    settingsError: editor.error,
+    saveSettings: changes => promptEditors.size ? Promise.resolve(false) : editor.commitSettings(changes),
   }
   return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
     <header ref={toolbar} className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
-        {renderCanvasManagement?.(management)}
         <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : current ? '已保存' : '尚无画布'}</span>
         {current && <WorkbenchIconButton label="保存画布" variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
         <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={requestLeave} />}</div>
@@ -202,7 +211,10 @@ export function GenerationCanvasWorkspace({
         <CanvasAppearancePicker compact />
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
-          <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
+          {focusMenu => <>
+            {renderCanvasManagement?.(management, focusMenu)}
+            <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
+          </>}
         </CanvasToolbarMenu>
       </div>
     </header>

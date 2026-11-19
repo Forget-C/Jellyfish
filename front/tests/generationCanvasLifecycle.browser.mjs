@@ -90,7 +90,8 @@ try {
   const deleteCanvas = async () => {
     await closeCanvasDetails(page)
 
-    await page.getByRole('button', { name: '删除画布', exact: true }).click()
+    await page.getByRole('button', { name: '更多操作', exact: true }).click()
+    await page.getByRole('group', { name: '更多操作选项' }).getByRole('button', { name: '删除画布', exact: true }).click()
     await page.getByRole('dialog', { name: '删除画布' }).getByRole('button', { name: '确认删除' }).click()
   }
   // A server failure cannot claim cleanup; verification confirms the canvas still exists.

@@ -14,6 +14,7 @@ type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardAppl
 export type PendingSave = CanvasSave & { scene?: SceneChange }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
+export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
 export type CanvasArrangementChange = { undo: () => void; redo: () => void }
 type HistoryEntry = { document: CanvasDocument; scene?: StoryboardScope; arrangement?: CanvasArrangementChange } | { apply: () => void; reverse: () => void }
 type HistorySide = 'past' | 'future'
@@ -29,6 +30,9 @@ const preservesFixedSource = (server: CanvasDocument, draft: CanvasDocument) => 
   return [server.fixed_source, ...(server.archived_sources ?? [])].every(source => !source ||
     same(server.cards?.find(card => card.id === source.card_id), draft.cards?.find(card => card.id === source.card_id)))
 }
+const settingsSave = (requestId?: string) => requestId?.startsWith('settings:') === true
+const rejectedSave = (reason: unknown, settings = false): reason is ApiError => reason instanceof ApiError &&
+  ([400, 409, 422].includes(reason.status) || (settings && reason.status === 404))
 const renameSave = (requestId?: string) => requestId?.startsWith('rename:') === true
 const visualContinuitySave = (requestId?: string) => requestId?.startsWith('visual-continuity:') === true
 const initialStoryboardSave = (requestId: string) => requestId.startsWith('storyboard:')
@@ -68,6 +72,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [storageError, setStorageError] = useState('')
   const [recovery, setRecovery] = useState<Recovery>()
   const [conflict, setConflict] = useState(false)
+  const [settingsDraft, setSettingsDraft] = useState<CanvasSettingsChanges>()
   const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: PendingSave; blocked?: CanvasDocument; recovery?: Recovery; initialBefore?: CanvasDocument; conflict: boolean }>({ scope: key, conflict: false })
   const cleaner = useRef<(value: CanvasDocument) => CanvasDocument>()
   const configureCatalog = useCallback((catalog: CanvasCatalog) => {
@@ -96,6 +101,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     state.current = { scope: key, conflict: false }; inFlight.current = undefined; cleaner.current = undefined
     history.current = { scope: key, past: [], future: [] }
     setStoryboardApplication(undefined)
+    setSettingsDraft(undefined)
     setCurrent(undefined); setDocument(undefined); setError(''); setConflict(false); setRecovery(undefined); setSaving(false); setInitialApplying(false)
     if (canvasId) void Canvases.canvasGet({ projectId, canvasId }).then(response => {
       if (!active || !response.data) return
@@ -215,11 +221,14 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       } catch (reason) {
         if (s !== state.current) return false
         const failedDocument = s.pending?.document
-        if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
+        const settings = settingsSave(s.pending?.request_id)
+        if (rejectedSave(reason, settings)) {
+          const staged = !!s.initialBefore
           s.pending = undefined
-          if (s.initialBefore) {
+          if (staged) {
             s.initialBefore = undefined; setInitialApplying(false)
-          } else if (reason.status === 409) { s.conflict = true; setConflict(true) }
+          }
+          if (reason.status === 409 && (!staged || settings)) { s.conflict = true; setConflict(true) }
         }
         // 暂停相同失败正文；未知结果保留原请求，手动保存可随时核实。
         s.blocked = structuredClone(s.pending ? s.document : failedDocument as CanvasDocument)
@@ -240,10 +249,23 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       // 先重放未明请求取得原回执，再读取最新服务端；恢复不产生新的保存意图。
       let baseline = saved.baseline
       let recovered = saved.document
-      const staged = !!saved.pending && (renameSave(saved.pending.request_id) || initialStoryboardSave(saved.pending.request_id) || visualContinuitySave(saved.pending.request_id) || !!saved.pending.scene)
-      if (saved.pending) {
-        baseline = await send(baseline, saved.pending)
-        if (staged) recovered = baseline.document
+      const command = saved.pending
+      let staged = !!command && (renameSave(command.request_id) || settingsSave(command.request_id) || initialStoryboardSave(command.request_id) || visualContinuitySave(command.request_id) || !!command.scene)
+      let recoveredSettings: CanvasSettingsChanges | undefined
+      if (command) {
+        try {
+          baseline = await send(baseline, command)
+          if (staged) recovered = baseline.document
+        } catch (reason) {
+          if (!settingsSave(command.request_id) || !rejectedSave(reason, true)) throw reason
+          const draft = command.document as CanvasDocument
+          recoveredSettings = {}
+          if (draft.name !== saved.document.name) recoveredSettings.name = draft.name
+          if ((draft.cover_file_id ?? null) !== (saved.document.cover_file_id ?? null)) {
+            recoveredSettings.cover_file_id = draft.cover_file_id ?? null
+          }
+          staged = false
+        }
       }
       const response = await Canvases.canvasGet({ projectId, canvasId: baseline.id })
       if (!response.data || s !== state.current) return
@@ -258,8 +280,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         configureCatalog(catalog.data)
       }
       const changed = response.data.revision !== baseline.revision || !same(cleaner.current!(response.data.document), cleaner.current!(baseline.document))
-      if (changed && staged) recovered = response.data.document
-      if (changed && !staged) {
+      const settingsOnly = recoveredSettings && same(cleaner.current!(saved.document), cleaner.current!(saved.baseline.document))
+      if (changed && (staged || settingsOnly)) recovered = response.data.document
+      if (changed && !staged && !settingsOnly) {
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
       s.current = response.data; s.document = cleaner.current!(recovered); s.pending = undefined; s.recovery = undefined
@@ -267,10 +290,17 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       if (!changed && staged && saved.pending) {
         recordConfirmedSave(saved.pending, saved.baseline.document, s.document)
       }
+      setSettingsDraft(recoveredSettings)
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
       return true
     } catch (reason) {
       if (s === state.current) {
+        if (settingsSave(saved.pending?.request_id) && reason instanceof ApiError && reason.status === 404) {
+          s.recovery = undefined; setRecovery(undefined); persist()
+          s.current = undefined; s.document = undefined
+          setCurrent(undefined); setDocument(undefined); setError('此画布已不可用')
+          return false
+        }
         if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
           if (renameSave(saved.pending?.request_id)) {
             s.recovery = undefined; setRecovery(undefined); persist()
@@ -290,6 +320,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     try {
       const response = await Canvases.canvasGet({ projectId, canvasId: canvasId! })
       if (!response.data || s !== state.current) return false
+      keepLocal = keepLocal && !same(s.document, s.current?.document)
       if (keepLocal && s.document && !preservesFixedSource(response.data.document, s.document)) {
         setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
         return false
@@ -345,6 +376,21 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const pendingCommand = state.current.pending ?? recovery?.pending
   const pendingRename = renameSave(pendingCommand?.request_id) ? (pendingCommand?.document as CanvasDocument).name : undefined
+  // 设置随最新本地文档保存，只有收到回执才更新可见名称和封面。
+  const commitSettings = async (changes: CanvasSettingsChanges) => {
+    const s = state.current
+    if (!ownership.canEdit() || !s.current || !s.document || s.current.scene || s.scope !== key || s.recovery || s.conflict) return false
+    if (settingsSave(s.pending?.request_id)) return save()
+    if ((inFlight.current || s.pending) && !await save()) return false
+    if (s !== state.current || !s.current || !s.document || !ownership.canEdit() || s.initialBefore || s.recovery || s.conflict) return false
+    const next = { ...s.document, ...changes }
+    if (same(next, s.document)) return true
+    s.initialBefore = s.document
+    s.pending = { request_id: `settings:${crypto.randomUUID()}`, expected_revision: s.current.revision, document: next }
+    setInitialApplying(true); persist()
+    return save()
+  }
+  const pendingSettings = settingsSave(pendingCommand?.request_id)
   const prepareReview = async (): Promise<StoryboardReviewPreparation | undefined> => {
     const s = state.current
     if (!await save() || s !== state.current || !s.current || s.initialBefore) return undefined
@@ -416,6 +462,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename,
+  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

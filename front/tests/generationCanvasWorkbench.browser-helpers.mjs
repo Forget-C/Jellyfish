@@ -375,3 +375,24 @@ export async function openStoryboardReview(page) {
   await drawer.getByRole('button', { name: '应用并进入画布', exact: true }).waitFor()
   return drawer
 }
+
+/** 通过独立编辑器的更多菜单打开画布设置。 */
+export async function canvasSettingsAction(page) {
+  const menu = page.getByRole('button', { name: '更多操作', exact: true })
+  if (await menu.getAttribute('aria-expanded') !== 'true') await menu.click()
+  return page.getByRole('group', { name: '更多操作选项' }).getByRole('button', { name: '设置', exact: true })
+}
+
+export async function openCanvasSettings(page) {
+  await (await canvasSettingsAction(page)).click()
+  const settings = page.getByRole('dialog', { name: '画布设置', exact: true })
+  await settings.waitFor()
+  return settings
+}
+
+export async function renameFreeCanvas(page, name) {
+  const settings = await openCanvasSettings(page)
+  await settings.getByRole('textbox', { name: '画布名称', exact: true }).fill(name)
+  await settings.getByRole('button', { name: '保存设置', exact: true }).click()
+  await settings.waitFor({ state: 'hidden' })
+}

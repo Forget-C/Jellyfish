@@ -1,5 +1,5 @@
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
-import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList, renameFreeCanvas } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -71,7 +71,7 @@ try {
   assert.equal(await text.inputValue(), '服务端拒绝的正文')
   await text.fill('持续输入 6')
 
-  await page.getByRole('textbox', { name: '画布名称' }).fill('已纠正')
+  await renameFreeCanvas(page, '已纠正')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   // A delayed save keeps one network request active and coalesces B/C into latest C.
   const commands = []
@@ -159,8 +159,7 @@ try {
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await open('m'); await outputStarted
 
-  await page.getByRole('textbox', { name: '画布名称' }).fill('触发较新修订')
-  await page.getByRole('button', { name: '保存画布' }).click()
+  await renameFreeCanvas(page, '触发较新修订')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await adopted.getByText('旧响应中的正文', { exact: true }).waitFor()
   const newest = await read(downstream.id)

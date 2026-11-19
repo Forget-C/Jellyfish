@@ -1,3 +1,4 @@
+import { renameFreeCanvas } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -165,8 +166,7 @@ try {
   const free = await request(`${studio}/generation-canvases`, 'POST', { name: '自由方案' })
   await page.goto(`${origin}/canvases/${free.id}`)
 
-  await page.getByRole('textbox', { name: '画布名称', exact: true }).fill('自由方案仍可更名')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await renameFreeCanvas(page, '自由方案仍可更名')
   await poll(() => request(`${studio}/generation-canvases/${free.id}`), row => row.document.name === '自由方案仍可更名')
 
   await request(`${sceneApi}/objects/extractions`, 'POST', { request_id: 'object-prep' })

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { renameFreeCanvas, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-independent-canvas-')
@@ -55,8 +55,7 @@ try {
   await openCardList(page, '基础卡')
   await page.getByRole('button', { name: '文本卡', exact: true }).click()
   await page.locator('[data-card-id]').first().waitFor()
-  await page.getByRole('textbox', { name: '画布名称', exact: true }).fill('独立画布验收')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await renameFreeCanvas(page, '独立画布验收')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
   await page.getByRole('link', { name: /独立画布验收/ }).waitFor()

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 /** 工具菜单只改变可见性，子组件持续挂载，避免收起菜单中断任务或丢失输入。 */
-export function CanvasToolbarMenu({ label, children, icon, caption }: { label: string; children: ReactNode; icon?: ReactNode; caption?: ReactNode }) {
+export function CanvasToolbarMenu({ label, children, icon, caption }: { label: string; children: ReactNode | ((focusTrigger: () => void) => ReactNode); icon?: ReactNode; caption?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -29,9 +29,11 @@ export function CanvasToolbarMenu({ label, children, icon, caption }: { label: s
       onClick={() => setOpen(value => !value)}>{caption}</WorkbenchButton>
     <div id={id} className="canvas-toolbar-popover canvas-workbench-dialog" role="group" aria-label={`${label}选项`} hidden={!open}
       onClick={event => {
-        if (event.target instanceof Element && event.target.closest('[data-menu-close]') && root.current?.contains(event.target)) setOpen(false)
+        if (event.target instanceof Element && event.target.closest('[data-menu-close]') && root.current?.contains(event.target)) {
+          setOpen(false); trigger.current?.focus({ preventScroll: true })
+        }
       }}>
-      {children}
+      {typeof children === 'function' ? children(() => trigger.current?.focus({ preventScroll: true })) : children}
     </div>
   </div>
 }
