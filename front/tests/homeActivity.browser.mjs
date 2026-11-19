@@ -51,8 +51,8 @@ try {
     const visibleRows = rows => state === 'empty' ? [] : state === 'single' ? rows.slice(0, 1) : rows
     const respond = data => route.fulfill({ json: { code: 200, data } })
     const fail = () => route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
-    if (pathname.endsWith('/recent-canvases')) return failedHome === 'canvases' ? fail() : respond(state === 'media' ? mediaCanvases : visibleRows(canvasRows))
-    if (pathname.endsWith('/recent-assets')) return failedHome === 'assets' ? fail() : respond(visibleRows(assetRows))
+    if (pathname.endsWith('/recent-canvases')) return state === 'error' || failedHome === 'canvases' ? fail() : respond(state === 'media' ? mediaCanvases : visibleRows(canvasRows))
+    if (pathname.endsWith('/recent-assets')) return state === 'error' || failedHome === 'assets' ? fail() : respond(visibleRows(assetRows))
     const corners = pathname.match(/\/files\/corners-(\d)\/download$/)
     if (corners) {
       const [width, height] = coverSizes[Number(corners[1])]
@@ -306,22 +306,35 @@ try {
       return [top + element.closest('main').scrollTop, height]
     })))
   }
+  async function checkPlaceholders(counts, animated) {
+    for (const [index, region] of [canvases, progress, sessions, assets].entries()) {
+      const slots = region.locator('.home-slot:visible')
+      assert.equal(await slots.count(), counts[index])
+      assert.ok(await slots.evaluateAll((nodes, expectedMotion) => nodes.every(node =>
+        node.getAttribute('aria-hidden') === 'true' && Boolean(node.getAnimations().length) === expectedMotion
+      ), animated))
+    }
+  }
   for (const [width, height] of [[1440, 900], [1024, 440], [375, 812]]) {
     await page.setViewportSize({ width, height })
+    const assetSlots = height === 440 ? 0 : 6
+    await page.emulateMedia({ reducedMotion: width === 375 ? 'reduce' : 'no-preference' })
+    const assetEntry = assets.getByRole('button', { name: height === 440 ? '查看最近资产' : assetRows[0].name, exact: true })
     state = 'loaded'
     await page.reload()
     await progress.getByRole('link', { name: project.name }).waitFor()
     await sessions.getByText(session.title).waitFor()
     await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
+    await assetEntry.waitFor()
     const expectedLayout = await measureHome()
     for (const next of ['single', 'empty', 'error']) {
       state = next
-      failedHome = next === 'error' ? 'canvases' : ''
       let release
       pendingActivity = new Promise(resolve => { release = resolve })
       await page.reload({ waitUntil: 'domcontentloaded' })
       try {
         await progress.getByRole('status').waitFor()
+        await checkPlaceholders([3, 3, 3, assetSlots], width !== 375)
         assert.deepEqual(await measureHome(), expectedLayout, '请求中保持区块和底部入口的位置')
       } finally {
         release()
@@ -331,15 +344,17 @@ try {
         await progress.getByRole('link', { name: project.name }).waitFor()
         await sessions.getByText(session.title).waitFor()
         await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
+        await assetEntry.waitFor()
+        await checkPlaceholders([2, 2, 2, Math.max(0, assetSlots - 1)], false)
         assert.equal(await canvases.getByRole('article').count(), 1)
       } else {
-        await Promise.all([progress, sessions, canvases].map(region =>
+        await Promise.all([progress, sessions, canvases, assets].map(region =>
           region.getByRole(next === 'error' ? 'alert' : 'status')
             .filter({ hasText: next === 'error' ? /失败/ : /暂无/ }).waitFor()))
+        await checkPlaceholders([3, 3, 3, assetSlots], false)
       }
       assert.deepEqual(await measureHome(), expectedLayout, next + ' 状态保持首页布局')
     }
-    failedHome = ''
   }
   state = 'empty'
   await page.reload()
