@@ -500,10 +500,11 @@ export function ChapterRawTextEditorDrawer({
   const handleRequestClose = () => guard(onClose)
   const showRawConfirmation = confirmRaw === rawText && !!impact
   useEffect(() => {
-    if (saveError || showRawConfirmation) {
-      saveFeedback.current?.scrollIntoView({ block: 'nearest' })
-    }
-  }, [saveError, showRawConfirmation])
+    if (saveError) saveFeedback.current?.scrollIntoView({ block: 'nearest' })
+  }, [saveError])
+  useEffect(() => {
+    if (showRawConfirmation) saveFeedback.current?.scrollIntoView({ block: 'nearest' })
+  }, [showRawConfirmation])
 
   const mockHistory: HistoryItem[] = useMemo(
     () => [
