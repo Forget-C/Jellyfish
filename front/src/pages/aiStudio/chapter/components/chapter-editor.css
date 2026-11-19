@@ -15,7 +15,6 @@
 .chapter-editor-tools .ant-btn[aria-pressed="true"] { color: var(--app-accent, #245fc5); background: var(--app-selected, #e4edfb); }
 .chapter-editor-drawer .ant-drawer-body .ant-btn,
 .chapter-editor-history .ant-btn { font-size: 13px; min-height: 32px; border-radius: 8px; }
-.chapter-editor-drawer .chapter-compare > * { min-width: 0; }
 .chapter-editor-drawer .ant-alert { overflow-wrap: anywhere; }
 .chapter-editor-drawer .ant-alert-message,
 .chapter-editor-drawer .ant-alert-description { font-size: 14px; }
