@@ -24,7 +24,7 @@ const canvasRows = [
   { id: 'scene-canvas', kind: 'scene', name: '真实场次画布', project_name: project.name, cover_file_id: 'home-cover', updated_at },
   { id: 'free-canvas', kind: 'free', name: '真实生成画布', project_name: null, cover_file_id: null, updated_at },
 ]
-const coverSizes = [[360, 180], [180, 480], [240, 240]]
+const coverSizes = [[360, 160], [180, 480], [240, 240]]
 const mediaCanvases = coverSizes.map((_, index) => ({
   ...canvasRows[0], id: 'media-' + index, cover_file_id: 'corners-' + index,
   name: '超长画布名称'.repeat(10) + index, project_name: '超长项目名称'.repeat(10),
@@ -302,10 +302,10 @@ try {
     assert.equal(pixels.corners, 4, '横图、竖图和方图均应完整显示四角')
     if (index > 0) assertSoftBackdrop(pixels.side)
   }
-  // The 2:1 fixture occupies 224px in a 112px-high cover. A 320px card has exactly 30% side space.
+  // The 360×160 fixture occupies 252px in a 112px-high cover, leaving exactly 30% of a 360px card.
   const landscape = canvases.getByRole('article').first().locator('img')
   const plain = [237, 241, 247]
-  for (const [width, softened] of [[682, false], [684, true], [686, true], [682, false]]) {
+  for (const [width, softened] of [[762, false], [764, true], [766, true], [762, false]]) {
     await page.setViewportSize({ width, height: 812 })
     const { side, corners } = await inspectCover(landscape)
     if (softened) {

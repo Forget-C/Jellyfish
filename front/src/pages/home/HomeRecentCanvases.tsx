@@ -18,7 +18,7 @@ function CanvasCover({ fileId }: { fileId: string | null }) {
       const { width, height } = image.getBoundingClientRect()
       // With contain, a width of at most 70% at full height leaves at least 30% at the sides.
       setShowBackdrop(image.naturalHeight > 0 && height > 0 &&
-        height * image.naturalWidth <= width * 0.7 * image.naturalHeight)
+        height * image.naturalWidth * 10 <= width * image.naturalHeight * 7)
     }
     const observer = new ResizeObserver(updateBackdrop)
     observer.observe(image)
