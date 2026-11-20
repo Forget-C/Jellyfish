@@ -8,12 +8,13 @@ import httpx
 import pytest
 from app.models.llm import Model, Provider
 from app.task_worker import TaskWorker
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
 from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
+@pytest.mark.parametrize('runtime', [None, 'mysql'], indirect=True)
 async def test_text_then_image_then_video_uses_completed_outputs_and_preview(runtime, image_storage, monkeypatch):
     async with runtime.sessions.begin() as db:
         db.add(Provider(id=runtime.provider_id + '-video', name='volcengine', base_url='https://video.test/v1', api_key='video-secret'))
@@ -44,7 +45,7 @@ async def test_text_then_image_then_video_uses_completed_outputs_and_preview(run
         return response.json()['data']
     async def save(name):
         current = (await runtime.client.get(runtime.url)).json()['data']
-        response = await runtime.client.put(runtime.url, json={'request_id': name, 'expected_revision': current['revision'], 'document': runtime.document})
+        response = await runtime.client.put(runtime.url, json={'request_id': name, 'expected_revision': current['revision'], 'document': bind_document_prompts(runtime.document)})
         assert response.status_code == 200, response.text
     def reference(source, port):
         return {'id': 'ref-' + source, 'kind': 'reference', 'source': {'canvas_id': runtime.canvas_id, 'card_id': source, 'port_id': port, 'position': 0}}
