@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Alert, Button, Modal, Space, Spin, Table, Tag } from 'antd'
-import { FilmService, StudioDirectingService, type DivisionAnalysisDetail, type DivisionHistoryEntry, type DivisionHistoryPage, type DivisionReceiptDetail, type DivisionVersionDetail } from '../../../services/generated'
+import { FilmService, StudioDirectingService, type DivisionAnalysisDetail, type DivisionHistoryEntry, type DivisionHistoryPage, type DivisionVersionDetail } from '../../../services/generated'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
 import '../assets/components/resourceEditor.css'
 
 export type DivisionHistorySelection = { kind: 'version'; detail: DivisionVersionDetail } | { kind: 'analysis'; detail: DivisionAnalysisDetail }
-type HistoryDetail = DivisionHistorySelection | { kind: 'receipt'; detail: DivisionReceiptDetail }
-const origins: Record<string, string> = { manual: '手动', ai: 'AI', restore: '历史恢复', imported: '旧记录导入', baseline: '接入时当前划分' }
-const statuses: Record<string, string> = { queued: '等待执行', running: '分析中', failed: '失败', cancelled: '已取消', saved: '已保存', unimported: '待接入记录' }
-const statusLabel = (row: DivisionHistoryEntry) => row.status === 'succeeded' ? (row.save_relation === 'unknown' ? '保存关系未知' : row.save_relation === 'saved' ? '已保存' : '待保存方案') : statuses[row.status] || row.status
+const origins: Record<string, string> = { manual: '手动', ai: 'AI', restore: '历史恢复' }
+const statuses: Record<string, string> = { queued: '等待执行', running: '分析中', failed: '失败', cancelled: '已取消', saved: '已保存' }
+const statusLabel = (row: DivisionHistoryEntry) => row.status === 'succeeded' ? (row.save_relation === 'saved' ? '已保存' : '待保存方案') : statuses[row.status] || row.status
 
 /** 摘要分页、展开才读正文；查看和载入均由父页面维护草稿保护。 */
 export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, onClose, onView, onLoad, targetTask }: {
@@ -22,7 +21,7 @@ export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, 
   const [data, setData] = useState<DivisionHistoryPage>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [details, setDetails] = useState<Record<string, HistoryDetail>>({})
+  const [details, setDetails] = useState<Record<string, DivisionHistorySelection>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<React.Key[]>([])
   const [retry, setRetry] = useState(0)
@@ -56,19 +55,15 @@ export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, 
     const isCurrent = () => scope.current === requestScope && requests.current.get(key) === request
     setErrors(value => ({ ...value, [key]: '' }))
     try {
-      let selection: HistoryDetail
+      let selection: DivisionHistorySelection
       if (row.kind === 'version') {
         const response = await StudioDirectingService.directingDivisionVersion({ projectId, chapterId, versionId: row.id })
         if (!response.data) throw new Error('版本详情读取失败')
         selection = { kind: 'version', detail: response.data }
-      } else if (row.kind === 'analysis') {
+      } else {
         const response = await StudioDirectingService.directingDivisionAnalysis({ projectId, chapterId, taskId: row.id })
         if (!response.data) throw new Error('分析详情读取失败')
         selection = { kind: 'analysis', detail: response.data }
-      } else {
-        const response = await StudioDirectingService.directingDivisionLegacyReceipt({ projectId, chapterId, requestId: row.id })
-        if (!response.data) throw new Error('旧回执读取失败')
-        selection = { kind: 'receipt', detail: response.data }
       }
       if (isCurrent()) {
         setDetails(value => ({ ...value, [key]: selection }))
@@ -108,8 +103,6 @@ export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, 
       : (selection.detail.chapter?.sequences || []).map(scene => ({ title: scene.title, excerpt: scene.source_text, span: scene.span, id: scene.id }))
     return <div className="division-history-detail">
       <p>{origins[row.origin] || row.origin} · {new Date(row.created_at).toLocaleString()} · {statusLabel(row)}</p>
-      {selection.kind === 'version' && (selection.detail.mapping.source_task_unknown || selection.detail.mapping.lineage_unknown) && <Alert type="warning" message="旧记录未保留完整的分析来源或身份变更映射；仅展示已验证的保存快照，不推断缺失关系。" />}
-      {selection.kind === 'receipt' && selection.detail.issues.map(issue => <Alert key={issue} type="warning" message={issue} />)}
       {selection.kind === 'analysis' && <>
         {selection.detail.issues.map(issue => <Alert key={issue} type="warning" message={issue} />)}
         {selection.detail.source_changed && <Alert type="warning" message="基于旧原文，载入后需要重新定位全部范围。" />}
@@ -144,7 +137,7 @@ export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, 
       locale={{ emptyText: '暂无历史版本或分析记录' }} pagination={{ current: page, pageSize: 10, total: data?.total || 0, showSizeChanger: false, onChange: setPage }}
       expandable={{ expandedRowKeys: expanded, onExpandedRowsChange: keys => setExpanded([...keys]), onExpand: (value, row) => { if (value) void readDetail(row) }, expandedRowRender: renderDetail }}
       columns={[
-        { title: '版本／记录', render: (_, row) => <Space wrap><strong>{row.number ? `v${row.number}` : row.kind === 'receipt' ? '旧保存记录' : 'AI 分析'}</strong>{row.is_current && <Tag color="blue">当前</Tag>}</Space> },
+        { title: '版本／记录', render: (_, row) => <Space wrap><strong>{row.number ? `v${row.number}` : 'AI 分析'}</strong>{row.is_current && <Tag color="blue">当前</Tag>}</Space> },
         { title: '来源', dataIndex: 'origin', responsive: ['md'], render: value => origins[value] || value },
         { title: '创建时间', dataIndex: 'created_at', responsive: ['lg'], render: value => new Date(value).toLocaleString() },
         { title: '场次数', dataIndex: 'sequence_count', responsive: ['md'], render: value => value ?? '展开查看' },

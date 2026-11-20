@@ -10,7 +10,6 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import aliased
 
 from app.services.chapters.explanations import explanation_basis
-from app.core.contracts.directing.shooting_preparation import ShootingPreparation
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.workspace import ChapterSequences
 from app.core.contracts.directing.division import DivisionDraft, DivisionImpact, DivisionPreview, DivisionSave, DivisionSaved
@@ -240,27 +239,7 @@ class DivisionService(WorkspaceService):
         request_hash = digest(body.model_dump(mode='json'))
         receipt = await self.db.get(DivisionCommit, (chapter_id, body.request_id), populate_existing=True, with_for_update=True)
         if receipt:
-            hashes = {request_hash}
             if receipt.request_hash != request_hash:
-                legacy_shooting = body.model_dump(mode='json')
-                for member, model in zip(legacy_shooting['draft']['members'], body.draft.members):
-                    value = ShootingPreparation.model_validate(model._legacy_preparation or {})  # pylint: disable=protected-access
-                    preparation = value.model_dump(mode='json')
-                    for note in preparation['notes']:
-                        note.pop('scope')
-                        note.pop('previous_scope_text')
-                    member['shooting_preparation'] = preparation
-                hashes.add(digest(legacy_shooting))
-            if body.draft.source_revision_id is None and not body.draft.restored_baseline and not body.draft.history_reconfirmed:
-                # 旧客户端的原请求不含新增恢复字段；默认值不能让已提交请求失去可重放性。
-                legacy = body.model_dump(mode='json')
-                for field in ('source_revision_id', 'restored_baseline', 'history_reconfirmed'):
-                    legacy['draft'].pop(field)
-                hashes.add(digest(legacy))
-                if body.draft.source_basis_id is None:
-                    legacy['draft'].pop('source_basis_id')
-                    hashes.add(digest(legacy))
-            if receipt.request_hash not in hashes:
                 raise RevisionConflict('提交身份已用于另一份划分，不能复用')
             return DivisionSaved.model_validate(receipt.response)
         chapter = await self._source_chapter(chapter, body.draft)
@@ -276,8 +255,6 @@ class DivisionService(WorkspaceService):
             raise ValueError('本章划分没有变化，无需保存')
         created = {}
         async with self.db.begin_nested():
-            if rows and not await current_version(self.db, chapter_id, locked=True):
-                await record_version(self.db, self.division_snapshot(chapter, [row for row in rows if row.is_current]), origin='baseline')
             # 移动的当前成员先进入正整数临时槽位，防止交换顺序触发唯一约束。
             temporary = max([row.position for row in rows] + [len(body.draft.members)]) + 1
             for offset, impact in enumerate(preview.impacts):
@@ -316,7 +293,7 @@ class DivisionService(WorkspaceService):
             saved_chapter = await record_version(self.db, saved_chapter,
                 origin='restore' if body.draft.source_revision_id else ('ai' if body.draft.source_task_id else 'manual'),
                 source_task_id=body.draft.source_task_id, source_revision_id=body.draft.source_revision_id,
-                request_id=body.request_id, mapping={'lineage': [row.model_dump(mode='json') for row in body.draft.lineage],
+                mapping={'lineage': [row.model_dump(mode='json') for row in body.draft.lineage],
                     'exited_sequence_ids': body.draft.exited_sequence_ids, 'created_sequence_ids': created,
                     'restored_sequence_ids': [row.sequence_id for row in body.draft.restored_baseline],
                     'history_reconfirmed': body.draft.history_reconfirmed})

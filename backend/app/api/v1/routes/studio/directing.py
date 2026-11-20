@@ -26,7 +26,7 @@ from app.core.contracts.directing.scene_objects import (
     SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead,
 )
 from app.services.directing.scene_objects import SceneObjectService
-from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionReceiptDetail, DivisionVersionDetail
+from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionVersionDetail
 from app.services.directing.division_history import DivisionHistoryService
 from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
 from app.core.contracts.video_generation import VideoReferenceCapabilities
@@ -319,15 +319,9 @@ async def division_version(project_id: str, chapter_id: str, version_id: str, db
     return success_response(await _call(DivisionHistoryService(db, project_id).version_detail(chapter_id, version_id)))
 
 
-@router.get("/chapters/{chapter_id}/division/history/receipts/{request_id}", response_model=ApiResponse[DivisionReceiptDetail], operation_id="directing_division_legacy_receipt")
-async def division_legacy_receipt(project_id: str, chapter_id: str, request_id: str, db: AsyncSession = Depends(get_db, scope="function")):
-    """只读查看尚未接入的旧保存记录，缺失数据保留说明。"""
-    return success_response(await _call(DivisionHistoryService(db, project_id).receipt_detail(chapter_id, request_id)))
-
-
 @router.get("/chapters/{chapter_id}/division/analyses/{task_id}", response_model=ApiResponse[DivisionAnalysisDetail], operation_id="directing_division_analysis")
 async def division_analysis(project_id: str, chapter_id: str, task_id: str, db: AsyncSession = Depends(get_db, scope="function")):
-    """展开分析时读取业务快照，旧资料缺失不冒充完整版本。"""
+    """展开分析时按需读取业务快照与资料缺失说明。"""
     return success_response(await _call(DivisionHistoryService(db, project_id).analysis_detail(chapter_id, task_id)))
 
 

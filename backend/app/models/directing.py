@@ -81,7 +81,6 @@ class DivisionVersion(Base):
     source_task_id: Mapped[str | None] = mapped_column(ForeignKey('tasks.id', ondelete='RESTRICT'))
     source_revision_id: Mapped[str | None] = mapped_column(ForeignKey('directing_division_versions.id', ondelete='RESTRICT'))
     base_revision_id: Mapped[str | None] = mapped_column(ForeignKey('directing_division_versions.id', ondelete='RESTRICT'))
-    request_id: Mapped[str | None] = mapped_column(String(64))
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     mapping: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'),
@@ -90,9 +89,8 @@ class DivisionVersion(Base):
     __table_args__ = (
         UniqueConstraint('chapter_id', 'number', name='uq_division_version_number'),
         UniqueConstraint('chapter_id', 'id', name='uq_division_version_chapter_identity'),
-        UniqueConstraint('chapter_id', 'request_id', name='uq_division_version_request'),
         CheckConstraint('number > 0 AND sequence_count >= 0', name='ck_division_version_numbers'),
-        CheckConstraint("origin IN ('manual','ai','restore','imported','baseline')", name='ck_division_version_origin'),
+        CheckConstraint("origin IN ('manual','ai','restore')", name='ck_division_version_origin'),
     )
 
 

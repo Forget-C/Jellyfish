@@ -132,8 +132,6 @@ class WorkspaceService(DirectingStore):
         if previous and previous.title == body.title and previous.position == body.position and source_unchanged:
             return self.sequence_read(previous, chapter)
         async with self.db.begin_nested():
-            if siblings and not await current_version(self.db, chapter_id, locked=True):
-                await record_version(self.db, self.division_snapshot(chapter, siblings), origin='baseline')
             if sequence_id is None:
                 if await self.db.scalar(select(Sequence.id).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True), Sequence.position == body.position)):
                     raise RevisionConflict("此场次顺序已被使用，请刷新后重试")
