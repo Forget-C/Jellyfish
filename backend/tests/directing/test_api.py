@@ -1,6 +1,9 @@
 """场次接口的事务边界、失败恢复及项目隔离；不调用外部模型。"""
 
+import asyncio
+import json
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -10,13 +13,13 @@ from app.api.v1.routes.studio.directing import router
 from app.api.v1.routes.studio.files import router as file_router
 from app.api.v1.routes.studio.generation_canvases import router as canvas_router
 from app.api.v1.routes.film.task_status import router as task_router
-from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.dependencies import get_db
-from app.models.studio import FileItem, FileUsage
-from app.models.task import Task, TaskOutput
+from app.models.llm import Model, Provider
+from app.models.studio import FileUsage
 from app.services.directing.store import DirectingStore
+from app.task_worker import TaskWorker
 from tests.directing.samples import design_sample, plan_sample
-from tests.directing.test_store import database, frozen
+from tests.directing.test_store import database, frozen, setup_story
 
 
 @pytest.mark.asyncio
@@ -79,44 +82,52 @@ async def client_for(sessions):
 
 
 @pytest.mark.asyncio
-async def test_retired_scene_tasks_keep_typed_results(tmp_path):
-    """旧任务停止执行后仍可通过项目任务详情读取已保存结果。"""
-    design = EditableSceneDesign(sources=[
-        {'kind': 'chapter', 'reference': 'ch1', 'version': 'historical-source'},
-    ]).model_dump(mode='json')
-    snapshot = {'scene_design': {'version_id': 'old-version'}}
-    instruction = {'unit_id': 'unit', 'text': '人物递出旧信。'}
-    check = {'unit_id': 'unit', 'destinations': None, 'rows': [
-        {'role': 'direction', 'occurrence_id': 'shot', 'verdict': 'pass',
-         'rationale': '动作与固定指令一致。', 'findings': []},
-    ]}
+async def test_production_design_task_keeps_results_sources_and_file_protection(tmp_path, monkeypatch):
+    """现行生产计划通过 Worker 取得导演方案，采用后可读，引用继续保护。"""
+    expected = design_sample()
+
+    class ControlledModel:
+        def __init__(self, **_kwargs):
+            pass
+
+        def invoke(self, _messages):
+            return SimpleNamespace(content=json.dumps(expected, ensure_ascii=False))
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add_all([
-                Task(id='old-design-flat', kind='directing_design', input_snapshot=snapshot, result=design,
-                     target_type='directing_sequence', project_id='p1', status='succeeded'),
-                Task(id='old-design-candidate', kind='directing_design', target_type='directing_sequence',
-                     input_snapshot={**snapshot, 'run_args': {'design_candidate_version': 1}},
-                     result={'design': design, 'issues': [], 'attempt': 1,
-                             'diagnostics': {'output': '旧纠错响应', 'issues': ['结构无效']}}, project_id='p1', status='succeeded'),
-                Task(id='old-instruction', kind='directing_instruction', target_type='directing_sequence',
-                     result=instruction, project_id='p1', status='succeeded'),
-                Task(id='old-check', kind='directing_instruction_check', target_type='directing_sequence',
-                     result=check, project_id='p1', status='succeeded'),
-            ])
-        base = '/api/v1/studio/projects/p1/directing/tasks'
-        for task_id, field, expected in [
-            ('old-design-flat', 'scene_design', design),
-            ('old-design-candidate', 'scene_design', design),
-            ('old-instruction', 'scene_instruction', instruction),
-            ('old-check', 'instruction_check', check),
-        ]:
-            response = await client.get(f'{base}/{task_id}')
-            assert response.status_code == 200, response.text
-            assert response.json()['data'][field] == expected
-        denied = await client.get('/api/v1/studio/projects/p2/directing/tasks/old-design-candidate')
-        assert denied.status_code == 422
-        assert '任务不属于当前工作区' in denied.text
+            _, sequence_id, _, _, _ = await setup_story(db)
+            db.add(Provider(id='director-provider', name='openai', base_url='https://director.test/v1', api_key='test'))
+            await db.flush()
+            db.add(Model(id='director-text', name='text', category='text', provider_id='director-provider'))
+        base = '/api/v1/studio/projects/p1/directing'
+        response = await client.post(f'{base}/sequences/{sequence_id}/design', json={'model_id': 'director-text'})
+        assert response.status_code == 200, response.text
+        task_id = response.json()['data']['task_id']
+
+        worker = TaskWorker(sessions)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=True)
+
+        response = await client.get(f'{base}/tasks/{task_id}')
+        assert response.status_code == 200, response.text
+        detail = response.json()['data']
+        assert detail['status'] == 'succeeded', detail
+        assert detail['design']['direction']['viewpoint']['text'] == expected['direction']['viewpoint']['text']
+        assert (await client.get(f'/api/v1/studio/projects/p2/directing/tasks/{task_id}')).status_code == 422
+        assert (await client.post(f'{base}/sequences/{sequence_id}/design/apply', json={'task_id': task_id})).status_code == 200
+
+        page = (await client.get('/api/v1/film/tasks', params={'project_id': 'p1', 'task_kind': 'directing_design'})).json()['data']
+        assert page['items'][0]['source']['id'] == sequence_id
+        assert page['items'][0]['source']['kind'] == 'sequence'
+        assert (await client.delete('/api/v1/studio/files/image1')).status_code == 409
+
+        contract = (await client.get('/openapi.json')).json()['components']['schemas']
+        assert {'scene_design', 'scene_instruction', 'instruction_check'}.isdisjoint(contract['DirectingTaskRead']['properties'])
+        assert {'version_id', 'unit_id', 'shot_id'}.isdisjoint(contract['TaskSourceRead']['properties'])
 
 
 @pytest.mark.asyncio
@@ -144,25 +155,6 @@ async def test_retired_scene_delivery_queries_are_not_routed(tmp_path):
         assert (await client.get(chapter + "/assembly")).status_code == 200
         assert (await client.get(chapter + "/deliveries")).status_code == 404
         assert (await client.get(f"{base}/sequences/{scene.id}/deliveries")).status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_retired_scene_export_keeps_its_file_protected(tmp_path):
-    """历史导出仍可由通用任务接口查询，文件仍受原业务引用保护。"""
-    async with database(tmp_path) as sessions, client_for(sessions) as client:
-        async with sessions.begin() as db:
-            db.add(FileItem(id="legacy-export", type="video", name="历史导出", storage_key="legacy/export.mp4"))
-            db.add(Task(id="old-export", kind="scene_export", project_id="p1", status="succeeded",
-                        result={"file_id": "legacy-export"}))
-            await db.flush()
-            db.add(TaskOutput(task_id="old-export", file_id="legacy-export", ordinal=0,
-                              delivery_status="published"))
-            db.add(FileUsage(file_id="legacy-export", project_id="p1", usage_kind="generated_video",
-                             source_ref="scene-export:old-export"))
-        result = await client.get("/api/v1/film/tasks/old-export/result")
-        assert result.status_code == 200
-        assert (await client.delete("/api/v1/studio/files/legacy-export")).status_code == 409
-        assert (await client.get("/api/v1/studio/files/legacy-export")).status_code == 200
 
 
 @pytest.mark.asyncio

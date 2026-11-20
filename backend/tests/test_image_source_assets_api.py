@@ -27,7 +27,7 @@ async def client(monkeypatch):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     from app.models.studio import Actor
     async with sessions() as db:
-        db.add(Actor(id="legacy", name="旧转化演员", style="国漫", visual_style="动漫", age_appearance="历史年龄", source_character_id="old-role"))
+        db.add(Actor(id="converted", name="转化演员", origin="project", source_kind="character", source_id="role"))
         await db.commit()
     async def database():
         async with sessions() as db:
@@ -103,6 +103,42 @@ async def test_uploaded_details_open_once_and_participate_in_generation(client, 
     assert (await client.patch(identity, json={"details_editable": False})).status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_opening_uploaded_details_retains_unspecified_style(client):
+    uploaded = await client.post("/api/v1/studio/files/upload", files={"file": ("image.png", b"image", "image/png")})
+    file_id = uploaded.json()["data"]["id"]
+    path = "/api/v1/studio/entities/actor"
+    created = await client.post(path + "/image-source", json={
+        "id": "uploaded", "name": "图片演员", "images": [{"file_id": file_id, "view_angle": "FRONT"}],
+    })
+    assert created.status_code == 201, created.text
+    opened = await client.patch(path + "/uploaded", json={"details_editable": True, "age_appearance": "30岁"})
+    assert opened.status_code == 200, opened.text
+
+    saved = (await client.get(path + "/uploaded")).json()["data"]
+    assert saved["style"] is None and saved["visual_style"] is None
+    listed = (await client.get(path, params={"style": "真人都市"})).json()["data"]["items"]
+    assert all(item["id"] != "uploaded" for item in listed)
+    preview = await client.post("/api/v1/studio/generation-prompts/assets/draft/render", json={
+        "asset_type": "actor", "view_angle": "LEFT",
+        "resource": {"id": "uploaded", "name": "图片演员", "age_appearance": "30岁"},
+    })
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["data"]["variables_snapshot"]["style"] == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["style", "visual_style"])
+async def test_manually_created_asset_keeps_required_style(client, field):
+    path = "/api/v1/studio/entities/actor"
+    body = {"id": "manual", "name": "设定演员", "style": "国漫", "visual_style": "动漫"}
+    assert (await client.post(path, json={**body, field: None})).status_code == 422
+    assert (await client.post(path, json=body)).status_code == 201
+    assert (await client.patch(path + "/manual", json={field: None})).status_code == 422
+    saved = (await client.get(path + "/manual")).json()["data"]
+    assert saved[field] == body[field]
+
+
 def test_uploaded_details_migration_preserves_existing_facts():
     import importlib.util
     from pathlib import Path
@@ -152,6 +188,11 @@ async def test_import_and_publish_copy_only_images(client, kind):
     assert published.status_code == 201, published.text
     library = published.json()["data"]
     assert library["origin"] == "project" and library["description"] == ""
+    assert library["source_kind"] == kind and library["source_id"] == "target"
+    if kind == "character":
+        assert library["source_character_id"] == "target"
+    replay = await client.post(f"/api/v1/studio/entities/{kind}/target/publish-to-library", json={"name": "转化副本"})
+    assert replay.status_code == 201 and replay.json()["data"]["id"] == library["id"]
     library_images = (await client.get(f"/api/v1/studio/entities/{source_kind}/{library['id']}/images")).json()["data"]["items"]
     assert library_images[0]["file_id"] not in {file_id, images[0]["file_id"]}
     assert (await client.get(f"/api/v1/studio/files/{library_images[0]['file_id']}/download")).content == b"source pixels"
@@ -192,31 +233,33 @@ async def test_invalid_upload_and_request_conflict(client):
 
 
 @pytest.mark.asyncio
-async def test_legacy_permissions_and_image_source_rename_validation(client):
-    assert (await client.get("/api/v1/studio/entities/actor/legacy")).json()["data"]["origin"] == "created"
-    assert (await client.patch("/api/v1/studio/entities/actor/legacy", json={"name": "不能改"})).status_code == 403
-    assert (await client.post("/api/v1/studio/entities/actor/legacy/images", json={"view_angle": "FRONT"})).status_code == 201
+async def test_role_conversion_permissions_and_generation(client):
+    assert (await client.get("/api/v1/studio/entities/actor/converted")).json()["data"]["origin"] == "project"
+    listed = (await client.get("/api/v1/studio/entities/actor", params={"source": "role_conversion"})).json()["data"]["items"]
+    assert [item["id"] for item in listed] == ["converted"]
+    assert listed[0]["source_character_id"] == "role"
+    assert (await client.patch("/api/v1/studio/entities/actor/converted", json={"name": "不能改"})).status_code == 403
+    assert (await client.post("/api/v1/studio/entities/actor/converted/images", json={"view_angle": "FRONT"})).status_code == 201
     uploaded = await client.post("/api/v1/studio/files/upload", files={"file": ("actor.png", b"pixels", "image/png")})
     file_id = uploaded.json()["data"]["id"]
-    image = await client.post("/api/v1/studio/entities/actor/legacy/images", json={"file_id": file_id, "view_angle": "FRONT", "is_primary": True})
-    path = f"/api/v1/studio/generation-prompts/assets/actor/legacy/slots/{image.json()['data']['id']}/render"
+    image = await client.post("/api/v1/studio/entities/actor/converted/images", json={"file_id": file_id, "view_angle": "FRONT", "is_primary": True})
+    path = f"/api/v1/studio/generation-prompts/assets/actor/converted/slots/{image.json()['data']['id']}/render"
     rendered = await client.post(path, json={"visual_style": "动漫", "style": "国漫"})
     assert rendered.status_code == 200, rendered.text
-    assert "历史年龄" not in rendered.json()["data"]["execution_prompt"]
     defaults = await client.post(path, json={})
     assert defaults.status_code == 200, defaults.text
     assert defaults.json()["data"]["variables_snapshot"]["style"] == "真人都市"
     assert defaults.json()["data"]["variables_snapshot"]["visual_style"] == "现实"
     assert (await client.post(path, json={"references": []})).status_code == 422
-    opened = await client.patch("/api/v1/studio/entities/actor/legacy", json={"details_editable": True, "age_appearance": "30岁"})
+    opened = await client.patch("/api/v1/studio/entities/actor/converted", json={"details_editable": True, "age_appearance": "30岁"})
     assert opened.status_code == 200, opened.text
     assert opened.json()["data"]["details_editable"] is True
-    assert opened.json()["data"]["source_character_id"] == "old-role"
+    assert opened.json()["data"]["source_character_id"] == "role"
     rendered = await client.post(path, json={"references": [{"file_id": file_id, "role": "identity"}]})
     assert rendered.status_code == 200, rendered.text
     assert "30岁" in rendered.json()["data"]["execution_prompt"]
-    assert (await client.patch("/api/v1/studio/entities/actor/legacy", json={"age_appearance": "35岁"})).status_code == 200
-    assert (await client.patch("/api/v1/studio/entities/actor/legacy", json={"details_editable": False})).status_code == 422
+    assert (await client.patch("/api/v1/studio/entities/actor/converted", json={"age_appearance": "35岁"})).status_code == 200
+    assert (await client.patch("/api/v1/studio/entities/actor/converted", json={"details_editable": False})).status_code == 422
 
 
 def test_origin_migration_preserves_existing_facts():
@@ -375,8 +418,11 @@ async def test_project_upload_details_confirm_then_save_and_reopen(client, kind)
     assert (await client.patch(path, json=fields)).status_code == 403
     opened = await client.patch(path, json={**fields, 'details_editable': True})
     assert opened.status_code == 200, opened.text
-    assert (await client.get(path)).json()['data']['details_editable'] is True
-    listed = (await client.get(f'/api/v1/studio/entities/{kind}', params={'project_id': project, 'style': '真人都市'})).json()['data']['items']
+    saved = (await client.get(path)).json()['data']
+    assert saved['details_editable'] is True
+    assert saved['style'] is None and saved['visual_style'] is None
+    assert (await client.patch(path, json={'style': '国漫', 'visual_style': '动漫'})).status_code == 200
+    listed = (await client.get(f'/api/v1/studio/entities/{kind}', params={'project_id': project, 'style': '国漫'})).json()['data']['items']
     assert any(item['id'] == 'project-detail' for item in listed)
     images = (await client.get(path + '/images')).json()['data']['items']
     rendered = await client.post(f"/api/v1/studio/generation-prompts/assets/{kind}/project-detail/slots/{images[0]['id']}/render", json={'references': [{'file_id': file_id, 'role': 'design'}]})
