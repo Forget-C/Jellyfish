@@ -44,18 +44,18 @@ async def test_review_active_cut_and_workspace(tmp_path):
         async with sessions.begin() as db:
             service, sid, _, take, cut = await prepared(db)
             accepted = await frozen(service, sid, 'cut_review', review(cut.id))
-            assert (await service.feedback(sid)).current_review_id == accepted.id
-            assembly = await service.chapter_assembly('ch1')
-            assert assembly.sequences[0].verdict == 'pass'
-            assert any('声音' in gap for gap in assembly.gaps)
+            feedback = await service.feedback(sid)
+            assert feedback.current_review_id == accepted.id
+            assert feedback.reviews[-1].content.verdict == 'pass'
+            assert feedback.reviews[-1].content.sound_status == 'pending_postproduction'
             changed = deepcopy(cut.payload)
             changed['items'][0]['media_range']['source_out_ms'] = 6000
             draft = await service.save_revision(sid, kind='cut', payload=changed, parent_id=cut.id)
-            assert (await service.chapter_assembly('ch1')).sequences == assembly.sequences
+            assert (await service.feedback(sid)).active_cut_revision_id == cut.id
             stale = await service.save_revision(sid, kind='cut_review', payload=review(cut.id))
             assert (await service.feedback(sid)).current_review_id == accepted.id
             await service.confirm_revision(draft.id, expected_version=1, actor_id='author')
-            assert (await service.chapter_assembly('ch1')).sequences[0].cut_revision_id == draft.id
+            assert (await service.feedback(sid)).active_cut_revision_id == draft.id
             assert (await service.feedback(sid)).current_review_id is None
             with pytest.raises(RevisionConflict, match='采用版本'):
                 await service.confirm_revision(stale.id, expected_version=1, actor_id='author')
@@ -138,58 +138,6 @@ async def test_knowledge_requires_human_confirmation(tmp_path):
             assert style.confirmed_at is None
             assert style.payload['rules'][0]['sequence_ids'] == [sid]
             assert style.payload['rules'][0]['status'] == 'candidate'
-
-
-@pytest.mark.asyncio
-async def test_cross_scene_real_boundaries_and_order(tmp_path, monkeypatch):
-    """跨场依赖真实边界；替换一侧或调整相邻顺序使旧结论失效。"""
-    from unittest.mock import AsyncMock
-    from app.core.contracts.directing.continuity import CutFrameRequest
-    from app.core.contracts.directing.feedback import TransitionWrite
-    from app.models.directing import Sequence
-    monkeypatch.setattr('app.core.storage.download_file', AsyncMock(return_value=b'video'))
-    monkeypatch.setattr('app.core.storage.upload_file', AsyncMock())
-    monkeypatch.setattr('app.services.directing.media.extract_boundary_frame', lambda content, start, end, edge: (b'\x89PNG\r\n\x1a\nimage', start if edge == 'start' else end - 1))
-    async with database(tmp_path) as sessions:
-        async with sessions.begin() as db:
-            service, sid, pid, take, cut = await prepared(db)
-            right = await service.create_sequence(chapter_id='ch1', title='后一场', position=1)
-            plan_data = deepcopy((await service.revision(pid)).payload)
-            design = await frozen(service, right.id, 'design', (await service.revision(plan_data['design_revision_id'])).payload)
-            plan_data['design_revision_id'] = design.id
-            plan = await frozen(service, right.id, 'plan', plan_data)
-            prompt = await frozen(service, right.id, 'prompt', {**(await service.revision(take.prompt_revision_id)).payload, 'plan_revision_id': plan.id})
-            await output(db, prompt.id, 'task2', 'video2')
-            second = await service.register_take(prompt_revision_id=prompt.id, task_id='task2', output_ordinal=0)
-            other = await frozen(service, right.id, 'cut', {'items': [{'kind': 'media', 'id': 'b', 'take_id': second.id,
-                'media_range': {'source_in_ms': 0, 'source_out_ms': 2000}, 'timeline_start_ms': 0}]})
-            left_frame = await service.extract_cut_frame(sid, CutFrameRequest(cut_revision_id=cut.id, item_id='a', edge='end'))
-            right_frame = await service.extract_cut_frame(right.id, CutFrameRequest(cut_revision_id=other.id, item_id='b', edge='start'))
-            body = TransitionWrite(left_sequence_id=sid, right_sequence_id=right.id, left_cut_revision_id=cut.id,
-                right_cut_revision_id=other.id, left_frame_id=left_frame.id, right_frame_id=right_frame.id,
-                verdict='pass', intent='有意跳时，姿态不要求相同', observation=note('造型和道具状态成立'), sound={})
-            assert (await service.review_transition('ch1', body)).transitions[-1].current
-            # A third scene inserted between the pair changes actual adjacency, even with identical cut IDs.
-            right.position = 2
-            await db.flush()
-            await service.create_sequence(chapter_id='ch1', title='插入场次', position=1)
-            assert not (await service.chapter_assembly('ch1')).transitions[-1].current
-            with pytest.raises(RevisionConflict, match='相邻顺序'):
-                await service.review_transition('ch1', body)
-            # Restore adjacency through the production sequence update service, not hidden JSON changes.
-            middle = await db.scalar(select(Sequence).where(Sequence.chapter_id == 'ch1', Sequence.position == 1))
-            middle.position = 3
-            await db.flush()
-            right.position = 1
-            await db.flush()
-            changed = deepcopy(other.payload)
-            changed['items'][0]['media_range']['source_out_ms'] = 1800
-            await frozen(service, right.id, 'cut', changed)
-            assert not (await service.chapter_assembly('ch1')).transitions[-1].current
-            with pytest.raises(ValueError, match='版本已变化'):
-                await service.review_transition('ch1', body)
-            with pytest.raises(ValueError, match='章节'):
-                await FeedbackService(db, 'p2').chapter_assembly('ch1')
 
 
 def test_nested_changes_are_not_one_variable():

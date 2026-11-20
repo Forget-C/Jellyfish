@@ -45,7 +45,7 @@ from app.services.directing.provenance import ProvenanceService
 from app.core.contracts.directing.provenance import SourceRead, SourceResolveRequest
 
 from app.services.directing.feedback import FeedbackService
-from app.core.contracts.directing.feedback import FeedbackRead, FeedbackWrite, ChapterAssemblyRead, TransitionWrite, RepairPlanRequest
+from app.core.contracts.directing.feedback import FeedbackRead, FeedbackWrite, RepairPlanRequest
 from app.core.contracts.directing.ledger import LedgerRead
 
 router = APIRouter(prefix="/projects/{project_id}/directing", tags=["studio/directing"])
@@ -603,18 +603,6 @@ async def confirm_feedback(project_id: str, sequence_id: str, revision_id: str, 
 async def ledger(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
     """只读汇总三本账，不提供第二份台账编辑入口。"""
     return success_response(await _call(FeedbackService(db, project_id).ledger(sequence_id)))
-
-
-@router.get('/chapters/{chapter_id}/assembly', response_model=ApiResponse[ChapterAssemblyRead], operation_id='directing_chapter_assembly')
-async def chapter_assembly(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """查询章节顺序播放依据、验收缺口与跨场审查。"""
-    return success_response(await _call(FeedbackService(db, project_id).chapter_assembly(chapter_id)))
-
-
-@router.post('/chapters/{chapter_id}/transitions', response_model=ApiResponse[ChapterAssemblyRead], operation_id='directing_review_transition')
-async def review_transition(project_id: str, chapter_id: str, body: TransitionWrite, db: AsyncSession = Depends(get_db, scope='function')):
-    """保存人工跨场审查，校验相邻顺序及实际边界。"""
-    return success_response(await _call(FeedbackService(db, project_id).review_transition(chapter_id, body)))
 
 
 @router.post('/sequences/{sequence_id}/knowledge/{revision_id}/style', response_model=ApiResponse[list[ProjectStyleRevision]], operation_id='directing_knowledge_style')

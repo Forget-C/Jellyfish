@@ -173,13 +173,20 @@ async def test_retired_scene_versions_are_not_routed(tmp_path):
 
 @pytest.mark.asyncio
 async def test_retired_scene_delivery_queries_are_not_routed(tmp_path):
-    """章节和场次的旧交付查询退役，章节组合仍可读取。"""
+    """章节和场次的退役接口不再注册，现行章节和场次仍可读取。"""
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             scene = await DirectingStore(db, "p1").create_sequence(chapter_id="ch1", title="店内", position=0)
         base = "/api/v1/studio/projects/p1/directing"
         chapter = f"{base}/chapters/ch1"
-        assert (await client.get(chapter + "/assembly")).status_code == 200
+        assert (await client.get(chapter)).status_code == 200
+        assert (await client.get(f"{base}/sequences/{scene.id}")).status_code == 200
+        assert (await client.get(chapter + "/assembly")).status_code == 404
+        assert (await client.post(chapter + "/transitions", json={})).status_code == 404
+        paths = (await client.get("/openapi.json")).json()["paths"]
+        chapter_route = base.replace("/p1/", "/{project_id}/") + "/chapters/{chapter_id}"
+        assert chapter_route + "/assembly" not in paths
+        assert chapter_route + "/transitions" not in paths
         assert (await client.get(chapter + "/deliveries")).status_code == 404
         assert (await client.get(f"{base}/sequences/{scene.id}/deliveries")).status_code == 404
 
