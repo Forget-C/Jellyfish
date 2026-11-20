@@ -131,6 +131,8 @@ try {
     request_id: 'cards-running', mode: 'faithful', text_model_id: modelId,
   })
   await page.reload()
+  await page.waitForFunction(async path => (await (await fetch(path)).json()).data.status === 'running',
+    new URL(sceneApi + '/storyboards/' + running.task_id).pathname)
   await progress.waitFor()
   await Promise.all([page.waitForRequest(req => req.url().endsWith('/storyboards/' + task.task_id)),
     card('新分镜方案').getByRole('button', { name: '查看并采用分镜', exact: true }).click()])
