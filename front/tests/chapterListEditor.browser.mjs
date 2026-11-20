@@ -280,6 +280,15 @@ try {
     assert.ok((await saveButton.boundingBox()).height >= (width < 768 ? 36 : 32))
     assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).evaluate(text => getComputedStyle(text).lineHeight), '23.8px')
     assert.equal(await editor.getByText('修改原文不会同步已有场次', { exact: true }).evaluate(hint => getComputedStyle(hint).fontSize), '12px')
+    const backToNameGap = await editor.evaluate(dialog => {
+      const back = dialog.querySelector('button[aria-label="返回"]')
+      const name = dialog.querySelector('input[aria-label="章节名称"]')
+      const label = document.createRange()
+      label.selectNode(name.closest('label').firstChild)
+      return label.getBoundingClientRect().top - back.getBoundingClientRect().bottom
+    })
+    const expectedGap = width === 375 ? 108 : 33
+    assert.ok(Math.abs(backToNameGap - expectedGap) <= 2, `${width}px: return-to-name gap is ${backToNameGap}px`)
     if (width === 375) {
       await editor.getByRole('button', { name: '对比', exact: true }).click()
       const raw = await editor.getByRole('textbox', { name: '对比原文', exact: true }).boundingBox()

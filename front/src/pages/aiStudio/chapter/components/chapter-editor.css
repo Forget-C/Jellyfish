@@ -26,6 +26,10 @@
 .chapter-editor-drawer .resource-editor-page-actions { flex-shrink: 0; }
 .chapter-editor-drawer .resource-editor-page-heading { flex: 1; }
 .chapter-editor-drawer .resource-editor-page-heading > .ant-btn { flex-shrink: 0; }
+@media (min-width: 768px) {
+  .resource-editor-drawer .chapter-editor-drawer .ant-drawer-body { padding-block-start: 13px; }
+  .chapter-editor-drawer .chapter-editor-field { margin-block-start: 5px; }
+}
 @media (max-width: 767px) {
   .chapter-editor-drawer .resource-editor-page-heading { flex-basis: 100%; }
   .chapter-editor-drawer .resource-editor-page-actions { display: flex; justify-content: flex-end; }
@@ -132,6 +136,7 @@
     grid-template-columns: max-content minmax(0, 360px);
     align-items: center;
     gap: 12px;
+    margin-block-start: 0;
   }
   .chapter-editor-layout[data-compare="false"] {
     grid-template-columns: minmax(520px, 1fr) clamp(280px, 32%, 520px);

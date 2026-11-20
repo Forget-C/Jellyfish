@@ -100,8 +100,9 @@ try {
       const rect = node.getBoundingClientRect()
       const content = node.querySelector('.resource-editor-drawer-content').getBoundingClientRect()
       const header = node.querySelector('.resource-editor-page-heading').getBoundingClientRect()
+      const backIcon = node.querySelector('.resource-editor-page-heading button .anticon').getBoundingClientRect()
       const toolbar = node.querySelector('.app-page-toolbar').getBoundingClientRect()
-      return {overflow:node.scrollWidth > node.clientWidth + 1, width:rect.width,x:rect.x,y:rect.y,height:rect.height,toolbarBottom:toolbar.bottom,contentWidth:content.width,aligned:Math.abs(content.x-header.x)<1 && toolbar.y===rect.y}
+      return {overflow:node.scrollWidth > node.clientWidth + 1, width:rect.width,x:rect.x,y:rect.y,height:rect.height,toolbarBottom:toolbar.bottom,contentWidth:content.width,aligned:Math.abs(content.x-header.x)<1 && toolbar.y===rect.y,backIconInset:backIcon.left-content.left}
     })
     assert.equal(await drawer.locator('.ant-drawer-body').evaluate(node => getComputedStyle(node).paddingTop), width <= 767 ? '12px' : '16px')
     assert.equal(await drawer.locator('.resource-editor-page-heading > .ant-btn').evaluate(node => getComputedStyle(node).fontSize), '13px')
@@ -112,6 +113,7 @@ try {
     assert.equal(layout.height,region.height)
     assert.ok(Math.abs(layout.contentWidth - (layout.width - (width < 768 ? 32 : 40))) <= 1)
     assert.equal(layout.aligned,true)
+    assert.ok(Math.abs(layout.backIconInset) <= 2, `${width}px: back arrow aligns with the drawer content`)
     const surface = await drawer.evaluate(node => {
       const style = getComputedStyle(node)
       const shell = getComputedStyle(document.querySelector('.app-shell'))

@@ -56,6 +56,7 @@
 
 .resource-editor-drawer-content { width: 100%; max-width: 880px; box-sizing: border-box; }
 .resource-editor-drawer .app-page-toolbar { min-height: 56px; padding: 10px 20px; gap: 8px; background: transparent; border: 0; }
+.resource-editor-drawer .resource-editor-page-heading > .ant-btn { padding-inline: 0 8px; flex-shrink: 0; }
 .resource-editor-drawer .app-page-title { font-size: 16px; font-weight: 600; }
 .resource-editor-drawer .resource-editor-page-actions .ant-space { justify-content: flex-end; }
 .resource-editor-drawer.resource-editor-scrolled .app-page-toolbar { box-shadow: 0 1px 0 rgb(38 50 68 / 8%); }
