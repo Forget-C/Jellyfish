@@ -1,5 +1,6 @@
 """Template management and asset generation against the public API."""
 import asyncio
+import base64
 import json
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ from app.main import app
 from app.models.task import Task
 from app.scripts.seed_system_data import _execute_seed
 from app.task_worker import TaskWorker
-from tests.test_database_baseline_business import LLM, STUDIO, baseline_client, data, finish_task, image_storage, provider_response
+from tests.test_database_baseline_business import LLM, STUDIO, baseline_client, data, finish_task, image_storage
 
 
 @pytest.mark.asyncio
@@ -65,11 +66,10 @@ async def test_seeded_template_reaches_image_provider(baseline_client, image_sto
         'base_url': 'https://image.test/v1', 'api_key': 'stub', 'status': 'active'}), 201)
     await data(client.post(LLM + '/models', json={'id': model, 'name': 'image-' + model,
         'category': 'image', 'provider_id': model}), 201)
-    received = []
 
     def record(request):
-        received.append(json.loads(request.content)['prompt'])
-        return provider_response(request)
+        prompt = json.loads(request.content)['prompt'].encode()
+        return httpx.Response(200, json={'data': [{'b64_json': base64.b64encode(prompt).decode()}]})
 
     async def slot(kind, angle, **fields):
         asset = uuid4().hex
@@ -162,11 +162,13 @@ async def test_seeded_template_reaches_image_provider(baseline_client, image_sto
     async with httpx.AsyncClient(transport=httpx.MockTransport(record)) as external:
         worker = TaskWorker(sessions, client=external)
         try:
-            for task_id, _ in jobs:
-                await finish_task(client, worker, task_id)
+            for task_id, prompt in jobs:
+                result = await finish_task(client, worker, task_id)
+                file_id = result['outputs'][0]['file_id']
+                response = await client.get(f'{STUDIO}/files/{file_id}/download')
+                assert response.status_code == 200 and response.content == prompt.encode()
         finally:
             worker.text_pool.shutdown(wait=True)
-    assert sorted(received) == sorted(prompt for _, prompt in jobs)
 
 async def overlapping_switches(client, sessions, path, first, last):
     """Hold the first API transaction open until a second request has its own connection."""

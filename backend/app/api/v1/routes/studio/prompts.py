@@ -9,8 +9,6 @@
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +24,7 @@ from app.schemas.studio.prompts import (
     PromptTemplateUpdate,
 )
 from app.services.common import entity_not_found
-from app.services.studio.template_defaults import apply_template_changes, editable_template, lock_default_selection, replace_default
+from app.services.studio.template_defaults import apply_template_changes, create_template, editable_template
 
 router = APIRouter()
 
@@ -138,28 +136,9 @@ async def get_prompt_template(
 )
 async def create_prompt_template(
     body: PromptTemplateCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[PromptTemplateRead]:
-    template_id = str(uuid.uuid4())
-    if body.is_default:
-        await lock_default_selection(db)
-        await replace_default(db, body.category, template_id)
-
-    obj = PromptTemplate(
-        id=template_id,
-        category=body.category,
-        name=body.name,
-        content=body.content,
-        preview=body.preview,
-        variables=body.variables,
-        variable_defaults=body.variable_defaults,
-        version=1,
-        is_default=body.is_default,
-        is_system=False,  # 客户端不可设置
-    )
-    db.add(obj)
-    await db.flush()
-    await db.refresh(obj)
+    obj = await create_template(db, body)
     return created_response(PromptTemplateRead.model_validate(obj))
 
 
@@ -174,7 +153,7 @@ async def create_prompt_template(
 async def update_prompt_template(
     template_id: str,
     body: PromptTemplateUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[PromptTemplateRead]:
     obj = await apply_template_changes(db, template_id, body.model_dump(exclude_unset=True))
     return success_response(PromptTemplateRead.model_validate(obj))
@@ -189,7 +168,7 @@ async def update_prompt_template(
 )
 async def delete_prompt_template(
     template_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[None]:
     obj = await editable_template(db, template_id)
     if obj.is_system:

@@ -1,5 +1,7 @@
 """按类别替换默认模板，提交边界由请求会话统一管理。"""
 
+from uuid import uuid4
+
 from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -7,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm import ModelSettings
 from app.models.studio import PromptCategory, PromptTemplate
+from app.schemas.studio.prompts import PromptTemplateCreate
 from app.services.common import entity_not_found
 
 
-async def lock_default_selection(db: AsyncSession) -> None:
+async def _lock_default_selection(db: AsyncSession) -> None:
     """锁定初始化时建立的全局设置行，使首次选择（该类别尚无模板）也能串行。"""
     if db.get_bind().dialect.name == "mysql":
         # 单行 upsert 取得排他锁；库刚迁移时也能初始化这条设置，不覆盖现有配置。
@@ -20,12 +23,25 @@ async def lock_default_selection(db: AsyncSession) -> None:
         await db.execute(update(ModelSettings).where(ModelSettings.id == 1).values(id=ModelSettings.id))
 
 
-async def replace_default(db: AsyncSession, category: PromptCategory, template_id: str) -> None:
+async def _replace_default(db: AsyncSession, category: PromptCategory, template_id: str) -> None:
     """调用方已锁定选择；在同一事务中撤销其余默认。"""
     await db.execute(update(PromptTemplate).where(
         PromptTemplate.category == category, PromptTemplate.is_default.is_(True),
         PromptTemplate.id != template_id,
     ).values(is_default=False))
+
+
+async def create_template(db: AsyncSession, body: PromptTemplateCreate) -> PromptTemplate:
+    """创建默认模板时在同一事务撤销本类别的旧选择。"""
+    template_id = str(uuid4())
+    if body.is_default:
+        await _lock_default_selection(db)
+        await _replace_default(db, body.category, template_id)
+    obj = PromptTemplate(id=template_id, is_system=False, version=1, **body.model_dump())
+    db.add(obj)
+    await db.flush()
+    await db.refresh(obj)
+    return obj
 
 
 async def editable_template(db: AsyncSession, template_id: str) -> PromptTemplate:
@@ -39,7 +55,7 @@ async def editable_template(db: AsyncSession, template_id: str) -> PromptTemplat
 async def apply_template_changes(db: AsyncSession, template_id: str, changes: dict) -> PromptTemplate:
     """选择只影响下次生成；只有模板编辑才变更内容版本。"""
     if changes.get("is_default") is True:
-        await lock_default_selection(db)
+        await _lock_default_selection(db)
     obj = await editable_template(db, template_id)
     if obj.is_system and set(changes) != {"is_default"}:
         raise HTTPException(403, "系统预置提示词不可修改")
@@ -50,7 +66,7 @@ async def apply_template_changes(db: AsyncSession, template_id: str, changes: di
         if obj.is_default and not selected:
             raise HTTPException(409, "请先将同类别的其他模板设为默认")
         if selected and not obj.is_default:
-            await replace_default(db, obj.category, template_id)
+            await _replace_default(db, obj.category, template_id)
             obj.is_default = True
     if any(getattr(obj, key) != value for key, value in changes.items()):
         obj.version += 1

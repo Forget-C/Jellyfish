@@ -25,8 +25,8 @@ let deletes = 0
 let lastPage = 1
 const listRequests = []
 const system = { ...template, id: 'system', name: '系统模板', is_system: true, is_default: false }
-const lateMatch = { ...template, id: 'late-match', name: '后续页模板', preview: '只在后续页简介出现的关键字' }
-const allTemplates = [template, system, ...Array.from({ length: 10 }, (_, i) => ({ ...template, id: `extra-${i}`, name: i === 9 ? '长模板名称'.repeat(18) : `其他模板 ${i}`, category: 'bgm' })), ...Array.from({ length: 88 }, (_, i) => ({ ...template, id: `more-${i}`, name: `补充模板 ${i}` })), lateMatch]
+const lateMatch = { ...template, is_default: false, id: 'late-match', name: '后续页模板', preview: '只在后续页简介出现的关键字' }
+const allTemplates = [template, system, ...Array.from({ length: 10 }, (_, i) => ({ ...template, is_default: false, id: `extra-${i}`, name: i === 9 ? '长模板名称'.repeat(18) : `其他模板 ${i}`, category: 'bgm' })), ...Array.from({ length: 88 }, (_, i) => ({ ...template, is_default: false, id: `more-${i}`, name: `补充模板 ${i}` })), lateMatch]
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
@@ -162,6 +162,7 @@ try {
   await restore.waitFor({ state: 'hidden' })
   await reader.getByText('默认提示词', { exact: true }).waitFor()
   await name.click()
+  assert.equal(await reader.getByText('默认提示词', { exact: true }).count(), 0)
   await reader.getByRole('button', { name: /删\s*除/ }).click()
   const remove = page.getByRole('dialog').filter({ hasText: '删除提示词' })
   await remove.getByText(/确定删除「创作模板」/).waitFor()
