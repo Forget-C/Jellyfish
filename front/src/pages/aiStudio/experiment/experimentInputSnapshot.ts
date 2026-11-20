@@ -1,43 +1,38 @@
-import type { ExperimentMessageRead } from '../../../services/generated'
+import type {
+  ExperimentMessageRead,
+  ImageGenerationOperationInput,
+  ImageMediaInput,
+  MediaReference,
+  VideoGenerationOperationInput,
+  VideoMediaInput_Output,
+} from '../../../services/generated'
 
 export type ExperimentInputSnapshot = {
   version: 1
-  model_id?: string
+  model_id?: string | null
   prompt: string
-  image?: { reference_file_ids?: string[]; target_ratio?: string | null; resolution_profile?: string | null }
-  video?: {
-    ratio?: string
-    frame_references?: { first_frame_file_id?: string | null; last_frame_file_id?: string | null; key_frame_file_ids?: string[] }
-    subject_references?: Array<{ name?: string; image_file_ids?: string[]; video_file_ids?: string[] }>
-  }
+  media?: ImageMediaInput & VideoMediaInput_Output
+  operation_input?: ImageGenerationOperationInput | VideoGenerationOperationInput
 }
 
-type VideoInputSnapshot = NonNullable<ExperimentInputSnapshot['video']>
-
-/** Reads the current snapshot first and falls back to legacy message payloads. */
-export function readExperimentInputSnapshot(message: ExperimentMessageRead): ExperimentInputSnapshot {
-  const payload = message.payload ?? {}
-  const snapshot = payload.input_snapshot
-  if (snapshot && typeof snapshot === 'object') {
-    const value = snapshot as Record<string, unknown>
-    if (value.version === 1 && typeof value.prompt === 'string') return value as ExperimentInputSnapshot
-  }
-  return {
-    version: 1,
-    model_id: typeof payload.model_id === 'string' ? payload.model_id : undefined,
-    prompt: message.content ?? '',
-    image: Array.isArray(payload.reference_file_ids)
-      ? { reference_file_ids: payload.reference_file_ids.filter((id): id is string => typeof id === 'string') }
-      : undefined,
-    video: {
-      ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined,
-      frame_references: payload.frame_references as VideoInputSnapshot['frame_references'],
-      subject_references: payload.subject_references as VideoInputSnapshot['subject_references'],
-    },
-  }
+/** 用户提交的可回填输入由服务端单独保存。 */
+export function readExperimentInputSnapshot(message: ExperimentMessageRead): ExperimentInputSnapshot | undefined {
+  const snapshot = message.payload?.input_snapshot
+  if (message.role !== 'user' || !snapshot || typeof snapshot !== 'object') return
+  const value = snapshot as Record<string, unknown>
+  if (value.version === 1 && typeof value.prompt === 'string'
+    && (value.model_id == null || typeof value.model_id === 'string')) return value as ExperimentInputSnapshot
 }
 
-/** Moves focus to the shared free-text editor after a history input is restored. */
+/** 同组媒体按提交时的顺序回填。 */
+export function orderedMediaReferences(media: MediaReference[] | undefined): MediaReference[] {
+  if (!Array.isArray(media)) return []
+  return media.filter(item => item && typeof item.file_id === 'string'
+      && (item.media_kind === 'image' || item.media_kind === 'video'))
+    .sort((left, right) => (left.ordinal ?? 0) - (right.ordinal ?? 0))
+}
+
+/** 将焦点移回公共提示词编辑器。 */
 export function focusExperimentPromptEditor(): void {
   window.requestAnimationFrame(() => {
     document.getElementById('experiment-prompt-editor')?.focus()

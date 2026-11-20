@@ -12,6 +12,7 @@ export interface TextLabStreamMessage {
   sequence: number
   created_at: string
   updated_at: string
+  payload?: Record<string, unknown>
 }
 
 /** 文本生成成功后由服务端冻结的结果元数据。 */
@@ -308,6 +309,7 @@ function parseMessage(value: unknown, expectedRole: 'user' | 'assistant'): TextL
     sequence: requirePositiveInteger(message.sequence, 'message.sequence'),
     created_at: requireString(message.created_at, 'message.created_at'),
     updated_at: requireString(message.updated_at, 'message.updated_at'),
+    ...(message.payload === undefined ? {} : { payload: requireRecord(message.payload, 'message.payload') }),
   }
 }
 

@@ -145,33 +145,39 @@ async def test_append_experiment_messages_reserves_continuous_sequences() -> Non
 
 
 @pytest.mark.asyncio
-async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path) -> None:
-    """不同事务并发追加同一会话时，原子计数器不应分配重复序号。"""
-    engine = create_async_engine(
-        f"sqlite+aiosqlite:///{tmp_path / 'concurrent-messages.db'}",
-        future=True,
-    )
-    session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-    async with session_local() as db:
-        db.add(ExperimentSession(id="concurrent-session", lab_type="image", title="并发顺序"))
-        await db.commit()
-
-    async def _append(content: str) -> int:
-        """在独立事务中追加一条消息并返回服务端序号。"""
-        async with session_local() as db:
-            items = await append_experiment_messages(
-                db,
-                session_id="concurrent-session",
-                drafts=[ExperimentMessageDraft(role="user", content=content)],
-            )
-            await db.commit()
-            return items[0].sequence
-
+@pytest.mark.parametrize("mysql", [False, pytest.param(True, marks=pytest.mark.integration)])
+async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path, mysql) -> None:
+    """并发追加同一会话后，历史以独立、连续的服务端序号返回。"""
+    if mysql:
+        from tests.services.test_task_mysql import isolated_database_url
+        database_url = isolated_database_url()
+    else:
+        database_url = f"sqlite+aiosqlite:///{tmp_path / 'concurrent-messages.db'}"
+    engine = create_async_engine(database_url)
+    session_local = async_sessionmaker(engine, expire_on_commit=False)
     try:
-        sequences = await asyncio.gather(_append("并发输入 A"), _append("并发输入 B"))
-        assert sorted(sequences) == [1, 2]
+        if not mysql:
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+        async with session_local() as db:
+            session = await route.create_experiment_session(ExperimentSessionCreate(lab_type="text"), db)
+        session_id = session.data.id
+
+        async def append(content: str) -> None:
+            async with session_local() as db:
+                await route.create_experiment_message(
+                    session_id, ExperimentMessageCreate(role="user", content=content), db,
+                )
+
+        try:
+            await asyncio.gather(append("并发输入 A"), append("并发输入 B"))
+            async with session_local() as db:
+                history = await route.list_experiment_messages(session_id, db, page=1, page_size=50)
+                assert [item.sequence for item in history.data] == [1, 2]
+                assert {item.content for item in history.data} == {"并发输入 A", "并发输入 B"}
+        finally:
+            async with session_local() as db:
+                await route.delete_experiment_session(session_id, db)
     finally:
         await engine.dispose()
 

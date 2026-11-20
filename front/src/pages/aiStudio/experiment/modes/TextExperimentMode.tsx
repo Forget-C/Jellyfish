@@ -329,13 +329,13 @@ export function TextExperimentMode({
 
   /** Restores a prior user message as editable free text without spending another model call. */
   const restoreUserMessage = (item: LocalMessage) => {
-    if (submitting) return
+    const snapshot = item.inputSnapshot
+    if (submitting || !snapshot) return
     confirmReplacement(() => {
-      const snapshot = item.inputSnapshot
-      applyFreeInput(snapshot?.prompt ?? item.content)
-      setModelId(snapshot?.model_id)
+      applyFreeInput(snapshot.prompt)
+      setModelId(snapshot.model_id ?? undefined)
       focusExperimentPromptEditor()
-      if (snapshot?.model_id) message.success('已回填历史输入，可修改后重新发送')
+      if (snapshot.model_id) message.success('已回填历史输入，可修改后重新发送')
       else message.info('已回填提示词；请重新选择模型后发送')
     })
   }
@@ -347,7 +347,7 @@ export function TextExperimentMode({
         {localMessages.map((item) => (
           <ExperimentMessageBubble
             key={item.id}
-            footer={item.role === 'user' ? <ExperimentHistoryRestoreButton disabled={submitting} onRestore={() => restoreUserMessage(item)} /> : undefined}
+            footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={submitting} onRestore={() => restoreUserMessage(item)} /> : undefined}
             identity={item.role === 'user' ? '你' : '模型'}
             status={item.status ? <ExperimentTaskStatus status={item.status} progress={item.progress} /> : null}
             tone={item.role === 'user' ? 'user' : 'assistant'}
