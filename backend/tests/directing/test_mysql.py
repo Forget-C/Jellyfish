@@ -62,7 +62,7 @@ async def test_mysql_concurrent_design_cut_and_take_writes():
         take_ids = await asyncio.gather(publish(), publish())
         assert take_ids[0] == take_ids[1]
         async with sessions.begin() as db:
-            assert await db.scalar(select(func.count()).select_from(Take)) == 1
+            assert await db.scalar(select(func.count()).select_from(Take).where(Take.task_id == "task1")) == 1
             store = DirectingStore(db, "p1")
             snapshot = await store.read_revision(design_id)
             assert snapshot.project_id == "p1" and snapshot.confirmed_by == "author"

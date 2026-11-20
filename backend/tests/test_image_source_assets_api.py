@@ -267,7 +267,7 @@ async def test_mysql_concurrent_same_upload_request_returns_one_object():
     from app.models.studio import FileItem
     from tests.services.test_task_mysql import isolated_database_url
     from tests.directing.test_api import client_for
-    engine = create_async_engine(isolated_database_url())
+    engine = create_async_engine(isolated_database_url(), isolation_level='READ COMMITTED')
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     identity = uuid4().hex
     try:

@@ -35,7 +35,7 @@ async def baseline_client(request, tmp_path, monkeypatch):
         engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path}/business.db')
         async with engine.begin() as db:
             await db.run_sync(Base.metadata.create_all)
-    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
     monkeypatch.setattr('app.dependencies.async_session_maker', sessions)
     try:
         async with app.router.lifespan_context(app):
@@ -111,8 +111,9 @@ def provider_response(request):
         return httpx.Response(200, json={'data': [{'b64_json': base64.b64encode(IMAGE).decode()}]})
     if request.url.host == 'video.test':
         if request.method == 'POST':
-            content = json.loads(request.content)['content']
-            first_frame = next(item for item in content if item.get('role') == 'first_frame')
+            submitted = json.loads(request.content)
+            assert submitted['ratio'] == '16:9'
+            first_frame = next(item for item in submitted['content'] if item.get('role') == 'first_frame')
             assert first_frame['image_url']['url'] == 'data:image/png;base64,' + base64.b64encode(IMAGE).decode()
             return httpx.Response(200, json={'id': 'baseline-video'})
         return httpx.Response(200, json={'status': 'succeeded', 'content': {'video_url': 'https://media.test/take.mp4'}})
@@ -142,18 +143,18 @@ async def publish_character(client, project_id, suffix, source_file_id):
     actors = STUDIO + '/entities/actor'
     characters = STUDIO + '/entities/character'
     actor_id, character_id = 'actor-' + suffix, 'role-' + suffix
-    await data(client.post(actors, json={'id': actor_id, 'name': '弟弟'}), 201)
+    await data(client.post(actors, json={'id': actor_id, 'name': f'弟弟 {suffix[:8]}'}), 201)
     await data(client.post(f'{actors}/{actor_id}/images', json={'file_id': source_file_id, 'view_angle': 'FRONT'}), 201)
     role = await data(client.post(characters + '/image-source', json={
         'id': character_id, 'name': '项目角色', 'source_id': actor_id, 'project_id': project_id,
     }), 201)
-    assert role['origin'] == 'library'
+    assert role['origin'] == 'library' and role['created_at']
     assert role['visual_style'] is None and role['style'] is None
     role_images = await data(client.get(f'{characters}/{character_id}/images'))
     primary = role_images['items'][0]
     assert primary['is_primary'] and primary['file_id'] != source_file_id
-    published = await data(client.post(f'{characters}/{character_id}/publish-to-library', json={'name': '入库角色'}), 201)
-    assert published['origin'] == 'project'
+    published = await data(client.post(f'{characters}/{character_id}/publish-to-library', json={'name': f'入库角色 {suffix[:8]}'}), 201)
+    assert published['origin'] == 'project' and published['created_at']
     assert (published['source_kind'], published['source_id']) == ('character', role['id'])
     images = await data(client.get(f"{actors}/{published['id']}/images"))
     assert images['items'][0]['is_primary']
@@ -183,7 +184,7 @@ async def check_production(client, worker, path, text_id, video_id, reference_fi
     plan = planned['plans'][0]
     await data(client.post(f"{path}/revisions/{plan['id']}/confirm", json={'expected_version': plan['version']}))
     compiled = await data(client.post(path + '/compile', json={
-        'plan_revision_id': plan['id'], 'unit_id': unit['id'], 'request_id': 'compile',
+        'plan_revision_id': plan['id'], 'unit_id': unit['id'], 'request_id': f"compile-{plan['id']}",
     }))
     prompt_id = compiled['compiled_prompt_revision_id']
     review_job = await data(client.post(f'{path}/prompts/{prompt_id}/review', json={'model_id': text_id}))
@@ -242,7 +243,10 @@ async def test_new_project_reads_current_canvas_assets_and_production(baseline_c
             'id': model_id, 'name': name, 'category': category, 'provider_id': provider_id,
         }), 201)
     monkeypatch.setattr('app.task_worker.ChatOpenAI', DirectingModel)
-    await data(client.post(STUDIO + '/projects', json={'id': project_id, 'name': '新库验收', 'style': '真人都市'}), 201)
+    await data(client.post(STUDIO + '/projects', json={
+        'id': project_id, 'name': '新库验收', 'style': '真人都市', 'default_video_ratio': '9:16',
+    }), 201)
+    assert (await data(client.get(f'{STUDIO}/projects/{project_id}')))['default_video_ratio'] == '9:16'
     await data(client.post(STUDIO + '/chapters', json={
         'id': chapter_id, 'project_id': project_id, 'index': 1, 'title': '第一章', 'raw_text': STORY,
     }), 201)

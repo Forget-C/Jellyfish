@@ -43,4 +43,5 @@ async def publish_to_library(
     source.library_copy_id = target.id
     await flush_resource(db)
     await copy_images(db, source_rows=images, target_spec=target_spec, target_id=target.id)
+    await db.refresh(target)
     return await get_entity(db, entity_type=target_type, entity_id=target.id)

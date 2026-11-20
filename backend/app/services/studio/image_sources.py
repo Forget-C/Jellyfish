@@ -107,4 +107,5 @@ async def create_image_source(db, *, entity_type, request):
         model, field = LINK_MODEL_BY_ENTITY[entity_type]
         await upsert_project_link(db, model=model, asset_field=field, asset_id=target.id,
                                   project_id=request.project_id, chapter_id=None)
+    await db.refresh(target)
     return await get_entity(db, entity_type=entity_type, entity_id=target.id)
