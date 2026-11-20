@@ -12,6 +12,8 @@
 
 `experiment_sessions` 和 `experiment_messages` 共用存储，按 `lab_type` 区分。历史按会话内单调 `sequence` 排序，服务端提供分页、重命名、删除与清空。删除和清空锁定会话并拒绝活动任务。会话当前为全局数据。历史供用户查看；文本每轮模型请求只带本轮内容。实验室任务的目标为 `experiment_session`，项目、资产及场次生产另有各自入口。
 
+标准生成入口写入实验消息，客户端通过会话历史读取已有消息。直接追加和修改普通消息的公开接口已退役。
+
 ## 文本流
 
 文本页面使用 `POST /api/v1/studio/labs/text/sessions/{session_id}/stream`，提交选定文本模型与本轮提示词。服务器在发出 `accepted` 前提交用户消息并创建进程内 SSE 运行。SSE ID 按 `sequence` 递增，后续传输 `delta`、`progress` 和单一终态 `completed`、`error` 或 `cancelled`。成功写入助手消息后才发出 `completed`。

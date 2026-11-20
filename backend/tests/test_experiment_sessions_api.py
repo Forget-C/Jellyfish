@@ -16,8 +16,8 @@ from app.core.db import Base
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task
 from app.services.task_service import TaskService
-from app.schemas.studio.experiment_sessions import ExperimentMessageCreate, ExperimentSessionCreate
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.schemas.studio.experiment_sessions import ExperimentSessionCreate
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
 
 
 def test_experiment_session_routes_are_registered(client: TestClient) -> None:
@@ -25,8 +25,14 @@ def test_experiment_session_routes_are_registered(client: TestClient) -> None:
     response = client.get("/openapi.json")
     paths = response.json()["paths"]
     assert "/api/v1/studio/experiment-sessions" in paths
-    assert "/api/v1/studio/experiment-sessions/{session_id}/messages" in paths
-    message_parameters = paths["/api/v1/studio/experiment-sessions/{session_id}/messages"]["get"]["parameters"]
+    messages = paths["/api/v1/studio/experiment-sessions/{session_id}/messages"]
+    assert set(messages) == {"get", "delete"}
+    assert "/api/v1/studio/experiment-sessions/messages/{message_id}" not in paths
+    base = "/api/v1/studio/experiment-sessions"
+    message_id = "0123456789abcdef0123456789abcdef"
+    assert client.post(f"{base}/fixture-session/messages", json={}).status_code == 405
+    assert client.patch(f"{base}/messages/{message_id}", json={}).status_code == 404
+    message_parameters = messages["get"]["parameters"]
     assert {parameter["name"] for parameter in message_parameters} >= {"session_id", "page", "page_size"}
     session_schema = response.json()["components"]["schemas"]["ExperimentSessionRead"]
     assert {"last_message_preview", "has_running_task"} <= set(session_schema["properties"])
@@ -164,9 +170,9 @@ async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path, m
         session_id = session.data.id
 
         async def append(content: str) -> None:
-            async with session_local() as db:
-                await route.create_experiment_message(
-                    session_id, ExperimentMessageCreate(role="user", content=content), db,
+            async with session_local.begin() as db:
+                await append_experiment_messages(
+                    db, session_id=session_id, drafts=[experiment_user_message(prompt=content, model_id=None)],
                 )
 
         try:
@@ -193,8 +199,8 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             )
             assert created.data is not None
             session_id = created.data.id
-            await route.create_experiment_message(
-                session_id, ExperimentMessageCreate(role="user", content="生成视频"), db
+            await append_experiment_messages(
+                db, session_id=session_id, drafts=[experiment_user_message(prompt="生成视频", model_id=None)],
             )
             task = await TaskService(db).submit(kind="video_generation", snapshot={},
                 target_type="experiment_session", target_id=session_id)
@@ -223,7 +229,6 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
 async def test_task_message_status_is_read_projection_and_rejects_cross_session(terminal):
     """任务状态只在 TaskService 维护；消息不存副本，也不展示其他会话的结果。"""
     from app.services.studio.experiment_messages import read_experiment_messages
-    from app.schemas.studio.experiment_sessions import ExperimentMessageUpdate
 
     db, engine = await _build_session()
     try:
@@ -263,11 +268,5 @@ async def test_task_message_status_is_read_projection_and_rejects_cross_session(
                 assert views[0].payload["error"]
             await db.refresh(message)
             assert message.status is None and message.payload == {"modality": "text"}
-            with pytest.raises(HTTPException) as error:
-                await route.update_experiment_message(message.id, ExperimentMessageUpdate(status="failed"), db)
-            assert error.value.status_code == 409
-            with pytest.raises(HTTPException) as error:
-                await route.create_experiment_message("other", ExperimentMessageCreate(role="task", content="伪造", task_id=task.id), db)
-            assert error.value.status_code == 422
     finally:
         await engine.dispose()

@@ -53,7 +53,6 @@ export type { ApiResponse_DivisionSaved_ } from './models/ApiResponse_DivisionSa
 export type { ApiResponse_DivisionVersionDetail_ } from './models/ApiResponse_DivisionVersionDetail_';
 export type { ApiResponse_EditableRevisionFields_ } from './models/ApiResponse_EditableRevisionFields_';
 export type { ApiResponse_EntityNameExistenceCheckResponse_ } from './models/ApiResponse_EntityNameExistenceCheckResponse_';
-export type { ApiResponse_ExperimentMessageRead_ } from './models/ApiResponse_ExperimentMessageRead_';
 export type { ApiResponse_ExperimentSessionRead_ } from './models/ApiResponse_ExperimentSessionRead_';
 export type { ApiResponse_ExperimentTaskCreated_ } from './models/ApiResponse_ExperimentTaskCreated_';
 export type { ApiResponse_ExtractedFrame_ } from './models/ApiResponse_ExtractedFrame_';
@@ -328,9 +327,7 @@ export type { EnvironmentActivityCard } from './models/EnvironmentActivityCard';
 export type { EnvironmentDesignFields } from './models/EnvironmentDesignFields';
 export type { Event_Input } from './models/Event_Input';
 export type { Event_Output } from './models/Event_Output';
-export type { ExperimentMessageCreate } from './models/ExperimentMessageCreate';
 export type { ExperimentMessageRead } from './models/ExperimentMessageRead';
-export type { ExperimentMessageUpdate } from './models/ExperimentMessageUpdate';
 export type { ExperimentSessionCreate } from './models/ExperimentSessionCreate';
 export type { ExperimentSessionRead } from './models/ExperimentSessionRead';
 export type { ExperimentSessionUpdate } from './models/ExperimentSessionUpdate';
