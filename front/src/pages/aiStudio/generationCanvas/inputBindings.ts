@@ -23,7 +23,7 @@ export function editorPrompt(card: GenerationCard): EditorPromptDocument {
   const bindings = new Map((card.input_bindings || []).map(binding => [binding.id, binding]))
   const hydrate = (reference: PromptReference): EditorPromptReference => {
     const binding = bindings.get(reference.binding_id || '')!
-    return { ...reference, source: binding.source }
+    return { ...reference, binding_id: binding.id, source: binding.source }
   }
   return { segments: (card.prompt?.segments || []).map(segment => segment.kind === 'reference' ? hydrate(segment)
     : segment.kind === 'instruction' ? { ...segment, parameters: segment.command === '主体参考' ? { ...segment.parameters, name: bindings.get(segment.references?.[0]?.binding_id || '')?.subject_name ?? segment.parameters?.name ?? '' } : segment.parameters, references: segment.references?.map(hydrate) } : segment) }
