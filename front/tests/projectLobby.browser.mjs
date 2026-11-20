@@ -32,6 +32,7 @@ try {
   page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(8000)
   const errors = []
+  let failCreate = true
   const deletes = []
   const saves = []
   let releaseSave
@@ -47,6 +48,7 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (pathname.endsWith('/studio/projects')) {
       if (request.method() === 'POST') {
+        if (failCreate) return route.fulfill({ status: 503, json: { detail: '项目暂时无法创建' } })
         const created = request.postDataJSON()
         projects.push(created)
         return respond(created)
@@ -347,11 +349,48 @@ try {
   await page.getByText('共 1 个项目', { exact: true }).waitFor()
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  await page.getByRole('button', { name: /新建项目/ }).click()
+  const openCreate = page.getByRole('button', { name: /新建项目/ })
   const createDialog = page.getByRole('dialog', { name: '新建短剧项目' })
-  await createDialog.getByRole('textbox', { name: /项目名称/ }).fill('新的制作项目')
-  await createDialog.getByRole('button', { name: '创建并进入' }).click()
+  const createName = createDialog.getByRole('textbox', { name: /项目名称/ })
+  const submitProject = createDialog.getByRole('button', { name: '创建并进入' })
+  await openCreate.click()
+  const drawerFrame = page.locator('.resource-editor-drawer', { has: createDialog })
+  const desktopDrawer = await drawerFrame.boundingBox()
+  assert.equal(desktopDrawer.width, 720)
+  assert.equal(desktopDrawer.x + desktopDrawer.width, 1440)
+  assert.ok(desktopDrawer.y > 0, '保留顶栏导航')
+  const heading = createDialog.getByRole('heading', { name: '新建短剧项目' })
+  assert.equal(await heading.evaluate(node => getComputedStyle(node).fontSize), '16px')
+  assert.equal(await submitProject.evaluate(node => getComputedStyle(node).fontSize), '13px')
+  assert.equal(await submitProject.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(36, 95, 197)')
+  await submitProject.click()
+  await createDialog.getByText('请输入项目名称').waitFor()
+  await createName.fill('临时项目')
+  await createName.press('Escape')
+  await createDialog.waitFor({ state: 'detached' })
+  assert.ok(await openCreate.evaluate(node => node === document.activeElement))
+  await page.setViewportSize({ width: 375, height: 600 })
+  await openCreate.click()
+  assert.equal(await createName.inputValue(), '')
+  const mobileDrawer = await drawerFrame.boundingBox()
+  assert.equal(mobileDrawer.x, 0)
+  assert.equal(mobileDrawer.width, 375)
+  const visualStyle = await createDialog.getByRole('combobox', { name: '视觉风格' }).boundingBox()
+  const videoStyle = await createDialog.getByRole('combobox', { name: '视频风格' }).boundingBox()
+  assert.ok(videoStyle.y > visualStyle.y)
+  const mobileAction = await submitProject.boundingBox()
+  assert.ok(mobileAction.height >= 36)
+  await createDialog.getByRole('switch', { name: '风格统一' }).click()
+  assert.equal((await submitProject.boundingBox()).y, mobileAction.y, '滚动到底部时创建按钮仍固定在顶栏')
+  assert.equal(await createDialog.evaluate(node => node.scrollWidth), 375)
+  await createName.fill('新的制作项目')
+  await submitProject.click()
+  await createDialog.getByRole('alert').filter({ hasText: '项目暂时无法创建' }).waitFor()
+  assert.equal(await createName.inputValue(), '新的制作项目')
+  failCreate = false
+  await submitProject.click()
   await page.waitForURL(url => url.pathname === `/projects/${projects.find(project => project.name === '新的制作项目')?.id}`)
+  assert.equal(projects.find(project => project.name === '新的制作项目').unify_style, false)
   projects.splice(0, projects.length, ...Array.from({ length: 23 }, (_, index) => ({
     id: `fixture-${String(index + 1).padStart(2, '0')}`,
     name: `分页项目 ${String(index + 1).padStart(2, '0')}`,

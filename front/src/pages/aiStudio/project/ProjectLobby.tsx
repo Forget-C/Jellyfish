@@ -1,8 +1,8 @@
 import { buildFileDownloadUrl } from '../assets/utils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Alert, Button, Checkbox, Dropdown, Empty, Form, Input, InputNumber,
-  Modal, Popconfirm, Select, Space, Spin, Switch, Tag, message,
+  Alert, Button, Checkbox, Dropdown, Empty, Input,
+  Modal, Popconfirm, Select, Spin, Tag, message,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
@@ -12,14 +12,11 @@ import {
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
-import type { ProjectRead, ProjectStyle, ProjectVisualStyle } from '../../../services/generated'
+import type { ProjectRead } from '../../../services/generated'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { ProjectCover } from './ProjectCover'
 import { summarizeProjectChapters, type ProjectStageSummary } from './projectStageSummary'
-import {
-  ProjectVisualStyleAndStyleFields,
-  type ProjectVisualStyleChoice,
-} from './ProjectVisualStyleAndStyleFields'
+import { ProjectCreateDrawer } from './ProjectCreateDrawer'
 import { useCardPageSize } from '../../../components/layout/useCardPageSize'
 import { CardListPagination } from '../../../components/layout/CardListPagination'
 import { useProjectStyleOptions } from './useProjectStyleOptions'
@@ -97,23 +94,11 @@ function ProjectLobby() {
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
-  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false)
   const [projectStageMap, setProjectStageMap] = useState<Partial<Record<string, ProjectStageState>>>({})
-  const {
-    options: projectStyleOptions,
-    videoRatioOptions,
-    defaultVideoRatio,
-  } = useProjectStyleOptions()
-  const [form] = Form.useForm()
+  const styleOptions = useProjectStyleOptions()
 
   const useMock = import.meta.env.VITE_USE_MOCK === 'true'
-
-  const newProjectId = () => {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID()
-    }
-    return `p_${Date.now()}_${Math.random().toString(16).slice(2)}`
-  }
 
   const changeQuery = (key: string, value: string) => {
     setSelectedIds([])
@@ -264,57 +249,6 @@ function ProjectLobby() {
     }
   }
 
-  const handleOpenCreate = () => {
-    form.resetFields()
-    const defaultVisual = (projectStyleOptions.visualStyles[0]?.value ?? '现实') as ProjectVisualStyleChoice
-    const defaultStyle =
-      projectStyleOptions.defaultStyleByVisual?.[defaultVisual] ??
-      projectStyleOptions.stylesByVisual[defaultVisual]?.[0]?.value
-    form.setFieldsValue({
-      visual_style: defaultVisual,
-      style: defaultStyle,
-      seed: Math.floor(Math.random() * 99999),
-      unifyStyle: true,
-      default_video_ratio: defaultVideoRatio,
-    })
-    setCreateModalOpen(true)
-  }
-
-  const handleCreateSubmit = async (values: {
-    name: string
-    description?: string
-    style: string
-    visual_style: ProjectVisualStyleChoice
-    seed: number
-    unifyStyle: boolean
-    default_video_ratio?: string
-  }) => {
-    try {
-      const createdId = newProjectId()
-      const res = await StudioProjectsService.createProjectApiV1StudioProjectsPost({
-        requestBody: {
-          id: createdId,
-          name: values.name,
-          description: values.description ?? '',
-          style: values.style as ProjectStyle,
-          visual_style: values.visual_style as ProjectVisualStyle,
-          seed: values.seed,
-          unify_style: values.unifyStyle,
-          default_video_ratio: values.default_video_ratio || null,
-          progress: 0,
-        },
-      })
-      const created = res.data
-      if (!created) throw new Error('empty project')
-      const ui = toUIProject(created)
-      message.success('项目创建成功')
-      setCreateModalOpen(false)
-      navigate(`/projects/${ui.id}`)
-    } catch {
-      message.error('创建失败')
-    }
-  }
-
   const handleDelete = async () => {
     if (!deleteTarget || deletePending.current) return
     deletePending.current = true
@@ -374,7 +308,7 @@ function ProjectLobby() {
     </div>
   )
   const createProject = (
-    <Button key="create" ref={createButton} className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>新建项目</Button>
+    <Button key="create" ref={createButton} className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerOpen(true)}>新建项目</Button>
   )
 
   return (
@@ -530,68 +464,7 @@ function ProjectLobby() {
         {deleteError && <Alert type="error" showIcon message={deleteError} />}
       </Modal>
 
-      <Modal
-        title="新建短剧项目"
-        open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
-        footer={null}
-        width={520}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateSubmit}
-          initialValues={{
-            visual_style: projectStyleOptions.visualStyles[0]?.value ?? '现实',
-            style:
-              projectStyleOptions.defaultStyleByVisual?.[projectStyleOptions.visualStyles[0]?.value ?? '现实'] ??
-              projectStyleOptions.stylesByVisual[projectStyleOptions.visualStyles[0]?.value ?? '现实']?.[0]?.value ??
-              '真人都市',
-            seed: Math.floor(Math.random() * 99999),
-            unifyStyle: true,
-            default_video_ratio: defaultVideoRatio,
-          }}
-        >
-          <Form.Item
-            name="name"
-            label="项目名称"
-            rules={[{ required: true, message: '请输入项目名称' }]}
-          >
-            <Input placeholder="例如：现实都市爱情短剧" />
-          </Form.Item>
-          <Form.Item name="description" label="项目简介（选填）">
-            <Input.TextArea rows={4} placeholder="项目简介与风格说明，建议 80–120 字" />
-          </Form.Item>
-          <ProjectVisualStyleAndStyleFields form={form} options={projectStyleOptions} />
-          <Form.Item
-            name="seed"
-            label="全局种子值"
-            tooltip="固定种子可确保整部短剧视觉调性一致"
-          >
-            <InputNumber min={0} className="w-full" />
-          </Form.Item>
-          <Form.Item name="default_video_ratio" label="默认视频比例">
-            <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
-          </Form.Item>
-          <Form.Item
-            name="unifyStyle"
-            label="所有章节强制继承此风格"
-            valuePropName="checked"
-            tooltip="开启后所有章节继承项目风格"
-          >
-            <Switch />
-          </Form.Item>
-          <Form.Item className="mb-0">
-            <Space>
-              <Button onClick={() => setCreateModalOpen(false)}>取消</Button>
-              <Button type="primary" htmlType="submit">
-                创建并进入
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
-
+      {createDrawerOpen && <ProjectCreateDrawer styleOptions={styleOptions} onClose={() => setCreateDrawerOpen(false)} />}
     </WorkspaceLayout>
   )
 }

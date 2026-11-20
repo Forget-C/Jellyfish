@@ -357,3 +357,23 @@
   }
 
 }
+
+.project-create-drawer {
+  --app-text: #263244;
+  --app-muted: #536174;
+}
+
+.project-create-drawer .resource-editor-page-actions {
+  text-align: right;
+}
+
+@media (max-width: 767px) {
+  .project-create-drawer .resource-editor-page-heading,
+  .project-create-drawer .resource-editor-page-actions {
+    width: auto;
+  }
+
+  .project-create-drawer .resource-editor-page-actions {
+    margin-inline-start: auto;
+  }
+}
