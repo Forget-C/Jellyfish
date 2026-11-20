@@ -13,7 +13,6 @@ import type { NamedImagePayload } from './NamedImagePayload';
 import type { NarrativeReferencePayload } from './NarrativeReferencePayload';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { OutputIdentity } from './OutputIdentity';
-import type { PhotographyTextPayload } from './PhotographyTextPayload';
 import type { SpatialReferencePayload } from './SpatialReferencePayload';
 import type { TextOutputPayload } from './TextOutputPayload';
 /**
@@ -22,7 +21,7 @@ import type { TextOutputPayload } from './TextOutputPayload';
 export type CanvasResolvedOutput = {
     source: OutputIdentity;
     modality: 'text' | 'image' | 'video' | 'audio';
-    payload?: ((BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload | PhotographyTextPayload) | null);
+    payload?: ((BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload) | null);
     text?: (string | null);
     file_id?: (string | null);
     token?: string;
