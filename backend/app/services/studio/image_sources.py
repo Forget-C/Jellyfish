@@ -89,7 +89,7 @@ async def create_image_source(db, *, entity_type, request):
     if previous is not None:
         return previous
     target = spec.model(id=request.id, name=request.name, project_id=request.project_id,
-        style="真人都市", visual_style="现实", origin="library" if request.source_id else "upload", source_kind=source_kind if request.source_id else None,
+        origin="library" if request.source_id else "upload", source_kind=source_kind if request.source_id else None,
         source_id=request.source_id, source_request_hash=fingerprint)
     db.add(target)
     await flush_resource(db)

@@ -36,8 +36,8 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
         "tags": obj.tags or [],
         "prompt_template_id": obj.prompt_template_id,
         "view_count": obj.view_count,
-        "style": obj.style if obj.origin == "created" or obj.details_editable else None,
-        "visual_style": obj.visual_style if obj.origin == "created" or obj.details_editable else None,
+        "style": obj.style,
+        "visual_style": obj.visual_style,
         "thumbnail": thumbnail,
     }
 
@@ -69,7 +69,7 @@ async def list_entities_paginated(
         # Match the source label on cards, where a converted actor has precedence over origin.
         card_source = spec.model.origin
         if entity_type_norm == "actor":
-            card_source = case((spec.model.source_character_id != "", "role_conversion"), else_=card_source)
+            card_source = case((spec.model.source_character_id.is_not(None), "role_conversion"), else_=card_source)
         stmt = stmt.where(card_source.in_(source))
     if has_cover is not None:
         image_parent = getattr(spec.image_model, spec.id_field)
@@ -77,12 +77,10 @@ async def list_entities_paginated(
             image_parent == spec.model.id, spec.image_model.file_id != "",
         ).exists()
         stmt = stmt.where(cover_exists if has_cover else ~cover_exists)
-    has_details = spec.model.origin == "created"
-    has_details = has_details | spec.model.details_editable.is_(True)
     if style:
-        stmt = stmt.where(has_details, getattr(spec.model, "style") == style)
+        stmt = stmt.where(spec.model.style == style)
     if visual_style:
-        stmt = stmt.where(has_details, getattr(spec.model, "visual_style") == visual_style)
+        stmt = stmt.where(spec.model.visual_style == visual_style)
     stmt = apply_order(
         stmt,
         model=spec.model,
@@ -250,6 +248,8 @@ async def update_entity(
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 255:
             raise HTTPException(422, "名称不能为空且不能超过255字符")
         update_data["name"] = name.strip()
+    if obj.origin == "created" and any(key in update_data and update_data[key] is None for key in ("style", "visual_style")):
+        raise HTTPException(422, "设定创建对象需要保留风格")
     if "references" in update_data:
         from app.services.studio.resource_references import validate_resource_references
         await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"])
@@ -278,7 +278,7 @@ async def delete_entity(
     obj = await db.get(spec.model, entity_id)
     if obj is None:
         return
-    if getattr(obj, "source_character_id", None) or (obj.origin != "created" and obj.project_id is None):
+    if obj.origin != "created" and obj.project_id is None:
         for kind in ("actor", "character", "scene", "prop", "costume"):
             model = entity_spec(kind).model
             configurations = await db.scalars(select(model.references))

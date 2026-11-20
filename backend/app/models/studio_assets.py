@@ -69,7 +69,7 @@ class Scene(StructuredAssetMixin, Base, TimestampMixin):
     environment_features: Mapped[str | None] = mapped_column(Text, nullable=True, comment="环境特征")
     materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="主要材质")
     color_palette: Mapped[str | None] = mapped_column(Text, nullable=True, comment="色彩")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -84,10 +84,9 @@ class Scene(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -118,7 +117,7 @@ class Prop(StructuredAssetMixin, Base, TimestampMixin):
     size_description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="尺寸或相对尺度")
     materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="材质")
     colors: Mapped[str | None] = mapped_column(Text, nullable=True, comment="颜色")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -133,10 +132,9 @@ class Prop(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -167,7 +165,7 @@ class Costume(StructuredAssetMixin, Base, TimestampMixin):
     materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="材质")
     colors: Mapped[str | None] = mapped_column(Text, nullable=True, comment="颜色")
     patterns_accessories: Mapped[str | None] = mapped_column(Text, nullable=True, comment="纹样与附属配饰")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -182,10 +180,9 @@ class Costume(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -213,7 +210,16 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
 
     __tablename__ = "actors"
 
-    source_character_id: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="角色转化来源")
+    @hybrid_property
+    def source_character_id(self) -> str | None:
+        """从统一的来源字段读取入库角色的身份。"""
+        if self.origin == "project" and self.source_kind == "character":
+            return self.source_id
+        return None
+
+    @source_character_id.expression
+    def source_character_id(cls):  # pylint: disable=no-self-argument
+        return case(((cls.origin == "project") & (cls.source_kind == "character"), cls.source_id))
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")
@@ -224,7 +230,7 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
     facial_features: Mapped[str | None] = mapped_column(Text, nullable=True, comment="五官特征")
     skin_tone: Mapped[str | None] = mapped_column(Text, nullable=True, comment="肤色")
     hair: Mapped[str | None] = mapped_column(Text, nullable=True, comment="发型发色")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -239,10 +245,9 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -288,11 +293,10 @@ class Character(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="角色名称")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="角色描述")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
     project: Mapped["Project"] = relationship(back_populates="characters")

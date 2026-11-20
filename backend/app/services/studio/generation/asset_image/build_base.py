@@ -127,7 +127,7 @@ def _resolve_edit_options(options: AssetPromptOptions, image_row: Any) -> AssetP
 
 async def resolve_source_options(db, entity_type, asset, options):
     """图片来源必须有主体参考，风格属于单次生成而非不可编辑的档案。"""
-    if ((asset.origin or "created") == "created" and not getattr(asset, "source_character_id", None)) or getattr(asset, "details_editable", False):
+    if (asset.origin or "created") == "created" or asset.details_editable:
         if options.style is not None or options.visual_style is not None:
             raise HTTPException(422, "设定创建对象的风格由档案维护")
         return options
@@ -143,10 +143,8 @@ async def resolve_source_options(db, entity_type, asset, options):
     if not any(ref.role not in {"costume", "prop", "style"} for ref in references):
         raise HTTPException(422, "请选择有效主体参考图")
     project = await db.get(Project, asset.project_id) if asset.project_id else None
-    style = project.style if project else asset.style
-    visual_style = project.visual_style if project else asset.visual_style
-    if project is None and getattr(asset, "source_character_id", None):
-        style, visual_style = ProjectStyle.real_people_city, ProjectVisualStyle.live_action
+    style = project.style if project else ProjectStyle.real_people_city
+    visual_style = project.visual_style if project else ProjectVisualStyle.live_action
     return options.model_copy(update={"references": references,
         "style": options.style or style, "visual_style": options.visual_style or visual_style})
 

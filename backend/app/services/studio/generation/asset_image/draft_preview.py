@@ -22,15 +22,20 @@ async def render_draft_preview(db, *, entity_type, resource, view_angle, options
     saved = await db.get(spec.model, asset.id)
     if saved is not None:
         # 草稿覆盖事实，模板依据仍与正式提交保持一致。
-        if not getattr(saved, "details_editable", False) and (saved.origin != "created" or getattr(saved, "source_character_id", None)):
+        if not saved.details_editable and saved.origin != "created":
             # 名称可在草稿中编辑；其余事实来自保存值，且预览不得修改 ORM 对象。
             asset = SimpleNamespace(id=saved.id, name=values["name"], description=saved.description,
                 origin=saved.origin, project_id=saved.project_id, references=saved.references,
                 source_character_id=getattr(saved, "source_character_id", None), details_editable=getattr(saved, "details_editable", False),
                 style=saved.style, visual_style=saved.visual_style, tags=getattr(saved, "tags", None),
                 prompt_template_id=getattr(saved, "prompt_template_id", None))
-        asset.details_editable = getattr(saved, "details_editable", False)
-        asset.source_character_id = getattr(saved, "source_character_id", None)
+        elif saved.origin != "created":
+            # 已开放的图片来源可以缺少风格，草稿未提交风格时沿用真实档案。
+            if "style" not in resource:
+                asset.style = saved.style
+            if "visual_style" not in resource:
+                asset.visual_style = saved.visual_style
+        asset.details_editable = saved.details_editable
         asset.prompt_template_id = getattr(saved, "prompt_template_id", None)
         asset.project_id = saved.project_id
     image = SimpleNamespace(view_angle=view_angle, prompt_overrides={}, file_id=None)
