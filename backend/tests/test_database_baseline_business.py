@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
 from app.main import app
-from app.models.llm import Model, Provider
 from app.task_worker import TaskWorker
 from tests.directing.samples import design_sample, plan_sample
 from tests.services.test_task_mysql import isolated_database_url
@@ -22,6 +21,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 STUDIO = '/api/v1/studio'
 FILM = '/api/v1/film'
+LLM = '/api/v1/llm'
 STORY = '哥哥提出借钱，弟弟回避。两人回到屋里。'
 IMAGE = b'generated image'
 VIDEO = b'generated video'
@@ -38,8 +38,9 @@ async def baseline_client(request, tmp_path, monkeypatch):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr('app.dependencies.async_session_maker', sessions)
     try:
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-            yield client, sessions
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                yield client, sessions
     finally:
         await engine.dispose()
 
@@ -225,13 +226,18 @@ async def test_new_project_reads_current_canvas_assets_and_production(baseline_c
     suffix = uuid4().hex
     project_id, chapter_id = 'project-' + suffix, 'chapter-' + suffix
     text_id, image_id, video_id = ('text-' + suffix, 'image-' + suffix, 'video-' + suffix)
-    async with sessions.begin() as db:
-        db.add_all([Provider(id=image_id, name='openai', base_url='https://image.test/v1', api_key='stub'),
-                    Provider(id=video_id, name='volcengine', base_url='https://video.test/v1', api_key='stub')])
-        await db.flush()
-        db.add_all([Model(id=text_id, name='baseline-text', category='text', provider_id=image_id),
-                    Model(id=image_id, name='baseline-image', category='image', provider_id=image_id),
-                    Model(id=video_id, name='doubao-seedance', category='video', provider_id=video_id)])
+    for provider_id, name, host in ((image_id, 'openai', 'image.test'), (video_id, 'volcengine', 'video.test')):
+        await data(client.post(LLM + '/providers', json={
+            'id': provider_id, 'name': name, 'base_url': f'https://{host}/v1', 'api_key': 'stub', 'status': 'active',
+        }), 201)
+    for model_id, name, category, provider_id in (
+        (text_id, 'baseline-text', 'text', image_id),
+        (image_id, 'baseline-image', 'image', image_id),
+        (video_id, 'doubao-seedance', 'video', video_id),
+    ):
+        await data(client.post(LLM + '/models', json={
+            'id': model_id, 'name': name, 'category': category, 'provider_id': provider_id,
+        }), 201)
     monkeypatch.setattr('app.task_worker.ChatOpenAI', DirectingModel)
     await data(client.post(STUDIO + '/projects', json={'id': project_id, 'name': '新库验收', 'style': '真人都市'}), 201)
     await data(client.post(STUDIO + '/chapters', json={
