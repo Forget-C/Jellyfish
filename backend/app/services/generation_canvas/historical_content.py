@@ -67,13 +67,6 @@ class CanvasHistoricalContent:
         cards = {card.id: card for card in document.cards}
         prior = {card.id: card for card in previous.cards}
         proofs = {key: dict(proof) for key, proof in (saved_proofs or {}).items()}
-        # 兼容升级前仍在已保存文档中的固定记录；新请求不能自行补写证明。
-        for model in previous.cards:
-            if isinstance(model, ModelCard):
-                for result in model.detached_results:
-                    proofs.setdefault(result.content_card_id, {
-                        'model_id': model.id, 'result_set_id': result.result_set_id, 'position': result.position, 'routes': [],
-                    })
         sources = {}
         moved = {}
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -16,14 +17,18 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 async def _check_database_version() -> None:
     """拒绝非空且未纳管的数据库，避免错误 stamp 跳过必要的结构变更。"""
     engine = create_async_engine(settings.database_url)
+    def is_unmanaged(sync) -> bool:
+        schema = inspect(sync)
+        tables = set(schema.get_table_names()) - {"alembic_version"}
+        return bool(tables or schema.get_view_names()) and not MigrationContext.configure(sync).get_current_heads()
+
     try:
         async with engine.connect() as connection:
-            tables = set(await connection.run_sync(lambda sync: inspect(sync).get_table_names()))
-        if tables and "alembic_version" not in tables:
-            raise RuntimeError(
-                "Database is non-empty but has no Alembic version. "
-                "Use an empty database or explicitly baseline a verified schema before upgrading."
-            )
+            if await connection.run_sync(is_unmanaged):
+                raise RuntimeError(
+                    "Database is non-empty but has no Alembic version. "
+                    "Use an empty database for the initial schema."
+                )
     finally:
         await engine.dispose()
 

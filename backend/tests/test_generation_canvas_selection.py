@@ -41,7 +41,7 @@ async def test_single_keeps_stale_or_missing_inputs_blocked(runtime, monkeypatch
     assert not stale['can_run'] and stale['execution_nodes'] == ['C']
     assert any(issue['code'] == 'INPUT_STALE' and issue['target']['card_id'] == 'C'
                for issue in stale['diagnostics'])
-    doc['cards'][2]['prompt']['segments'][0]['source']['position'] = 3
+    doc['cards'][2]['input_bindings'][0]['source']['position'] = 3
     await save(runtime, doc)
     missing = await single_preview(runtime, 'C')
     assert not missing['can_run'] and missing['preview_token'] is None

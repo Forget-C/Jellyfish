@@ -520,7 +520,7 @@ class SceneStoryboardService(SceneObjectService):
             inputs=[('prepared-reference', index, file_id) for index, file_id in enumerate(files)],
             snapshot={'scene_admission_order': await self._next_scene_task_order(sequence_id), 'storyboard_request': request, 'chapter_id': chapter.id, 'canvas_id': canvas.id,
                       'reextract_canvas_id': canvas_id, 'baseline': canvas.model_dump(mode='json'), 'model_id': model.id, 'model_name': model.name,
-                      'provider_key': config.provider_key, 'run_args': args, 'video_prompt_version': 1,
+                      'provider_key': config.provider_key, 'run_args': args,
                       'review_protected_designs': sorted(protected), 'review_basis': review_basis,
                       **({'review_current_document': current} if canvas_id else {})})
         return await self._storyboard_read(task)

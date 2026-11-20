@@ -70,14 +70,6 @@ class SourceInfo(BaseModel):
     source_kind: str | None = None
     source_id: str | None = None
 
-    @model_validator(mode="after")
-    def omit_image_source_style(self):
-        """兼容旧表非空风格列，但不能将内部默认值投影为图片来源的基础事实。"""
-        if self.origin != "created" and not getattr(self, "details_editable", False) and hasattr(self, "style"):
-            setattr(self, "style", None)
-            setattr(self, "visual_style", None)
-        return self
-
 
 class ActorRead(SourceInfo, ActorFields, ActorBase):
     """返回演员设定及后端派生的完整描述。"""

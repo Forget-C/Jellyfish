@@ -48,8 +48,6 @@ RESULT_CONTRACTS = {
 def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
 
-    if kind == 'directing_design' and args.get('scene_version_design'):
-        raise ValueError('旧场次版本任务已退役')
     contract = RESULT_CONTRACTS[kind]
     instruction = {
         STORYBOARD_KIND: (
@@ -136,7 +134,10 @@ def generate_directing_result(kind: str, llm, args: dict):
     if structure_saved:
         from app.services.directing.storyboard_structure import structure_feedback
         messages.append(HumanMessage(content=structure_feedback(structure_saved)))
-    structure_failed = structure_saved
+    structure_failed = None
+    if structure_saved:
+        structure_failed = {**structure_saved, 'attempt_issues': []}
+        structure_failed.pop('decision_reason', None)
     structure_original = structure_saved.get('draft') if structure_saved else None
     structure_issues = structure_saved.get('issues', []) if structure_saved else []
     for attempt in range(1 if structure_saved else 2):
@@ -166,7 +167,7 @@ def generate_directing_result(kind: str, llm, args: dict):
                     failure = DirectingOutputError('结构纠错需要创作选择，请核对方案后继续' if choices else '无法形成可靠纠错方案，请核对设计依据或明确重新生成')
                     failure.storyboard_structure = {'output': text, 'draft': structure_original,
                         'issues': structure_issues + [reason], 'options': choices, 'decision_reason': reason, 'attempt_issues': [reason],
-                        **({'draft_issues': (structure_saved or structure_failed)['draft_issues']} if 'draft_issues' in (structure_saved or structure_failed or {}) else {})}
+                        'draft_issues': (structure_saved or structure_failed)['draft_issues']}
                     raise failure
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design"})
             if kind == STORYBOARD_KIND:
@@ -190,13 +191,9 @@ def generate_directing_result(kind: str, llm, args: dict):
                 if kind == STORYBOARD_KIND:
                     from app.services.directing.storyboard_structure import retained_structure
                     failure.storyboard_structure = retained_structure(text, paths)
-                    failure.storyboard_structure['attempt_issues'] = paths
                     if structure_original:
                         failure.storyboard_structure['draft'] = structure_original
-                        if 'draft_issues' in (structure_saved or structure_failed or {}):
-                            failure.storyboard_structure['draft_issues'] = (structure_saved or structure_failed)['draft_issues']
-                        else:
-                            failure.storyboard_structure.pop('draft_issues', None)
+                        failure.storyboard_structure['draft_issues'] = (structure_saved or structure_failed)['draft_issues']
                         failure.storyboard_structure['issues'] = structure_issues + paths
                 raise failure from None
             # 结构、来源与单元范围共用一次纠错，沿用 Worker 的取消回调和总时限。
@@ -310,8 +307,7 @@ class DirectingAIService(WorkspaceService):
             args["revision_context"]["task_identity"] = args["task_identity"]
         return await TaskService(self.db).submit(
             kind=kind, title={"directing_divide": "分析章节场次", "directing_design": "生成导演方案", "directing_review": "六部门审稿", "directing_review_revision": "生成检查修改方案"}[kind],
-            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args,
-                      **({'division_versioning': 1} if kind == 'directing_divide' else {})},
+            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args},
             provider_id=provider.id, project_id=self.project_id,
             target_type="directing_sequence" if sequence_id else "directing_chapter", target_id=sequence_id or chapter_id,
         )
@@ -322,8 +318,6 @@ class DirectingAIService(WorkspaceService):
         task = await self.db.get(Task, task_id)
         if task is None or task.project_id != self.project_id or task.target_id != sequence_id or task.kind != "directing_design" or task.status != "succeeded":
             raise ValueError("没有可采用的导演任务结果")
-        if task.input_snapshot.get("scene_design"):
-            raise ValueError("场次版本建议须在原版本预览并明确应用")
         args = task.input_snapshot["run_args"]
         content = SceneDesign.model_validate(task.result)
         # Model provenance stays separate from the exact chapter version used for generation.

@@ -81,11 +81,6 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
             path = ['design_media_uses', segment_id, *path[2:]]
         result.diagnostics.append(CanvasDiagnostic(code=code, message=message, severity='warning' if warning else 'error',
             target={'card_id': card_id, 'segment_id': segment_id, 'path': path or ['prompt', 'segments', segment_id]}, blocks=[] if warning else ['run']))
-    for item in result.used:
-        if item.payload and item.payload.kind == 'photography':
-            issue('LEGACY_DESIGN_OUTPUT', '旧摄影输出已不受支持，请重新配置独立设计', item.source.card_id)
-    for source_id in card.missing_designs:
-        issue('DESIGN_BASIS_MISSING', '旧摄影设计已移除，请补充设计或明确处理缺失依据', source_id, ['missing_designs'])
     for ref, path in refs:
         source = by_source.get(identity_key(ref.source))
         if ref.source.canvas_id != canvas_id:

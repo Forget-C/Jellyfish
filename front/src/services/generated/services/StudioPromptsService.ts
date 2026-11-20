@@ -5,6 +5,7 @@
 import type { ApiResponse_list_PromptCategoryOptionRead__ } from '../models/ApiResponse_list_PromptCategoryOptionRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_PromptTemplateRead__ } from '../models/ApiResponse_PaginatedData_PromptTemplateRead__';
+import type { ApiResponse_PaginatedData_PromptTemplateSummary__ } from '../models/ApiResponse_PaginatedData_PromptTemplateSummary__';
 import type { ApiResponse_PromptTemplateRead_ } from '../models/ApiResponse_PromptTemplateRead_';
 import type { PromptCategory } from '../models/PromptCategory';
 import type { PromptTemplateCreate } from '../models/PromptTemplateCreate';
@@ -88,6 +89,34 @@ export class StudioPromptsService {
         });
     }
     /**
+     * 按名称或简介搜索模板摘要
+     * 对名称与简介做字面包含匹配，先稳定分页再交由界面分组。
+     * @returns ApiResponse_PaginatedData_PromptTemplateSummary__ Successful Response
+     * @throws ApiError
+     */
+    public static listPromptSummariesApiV1StudioPromptsSummariesGet({
+        q = '',
+        page = 1,
+        pageSize = 10,
+    }: {
+        q?: string,
+        page?: number,
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_PaginatedData_PromptTemplateSummary__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/prompts/summaries',
+            query: {
+                'q': q,
+                'page': page,
+                'page_size': pageSize,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * 获取提示词类别枚举（含中文映射）
      * @returns ApiResponse_list_PromptCategoryOptionRead__ Successful Response
      * @throws ApiError
@@ -140,6 +169,7 @@ export class StudioPromptsService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                409: `请先将同类别的其他模板设为默认`,
                 422: `Validation Error`,
             },
         });

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import json
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, select, case
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
@@ -81,14 +81,8 @@ class TaskQueries:
             raise HTTPException(status_code=422, detail="invalid_task_page_size")
         if created_from is not None and created_before is not None and _utc_naive(created_from) >= _utc_naive(created_before):
             raise HTTPException(status_code=422, detail="invalid_task_date_range")
-        stmt = select(*_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"),
-            case(*[(Task.kind == kind, Task.input_snapshot[key]['version_id'].as_string())
-                for kind, key in [('directing_instruction', 'scene_instruction'),
-                    ('directing_instruction_check', 'instruction_check'), ('directing_design', 'scene_design'), ('directing_unit_design', 'scene_unit_design')]]).label('scene_version_id'),
-            case(*[(Task.kind == kind, Task.input_snapshot[key]['unit_id'].as_string())
-                for kind, key in [('directing_instruction', 'scene_instruction'),
-                    ('directing_instruction_check', 'instruction_check')]]).label('scene_unit_id'),
-            Task.input_snapshot['scene_unit_design']['request']['shot_id'].as_string().label('scene_shot_id')
+        stmt = select(
+            *_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"),
         ).where(Task.kind != AUTO_CHECK_DISPATCH)
         for column, value in ((Task.kind, task_kind), (Task.target_type, target_type),
                               (Task.target_id, target_id), (Task.project_id, project_id)):
@@ -219,23 +213,30 @@ class TaskQueries:
         """批量投影消息关联任务，查询次数不随消息数增加。"""
         if not task_ids:
             return {}
-        tasks = list(await self.db.scalars(select(Task).where(Task.id.in_(task_ids))))
-        rows = (await self.db.execute(select(TaskOutput, FileItem).join(
+        tasks = (await self.db.execute(select(
+            Task.id, Task.status, Task.stage, Task.progress, Task.cancel_requested_at,
+            Task.started_at, Task.finished_at, Task.kind, Task.result, Task.provider_task_id,
+            Task.error_code, Task.error_message,
+        ).where(Task.id.in_(task_ids)))).all()
+        rows = (await self.db.execute(select(
+            TaskOutput.task_id, TaskOutput.ordinal, FileItem.id.label("file_id"), FileItem.type,
+            FileItem.deleted_at, TaskOutput.delivery_status, TaskOutput.delivery_reason,
+        ).join(
             FileItem, FileItem.id == TaskOutput.file_id,
         ).where(TaskOutput.task_id.in_(task_ids)).order_by(TaskOutput.ordinal))).all()
         grouped: dict[str, list] = {}
-        for output, file in rows:
-            grouped.setdefault(output.task_id, []).append((output, file))
+        for row in rows:
+            grouped.setdefault(row.task_id, []).append(row)
         return {task.id: _result_view(task, grouped.get(task.id, [])) for task in tasks}
 
 
-def _result_view(task: Task, rows: list) -> TaskResultRead:
+def _result_view(task, rows: list) -> TaskResultRead:
     """将数据库事实组成响应；不会回写消息或其他业务表。"""
     outputs = [TaskOutputRead(
-        ordinal=output.ordinal, file_id=file.id, media_type=file.type,
+        ordinal=output.ordinal, file_id=output.file_id, media_type=output.type,
         delivery_status=output.delivery_status, delivery_reason=output.delivery_reason,
-        deleted=file.deleted_at is not None,
-    ) for output, file in rows]
+        deleted=output.deleted_at is not None,
+    ) for output in rows]
     delivery = None
     if task.kind in {"image_generation", "video_generation"} and task.status in TERMINAL_TASK_STATUSES:
         delivery = GenerationDeliveryResult(

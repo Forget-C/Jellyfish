@@ -67,13 +67,13 @@ async def test_analysis_detail_redacts_and_reports_incomplete_history(tmp_path):
             service = DivisionService(db, 'p1')
             await setup_two(service)
             chapter = await service.list_sequences('ch1')
-            snapshot = {'division_versioning': 1, 'provider_key': 'PRIVATE', 'run_args': {
+            snapshot = {'provider_key': 'PRIVATE', 'run_args': {
                 'script_text': chapter.raw_text, 'source_version': chapter.source_version,
                 'division_baseline': {row.id: row.version for row in chapter.sequences}}}
             db.add_all([Task(id='new', project_id='p1', target_type='directing_chapter', target_id='ch1',
                 kind='directing_divide', status='succeeded', input_snapshot=snapshot,
                 result={'scenes': [{'title': '完整方案', 'excerpt': chapter.raw_text, 'purpose': '交谈'}]}),
-                Task(id='old', project_id='p1', target_type='directing_chapter', target_id='ch1',
+                Task(id='incomplete', project_id='p1', target_type='directing_chapter', target_id='ch1',
                     kind='directing_divide', status='succeeded', input_snapshot={}, result={'invalid': 'PRIVATE'}),
                 Task(id='failed', project_id='p1', target_type='directing_chapter', target_id='ch1',
                     kind='directing_divide', status='failed', error_message='PRIVATE')])
@@ -84,15 +84,15 @@ async def test_analysis_detail_redacts_and_reports_incomplete_history(tmp_path):
             assert not detail.source_changed and not detail.baseline_changed and not detail.issues
             assert detail.analysis.save_relation == 'unsaved'
             assert 'PRIVATE' not in detail.model_dump_json()
-            old = await history.analysis_detail('ch1', 'old')
-            assert old.analysis.save_relation == 'unknown'
-            assert len(old.issues) == 3 and old.result is None and old.raw_text is None
-            assert 'PRIVATE' not in old.model_dump_json()
+            incomplete = await history.analysis_detail('ch1', 'incomplete')
+            assert incomplete.analysis.save_relation == 'unsaved'
+            assert len(incomplete.issues) == 3 and incomplete.result is None and incomplete.raw_text is None
+            assert 'PRIVATE' not in incomplete.model_dump_json()
             failed = await history.analysis_detail('ch1', 'failed')
             assert failed.analysis.save_relation == 'not_applicable' and 'PRIVATE' not in failed.model_dump_json()
             page = await history.history('ch1')
             assert {row.id: row.save_relation for row in page.items if row.kind == 'analysis'} == {
-                'new': 'unsaved', 'old': 'unknown', 'failed': 'not_applicable'}
+                'new': 'unsaved', 'incomplete': 'unsaved', 'failed': 'not_applicable'}
             with pytest.raises(ValueError, match='章节不属于'):
                 await DivisionHistoryService(db, 'p2').analysis_detail('ch1', 'new')
             with pytest.raises(ValueError, match='分析记录不属于'):

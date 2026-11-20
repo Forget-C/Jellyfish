@@ -31,7 +31,6 @@ def test_task_command_reads_json_columns_and_omits_private_snapshot(tmp_path, ca
                 worker_instance_id='worker-old', created_at=datetime(2026, 10, 20, 6, 18, 17),
                 error_code='directing_output_invalid', error_message='普通设计不能声明规则阶段或条件',
                 input_snapshot={'api_key': 'PRIVATE-KEY', 'run_args': {
-                    'scene_version_design': True, 'design_scope_version': 1, 'design_scope': None,
                     'script_text': 'PRIVATE-SCRIPT'}},
                 result={'design_diagnostics': {'output': 'PRIVATE-MODEL-OUTPUT', 'issues': ['applicability.3：阶段错误']}}))
         statements = []
@@ -51,7 +50,6 @@ def test_task_command_reads_json_columns_and_omits_private_snapshot(tmp_path, ca
         assert report['database']['database'] == str(tmp_path / 'tasks.sqlite')
         assert report['task']['created_at'] == '2026-10-20T14:18:17+08:00'
         assert report['task']['worker_instance_id'] == 'worker-old'
-        assert report['design_flags']['design_scope_version'] == 1
         assert report['diagnostics']['available'] is True
         assert report['diagnostics']['issues'] == ['applicability.3：阶段错误']
         assert report['diagnostics']['output_chars'] == len('PRIVATE-MODEL-OUTPUT')

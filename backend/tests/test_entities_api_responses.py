@@ -119,34 +119,6 @@ def test_get_actor_entity_not_found_returns_api_response(client: TestClient) -> 
     }
 
 
-def test_delete_actor_entity_returns_empty_envelope(client: TestClient) -> None:
-    db = _FakeEntityDB()
-    actor = Actor(
-        origin="created",
-        id="actor-1",
-        name="演员一",
-        supplementary_info="",
-        tags=[],
-        prompt_template_id=None,
-        view_count=1,
-        style=ProjectStyle.real_people_city,
-        visual_style=ProjectVisualStyle.live_action,
-    )
-    actor.created_at = datetime.now(UTC)
-    actor.updated_at = actor.created_at
-    db.actors[actor.id] = actor
-
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        response = client.delete("/api/v1/studio/entities/actor/actor-1")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
-    assert "actor-1" not in db.actors
-
-
 def test_create_entity_invalid_entity_type_returns_api_response(client: TestClient) -> None:
     db = _FakeEntityDB()
     app.dependency_overrides[get_db] = _override_db(db)

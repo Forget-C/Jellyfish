@@ -33,14 +33,15 @@ import { VideoExperimentReferences, frameLabels, videoReferenceIssues, type Fram
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
 import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
-import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
+import { focusExperimentPromptEditor, orderedMediaReferences, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 type VideoMessage = {
   id: string; role: 'user' | 'assistant'; content: string; taskId?: string; status?: string
   progress?: number | null; videoUrl?: string; error?: string; ratio?: string
   frameFileIds?: Partial<Record<FrameSlot, string>>
-  subjectReferences?: { name: string; imageFileIds: string[]; videoFileIds: string[] }[]
+  subjectReferences?: VideoSubjectDraft[]
+  inputSnapshot?: ExperimentInputSnapshot
 }
 const ratioOptions = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
 
@@ -56,38 +57,31 @@ function extractVideoUrl(result: unknown): string | undefined {
 /** 将通用持久化消息转换为视频展示模型。 */
 function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
   const payload = item.payload ?? {}
-  const frameFileIds: Partial<Record<FrameSlot, string>> = {}
-  const frameReferences = payload.frame_references
-  if (frameReferences && typeof frameReferences === 'object') {
-    const references = frameReferences as Record<string, unknown>
-    if (typeof references.first_frame_file_id === 'string') frameFileIds.first = references.first_frame_file_id
-    if (typeof references.last_frame_file_id === 'string') frameFileIds.last = references.last_frame_file_id
-    const keyFrames = references.key_frame_file_ids
-    if (Array.isArray(keyFrames) && typeof keyFrames[0] === 'string') frameFileIds.key = keyFrames[0]
-  } else {
-    // 兼容已持久化的旧实验消息；新提交始终写入 frame_references。
-    ;(['first', 'last', 'key'] as FrameSlot[]).forEach((slot) => {
-      const value = payload[`${slot}_frame_file_id`]
-      if (typeof value === 'string') frameFileIds[slot] = value
-    })
+  const inputSnapshot = readExperimentInputSnapshot(item)
+  const frames = inputSnapshot?.media?.frames
+  const frameFileIds = {
+    first: frames?.first?.file_id,
+    last: frames?.last?.file_id,
+    key: orderedMediaReferences(frames?.keys)[0]?.file_id,
   }
-  const subjectReferences = Array.isArray(payload.subject_references) ? payload.subject_references.flatMap((value) => {
-    if (!value || typeof value !== 'object') return []
-    const subject = value as Record<string, unknown>
-    const name = typeof subject.name === 'string' ? subject.name : '主体'
-    return [{
-      name,
-      imageFileIds: Array.isArray(subject.image_file_ids) ? subject.image_file_ids.filter((id): id is string => typeof id === 'string') : [],
-      videoFileIds: Array.isArray(subject.video_file_ids) ? subject.video_file_ids.filter((id): id is string => typeof id === 'string') : [],
-    }]
-  }) : []
+  const subjects = inputSnapshot?.media?.subjects
+  const subjectReferences = Array.isArray(subjects) ? subjects.flatMap((subject, index) =>
+    subject && typeof subject.name === 'string' ? [{
+      id: `${item.id}-subject-${index}`,
+      name: subject.name,
+      media: orderedMediaReferences(subject.media).map(entry => ({ id: entry.file_id, kind: entry.media_kind })),
+    }] : [],
+  ) : []
+  const operation = inputSnapshot?.operation_input
   return {
     id: item.id, role: item.role === 'user' ? 'user' : 'assistant', content: item.content ?? '',
     taskId: item.task_id ?? undefined, status: item.status ?? undefined,
     progress: typeof payload.progress === 'number' ? payload.progress : undefined,
     videoUrl: extractVideoUrl(payload.result as Record<string, unknown> | undefined),
     error: typeof payload.error === 'string' ? payload.error : undefined,
-    ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined, frameFileIds, subjectReferences,
+    ratio: operation && typeof operation === 'object' && 'ratio' in operation && typeof operation.ratio === 'string'
+      ? operation.ratio : undefined,
+    frameFileIds, subjectReferences, inputSnapshot,
   }
 }
 
@@ -210,15 +204,18 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     })
   }
 
-  /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
+  /** 回填提示词、模型、画幅以及与主体分开的帧素材。 */
   const restoreUserMessage = (item: VideoMessage) => {
-    if (disabled) return
+    const snapshot = item.inputSnapshot
+    if (disabled || !snapshot) return
     confirmReplacement(() => {
-      applyFreeInput(item.content)
-      setFrameFileIds({})
-      setSubjectReferences([])
+      applyFreeInput(snapshot.prompt)
+      selectModel(snapshot.model_id ?? undefined)
+      if (item.ratio) setRatio(item.ratio)
+      setFrameFileIds(item.frameFileIds ?? {})
+      setSubjectReferences(item.subjectReferences ?? [])
       focusExperimentPromptEditor()
-      message.info('已回填提示词；请重新选择模型、画幅和参考素材后生成')
+      message.success('已回填历史输入，可修改后重新发送')
     }, hasFrameReferences || hasSubjectReferences)
   }
 
@@ -227,13 +224,13 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       const isUser = item.role === 'user'
       return <ExperimentMessageBubble
         key={item.id}
-        footer={isUser ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
+        footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
         identity={isUser ? '你' : '视频生成'}
         status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
         tone={isUser ? 'user' : 'assistant'}
       >
           {isUser || item.content !== '视频生成任务已提交，正在等待生成结果。' ? item.content : null}
-          {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: frameLabels[slot] }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.imageFileIds.map((id) => ({ id, label: `${subject.name}图片` })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.videoFileIds.map((id) => <Tag key={id} className="mt-1">{subject.name}视频：{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">画幅：{item.ratio}</div> : null}</> : null}
+          {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: frameLabels[slot] }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'image').map(({ id }) => ({ id, label: `${subject.name}图片` })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'video').map(({ id }) => <Tag key={`${subject.id}:${id}`} className="mt-1">{subject.name}视频：{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">画幅：{item.ratio}</div> : null}</> : null}
           {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
           {item.videoUrl ? <ExperimentResultMedia kind="video" urls={[item.videoUrl]} /> : null}
       </ExperimentMessageBubble>

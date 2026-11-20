@@ -33,7 +33,7 @@ async def test_project_resources_filter_owned_objects_before_pagination(monkeypa
                 Actor(id="c", name="机场创建", project_id="p1", origin="created", style="真人都市", created_at=created),
                 Actor(id="b", name="机场导入", project_id="p1", origin="library", style="真人都市", created_at=created),
                 Actor(id="a", name="演员", project_id="p1", style="真人都市", created_at=created,
-                      supplementary_info="机场", origin="project", source_character_id="role"),
+                      supplementary_info="机场", origin="project", source_kind="character", source_id="role"),
                 Actor(id="other", name="机场其他项目", project_id="p2", style="真人都市"),
                 Actor(id="shared", name="机场共享", style="真人都市"),
             ])

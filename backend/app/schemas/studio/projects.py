@@ -23,7 +23,7 @@ class ProjectBase(BaseModel):
     seed: int = Field(0, description="随机种子")
     unify_style: bool = Field(True, description="是否统一风格")
     progress: int = Field(0, description="进度百分比（0-100）")
-    default_video_ratio: str | None = Field(None, description="项目级默认视频比例；分镜未覆盖时生效")
+    default_video_ratio: str | None = Field(None, description="项目保存的默认视频比例；现行生成使用各次提交的画幅")
     stats: dict[str, Any] = Field(default_factory=dict, description="聚合统计（JSON）")
 
 

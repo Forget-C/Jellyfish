@@ -217,7 +217,15 @@ async def test_task_api_reads_and_cancels_through_single_service():
             cancellation = response.json()["data"]
             assert cancellation["status"] == "running" and cancellation["cancel_requested"]
             assert not cancellation["effective_immediately"]
+            statements = []
+            def record_result_sql(_conn, _cursor, statement, *_args):
+                statements.append(statement.lower())
+
+            event.listen(engine.sync_engine, "before_cursor_execute", record_result_sql)
             result = (await client.get(f"/api/v1/film/tasks/{media.id}/result")).json()["data"]
+            event.remove(engine.sync_engine, "before_cursor_execute", record_result_sql)
+            assert len(statements) <= 2
+            assert all("input_snapshot" not in sql and "storage_key" not in sql for sql in statements)
             assert result["status"] == "succeeded" and result["progress"] == 100
             assert result["finished_at_ts"] is not None
             assert result["generation_delivery"]["primary_file_id"] == "api-output"

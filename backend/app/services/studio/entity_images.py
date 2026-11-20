@@ -15,6 +15,8 @@ from app.services.common import entity_not_found
 from app.services.studio.files import require_available_file
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
 
+from app.services.studio.resource_references import require_no_saved_references
+
 IMAGE_ORDER_FIELDS = {"id", "quality_level", "view_angle", "created_at", "updated_at"}
 
 
@@ -103,6 +105,9 @@ async def update_entity_image(
     update_data = _parse_image_body(spec.image_update_model, body).model_dump(exclude_unset=True)
     if update_data.get("file_id") is not None:
         await require_available_file(db, file_id=update_data["file_id"], expected_type="image")
+    if obj.file_id and "file_id" in update_data and update_data["file_id"] != obj.file_id:
+        await require_no_saved_references(db, {"source_kind": normalize_entity_type(entity_type), "source_id": getattr(obj, spec.id_field), "source_image_id": image_id},
+                                          label="来源图片")
     if "file_id" in update_data:
         # 手动采用或清空使旧生成任务的自动采用失效。
         obj.version_id = spec.image_model.version_id + 1
@@ -129,6 +134,9 @@ async def delete_entity_image(
     obj = await db.get(spec.image_model, image_id)
     if obj is None or getattr(obj, spec.id_field) != entity_id:
         return
+    if obj.file_id:
+        await require_no_saved_references(db, {"source_kind": normalize_entity_type(entity_type), "source_id": getattr(obj, spec.id_field), "source_image_id": image_id},
+                                          label="来源图片")
     await db.delete(obj)
     await db.flush()
     await maintain_primary_image(db, spec, entity_id, None)

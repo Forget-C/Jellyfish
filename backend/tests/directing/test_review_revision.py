@@ -7,6 +7,18 @@ import pytest
 from tests.directing.samples import design_sample, plan_sample
 
 
+async def finish_candidate(db, task, raw):
+    """终结模型替身的候选，同时保存 Worker 使用的固定预览。"""
+    from app.services.directing.review_revision import ReviewRevisionService
+    from app.services.task_service import TaskService
+
+    tasks = TaskService(db)
+    await tasks.claim(task.id, worker_id='review-fixture')
+    candidate = await ReviewRevisionService(db, task.project_id).complete_candidate(task, raw)
+    await tasks.finish(task.id, result=candidate.model_dump(mode='json'))
+    return candidate
+
+
 def test_revision_rejects_unknown_fields_and_sound_values():
     from app.services.directing.review_revision import validate_candidate
     design = design_sample()
@@ -63,8 +75,7 @@ async def test_candidate_and_adoption_resume_without_duplicate_outputs(tmp_path,
             assert (await service.generate_revision(sequence_id, body)).id == task.id
             context = task.input_snapshot['run_args']['revision_context']
             assert await db.scalar(select(func.count()).select_from(DirectingRevision)) == before
-            task.status = 'succeeded'
-            task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'design', 'path': '/sound/execution', 'before': 'postproduction', 'after': 'unknown', 'reason': '暂不确定', 'problem_keys': [context['problem_keys'][0]]}], 'outcomes': [{'problem_key': context['problem_keys'][0], 'status': 'planned', 'reason': '说明待确定', 'choices': []}]}
+            await finish_candidate(db, task, {'input_identity': context['input_identity'], 'changes': [{'target': 'design', 'path': '/sound/execution', 'before': 'postproduction', 'after': 'unknown', 'reason': '暂不确定', 'problem_keys': [context['problem_keys'][0]]}], 'outcomes': [{'problem_key': context['problem_keys'][0], 'status': 'planned', 'reason': '说明待确定', 'choices': []}]})
             await db.flush()
             apply = ApplyReviewRevisionRequest(task_id=task.id, input_identity=context['input_identity'], candidate_identity=(await service.read_task(task.id)).revision.candidate_identity, request_id='adopt1')
             original_step = getattr(service, failed_step)
@@ -105,6 +116,8 @@ async def test_candidate_and_adoption_resume_without_duplicate_outputs(tmp_path,
         async with sessions.begin() as db:
             service = ReviewRevisionService(db, 'p1')
             assert await service.apply_revision(sequence_id, apply) == resumed
+            with pytest.raises(ValueError, match='候选或预览'):
+                await service.apply_revision(sequence_id, apply.model_copy(update={'candidate_identity': None}))
             assert await db.scalar(select(func.count()).select_from(DirectingRevision)) == before + 3
             assert await db.scalar(select(func.count()).select_from(Task).where(Task.kind == 'directing_review')) == 1
             with pytest.raises(ValueError, match='原请求'):
@@ -132,9 +145,9 @@ async def test_revision_rejects_changed_directions_source_and_wrong_project(tmp_
             body = ReviewRevisionRequest(prompt_revision_id=prompt_id, review_source={'kind': 'review', 'id': review_id}, request_id='generate1', model_id='text-review')
             task = await service.generate_revision(sequence_id, body)
             context = task.input_snapshot['run_args']['revision_context']
-            task.status = 'succeeded'
-            task.result = {'input_identity': context['input_identity'], 'changes': [], 'outcomes': []}
-            apply = ApplyReviewRevisionRequest(task_id=task.id, input_identity=context['input_identity'], request_id='adopt1', directions=[{'occurrence_id': 'o1', 'role': 'direction', 'finding_index': -1, 'text': '新方向'}])
+            candidate = await finish_candidate(db, task, {'input_identity': context['input_identity'],
+                'outcomes': [{'problem_key': key, 'status': 'unresolved', 'reason': '需要进一步确认'} for key in context['problem_keys']]})
+            apply = ApplyReviewRevisionRequest(task_id=task.id, input_identity=context['input_identity'], candidate_identity=candidate.candidate_identity, request_id='adopt1', directions=[{'occurrence_id': 'o1', 'role': 'direction', 'finding_index': -1, 'text': '新方向'}])
             with pytest.raises(ValueError, match='方向或输入'):
                 await service.apply_revision(sequence_id, apply)
             with pytest.raises(ValueError):
@@ -229,8 +242,7 @@ async def test_concurrent_sqlite_requests_have_one_task_and_one_adoption(tmp_pat
         async with sessions.begin() as db:
             task = await db.get(Task, first)
             context = task.input_snapshot['run_args']['revision_context']
-            task.status = 'succeeded'
-            task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'unit', 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8000, 'reason': '延长本次镜头', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'planned', 'reason': '延长镜头', 'choices': []} for key in context['problem_keys']]}
+            await finish_candidate(db, task, {'input_identity': context['input_identity'], 'changes': [{'target': 'unit', 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8000, 'reason': '延长本次镜头', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'planned', 'reason': '延长镜头', 'choices': []} for key in context['problem_keys']]})
             apply = ApplyReviewRevisionRequest(task_id=first, input_identity=context['input_identity'], candidate_identity=(await ReviewRevisionService(db, 'p1').read_task(task.id)).revision.candidate_identity, request_id='parallel-adopt')
         async def adopt():
             async with sessions.begin() as db:
@@ -272,8 +284,7 @@ async def test_task_source_api_restores_request_and_blocks_unresolved_adoption(t
         async with sessions.begin() as db:
             task = await db.get(Task, task_id)
             context = task.input_snapshot['run_args']['revision_context']
-            task.status = 'succeeded'
-            task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'design', 'path': '/sound/execution', 'before': 'postproduction', 'after': 'unknown', 'reason': '拟改动', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'unresolved', 'reason': '必须先修复编译器，不能删除正确设计', 'choices': []} for key in context['problem_keys']]}
+            await finish_candidate(db, task, {'input_identity': context['input_identity'], 'changes': [{'target': 'design', 'path': '/sound/execution', 'before': 'postproduction', 'after': 'unknown', 'reason': '拟改动', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'unresolved', 'reason': '必须先修复编译器，不能删除正确设计', 'choices': []} for key in context['problem_keys']]})
         async with client_for(sessions) as client:
             task_url = f'/api/v1/studio/projects/p1/directing/tasks/{task_id}'
             detail = (await client.get(task_url)).json()['data']
@@ -349,8 +360,7 @@ async def test_unsupported_unit_change_does_not_persist_versions(tmp_path):
             review_id = (await frozen(service, sequence_id, 'review', packet)).id
             task = await service.generate_revision(sequence_id, ReviewRevisionRequest(prompt_revision_id=prompt_id, review_source={'kind': 'review', 'id': review_id}, request_id='unsupported', model_id='text-review'))
             context = task.input_snapshot['run_args']['revision_context']
-            task.status = 'succeeded'
-            task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'unit', 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8500, 'reason': '不受支持的时长', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'planned', 'reason': '拟延长'} for key in context['problem_keys']]}
+            await finish_candidate(db, task, {'input_identity': context['input_identity'], 'changes': [{'target': 'unit', 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8500, 'reason': '不受支持的时长', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'planned', 'reason': '拟延长'} for key in context['problem_keys']]})
             apply = ApplyReviewRevisionRequest(task_id=task.id, input_identity=context['input_identity'], candidate_identity=(await service.read_task(task.id)).revision.candidate_identity, request_id='adopt-unsupported')
             before = await db.scalar(select(func.count()).select_from(DirectingRevision))
             result = await service.apply_revision(sequence_id, apply)
@@ -457,8 +467,7 @@ async def test_proactive_input_has_no_fabricated_review_and_requires_identity(tm
             context = task.input_snapshot['run_args']['revision_context']
             assert context['review'] is None and context['problem_keys'] == []
             assert task.input_snapshot['run_args']['instruction'] == body.instruction
-            task.status = 'succeeded'
-            task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'unit', 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8000, 'reason': '整体要求'}]}
+            await finish_candidate(db, task, {'input_identity': context['input_identity'], 'changes': [{'target': 'unit', 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8000, 'reason': '整体要求'}]})
             candidate = (await service.read_task(task.id)).revision
             apply = ApplyReviewRevisionRequest(task_id=task.id, input_identity=candidate.input_identity,
                 instruction=body.instruction, request_id='proactive-apply')
@@ -625,11 +634,10 @@ async def test_global_summary_cannot_adopt_or_create_empty_versions(tmp_path, st
                 instruction='整体修改', model_id='text-review')
             task = await service.generate_revision(sequence_id, body)
             context = task.input_snapshot['run_args']['revision_context']
-            task.status = 'succeeded'
             changes = [] if status == 'unchanged' else [{'target': 'unit', 'path': '/duration_ms',
                 'before': context['unit']['duration_ms'], 'after': 8000, 'reason': '部分修改'}]
-            task.result = {'input_identity': context['input_identity'], 'changes': changes,
-                'summary': {'status': status, 'reason': '整体仍待处理', 'choices': ['选择甲', '选择乙'] if status == 'needs_choice' else []}}
+            await finish_candidate(db, task, {'input_identity': context['input_identity'], 'changes': changes,
+                'summary': {'status': status, 'reason': '整体仍待处理', 'choices': ['选择甲', '选择乙'] if status == 'needs_choice' else []}})
             before = await db.scalar(select(func.count()).select_from(DirectingRevision))
             candidate = (await service.read_task(task.id)).revision
             assert candidate.summary.status == status and candidate.preview_text

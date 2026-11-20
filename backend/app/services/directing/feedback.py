@@ -4,14 +4,13 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.core.contracts.directing.feedback import (
-    ChapterAssemblyRead, ChapterSequenceRead, FeedbackRead, FeedbackWrite, KnowledgeCandidate,
-    ObservedRange, RepairItem, RepairRead, TransitionRead, TransitionWrite,
+    FeedbackRead, FeedbackWrite, KnowledgeCandidate,
+    RepairItem, RepairRead,
 )
 from app.core.contracts.directing.production import SequenceCut
 from app.core.contracts.directing.style import ProjectStyleProfile, StyleRule, StyleWrite
 from app.core.contracts.directing.common import Source
-from app.models.directing import ChapterTransition, DirectingRevision, RepairPlanLink, Sequence
-from app.models.studio import Chapter
+from app.models.directing import DirectingRevision, RepairPlanLink
 from app.services.directing.continuity import ContinuityService
 from app.services.directing.feedback_rules import changed_factors
 from app.services.directing.store import RevisionConflict
@@ -46,86 +45,6 @@ class FeedbackService(ContinuityService):
         await self.current_sequence(sequence_id)
         return await self.save_revision(sequence_id, kind=body.document.kind, payload=body.document.content.model_dump(mode='json'),
             revision_id=body.revision_id, expected_version=body.expected_version, parent_id=body.parent_id)
-
-    async def chapter_assembly(self, chapter_id: str) -> ChapterAssemblyRead:
-        """实时组合章节顺序和当前采用；预演、空白、未验收与待后期分别暴露。"""
-        chapter = await self.list_sequences(chapter_id)
-        sequences, gaps = [], []
-        for sequence in chapter.sequences:
-            feedback = await self.feedback(sequence.id)
-            cut = await self.active_cut(sequence.id)
-            items = sorted(SequenceCut.model_validate(cut.payload).items, key=lambda item: item.timeline_start_ms) if cut else []
-            review = next((row.content for row in feedback.reviews if row.id == feedback.current_review_id), None)
-            missing, media, starts, end = [], [], [], 0
-            for item in items:
-                if item.timeline_start_ms > end:
-                    missing.append(f'{end / 1000:g}–{item.timeline_start_ms / 1000:g} 秒为空白')
-                if item.kind == 'planned':
-                    missing.append(f'预演 {item.id} 尚无真实素材')
-                    end = item.timeline_start_ms + item.estimated_duration_ms
-                else:
-                    media.append(ObservedRange(take_id=item.take_id, media_range=item.media_range))
-                    starts.append(item.timeline_start_ms)
-                    end = item.timeline_start_ms + item.media_range.source_out_ms - item.media_range.source_in_ms
-            if not items:
-                missing.append('尚无已确认采用')
-            if not review or review.verdict != 'pass':
-                missing.append('场次尚未验收通过')
-            if sequence.source_changed:
-                missing.append('原文已变化，需核对场次')
-            sound = review.sound_status if review else 'pending_postproduction'
-            if sound == 'pending_postproduction':
-                missing.append('声音待后期处理')
-            gaps.extend(f'{sequence.title}：{message}' for message in missing)
-            sequences.append(ChapterSequenceRead(sequence_id=sequence.id, title=sequence.title, position=sequence.position,
-                cut_revision_id=cut.id if cut else None, review_id=feedback.current_review_id,
-                verdict=review.verdict if review else 'unreviewed', sound_status=sound, source_changed=sequence.source_changed,
-                items=media, timeline_starts_ms=starts, duration_ms=end, gaps=missing))
-        pairs = {(left.sequence_id, right.sequence_id): (left.cut_revision_id, right.cut_revision_id)
-                 for left, right in zip(sequences, sequences[1:])}
-        rows = list(await self.db.scalars(select(ChapterTransition).where(ChapterTransition.chapter_id == chapter_id)
-            .order_by(ChapterTransition.created_at, ChapterTransition.id)))
-        transitions = [TransitionRead(id=row.id, current=pairs.get((row.left_sequence_id, row.right_sequence_id)) ==
-            (row.left_cut_revision_id, row.right_cut_revision_id), content=TransitionWrite.model_validate(row.payload)) for row in rows]
-        for pair in pairs:
-            relevant = [row for row in transitions if row.current and (row.content.left_sequence_id, row.content.right_sequence_id) == pair]
-            if not relevant or relevant[-1].content.verdict != 'pass':
-                gaps.append('跨场衔接尚未通过：' + ' → '.join(next(row.title for row in sequences if row.sequence_id == identity) for identity in pair))
-        return ChapterAssemblyRead(chapter_id=chapter_id, title=chapter.title, sequences=sequences, transitions=transitions, gaps=gaps)
-
-    async def review_transition(self, chapter_id: str, body: TransitionWrite):
-        """锁定章节顺序与两场采用，以真正首尾边界保存一次跨场观察。"""
-        await self.chapter(chapter_id)
-        await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id).with_for_update())
-        ids = [body.left_sequence_id, body.right_sequence_id]
-        for identity in sorted(ids):
-            sequence = await self.current_sequence(identity)
-            if sequence.chapter_id != chapter_id:
-                raise ValueError('跨场审查只能使用本章节场次')
-            await self.db.scalar(select(Sequence).where(Sequence.id == identity).with_for_update())
-        assembly = await self.chapter_assembly(chapter_id)
-        if not any(left.sequence_id == ids[0] and right.sequence_id == ids[1] for left, right in zip(assembly.sequences, assembly.sequences[1:])):
-            raise RevisionConflict('章节相邻顺序已变化，请刷新')
-        for sequence_id, cut_id, frame_id, edge in [(ids[0], body.left_cut_revision_id, body.left_frame_id, 'end'),
-                                                   (ids[1], body.right_cut_revision_id, body.right_frame_id, 'start')]:
-            _, items = await self.current_items(sequence_id, expected_cut_id=cut_id)
-            frame = await self.cut_frame(sequence_id, frame_id)
-            boundary = items[-1] if edge == 'end' and items else items[0] if items else None
-            if boundary is None or frame.edge != edge or not self.frame_matches(frame, boundary):
-                raise ValueError('跨场审查必须选择整场实际首尾片段的边界帧')
-        if not body.observation.text or not body.observation.sources:
-            raise ValueError('跨场观察必须有内容和来源')
-        # Notes are tied to this observed boundary; arbitrary foreign file/revision claims are rejected.
-        for note in (body.observation, body.sound):
-            for source in note.sources:
-                if source.kind != 'human' or source.file_id or source.media_range:
-                    raise ValueError('跨场记录使用人工署名；媒体证据由所选边界帧提供')
-        row = ChapterTransition(id=uuid4().hex, chapter_id=chapter_id, **{key: getattr(body, key) for key in (
-            'left_sequence_id', 'right_sequence_id', 'left_cut_revision_id', 'right_cut_revision_id', 'left_frame_id', 'right_frame_id')},
-            payload=body.model_dump(mode='json'), actor_id='local-user')
-        self.db.add(row)
-        await self.db.flush()
-        return await self.chapter_assembly(chapter_id)
 
     async def propose_style(self, sequence_id: str, candidate_id: str):
         """显式将已确认经验转为本场适用的风格草稿，仍须在风格页确认。"""

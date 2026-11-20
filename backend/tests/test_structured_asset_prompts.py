@@ -185,3 +185,13 @@ async def test_invalid_stored_template_returns_actionable_error(asset_db):
     with pytest.raises(HTTPException, match="模板语法无效") as error:
         await build_actor_image_base_draft(asset_db, actor_id="actor", image_id=1)
     assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_unselected_template_does_not_change_next_generation(asset_db):
+    asset_db.add(PromptTemplate(id="ordinary", name="普通模板", category=PromptCategory.actor_image,
+                                content="不应自动选用", variables=[], is_default=False))
+    await asset_db.flush()
+    draft = await build_actor_image_base_draft(asset_db, actor_id="actor", image_id=2)
+    assert draft.template_id is None and draft.template_version is None
+    assert "左眉疤痕" in draft.prompt

@@ -188,7 +188,7 @@ export class StudioFilesService {
         });
     }
     /**
-     * 删除文件（记录 + 存储对象）
+     * 申请删除文件
      * @returns ApiResponse_NoneType_ Successful Response
      * @throws ApiError
      */
@@ -204,6 +204,7 @@ export class StudioFilesService {
                 'file_id': fileId,
             },
             errors: {
+                409: `文件仍在使用，长期参考冲突列出使用对象和解除方法`,
                 422: `Validation Error`,
             },
         });
@@ -231,6 +232,7 @@ export class StudioFilesService {
                 'project_id': projectId,
             },
             errors: {
+                409: `仍有其他用途，长期参考冲突列出使用对象和解除方法`,
                 422: `Validation Error`,
             },
         });

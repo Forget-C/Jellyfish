@@ -36,8 +36,8 @@ def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
         "tags": obj.tags or [],
         "prompt_template_id": obj.prompt_template_id,
         "view_count": obj.view_count,
-        "style": obj.style if obj.origin == "created" or obj.details_editable else None,
-        "visual_style": obj.visual_style if obj.origin == "created" or obj.details_editable else None,
+        "style": obj.style,
+        "visual_style": obj.visual_style,
         "thumbnail": thumbnail,
     }
 
@@ -69,7 +69,7 @@ async def list_entities_paginated(
         # Match the source label on cards, where a converted actor has precedence over origin.
         card_source = spec.model.origin
         if entity_type_norm == "actor":
-            card_source = case((spec.model.source_character_id != "", "role_conversion"), else_=card_source)
+            card_source = case((spec.model.source_character_id.is_not(None), "role_conversion"), else_=card_source)
         stmt = stmt.where(card_source.in_(source))
     if has_cover is not None:
         image_parent = getattr(spec.image_model, spec.id_field)
@@ -77,12 +77,10 @@ async def list_entities_paginated(
             image_parent == spec.model.id, spec.image_model.file_id != "",
         ).exists()
         stmt = stmt.where(cover_exists if has_cover else ~cover_exists)
-    has_details = spec.model.origin == "created"
-    has_details = has_details | spec.model.details_editable.is_(True)
     if style:
-        stmt = stmt.where(has_details, getattr(spec.model, "style") == style)
+        stmt = stmt.where(spec.model.style == style)
     if visual_style:
-        stmt = stmt.where(has_details, getattr(spec.model, "visual_style") == visual_style)
+        stmt = stmt.where(spec.model.visual_style == visual_style)
     stmt = apply_order(
         stmt,
         model=spec.model,
@@ -158,7 +156,7 @@ async def create_entity(
                 raise HTTPException(status_code=400, detail="Chapter does not belong to the same project")
 
     from app.services.studio.resource_references import validate_resource_references
-    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []))
+    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []), saving=True)
     obj = spec.model(**data)
     db.add(obj)
     await flush_resource(db)
@@ -250,9 +248,11 @@ async def update_entity(
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 255:
             raise HTTPException(422, "名称不能为空且不能超过255字符")
         update_data["name"] = name.strip()
+    if obj.origin == "created" and any(key in update_data and update_data[key] is None for key in ("style", "visual_style")):
+        raise HTTPException(422, "设定创建对象需要保留风格")
     if "references" in update_data:
         from app.services.studio.resource_references import validate_resource_references
-        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"])
+        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"], saving=True)
 
     for key, value in update_data.items():
         setattr(obj, key, value)
@@ -275,16 +275,11 @@ async def delete_entity(
 ) -> None:
     entity_type = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type)
-    obj = await db.get(spec.model, entity_id)
+    obj = await db.get(spec.model, entity_id, with_for_update=True, populate_existing=True)
     if obj is None:
         return
-    if getattr(obj, "source_character_id", None) or (obj.origin != "created" and obj.project_id is None):
-        for kind in ("actor", "character", "scene", "prop", "costume"):
-            model = entity_spec(kind).model
-            configurations = await db.scalars(select(model.references))
-            if any(reference.get("source_kind") == entity_type and reference.get("source_id") == entity_id
-                   for references in configurations for reference in references):
-                raise HTTPException(409, "演员仍被对象直接参考，请先解除参考")
+    from app.services.studio.resource_references import require_no_saved_references
+    await require_no_saved_references(db, {"source_kind": entity_type, "source_id": obj.id}, label=f"来源对象「{obj.name}」")
     if obj.project_id is None:
         # 删除独立副本后，原项目对象可再次明确入库。
         for kind in (("actor", "character") if entity_type == "actor" else (entity_type,)):

@@ -1,6 +1,5 @@
 """章节锁内记录不可变划分快照，供整章和基本信息写入共同使用。"""
 
-from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -24,11 +23,10 @@ async def current_version(db: AsyncSession, chapter_id: str, *, locked: bool = F
 
 async def record_version(db: AsyncSession, snapshot: ChapterSequences, *, origin: str,
                          source_task_id: str | None = None, source_revision_id: str | None = None,
-                         request_id: str | None = None, mapping: dict | None = None,
-                         make_current: bool = True, created_at: datetime | None = None) -> ChapterSequences:
+                         mapping: dict | None = None) -> ChapterSequences:
     """调用者须持章节锁并位于保存点内；快照、指向和业务写入一起回滚。"""
     head = await db.get(DivisionHead, snapshot.chapter_id, populate_existing=True, with_for_update=True)
-    if make_current and origin not in ('restore', 'baseline') and await db.get(
+    if origin != 'restore' and await db.get(
             ChapterShootingExplanation, (snapshot.chapter_id, snapshot.source_version), with_for_update=True) is None:
         value = await inherited_preparation(db, snapshot.chapter_id, snapshot.source_version, snapshot.raw_text, locked=True)
         if value.notes:
@@ -43,14 +41,12 @@ async def record_version(db: AsyncSession, snapshot: ChapterSequences, *, origin
     db.add(DivisionVersion(id=identity, chapter_id=snapshot.chapter_id, number=number, origin=origin,
         source_version=snapshot.source_version, sequence_count=len(snapshot.sequences),
         source_task_id=source_task_id, source_revision_id=source_revision_id,
-        base_revision_id=head.revision_id if head and make_current else None, request_id=request_id,
-        snapshot=saved.model_dump(mode='json'), mapping=mapping or {},
-        **({'created_at': created_at} if created_at else {})))
+        base_revision_id=head.revision_id if head else None,
+        snapshot=saved.model_dump(mode='json'), mapping=mapping or {}))
     await db.flush()
-    if make_current:
-        if head:
-            head.revision_id = identity
-        else:
-            db.add(DivisionHead(chapter_id=snapshot.chapter_id, revision_id=identity))
+    if head:
+        head.revision_id = identity
+    else:
+        db.add(DivisionHead(chapter_id=snapshot.chapter_id, revision_id=identity))
     await db.flush()
     return snapshot.model_copy(update={'current_version': saved.current_version})

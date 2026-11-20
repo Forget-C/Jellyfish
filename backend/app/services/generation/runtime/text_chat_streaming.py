@@ -38,7 +38,7 @@ from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
 from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.llm.resolver import build_text_chat_model
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
 
 _runtime = TextStreamingRuntime()
 _stream_inputs: dict[str, _TextStreamInput] = {}
@@ -61,6 +61,7 @@ def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
         session_id=message.session_id,
         role="assistant" if message.role == "assistant" else "user",
         content=message.content,
+        payload=message.payload if message.role == "user" else {},
         sequence=message.sequence,
         created_at=message.created_at,
         updated_at=message.updated_at,
@@ -85,7 +86,7 @@ async def create_text_stream_run(
     await build_text_chat_model(db, model_id=model_id, thinking=False)
     user_message = (
         await append_experiment_messages(
-            db, session_id=session_id, drafts=[ExperimentMessageDraft(role="user", content=content, payload={"model_id": model_id})]
+            db, session_id=session_id, drafts=[experiment_user_message(prompt=content, model_id=model_id)]
         )
     )[0]
     session.updated_at = func.now()
@@ -122,7 +123,7 @@ async def create_text_async_task(
         db,
         session_id=session_id,
         drafts=[
-            ExperimentMessageDraft(role="user", content=content, payload={"model_id": model_id}),
+            experiment_user_message(prompt=content, model_id=model_id),
             ExperimentMessageDraft(role="task", content="文本生成任务已提交，正在等待生成结果。", payload={"modality": "text"}),
         ],
     )
@@ -140,7 +141,7 @@ async def execute_text_inline(
     await _require_text_session(db, session_id=session_id)
     command = _text_chat_command(session_id=session_id, model_id=model_id, content=content, delivery=GenerationDelivery.inline)
     snapshot = await GenerationEntityGate().validate(db, command)
-    user_message = (await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(role="user", content=content, payload={"model_id": model_id})]))[0]
+    user_message = (await append_experiment_messages(db, session_id=session_id, drafts=[experiment_user_message(prompt=content, model_id=model_id)]))[0]
     text = await _invoke_text_snapshot(db, snapshot_payload=snapshot.model_dump(mode="json"))
     assistant_message = (await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(role="assistant", content=text, payload={"model_id": snapshot.model_id})]))[0]
     return user_message, assistant_message

@@ -3,12 +3,12 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Computed, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, Index, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Computed, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.mysql import DATETIME, MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
-from app.models.base import TimestampMixin
+from app.models.base import HighPrecisionCurrentTimestamp, TimestampMixin
 
 
 def revision_created_at() -> datetime:
@@ -53,7 +53,7 @@ class ChapterShootingExplanation(Base, TimestampMixin):
     last_request_id: Mapped[str | None] = mapped_column(String(64))
     last_request_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'),
-                                                default=revision_created_at, server_default=func.now(), nullable=False)
+                                                default=revision_created_at, server_default=HighPrecisionCurrentTimestamp(), nullable=False)
 
 
 class DivisionCommit(Base, TimestampMixin):
@@ -81,18 +81,16 @@ class DivisionVersion(Base):
     source_task_id: Mapped[str | None] = mapped_column(ForeignKey('tasks.id', ondelete='RESTRICT'))
     source_revision_id: Mapped[str | None] = mapped_column(ForeignKey('directing_division_versions.id', ondelete='RESTRICT'))
     base_revision_id: Mapped[str | None] = mapped_column(ForeignKey('directing_division_versions.id', ondelete='RESTRICT'))
-    request_id: Mapped[str | None] = mapped_column(String(64))
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     mapping: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'),
-                                                default=revision_created_at, server_default=func.now(), nullable=False)
+                                                default=revision_created_at, server_default=HighPrecisionCurrentTimestamp(), nullable=False)
 
     __table_args__ = (
         UniqueConstraint('chapter_id', 'number', name='uq_division_version_number'),
         UniqueConstraint('chapter_id', 'id', name='uq_division_version_chapter_identity'),
-        UniqueConstraint('chapter_id', 'request_id', name='uq_division_version_request'),
         CheckConstraint('number > 0 AND sequence_count >= 0', name='ck_division_version_numbers'),
-        CheckConstraint("origin IN ('manual','ai','restore','imported','baseline')", name='ck_division_version_origin'),
+        CheckConstraint("origin IN ('manual','ai','restore')", name='ck_division_version_origin'),
     )
 
 
@@ -109,136 +107,13 @@ class DivisionHead(Base):
         name='fk_division_head_version', ondelete='RESTRICT'),)
 
 
-class SceneVersionRecord(Base, TimestampMixin):
-    """可编辑方案；source_bases 保存已核实原文证据，不构成逐次保存历史。"""
-
-    __tablename__ = 'directing_scene_versions'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), nullable=False, index=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    source_bases: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
-    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    create_request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    last_save_request_id: Mapped[str | None] = mapped_column(String(64))
-
-    __table_args__ = (
-        UniqueConstraint('sequence_id', 'create_request_id', name='uq_scene_version_create_request'),
-        CheckConstraint('revision > 0', name='ck_scene_version_revision'),
-    )
-
-
-class SceneUnitIdentityRecord(Base):
-    """版本内已保存过的单元身份；移除当前单元不释放身份。"""
-
-    __tablename__ = 'directing_scene_unit_identities'
-
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), primary_key=True)
-    unit_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-
-
-class SceneTakeReviewRecord(Base):
-    """仅新增的人工审片证据；后续方案保存不更新本记录。"""
-
-    __tablename__ = 'directing_scene_take_reviews'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    take_kind: Mapped[str] = mapped_column(String(32), nullable=False)
-    take_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    basis_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
-
-    __table_args__ = (Index('ix_scene_take_review_basis', 'version_id', 'basis_key'), UniqueConstraint('version_id', 'revision', 'take_kind', 'take_id', name='uq_scene_take_review_revision'),)
-
-
-class SceneCutReviewRecord(Base):
-    """整场验收仅新增；完整请求与内容固定，后续编辑不改写证据。"""
-
-    __tablename__ = 'directing_scene_cut_reviews'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    review: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    basis_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
-
-    __table_args__ = (Index('ix_scene_cut_review_basis', 'version_id', 'basis_key'), UniqueConstraint('version_id', 'request_id', name='uq_scene_cut_review_request'),)
-
-
-class SceneSeamReviewRecord(Base):
-    """局部接缝审查仅新增；完整请求与内容固定，后续编辑不改写证据。"""
-
-    __tablename__ = 'directing_scene_seam_reviews'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    basis_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    review: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
-
-    __table_args__ = (Index('ix_scene_seam_review_basis', 'version_id', 'basis_key'), UniqueConstraint('version_id', 'request_id', name='uq_scene_seam_review_request'),)
-
-
-class SceneEndFrameRecord(Base):
-    """落幅证据仅新增；固定原请求、采用及实际解码帧位置。"""
-
-    __tablename__ = 'directing_scene_end_frames'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    request: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    clip: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    file_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    at_ms: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
-
-    __table_args__ = (UniqueConstraint('version_id', 'request_id', name='uq_scene_end_frame_request'),)
-
-
-class SceneDeliveryRecord(Base):
-    """明确交付时固定内容和适用审片；后来编辑不改写历史。"""
-
-    __tablename__ = 'directing_scene_deliveries'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), nullable=False)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    version_title: Mapped[str] = mapped_column(String(255), nullable=False)
-    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    review_id: Mapped[str | None] = mapped_column(ForeignKey('directing_scene_cut_reviews.id', ondelete='RESTRICT'))
-    review: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
-
-    __table_args__ = (UniqueConstraint('version_id', 'request_id', name='uq_scene_delivery_request'),)
-
-
-class SceneDeliveryUse(Base):
-    """章节当前使用指向仅由新的明确交付替换，历史请求核实不回退。"""
-
-    __tablename__ = 'directing_scene_delivery_uses'
-
-    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), primary_key=True)
-    delivery_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_deliveries.id', ondelete='RESTRICT'), nullable=False)
-
-
 class DirectingRevision(Base, TimestampMixin):
     """设计、计划、提示词、审稿、剪辑共用版本机制，payload 按 kind 强类型验证。"""
 
     __tablename__ = "directing_revisions"
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), "mysql"),
-                                                default=revision_created_at, server_default=func.now(), nullable=False)
+                                                default=revision_created_at, server_default=HighPrecisionCurrentTimestamp(), nullable=False)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     sequence_id: Mapped[str] = mapped_column(ForeignKey("directing_sequences.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -419,24 +294,6 @@ class SeamReview(Base):
     __table_args__ = (CheckConstraint("verdict IN ('pass','revise')", name='ck_directing_seam_verdict'),)
 
 
-class ChapterTransition(Base):
-    """不可变跨场审查固定两端采用和实际帧，顺序改变后仅保留历史。"""
-
-    __tablename__ = 'directing_chapter_transitions'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    chapter_id: Mapped[str] = mapped_column(ForeignKey('chapters.id', ondelete='RESTRICT'), index=True)
-    left_sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'))
-    right_sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'))
-    left_cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'))
-    right_cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'))
-    left_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'))
-    right_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'))
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at)
-
-
 class RepairPlanLink(Base):
     """连接明确返工诊断与派生计划，后续任务和 Take 沿计划身份追溯。"""
 
@@ -444,63 +301,3 @@ class RepairPlanLink(Base):
 
     repair_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), primary_key=True)
     plan_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), primary_key=True, unique=True)
-
-
-class SceneCopyOrigin(Base):
-    """固定另存授权与真实来源，允许沿用明确复制的历史证据而不复制任务。"""
-
-    __tablename__ = 'directing_scene_copy_origins'
-
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), primary_key=True)
-    source_version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    request: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    review_ids: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-
-
-class InstructionBasisRecord(Base):
-    """不可变的正文依据确认回执，不随场次版本普通保存改写。"""
-
-    __tablename__ = 'directing_instruction_bases'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    unit_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    inputs: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    instruction: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    __table_args__ = (UniqueConstraint('version_id', 'unit_id', 'request_id', name='uq_instruction_basis_request'),)
-
-
-class SceneVideoExecution(Base):
-    """一次明确视频执行的不可变输入；只在创建事务内绑定任务身份。"""
-
-    __tablename__ = 'directing_scene_video_executions'
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
-    unit_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    preparation: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    task_id: Mapped[str | None] = mapped_column(ForeignKey('tasks.id', ondelete='RESTRICT'), unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    __table_args__ = (UniqueConstraint('version_id', 'unit_id', 'request_id', name='uq_scene_video_request'),)
-
-
-class SceneTakeRecord(Base):
-    """新场次版本的候选素材，指向真实执行与 TaskOutput，不借用旧计划身份。"""
-
-    __tablename__ = 'directing_scene_takes'
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    execution_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_video_executions.id', ondelete='RESTRICT'), nullable=False)
-    task_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    output_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
-    file_id: Mapped[str] = mapped_column(ForeignKey('files.id', ondelete='RESTRICT'), nullable=False)
-    annotation: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    __table_args__ = (
-        ForeignKeyConstraint(['task_id', 'output_ordinal'], ['task_outputs.task_id', 'task_outputs.ordinal'], ondelete='RESTRICT'),
-        UniqueConstraint('task_id', 'output_ordinal', name='uq_scene_take_output'),
-    )

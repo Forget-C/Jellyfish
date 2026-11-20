@@ -6,7 +6,6 @@ import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSummary_';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
-import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
 import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_ChapterWorkbenchManagement_ } from '../models/ApiResponse_ChapterWorkbenchManagement_';
@@ -17,7 +16,6 @@ import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_Direc
 import type { ApiResponse_DivisionAnalysisDetail_ } from '../models/ApiResponse_DivisionAnalysisDetail_';
 import type { ApiResponse_DivisionHistoryPage_ } from '../models/ApiResponse_DivisionHistoryPage_';
 import type { ApiResponse_DivisionPreview_ } from '../models/ApiResponse_DivisionPreview_';
-import type { ApiResponse_DivisionReceiptDetail_ } from '../models/ApiResponse_DivisionReceiptDetail_';
 import type { ApiResponse_DivisionSaved_ } from '../models/ApiResponse_DivisionSaved_';
 import type { ApiResponse_DivisionVersionDetail_ } from '../models/ApiResponse_DivisionVersionDetail_';
 import type { ApiResponse_EditableRevisionFields_ } from '../models/ApiResponse_EditableRevisionFields_';
@@ -84,7 +82,6 @@ import type { StoryboardRestore } from '../models/StoryboardRestore';
 import type { StoryboardRetry } from '../models/StoryboardRetry';
 import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
-import type { TransitionWrite_Input } from '../models/TransitionWrite_Input';
 import type { VersionRequest } from '../models/VersionRequest';
 import type { VisualRequest } from '../models/VisualRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -1108,36 +1105,8 @@ export class StudioDirectingService {
         });
     }
     /**
-     * Division Legacy Receipt
-     * 只读查看尚未接入的旧保存记录，缺失数据保留说明。
-     * @returns ApiResponse_DivisionReceiptDetail_ Successful Response
-     * @throws ApiError
-     */
-    public static directingDivisionLegacyReceipt({
-        projectId,
-        chapterId,
-        requestId,
-    }: {
-        projectId: string,
-        chapterId: string,
-        requestId: string,
-    }): CancelablePromise<ApiResponse_DivisionReceiptDetail_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/history/receipts/{request_id}',
-            path: {
-                'project_id': projectId,
-                'chapter_id': chapterId,
-                'request_id': requestId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * Division Analysis
-     * 展开分析时读取业务快照，旧资料缺失不冒充完整版本。
+     * 展开分析时按需读取业务快照与资料缺失说明。
      * @returns ApiResponse_DivisionAnalysisDetail_ Successful Response
      * @throws ApiError
      */
@@ -2269,60 +2238,6 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
             },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Chapter Assembly
-     * 查询章节顺序播放依据、验收缺口与跨场审查。
-     * @returns ApiResponse_ChapterAssemblyRead_ Successful Response
-     * @throws ApiError
-     */
-    public static directingChapterAssembly({
-        projectId,
-        chapterId,
-    }: {
-        projectId: string,
-        chapterId: string,
-    }): CancelablePromise<ApiResponse_ChapterAssemblyRead_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/assembly',
-            path: {
-                'project_id': projectId,
-                'chapter_id': chapterId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Review Transition
-     * 保存人工跨场审查，校验相邻顺序及实际边界。
-     * @returns ApiResponse_ChapterAssemblyRead_ Successful Response
-     * @throws ApiError
-     */
-    public static directingReviewTransition({
-        projectId,
-        chapterId,
-        requestBody,
-    }: {
-        projectId: string,
-        chapterId: string,
-        requestBody: TransitionWrite_Input,
-    }): CancelablePromise<ApiResponse_ChapterAssemblyRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/transitions',
-            path: {
-                'project_id': projectId,
-                'chapter_id': chapterId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

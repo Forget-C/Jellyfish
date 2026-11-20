@@ -5,22 +5,20 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.studio.experiment_sessions import (
-    ExperimentMessageCreate,
     ExperimentMessageRead,
-    ExperimentMessageUpdate,
     ExperimentSessionCreate,
     ExperimentSessionRead,
     ExperimentSessionUpdate,
     LabType,
 )
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages, has_active_experiment_tasks
+from app.services.studio.experiment_messages import read_experiment_messages, has_active_experiment_tasks
 
 router = APIRouter()
 
@@ -84,46 +82,6 @@ async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(g
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
     rows.reverse()
     return success_response(await read_experiment_messages(db, rows))
-
-
-@router.post("/{session_id}/messages", response_model=ApiResponse[ExperimentMessageRead], status_code=status.HTTP_201_CREATED)
-async def create_experiment_message(session_id: str, body: ExperimentMessageCreate, db: AsyncSession = Depends(get_db)) -> ApiResponse[ExperimentMessageRead]:
-    """追加一条用户可见消息；该数据不会传入模型上下文。"""
-    if await db.get(ExperimentSession, session_id) is None:
-        raise HTTPException(status_code=404, detail="Experiment session not found")
-    if body.task_id is not None or body.role == "task":
-        raise HTTPException(status_code=422, detail="task_messages_are_created_by_generation_submission")
-    items = await append_experiment_messages(
-        db,
-        session_id=session_id,
-        drafts=[ExperimentMessageDraft(**body.model_dump())],
-    )
-    item = items[0]
-    session = await db.get(ExperimentSession, session_id)
-    if session is not None:
-        session.updated_at = func.now()
-    await db.commit()
-    await db.refresh(item)
-    return created_response((await read_experiment_messages(db, [item]))[0])
-
-
-@router.patch("/messages/{message_id}", response_model=ApiResponse[ExperimentMessageRead])
-async def update_experiment_message(message_id: str, body: ExperimentMessageUpdate, db: AsyncSession = Depends(get_db)) -> ApiResponse[ExperimentMessageRead]:
-    """更新普通或流式消息；异步任务消息只能从任务事实派生。"""
-    item = await db.get(ExperimentMessage, message_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Experiment message not found")
-    if item.task_id is not None or item.role == "task":
-        raise HTTPException(status_code=409, detail="task_message_is_read_only")
-    if body.content is not None:
-        item.content = body.content
-    if body.status is not None:
-        item.status = body.status
-    if body.payload is not None:
-        item.payload = body.payload
-    await db.commit()
-    await db.refresh(item)
-    return success_response((await read_experiment_messages(db, [item]))[0])
 
 
 @router.delete("/{session_id}", response_model=ApiResponse[None])

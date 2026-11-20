@@ -37,7 +37,7 @@ try {
   assert.ok(data)
   const sequence = data.sequences[0]
   const versions = `${directing}/sequences/${sequence.id}/versions`
-  const { delivery_id: deliveryId, version_id: versionId, file_id: fileId } = await request(`${api}/browser-test/legacy-delivery/${sequence.id}`, 'POST')
+  const versionId = 'retired-version'
   assert.equal((await fetch(versions)).status, 404)
   assert.equal((await fetch(`${versions}/${versionId}`)).status, 404)
   const chapters = `${origin}/projects/${project}?tab=chapters`
@@ -56,8 +56,10 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const newHost = page.getByRole('region', { name: '工作台管理', exact: true })
   const versionReads = []
+  const assemblyRequests = []
   page.on('request', request => {
     if (request.url().includes(`/directing/sequences/${sequence.id}/versions`)) versionReads.push(request.url())
+    if (/\/directing\/chapters\/[^/]+\/(assembly|transitions)$/.test(new URL(request.url()).pathname)) assemblyRequests.push(request.url())
   })
 
   await page.goto(chapters)
@@ -78,23 +80,24 @@ try {
 
   const management = page.getByRole('region', { name: '工作台管理', exact: true })
   const retired = page.getByText('章节组合已停用，可在工作台管理中继续准备场次。', { exact: true })
-  for (const link of [chapterPage + '&panel=assembly', old.replace('/' + sequence.id, '') + '?panel=assembly&sequence=' + sequence.id]) {
+  for (const link of [chapterPage + '&panel=assembly&sequence=' + sequence.id,
+    old.replace('/' + sequence.id, '') + '?panel=assembly&sequence=' + sequence.id]) {
     await page.goto(link)
-    await page.waitForURL(url => url.pathname === managementPath && !url.searchParams.has('panel'))
+    await page.waitForURL(url => url.pathname === managementPath && !url.searchParams.has('panel') && url.searchParams.get('sequence') === sequence.id)
     await retired.waitFor()
     await management.getByRole('button', { name: `1. ${sequence.title}`, exact: true }).waitFor()
     assert.equal(await management.getByRole('button', { name: '按场次顺序播放', exact: true }).count(), 0)
   }
+  await page.goto(chapters + '&panel=assembly')
+  await page.getByText('章节组合已停用，旧链接缺少章节标识。', { exact: true }).waitFor()
+  assert.deepEqual(assemblyRequests, [])
   await page.goto(chapterPage.replace('/projects/' + project, '/projects/wrong-project') + '&panel=assembly')
   await page.waitForURL(url => url.pathname === managementPath.replace(project, 'wrong-project'))
   await management.getByText('章节不属于当前项目', { exact: true }).waitFor()
   assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
   assert.equal((await fetch(`${directing}/chapters/${chapter}/deliveries`)).status, 404)
   assert.equal((await fetch(`${directing}/sequences/${sequence.id}/deliveries`)).status, 404)
-  const file = await request(`${api}/api/v1/studio/files/${fileId}`)
-  assert.deepEqual(file.usages.map(usage => usage.source_ref), ['scene-delivery:' + deliveryId])
-  assert.equal((await fetch(`${api}/api/v1/studio/files/${fileId}`, { method: 'DELETE' })).status, 409)
-  console.log('management routes and retained file protection verified', output)
+  console.log('management and retired routes verified', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   throw error

@@ -8,7 +8,8 @@ import { WorkbenchStoryboardRetry } from './WorkbenchStoryboardRetry'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
 
 /** 管理页处理候选；共同编辑器保留保存、修订、应用回执与撤销校验。 */
-export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onSubmissionChange, onEnter, onReviewSource, quickEntry = false }: {
+export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onSubmissionChange, onEnter, onReviewSource, candidateId, quickEntry = false }: {
+  candidateId?: string
   quickEntry?: boolean
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary; historical: boolean
   onClose: () => void; onChange: (acceptedTaskId?: string) => void; onEnter: () => void; onReviewSource: () => void
@@ -22,7 +23,8 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
   const entering = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  const taskId = canvas.latest_storyboard?.task_id ?? canvas.candidate_storyboard_task_id
+  const displayedTask = !candidateId || candidateId === canvas.latest_storyboard?.task_id ? canvas.latest_storyboard : undefined
+  const taskId = candidateId ?? displayedTask?.task_id
   useEffect(() => {
     if (!taskId) return
     let active = true
@@ -31,7 +33,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
     void request.then(({ data }) => { if (active && data) setTask(data) })
       .catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, taskId, canvas.latest_storyboard?.status, canvas.latest_storyboard?.stage, refresh])
+  }, [projectId, chapterId, sequenceId, taskId, displayedTask?.status, displayedTask?.stage, refresh])
   const task = loadedTask?.task_id === taskId ? loadedTask : undefined
   const ownership = editor.ownership
   const matched = editor.current?.scene?.chapter_id === chapterId && editor.current.scene.sequence_id === sequenceId
@@ -104,8 +106,8 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
       {editor.current?.document.storyboard && !editor.recovery && <Button onClick={() => {
         editor.handoffStoryboardApplication(); onEnter()
       }}>进入当前画布</Button>}
-      <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
-        onAccepted={onChange} onSubmissionChange={onSubmissionChange} />
+      {displayedTask && <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
+        onAccepted={onChange} onSubmissionChange={onSubmissionChange} />}
     </Space>
     </div>
   </Drawer>

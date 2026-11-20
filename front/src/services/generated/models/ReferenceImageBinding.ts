@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { OutputIdentity } from './OutputIdentity';
 /**
- * 固定具体文件；新增来源仅支持图片内容卡，旧的直接文件与历史产物绑定仍保留。
+ * 固定具体文件。绑定来源使用图片内容卡；明确解除来源后仍可保留固定文件。
  */
 export type ReferenceImageBinding = {
     file_id: string;

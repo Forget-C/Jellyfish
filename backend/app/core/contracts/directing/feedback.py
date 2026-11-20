@@ -166,56 +166,6 @@ class FeedbackRead(Contract):
     knowledge: list[RevisionSnapshot[KnowledgeCandidate]]
 
 
-class TransitionWrite(Contract):
-    """跨场审查固定实际末幅与入幅，并记录有意转换而非强求状态相同。"""
-
-    left_sequence_id: Identity
-    right_sequence_id: Identity
-    left_cut_revision_id: Identity
-    right_cut_revision_id: Identity
-    left_frame_id: Identity
-    right_frame_id: Identity
-    verdict: Literal['pass', 'revise']
-    intent: Text
-    observation: Note
-    sound: Note
-
-
-class TransitionRead(Contract):
-    """当前相邻场次审查及历史记录是否仍适用。"""
-
-    id: Identity
-    current: bool
-    content: TransitionWrite
-
-
-class ChapterSequenceRead(Contract):
-    """章节播放直接消费本场已确认粗剪，未验收场次明确显示缺口。"""
-
-    sequence_id: Identity
-    title: Text
-    position: int
-    cut_revision_id: Identity | None
-    review_id: Identity | None
-    verdict: Literal['unreviewed', 'pass', 'revise']
-    sound_status: Literal['pending_postproduction', 'reviewed', 'not_applicable']
-    source_changed: bool
-    items: list[ObservedRange]
-    timeline_starts_ms: list[int]
-    duration_ms: int
-    gaps: list[str]
-
-
-class ChapterAssemblyRead(Contract):
-    """有序播放和跨场审查不创建第二份可编辑剪辑真值。"""
-
-    chapter_id: Identity
-    title: Text
-    sequences: list[ChapterSequenceRead]
-    transitions: list[TransitionRead]
-    gaps: list[str]
-
-
 class RepairPlanRequest(Contract):
     """用户明确指定本次局部覆盖和时长，生成草稿而非付费请求。"""
 

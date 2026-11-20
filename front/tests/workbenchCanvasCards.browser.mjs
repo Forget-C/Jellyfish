@@ -12,6 +12,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-workbench-canvas-cards-')
 const api = 'http://127.0.0.1:8385', studio = api + '/api/v1/studio'
 const project = 'canvas-project', chapter = 'workbench-cards'
+const modelId = process.env.CANVAS_BROWSER_DATABASE_URL ? project + '-text' : 'canvas-runtime-text'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'),
   env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
@@ -57,7 +58,7 @@ try {
   assert.equal(prepared.task?.status, 'succeeded')
   const older = await data(sceneApi + '/canvases', 'POST', { name: '旧空白方案' })
   const task = await data(sceneApi + '/storyboards', 'POST', {
-    request_id: 'cards-start', name: '新分镜方案', mode: 'faithful', text_model_id: 'canvas-runtime-text',
+    request_id: 'cards-start', name: '新分镜方案', mode: 'faithful', text_model_id: modelId,
   })
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: {
     host: '127.0.0.1', port: 4385, strictPort: true, proxy: { '/api': api },
@@ -114,8 +115,34 @@ try {
   assert.equal(await card('新分镜方案').getByText('最近打开', { exact: true }).count(), 0)
   await card('旧空白方案').getByText('最近打开', { exact: true }).waitFor()
   await search.fill('')
-  await card('新分镜方案').getByRole('button', { name: '查看并采用分镜', exact: true }).click()
+  const later = await data(sceneApi + '/canvases/' + task.canvas_id + '/storyboards', 'POST', {
+    request_id: 'cards-reextract', mode: 'faithful', text_model_id: modelId,
+  })
+  await page.reload()
+  const progress = card('新分镜方案').getByRole('button', { name: '查看提取进度', exact: true })
+  await Promise.all([page.waitForRequest(req => req.url().endsWith('/storyboards/' + later.task_id)), progress.click()])
+  await page.getByRole('button', { name: '暂不处理', exact: true }).click()
+  await control({ storyboard_release: 2, storyboard_fail_on: 2 })
+  await card('新分镜方案').getByRole('button', { name: '处理提取问题', exact: true }).waitFor()
+  await Promise.all([page.waitForRequest(req => req.url().endsWith('/storyboards/' + later.task_id)),
+    card('新分镜方案').getByRole('button', { name: '处理提取问题', exact: true }).click()])
+  await page.getByRole('button', { name: '暂不处理', exact: true }).click()
+  const running = await data(sceneApi + '/canvases/' + task.canvas_id + '/storyboards', 'POST', {
+    request_id: 'cards-running', mode: 'faithful', text_model_id: modelId,
+  })
+  await page.reload()
+  await page.waitForFunction(async path => (await (await fetch(path)).json()).data.status === 'running',
+    new URL(sceneApi + '/storyboards/' + running.task_id).pathname)
+  await progress.waitFor()
+  await Promise.all([page.waitForRequest(req => req.url().endsWith('/storyboards/' + task.task_id)),
+    card('新分镜方案').getByRole('button', { name: '查看并采用分镜', exact: true }).click()])
   await page.locator('[data-card-type="direction.shot"]').first().waitFor()
+  await control({ storyboard_release: 3 })
+  await page.waitForFunction(async ({ path, canvasId, appliedId, candidateId }) => {
+    const response = await fetch(path)
+    const canvas = (await response.json()).data.canvases.find(row => row.id === canvasId)
+    return canvas?.applied_storyboard_task_id === appliedId && canvas.candidate_storyboard_task_id === candidateId
+  }, { path: new URL(sceneApi + '/canvases').pathname, canvasId: task.canvas_id, appliedId: task.task_id, candidateId: running.task_id })
   await page.goBack()
   await card('新分镜方案').getByText('最近打开', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'desktop.png') })
@@ -157,9 +184,9 @@ try {
   await card('旧空白方案').waitFor()
   assert.deepEqual(await ordering(), ['新分镜方案', '旧空白方案'])
 
-  await control({ storyboard_release: 2, storyboard_fail_on: 2 })
+  await control({ storyboard_release: 4, storyboard_fail_on: 4 })
   const failed = await data(sceneApi + '/storyboards', 'POST', {
-    request_id: 'cards-fail', name: '失败后保留的方案', mode: 'faithful', text_model_id: 'canvas-runtime-text',
+    request_id: 'cards-fail', name: '失败后保留的方案', mode: 'faithful', text_model_id: modelId,
   })
   await page.reload()
   const failedCard = card('失败后保留的方案')

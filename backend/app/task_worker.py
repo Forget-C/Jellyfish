@@ -44,8 +44,7 @@ from app.services.llm.provider_resolver import resolve_provider_config_from_prov
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 from app.services.task_service import (
-    AUTO_CHECK_DISPATCH, MEDIA_KINDS, RETIRED_SCENE_TASK_KINDS, TASK_KINDS,
-    TaskService, is_retired_scene_task, utcnow,
+    AUTO_CHECK_DISPATCH, MEDIA_KINDS, TASK_KINDS, TaskService, utcnow,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,8 +153,7 @@ class TaskWorker:
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(
                 Task.status == "running", Task.execution_mode == "remote",
             )) or 0
-            # 仍领取已入队的退役类型，由 _load 核对并写入终态。
-            for phase, kinds, capacity in (("text", (TASK_KINDS - MEDIA_KINDS) | RETIRED_SCENE_TASK_KINDS, self.limits.text),
+            for phase, kinds, capacity in (("text", TASK_KINDS - MEDIA_KINDS, self.limits.text),
                                            ("submit", MEDIA_KINDS, self.limits.submit)):
                 occupied = {task_id for task_id, current in self.phases.items() if current == phase}
                 if phase == "text":
@@ -210,10 +208,6 @@ class TaskWorker:
                 await TaskService(db).finish(task_id, cancelled=True)
                 await db.commit()
                 return None
-            if is_retired_scene_task(task.kind, task.target_type, task.input_snapshot):
-                await TaskService(db).finish(task_id, error_code="scene_version_retired", error="旧场次版本任务已退役")
-                await db.commit()
-                return None
             return task
 
     async def _execute(self, task_id: str) -> None:
@@ -223,18 +217,6 @@ class TaskWorker:
                 task = await self._load(task_id)
                 if task is None:
                     return
-                if task.target_type == 'canvas_node':
-                    async with self.sessions() as db:
-                        from app.models.generation_canvas import CanvasRunNode
-                        from app.services.generation_canvas.snapshot_support import require_supported_snapshot
-                        node = await db.get(CanvasRunNode, task.target_id)
-                        if node:
-                            from fastapi import HTTPException
-                            try:
-                                require_supported_snapshot(node.execution_snapshot or {})
-                            except HTTPException as error:
-                                await self._fail(task.id, error.detail['code'], error.detail['message'])
-                                return
                 if task.kind == AUTO_CHECK_DISPATCH:
                     from app.services.generation_canvas.automatic_checks import dispatch_automatic_checks
                     async with self.sessions.begin() as db:
@@ -476,8 +458,6 @@ class TaskWorker:
         """Persist each completed unit before proceeding; retry never repeats valid writing."""
         from app.services.directing.storyboard_prompt import writing_inputs, input_identity, write_video_prompt, apply_video_prompt
         from app.schemas.generation_canvas import VideoModelCard
-        if not task.input_snapshot.get('video_prompt_version'):
-            return checkpoint
         document = CanvasDocument.model_validate(checkpoint['document'])
         saved_cards = {card['id']: card for card in prior.get('document', {}).get('cards', [])}
         identities = dict(prior.get('prompt_inputs', {}))

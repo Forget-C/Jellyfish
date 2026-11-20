@@ -111,11 +111,12 @@ try {
   await page.goto(`${origin}/canvases`)
   const canvasLink = canvases.getByRole('link', { name: /真实生成画布/ })
   await canvasLink.waitFor()
-  const cover = canvasLink.locator('img')
+  const canvasCard = canvases.getByRole('article').filter({ has: page.getByRole('link', { name: /真实生成画布/ }) })
+  const cover = canvasCard.locator('img')
   assert.ok((await cover.getAttribute('src')).endsWith('/files/cover-1/download'))
   const assertCoverAboveCaption = async () => {
     await cover.evaluate(image => image.decode())
-    const coverBox = await cover.boundingBox(), captionBox = await canvasLink.getByRole('heading').boundingBox()
+    const coverBox = await cover.boundingBox(), captionBox = await canvasCard.getByRole('heading').boundingBox()
     assert.ok(coverBox.y + coverBox.height <= captionBox.y, '画布封面不能遮挡下方标题链接')
   }
   await assertCoverAboveCaption()

@@ -66,8 +66,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [facts, setFacts] = useState<AssetFacts>({})
-  const [visualStyle, setVisualStyle] = useState<'现实' | '动漫'>('现实')
-  const [style, setStyle] = useState('真人都市')
+  const [visualStyle, setVisualStyle] = useState<'现实' | '动漫' | null>('现实')
+  const [style, setStyle] = useState<string | null>('真人都市')
   const nameInput = useRef<InputRef>(null)
   const sectionScroll = useRef<Record<string, number>>({})
   const [section, setSection] = useState('settings')
@@ -156,11 +156,14 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     setPreviewBusy(true); setPreviewError('')
     const timer = window.setTimeout(() => {
       const requested = editingGeneration.mode === 'edit' && editingImage ? [editingImage.view_angle as Angle] : editingAngles.length ? editingAngles : ['FRONT'] as Angle[]
+      const draftStyles = 'style' in payload
+        ? { visual_style: payload.visual_style ?? undefined, style: payload.style ?? undefined }
+        : {}
       void Promise.all(requested.map(async angle => {
         const response = await StudioGenerationPromptsService.renderDraftAssetImagePromptApiV1StudioGenerationPromptsAssetsDraftRenderPost({ requestBody: {
           ...editingGeneration, asset_type: kind, view_angle: angle,
           ...(editingGeneration.mode === 'edit' && editingImage ? { image_id: editingImage.id } : {}),
-          resource: { id: resource?.id ?? draftId.current, ...payload, ...((resource ? resource.project_id : projectId) ? { project_id: resource ? resource.project_id : projectId } : {}) } as DraftAssetPromptRenderBody['resource'],
+          resource: { id: resource?.id ?? draftId.current, ...payload, ...draftStyles, ...((resource ? resource.project_id : projectId) ? { project_id: resource ? resource.project_id : projectId } : {}) } as DraftAssetPromptRenderBody['resource'],
         } })
         if (!response.data) throw new Error('预览结果缺失')
         return [angle, response.data] as const
@@ -209,8 +212,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     setReferenceNames({}); setBaseline(''); setName(''); setDescription(''); setFacts({}); setReferences([]);
     setResource(undefined); savedResource.current = undefined; setImages([]); setCandidates([]); setEditingImage(undefined); setTasks({}); setGeneration({}); setEditingGeneration({}); setEditingAngles(['FRONT']); setShowPreview(false); setSelectedAngles(['FRONT']); setPage(initialPage); setError(''); setCloseRequested(false)
     const initialVisual = seed?.visual_style ?? defaultVisualStyle as '现实' | '动漫'
-    const initial = { name: seed?.name ?? '', description: seed?.description ?? '', visualStyle: initialVisual,
-      style: seed?.style ?? getDefaultStyle(initialVisual), facts: {} as AssetFacts, references: [] as AssetPromptReference[] }
+    const initial = { name: seed?.name ?? '', description: seed?.description ?? '', visualStyle: initialVisual as '现实' | '动漫' | null,
+      style: (seed?.style ?? getDefaultStyle(initialVisual)) as string | null, facts: {} as AssetFacts, references: [] as AssetPromptReference[] }
     const load = async () => {
       if (projectId) {
         try {
@@ -224,7 +227,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       if (assetId) {
         const response = await StudioEntitiesApi.get(kind, assetId)
         if (!active) return
-        const value = response.data as Resource & { visual_style: '现实' | '动漫'; style: string }
+        const value = response.data as Resource & { visual_style: '现实' | '动漫' | null; style: string | null }
         if (projectId && value.project_id !== projectId) throw new Error('请先导入独立项目副本')
         setResource(value); savedResource.current = value
         initial.references = value.references ?? []
@@ -626,7 +629,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     if (!imageBased) { delete config.style; delete config.visual_style }
     if (config.references === undefined) config.references = defaultReferences()
     if (imageBased) {
-      const defaultVisual = resource?.project_id ? visualStyle : defaultVisualStyle
+      const defaultVisual = resource?.project_id ? visualStyle ?? defaultVisualStyle : defaultVisualStyle
       config.style ??= (resource?.project_id ? style : getDefaultStyle(defaultVisual)) as AssetImagePromptRenderBody['style']
       config.visual_style ??= defaultVisual as AssetImagePromptRenderBody['visual_style']
 

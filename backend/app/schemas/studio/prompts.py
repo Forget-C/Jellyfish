@@ -57,3 +57,11 @@ class PromptTemplateRead(BaseModel):
     is_system: bool = Field(..., description="是否为系统预置")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="最后更新时间")
+
+
+class PromptTemplateSummary(BaseModel):
+    """模板管理列表中的分类与选择信息。"""
+
+    id: str
+    category: PromptCategory
+    name: str

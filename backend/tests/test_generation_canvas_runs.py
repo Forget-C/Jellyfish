@@ -1,4 +1,5 @@
 """Real HTTP, database, submitter and Worker at the agreed execution seam."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas, canvas_params
 import asyncio
 import json
@@ -396,7 +397,7 @@ async def test_single_card_uses_published_input_without_executing_upstream_and_r
         'prompt': {'segments': [{'kind': 'reference', 'id': 'ref', 'source': source}]}})
     runtime.document['edges'] = [{'id': 'input', 'source_card': 'm', 'source_port': 'text', 'target_card': 'consumer', 'target_port': 'text'}]
     runtime.document['input_order'] = {'consumer': {'text': ['input']}}
-    assert (await runtime.client.put(runtime.url, json={'request_id': 'consumer', 'expected_revision': 1, 'document': runtime.document})).status_code == 200
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'consumer', 'expected_revision': 1, 'document': bind_document_prompts(runtime.document)})).status_code == 200
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
     assert preview['can_run'] and preview['execution_nodes'] == ['consumer']
     assert preview['input']['text'] == 'Actual source'
@@ -409,11 +410,11 @@ async def test_single_card_uses_published_input_without_executing_upstream_and_r
     runtime.document['cards'].append({'id': 'unused', 'type': 'content.text', 'text': 'Unused candidate'})
     runtime.document['edges'].append({'id': 'unused-edge', 'source_card': 'unused', 'source_port': 'text', 'target_card': 'consumer', 'target_port': 'text'})
     runtime.document['input_order']['consumer']['text'] = ['unused-edge', 'input']
-    assert (await runtime.client.put(runtime.url, json={'request_id': 'unused', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'unused', 'expected_revision': 2, 'document': bind_document_prompts(runtime.document)})).status_code == 200
     unchanged = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert unchanged['current_outputs']['consumer'][0]['basis_current']
     runtime.document['cards'][0]['prompt']['segments'][0]['text'] = 'changed source basis'
-    assert (await runtime.client.put(runtime.url, json={'request_id': 'change-source', 'expected_revision': 3, 'document': runtime.document})).status_code == 200
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'change-source', 'expected_revision': 3, 'document': bind_document_prompts(runtime.document)})).status_code == 200
     snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert snapshot['current_outputs']['m'][0]['text'] == 'Actual source'
     assert not snapshot['current_outputs']['m'][0]['basis_current']
@@ -442,49 +443,6 @@ async def test_mysql_activity_guard_sees_run_committed_after_earlier_read(runtim
     assert error.value.status_code == 409
     await deleting.rollback()
     await deleting.close()
-
-
-@pytest.mark.asyncio
-async def test_runtime_migration_preserves_existing_scene_canvas_observation(tmp_path):
-    """An existing document must have an event mutex before its first subscription."""
-    import importlib.util
-    from pathlib import Path
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    from app.models.directing import Sequence
-    from app.models.generation_canvas import GenerationCanvas, CanvasSaveReceipt
-    from app.models.studio import Chapter, FileItem
-    from app.services.generation_canvas.runtime import CanvasRuntime
-    engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path}/upgrade.db')
-    async with engine.begin() as db:
-        def migrate(connection):
-            FileItem.__table__.create(connection)
-            Project.__table__.create(connection)
-            # The current canvas metadata can reference the earlier chapter and scene tables.
-            Chapter.__table__.create(connection)
-            Sequence.__table__.create(connection)
-            GenerationCanvas.__table__.create(connection)
-            CanvasSaveReceipt.__table__.create(connection)
-            connection.execute(Project.__table__.insert().values(id='existing-project', name='existing', style='真人都市'))
-            connection.execute(GenerationCanvas.__table__.insert().values(id='existing-canvas', project_id='existing-project', kind='scene', revision=7,
-                card_types={}, document={'id': 'existing-canvas', 'project_id': 'existing-project', 'name': 'old'}))
-            path = Path(__file__).parents[1] / 'alembic/versions/473ab089b58f_generation_canvas_runtime.py'
-            spec = importlib.util.spec_from_file_location('canvas_runtime_migration', path)
-            migration = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            with Operations.context(MigrationContext.configure(connection)):
-                migration.upgrade()
-                snapshot_path = path.with_name('8a10d04c631e_canvas_dag_snapshots.py')
-                snapshot_spec = importlib.util.spec_from_file_location('canvas_dag_migration', snapshot_path)
-                snapshot_migration = importlib.util.module_from_spec(snapshot_spec)
-                snapshot_spec.loader.exec_module(snapshot_migration)
-                snapshot_migration.upgrade()
-        await db.run_sync(migrate)
-    sessions = async_sessionmaker(engine)
-    async with sessions.begin() as db:
-        snapshot = await CanvasRuntime(db, 'existing-project').snapshot('existing-canvas')
-        assert snapshot.cursor == 0 and snapshot.runs == [] and snapshot.current_outputs == {}
-    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -698,8 +656,7 @@ async def test_bound_creative_basis_runs_through_worker_and_publishes_typed_outp
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('legacy', [False, True])
-async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events_are_pruned(runtime, monkeypatch, legacy):
+async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events_are_pruned(runtime, monkeypatch):
     """Public snapshots retain accepted order, independently of clock precision or UUID order."""
     from datetime import datetime
     from itertools import count
@@ -724,14 +681,9 @@ async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events
     async with runtime.sessions.begin() as db:
         await db.execute(update(CanvasRun).where(CanvasRun.canvas_id == runtime.canvas_id)
                          .values(created_at=datetime(2026, 10, 29, 12, 0, 0)))
-        if legacy:
-            for node in await db.scalars(select(CanvasRunNode).where(CanvasRunNode.canvas_id == runtime.canvas_id)):
-                node.execution_snapshot = {key: value for key, value in node.execution_snapshot.items() if key != 'admitted_cursor'}
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert [run['id'] for run in state['runs']] == [first['run_id'], second['run_id']]
     assert state['runs'][-1]['nodes'][0]['status'] == 'queued'
-    if legacy:
-        return  # Legacy admission order is recoverable only while its events remain.
     async with runtime.sessions.begin() as db:
         await db.execute(delete(CanvasEvent).where(CanvasEvent.canvas_id == runtime.canvas_id))
     recovered = (await runtime.client.get(runtime.url + '/runtime')).json()['data']

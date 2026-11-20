@@ -1,4 +1,4 @@
-"""画布固定依据：纯编译、公开投影及旧格式快照恢复，不读取可变配置或推进任务。"""
+"""画布固定依据：纯编译、公开投影及固定快照，不读取可变配置或推进任务。"""
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -99,13 +99,6 @@ class CanvasBasis:
             'capability': context.capability.model_dump() if context.execution_config and context.capability else None}
 
 
-def _model_card(document, card_id) -> ModelCard:
-    card = next((card for card in document.cards if card.id == card_id), None)
-    if not isinstance(card, ModelCard):
-        raise HTTPException(404, 'Model card not found')
-    return card
-
-
 def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[CanvasResolvedOutput]],
                 *, revision: int, model_context: CanvasModelContext, context: CanvasOutputContext | None = None,
                 include_acceptance: bool = True, include_dependencies: bool = True) -> CanvasBasis:
@@ -140,23 +133,3 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
         actual['video_media'] = compiled.video_media.model_dump()
     return CanvasBasis(card, compiled, public, digest({'basis': actual, 'execution': model_context.execution_config}),
                        document, outputs, model_context, include_acceptance, include_dependencies)
-
-
-def restore_basis(snapshot: dict, card_id: str, dependency_outputs: dict[str, list[dict]]) -> CanvasBasis:
-    """按旧格式恢复已受理依据；依赖须已由调用方确认成功，整组替换且不回退旧位置。"""
-    from app.services.generation_canvas.snapshot_support import require_supported_snapshot
-    require_supported_snapshot(snapshot)
-    outputs = {key: [CanvasResolvedOutput.model_validate(item) for item in values] for key, values in snapshot['outputs'].items()}
-    for source in snapshot['dependencies']:
-        outputs[source] = [CanvasResolvedOutput.model_validate(item) for item in dependency_outputs[source]]
-    document = CanvasDocument.model_validate(snapshot['document'])
-    card = _model_card(document, card_id)
-    frozen = snapshot['execution_config']
-    context = CanvasModelContext(
-        model={'id': card.model_id, 'name': frozen['model_name'], 'params': frozen['model_params']},
-        execution_config={'model_name': frozen['model_name'], 'model_params': frozen['model_params'] or {},
-            'provider_key': frozen['provider_key'], 'provider_id': frozen['provider_id'],
-            'api_key': frozen['api_key'], 'base_url': frozen['base_url']},
-        capability=CanvasModelCapability.model_validate(snapshot['capability']))
-    return build_basis(document, card_id, outputs, revision=snapshot['revision'], model_context=context,
-                       include_acceptance=snapshot.get('include_acceptance', False), include_dependencies=snapshot.get('include_dependencies', False))

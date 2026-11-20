@@ -6,7 +6,7 @@ from app.services.generation_canvas.catalog import ports_compatible
 
 
 def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = None) -> None:
-    """校验整图结构；仅保留端点未变且未采用的历史类别不兼容候选，新连线仍严格校验。"""
+    """校验图的端点、输入用途、顺序与依赖关系。"""
     cards = {card.id: card for card in document.cards}
     previous_edges = {edge.id: edge for edge in previous.edges} if previous else {}
     by_edge = {edge.id: edge for edge in document.edges}
@@ -48,12 +48,9 @@ def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = N
         if not ports_compatible(edge.source_port, receiver.type, edge.target_port, source.type):
             raise diagnostic('INCOMPATIBLE_PORT', '端口值种类不匹配，不提供隐式转换', target)
         if isinstance(receiver, NamedImageReferenceCard):
-            binding = receiver.name_binding if edge.target_port == 'name' else receiver.image_binding.source if receiver.image_binding else None
-            adopted = binding and binding.card_id == edge.source_card and binding.port_id == edge.source_port
-            retained_candidate = previous_edges.get(edge.id) == edge and not adopted
             if edge.target_port == 'image_source' and source.type != 'content.image':
                 raise diagnostic('INVALID_REFERENCE_SOURCE', '参考图仅支持图片内容卡，请先另存为图片内容卡', target)
-            if edge.target_port == 'name' and (not isinstance(source, ObjectDescriptionCard) or source.category != receiver.type.split('.')[1]) and not retained_candidate:
+            if edge.target_port == 'name' and (not isinstance(source, ObjectDescriptionCard) or source.category != receiver.type.split('.')[1]):
                 raise diagnostic('INVALID_REFERENCE_CATEGORY', '名称候选必须来自同类型描述卡', target)
         successors[edge.source_card].add(edge.target_card)
         expected.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)

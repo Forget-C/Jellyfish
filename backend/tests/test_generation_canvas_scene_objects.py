@@ -1,4 +1,5 @@
 """场次对象引用经公开画布接口读取当前资源，而非固定准备阶段图片。"""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -91,7 +92,7 @@ async def test_dynamic_image_run_freezes_actual_file_after_selection_is_cleared(
     port = 'image' if modality == 'image' else 'first_frame'
     runtime.document['edges'] = [{'id': 'ref-image', 'source_card': 'ref', 'source_port': 'image', 'target_card': model_card_id, 'target_port': port}]
     runtime.document['input_order'] = {model_card_id: {port: ['ref-image']}}
-    saved = await runtime.client.put(runtime.url, json={'request_id': 'dynamic-run', 'expected_revision': 2, 'document': runtime.document})
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'dynamic-run', 'expected_revision': 2, 'document': bind_document_prompts(runtime.document)})
     assert saved.status_code == 200, saved.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': model_card_id})).json()['data']
     assert preview['can_run'], preview
@@ -177,7 +178,7 @@ async def test_multiple_dynamic_views_keep_one_story_object_and_missing_view_blo
         'canvas_id': runtime.canvas_id, 'card_id': 'ref', 'port_id': 'image', 'position': pos}} for pos in [0, 2]]}
     document['edges'] = [{'id': 'ref-image', 'source_card': 'ref', 'source_port': 'image', 'target_card': 'image', 'target_port': 'image'}]
     document['input_order'] = {'image': {'image': ['ref-image']}}
-    saved = await runtime.client.put(runtime.url, json={'request_id': 'multiple', 'expected_revision': 2, 'document': document})
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'multiple', 'expected_revision': 2, 'document': bind_document_prompts(document)})
     assert saved.status_code == 200, saved.text
     compiled = (await runtime.client.get(runtime.url + '/cards/image/compile')).json()['data']
     assert compiled['can_run'], compiled

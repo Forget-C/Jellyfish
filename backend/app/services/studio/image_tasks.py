@@ -104,7 +104,8 @@ async def resolve_prompt_template(
     stmt = select(PromptTemplate).where(PromptTemplate.category == category)
     if template_id:
         stmt = stmt.where(PromptTemplate.id == template_id)
-    stmt = stmt.order_by(PromptTemplate.is_default.desc(), PromptTemplate.updated_at.desc()).limit(1)
+    else:
+        stmt = stmt.where(PromptTemplate.is_default.is_(True))
     result = await db.execute(stmt)
     return result.scalars().first()
 

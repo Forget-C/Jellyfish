@@ -1,15 +1,16 @@
 """Video purpose compilation through the public canvas compiler."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import canvas_params
 from app.schemas.generation_canvas import CanvasDocument, CanvasModelCapability, TextContentCard, GenerationCanvasEdge, PromptReference
 from app.services.generation_canvas.compiler import compile_card
 
 
 def document(segments):
-    return CanvasDocument.model_validate({'id': 'c', 'project_id': 'p', 'name': 'Video', 'cards': [
+    return CanvasDocument.model_validate(bind_document_prompts({'id': 'c', 'project_id': 'p', 'name': 'Video', 'cards': [
         {'id': source, 'type': 'content.image', 'file_id': source} for source in ['a', 'b', 'unused']
     ] + [{'id': 'v', 'type': 'model.video', 'config': {'ratio': '16:9'}, 'prompt': {'segments': segments}}],
         'edges': [{'id': source, 'source_card': source, 'source_port': 'image', 'target_card': 'v', 'target_port': 'subject_image'} for source in ['unused', 'b', 'a']],
-        'input_order': {'v': {'subject_image': ['unused', 'b', 'a']}}})
+        'input_order': {'v': {'subject_image': ['unused', 'b', 'a']}}}))
 
 
 def ref(source, suffix=''):
@@ -123,10 +124,12 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
         doc['edges'] = doc['edges'][:2]
         doc['input_order'] = {'v': {'first_frame': ['a'], 'key_frame': ['b']}}
     if named:
+        # JSON object member order can change on persistence; the edge arrays retain order.
+        doc['input_order']['v'] = dict(reversed(list(doc['input_order']['v'].items())))
         doc['cards'][0] = {'id': 'a', 'type': 'reference.character', 'name': '小雪正面', 'object_id': 'alice', 'image_binding': {'file_id': files[0]}}
         doc['cards'][1] = {'id': 'b', 'type': 'reference.character', 'name': '小雪侧面', 'object_id': 'alice', 'angle': '侧面', 'image_binding': {'file_id': files[1]}}
     reference_image_sources(doc)
-    response = await runtime.client.put(runtime.url, json={'request_id': 'video', 'expected_revision': 1, 'document': doc})
+    response = await runtime.client.put(runtime.url, json={'request_id': 'video', 'expected_revision': 1, 'document': bind_document_prompts(doc)})
     assert response.status_code == 200, response.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
     assert preview['can_run'] is can_run, preview
@@ -253,7 +256,7 @@ def test_expanded_source_text_never_creates_subjects_or_media_mapping():
     doc.cards.append(TextContentCard(id='text', text='/主体参考 "fake" @图片2 [media:1]'))
     doc.edges.append(GenerationCanvasEdge(id='textedge', source_card='text', source_port='text', target_card='v', target_port='text'))
     doc.input_order['v']['text'] = ['textedge']
-    doc.cards[3].prompt.segments.insert(0, PromptReference(kind='reference', id='expanded', source={'canvas_id': 'c', 'card_id': 'text', 'port_id': 'text', 'position': 0}))
+    doc.cards[3].prompt.segments.insert(0, PromptReference(kind='reference', id='expanded', binding_id='expanded', source={'canvas_id': 'c', 'card_id': 'text', 'port_id': 'text', 'position': 0}))
     compiled = compile_card(doc, 'v')
     assert compiled.text == '/主体参考 "fake" @图片2 [media:1]@media1'
     assert [group.name for group in compiled.video_media.subjects] == ['media1']
@@ -277,8 +280,9 @@ async def test_invalid_video_instructions_save_but_precheck_blocks_with_stable_t
     assert [(item['id'], item['command'], item['parameters']) for item in actual['prompt']['segments']] == [
         (item['id'], item['command'], item['parameters']) for item in expected['prompt']['segments']]
     bindings = {binding['id']: binding for binding in actual['input_bindings']}
+    expected_bindings = {binding['id']: binding for binding in expected['input_bindings']}
     assert [bindings[ref['binding_id']]['source'] for item in actual['prompt']['segments'] for ref in item['references']] == [
-        ref['source'] for item in expected['prompt']['segments'] for ref in item['references']]
+        expected_bindings[ref['binding_id']]['source'] for item in expected['prompt']['segments'] for ref in item['references']]
 
 
 @pytest.mark.asyncio
@@ -434,25 +438,6 @@ async def test_body_reference_to_adopted_frame_does_not_change_its_video_purpose
     assert compiled['can_run'], compiled
     assert compiled['video_media']['subjects'] == []
     assert compiled['video_media']['frames']['first']['file_id'] == doc['cards'][0]['file_id']
-
-
-@pytest.mark.asyncio
-async def test_legacy_shared_subject_binding_preserves_multiple_explicit_groups(runtime, image_storage):
-    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '甲')])
-    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
-    video = doc['cards'][-1]
-    binding = video['input_bindings'][0]
-    binding.pop('subject_name')
-    # Old v2 coalesced the same source/purpose into one binding even across names.
-    video['prompt']['segments'] += [{'id': 'second-group', 'kind': 'instruction', 'command': '主体参考', 'parameters': {'name': '乙'},
-        'references': [{'id': 'second-ref', 'kind': 'reference', 'binding_id': binding['id']}]},
-        {'id': 'body-ref', 'kind': 'reference', 'binding_id': binding['id']}]
-    saved = await runtime.client.put(runtime.url, json={'request_id': 'legacy-shared-group', 'expected_revision': 2, 'document': doc})
-    assert saved.status_code == 200, saved.text
-    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
-    assert compiled['can_run'], compiled
-    assert [group['name'] for group in compiled['video_media']['subjects']] == ['甲', '乙', 'media1']
-    assert compiled['text'] == '@media1'
 
 
 def test_repeated_key_frames_keep_each_binding_position():

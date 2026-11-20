@@ -78,8 +78,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('modality', ['text', 'image', 'video'])
-@pytest.mark.parametrize('legacy_conflict', [False, 'examples', 'text', 'object', 'object-situation', 'object-performance', 'object-activity', 'object-sound', 'object-camera', 'object-lighting', 'object-focus', 'object-composition', 'object-movement', 'direction.creative_control', 'direction.guidance', 'direction.fact', 'direction.performance_rule'])
-async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_connection(runtime, image_storage, monkeypatch, modality, legacy_conflict):
+async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_connection(runtime, image_storage, monkeypatch, modality):
     import asyncio
     import json
     from types import SimpleNamespace
@@ -116,25 +115,6 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
     assert not preview['input']['media'] and '提交时标准' in preview['input']['text']
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'run', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200
-    if legacy_conflict:
-        from copy import deepcopy
-        from sqlalchemy import select
-        from app.models.generation_canvas import CanvasRunNode
-        async with runtime.sessions.begin() as db:
-            node = await db.scalar(select(CanvasRunNode))
-            private = deepcopy(node.execution_snapshot)
-            if legacy_conflict == 'examples':
-                private['document']['cards'][0]['examples'] = [{'id': 'old', 'file_id': 'old'}]
-            elif isinstance(legacy_conflict, str) and legacy_conflict.startswith('object-'):
-                private['document']['cards'].append({'id': 'old-design', 'type': 'direction.' + legacy_conflict.removeprefix('object-'), 'input_bindings': [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]})
-            elif legacy_conflict == 'object':
-                private['document']['cards'][0]['input_bindings'] = [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]
-            elif isinstance(legacy_conflict, str) and legacy_conflict.startswith('direction.'):
-                private['document']['cards'].append({'id': 'old-requirement', 'type': legacy_conflict, 'input_bindings': [{'id': 'old-object', 'input_port': 'effect_object', 'source': source('control', 'text')}]})
-            else:
-                private['document']['edges'].append({'id': 'old-text', 'source_card': 'criterion', 'source_port': 'text', 'target_card': 'shot', 'target_port': 'text'})
-                private['document']['input_order']['shot']['text'] = ['old-text']
-            node.execution_snapshot = private
     doc['cards'][0]['standard'].update(text='新标准：钥匙必须位于画面中央', authorship='user')
     changed = await runtime.client.put(runtime.url, json={'request_id': 'after-admission', 'expected_revision': 2, 'document': doc})
     assert changed.status_code == 200, changed.text
@@ -172,16 +152,6 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
             await asyncio.sleep(0)
             clock[0] += timedelta(seconds=10)
         worker.text_pool.shutdown(wait=False)
-    if legacy_conflict:
-        assert received == []
-        state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-        assert state['runs'][0]['nodes'][0]['status'] == 'failed'
-        assert state['runs'][0]['nodes'][0]['error_code'] == ('LEGACY_DESIGN_SNAPSHOT' if legacy_conflict == 'examples' else 'LEGACY_ACCEPTANCE_SNAPSHOT')
-        assert '重新提交' in state['runs'][0]['nodes'][0]['error_message']
-        if isinstance(legacy_conflict, str) and legacy_conflict.startswith('direction.'):
-            assert '通用对象用途' in state['runs'][0]['nodes'][0]['error_message']
-        assert state['runs'][0]['nodes'][0]['basis']['input']['text'] == preview['input']['text']
-        return
     assert received == [preview['input']['text']]
     for text in ['背景可探索', '保持帽子', '色调待定', '反应优先', '稍后选择图片', '声音后期制作', '不可出现字幕', '手与钥匙清晰可见']:
         assert text in received[0]
@@ -339,33 +309,6 @@ async def test_linked_acceptance_carries_effective_standard_media_and_checks_cap
     assert not inactive['media']
     assert not any(issue['code'] in ('DESIGN_MEDIA_CARRY_NOT_READY', 'DESIGN_MEDIA_PURPOSE_REQUIRED') for issue in inactive['diagnostics'])
 
-
-@pytest.mark.asyncio
-async def test_store_reads_unadopted_acceptance_candidates_without_rewriting(canvas_client, canvas_file_store):
-    from app.models.generation_canvas import GenerationCanvas
-    client = canvas_client
-    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '旧候选'})).json()['data']
-    url = canvas_url(f"/canvases/p/{canvas['id']}")
-    doc = canvas['document']
-    doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '未采用标准'}, {'id': 'shot', 'type': 'direction.shot', 'name': '镜头'}],
-        edges=[{'id': 'old', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'acceptance_basis'}],
-        input_order={'shot': {'acceptance_basis': ['old']}})
-    # Seed a historical document to verify that Store reads do not rewrite it.
-    async with canvas_file_store['sessions'].begin() as db:
-        row = await db.get(GenerationCanvas, canvas['id'])
-        row.document = doc
-    from copy import deepcopy
-    from app.services.generation_canvas.store import CanvasStore
-    async with canvas_file_store['sessions']() as db:
-        row = await db.get(GenerationCanvas, canvas['id'])
-        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
-        store = CanvasStore(db, 'p')
-        await store.get(canvas['id'])
-        await store.get(canvas['id'])
-        await store.list()
-        await db.refresh(row)
-        assert (row.document, row.card_types, row.revision) == before
-        assert not db.dirty
 
 @pytest.mark.asyncio
 async def test_independent_design_connection_adopts_and_disconnects(canvas_client):

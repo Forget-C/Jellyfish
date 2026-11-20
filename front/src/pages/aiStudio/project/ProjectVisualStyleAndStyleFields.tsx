@@ -39,8 +39,8 @@ type FormModeProps = {
 }
 
 type ControlledModeProps = {
-  visual_style: ProjectVisualStyleChoice
-  style: string
+  visual_style: ProjectVisualStyleChoice | null
+  style: string | null
   onChange: (next: { visual_style: ProjectVisualStyleChoice; style: string }) => void
   disabled?: boolean
   visualStyleLabel?: string
@@ -116,7 +116,8 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
           className="mt-1 w-full"
           aria-label={visualStyleLabel ?? '视觉风格'}
           disabled={disabled}
-          value={visual_style}
+          value={visual_style ?? undefined}
+          placeholder="未提供"
           onChange={(v) => {
             const nextVisual = v as ProjectVisualStyleChoice
             onChange({ visual_style: nextVisual, style: getDefaultStyle(nextVisual, resolvedOptions) })
@@ -129,10 +130,11 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
         <Select
           className="mt-1 w-full"
           aria-label={styleLabel ?? '视频风格'}
-          disabled={disabled}
-          value={style}
-          onChange={(v) => onChange({ visual_style, style: String(v) })}
-          options={resolvedOptions.stylesByVisual[visual_style] ?? []}
+          disabled={disabled || !visual_style}
+          value={style ?? undefined}
+          placeholder="未提供"
+          onChange={(v) => { if (visual_style) onChange({ visual_style, style: String(v) }) }}
+          options={visual_style ? resolvedOptions.stylesByVisual[visual_style] ?? [] : []}
         />
       </div>
     </div>

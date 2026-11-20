@@ -163,7 +163,8 @@ async def update_file_meta(
 @router.delete(
     "/{file_id}",
     response_model=ApiResponse[None],
-    summary="删除文件（记录 + 存储对象）",
+    summary="申请删除文件",
+    responses={409: {"model": ApiResponse[None], "description": "文件仍在使用，长期参考冲突列出使用对象和解除方法"}},
 )
 async def delete_file_api(
     file_id: str,
@@ -175,6 +176,7 @@ async def delete_file_api(
 
 @router.delete(
     "/{file_id}/upload-retention", response_model=ApiResponse[None],
+    responses={409: {"model": ApiResponse[None], "description": "仍有其他用途，长期参考冲突列出使用对象和解除方法"}},
     operation_id="release_upload_retention", summary="显式清理画布上传保留关系",
 )
 async def release_upload_retention_api(

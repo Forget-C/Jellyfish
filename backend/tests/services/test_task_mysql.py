@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 from uuid import uuid4
 
 import pytest
@@ -9,7 +10,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect, text
+from sqlalchemy import Boolean, CheckConstraint, Integer, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -31,31 +32,60 @@ def isolated_database_url():
     return value
 
 
-async def test_migrated_mysql_schema_matches_task_models():
-    """检查迁移后真实列、索引、外键和约束，而不是只检查 ORM 建表结果。"""
+async def test_migrated_mysql_schema_matches_application_models():
+    """Check the deployed baseline's table set, types, defaults and relational constraints."""
     engine = create_async_engine(isolated_database_url())
     try:
         async with engine.connect() as db:
             def compare(connection):
-                """仅比较本次范围，注释差异不影响执行契约。"""
-                def compare_default(context, inspected, metadata, database_default, model_default, rendered_default):
-                    """MySQL 将 now() 回读为 (now())，仅忽略这类括号差异。"""
-                    if database_default and rendered_default and database_default.strip("()") == rendered_default.strip("()"):
-                        return False
-                    return None
+                schema = inspect(connection)
+                assert set(schema.get_table_names()) == {*Base.metadata.tables, "alembic_version"}
 
-                scope = {"tasks", "task_inputs", "task_outputs", "files", "file_usages", "generation_canvases", "generation_canvas_save_receipts"} | {name for name in Base.metadata.tables if name.startswith("generation_canvas_")}
-                context = MigrationContext.configure(connection, opts={
-                    "compare_type": True, "compare_server_default": compare_default,
-                    "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name) in scope,
-                })
-                diffs = compare_metadata(context, Base.metadata)
-                substantive = [item for group in diffs for item in (group if isinstance(group, list) else [group])
-                               if item[0] != "modify_comment"]
-                assert not substantive, substantive
-                assert not {"generation_tasks", "generation_runs", "generation_artifacts", "media_blobs"} & set(inspect(connection).get_table_names())
+                def unwrap(value):
+                    while value.startswith("(") and value.endswith(")"):
+                        value = value[1:-1]
+                    return value
+
+                def normalized_default(value, column_type):
+                    if value is None:
+                        return None
+                    value = unwrap(value)
+                    if match := re.fullmatch(r"(?:current_timestamp|now)(?:\((\d*)\))?", value, re.IGNORECASE):
+                        return f"current_timestamp({match[1] or '0'})"
+                    value = value.removeprefix("_utf8mb4")
+                    if isinstance(column_type, (Boolean, Integer)):
+                        value = value.strip("'")
+                        if value.casefold() == "false":
+                            return "0"
+                    return value
+
+                compiler = connection.dialect.ddl_compiler(connection.dialect, None)
+                context = MigrationContext.configure(connection, opts={"compare_type": True})
+                assert not compare_metadata(context, Base.metadata)
+                for table in Base.metadata.tables.values():
+                    assert schema.get_pk_constraint(table.name)["constrained_columns"] == list(table.primary_key.columns.keys())
+                    expected = {constraint.name for constraint in table.constraints if isinstance(constraint, CheckConstraint)}
+                    assert {constraint["name"] for constraint in schema.get_check_constraints(table.name)} == expected
+                    columns = {item["name"]: item for item in schema.get_columns(table.name)}
+                    for column in table.columns:
+                        reflected = columns[column.name]
+                        label = (table.name, column.name)
+                        if precision := getattr(column.type.dialect_impl(connection.dialect), "fsp", None):
+                            assert reflected["type"].fsp == precision, label
+                        if column.computed is None:
+                            actual = normalized_default(reflected["default"], column.type)
+                            expected = normalized_default(compiler.get_column_default_string(column), column.type)
+                            assert actual == expected, label
+                        else:
+                            computed = reflected["computed"]
+                            assert computed["persisted"] is column.computed.persisted, label
+                            actual = re.sub(r"_utf8mb4|[\s`]", "", unwrap(computed["sqltext"]).casefold())
+                            expected = re.sub(r"[\s`]", "", column.computed.sqltext.text.casefold())
+                            assert actual == expected, label
+
             await db.run_sync(compare)
-            assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
+            scripts = ScriptDirectory.from_config(Config("alembic.ini"))
+            assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == scripts.get_current_head()
     finally:
         await engine.dispose()
 

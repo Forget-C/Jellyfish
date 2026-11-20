@@ -1,9 +1,9 @@
-"""Task 事实到画布成果的事务结算；运行受理和历史调度不属于此模块。"""
+"""Task 事实到画布成果的事务结算；受理不属于此模块。"""
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.generation_canvas import CanvasRunNode, CanvasCurrentOutput, CanvasResultSet, GenerationCanvas
+from app.models.generation_canvas import CanvasRun, CanvasRunNode, CanvasCurrentOutput, CanvasResultSet, GenerationCanvas
 from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead, CanvasResolvedOutput, OutputIdentity
 from app.services.generation_canvas.events import TERMINAL, event_head, append_event
 from app.services.generation_canvas.node_completion import finish_node
@@ -81,8 +81,9 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
         payload.update(delta=delta, position=0)
     if terminal:
         await finish_node(db, node, head, payload=payload)
-        from app.services.generation_canvas.planner import advance
-        await advance(db, node.run_id, head, interrupted=task.error_code in ('execution_interrupted', 'submission_interrupted'))
+        run = await db.get(CanvasRun, node.run_id)
+        run.lifecycle = 'finished'
+        await append_event(db, head, 'run.finished', run_id=run.id, payload={'run_id': run.id})
     else:
         await append_event(db, head, 'text.delta' if delta else 'node.updated', node=node, payload=payload)
 

@@ -42,7 +42,7 @@ async def prepare_document(db, project_id: str | None, canvas, raw_document: dic
             card.enabled_categories = initial_check_categories()
     previous_document = CanvasDocument.model_validate(canvas.document)
     _validate_fixed_source(previous_document, document, scene_sources)
-    document, previous_document = _normalize_document(document, previous_document)
+    document = _normalize_document(document, previous_document)
     await _mark_storyboard_edits(db, document)
     identities = dict(canvas.card_types)
     seen = set()
@@ -282,11 +282,8 @@ def _validate_fixed_source(previous: CanvasDocument, current: CanvasDocument, sc
 
 
 def _normalize_document(document, previous_document):
-    """旧文档只做参考源清理；新文档依次同步来源、采用与设计连线。"""
+    """同步来源候选、显式采用、设计连线与结果排序。"""
     from app.services.generation_canvas.stacks import validate_stack_edit
-    from app.services.generation_canvas.reference_rules import clean_reference_image_sources
-    document = clean_reference_image_sources(document, previous_document)
-    previous_document = clean_reference_image_sources(previous_document)
     from app.services.generation_canvas.design_connections import expand_source_connections
     document = expand_source_connections(document, previous_document)
     from app.services.generation_canvas.acceptance import synchronize_acceptance
@@ -299,4 +296,4 @@ def _normalize_document(document, previous_document):
         if edge.order_anchor and edge.order_anchor.edge_id not in edges and previous_anchors.get(edge.id) == edge.order_anchor:
             edge.order_anchor = None
     validate_stack_edit(previous_document.model_dump(), document)
-    return document, previous_document
+    return document
