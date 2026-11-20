@@ -28,9 +28,10 @@
 
 .asset-library-tabs .management-tools { flex: 1 1 auto; }
 
-.asset-library-grid {
+.asset-library-grid,
+.asset-library-measure {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 228px), 1fr));
+  grid-template-columns: repeat(var(--app-media-card-columns, 1), minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -66,7 +67,7 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
   object-fit: contain;
 }
 .asset-library-cover-placeholder { display: flex; align-items: center; gap: 6px; }
-.asset-library-card-content { min-width: 0; display: grid; gap: 8px; padding: 12px; }
+.asset-library-card-content { min-width: 0; display: grid; grid-template-rows: 24px 24px 40px; gap: 8px; padding: 12px; }
 .asset-library-card h2 { min-width: 0; margin: 0; font-size: 14px; font-weight: 650; line-height: 22px; }
 .asset-library-name {
   display: inline-flex;
@@ -100,9 +101,7 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
   font-size: 12px;
 }
 .asset-library-tags .ant-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; margin: 0; }
-.asset-library-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-.asset-library-card-actions > [role="status"] { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
-.asset-library-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
+.management-panel.asset-library-scroll { padding: 0; scrollbar-gutter: stable; }
 .asset-library-skeleton { padding: 12px; }
 .asset-library-skeleton > .ant-skeleton.ant-skeleton-element,
 .asset-library-skeleton .ant-skeleton-image { width: 100%; height: 160px; }
@@ -124,7 +123,7 @@ button.asset-library-cover:focus-visible { outline-offset: -3px; }
 @media (max-width: 767px) {
   .asset-library-tabs .management-heading .ant-tabs-nav { flex-basis: 100%; }
   .asset-library-tabs .management-tools { flex-basis: 160px; }
-  .asset-library-grid { grid-template-columns: minmax(0, 1fr); }
+  .asset-library-grid { grid-template-columns: repeat(var(--app-media-card-columns, 1), minmax(0, 1fr)); }
 }
 
 .asset-library-card-content { padding:16px; }

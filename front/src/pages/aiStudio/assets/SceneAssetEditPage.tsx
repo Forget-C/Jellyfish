@@ -13,7 +13,7 @@ export default function SceneAssetEditPage() {
   const backTo = decodeAssetEditReturnTo(searchParams.get('returnTo'), adapter.backTo)
 
   return (
-    <AssetEditPageBase<any, any>
+    <AssetEditPageBase
       key={sceneId}
       assetId={sceneId}
       onNavigate={onNavigate}

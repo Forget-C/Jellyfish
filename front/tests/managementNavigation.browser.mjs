@@ -25,7 +25,7 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
+  const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 720 } })
   page.setDefaultTimeout(5000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   await page.route('**/api/**', route => {
@@ -60,16 +60,18 @@ try {
     assert.equal(await enterManagement.getAttribute('aria-current'), 'page')
   }
   await secondary.getByRole('link', { name: '资产库', exact: true }).click()
+  await page.setViewportSize({ width: 1440, height: 520 })
   const createAsset = page.getByRole('button', { name: '新建演员', exact: true })
   const firstAsset = page.getByRole('link', { name: '验收演员 1', exact: true })
   const lastAsset = page.getByRole('link', { name: '验收演员 12', exact: true })
   await firstAsset.waitFor()
   const fixedAction = await createAsset.boundingBox()
   const firstAssetTop = (await firstAsset.boundingBox()).y
-  assert.ok((await lastAsset.boundingBox()).y >= 900)
+  const viewportHeight = page.viewportSize().height
+  assert.ok((await lastAsset.boundingBox()).y >= viewportHeight)
   await lastAsset.scrollIntoViewIfNeeded()
   assert.ok((await firstAsset.boundingBox()).y < firstAssetTop)
-  assert.ok((await lastAsset.boundingBox()).y < 900)
+  assert.ok((await lastAsset.boundingBox()).y < viewportHeight)
   assert.deepEqual(await createAsset.boundingBox(), fixedAction, '滚动资产列表时页面操作保持可见')
   assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 0)
 

@@ -13,13 +13,15 @@ from app.services.llm.provider_resolver import resolve_provider_config_from_prov
 
 class CanvasCurrentState:
     """接收已核实归属的画布；只保存会话与项目，结构上下文可复用，查询结果每次重算。"""
-    def __init__(self, db: AsyncSession, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db: AsyncSession, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
 
     async def current_basis(self, canvas, card_id, outputs, *, lock_config=False, context=None):
         """读取当前配置及原有锁，再交给纯依据模块；已受理恢复不经过此入口。"""
         context = context or CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
         document = context.document
+        from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+        validate_canvas_cards(canvas, document)
         card = context.cards.get(card_id)
         if not isinstance(card, ModelCard):
             raise HTTPException(404, 'Model card not found')
@@ -59,7 +61,11 @@ class CanvasCurrentState:
         result, visiting = {}, set()
         context = context or CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
         document = context.document
+        from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+        validate_canvas_cards(canvas, document)
         cards = context.cards
+        from app.services.generation_canvas.scene_object_sources import current_scene_images
+        result.update(await current_scene_images(self.db, self.project_id, document))
         # 文件可在保存后失效；读取和编译统一使用已核验的媒体出口。
         from app.services.generation_canvas.outputs import card_outputs
         from app.services.studio.files import require_available_file
@@ -76,7 +82,7 @@ class CanvasCurrentState:
                     expected_type=card.output_ports[0], lock=False)
                 belongs = await self.db.scalar(select(FileUsage.id).where(
                     FileUsage.file_id == file_id, FileUsage.project_id == self.project_id).limit(1))
-                if not belongs:
+                if self.project_id is not None and not belongs:
                     raise HTTPException(404, 'File not in project')
             except HTTPException:
                 outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas.id, card_id=card.id,

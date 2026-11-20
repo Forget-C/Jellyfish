@@ -2,7 +2,7 @@
 .generation-attribute-label { display: block; margin-bottom: 4px; color: var(--wb-muted); font-size: 12px; line-height: 16px; }
 .generation-attribute-control { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .generation-attribute-control > :is(.ant-input,.ant-select,.generation-reference-name) { flex: 1; width: 100%; min-width: 0; }
-.generation-attribute-control :is(.ant-input,.ant-select-selector) { background: var(--wb-surface); border-color: var(--wb-border); border-radius: 8px; }
+.generation-attribute-control :is(.ant-input,.ant-select-selector) { background: var(--wb-surface); border-color: var(--wb-controlBorder); border-radius: 8px; }
 .generation-attribute-control .ant-input { height: 32px; }
 .generation-attribute-control[data-locked="true"] .ant-select-disabled .ant-select-selection-item { color: var(--wb-text); }
 .generation-attribute-control:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: 2px; }

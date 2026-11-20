@@ -1,19 +1,20 @@
 import { PictureOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
-import type { NamedImageReferenceCard } from '../../../services/generated'
+import type { CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { GenerationCardFrame } from './GenerationCardFrame'
 import { ReferenceCardSummary } from './ReferenceCardSummary'
 import { CardComposer } from './CardComposer'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import './referenceCard.css'
 
 /** 四类参考卡共用显示基础；摘要展示本卡名称及角度，图片独立固定。 */
-export function ReferenceCard({ card, readonly, error }: {
-  card: NamedImageReferenceCard; readonly: boolean; error?: string
+export function ReferenceCard({ card, readonly, error, outputs }: {
+  card: NamedImageReferenceCard; readonly: boolean; error?: string; outputs?: CanvasResolvedOutput[]
 }) {
-  return <GenerationCardFrame label="参考图片预览" status={<>{readonly && <span>只读</span>}<ReferenceCardSummary card={card} /><span>{error || (card.image_binding ? '1 张参考图' : '缺少主图')}</span></>}>
-    <div className="generation-reference-preview">{card.image_binding ? <img alt="参考图片" src={buildFileDownloadUrl(card.image_binding.file_id)} /> : <div><PictureOutlined aria-hidden /><span>未选择参考图</span></div>}</div>
+  const fileId = card.scene_object_source ? outputs?.find(output => output.modality === 'image' && output.source.position === 0 && output.available !== false)?.file_id : card.image_binding?.file_id
+  return <GenerationCardFrame label="参考图片预览" status={<>{readonly && <span>只读</span>}<ReferenceCardSummary card={card} /><span>{error || (fileId ? '1 张参考图' : '缺少主图')}</span></>}>
+    <div className="generation-reference-preview">{fileId ? <img alt="参考图片" src={buildFileDownloadUrl(fileId)} /> : <div><PictureOutlined aria-hidden /><span>未选择参考图</span></div>}</div>
   </GenerationCardFrame>
 }
 

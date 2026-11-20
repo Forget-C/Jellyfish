@@ -1,7 +1,7 @@
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { CanvasDocument, GenerationCanvasGroup } from '../../../services/generated'
 import { generationGroupBounds, type GenerationCanvasLayoutPolicy } from '../generationCanvas/generationLayout'
-import type { GraphArrange, GraphSize } from './graphLayout'
+import type { GraphArrange, GraphSize } from '../generationCanvas/graphLayout'
 
 const gap = 64
 const narrowWidth = 700

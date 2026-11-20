@@ -3,10 +3,14 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AssetPromptReference } from './AssetPromptReference';
+import type { ProjectStyle } from './ProjectStyle';
+import type { ProjectVisualStyle } from './ProjectVisualStyle';
 /**
  * 资产图片渲染允许编辑的槽位资源；目标仅由路径唯一确定。
  */
 export type AssetImagePromptRenderBody = {
+    style?: (ProjectStyle | null);
+    visual_style?: (ProjectVisualStyle | null);
     mode?: 'generate' | 'edit';
     /**
      * 局部修改的对象和目标效果
@@ -45,4 +49,3 @@ export type AssetImagePromptRenderBody = {
      */
     additional_instruction?: string;
 };
-

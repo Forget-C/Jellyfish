@@ -1,5 +1,5 @@
 .app-project-frame { display: flex; flex: 1; min-height: 0; min-width: 0; }
-.app-project-sidebar { flex: 0 0 216px; width: 216px; overflow-y: auto; padding: 12px 10px 16px var(--app-page-gutter); }
+.app-project-sidebar { flex: 0 0 var(--app-sidebar-width, 216px); width: var(--app-sidebar-width, 216px); overflow-y: auto; padding: 12px 10px 16px var(--app-page-gutter); }
 .app-project-navigation { display: flex; flex-direction: column; gap: 14px; color: var(--app-text, #263244); }
 .app-project-name { display: block; overflow: hidden; padding-inline: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .app-project-back { display: inline-flex; align-items: center; align-self: flex-start; gap: 6px; padding: 6px 8px; }

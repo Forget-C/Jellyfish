@@ -1,4 +1,5 @@
 """空间设计通过公开 HTTP 保存、输出和编译。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -7,8 +8,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_text_anchor_and_blocking_keep_identity_and_do_not_read_ancestors(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '空间'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '空间'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     def source(card, port, **extra):
         return {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = canvas['document']
@@ -43,8 +44,8 @@ async def test_text_anchor_and_blocking_keep_identity_and_do_not_read_ancestors(
 ])
 async def test_independent_activity_and_environment_keep_complete_fields(canvas_client, kind, fields):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '活动'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '活动'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     card = {'id': 'design', 'type': 'direction.' + kind, **{key: {'state': 'proposal', 'text': value} for key, value in fields.items()}}
     if kind == 'activity':
         card['delay_ms'] = 350
@@ -66,8 +67,8 @@ async def test_independent_activity_and_environment_keep_complete_fields(canvas_
 async def test_anchor_reference_replacement_keeps_identity_marker_and_fixed_file(canvas_client):
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': (f'{i}.png', b'image', 'image/png')})).json()['data']['id'] for i in range(2)]
-    canvas = (await client.post('/canvases/p', json={'name': '标记'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '标记'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}
     doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': files[0]},
@@ -102,14 +103,14 @@ async def test_anchor_reference_replacement_keeps_identity_marker_and_fixed_file
 ])
 async def test_spatial_relations_use_specific_direct_eligible_objects(canvas_client, kind, port, category, count, code):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '关系'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '关系'})).json()['data']
     doc = canvas['document']
     objects = [{'id': f'object{i}', 'type': 'content.' + category, 'object_id': f'identity{i}', 'name': f'对象{i}'} for i in range(count)]
     bindings = [{'id': str(i), 'input_port': port, 'source': {'canvas_id': canvas['id'], 'card_id': f'object{i}', 'port_id': 'object', 'object_id': f'identity{i}', 'position': 0}} for i in range(count)]
     doc.update(cards=[*objects, {'id': 'design', 'type': 'direction.' + kind, 'input_bindings': bindings}],
         edges=[{'id': str(i), 'source_card': f'object{i}', 'source_port': 'object', 'target_card': 'design', 'target_port': port} for i in range(count)],
         input_order={'design': {port: [str(i) for i in range(count)]}})
-    response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    response = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == (422 if code else 200), response.text
     if code:
         assert response.json()['detail']['code'] == code
@@ -189,8 +190,8 @@ async def test_actual_worker_receives_complete_spatial_design_with_explicit_ance
 @pytest.mark.asyncio
 async def test_anchor_identity_cannot_be_silently_reassigned(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '身份'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '身份'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 'anchor', 'type': 'direction.anchor', 'anchor_id': 'door', 'name': '门'}]
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
@@ -201,36 +202,36 @@ async def test_anchor_identity_cannot_be_silently_reassigned(canvas_client):
 
 @pytest.mark.asyncio
 async def test_spatial_candidate_graph_cannot_cycle(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '无环'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '无环'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': 'anchor', 'type': 'direction.anchor'}, {'id': 'model', 'type': 'model.image'}],
         edges=[{'id': 'a', 'source_card': 'anchor', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}, {'id': 'b', 'source_card': 'model', 'source_port': 'image', 'target_card': 'anchor', 'target_port': 'image_example'}],
         input_order={'model': {'text': ['a']}, 'anchor': {'image_example': ['b']}})
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == 'GRAPH_CYCLE'
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('port,start,end', [('image', 0, 10), ('video', 10, 10), ('video', 20, 10), ('video', -1, 10), ('video', None, 10)])
 async def test_spatial_media_rejects_invalid_intervals(canvas_client, port, start, end):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '区间'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '区间'})).json()['data']
     doc = canvas['document']
     doc['cards'] = [{'id': 'anchor', 'type': 'direction.anchor', 'examples': [{'id': 'media', 'file_id': 'file', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': port, 'position': 0}, 'start_ms': start, 'end_ms': end}]}]
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_DOCUMENT'
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind,field', [('blocking', 'path'), ('activity', 'task')])
 async def test_visual_spatial_action_requires_explicit_participant_but_text_can_analyze(canvas_client, kind, field):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '主体'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '主体'})).json()['data']
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'design', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'design', 'type': 'direction.' + kind, field: {'state': 'proposal', 'text': '走到门口'}},
         *[{'id': model, 'type': 'model.' + model, 'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': source}]} for model in ('text', 'video')]],
         edges=[{'id': model, 'source_card': 'design', 'source_port': 'text', 'target_card': model, 'target_port': 'text'} for model in ('text', 'video')],
         input_order={model: {'text': [model]} for model in ('text', 'video')})
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     assert (await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
     for model in ('text', 'video'):
         compiled = (await canvas_client.get(url + f'/cards/{model}/compile')).json()['data']

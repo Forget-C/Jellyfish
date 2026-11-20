@@ -21,14 +21,17 @@ const fixture = (category) => ({
   created_at: timestamp, updated_at: timestamp,
 })
 const session = (mode) => ({ id: mode + '-session', lab_type: mode, title: labNames[mode] + '测试会话', created_at: timestamp, updated_at: timestamp })
-const message = (id, session_id, role, content, sequence) => ({ id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp })
+const message = (id, session_id, role, content, sequence, input) => ({
+  id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp,
+  ...(input ? { payload: { input_snapshot: { version: 1, prompt: content, ...input } } } : {}),
+})
 const frame = (event, sequence, data) => `id: ${sequence}\nevent: ${event}\ndata: ${JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data })}\n\n`
 const submitted = []
 const writes = []
 let failTemplates = false
 let emptyTemplates = false
 let currentMode = 'text'
-const persisted = new Map(Object.keys(labNames).map((mode) => [mode + '-session', [message(mode + '-history', mode + '-session', 'user', '先前的提示词', 1)]]))
+const persisted = new Map(Object.keys(labNames).map((mode) => [mode + '-session', [message(mode + '-history', mode + '-session', 'user', '先前的提示词', 1, { model_id: mode + '-model' })]]))
 const server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4802, strictPort: true, open: false } })
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -69,7 +72,9 @@ try {
       const requestBody = request.postDataJSON()
       const content = requestBody.content ?? requestBody.execution_prompt
       submitted.push({ mode, content })
-      const user = message(mode + '-user', sessionId, 'user', content, 2)
+      const user = message(mode + '-user', sessionId, 'user', content, 2, {
+        model_id: requestBody.model_id, media: requestBody.media, operation_input: requestBody.operation_input,
+      })
       const result = message(mode + '-result', sessionId, 'assistant', '测试结果', 3)
       const runId = mode + '-run'
       if (mode === 'text') {
@@ -222,6 +227,11 @@ try {
     await apply.click()
     await editor.waitFor({ state: 'hidden' })
     await send(mode)
+    const priorInput = mode === 'image' ? '角色 旅人，地点 森林。' : '角色 旅人，地点 雪原。'
+    await page.getByRole('article').filter({ hasText: priorInput }).getByRole('button', { name: '回填到输入框', exact: true }).click()
+    await replacement.getByRole('button', { name: /^替\s*换$/ }).click()
+    await assertField(page.getByRole('textbox', { name: labNames[mode] + '提示词', exact: true }), priorInput)
+    await page.getByRole('button', { name: labNames[mode] + '测试模型', exact: true }).waitFor()
   }
   assert.deepEqual(submitted, [
     { mode: 'text', content: '角色 旅人，地点 山谷。' },

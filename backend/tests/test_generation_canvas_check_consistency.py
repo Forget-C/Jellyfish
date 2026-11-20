@@ -1,4 +1,5 @@
 """P02 and P09 through the canvas API, task submitter and real Worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import json
 from types import SimpleNamespace
@@ -23,7 +24,7 @@ async def save_requirements(runtime, cards, prompt=''):
         'target_card': 'check', 'target_port': 'check_basis',
     }], 'input_order': {'model': {'text': [edge['id'] for edge in edges]}, 'check': {'check_basis': ['observe']}}}
     await save_canvas(runtime.client, runtime.url, document, 1)
-    return f'{runtime.url}/checks/check'
+    return (runtime.url + f'/checks/check')
 
 
 async def check_category(runtime, checks, category, *, recheck=False, source_card_id=None):
@@ -31,7 +32,7 @@ async def check_category(runtime, checks, category, *, recheck=False, source_car
     preview = (await client.get(checks)).json()['data']
     item, = (item for item in preview['items'] if item['category'] == category
              and (source_card_id is None or item['source']['card_id'] == source_card_id))
-    response = await client.post(f'{checks}/runs', json={
+    response = await client.post(append_canvas_path(checks, f'/runs'), json={
         'expected_revision': preview['basis']['revision'], 'basis_hash': preview['basis']['basis_hash'],
         'item_id': item['id'],
     })
@@ -41,19 +42,19 @@ async def check_category(runtime, checks, category, *, recheck=False, source_car
     try:
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
-        report = (await client.get(f'{checks}/reports')).json()['data'][0]
+        report = (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'][0]
         assert report['executions'][0]['status'] == 'succeeded', report['executions']
         assert report['items'][0]['input_stamp'] == item['input_stamp']
         result = report['results'][0]
         if recheck:
-            response = await client.post(f"{checks}/reports/{report['id']}/recheck", json={
+            response = await client.post(append_canvas_path(checks, f"/reports/{report['id']}/recheck"), json={
                 'item_id': item['id'], 'clarification': '再核对同一范围',
             })
             assert response.status_code == 200, response.text
             accepted = response.json()['data']
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-            reviewed, original = (await client.get(f'{checks}/reports')).json()['data']
+            reviewed, original = (await client.get(append_canvas_path(checks, f'/reports'))).json()['data']
             assert original == report and reviewed['id'] == accepted['id']
             assert reviewed['basis'] == report['basis'] and reviewed['results'] == [result]
             assert reviewed['recheck']['original_result'] == result

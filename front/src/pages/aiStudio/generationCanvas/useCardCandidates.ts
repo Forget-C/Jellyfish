@@ -10,6 +10,7 @@ export function useCardCandidates(projectId: string, canvasId: string, cardId: s
   const scope = JSON.stringify([projectId, canvasId, cardId, revision, publishedKey, compile])
   const latest = useRef(scope); latest.current = scope
   useEffect(() => {
+    if (revision === -1) return
     let active = true
     void Promise.allSettled([
       Canvases.canvasCardOutputs({ projectId, canvasId, cardId }),

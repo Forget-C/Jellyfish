@@ -6,7 +6,7 @@ import { SoundReferenceCandidate } from './SoundReferenceCandidate'
 import { AnchorReferenceCandidate } from './AnchorReferenceCandidate'
 import { DesignCandidateRelations } from './DesignCandidateRelations'
 import { CompositionFrameCandidate, movementFrameOptions } from './CompositionFrameCandidate'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { Typography } from 'antd'
 import type { DialogueCard, SoundArrangementCard, SpatialAnchorCard, CompositionCard, MovementCard, DesignReferenceIssue, CanvasDocument, CanvasResolvedOutput, ReferenceDesignField, DesignFieldDocument } from '../../../services/generated'
@@ -22,7 +22,7 @@ import { useCardCandidates } from './useCardCandidates'
 import { referenceLabels } from './referenceLabels'
 import { MediaPreview } from './MediaContentEditor'
 import { AcceptanceBasisDetails } from './AcceptanceBasisDetails'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 
 type TargetField = { fieldId: string; segmentId?: string; serial: number }
 interface ReferenceContext {
@@ -37,7 +37,7 @@ export const DesignReferenceContext = createContext<ReferenceContext | undefined
 /** Reference session belongs to one retained design card, not a model prompt binding set. */
 export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField, onDisconnect, onLocateDesign, onChange }: { onChange?: (card: GenerationCard) => void; onDisconnect?: (edgeId: string) => void; onLocateDesign?: (cardId: string, fieldId: string) => void; targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
   const { cardDefinitions } = useGraphRules()
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
   const focused = useRef<React.RefObject<PromptEditorHandle>>()
   const focusedLabel = useRef<string>()
   const [expandedSource, setExpandedSource] = useState<string>()

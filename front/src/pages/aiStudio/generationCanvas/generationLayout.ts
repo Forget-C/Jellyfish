@@ -1,6 +1,6 @@
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { GenerationCanvasGroup } from '../../../services/generated'
-import type { GraphArrange, GraphSize } from '../directing/graphLayout'
+import type { GraphArrange, GraphSize } from './graphLayout'
 
 type CanvasLayoutPlacement = {
   anchorId: string

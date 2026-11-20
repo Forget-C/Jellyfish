@@ -1,4 +1,5 @@
 """独立风格通过画布 HTTP 输出和编译验证，不采用演示媒体。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -6,8 +7,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_style_is_whole_design_and_connection_alone_does_not_adopt(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '风格'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '风格'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document.update(cards=[{'id': 'style', 'type': 'direction.style', 'fields': {
         'direction': {'text': '手绘水彩', 'state': 'proposal'},
@@ -109,8 +110,8 @@ async def test_style_whole_output_reaches_real_worker_without_implicit_media(run
 async def test_style_retired_fixed_examples_are_rejected(canvas_client):
     client = canvas_client
     image = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('style.png', b'image', 'image/png')})).json()['data']
-    canvas = (await client.post('/canvases/p', json={'name': '风格示例'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '风格示例'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     def source(card, port):
         return {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0}

@@ -22,9 +22,9 @@ def review_stack_changes(current: CanvasDocument, planned: CanvasDocument) -> tu
         return group_id in automatic or base in automatic and re.fullmatch(r'[0-9a-f]{8}', revision) is not None
 
     # The comparison copy normalizes exactly as a save does before evaluating each stack.
-    normalized, previous = _normalize_document(planned.model_copy(deep=True), current.model_copy(update={'groups': []}, deep=True))
-    previous.groups = list(stacks.values())
-    previous_document = previous.model_dump()
+    previous = current.model_copy(update={'groups': []}, deep=True)
+    normalized = _normalize_document(planned.model_copy(deep=True), previous)
+    previous_document = current.model_dump()
     planned_stacks = {group.id: group for group in normalized.groups if group.kind == 'stack'}
     # An absent group is not implicit permission to delete all its members during extraction.
     normalized.groups = [planned_stacks.get(group.id) or group.model_copy(update={'card_ids': []}) for group in stacks.values()]

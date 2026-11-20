@@ -32,6 +32,10 @@ class Project(Base, TimestampMixin):
         default=ProjectVisualStyle.live_action,
         comment="画面表现形式（真人/动漫等）",
     )
+    cover_file_id: Mapped[str | None] = mapped_column(
+        ForeignKey("files.id", name="fk_projects_cover_file", ondelete="SET NULL"),
+        nullable=True,
+    )
     seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="随机种子")
     unify_style: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, comment="是否统一风格（跨章节）")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="进度百分比（0-100）")
@@ -39,7 +43,7 @@ class Project(Base, TimestampMixin):
         String(16),
         nullable=True,
         default=None,
-        comment="项目级默认视频比例（可为空；分镜未覆盖时使用）",
+        comment="项目保存的默认视频比例（可为空）",
     )
     stats: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="聚合统计（JSON）")
 
@@ -107,6 +111,7 @@ class Chapter(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="章节标题")
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节摘要")
     raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节原文（未清洗/可较长）")
+    source_explanations: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     condensed_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="由模型精简后的原文（用于抽取/提示词）")
     status: Mapped[ChapterStatus] = mapped_column(
         String(32),

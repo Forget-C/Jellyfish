@@ -15,7 +15,8 @@ from app.schemas.canvas_checks import (
 )
 from app.services.generation_canvas.check_adoption import ADOPTION_CATEGORY
 from app.services.generation_canvas.check_duration import DURATION_CATEGORY, recheck_duration
-from app.services.generation_canvas.check_media import owned_check_files, supports_check_image, supports_check_video
+from app.services.generation_canvas.check_media import owned_check_files
+from app.services.generation_canvas.check_models import supports_check_image, supports_check_video
 from app.services.generation_canvas.check_product_text import PRODUCT_TEXT_CATEGORY
 from app.services.generation_canvas.check_product_video import VIDEO_PRODUCT_CHECK, VIDEO_SEQUENCE, unavailable_video_results
 from app.services.generation_canvas.check_product_visual import VISUAL_PRODUCT_CHECK, unavailable_visual_results
@@ -55,8 +56,8 @@ def _missing_basis(report_id: str, item_id: str):
 class CanvasCheckRechecks:
     """Recheck historical evidence without reading current design or model settings."""
 
-    def __init__(self, db: AsyncSession, project_id: str):
-        self.db, self.project_id = db, project_id
+    def __init__(self, db: AsyncSession, project_id: str | None):
+        self.db, self.project_id = db, project_id or None
         self.checks = CanvasChecks(db, project_id)
 
     async def run(self, canvas_id: str, card_id: str, report_id: str,

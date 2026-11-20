@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasDetachedResult } from './CanvasDetachedResult';
 import type { DesignMediaUse } from './DesignMediaUse';
+import type { GeneratedVideoPrompt } from './GeneratedVideoPrompt';
 import type { InputBinding } from './InputBinding';
 import type { PromptDocument } from './PromptDocument';
 import type { VideoModelConfig } from './VideoModelConfig';
@@ -19,13 +20,10 @@ export type VideoModelCard = {
      */
     show_result_cards?: boolean;
     detached_results?: Array<CanvasDetachedResult>;
-    /**
-     * 已移除设计的稳定身份，补充或明确处理前阻塞运行
-     */
-    missing_designs?: Array<string>;
     prompt?: PromptDocument;
     input_bindings?: Array<InputBinding>;
     type?: string;
+    generated_prompt?: (GeneratedVideoPrompt | null);
     config?: VideoModelConfig;
     design_media_uses?: Array<DesignMediaUse>;
 };

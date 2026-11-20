@@ -1,4 +1,5 @@
 """检查卡通过公开保存、读取、执行和报告边界验收。"""
+from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
 from copy import deepcopy
 
 import pytest
@@ -39,12 +40,12 @@ async def save_canvas(client, url, document, revision, *, expected_status=200):
 @pytest.mark.asyncio
 async def test_check_reuses_actual_input_and_preserves_independent_reports(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '生成前检查'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
-    checks = f'{url}/checks/check'
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '生成前检查'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
+    checks = (url + f'/checks/check')
     document = duration_canvas(canvas['document'])
     await save_canvas(client, url, document, 0)
-    compiled = (await client.get(f'{url}/cards/model/compile')).json()['data']
+    compiled = (await client.get((url + f'/cards/model/compile'))).json()['data']
 
     connect_check(document)
     await save_canvas(client, url, document, 1)
@@ -54,11 +55,11 @@ async def test_check_reuses_actual_input_and_preserves_independent_reports(canva
     assert basis['basis']['parameters']['seconds'] == 5
     assert [source['source']['card_id'] for source in basis['basis']['input']['used']] == ['shot']
     assert any(issue['code'] == 'MODEL_REQUIRED' for issue in basis['basis']['input']['diagnostics'])
-    assert (await client.get(f'{checks}/reports')).json()['data'] == []
+    assert (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'] == []
 
     item, = (item for item in basis['items'] if item['category'] == 'P06')
     request = {'expected_revision': basis['basis']['revision'], 'basis_hash': basis['basis']['basis_hash']}
-    response = await client.post(f'{checks}/runs', json=request)
+    response = await client.post(append_canvas_path(checks, f'/runs'), json=request)
     assert response.status_code == 200, response.text
     first = response.json()['data']
     assert first['scope'] == 'all'
@@ -70,25 +71,25 @@ async def test_check_reuses_actual_input_and_preserves_independent_reports(canva
     document = (await client.get(url)).json()['data']['document']
     document['cards'][0]['estimated_duration'] = {'text': '至少 12 秒', 'state': 'fact', 'purpose': 'constraint'}
     await save_canvas(client, url, document, 2)
-    assert (await client.post(f'{checks}/runs', json=request)).status_code == 409
+    assert (await client.post(append_canvas_path(checks, f'/runs'), json=request)).status_code == 409
     updated = (await client.get(checks)).json()['data']
-    response = await client.post(f'{checks}/runs', json={
+    response = await client.post(append_canvas_path(checks, f'/runs'), json={
         'expected_revision': updated['basis']['revision'], 'basis_hash': updated['basis']['basis_hash'], 'item_id': item['id'],
     })
     assert response.status_code == 200, response.text
     second = response.json()['data']
     assert second['id'] != first['id'] and second['scope'] == 'item'
     assert second['results'][0]['outcome'] == 'nonconforming'
-    assert (await client.get(f'{checks}/reports')).json()['data'] == [second, first]
-    assert (await client.get(f"/canvases/other/{canvas['id']}/checks/check/reports")).status_code == 404
-    assert (await client.get(f'{url}/runtime')).json()['data']['runs'] == []
+    assert (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'] == [second, first]
+    assert (await client.get(canvas_url(f"/canvases/other/{canvas['id']}/checks/check/reports"))).status_code == 404
+    assert (await client.get((url + f'/runtime'))).json()['data']['runs'] == []
 
 
 @pytest.mark.asyncio
 async def test_check_rejects_invalid_and_second_observation_connection(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '检查连接限制'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '检查连接限制'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = duration_canvas(canvas['document'])
     wrong = deepcopy(document)
     connect_check(wrong, port='video')
@@ -107,20 +108,20 @@ async def test_check_rejects_invalid_and_second_observation_connection(canvas_cl
 @pytest.mark.asyncio
 async def test_disabling_business_check_does_not_bypass_invalid_generation_parameters(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '独立技术预检'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '独立技术预检'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = duration_canvas(canvas['document'])
     document['cards'][2].update(model_id='canvas-video', config={'seconds': 5, 'ratio': '9:9'})
     document['cards'][3]['disabled_items'] = ['P06:shot:estimated_duration']
     connect_check(document)
     await save_canvas(client, url, document, 0)
-    preview = (await client.get(f'{url}/checks/check')).json()['data']
+    preview = (await client.get((url + f'/checks/check'))).json()['data']
     assert not preview['items'][0]['enabled']
     basis = preview['basis']
-    assert (await client.post(f'{url}/checks/check/runs', json={
+    assert (await client.post((url + f'/checks/check/runs'), json={
         'expected_revision': basis['revision'], 'basis_hash': basis['basis_hash'],
     })).status_code == 422
-    generation = (await client.get(f'{url}/cards/model/compile')).json()['data']
+    generation = (await client.get((url + f'/cards/model/compile'))).json()['data']
     assert not generation['can_run']
     assert any(issue['code'] == 'INVALID_PARAMETER' for issue in generation['diagnostics'])
 
@@ -132,8 +133,8 @@ async def test_check_item_applicability_is_independent_of_revision_and_enabled_s
         provider = await db.get(Provider, 'canvas-provider')
         provider.api_key = 'test-key'
         await db.commit()
-    canvas = (await client.post('/canvases/p', json={'name': '检查结论适用性'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '检查结论适用性'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = duration_canvas(canvas['document'])
     document['cards'][2].update(model_id='canvas-video', config={'seconds': 5, 'ratio': '16:9'})
     document['cards'][3]['enabled_categories'] = ['P06']
@@ -151,12 +152,12 @@ async def test_check_item_applicability_is_independent_of_revision_and_enabled_s
     await save_canvas(client, url, document, 0)
 
     async def preview(card_id='check'):
-        response = await client.get(f'{url}/checks/{card_id}')
+        response = await client.get((url + f'/checks/{card_id}'))
         assert response.status_code == 200, response.text
         return response.json()['data']
 
     async def run(current, card_id='check', item_id=None):
-        response = await client.post(f'{url}/checks/{card_id}/runs', json={
+        response = await client.post((url + f'/checks/{card_id}/runs'), json={
             'expected_revision': current['basis']['revision'], 'basis_hash': current['basis']['basis_hash'], 'item_id': item_id,
         })
         assert response.status_code == 200, response.text
@@ -171,7 +172,7 @@ async def test_check_item_applicability_is_independent_of_revision_and_enabled_s
 
     credentials = []
     for _ in range(2):
-        response = await client.post(f'{url}/precheck', json={'card_id': 'model'})
+        response = await client.post((url + f'/precheck'), json={'card_id': 'model'})
         assert response.status_code == 200, response.text
         prepared = response.json()['data']
         assert prepared['preview_token'], prepared['diagnostics']
@@ -210,5 +211,5 @@ async def test_check_item_applicability_is_independent_of_revision_and_enabled_s
     retargeted = await preview()
     assert retargeted['basis']['target_card_id'] == 'second-model'
     assert [item['id'] for item in retargeted['items'] if item['category'] == 'P06'] == [second_item['id']]
-    reports = (await client.get(f'{url}/checks/check/reports')).json()['data']
+    reports = (await client.get((url + f'/checks/check/reports'))).json()['data']
     assert reports == [checked_again, single, first]

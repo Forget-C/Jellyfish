@@ -34,6 +34,7 @@ class StoryboardBasisObject(Contract):
     asset_name: str | None = None
     image_file_id: Identity | None = None
     reference_unavailable: bool = False
+    reference_state: Literal['ready', 'unassociated', 'missing', 'unavailable'] | None = None
 
 
 class StoryboardBasis(Contract):
@@ -41,6 +42,7 @@ class StoryboardBasis(Contract):
 
     token: str
     source_text: str
+    shooting_notes: list[dict] = Field(default_factory=list)
     source_changed: bool
     preparation_revision: int
     preparation_stale: bool
@@ -224,6 +226,7 @@ class StoryboardReviewIssue(Contract):
     shot_ids: list[Identity] = Field(min_length=1, max_length=30)
     requirements: Text = Field(max_length=1200)
     suggestion: Text = Field(max_length=1200)
+    prompt_unit_ids: list[Identity] = Field(default_factory=list, max_length=30)
     repair_targets: list[StoryboardRepairTarget] = Field(default_factory=list, max_length=60)
 
 
@@ -318,9 +321,31 @@ class StoryboardRetry(Contract):
     basis_token: str | None = Field(default=None, min_length=64, max_length=64)
     use_saved_objects: bool = False
     regenerate: bool = False
+    correction_notes: str = Field(default="", max_length=2000)
     structure_choice_id: Identity | None = None
     targeted_repair: StoryboardTargetedRepair | None = Field(default=None, exclude_if=lambda value: value is None)
     review_plan: StoryboardPlanReview | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class StoryboardUserIssue(Contract):
+    """User-facing explanation resolved only from the retained draft."""
+
+    title: str
+    explanation: str
+    decision: str
+    context: str = ''
+
+
+class StoryboardAttemptRead(Contract):
+    """One task's outcome; it does not describe unresolved draft validation issues."""
+
+    task_id: Identity
+    created_at: str
+    status: str
+    title: str
+    reason: str
+    correction_notes: str = ''
+    diagnostics: list[str] = Field(default_factory=list)
 
 
 class StoryboardRetryBasis(Contract):
@@ -334,9 +359,16 @@ class StoryboardRetryBasis(Contract):
     production_model_id: Identity | None = None
     production_model_name: str | None = None
     pending_modality: Literal['image', 'video']
+    prompt_only: bool = False
     review_only: bool = False
+    review_basis_changed: bool = False
+    review_diff: "StoryboardDiff | None" = None
     structure_only: bool = False
     structure_issues: list[str] = Field(default_factory=list)
+    user_issues: list[StoryboardUserIssue] = Field(default_factory=list)
+    current_attempt: StoryboardAttemptRead | None = None
+    history: list[StoryboardAttemptRead] = Field(default_factory=list)
+    previous_correction_notes: str = ""
     structure_options: list[StoryboardStructureOption] = Field(default_factory=list)
 
 

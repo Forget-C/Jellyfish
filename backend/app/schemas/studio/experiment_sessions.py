@@ -37,26 +37,14 @@ class ExperimentSessionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ExperimentMessageCreate(BaseModel):
-    """写入一条仅用于用户历史展示的消息。"""
+class ExperimentMessageRead(BaseModel):
+    """持久化消息的展示结构。"""
 
     role: MessageRole
     content: str = ""
     status: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     task_id: str | None = None
-
-
-class ExperimentMessageUpdate(BaseModel):
-    """回写异步任务的用户可见状态与展示结果。"""
-
-    content: str | None = None
-    status: str | None = None
-    payload: dict[str, Any] | None = None
-
-
-class ExperimentMessageRead(ExperimentMessageCreate):
-    """持久化消息的展示结构。"""
 
     id: str
     session_id: str

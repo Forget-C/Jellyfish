@@ -1,4 +1,5 @@
 """检查卡开关和范围按来源稳定保留，通过保存、预览和执行验证。"""
+from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
 import pytest
 
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -13,16 +14,16 @@ def run_request(preview, **selection):
 @pytest.mark.asyncio
 async def test_check_selection_survives_source_replacement_and_keeps_history(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '检查范围选择'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
-    checks = f'{url}/checks/check'
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '检查范围选择'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
+    checks = (url + f'/checks/check')
     document = duration_canvas(canvas['document'])
     connect_check(document)
     await save_canvas(client, url, document, 0)
     first = (await client.get(checks)).json()['data']
     item, = (item for item in first['items'] if item['category'] == 'P06')
     assert first['categories'][0]['id'] == 'P06' and first['categories'][0]['enabled']
-    original = (await client.post(f'{checks}/runs', json=run_request(first))).json()['data']
+    original = (await client.post(append_canvas_path(checks, f'/runs'), json=run_request(first))).json()['data']
 
     document = (await client.get(url)).json()['data']['document']
     check = next(card for card in document['cards'] if card['id'] == 'check')
@@ -35,8 +36,8 @@ async def test_check_selection_survives_source_replacement_and_keeps_history(can
     derived, = (item for item in replacement['items'] if item['category'] == 'P06')
     assert derived['source']['card_id'] == 'unused' and derived['id'] != item['id']
     assert not derived['enabled'] and not replacement['categories'][0]['enabled']
-    assert (await client.post(f'{checks}/runs', json=run_request(replacement))).status_code == 422
-    single = await client.post(f'{checks}/runs', json=run_request(replacement, item_id=derived['id']))
+    assert (await client.post(append_canvas_path(checks, f'/runs'), json=run_request(replacement))).status_code == 422
+    single = await client.post(append_canvas_path(checks, f'/runs'), json=run_request(replacement, item_id=derived['id']))
     assert single.status_code == 200, single.text
     assert single.json()['data']['scope'] == 'item'
     assert [result['item_id'] for result in single.json()['data']['results']] == [derived['id']]
@@ -51,15 +52,15 @@ async def test_check_selection_survives_source_replacement_and_keeps_history(can
     derived, = (item for item in restored['items'] if item['category'] == 'P06')
     assert restored['categories'][0]['enabled'] and not derived['enabled']
     assert derived['id'] == item['id'] and derived['scope_note'] == '核对本镜头'
-    assert (await client.get(f'{checks}/reports')).json()['data'][-1] == original
+    assert (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'][-1] == original
 
 
 @pytest.mark.asyncio
 async def test_missing_seconds_keeps_applicable_item_but_empty_duration_is_not_applicable(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '检查项适用性'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
-    checks = f'{url}/checks/check'
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '检查项适用性'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
+    checks = (url + f'/checks/check')
     document = duration_canvas(canvas['document'])
     document['cards'][2]['config'] = {}
     connect_check(document)
@@ -69,8 +70,8 @@ async def test_missing_seconds_keeps_applicable_item_but_empty_duration_is_not_a
     assert preview['categories'][0]['availability'] == 'unavailable'
     item, = (item for item in preview['items'] if item['category'] == 'P06')
     assert item['availability'] == 'unavailable' and item['reason'] == '请先填写本次生成时长'
-    assert (await client.post(f'{checks}/runs', json=run_request(preview, item_id=item['id']))).status_code == 422
-    assert (await client.get(f'{checks}/reports')).json()['data'] == []
+    assert (await client.post(append_canvas_path(checks, f'/runs'), json=run_request(preview, item_id=item['id']))).status_code == 422
+    assert (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'] == []
 
     document = (await client.get(url)).json()['data']['document']
     document['cards'][0]['estimated_duration'] = {'state': 'empty', 'text': ''}
@@ -83,8 +84,8 @@ async def test_missing_seconds_keeps_applicable_item_but_empty_duration_is_not_a
 @pytest.mark.asyncio
 async def test_unrelated_shots_remain_unavailable_instead_of_compared_to_whole_duration(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '不擅自汇总时长'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '不擅自汇总时长'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = duration_canvas(canvas['document'])
     document['edges'].append({
         'id': 'adopt-second', 'source_card': 'unused', 'source_port': 'text',
@@ -93,8 +94,8 @@ async def test_unrelated_shots_remain_unavailable_instead_of_compared_to_whole_d
     document['input_order']['model']['text'].append('adopt-second')
     connect_check(document)
     await save_canvas(client, url, document, 0)
-    preview = (await client.get(f'{url}/checks/check')).json()['data']
+    preview = (await client.get((url + f'/checks/check'))).json()['data']
     assert {item['source']['card_id'] for item in preview['items'] if item['category'] == 'P06'} == {'shot', 'unused'}
     assert {item['availability'] for item in preview['items']} == {'unavailable'}
     assert all('同一范围' in item['reason'] for item in preview['items'] if item['category'] == 'P06')
-    assert (await client.post(f'{url}/checks/check/runs', json=run_request(preview))).status_code == 422
+    assert (await client.post((url + f'/checks/check/runs'), json=run_request(preview))).status_code == 422

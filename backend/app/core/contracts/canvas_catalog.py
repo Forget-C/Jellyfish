@@ -64,7 +64,7 @@ class CanvasConnectionPolicy(BaseModel):
 
 
 class CanvasCatalog(BaseModel):
-    """当前应用版本的权威类型目录；不随画布编辑修订变化。"""
+    """当前画布归属允许的权威类型目录；不随画布编辑修订变化。"""
     model_config = ConfigDict(extra='forbid')
     version: Literal[1] = 1
     cards: list[CanvasCardTypeDefinition]

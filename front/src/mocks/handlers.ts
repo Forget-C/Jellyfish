@@ -92,6 +92,7 @@ function toChapterRead(c: Chapter) {
     index: c.index,
     title: c.title,
     summary: c.summary,
+    raw_text: c.summary ?? '',
     sequence_count: c.sequenceCount,
     status: c.status,
   }
@@ -101,18 +102,26 @@ export const handlers = [
   // ====== StudioProjectsService /api/v1/studio/projects ======
   http.get('/api/v1/studio/projects', ({ request }) => {
     const url = new URL(request.url)
-    const q = url.searchParams.get('q')?.trim()
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
     const page = Number(url.searchParams.get('page') ?? '1') || 1
     const pageSize = Number(url.searchParams.get('page_size') ?? '10') || 10
+    const stage = url.searchParams.get('stage')
+    const order = url.searchParams.get('order')
+    const desc = url.searchParams.get('is_desc') === 'true'
+    const projectChapters = (project: MockProject) => chaptersList.filter(chapter => chapter.projectId === project.id)
 
-    let list = projectsList
-    if (q) {
-      list = list.filter(
-        (p) =>
-          p.name.includes(q) ||
-          (p.description && p.description.includes(q)),
-      )
-    }
+    const list = projectsList.filter(project => {
+      if (q && !project.name.toLowerCase().includes(q) && !project.description?.toLowerCase().includes(q)) return false
+      if (stage !== 'edit_raw') return true
+      const chapters = projectChapters(project)
+      return !chapters.length || chapters.some(chapter => !chapter.summary?.trim())
+    })
+    list.sort((left, right) => {
+      const comparison = order === 'name' ? left.name.localeCompare(right.name)
+        : order === 'chapter_count' ? projectChapters(left).length - projectChapters(right).length
+          : (left.updatedAt ?? '').localeCompare(right.updatedAt ?? '')
+      return (desc ? -comparison : comparison) || left.id.localeCompare(right.id)
+    })
 
     const paged = makePagination(list.map(toProjectRead), page, pageSize)
     return ok(paged)

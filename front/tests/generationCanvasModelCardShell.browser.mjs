@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8610', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8610', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8610' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -42,7 +42,7 @@ try {
   }
   const defaults = await fetch(api+'/api/v1/llm/model-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({default_text_model_id:null,default_image_model_id:null,default_video_model_id:null})})
   assert.ok(defaults.ok,await defaults.text())
-  const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '模型卡固定尺寸与底部状态' })
+  const canvas = await request('/api/v1/studio/generation-canvases', { name: '模型卡固定尺寸与底部状态' })
   const ids = ['short', 'long', 'empty', 'image', 'video']
   const positions = Object.fromEntries([...ids, 'content'].map((id, index) => [id, { x: 120 + index % 3 * 400, y: 200 + Math.floor(index / 3) * 500 }]))
   const contentCards = [
@@ -52,7 +52,7 @@ try {
   ]
   Object.assign(positions,{description:{x:1500,y:200},basis:{x:1500,y:450}})
   const sizes = { description:{width:440,height:204}, basis:{width:480,height:250}, short: {width:360,height:424}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
-  const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
+  const layoutKey = `jellyfish:generation-layout::${canvas.id}:view:canvas`
   const transform = {x:0,y:0,scale:1}
   const upload = async (name, data, type) => {
     const form = new FormData(); form.append('file',new Blob([data],{type}),name); form.append('project_id','canvas-project'); form.append('usage_kind','generation_upload')
@@ -86,7 +86,7 @@ try {
     await route.fulfill({ contentType: 'text/event-stream', body: event ? `data: ${JSON.stringify(event)}\n\n` : ': waiting\n\n' })
   })
   let scenarioOutputs
-  await page.route('**/runtime', async route => {
+  await page.route('**/runtime?project_id=*', async route => {
     const outputs = scenario === 'empty' ? {} : {short:[out('short',0,'text',{text:'一行短文本'})], long:[out('long',0,'text',{text:'很长的生成内容。'.repeat(1000)})], image:[out('image',0,'image',{file_id:imageId}),out('image',1,'image',{file_id:imageId})],video:[out('video',0,'video',{file_id:videoId}),out('video',1,'audio',{file_id:voiceId})]}
     scenarioOutputs = outputs
     const nodes = scenario === 'empty' ? [] : ids.filter(id=>id!=='empty').map(id=>({id:'node-'+id,run_id:'run',card_id:id,task_id:null,status:scenario,stage:scenario==='running'?'generating':'finished',progress:scenario==='running'?30:100,text:scenario==='running'?'正在生成'.repeat(500):'',basis:{},outputs:outputs[id]||[],result_set_id:null,current_output_updated:scenario==='succeeded',error_code:scenario==='failed'?'fixture_failure':null,error_message:scenario==='failed'?'生成失败，保留上次结果':null}))
@@ -101,7 +101,7 @@ try {
     }
     requestAnimationFrame(captureFirstFrame)
   },{layoutKey,positions,sizes,transform})
-  const url=`http://127.0.0.1:${port}/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  const url=`http://127.0.0.1:${port}/canvases/${canvas.id}`
   const modelHeights = {short:304,long:304,empty:304,image:424,video:424}
   const checkGeometry = async (scale=1) => {
     for (const id of ids) {
@@ -237,7 +237,7 @@ try {
     await card.getByText('voice', { exact: true }).waitFor()
     await card.getByText('4 秒', { exact: true }).waitFor()
   }
-  const readCanvas = () => request('/api/v1/studio/generation-canvases/canvas-project/' + canvas.id)
+  const readCanvas = () => request('/api/v1/studio/generation-canvases/' + canvas.id)
   const beforePlayback = await readCanvas()
   let cursor = 4
   let currentMedia = scenarioOutputs.video

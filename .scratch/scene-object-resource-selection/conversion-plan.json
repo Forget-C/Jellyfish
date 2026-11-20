@@ -1,0 +1,42 @@
+{
+  "sequences": [
+    {
+      "sequence_id": "d745684b7495466cb2aaa6bdc3552aed",
+      "project_id": "a4ea5321-a5ff-46f9-805a-17c1ad182ae6",
+      "revision": 10,
+      "before_sha256": "30d5f33ada18c900191f3400a9b6251a84967170d284bc652a25acfbe67b8a9c",
+      "after_sha256": "2e449334ed9443b4f85c4e56b65a9cfcdedc00bb169a16f7cd06c451341bdc07",
+      "objects": [
+        {
+          "object_id": "603498127761664c7c17eb7341365a03caf953eb74781840b2df8300a7129bed",
+          "action": "convert"
+        },
+        {
+          "object_id": "2f28aea312edb74e6ce2ef1f4feaf7f6e11756d74ce9815ab120584591784e75",
+          "action": "convert"
+        },
+        {
+          "object_id": "ad4ecc6e960367159fb50b4f3509395ccb11318ab7243dcd294f6c84ef11fdf2",
+          "action": "convert"
+        },
+        {
+          "object_id": "c97b59d488433dd029211535d5a768ac28e30aa8f83be061ec99182b3d8c4e28",
+          "action": "convert"
+        },
+        {
+          "object_id": "43bbf351a3bc46aa5fb328437f4ff49b7452dfab17de87f329dc2653f98d31d5",
+          "action": "convert"
+        }
+      ]
+    }
+  ],
+  "release_usages": [
+    2518
+  ],
+  "retained_usages": [
+    2510,
+    2511,
+    2513,
+    2517
+  ]
+}

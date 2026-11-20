@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 /** 退役旧摄影用例沿用真实HTTP/DB页面，分别验证清理、六类编辑及卡面。 */
 export async function verifyIndependentDesigns(scenario, port) {
   const root=fileURLToPath(new URL('..',import.meta.url)), output=await browserOutput('jellyfish-independent-designs-')
-  const api=`http://127.0.0.1:${port+4000}`, base=`${api}/api/v1/studio/generation-canvases/canvas-project`
+  const api=`http://127.0.0.1:${port+4000}`, base=`${api}/api/v1/studio/generation-canvases`
   const backend=spawn('uv',['run','--no-sync','python','-m','tests.generation_canvas_images_browser_server'],{cwd:join(root,'../backend'),env:{...process.env,PYTHONPATH:join(root,'../backend'),UV_CACHE_DIR:'/tmp/jellyfish-uv-cache',CANVAS_BROWSER_PORT:String(port+4000),CANVAS_BROWSER_DATABASE:join(output,'browser.sqlite'),CANVAS_BROWSER_MEDIA_STORAGE:join(output,'media')},stdio:['ignore','pipe','pipe']})
   captureBackend(backend,output)
   let browser,server
@@ -22,7 +23,7 @@ export async function verifyIndependentDesigns(scenario, port) {
     browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL})
     const context=await browser.newContext({viewport:{width:1440,height:960}}), page=await context.newPage()
     await page.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
-    const canvas=(await (await fetch(base,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'六类设计'})})).json()).data
+    const canvas = await createStoryboardCanvas(base, '六类设计')
     const types=['style','composition','camera','movement','lighting','focus']
     const compactExamples = {
       criterion: ['standard', '检查钥匙仍在人物左手。'.repeat(45)],
@@ -92,7 +93,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       {id:'relation-only',type:'direction.focus',input_bindings:[{id:'person-use',input_port:'focus_object',source:{canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'person-id'}}]}
     )
     if(scenario==='summaries') {
-      const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards
+      const catalog=(await (await fetch(storyboardCanvasApi(base, canvas.id, `/catalog`))).json()).data.cards
       const otherDesigns=catalog.filter(card=>card.type.startsWith('direction.') && !types.includes(card.type.slice('direction.'.length)))
       assert.equal(otherDesigns.length,19)
       cards.push(...otherDesigns.map(card => {
@@ -133,8 +134,7 @@ export async function verifyIndependentDesigns(scenario, port) {
         }
       }
     }
-    if(scenario==='retirement')cards.push({id:'old',type:'direction.photography'},{id:'model',type:'model.text',input_bindings:[{id:'old-use',input_port:'text',source:{canvas_id:canvas.id,card_id:'old',port_id:'text',position:0},photography_scope:['whole']}]})
-    const document={...canvas.document,cards,edges:scenario==='retirement'?[{id:'retired',source_card:'old',source_port:'text',target_card:'model',target_port:'text'}]:[],input_order:{}}
+    const document = { ...canvas.document, cards, edges: [], input_order: {} }
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
     const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, camera: { x: 1860, y: 840 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 }, 'empty-style': { x: 1860, y: 180 }, 'invalid-frame': { x: 1860, y: 500 } }
     if (scenario === 'summaries') {
@@ -162,20 +162,13 @@ export async function verifyIndependentDesigns(scenario, port) {
         sessionStorage.setItem('compact-layout-seeded', 'true')
       }, { key: compactLayoutKey, positions: compactPositions })
     }
-    const saved=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(saved.ok,await saved.text())
-    const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
+    const saved=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})});assert.ok(saved.ok,await saved.text())
+    const read=async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
     const poll=async predicate=>{for(let i=0;i<80;i++){if(predicate(await read()))return;await delay(100)}throw Error('save timeout')}
-    await page.goto(`http://127.0.0.1:${port}/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+    await page.goto(`http://127.0.0.1:${port}${storyboardCanvasPath(canvas)}`)
     const detail=page.locator('.wb-details:visible')
     if(scenario==='retirement'){
       assert.equal(await page.locator('[data-card-type="direction.photography"]').count(),0)
-      await page.locator('[data-card-id="model"]').press('Enter')
-      const inspection=detail.getByRole('button',{name:'打开模型配置与检查',exact:true});if(await inspection.count())await inspection.click()
-      await detail.getByText('旧摄影设计已移除，需要补充设计依据',{exact:true}).waitFor()
-      await page.screenshot({path:join(output,'missing-design.png')})
-      assert.ok((await (await fetch(`${base}/${canvas.id}/cards/model/compile`)).json()).data.diagnostics.some(item=>item.code==='DESIGN_BASIS_MISSING'))
-      await detail.getByRole('button',{name:'已处理缺失设计',exact:true}).click();await poll(s=>s.document.cards.find(c=>c.id==='model').missing_designs.length===0)
-      await page.keyboard.press('Escape');await detail.waitFor({state:'hidden'})
     }
     const assertDesignGeometry = async target => {
       await target.locator('[data-card-id="criterion"]').waitFor({ state: 'attached' })
@@ -527,7 +520,7 @@ export async function verifyIndependentDesigns(scenario, port) {
       await observer.screenshot({ path: join(output, 'structured-shot-readonly-mobile.png'), animations: 'disabled' })
       await observer.close()
     }
-    const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data.cards.filter(c=>c.category==='画面设计');assert.equal(catalog.length,6);assert.ok(catalog.every(c=>c.outputs[0].adoption==='whole_card'&&c.entries.length===0))
+    const catalog=(await (await fetch(storyboardCanvasApi(base, canvas.id, `/catalog`))).json()).data.cards.filter(c=>c.category==='画面设计');assert.equal(catalog.length,6);assert.ok(catalog.every(c=>c.outputs[0].adoption==='whole_card'&&c.entries.length===0))
     console.log(`PASS ${scenario}: six independent designs, no legacy navigation, saved fields, narrow layout`)
   } finally {await cleanup()}
 }

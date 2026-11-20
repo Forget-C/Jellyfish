@@ -53,15 +53,20 @@ class ContentOutputHandler:
             return publish_design(canvas_id, card, adopted_inputs)
         if isinstance(card, NamedImageReferenceCard):
             # 图外围控制名称就绪；保存校验仍需核对草稿的稳定身份。
-            obj = NamedImageObject(object_id=card.name_binding.object_id if card.name_binding else card.object_id or card.id, name=card.name.strip(), category=card.type.split('.')[1])
+            obj = NamedImageObject(object_id=card.name_binding.object_id if card.name_binding else card.object_id or (card.scene_object_source.object_id if card.scene_object_source else card.id), name=card.name.strip(), category=card.type.split('.')[1])
             outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
                 port_id='object', position=0, object_id=obj.object_id), modality='text',
                 payload=ObjectReferencePayload(object_id=obj.object_id, name=obj.name, category=obj.category))]
-            if card.image_binding:
+            if card.scene_object_source and published_results:
+                return list(published_results) + outputs
+            if card.image_binding or card.scene_object_source:
                 image = next((item for item in published_results if item.source.port_id == 'image'), None)
-                outputs.insert(0, image or CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
-                    port_id='image', position=0), modality='image', payload=NamedImagePayload(
-                    name=card.name.strip(), file_id=card.image_binding.file_id, objects=[obj], angle=card.angle)))
+                if image is None:
+                    source = OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='image', position=0)
+                    image = CanvasResolvedOutput(source=source, modality='image', payload=NamedImagePayload(
+                        name=card.name.strip(), file_id=card.image_binding.file_id, objects=[obj], angle=card.angle)) if card.image_binding else CanvasResolvedOutput(
+                        source=source, modality='image', available=False)
+                outputs.insert(0, image)
             return outputs
         if isinstance(card, ObjectDescriptionCard):
             outputs = []

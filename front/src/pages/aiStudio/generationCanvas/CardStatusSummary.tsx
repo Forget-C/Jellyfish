@@ -4,7 +4,7 @@ import { InfoCircleOutlined, LinkOutlined } from '@ant-design/icons'
 import type { CanvasNodeRead, CanvasResolvedOutput } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
-import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import './cardStatusSummary.css'
 
 /** 状态只读取本卡的实际采用和运行快照；候选边不计入来源数。 */

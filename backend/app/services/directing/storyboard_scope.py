@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from pydantic import ValidationError
+
 from app.core.contracts.directing.scene_storyboard import StoryboardDesign, StoryboardField
 from app.services.generation_canvas.capabilities import parameter_diagnostics
 from app.services.generation_canvas.catalog import canvas_catalog
@@ -96,6 +98,7 @@ class StoryboardDesignPlan:
         self.pieces = []
         self.fields = {}
         seen = set()
+        subject_errors = {}
         for owner, design in design_rows:
             prefix = self.design_key(owner, design.id)
             if prefix in seen:
@@ -122,10 +125,19 @@ class StoryboardDesignPlan:
                 if (design.object_id and not piece.carries_subject
                         and any(design.object_id not in shots[key].object_ids for key in scope.shots)):
                     missing = [key for key in scope.shots if design.object_id not in shots[key].object_ids]
-                    raise ValueError(f'设计主体未参与其声明的镜头：设计 {prefix}，字段 {", ".join(scoped_notes)}，'
-                                     f'对象 {design.object_id}，镜头 {", ".join(missing)}；请核对设计范围或实际参与对象，不得机械补充对象')
+                    # Merge scope pieces of the same design so field count does not inflate issue count.
+                    entry = subject_errors.setdefault(prefix, (design.object_id, [], []))
+                    entry[1].extend(name for name in scoped_notes if name not in entry[1])
+                    entry[2].extend(key for key in missing if key not in entry[2])
                 self.pieces.append(piece)
                 self.fields.update({(prefix, name): piece for name in scoped_notes})
+
+        if subject_errors:
+            raise ValidationError.from_exception_data('SceneStoryboard', [
+                {'type': 'value_error', 'loc': ('design',), 'input': subject,
+                 'ctx': {'error': ValueError(f'设计主体未参与其声明的镜头：设计 {prefix}，字段 {", ".join(names)}，'
+                         f'对象 {subject}，镜头 {", ".join(missing)}；请核对设计范围或实际参与对象，不得机械补充对象')}}
+                for prefix, (subject, names, missing) in subject_errors.items()])
 
     @staticmethod
     def design_key(owner, design_id):

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import json
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, select, case
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
@@ -16,7 +16,7 @@ from app.models.task import Task, TaskOutput
 from app.services.task_sources import resolve_task_sources
 from app.services.task_service import AUTO_CHECK_DISPATCH
 from app.models.studio_prompts_files_timeline import FileItem
-from app.schemas.task import TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead
+from app.schemas.task import TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead, ActorImageParametersRead
 
 
 # 列表不加载大输入、文本结果、供应商响应或错误正文。
@@ -81,14 +81,8 @@ class TaskQueries:
             raise HTTPException(status_code=422, detail="invalid_task_page_size")
         if created_from is not None and created_before is not None and _utc_naive(created_from) >= _utc_naive(created_before):
             raise HTTPException(status_code=422, detail="invalid_task_date_range")
-        stmt = select(*_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"),
-            case(*[(Task.kind == kind, Task.input_snapshot[key]['version_id'].as_string())
-                for kind, key in [('directing_instruction', 'scene_instruction'),
-                    ('directing_instruction_check', 'instruction_check'), ('directing_design', 'scene_design'), ('directing_unit_design', 'scene_unit_design')]]).label('scene_version_id'),
-            case(*[(Task.kind == kind, Task.input_snapshot[key]['unit_id'].as_string())
-                for kind, key in [('directing_instruction', 'scene_instruction'),
-                    ('directing_instruction_check', 'instruction_check')]]).label('scene_unit_id'),
-            Task.input_snapshot['scene_unit_design']['request']['shot_id'].as_string().label('scene_shot_id')
+        stmt = select(
+            *_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"),
         ).where(Task.kind != AUTO_CHECK_DISPATCH)
         for column, value in ((Task.kind, task_kind), (Task.target_type, target_type),
                               (Task.target_id, target_id), (Task.project_id, project_id)):
@@ -120,6 +114,43 @@ class TaskQueries:
             last = rows[limit - 1]
             next_cursor = urlsafe_b64encode(json.dumps([last.created_at.isoformat(), last.id]).encode()).decode()
         return TaskPageRead(items=items, next_cursor=next_cursor)
+
+    async def asset_image_parameters(self, entity_type: str, entity_id: str, image_id: int) -> ActorImageParametersRead | None:
+        """只读匹配同类别、同对象的当前文件来源，不补齐历史参数。"""
+        from app.services.studio.entity_specs import entity_spec  # pylint: disable=import-outside-toplevel
+
+        if entity_type not in {"actor", "character", "scene", "prop", "costume"}:
+            raise HTTPException(status_code=422, detail="Unsupported asset type")
+        spec = entity_spec(entity_type)
+        image = await self.db.get(spec.image_model, image_id)
+        if image is None or getattr(image, spec.id_field) != entity_id:
+            raise HTTPException(status_code=404, detail="Asset image not found")
+        if not image.file_id:
+            return None
+        task = await self.db.scalar(select(Task).join(TaskOutput, TaskOutput.task_id == Task.id).where(
+            TaskOutput.file_id == image.file_id, Task.kind == "image_generation",
+            Task.target_type == f"{entity_type}_image_slot",
+            Task.input_snapshot["target_parent_id"].as_string() == entity_id,
+        ).order_by(Task.created_at.desc(), Task.id.desc()).limit(1))
+        if task is None:
+            return None
+        snapshot = task.input_snapshot or {}
+        audit = snapshot.get("asset_prompt_audit")
+        audit = audit if isinstance(audit, dict) else {}
+        variables = audit.get("variables")
+        variables = variables if isinstance(variables, dict) else {}
+        keys = {"framing_instruction", "background_instruction", "lighting_instruction", "visible_detail_instruction",
+                "negative_prompt", "additional_instruction", "edit_instruction", "preserve_instruction"}
+        parameters = {key: value for key, value in variables.items() if key in keys and isinstance(value, str) and value}
+        references = audit.get("reference_file_ids")
+        return ActorImageParametersRead(
+            task_id=task.id, created_at_ts=timestamp(task.created_at),
+            model_name=snapshot.get("model_name") if isinstance(snapshot.get("model_name"), str) else None,
+            view_angle=variables.get("view_angle") if isinstance(variables.get("view_angle"), str) else None,
+            reference_count=len(references) if isinstance(references, list) else None,
+            execution_prompt=snapshot.get("execution_prompt") if isinstance(snapshot.get("execution_prompt"), str) else None,
+            parameters=parameters,
+        )
 
     async def outputs(
         self, *, target_type: str, target_id: str, cursor: str | None = None, limit: int = 100,
@@ -182,23 +213,30 @@ class TaskQueries:
         """批量投影消息关联任务，查询次数不随消息数增加。"""
         if not task_ids:
             return {}
-        tasks = list(await self.db.scalars(select(Task).where(Task.id.in_(task_ids))))
-        rows = (await self.db.execute(select(TaskOutput, FileItem).join(
+        tasks = (await self.db.execute(select(
+            Task.id, Task.status, Task.stage, Task.progress, Task.cancel_requested_at,
+            Task.started_at, Task.finished_at, Task.kind, Task.result, Task.provider_task_id,
+            Task.error_code, Task.error_message,
+        ).where(Task.id.in_(task_ids)))).all()
+        rows = (await self.db.execute(select(
+            TaskOutput.task_id, TaskOutput.ordinal, FileItem.id.label("file_id"), FileItem.type,
+            FileItem.deleted_at, TaskOutput.delivery_status, TaskOutput.delivery_reason,
+        ).join(
             FileItem, FileItem.id == TaskOutput.file_id,
         ).where(TaskOutput.task_id.in_(task_ids)).order_by(TaskOutput.ordinal))).all()
         grouped: dict[str, list] = {}
-        for output, file in rows:
-            grouped.setdefault(output.task_id, []).append((output, file))
+        for row in rows:
+            grouped.setdefault(row.task_id, []).append(row)
         return {task.id: _result_view(task, grouped.get(task.id, [])) for task in tasks}
 
 
-def _result_view(task: Task, rows: list) -> TaskResultRead:
+def _result_view(task, rows: list) -> TaskResultRead:
     """将数据库事实组成响应；不会回写消息或其他业务表。"""
     outputs = [TaskOutputRead(
-        ordinal=output.ordinal, file_id=file.id, media_type=file.type,
+        ordinal=output.ordinal, file_id=output.file_id, media_type=output.type,
         delivery_status=output.delivery_status, delivery_reason=output.delivery_reason,
-        deleted=file.deleted_at is not None,
-    ) for output, file in rows]
+        deleted=output.deleted_at is not None,
+    ) for output in rows]
     delivery = None
     if task.kind in {"image_generation", "video_generation"} and task.status in TERMINAL_TASK_STATUSES:
         delivery = GenerationDeliveryResult(

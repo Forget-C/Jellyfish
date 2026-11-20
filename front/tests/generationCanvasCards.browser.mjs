@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, expandCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -13,7 +14,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8423'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     PYTHONPATH: join(root, '../backend'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8423' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -35,7 +36,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const created = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '卡片阅读验证' }) })).json()).data
+  const created = await createStoryboardCanvas(base, '卡片阅读验证')
   const id = created.id
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', join(output, 'voice.wav')])
@@ -47,11 +48,11 @@ try {
     const file = (await response.json()).data; assert.ok(response.ok)
     media.push({ id: `${type}-card`, type: `content.${type}`, file_id: file.id })
   }
-  const cards = [{ id: 'text-one', type: 'content.object', name: '张三', category: 'character', object_id: 'character-one', text: '三十岁的人物描述' }, { id: 'text-two', type: 'content.text', text: '第二张正文' }, ...media, { id: 'model-card', type: 'model.text', model_id: null, prompt: { segments: [] }, config: {} }, { id: 'director-card', type: 'direction.fact', input_bindings: [], examples: [], scope: {} }]
-  cards.push({ id: 'reference-card', type: 'reference.character', title: '正面角色参考', angle: '正面', objects: [], image_binding: { file_id: media[0].file_id, source:{canvas_id:id,card_id:media[0].id,port_id:'image',position:0} } })
-  const saved = await fetch(`${base}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: created.revision, document: { ...created.document, cards, edges:[{id:'reference-image',source_card:media[0].id,source_port:'image',target_card:'reference-card',target_port:'image_source'}],input_order:{'reference-card':{image_source:['reference-image']}} } }) })
+  const cards = [{ id: 'text-one', type: 'content.character', name: '张三', category: 'character', object_id: 'character-one', text: '三十岁的人物描述' }, { id: 'text-two', type: 'content.text', text: '第二张正文' }, ...media, { id: 'model-card', type: 'model.text', model_id: null, prompt: { segments: [] }, config: {} }, { id: 'director-card', type: 'direction.fact', input_bindings: [], examples: [], scope: {} }]
+  cards.push({ id: 'reference-card', type: 'reference.character', name: '正面角色参考', angle: '正面', image_binding: { file_id: media[0].file_id, source:{canvas_id:id,card_id:media[0].id,port_id:'image',position:0} } })
+  const saved = await fetch(storyboardCanvasApi(base, id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: created.revision, document: { ...created.document, cards: [...cards, ...created.document.cards], edges:[{id:'reference-image',source_card:media[0].id,source_port:'image',target_card:'reference-card',target_port:'image_source'}],input_order:{'reference-card':{image_source:['reference-image']}} } }) })
   assert.ok(saved.ok, await saved.text())
-  await page.goto(`http://127.0.0.1:4423/projects/canvas-project/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4423${storyboardCanvasPath(created)}`)
   const card = page.locator('[data-card-id="text-one"]')
   await card.waitFor()
   await closeCanvasDetails(page)
@@ -159,7 +160,7 @@ try {
   await closeCanvasDetails(page)
   await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false })
   await touch.detach()
-  const persisted = (await (await fetch(`${base}/${id}`)).json()).data.document
+  const persisted = (await (await fetch(storyboardCanvasApi(base, id))).json()).data.document
   assert.equal(persisted.cards.find(value => value.id === 'text-one').text, '自动保存期间的连续输入')
   assert.deepEqual(persisted.cards.find(value => value.id === 'model-card').input_bindings || [], [], 'layout gestures do not adopt input')
   const move = card.getByRole('button', { name: '移动布局：张三', exact: true })

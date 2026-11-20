@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { chapters as mockChapters, type Project, type Chapter as MockChapter } from '../../../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../../../services/generated'
 import type { ChapterRead, ProjectRead, ProjectUpdate } from '../../../../../services/generated'
-import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -58,15 +57,16 @@ export function useProject(projectId: string | undefined) {
   }, [projectId])
 
   // 持有设置页的保存锁，切换项目内页签时仍由同一个工作台处理返回结果。
-  async function saveProject(values: ProjectUpdate) {
+  async function saveProject(values: ProjectUpdate, coverUpload?: File) {
     if (!projectId || pendingSave.current) return false
     pendingSave.current = true
     setSaving(true)
     try {
-      const response = await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({
-        projectId,
-        requestBody: values,
-      })
+      const response = coverUpload
+        ? await StudioProjectsService.updateProjectWithCoverUploadApiV1StudioProjectsProjectIdCoverUploadPatch({
+          projectId, formData: { file: coverUpload as unknown as string, settings: JSON.stringify(values) },
+        })
+        : await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({ projectId, requestBody: values })
       const updated = response.data
       if (updated?.id !== projectId) throw new Error('未能确认保存结果，请重试')
       setProject(current => current?.id === updated.id ? updated : current)
@@ -125,39 +125,6 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
   }, [load])
 
   return { chapters, loading, total, totalKnown, error, refresh: load }
-}
-
-export function useProjectCharacters(projectId: string | undefined) {
-  const [characters, setCharacters] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    if (!projectId) {
-      setCharacters([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await StudioEntitiesApi.list('character', {
-        page: 1,
-        pageSize: 100,
-        q: null,
-      })
-      const items = (res.data?.items ?? []).filter((x) => x.project_id === projectId)
-      setCharacters(items)
-    } catch {
-      setCharacters([])
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  return { characters, loading, refresh: load }
 }
 
 export { newId }

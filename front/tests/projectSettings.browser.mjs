@@ -16,6 +16,7 @@ let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
 let saved = { id:'settings-project',name:'原有项目',description:'原有简介',visual_style:'现实',style:'真人都市',seed:12,unify_style:true,default_video_ratio:'16:9' }
 let pendingSave
+let coverUploads = 0
 const requests = [], errors = []
 try {
   await server.listen()
@@ -27,15 +28,40 @@ try {
   await page.route('**/api/**',route=>{
     const request=route.request(),path=new URL(request.url()).pathname
     const respond=data=>route.fulfill({json:{success:true,data}})
+    if (path.endsWith('/files')) {
+      const params = new URL(request.url()).searchParams
+      assert.equal(params.get('file_type'), 'image')
+      assert.equal(params.has('project_id'), false)
+      return respond({ items: [{ id: 'source-cover', name: '文件海报', type: 'image' }], pagination: { total: 1 } })
+    }
+    if (path.endsWith('/download')) return route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6aYAAAAASUVORK5CYII=', 'base64'),
+    })
+    if (path.endsWith('/cover-upload')) {
+      coverUploads++
+      const body = request.postData()
+      assert.match(request.headers()['content-type'], /multipart\/form-data/)
+      assert.match(body, /filename="cover.png"/)
+      assert.match(body, /"name":"带上传封面的项目"/)
+      saved = { ...saved, name: '带上传封面的项目', cover_file_id: 'uploaded-cover' }
+      return respond(saved)
+    }
     if(path.endsWith('/projects/settings-project') && request.method()==='PATCH') {
       requests.push(request.postDataJSON())
       return new Promise(resolve=>{pendingSave=async(fail)=>{
         if(fail) await route.fulfill({status:503,json:{detail:'保存暂不可用'}})
-        else {saved={...saved,...request.postDataJSON()};await respond(saved)}
+        else {
+          const changes = request.postDataJSON()
+          if (changes.cover_file_id === 'source-cover') changes.cover_file_id = 'cloned-cover'
+          saved = { ...saved, ...changes }
+          await respond(saved)
+        }
         resolve()
       }})
     }
     if(path.endsWith('/projects/settings-project'))return respond(saved)
+    if(path.endsWith('/studio/projects'))return respond({ items: [saved], pagination: { total: 1 } })
     if(path.endsWith('/chapters'))return respond({items:[],pagination:{total:0}})
     if(path.endsWith('/video-generation-options'))return respond({allowed_ratios:['16:9','9:16'],default_ratio:'16:9'})
     return respond({items:[]})
@@ -105,6 +131,40 @@ try {
       assert.equal(await description.evaluate(input=>input===document.activeElement),true)
     }
   }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await cancel.click()
+  const chooseCover = async () => {
+    await page.getByRole('button', { name: '设置封面' }).click()
+    await page.getByRole('menuitem', { name: '从文件管理选择' }).click()
+    await page.getByRole('dialog', { name: '从文件管理选择图片' }).getByRole('button', { name: '文件海报' }).click()
+  }
+  const preview = page.getByRole('img', { name: '项目封面预览' })
+  await chooseCover()
+  assert.match(await preview.getAttribute('src'), /source-cover/)
+  await cancel.click()
+  assert.equal(await preview.count(), 0)
+  assert.equal(requests.length, 2)
+  await chooseCover()
+  const coverSave = page.waitForRequest(request => request.method() === 'PATCH')
+  await save.click()
+  await coverSave
+  assert.equal(requests.at(-1).cover_file_id, 'source-cover')
+  await pendingSave(false)
+  await page.waitForFunction(() => document.querySelector('img[alt="项目封面预览"]')?.src.includes('cloned-cover'))
+  await page.reload()
+  assert.match(await preview.getAttribute('src'), /cloned-cover/)
+
+  await page.getByLabel('上传项目封面').setInputFiles({ name: 'cover.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6aYAAAAASUVORK5CYII=', 'base64') })
+  await page.waitForFunction(() => document.querySelector('img[alt="项目封面预览"]')?.src.startsWith('blob:'))
+  assert.equal(coverUploads, 0)
+  await name.fill('带上传封面的项目')
+  await save.click()
+  await page.waitForFunction(() => document.querySelector('img[alt="项目封面预览"]')?.src.includes('uploaded-cover'))
+  assert.equal(coverUploads, 1)
+  await page.goto(`${origin}/projects`)
+  const card = page.getByRole('article').filter({ hasText: '带上传封面的项目' })
+  assert.match(await card.locator('.project-lobby-cover img').getAttribute('src'), /uploaded-cover/)
   assert.deepEqual(errors,[])
   console.log('PASS project settings groups, scoped toolbar, failed-save recovery, saving lock and saved cancel baseline')
 } finally { await cleanup() }

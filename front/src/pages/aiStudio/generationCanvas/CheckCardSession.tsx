@@ -43,7 +43,8 @@ function useCheckSession(props: CheckSessionProps) {
   const [error, setError] = useState('')
   const [automaticWaitExpired, setAutomaticWaitExpired] = useState(false)
   const submitting = useRef(false)
-  const { project_id: projectId, id: canvasId } = document
+  const { id: canvasId } = document
+  const projectId = document.project_id || ''
   const cardId = card.id
   const saved = props.savedCard?.type === 'review.check'
   const observedIds = preview?.basis?.observed_model_inputs || []

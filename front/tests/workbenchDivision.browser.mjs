@@ -31,7 +31,7 @@ const request = async (url, method = 'GET', body) => {
 try {
   for (let attempt = 0; ; attempt++) {
     if (backend.exitCode !== null || attempt >= 80) throw new Error('isolated backend did not start')
-    try { if ((await fetch(studio + '/generation-canvases/' + project)).ok) break } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) break } catch {}
     await delay(250)
   }
   const chapterApi = studio + '/projects/' + project + '/directing/chapters/' + chapter
@@ -44,7 +44,7 @@ try {
   const second = await scene('后院', 0, 5, 10)
   const firstApi = chapterApi + '/sequences/' + first.id
   const fixedCanvas = await request(firstApi + '/canvases', 'POST', { name: '固定原文方案' })
-  const readCanvas = () => request(studio + '/generation-canvases/' + project + '/' + fixedCanvas.id)
+  const readCanvas = () => request(`${studio}/generation-canvases/${fixedCanvas.id}?project_id=${project}`)
   const originalCanvas = await readCanvas()
   const extraction = await request(firstApi + '/objects/extractions', 'POST', { request_id: 'initial-preparation' })
   for (let attempt = 0; ; attempt++) {
@@ -173,7 +173,8 @@ try {
   assert.equal(await preview.getByRole('button', { name: '保存本章划分' }).isDisabled(), true)
   await preview.getByRole('button', { name: '继续编辑' }).click()
   await draftList.getByRole('button', { name: /前厅（拆分）/ }).click()
-  await page.getByRole('button', { name: '与前场合并', exact: true }).click()
+  await page.getByRole('button', { name: '并入／合并场次', exact: true }).click()
+  await page.getByRole('menuitem', { name: /与前场合并/ }).click()
   const merge = page.getByRole('dialog', { name: '确认合并场次', exact: true })
   await merge.getByRole('button', { name: '确认加入草稿', exact: true }).click()
   assert.equal(await draftList.getByRole('button', { name: /前厅（拆分）/ }).count(), 0)
@@ -211,7 +212,7 @@ try {
   await preview.getByRole('button', { name: '保存本章划分' }).click()
   await page.getByText('原场次“后院雨夜”已转入历史').waitFor()
   await page.getByRole('button', { name: '查看该历史场次' }).click()
-  await page.getByText('历史场次：后院雨夜', { exact: true }).waitFor()
+  await page.getByRole('button', { name: /历史场次：.*后院雨夜/ }).waitFor()
   await openDivision.click()
   await page.getByRole('button', { name: '历史版本', exact: true }).click()
   const history = page.getByRole('dialog', { name: '历史版本' })
@@ -290,6 +291,11 @@ try {
   await page.getByRole('button', { name: '取消新建', exact: true }).click()
   assert.equal((await request(aiApi)).sequences.length, 0)
   await page.getByRole('button', { name: '智能划分' }).click()
+  const aiConfirm=page.locator('.ant-modal-confirm').filter({hasText:'确认智能划分？'})
+  await aiConfirm.getByRole('button',{name:/^取\s*消$/}).click()
+  assert.equal((await request(aiApi + '/division/history')).items.some(row=>row.kind==='analysis'),false)
+  await page.getByRole('button', { name: '智能划分' }).click()
+  await aiConfirm.getByRole('button',{name:'开始划分',exact:true}).click()
   await page.getByText(/AI 生成 · 未保存/).waitFor()
   const analysis = (await request(aiApi + '/division/history')).items.find(row => row.kind === 'analysis')
   assert.ok(analysis?.id)

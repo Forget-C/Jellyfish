@@ -33,6 +33,12 @@ async def test_text_stream_creates_message_without_generation_task(tmp_path, mon
             await db.commit()
 
         assert accepted.data.task_id == run_id
+        expected = {"version": 1, "prompt": "你好", "model_id": "text-model"}
+        assert accepted.data.user_message.payload["input_snapshot"] == expected
+        from app.api.v1.routes.studio.experiment_sessions import list_experiment_messages
+        async with session_local() as db:
+            history = await list_experiment_messages("text-session", db, page=1, page_size=50)
+            assert history.data[0].payload["input_snapshot"] == expected
         async with session_local() as db:
             assert list((await db.scalars(select(Task))).all()) == []
         assert await text_chat_streaming.request_text_stream_cancel(

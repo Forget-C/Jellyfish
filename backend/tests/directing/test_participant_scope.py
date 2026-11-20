@@ -10,7 +10,8 @@ from sqlalchemy import update
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.production import GenerationUnit
 from app.models.directing import DirectingRevision
-from app.services.directing.ai import generate_directing_result, DirectingOutputError
+from app.services.directing.ai import generate_directing_result
+from app.services.directing.errors import DirectingOutputError
 from app.services.directing.production import ProductionService
 from tests.directing.samples import design_sample, plan_sample
 from tests.directing.test_store import database

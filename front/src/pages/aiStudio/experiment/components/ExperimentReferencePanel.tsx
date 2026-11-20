@@ -28,7 +28,7 @@ export function ExperimentReferencePanel({ open, title, applyLabel, applyDisable
     open={open}
     placement="right"
     width="var(--experiment-reference-panel-width)"
-    rootClassName="experiment-reference-panel"
+    rootClassName="experiment-reference-panel app-detail-drawer"
     keyboard={!previewOpen}
     onClose={onCancel}
     afterOpenChange={visible => { if (!visible) onAfterClose?.() }}

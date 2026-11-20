@@ -1,4 +1,6 @@
 """Public file/canvas deletion through actual media generation and history."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
+from tests.canvas_urls import seed_scene_canvas, canvas_params, canvas_url
 import asyncio
 import base64
 import httpx
@@ -31,8 +33,8 @@ async def test_deleted_cards_keep_history_and_canvas_deletion_releases_only_its_
     node = next(run for run in snapshot['runs'] if run['id'] == accepted['run_id'])['nodes'][0]
     assert node['status'] == ('failed' if incomplete else 'succeeded')
     first, second = [output['file_id'] for output in node['outputs']]
-    other = (await runtime.client.post('/canvases/' + runtime.project_id, json={'name': 'independent'})).json()['data']
-    other_url = '/canvases/' + runtime.project_id + '/' + other['id']
+    other = (await seed_scene_canvas(runtime.client, '/canvases/' + runtime.project_id, json={'name': 'independent'})).json()['data']
+    other_url = canvas_url('/canvases/' + runtime.project_id + '/' + other['id'])
     other['document']['cards'] = [{'id': 'independent', 'type': 'content.image', 'file_id': first}]
     saved = await runtime.client.put(other_url, json={'request_id': 'retain', 'expected_revision': 0, 'document': other['document']})
     assert saved.status_code == 200, saved.text
@@ -43,13 +45,13 @@ async def test_deleted_cards_keep_history_and_canvas_deletion_releases_only_its_
     assert next(run for run in history if run['id'] == accepted['run_id'])['nodes'][0]['outputs'] == node['outputs']
     assert (await runtime.client.get('/files/' + second + '/download')).content == b'second'
     assert (await runtime.client.delete('/files/' + second)).status_code == 409
-    assert (await runtime.client.delete(runtime.url, params={'expected_revision': 3})).status_code == 200
+    assert (await runtime.client.delete(runtime.url, params={**canvas_params(runtime.url), **({'expected_revision': 3})})).status_code == 200
     assert (await runtime.client.get(runtime.url + '/runtime')).status_code == 404
     assert (await runtime.client.delete('/files/' + second)).status_code == 200
     assert (await runtime.client.delete('/files/' + first)).status_code == 409
     assert (await runtime.client.get('/files/' + first + '/download')).content == b'first'
     assert (await runtime.client.get(other_url)).json()['data']['document']['cards'][0]['file_id'] == first
-    assert (await runtime.client.delete(other_url, params={'expected_revision': 1})).status_code == 200
+    assert (await runtime.client.delete(other_url, params={**canvas_params(other_url), **({'expected_revision': 1})})).status_code == 200
     assert (await runtime.client.delete('/files/' + first)).status_code == 200
 
 
@@ -113,7 +115,7 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
                 for source in ('image', 'known')]}}]
         doc['edges'] = [{'id': source + '-B', 'source_card': source, 'source_port': 'image', 'target_card': 'B', 'target_port': 'image'} for source in ('image', 'known')]
         doc['input_order'] = {'B': {'image': ['image-B', 'known-B']}}
-        await save(runtime, doc)
+        await save(runtime, bind_document_prompts(doc))
         await run(runtime, 'image')
         await drain(worker)
         accepted, _ = await run(runtime, 'B')
@@ -126,11 +128,12 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
         assert {'generation_upload', 'canvas_content', 'canvas_run'} <= {usage['usage_kind'] for usage in detail['usages']}
         assert (await runtime.client.delete('/files/' + file_id)).status_code == 409
         revision = (await runtime.client.get(runtime.url)).json()['data']['revision']
-        rejected = await runtime.client.delete(runtime.url, params={'expected_revision': revision})
+        rejected = await runtime.client.delete(runtime.url, params={**canvas_params(runtime.url), **({'expected_revision': revision})})
         assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
         assert (await runtime.client.delete('/projects/' + runtime.project_id)).status_code == 409
         doc['cards'] = [card for card in doc['cards'] if card['id'] != 'known']
         doc['cards'][1]['prompt']['segments'] = [doc['cards'][1]['prompt']['segments'][0]]
+        doc['cards'][1]['input_bindings'] = [doc['cards'][1]['input_bindings'][0]]
         doc['edges'] = [doc['edges'][0]]
         doc['input_order']['B']['image'] = ['image-B']
         await save(runtime, doc)
@@ -140,7 +143,7 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
         assert cancelled.status_code == 200, cancelled.text
         assert (await runtime.client.delete(release)).status_code == 409
         revision = (await runtime.client.get(runtime.url)).json()['data']['revision']
-        assert (await runtime.client.delete(runtime.url, params={'expected_revision': revision})).status_code == 200
+        assert (await runtime.client.delete(runtime.url, params={**canvas_params(runtime.url), **({'expected_revision': revision})})).status_code == 200
         assert (await runtime.client.delete('/files/' + file_id)).status_code == 409
         assert (await runtime.client.delete(release)).status_code == 200
         assert (await runtime.client.get('/files/' + file_id + '/download')).content == b'known'
@@ -191,7 +194,7 @@ async def test_canvas_upload_and_retention_http_success_waits_for_real_database_
                 pending = asyncio.create_task(client.post('/files/upload', files={'file': ('initial.png', b'initial', 'image/png')},
                     data={'project_id': runtime.project_id, 'usage_kind': 'generation_upload'}))
             else:
-                pending = asyncio.create_task(client.delete('/files/' + file_id + '/upload-retention', params={'project_id': runtime.project_id}))
+                pending = asyncio.create_task(client.delete('/files/' + file_id + '/upload-retention', params={**canvas_params('/files/' + file_id + '/upload-retention'), **({'project_id': runtime.project_id})}))
             await asyncio.wait_for(commit_started.wait(), timeout=5)
             done, _ = await asyncio.wait({pending}, timeout=.1)
             assert not done, 'file/retention success reached the HTTP client before commit'
@@ -201,7 +204,7 @@ async def test_canvas_upload_and_retention_http_success_waits_for_real_database_
             if operation == 'initial_upload':
                 file_id = response.json()['data']['id']
                 assert [usage['usage_kind'] for usage in (await client.get('/files/' + file_id)).json()['data']['usages']] == ['generation_upload']
-                assert (await client.delete('/files/' + file_id + '/upload-retention', params={'project_id': runtime.project_id})).status_code == 200
+                assert (await client.delete('/files/' + file_id + '/upload-retention', params={**canvas_params('/files/' + file_id + '/upload-retention'), **({'project_id': runtime.project_id})})).status_code == 200
             assert (await client.get('/files/' + file_id)).json()['data']['usages'] == []
             assert (await client.delete('/files/' + file_id)).status_code == 200
     finally:

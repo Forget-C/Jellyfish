@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import ConfigDict
+from pydantic import Field, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.asset_prompts import AssetPromptOptions
+from app.models.studio import AssetViewAngle
+from app.schemas.studio.assets import SceneCreate, PropCreate, CostumeCreate
+from app.schemas.studio.cast import ActorCreate, CharacterCreate
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.services.generation.prompts import AssetImagePromptRenderInput, PromptRendererName, PromptRenderRequest, RenderedPromptSnapshot, prompt_renderer_registry
@@ -22,9 +25,24 @@ class AssetImagePromptRenderBody(AssetPromptOptions):
     model_config = ConfigDict(extra="forbid")
 
 
+class DraftAssetPromptRenderBody(AssetPromptOptions):
+    """仅预览本地对象草稿，不创建对象、图片或任务。"""
+
+    asset_type: Literal["actor", "character", "prop", "scene", "costume"]
+    resource: ActorCreate | CharacterCreate | SceneCreate | PropCreate | CostumeCreate
+    view_angle: AssetViewAngle = AssetViewAngle.front
+    image_id: int | None = Field(None, ge=1, description="局部修改预览所用的当前对象图片")
 
 
-
+@router.post("/assets/draft/render", response_model=ApiResponse[RenderedPromptSnapshot], summary="预览未创建对象的图片提示词")
+async def render_draft_asset_image_prompt(
+    body: DraftAssetPromptRenderBody, db: AsyncSession = Depends(get_db),
+) -> ApiResponse[RenderedPromptSnapshot]:
+    from app.services.studio.generation.asset_image.draft_preview import render_draft_preview
+    snapshot = await render_draft_preview(db, entity_type=body.asset_type,
+        resource=body.resource.model_dump(exclude_unset=True), view_angle=body.view_angle, image_id=body.image_id,
+        options=AssetPromptOptions.model_validate(body.model_dump(exclude={"asset_type", "resource", "view_angle", "image_id"})))
+    return success_response(snapshot)
 
 
 @router.post(

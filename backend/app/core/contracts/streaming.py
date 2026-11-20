@@ -30,6 +30,7 @@ class StreamMessageData(BaseModel):
     session_id: str = Field(min_length=1)
     role: Literal["user", "assistant"]
     content: str
+    payload: dict = Field(default_factory=dict)
     sequence: int = Field(ge=1)
     created_at: datetime
     updated_at: datetime

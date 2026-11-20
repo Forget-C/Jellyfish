@@ -132,8 +132,6 @@ class WorkspaceService(DirectingStore):
         if previous and previous.title == body.title and previous.position == body.position and source_unchanged:
             return self.sequence_read(previous, chapter)
         async with self.db.begin_nested():
-            if siblings and not await current_version(self.db, chapter_id, locked=True):
-                await record_version(self.db, self.division_snapshot(chapter, siblings), origin='baseline')
             if sequence_id is None:
                 if await self.db.scalar(select(Sequence.id).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True), Sequence.position == body.position)):
                     raise RevisionConflict("此场次顺序已被使用，请刷新后重试")
@@ -233,36 +231,24 @@ class WorkspaceService(DirectingStore):
         return ExtractedFrame(file_id=result.id, source=Source(kind="file", reference=take.id, version="1",
             file_id=file.id, media_range={"source_in_ms": at_ms, "source_out_ms": at_ms + 1}))
 
-    async def assets(self):
-        """列出当前项目已关联资产，供场次工作单显式选择。"""
+    async def assets(self, *, main_only=False):
+        """列出当前项目直接拥有的对象，供场次工作单显式选择。"""
         from app.core.contracts.directing.workspace import AssetSummary
-        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink, CharacterImage, SceneImage, PropImage, FileItem
+        from app.models.studio import Character, Scene, Prop
+        from app.services.directing.object_assets import reference_images
 
         result = []
-        queries = [("character", select(Character).where(Character.project_id == self.project_id)),
-            ("scene", select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id).distinct()),
-            ("prop", select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id).distinct())]
-        image_models = {'character': (CharacterImage, CharacterImage.character_id),
-                        'scene': (SceneImage, SceneImage.scene_id), 'prop': (PropImage, PropImage.prop_id)}
+        queries = [(kind, select(model).where(model.project_id == self.project_id))
+                   for kind, model in [('character', Character), ('scene', Scene), ('prop', Prop)]]
         for kind, query in queries:
             rows = list(await self.db.scalars(query))
-            if not rows:
-                continue
-            image_model, owner = image_models[kind]
-            images = list(await self.db.execute(select(owner, image_model.file_id, FileItem).outerjoin(
-                FileItem, FileItem.id == image_model.file_id).where(owner.in_([row.id for row in rows]))))
+            grouped = await reference_images(self.db, kind, [row.id for row in rows], main_only=main_only)
             for row in rows:
-                files = set()
-                unavailable = 0
-                for asset_id, file_id, file in images:
-                    if asset_id != row.id or not file_id:
-                        continue
-                    if file is not None and file.type == 'image' and file.delete_requested_at is None and file.deleted_at is None:
-                        files.add(file_id)
-                    else:
-                        unavailable += 1
-                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or "",
-                                          image_file_ids=sorted(files), unavailable_image_count=unavailable))
+                images, unavailable = grouped[row.id]
+                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or '',
+                    main_image_file_id=next((image.file_id for image in images if image.is_primary), None),
+                    reference_images=images, image_file_ids=list(dict.fromkeys(image.file_id for image in images)),
+                    unavailable_image_count=unavailable))
         return result
 
     async def create_asset(self, sequence_id, body):

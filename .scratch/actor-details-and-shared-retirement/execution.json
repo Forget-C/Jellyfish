@@ -1,0 +1,22 @@
+{
+  "copies": [
+    {
+      "project_id": "ddb77af6-7778-4d56-9151-f9b91be8d788",
+      "kind": "scene",
+      "source_id": "3df48dd079224d599226e57d93c6cd95",
+      "copy_id": "d1065466dfd05050bdbc05f0f8294160"
+    },
+    {
+      "project_id": "a4ea5321-a5ff-46f9-805a-17c1ad182ae6",
+      "kind": "scene",
+      "source_id": "b0b55d53c6584682959ca8d62b9cd77f",
+      "copy_id": "9eed3a86af125c2ab7e76fd8b5e86bc1"
+    },
+    {
+      "project_id": "ddb77af6-7778-4d56-9151-f9b91be8d788",
+      "kind": "prop",
+      "source_id": "fb0f8b4e9f304c84946edbf28a91758c",
+      "copy_id": "884f610e42e259c9b24ce65f64fd4285"
+    }
+  ]
+}

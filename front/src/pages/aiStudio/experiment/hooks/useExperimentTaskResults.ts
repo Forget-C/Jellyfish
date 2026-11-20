@@ -8,8 +8,10 @@ function isTerminal(status?: string) {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
 }
 
-/** 仅轮询已知仍在执行的任务，读取错误保留最后一次可靠状态。 */
-export function useExperimentTaskResults(messages: TaskMessage[], refreshHistory: () => Promise<void>) {
+/** 合成历史与轮询状态；读取错误保留可靠状态，媒体解析由各模态提供。 */
+export function useExperimentTaskResults<T extends TaskMessage>(
+  messages: T[], refreshHistory: () => Promise<void>, projectMedia: (message: T, result: TaskResultRead) => T,
+) {
   const [reads, setReads] = useState<Record<string, TaskRead>>({})
   const [retry, setRetry] = useState(0)
   const runningTaskId = messages.find((message) => {
@@ -60,5 +62,14 @@ export function useExperimentTaskResults(messages: TaskMessage[], refreshHistory
     else delete currentReads[taskId]
   }
 
-  return { reads: currentReads, runningTaskId, retryStatus: () => setRetry((current) => current + 1) }
+  const currentMessages = messages.map(message => {
+    const read = message.taskId ? currentReads[message.taskId] : undefined
+    const result = read?.result
+    return {
+      ...(result ? projectMedia(message, result) : message),
+      ...(result ? { status: result.status, progress: result.progress, error: result.error } : {}),
+      unavailable: read?.unavailable,
+    }
+  })
+  return { messages: currentMessages, runningTaskId, retryStatus: () => setRetry((current) => current + 1) }
 }

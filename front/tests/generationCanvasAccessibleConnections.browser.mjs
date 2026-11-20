@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, openCardList, prepareCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8482'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8482' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -36,12 +37,11 @@ try {
   page.on('pageerror',error=>console.error(error))
   page.setDefaultTimeout(15000)
   await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
-  const canvas=(await response.json()).data
+  const canvas = await createStoryboardCanvas(base, '筛选保持采用')
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'用于候选的正文'}, {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'person',type:'content.character',object_id:'actor',name:'张三',text:'人物描述'}, {id:'photo',type:'direction.focus',input_bindings:[],examples:[],scope:{}}],edges:[],input_order:{}}
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok,await seed.clone().text())
-  await page.goto(`http://127.0.0.1:4482/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4482${storyboardCanvasPath(canvas)}`)
   const source=page.locator('[data-card-id="source"]')
   await source.waitFor()
   await source.getByRole('button',{name:'卡片操作',exact:true}).click()
@@ -50,7 +50,7 @@ try {
   await page.getByRole('button',{name:'连接到文本模型卡 · 卡片 2',exact:true}).first().click()
   await page.getByRole('status').filter({hasText:'连接提供候选'}).waitFor()
   await delay(1400)
-  const saved=(await(await fetch(`${base}/${canvas.id}`)).json()).data
+  const saved=(await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   assert.equal(saved.document.edges.length,1)
   assert.equal(saved.document.cards.find(c=>c.id==='model').input_bindings?.length||0,0)
   await source.getByRole('button',{name:'左侧连接点',exact:true}).press('Enter')
@@ -59,7 +59,7 @@ try {
   await page.getByRole('status').filter({hasText:'连接提供候选'}).waitFor()
   assert.equal(await page.locator('.wb-details:visible').count(),0,'choosing a target does not open details')
   await delay(1300)
-  assert.equal((await(await fetch(`${base}/${canvas.id}`)).json()).data.document.edges.length,2)
+  assert.equal((await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data.document.edges.length,2)
   await page.screenshot({path:join(output,'accessible-desktop.png'),animations:'disabled'})
   await source.press('Enter')
   const details=page.locator('.wb-details:visible')
@@ -109,11 +109,11 @@ try {
   await page.getByRole('status').filter({hasText:'连接提供候选'}).waitFor()
   assert.equal(await person.getByRole('button',{name:'右侧连接点',exact:true}).evaluate(element=>element===document.activeElement),true,'connection restores source focus')
   await delay(1300)
-  const final=(await(await fetch(`${base}/${canvas.id}`)).json()).data
+  const final=(await(await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   assert.deepEqual(final.document.edges.filter(e=>e.source_card==='person' && e.target_card==='photo').map(e=>e.target_port).sort(),['attention_object','focus_object','object','text'])
   assert.equal(final.document.cards.find(c=>c.id==='photo').input_bindings.length,0)
   assert.equal(final.document.cards.find(c=>c.id==='source').text,'连接期间保留输入')
-  assert.equal(final.document.cards.length,6)
+  assert.equal(final.document.cards.filter(item => item.id !== canvas.document.fixed_source.card_id).length,6)
   await page.reload()
   await source.press('Enter')
   assert.equal(await details.getByRole('textbox',{name:'文本内容',exact:true}).inputValue(),'连接期间保留输入')

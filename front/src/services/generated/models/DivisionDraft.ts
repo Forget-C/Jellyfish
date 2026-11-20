@@ -10,6 +10,7 @@ import type { DivisionMember } from './DivisionMember';
  */
 export type DivisionDraft = {
     source_version: string;
+    source_basis_id?: (string | null);
     source_task_id?: (string | null);
     source_revision_id?: (string | null);
     restored_baseline?: Array<DivisionBaseline>;

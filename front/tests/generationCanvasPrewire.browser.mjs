@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8480'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8480' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -39,8 +39,8 @@ try {
     {id:'upstream',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[{id:'p',kind:'text',text:'明确运行上游'}]},config:{}},
     {id:'consumer',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}},
     {id:'image',type:'content.image',file_id:null},
-    {id:'ref',type:'reference.character',title:'角色参考',angle:'正面',objects:[],input_bindings:[]},
-    {id:'person',type:'content.object',object_id:null,name:'',category:'character',text:''},
+    {id:'ref',type:'reference.character',name:'角色参考',angle:'正面'},
+    {id:'person',type:'content.character',object_id:null,name:'',category:'character',text:''},
     {id:'unknown',type:'model.text',model_id:null,prompt:{segments:[]},config:{}}
   ],edges:[],input_order:{}}
   assert.ok((await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})).ok)
@@ -53,9 +53,9 @@ try {
     if(target==='ref'){await connectCanvasCards(page,source,target,port);await open(target);return}
     const detail=editor
     await detail.getByRole('combobox',{name:'连接已有卡',exact:true}).press('ArrowDown')
-    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({hasText:new RegExp(`· ${source} → ${port}$`)}).click()
+    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({hasText:new RegExp(`· ${source.slice(0, 8)}$`)}).click()
   }
-  await page.goto(`http://127.0.0.1:4480/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4480/canvases/${canvas.id}`)
   await page.locator('[data-card-id="consumer"]').waitFor()
   await open('consumer')
   await page.locator('.wb-details:visible').getByRole('combobox',{name:'连接已有卡',exact:true}).press('ArrowDown')
@@ -93,7 +93,7 @@ try {
   await page.keyboard.press('Escape')
   await open('upstream')
   await details.getByRole('combobox',{name:'连接已有卡',exact:true}).press('ArrowDown')
-  assert.equal(await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({hasText:/· consumer → 文本$/}).count(),0,'even unadopted candidate edges prevent a cycle')
+  assert.equal(await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({hasText:/· consumer$/}).count(),0,'even unadopted candidate edges prevent a cycle')
   await page.keyboard.press('Escape')
   // Populate a directly connected image via the real upload UI; publication is not adoption.
   await open('image')

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetPromptReference } from './AssetPromptReference';
 import type { ProjectStyle } from './ProjectStyle';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 /**
@@ -36,6 +37,8 @@ export type ActorUpdate = {
      * 发型发色
      */
     hair?: (string | null);
+    references?: Array<AssetPromptReference>;
+    details_editable?: (boolean | null);
     name?: (string | null);
     tags?: (Array<string> | null);
     prompt_template_id?: (string | null);

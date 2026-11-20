@@ -8,5 +8,5 @@
 export type PromptReference = {
     id: string;
     kind: 'reference';
-    binding_id?: (string | null);
+    binding_id: string;
 };

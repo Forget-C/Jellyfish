@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-guidance-')
-const api = 'http://127.0.0.1:8301', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8301', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8301' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,7 +36,7 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '命名图片参考')
 
   const types = ['shot', 'performance', 'camera', 'lighting', 'focus', 'composition', 'movement']
   const document = { ...canvas.document, cards: [
@@ -47,11 +48,11 @@ try {
     ...types.map(id => ({ id, type: 'direction.' + id }))],
     edges: types.flatMap(id => ['criterion', 'second'].map(source => ({ id: id + source, source_card: source, source_port: 'criterion', target_card: id, target_port: 'acceptance_basis' }))), input_order: {} }
   document.input_order = Object.fromEntries(types.map(id => [id, { acceptance_basis: [id + 'criterion', id + 'second'] }]))
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('save did not arrive') }
-  await page.goto(`http://127.0.0.1:4301/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4301${storyboardCanvasPath(canvas)}`)
   const savedBeforeEmptyConnection = await read()
   const point = (id, side) => page.locator(`[data-card-id="${id}"] [data-connection-side="${side}"]`)
   await page.getByRole('button', { name: '适应全部', exact: true }).click()

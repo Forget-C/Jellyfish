@@ -7,13 +7,14 @@ import brandLogo from '../../logo.svg'
 import { appearances, useAppStore } from '../store/useAppStore'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
-import { resolveProjectTab } from '../pages/aiStudio/project/ProjectWorkbench/constants'
 import { ProjectNavigation } from '../pages/aiStudio/project/ProjectWorkbench/ProjectNavigation'
 import { useLastManagementPage } from './useLastManagementPage'
 import { AppearancePreview } from './AppearancePreview'
 import { activeMainNavigation, mainNavigation } from './navigation'
 import { useNavigationTitles } from './pageTitle'
 import './shell.css'
+
+const projectQueryStorageKey = 'jellyfish_project_list_query'
 
 const ordinaryPageTheme = {
   token: {
@@ -37,7 +38,6 @@ function OrdinaryLayout() {
   const [accountOpen, setAccountOpen] = useState(false)
   const titles = useNavigationTitles()
   const projectIndex = !!projectId && pathname.split('/').filter(Boolean).length === 2
-  const legacyGeneration = projectIndex && resolveProjectTab(new URLSearchParams(search).get('tab')) === 'generation'
   useEffect(() => {
     const resolved = i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
     setLanguage(resolved)
@@ -46,6 +46,23 @@ function OrdinaryLayout() {
 
   const activeNavigation = activeMainNavigation(pathname)
   const lastManagementPage = useLastManagementPage(pathname)
+  const [lastProjectQuery, setLastProjectQuery] = useState(() => {
+    try {
+      return sessionStorage.getItem(projectQueryStorageKey) ?? ''
+    } catch {
+      return ''
+    }
+  })
+  useEffect(() => {
+    if (pathname !== '/projects') return
+    setLastProjectQuery(search)
+    try {
+      sessionStorage.setItem(projectQueryStorageKey, search)
+    } catch {
+      // 当前会话仍可使用内存中的查询条件。
+    }
+  }, [pathname, search])
+  const projectsLink = projectId ? { pathname: '/projects', search: lastProjectQuery } : '/projects'
   const routeContent = <main className="app-route-viewport" id="main-content">
     <Outlet />
   </main>
@@ -55,7 +72,7 @@ function OrdinaryLayout() {
       <header className="app-topbar">
         <Link to="/" className="app-brand" aria-label={t('brandHome')}><img src={brandLogo} alt="" /><span>Jellyfish</span></Link>
         <nav aria-label={t('primaryNavigation')} className="app-primary-navigation">
-          {mainNavigation.map(item => <Link key={item.key} to={item.key === 'management' ? lastManagementPage : item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
+          {mainNavigation.map(item => <Link key={item.key} to={item.key === 'management' ? lastManagementPage : item.key === 'projects' ? projectsLink : item.to} className="app-nav-link" aria-current={activeNavigation === item.key ? 'page' : undefined}>{t(`menu.${item.key}`)}</Link>)}
         </nav>
         <div className="app-global-actions">
           <TaskCenter />
@@ -85,7 +102,7 @@ function OrdinaryLayout() {
           ] }}><Button ref={accountButton} type="text" className="app-account" aria-label="用户与语言设置" aria-haspopup="menu" aria-expanded={accountOpen}><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
         </div>
       </header>
-      {projectId && !legacyGeneration ? <div className="app-project-frame">
+      {projectId ? <div className="app-project-frame">
         <ProjectNavigation key={projectId} projectId={projectId} projectName={projectIndex ? titles.page : titles.project} />
         {routeContent}
       </div> : routeContent}
@@ -96,6 +113,6 @@ function OrdinaryLayout() {
 /** 路由切换时保留同一个任务运行时，包括进出独立画布。 */
 export default function MainLayout() {
   const { pathname } = useLocation()
-  const standaloneCanvas = /^\/projects\/[^/]+\/generation-canvas\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+(?:\/canvas-workbench)?\/?$/.test(pathname)
+  const standaloneCanvas = /^\/canvases\/[^/]+\/?$/.test(pathname) || /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+(?:\/canvas-workbench)?\/?$/.test(pathname)
   return <TaskRuntimeProvider>{standaloneCanvas ? <Outlet /> : <OrdinaryLayout />}</TaskRuntimeProvider>
 }

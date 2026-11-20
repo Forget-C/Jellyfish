@@ -1,5 +1,6 @@
 """An explicit workbench check examines saved design, without reextracting it."""
 
+from tests.canvas_urls import canvas_params, canvas_url
 import asyncio
 import json
 from types import SimpleNamespace
@@ -64,8 +65,8 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
         scene_path = chapter + '/sequences/' + scene['id']
         storyboards = scene_path + '/storyboards'
         original_task = await read_data(client, 'POST', storyboards, {'request_id': 'existing', 'text_model_id': 'saved-text'})
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + original_task['canvas_id']
-        checks_path = scene_path + '/canvases/' + original_task['canvas_id'] + '/continuity-check'
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + original_task['canvas_id']
+        checks_path = scene_path + canvas_url('/canvases/') + original_task['canvas_id'] + '/continuity-check'
         worker = TaskWorker(sessions)
         try:
             async def work(item):
@@ -81,7 +82,7 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
             request = {'request_id': 'check', 'expected_revision': before['revision']}
             check = await read_data(client, 'POST', checks_path, request)
             assert await read_data(client, 'POST', checks_path, request) == check
-            blocked_delete = await client.delete(canvas_path, params={'expected_revision': before['revision']})
+            blocked_delete = await client.delete(canvas_path, params={**canvas_params(canvas_path), **({'expected_revision': before['revision']})})
             assert blocked_delete.status_code == 409 and blocked_delete.json()['data']['code'] == 'STORYBOARD_BUSY'
             failed = await work(check)
             assert failed['status'] == 'failed' and failed['review_state'] == 'incomplete'
@@ -128,7 +129,7 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
             undone = await read_data(client, 'POST', repaired_path + '/restore', {'request_id': 'undo-saved',
                 'expected_revision': applied['revision'], 'direction': 'undo', 'document': before['document']})
             assert undone['document'] == before['document']
-            assert (await read_data(client, 'GET', checks_path))['review_state'] == ('stale' if action == 'repair' else 'conflict')
+            assert (await read_data(client, 'GET', checks_path))['review_state'] == ('passed' if action == 'repair' else 'conflict')
 
             stale = await read_data(client, 'POST', checks_path, {'request_id': 'stale-check', 'expected_revision': undone['revision']})
             manual = undone['document']

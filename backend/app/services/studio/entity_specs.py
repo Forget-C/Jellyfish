@@ -41,7 +41,7 @@ from app.services.common import invalid_choice
 DEFAULT_VIEW_ANGLES: tuple[AssetViewAngle, ...] = (
     AssetViewAngle.front,
     AssetViewAngle.left,
-    AssetViewAngle.right,
+    AssetViewAngle.top,
     AssetViewAngle.back,
 )
 

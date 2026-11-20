@@ -10,3 +10,5 @@
 | `/api/v1/llm` | 模型与供应商配置 |
 
 前端统一使用 `front/src/services/generated` 客户端。接口契约变化时按 [OpenAPI 同步指南](../guides/openapi.md)操作。状态语义见[任务执行架构](../architecture/task-execution.md)。
+
+章节一致性检查与四类资产描述分析统一使用 `/api/v1/script-processing/*-async` 任务接口；对应的五个同步入口已退役。演员图片生成参数统一使用 `/api/v1/film/tasks/asset-images/{entity_type}/{entity_id}/{image_id}/parameters`，演员专用旧入口已退役。

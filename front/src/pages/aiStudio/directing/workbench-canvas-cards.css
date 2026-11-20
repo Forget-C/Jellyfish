@@ -10,7 +10,7 @@
 .management-card-grid {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr));
   gap: 12px;
   padding: 0;
   margin: 0;
@@ -20,21 +20,8 @@
 .management-canvas-status:not(:empty), .management-canvas-actions { margin-top: 8px; }
 .management-canvas-status .ant-tag { margin-inline-end: 0; }
 .management-canvas-created.ant-card { border-color: #91caff; }
-.management-canvas-configuration { margin-top: 12px; }
-.management-canvas-configuration fieldset {
-  border: 0;
-  margin: 0 0 12px;
-  padding: 0;
-  min-width: 0;
-  display: grid;
-  gap: 8px;
-}
-.management-canvas-configuration fieldset > .ant-input,
-.management-canvas-configuration fieldset > .ant-select { width: min(100%, 440px); }
-.management-canvas-configuration p { margin: 0; }
 .management-storyboard-basis { display: grid; gap: 8px; }
 .management-storyboard-basis .management-excerpt { margin-top: 8px; }
-.management-basis-reference { width: 40px; height: 32px; object-fit: contain; vertical-align: middle; }
 .management-canvas-error {
   color: var(--app-muted);
   margin: 8px 0 0;
@@ -44,27 +31,22 @@
   overflow: hidden;
 }
 @media (max-width: 575px) {
-  .management-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .management-card-grid { grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr)); }
 }
 
 /* 普通管理页表面；不应用到独立画布或其浮层。 */
-.management-workspace .management-canvas-surface.ant-card,
-.management-workspace .management-canvas-configuration > .ant-card {
+.management-workspace .management-canvas-surface.ant-card {
   border: 0;
   border-radius: 12px;
   background: #fff;
   box-shadow: none;
 }
-.management-workspace .management-canvas-surface.ant-card > .ant-card-body,
-.management-workspace .management-canvas-configuration > .ant-card > .ant-card-body { padding: 16px; }
+.management-workspace .management-canvas-surface.ant-card > .ant-card-body { padding: 16px; }
 .management-workspace .management-canvas-created.ant-card { background: #f5f8fe; }
 .management-workspace .management-canvas-card-heading h4 { font-size: 14px; font-weight: 600; }
-.management-workspace .management-canvas-toolbar h3,
-.management-workspace .management-canvas-configuration h3 { font-size: 14px; font-weight: 600; }
+.management-workspace .management-canvas-toolbar h3 { font-size: 14px; font-weight: 600; }
 .management-workspace .management-canvas-cards .ant-btn { height: 32px; border-radius: 8px; font-size: 13px; }
 .management-workspace .management-canvas-status { font-size: 12px; }
-.management-workspace .management-canvas-configuration { font-size: 14px; }
-.management-workspace .management-canvas-configuration > .ant-card { max-width: 720px; }
 .management-canvas-dialog { top: 16px; padding-bottom: 16px; }
 .management-canvas-dialog .ant-modal-content { max-height: calc(100dvh - 32px); display: flex; flex-direction: column; border-radius: 12px; padding: 16px; }
 .management-canvas-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
@@ -76,7 +58,34 @@
   .management-canvas-dialog .ant-btn { min-height: 36px; height: auto; }
 }
 
-.management-workspace .management-card-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 360px)); gap: 16px; }
+.management-workspace .management-card-grid { grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr)); gap: 16px; }
+.management-workspace .management-content > .management-storyboard-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.management-storyboard-panel > .management-scene-production,
+.management-canvas-cards {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.management-canvas-page-body { position: relative; display: flex; flex: 1; min-height: 0; }
+.management-canvas-scroll { scrollbar-gutter: stable; }
+.management-canvas-page-measure {
+  display: grid;
+  grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr));
+  gap: 16px;
+}
+/* Budget a full card row, including task status and one action. */
+.management-canvas-page-card { height: 352px; }
+.management-canvas-cards > .app-card-list-pagination { padding-inline: 0; }
+@media (max-height: 400px) {
+  .management-workspace .management-content:has(> .management-storyboard-panel) { overflow-y: auto; }
+  .management-workspace .management-content > .management-storyboard-panel { flex: 1 0 144px; }
+}
 .management-workspace .management-canvas-card-heading h4 { min-width: 0; }
 .management-workspace .management-canvas-name.ant-btn { display: flex; align-items: center; gap: 6px; height: auto; max-width: 100%; padding: 0; text-align: left; white-space: normal; font-size: 14px; font-weight: 600; }
 .management-workspace .management-canvas-name .anticon { flex-shrink: 0; }
@@ -84,9 +93,19 @@
 .management-canvas-markers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; color: var(--app-muted); font-size: 12px; }
 .management-canvas-markers:empty, .management-canvas-actions:empty { display: none; }
 .management-canvas-markers .ant-tag { margin: 0; background: transparent; border: 0; color: inherit; }
-@media (max-width: 575px) { .management-workspace .management-card-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 575px) { .management-workspace .management-card-grid { grid-template-columns: repeat(var(--app-canvas-card-columns, 1), minmax(0, 1fr)); } }
 .management-workspace .management-card-grid > li > .management-canvas-surface { height: 100%; }
 .management-workspace .management-canvas-cover { height:160px; margin:-16px -16px 12px; border-radius:12px 12px 0 0; display:grid; place-items:center; color:#5679a6; font-size:32px; background:linear-gradient(125deg,#e4edfb,#edf3fa); position:relative; overflow:hidden; }
 .management-canvas-cover::before { content:''; position:absolute; width:120px; height:72px; border-radius:12px; background:#fff5; transform:rotate(-9deg); }
 .management-canvas-cover .anticon { z-index:1; }
 .management-canvas-metadata { display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; color:var(--app-muted); font-size:12px; }
+
+.management-storyboard-processing { display:grid; gap:16px; min-width:0; overflow-wrap:anywhere; }
+.management-storyboard-review h3 { margin:0; font-size:14px; font-weight:600; }
+.management-storyboard-review p { margin:8px 0; line-height:1.7; }
+.management-processing-issue { padding:12px 0; border-bottom:1px solid var(--app-border); }
+.management-processing-hint { color:var(--app-muted); font-size:12px; }
+.management-storyboard-review .ant-drawer-footer > div { flex-wrap:wrap; }
+.management-storyboard-review .ant-radio-group { display:grid; gap:8px; }
+.management-storyboard-review .ant-space { max-width:100%; }
+.management-storyboard-review summary { cursor:pointer; }

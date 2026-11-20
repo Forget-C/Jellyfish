@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from typing import Self
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.studio.asset_fields import SceneFields, PropFields, CostumeFields
 
 from app.core.contracts.asset_prompts import validate_display_overrides
+
+from app.core.contracts.asset_prompts import AssetPromptReference
 
 from app.models.studio import AssetQualityLevel, AssetViewAngle, ProjectStyle, ProjectVisualStyle
 
@@ -25,6 +28,10 @@ class AssetBase(BaseModel):
 
 
 class AssetCreate(BaseModel):
+
+    adopt_reference: AssetPromptReference | None = None
+
+    references: list[AssetPromptReference] = Field(default_factory=list)
     id: str
     name: str
     tags: list[str] = Field(default_factory=list)
@@ -32,7 +39,7 @@ class AssetCreate(BaseModel):
     view_count: int = Field(1, ge=1)
     style: ProjectStyle = ProjectStyle.real_people_city
     visual_style: ProjectVisualStyle = ProjectVisualStyle.live_action
-    project_id: str | None = Field(None, description="可选：创建成功后写入 project_*_link（与资产创建同一事务）")
+    project_id: str | None = Field(None, description="所属项目；不传时创建共享资产")
     chapter_id: str | None = Field(None, description="可选：章节 ID")
 
     @field_validator("project_id", "chapter_id", mode="before")
@@ -52,6 +59,9 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+
+    details_editable: bool | None = None
+    references: list[AssetPromptReference] = Field(default_factory=list)
     name: str | None = None
     tags: list[str] | None = None
     prompt_template_id: str | None = None
@@ -61,6 +71,12 @@ class AssetUpdate(BaseModel):
 
 
 class AssetRead(AssetBase):
+
+    created_at: datetime | None = None
+    details_editable: bool = False
+    references: list[AssetPromptReference] = Field(default_factory=list)
+    library_copy_id: str | None = None
+    project_id: str | None = Field(None, description="所属项目；空值表示共享资产")
     model_config = ConfigDict(from_attributes=True)
 
     thumbnail: str = Field("", description="缩略图下载地址")
@@ -70,6 +86,8 @@ class AssetImageBase(BaseModel):
     id: int = Field(..., description="图片行 ID")
     quality_level: AssetQualityLevel = Field(AssetQualityLevel.low, description="精度等级")
     view_angle: AssetViewAngle = Field(AssetViewAngle.front, description="视角")
+    is_view_default: bool = False
+    is_primary: bool = False
     file_id: str | None = Field(None, description="关联的 FileItem ID（可空，支持先创建槽位后填充）")
     width: int | None = Field(None, description="宽(px)")
     height: int | None = Field(None, description="高(px)")
@@ -78,6 +96,8 @@ class AssetImageBase(BaseModel):
 
 
 class AssetImageCreate(BaseModel):
+    is_view_default: bool = False
+    is_primary: bool = False
     quality_level: AssetQualityLevel = AssetQualityLevel.low
     view_angle: AssetViewAngle = AssetViewAngle.front
     file_id: str | None = None
@@ -95,6 +115,8 @@ class AssetImageCreate(BaseModel):
 
 
 class AssetImageUpdate(BaseModel):
+    is_view_default: bool = False
+    is_primary: bool = False
     quality_level: AssetQualityLevel | None = None
     view_angle: AssetViewAngle | None = None
     file_id: str | None = None

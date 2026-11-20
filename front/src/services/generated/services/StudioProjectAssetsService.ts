@@ -2,7 +2,6 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_Any__ } from '../models/ApiResponse_PaginatedData_Any__';
 import type { ApiResponse_ProjectActorLinkRead_ } from '../models/ApiResponse_ProjectActorLinkRead_';
 import type { ApiResponse_ProjectCostumeLinkRead_ } from '../models/ApiResponse_ProjectCostumeLinkRead_';
@@ -58,7 +57,7 @@ export class StudioProjectAssetsService {
         });
     }
     /**
-     * 创建项目-章节-演员关联
+     * 创建本项目专属对象-章节-演员关联
      * @returns ApiResponse_ProjectActorLinkRead_ Successful Response
      * @throws ApiError
      */
@@ -78,28 +77,7 @@ export class StudioProjectAssetsService {
         });
     }
     /**
-     * 删除项目-章节-演员关联
-     * @returns ApiResponse_NoneType_ Successful Response
-     * @throws ApiError
-     */
-    public static deleteProjectActorLinkApiV1StudioProjectAssetsActorLinkIdDelete({
-        linkId,
-    }: {
-        linkId: number,
-    }): CancelablePromise<ApiResponse_NoneType_> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/studio/project-assets/actor/{link_id}',
-            path: {
-                'link_id': linkId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 创建项目-章节-场景关联
+     * 创建本项目专属对象-章节-场景关联
      * @returns ApiResponse_ProjectSceneLinkRead_ Successful Response
      * @throws ApiError
      */
@@ -119,28 +97,7 @@ export class StudioProjectAssetsService {
         });
     }
     /**
-     * 删除项目-章节-场景关联
-     * @returns ApiResponse_NoneType_ Successful Response
-     * @throws ApiError
-     */
-    public static deleteProjectSceneLinkApiV1StudioProjectAssetsSceneLinkIdDelete({
-        linkId,
-    }: {
-        linkId: number,
-    }): CancelablePromise<ApiResponse_NoneType_> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/studio/project-assets/scene/{link_id}',
-            path: {
-                'link_id': linkId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 创建项目-章节-道具关联
+     * 创建本项目专属对象-章节-道具关联
      * @returns ApiResponse_ProjectPropLinkRead_ Successful Response
      * @throws ApiError
      */
@@ -160,28 +117,7 @@ export class StudioProjectAssetsService {
         });
     }
     /**
-     * 删除项目-章节-道具关联
-     * @returns ApiResponse_NoneType_ Successful Response
-     * @throws ApiError
-     */
-    public static deleteProjectPropLinkApiV1StudioProjectAssetsPropLinkIdDelete({
-        linkId,
-    }: {
-        linkId: number,
-    }): CancelablePromise<ApiResponse_NoneType_> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/studio/project-assets/prop/{link_id}',
-            path: {
-                'link_id': linkId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 创建项目-章节-服装关联
+     * 创建本项目专属对象-章节-服装关联
      * @returns ApiResponse_ProjectCostumeLinkRead_ Successful Response
      * @throws ApiError
      */
@@ -195,27 +131,6 @@ export class StudioProjectAssetsService {
             url: '/api/v1/studio/project-assets/costume',
             body: requestBody,
             mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 删除项目-章节-服装关联
-     * @returns ApiResponse_NoneType_ Successful Response
-     * @throws ApiError
-     */
-    public static deleteProjectCostumeLinkApiV1StudioProjectAssetsCostumeLinkIdDelete({
-        linkId,
-    }: {
-        linkId: number,
-    }): CancelablePromise<ApiResponse_NoneType_> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/studio/project-assets/costume/{link_id}',
-            path: {
-                'link_id': linkId,
-            },
             errors: {
                 422: `Validation Error`,
             },

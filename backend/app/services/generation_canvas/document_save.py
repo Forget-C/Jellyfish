@@ -21,7 +21,7 @@ class PreparedDocument:
     detached_proofs: dict[str, dict[str, Any]]
 
 
-async def prepare_document(db, project_id: str, canvas, raw_document: dict, *,
+async def prepare_document(db, project_id: str | None, canvas, raw_document: dict, *,
                            scene_sources: dict | None = None, restored_continuity: frozenset[str] = frozenset()) -> PreparedDocument:
     """调用方已锁画布并核对回执及 revision；保持首个诊断顺序，不写文档或替换保护。"""
     canvas_id = canvas.id
@@ -32,13 +32,17 @@ async def prepare_document(db, project_id: str, canvas, raw_document: dict, *,
         raise diagnostic('INVALID_DOCUMENT', error['msg'], {'canvas_id': canvas_id, 'path': list(error['loc'])}) from exc
     if document.id != canvas_id or document.project_id != project_id:
         raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
+    from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+    validate_canvas_cards(canvas, document)
+    if not document.name.strip():
+        raise diagnostic('INVALID_CANVAS_NAME', '画布名称不能为空白', {'path': ['name']})
     for card in document.cards:
         if isinstance(card, CheckCard) and card.id not in canvas.card_types and 'enabled_categories' not in card.model_fields_set:
             from app.services.generation_canvas.check_selection import initial_check_categories
             card.enabled_categories = initial_check_categories()
     previous_document = CanvasDocument.model_validate(canvas.document)
     _validate_fixed_source(previous_document, document, scene_sources)
-    document, previous_document = _normalize_document(document, previous_document)
+    document = _normalize_document(document, previous_document)
     await _mark_storyboard_edits(db, document)
     identities = dict(canvas.card_types)
     seen = set()
@@ -278,11 +282,8 @@ def _validate_fixed_source(previous: CanvasDocument, current: CanvasDocument, sc
 
 
 def _normalize_document(document, previous_document):
-    """旧文档只做参考源清理；新文档依次同步来源、采用与设计连线。"""
+    """同步来源候选、显式采用、设计连线与结果排序。"""
     from app.services.generation_canvas.stacks import validate_stack_edit
-    from app.services.generation_canvas.reference_rules import clean_reference_image_sources
-    document = clean_reference_image_sources(document, previous_document)
-    previous_document = clean_reference_image_sources(previous_document)
     from app.services.generation_canvas.design_connections import expand_source_connections
     document = expand_source_connections(document, previous_document)
     from app.services.generation_canvas.acceptance import synchronize_acceptance
@@ -295,4 +296,4 @@ def _normalize_document(document, previous_document):
         if edge.order_anchor and edge.order_anchor.edge_id not in edges and previous_anchors.get(edge.id) == edge.order_anchor:
             edge.order_anchor = None
     validate_stack_edit(previous_document.model_dump(), document)
-    return document, previous_document
+    return document

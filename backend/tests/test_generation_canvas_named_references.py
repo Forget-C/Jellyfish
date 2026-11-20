@@ -1,4 +1,5 @@
 """Single-object reference cards exercised through the saved canvas HTTP contract."""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.generation_canvas_reference_fixtures import reference_image_sources
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -7,8 +8,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_reference_name_drafts_and_unique_scope(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '参考名称'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '参考名称'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc['cards'] = [{'id': 'a', 'type': 'reference.character', 'name': ' '},
                     {'id': 'b', 'type': 'reference.character', 'name': '小雪'},
                     {'id': 'c', 'type': 'reference.costume', 'name': '小雪'}]
@@ -38,8 +39,8 @@ async def test_four_categories_fixed_image_requires_connection_and_can_rebind_to
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': (f'{index}.png', b'image', 'image/png')})).json()['data']['id'] for index in range(2)]
-    canvas = (await client.post('/canvases/p', json={'name': kind})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': kind})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc['cards'] = [{'id': 'image', 'type': 'content.image', 'file_id': files[0]},
         {'id': 'ref', 'type': 'reference.' + kind, 'name': '主对象', 'image_binding': {'file_id': files[0],
          'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}}}]
@@ -65,8 +66,8 @@ async def test_four_categories_fixed_image_requires_connection_and_can_rebind_to
 @pytest.mark.asyncio
 async def test_new_reference_image_sources_are_rejected_for_same_or_other_category(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '图约束'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '图约束'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'reference.character', 'name': '甲'}, {'id': 'b', 'type': 'reference.prop', 'name': '乙'}],
         edges=[{'id': 'e', 'source_card': 'a', 'source_port': 'image', 'target_card': 'b', 'target_port': 'image_source'}], input_order={'b': {'image_source': ['e']}})
     response = await client.put(url, json={'request_id': 'category', 'expected_revision': 0, 'document': doc})
@@ -84,8 +85,8 @@ async def test_reference_file_withdrawal_invalidates_image_but_keeps_object(canv
     from app.services.task_service import utcnow
     client = canvas_client
     uploaded = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('ref.png', b'picture', 'image/png')})).json()['data']
-    canvas = (await client.post('/canvases/p', json={'name': '撤回图片'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '撤回图片'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'ref', 'port_id': 'image', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[{'id': 'ref', 'type': 'reference.place', 'image_binding': {'file_id': uploaded['id']}, 'object_id': 'room', 'name': '空屋'},
@@ -109,8 +110,8 @@ async def test_video_multiple_angles_map_actual_purposes_and_explicit_group(canv
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': (name + '.png', b'image', 'image/png')})).json()['data']['id'] for name in ['front', 'side']]
-    canvas = (await client.post('/canvases/p', json={'name': '多角度'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '多角度'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     def source(card, port='image', object_id=None):
         value = {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0}
         if object_id:
@@ -157,8 +158,8 @@ async def test_video_multiple_angles_map_actual_purposes_and_explicit_group(canv
 @pytest.mark.asyncio
 async def test_subject_mapping_uses_group_image_order_instead_of_candidate_order(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '顺序'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '顺序'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': (name + '.png', b'image', 'image/png')})).json()['data']['id'] for name in ['front', 'side']]
     doc = canvas['document']

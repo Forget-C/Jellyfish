@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.core.contracts.asset_prompts import AssetPromptAudit
+from app.core.contracts.asset_prompts import AssetPromptAudit, AssetPromptReference
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.core.contracts.text_generation import ScriptOperationInput, TextChatInput
 
@@ -35,7 +35,6 @@ class GenerationTargetKind(str, Enum):
     experiment_session = "experiment_session"
     asset_image_slot = "asset_image_slot"
     directing_unit = "directing_unit"
-    scene_video = "scene_video"
     directing_image = "directing_image"
     script_processing = "script_processing"
 
@@ -106,6 +105,7 @@ class GenerationSubmitRequest(BaseModel):
     media: ImageMediaInput | VideoMediaInput | None = None
     render_id: str | None = None
     asset_prompt_audit: AssetPromptAudit | None = None
+    asset_references: list[AssetPromptReference] | None = None
     operation_input: TypedOperationInput
 
     @model_validator(mode="after")
@@ -164,3 +164,4 @@ class ResolvedGenerationSnapshot(BaseModel):
     operation_input: TypedOperationInput
     execution_prompt: str | None = None
     asset_prompt_audit: AssetPromptAudit | None = None
+    asset_references: list[AssetPromptReference] | None = None

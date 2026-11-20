@@ -1,3 +1,4 @@
+import { selectPreparedCharacter, storyboardCanvasApi } from './storyboard-canvas-fixture.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -31,7 +32,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -48,12 +49,12 @@ try {
   const prep = `http://127.0.0.1:4327/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
   await page.goto(prep.replace('step=storyboard', 'step=objects'))
   await page.getByRole('button', { name: '提取对象', exact: true }).click()
+  await page.locator('.ant-modal-confirm').filter({ hasText: '确认提取对象？' }).getByRole('button', { name: '开始提取', exact: true }).click()
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
-  await front.getByRole('combobox', { name: '关联资产' }).click()
-  await page.getByText('已有角色（提取建议）', { exact: true }).click()
-  await front.getByRole('button', { name: '选择参考图' }).click()
-  await page.getByText('参考图 1', { exact: true }).click()
-  await front.getByText('已选参考图', { exact: true }).waitFor()
+  const resourceImages = `${studio}/entities/character/object-browser-character/images`
+  const referenceImage = (await request(resourceImages)).items[0]
+  await request(`${resourceImages}/${referenceImage.id}`, 'PATCH', { is_primary: true })
+  await selectPreparedCharacter(page, front, '已有角色')
   // 通过公开接口建立旧图片分镜，验证现有画布的编辑与引用契约。
   const storyboardName = '已有图片分镜'
   await request(`${scenes}/${sequence.id}/storyboards`, 'POST', {
@@ -62,7 +63,7 @@ try {
   await page.goto(prep)
   await openReadyStoryboard(page, storyboardName)
   const id = new URL(page.url()).searchParams.get('canvas')
-  const canvas = `${studio}/generation-canvases/${project}/${id}`
+  const canvas = `${studio}/generation-canvases/${id}?project_id=${project}`
   const read = () => request(canvas)
   const poll = async predicate => {
     for (let attempt = 0; attempt < 130; attempt++) {
@@ -80,7 +81,7 @@ try {
   const { shots } = applied.document.storyboard
   const sourceCard = applied.document.fixed_source.card_id
   const compile = async () => {
-    const { input } = await request(`${canvas}/precheck`, 'POST', { card_id: shots[0].model_card_ids[0] })
+    const { input } = await request(storyboardCanvasApi(`${studio}/generation-canvases`, id, '/precheck', project), 'POST', { card_id: shots[0].model_card_ids[0] })
     delete input.revision
     return input
   }
@@ -127,7 +128,7 @@ try {
   const save = (document, expected_revision, request_id) => request(canvas, 'PUT', { document, expected_revision, request_id })
   const saved = await save(draft, applied.revision, 'source-locations')
   const fit = () => page.getByRole('button', { name: '适应全部', exact: true }).click()
-  await page.goto(`http://127.0.0.1:4327/projects/${project}/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4327/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${id}`)
   await trigger.waitFor()
   await fit()
   assert.equal(await card(sourceCard).count(), 0)

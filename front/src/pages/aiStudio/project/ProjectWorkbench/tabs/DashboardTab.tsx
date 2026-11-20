@@ -5,11 +5,10 @@ import { Alert, Button, Empty, Space, Spin } from 'antd'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { StudioDirectingService, type ChapterOverview } from '../../../../../services/generated'
 import { useChapters } from '../hooks/useProjectData'
-import { directingError } from '../../../directing/common'
+import { apiErrorMessage } from '../../../../../services/apiErrorMessage'
 import { chapterActionLocation, chapterLocation, workbenchManagementLocation } from '../../../directing/chapterNavigation'
 import { readRecentWork } from '../../../directing/workspaceContext'
 import { chapterProduction } from '../../chapterProduction'
-import { ProjectCanvasPreview } from '../ProjectCanvasPreview'
 import '../project-production.css'
 
 /** 项目概览使用真实章节和已有场次入口呈现当前制作。 */
@@ -32,7 +31,7 @@ export function DashboardTab() {
       return result.data
     }))
       .then(results => { if (active) setRows(results) })
-      .catch(cause => { if (active) setSceneError(directingError(cause)) })
+      .catch(cause => { if (active) setSceneError(apiErrorMessage(cause)) })
       .finally(() => { if (active) setScenesLoading(false) })
     return () => { active = false }
   }, [chapters, projectId, retry])
@@ -66,7 +65,6 @@ export function DashboardTab() {
             </Empty>}
         </div>
       </section>
-      <ProjectCanvasPreview projectId={projectId} />
     </div>
     <section aria-labelledby="project-overview-sequences">
       <div className="project-section-heading">

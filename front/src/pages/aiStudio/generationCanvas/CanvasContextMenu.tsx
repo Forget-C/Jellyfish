@@ -5,7 +5,7 @@ import { Button, ConfigProvider, Menu } from 'antd'
 import type { MenuProps, MenuRef } from 'antd'
 import { LeftOutlined } from '@ant-design/icons'
 import { cardCategories, cardCategoryEntries, cardEntryIcon } from './CardList'
-import { workbenchTokens } from '../directing/ui/WorkbenchTheme'
+import { useWorkbenchColors } from '../../../components/workbench/WorkbenchTheme'
 import type { CanvasCatalog } from '../../../services/generated'
 
 export type ContextAction = { label: string; shortcut?: string; reason?: string; danger?: boolean; run: () => void }
@@ -13,6 +13,7 @@ type Entry = ContextAction & { key: string; icon?: ReactNode; children?: Entry[]
 
 /** 独立浮层采用菜单语义；桌面各级互不撑开，窄屏在同一浮层内逐级浏览。 */
 export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose }: { x: number; y: number; card: boolean; actions: ContextAction[]; catalog: CanvasCatalog; onAdd: (type: string, entry?: string) => void; onClose: () => void }) {
+  const { tokens: workbenchTokens, dark } = useWorkbenchColors()
   const host = useRef<HTMLDivElement>(null)
   const menuRef = useRef<MenuRef>(null)
   const sessionClass = `generation-context-session-${useId().replace(/:/g, '')}`
@@ -151,7 +152,7 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
   } } }}>
     <div ref={host} tabIndex={-1} className={`generation-context-host ${sessionClass}`} data-narrow={narrow} style={{ left: x, top: y }} onContextMenu={event => event.preventDefault()}>
       {narrow && path.length > 0 && <Button type="text" className="generation-context-back" aria-label="返回上一级" icon={<LeftOutlined />} onClick={back}>返回上一级<span>{find(path[path.length - 1])?.label}</span></Button>}
-      <Menu ref={menuRef} theme="dark" mode="vertical" className="generation-context-menu" aria-label={card ? '卡片右键菜单' : '画布右键菜单'} selectable={false} items={items(entries)}
+      <Menu ref={menuRef} theme={dark ? 'dark' : 'light'} mode="vertical" className="generation-context-menu" aria-label={card ? '卡片右键菜单' : '画布右键菜单'} selectable={false} items={items(entries)}
         openKeys={narrow ? [] : openKeys} onOpenChange={keys => setOpenKeys(keys)} onClick={({ key }) => activate(key)}
         subMenuOpenDelay={0.12} subMenuCloseDelay={0.2} getPopupContainer={() => portalHost} />
     </div>

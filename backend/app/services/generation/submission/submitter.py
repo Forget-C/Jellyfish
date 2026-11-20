@@ -28,9 +28,10 @@ class GenerationEntityGate(Protocol):
 
 @dataclass(frozen=True)
 class GenerationAccepted:
-    """调用方以任务 ID 查询进度和历史结果。"""
+    """返回任务身份，以及受理时实际解析的模型身份。"""
 
     task_id: str
+    model_id: str
 
 
 class GenerationSubmitter:
@@ -89,11 +90,18 @@ class GenerationSubmitter:
             }[snapshot.operation_input.operation]
         source = (await resolve_task_sources(db, [SimpleNamespace(
             id="submission", target_type=target_type, target_id=target_id,
-            target_parent_id=data.get("target_parent_id"), scene_version_id=None, scene_unit_id=None,
+            target_parent_id=data.get("target_parent_id"),
         )])).get("submission")
         task = await TaskService(db).submit(
             kind=kind, snapshot=data, title=kind, target_type=target_type, target_id=target_id,
             expected_target_version=snapshot.expected_version_id, provider_id=provider_id,
             execution_mode=mode, inputs=inputs, project_id=source.project_id if source else None, retry_of_task_id=retry_of_task_id,
         )
-        return GenerationAccepted(task_id=task.id)
+        if command.request.asset_references is not None:
+            from app.services.studio.entity_specs import entity_spec
+            from app.services.studio.resource_references import validate_resource_references
+            spec = entity_spec(command.target.asset_type)
+            asset = await db.get(spec.model, command.target.entity_id)
+            await validate_resource_references(db, command.target.asset_type, asset.project_id,
+                [ref.model_dump(exclude_none=True) for ref in command.request.asset_references])
+        return GenerationAccepted(task_id=task.id, model_id=snapshot.model_id)

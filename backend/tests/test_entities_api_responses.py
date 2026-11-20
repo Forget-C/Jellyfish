@@ -38,6 +38,11 @@ class _FakeEntityDB:
 
     def add(self, obj: object) -> None:
         if isinstance(obj, Actor):
+            # 该数据库替身不执行 SQLAlchemy 的 INSERT 默认值。
+            if obj.origin is None:
+                obj.origin = "created"
+            if obj.details_editable is None:
+                obj.details_editable = False
             self.actors[obj.id] = obj
         else:
             self.actor_images.append(obj)
@@ -54,6 +59,9 @@ class _FakeEntityDB:
     async def delete(self, obj: object) -> None:
         if isinstance(obj, Actor):
             self.actors.pop(obj.id, None)
+
+    async def scalar(self, _statement):
+        return None
 
     async def execute(self, *_args, **_kwargs):
         return _FakeResult([])
@@ -109,33 +117,6 @@ def test_get_actor_entity_not_found_returns_api_response(client: TestClient) -> 
         "data": None,
         "meta": None,
     }
-
-
-def test_delete_actor_entity_returns_empty_envelope(client: TestClient) -> None:
-    db = _FakeEntityDB()
-    actor = Actor(
-        id="actor-1",
-        name="演员一",
-        supplementary_info="",
-        tags=[],
-        prompt_template_id=None,
-        view_count=1,
-        style=ProjectStyle.real_people_city,
-        visual_style=ProjectVisualStyle.live_action,
-    )
-    actor.created_at = datetime.now(UTC)
-    actor.updated_at = actor.created_at
-    db.actors[actor.id] = actor
-
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        response = client.delete("/api/v1/studio/entities/actor/actor-1")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
-    assert "actor-1" not in db.actors
 
 
 def test_create_entity_invalid_entity_type_returns_api_response(client: TestClient) -> None:

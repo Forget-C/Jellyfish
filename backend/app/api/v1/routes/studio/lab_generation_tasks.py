@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-from app.services.studio.experiment_messages import read_experiment_messages
-
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -35,6 +33,8 @@ from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_messages import (
     ExperimentMessageDraft,
     append_experiment_messages,
+    experiment_user_message,
+    read_experiment_messages,
     task_message_display_payload,
 )
 
@@ -62,9 +62,9 @@ async def _require_session(
     session_id: str,
     lab_type: Literal["image", "video"],
 ) -> ExperimentSession:
-    """读取并校验实验室类型，防止把图片任务写入视频历史或反之。"""
+    """锁定会话并校验类型，任务与消息提交期间不允许删除会话。"""
 
-    session = await db.get(ExperimentSession, session_id)
+    session = await db.get(ExperimentSession, session_id, with_for_update=True)
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="target_not_found")
     if session.lab_type != lab_type:
@@ -85,20 +85,6 @@ async def _submit_lab_task(
     session = await _require_session(db, session_id=session_id, lab_type=lab_type)
     operation = GenerationOperation.image_generation if modality is GenerationModality.image else GenerationOperation.video_generation
     task_label = "图片" if modality is GenerationModality.image else "视频"
-    user_message, task_message = await append_experiment_messages(
-        db,
-        session_id=session_id,
-        drafts=[
-            # 用户消息只保存可见文本。完整模型、媒体和 operation 参数只存在于
-            # Task.input_snapshot，不能由消息记录反向作为 Worker 输入。
-            ExperimentMessageDraft(role="user", content=body.execution_prompt or ""),
-            ExperimentMessageDraft(
-                role="task",
-                content=f"{task_label}生成任务已提交，正在等待生成结果。",
-                payload=task_message_display_payload(modality=modality.value),
-            ),
-        ],
-    )
     accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(
         db,
         GenerationCommand(
@@ -109,7 +95,20 @@ async def _submit_lab_task(
             request=body,
         ),
     )
-    task_message.task_id = accepted.task_id
+    user_message, task_message = await append_experiment_messages(
+        db,
+        session_id=session_id,
+        drafts=[
+            experiment_user_message(prompt=body.execution_prompt or "", model_id=accepted.model_id,
+                                    media=body.media, operation_input=body.operation_input),
+            ExperimentMessageDraft(
+                role="task",
+                task_id=accepted.task_id,
+                content=f"{task_label}生成任务已提交，正在等待生成结果。",
+                payload=task_message_display_payload(modality=modality.value),
+            ),
+        ],
+    )
     session.updated_at = func.now()
     await db.commit()
     await db.refresh(user_message)

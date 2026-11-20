@@ -1,18 +1,21 @@
+import { persistSceneChange } from './sceneCanvasPersistence'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Drawer, Space, Spin } from 'antd'
 import { StudioDirectingService as Directing, type SceneCanvasSummary, type StoryboardTaskRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from '../generationCanvas/useGenerationCanvasEditor'
 import { SceneStoryboardReview, StoryboardReviewFindings } from './SceneStoryboardReview'
 import { WorkbenchStoryboardRetry } from './WorkbenchStoryboardRetry'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 
 /** 管理页处理候选；共同编辑器保留保存、修订、应用回执与撤销校验。 */
-export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onEnter, onReviewSource, quickEntry = false }: {
+export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, canvas, historical, onClose, onChange, onSubmissionChange, onEnter, onReviewSource, candidateId, quickEntry = false }: {
+  candidateId?: string
   quickEntry?: boolean
   projectId: string; chapterId: string; sequenceId: string; canvas: SceneCanvasSummary; historical: boolean
-  onClose: () => void; onChange: () => void; onEnter: () => void; onReviewSource: () => void
+  onClose: () => void; onChange: (acceptedTaskId?: string) => void; onEnter: () => void; onReviewSource: () => void
+  onSubmissionChange: (submitting: boolean) => void
 }) {
-  const editor = useGenerationCanvasEditor(projectId, canvas.id, false)
+  const editor = useGenerationCanvasEditor(projectId, canvas.id, false, persistSceneChange)
   const [loadedTask, setTask] = useState<StoryboardTaskRead>()
   const [error, setError] = useState('')
   const [actionHost, setActionHost] = useState<HTMLDivElement | null>(null)
@@ -20,16 +23,17 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
   const entering = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  const taskId = canvas.latest_storyboard?.task_id ?? canvas.candidate_storyboard_task_id
+  const displayedTask = !candidateId || candidateId === canvas.latest_storyboard?.task_id ? canvas.latest_storyboard : undefined
+  const taskId = candidateId ?? displayedTask?.task_id
   useEffect(() => {
     if (!taskId) return
     let active = true
     setError('')
     const request = Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId })
     void request.then(({ data }) => { if (active && data) setTask(data) })
-      .catch(cause => { if (active) setError(directingError(cause)) })
+      .catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, taskId, canvas.latest_storyboard?.status, canvas.latest_storyboard?.stage, refresh])
+  }, [projectId, chapterId, sequenceId, taskId, displayedTask?.status, displayedTask?.stage, refresh])
   const task = loadedTask?.task_id === taskId ? loadedTask : undefined
   const ownership = editor.ownership
   const matched = editor.current?.scene?.chapter_id === chapterId && editor.current.scene.sequence_id === sequenceId
@@ -50,7 +54,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
     if (quickEntry && matched && task?.status === 'succeeded' && task.candidate &&
       !task.pending_application && !task.repair_details && !task.structure_issues?.length && !task.retry_of_task_id && ownership.editable && !editor.recovery && !editor.conflict) void enter()
   })
-  return <Drawer open aria-label="处理分镜提取结果" title="处理分镜提取结果" width="min(720px, 100vw)" onClose={onClose}
+  return <Drawer className="app-detail-drawer management-storyboard-review" open aria-label="处理分镜提取结果" title="处理分镜提取结果" width="min(720px, 100vw)" onClose={onClose}
     footer={<div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
       <Button onClick={onClose}>暂不处理</Button><div ref={setActionHost} />
     </div>}>
@@ -76,7 +80,9 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
         <Button disabled={!ownership.editable} onClick={() => editor.reload()}>使用服务器内容</Button>
       </Space>} />}
       {(task?.status === 'queued' || task?.status === 'running') && <p role="status">提取或审查正在进行，关闭后可继续查看进度。</p>}
-      {task?.error && <Alert type="error" showIcon message="提取未完成，请核对依据后重试。" description={<details><summary>查看失败原因</summary>{task.error}</details>} />}
+      {task?.error && task.status !== 'failed' && task.status !== 'cancelled' && <Alert type={task.structure_issues?.length ? 'warning' : 'error'} showIcon
+        message={task.structure_issues?.length ? '提取结果需要处理，请核对下方问题并选择处理方式。' : '提取未完成，请核对依据后重试。'}
+        description={!task.structure_issues?.length && <details><summary>查看失败原因</summary>{task.error}</details>} />}
       {task?.status === 'failed' && task.repair_details && <details><summary>查看此前候选与修正记录</summary>
         <p>{task.repair_details.reason}</p>
         <StoryboardReviewFindings report={task.repair_details.before_review} candidate={task.candidate} />
@@ -88,6 +94,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
           prepare={editor.prepareReview} reload={editor.reload} applying={editor.saving} saveError={editor.error}
           report={task.review} candidate={task.candidate} repairDetails={task.repair_details} structureIssues={task.structure_issues}
           reviewedOverwrite={task.reviewed_overwrite_card_ids} onOpenCanvas={canvas.applied_storyboard_task_id ? onEnter : undefined}
+          onRepairAccepted={onChange} onRepairSubmissionChange={onSubmissionChange}
           onRepaired={result => { setTask(result); onChange() }}
           apply={async choice => {
             const applied = await editor.applyReviewedCandidate({ chapterId, sequenceId, taskId: task.task_id }, choice)
@@ -99,8 +106,8 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
       {editor.current?.document.storyboard && !editor.recovery && <Button onClick={() => {
         editor.handoffStoryboardApplication(); onEnter()
       }}>进入当前画布</Button>}
-      <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
-        onAccepted={onChange} />
+      {displayedTask && <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
+        onAccepted={onChange} onSubmissionChange={onSubmissionChange} />}
     </Space>
     </div>
   </Drawer>

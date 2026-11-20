@@ -41,12 +41,23 @@ async def validate_references(db, document, previous, project_id, media_referenc
                     or not any(edge.target_card == card.id and edge.target_port == 'name' and
                                edge.source_card == source.id and edge.source_port == 'object' for edge in document.edges)):
                 raise diagnostic('INVALID_NAME_BINDING', '请选择已连线的同类型描述名称', {**target, 'path': ['name_binding']})
+        if card.scene_object_source:
+            from app.services.generation_canvas.scene_object_sources import scene_object
+            obj = await scene_object(db, project_id, card.scene_object_source)
+            kind = 'scene' if card.type == 'reference.place' else card.type.split('.')[1]
+            unchanged_source = isinstance(prior, NamedImageReferenceCard) and prior.scene_object_source == card.scene_object_source
+            identity = card.name_binding.object_id if card.name_binding else card.object_id
+            if card.image_binding or (identity and identity != card.scene_object_source.object_id) or (not unchanged_source and (not obj or obj.get('kind') != kind)):
+                raise diagnostic('INVALID_SCENE_OBJECT_SOURCE', '请选择本项目同类型场次对象，且不能同时采用固定图片', target)
         image = card.image_binding
         if not image:
             continue
-        unchanged = isinstance(prior, NamedImageReferenceCard) and prior.image_binding == image
-        source = next((value for value in document.cards if image.source and value.id == image.source.card_id), None)
-        if not unchanged and (not image.source or not source or source.type != 'content.image'):
+        previous_image = prior.image_binding if isinstance(prior, NamedImageReferenceCard) else None
+        unchanged = previous_image == image
+        source = context.cards.get(image.source.card_id) if image.source else None
+        keeps_pinned_file = (image.source is None and previous_image is not None
+                               and previous_image.file_id == image.file_id and previous_image.result_set_id == image.result_set_id)
+        if not (keeps_pinned_file or (source and source.type == 'content.image')):
             raise diagnostic('INVALID_REFERENCE_SOURCE', '新增参考图仅可从图片内容卡选择', {**target, 'path': ['image_binding']})
         await validate_media_file(db, project_id, media_references[card.id][0])
         if image.source:

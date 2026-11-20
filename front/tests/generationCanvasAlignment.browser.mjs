@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, expandCanvasDetails, closePrecheck, openModelInspection, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { writeFile } from 'node:fs/promises'
@@ -13,7 +14,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8426'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8426' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -35,14 +36,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
-  const canvas=(await response.json()).data
+  const canvas = await createStoryboardCanvas(base, '筛选保持采用')
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'被隐藏但明确采用的内容'},
     {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}},{id:'dense',type:'direction.performance',input_bindings:[],examples:[],scope:{}},{id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}],
     edges:[],input_order:{}}
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok,await seed.clone().text())
-  await page.goto(`http://127.0.0.1:4426/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4426${storyboardCanvasPath(canvas)}`)
   await page.locator('[data-card-id="source"]').waitFor()
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   const safeFit = await page.evaluate(() => {
@@ -73,7 +73,7 @@ try {
     await openCardList(page, '基础卡')
     await snapshot(`generation-list-${name}`)
     await page.getByRole('button',{name:'关闭卡片列表',exact:true}).click()
-    await page.getByRole('button',{name:'画布管理',exact:true}).click()
+    await page.getByRole('button',{name:'布局',exact:true}).click()
     await snapshot(`generation-menu-${name}`)
     await page.keyboard.press('Escape')
     await page.locator('[data-card-id="source"]').press('Enter')
@@ -108,7 +108,7 @@ try {
   await details.getByRole('button',{name:'预检运行',exact:true}).click()
   await snapshot('generation-precheck-desktop')
   await page.getByRole('button',{name:'确认执行',exact:true}).click()
-  const waitStatus=async status=>{for(let i=0;i<80;i++){const runtime=(await(await fetch(`${base}/${canvas.id}/runtime`)).json()).data;if(runtime.runs.some(run=>run.nodes.some(node=>node.card_id==='model'&&node.status===status)))return;await delay(100)}throw Error(`runtime never reached ${status}`)}
+  const waitStatus=async status=>{for(let i=0;i<80;i++){const runtime=(await(await fetch(storyboardCanvasApi(base, canvas.id, `/runtime`))).json()).data;if(runtime.runs.some(run=>run.nodes.some(node=>node.card_id==='model'&&node.status===status)))return;await delay(100)}throw Error(`runtime never reached ${status}`)}
   await waitStatus('running')
   await closePrecheck(page)
   await closeCanvasDetails(page)

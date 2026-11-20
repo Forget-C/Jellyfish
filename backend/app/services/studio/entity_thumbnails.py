@@ -35,7 +35,7 @@ async def resolve_thumbnails(
             continue
         parent_id = getattr(row, parent_field_name)
         created_ts = int(row.created_at.timestamp()) if row.created_at else -1
-        score = (1 if row.view_angle == AssetViewAngle.front else 0, created_ts, row.id)
+        score = (2 if row.is_primary else (1 if row.view_angle == AssetViewAngle.front else 0), created_ts, row.id)
         current = best.get(parent_id)
         if current is None or score > current[:3]:
             best[parent_id] = (*score, file_id)
@@ -63,7 +63,7 @@ async def resolve_thumbnail_infos(
         parent_id = getattr(row, parent_field_name)
         created_ts = int(row.created_at.timestamp()) if row.created_at else -1
         image_id = int(row.id)
-        score3 = (1 if row.view_angle == AssetViewAngle.front else 0, created_ts, image_id)
+        score3 = (2 if row.is_primary else (1 if row.view_angle == AssetViewAngle.front else 0), created_ts, image_id)
         current = best.get(parent_id)
         if current is None or score3 > current[:3]:
             best[parent_id] = (*score3, image_id, file_id)

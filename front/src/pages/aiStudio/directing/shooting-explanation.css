@@ -1,0 +1,39 @@
+.shooting-review-modal { --wb-border: var(--app-border); --wb-spacing: 8px; }
+.shooting-explanation-drawer .ant-drawer-body { display: flex; flex-direction: column; }
+.shooting-explanation-drawer .resource-editor-drawer-content { display: flex; flex: 1; min-height: 0; }
+.shooting-drawer-body { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.shooting-drawer-section { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere; padding: var(--app-detail-content-gap); background: #fff; border: 1px solid var(--app-border); border-radius: 12px; }
+.shooting-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.shooting-heading h3 { font-size: 14px; font-weight: 600; margin: 0; }
+.shooting-drawer-body p,
+.shooting-review-modal :where(p, blockquote) { margin: 0; }
+.shooting-section-scroll { min-height: 0; overflow-y: auto; padding: 2px; scrollbar-gutter: stable; }
+.shooting-stack, .shooting-card { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.shooting-card, .shooting-source-text { padding: 12px; border: 1px solid var(--app-border); border-radius: 8px; }
+.shooting-source-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.85; background: #f7f8fb; }
+.shooting-source-text .is-marked { background: #e4edfb; cursor: pointer; }
+.shooting-source-text :is(.is-focused, .is-selection) { background: #caddf8; }
+.shooting-source-text .is-start { box-shadow: -2px 0 #245fc5; }
+.shooting-source-text .is-end { box-shadow: 2px 0 #245fc5; }
+.shooting-source-text .is-start.is-end { box-shadow: -2px 0 #245fc5, 2px 0 #245fc5; }
+.shooting-source-text .is-marked:focus-visible { outline: 2px solid #245fc5; outline-offset: 2px; }
+.shooting-meta, .shooting-review-modal blockquote { color: #536174; font-size: 13px; }
+.shooting-review-modal blockquote { border-inline-start: 2px solid var(--app-border); padding-inline-start: 10px; overflow-wrap: anywhere; }
+.shooting-review-modal .ant-modal-body .ant-checkbox-wrapper { display: inline-flex; align-items: center; }
+.shooting-source-context { white-space: pre-wrap; }
+.shooting-source-context mark { background: #e4edfb; color: inherit; }
+.shooting-review-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.shooting-review-compare > div { display: grid; gap: 6px; align-content: start; padding: 10px; border-radius: 8px; background: #f7f8fb; overflow-wrap: anywhere; }
+.shooting-review-compare > div:last-child { background: #eef5ff; }
+.shooting-explanation-drawer .shooting-scope-link { height: auto; padding-inline: 0; display: inline; white-space: normal; text-align: start; }
+.shooting-explanation-loading { display: grid; min-height: 96px; place-items: center; }
+.shooting-explanation-drawer .shooting-return-source { display: none; }
+.shooting-explanation-drawer .shooting-range-option { max-width: 100%; height: auto; white-space: normal; text-align: start; overflow-wrap: anywhere; }
+
+@media (max-width: 767px) {
+  .shooting-explanation-drawer .resource-editor-drawer-content { display: block; }
+  .shooting-drawer-body { display: flex; flex-direction: column; flex: none; }
+  .shooting-section-scroll { overflow: visible; }
+  .shooting-review-compare { grid-template-columns: 1fr; }
+  .shooting-explanation-drawer .shooting-return-source { display: inline-flex; }
+}

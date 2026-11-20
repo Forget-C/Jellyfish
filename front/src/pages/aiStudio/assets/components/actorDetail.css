@@ -1,0 +1,85 @@
+.actor-detail-layout { display:grid; grid-template-columns:minmax(350px, 11fr) minmax(0, 9fr); gap:20px; height:100%; min-height:0; }
+.actor-detail-layout > section { padding:16px; border-radius:12px; background:white; min-width:0; min-height:0; }
+.actor-fields { display:grid; gap:12px; }
+.actor-fields label { display:grid; gap:4px; min-width:0; }
+.actor-fields label > span { display:flex; align-items:center; justify-content:space-between; }
+.actor-fields textarea { resize:none; }
+.actor-facts-grid,.actor-generation-display,.actor-style-fields > .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.actor-style-fields .ant-form-item { margin-bottom:0; }
+.actor-pictures { display:flex; flex-direction:column; height:100%; min-height:0; }
+.actor-picture-heading { display:flex; align-items:center; justify-content:space-between; flex:none; height:32px; }
+.actor-picture-heading h2 { margin:0; font-size:14px; font-weight:600; }
+.actor-picture-card { width:112px; flex:none; min-width:0; }
+.actor-picture-card .ant-image { display:block; height:clamp(56px,9vh,100px); width:100%; }
+.actor-picture-card .ant-image-img { height:100%; width:100%; object-fit:contain; }
+.actor-picture-card > div:first-child { position:relative; }
+.actor-picture-card > div:first-child > .ant-btn { position:absolute; inset:0; opacity:0; width:100%; height:100%; }
+.actor-picture-card > div:first-child > .ant-btn:focus-visible { opacity:1; }
+.actor-picture-actions { display:flex; align-items:center; height:24px; justify-content:center; white-space:nowrap; }
+.actor-picture-actions .ant-tag { margin:0; padding-inline:4px; font-size:11px; }
+.actor-empty { display:flex; flex-direction:column; align-items:center; gap:12px; color:#667085; text-align:center; }
+.actor-empty > .anticon { font-size:32px; color:#9aa7b8; }
+.actor-generate-action { flex:none; text-align:right; padding-top:12px; }
+.actor-gallery { display:flex; flex-wrap:wrap; gap:16px; padding-block:16px; }
+.actor-detail-page > .resource-editor-body { overflow-y:hidden; }
+.actor-detail-page .actor-detail-layout { height:100%; }
+@media (max-width:1199px), (max-height:739px) {
+ .actor-detail-page > .resource-editor-body { overflow-y:auto; }
+ .actor-detail-layout { display:block; height:auto; }
+ .actor-detail-layout > section { min-height:580px; }
+ .actor-pictures { min-height:580px; }
+}
+@media (max-width:767px) { .actor-generation-display { grid-template-columns:1fr; } }
+
+.actor-detail-page > .resource-editor-body { display:flex; flex-direction:column; gap:12px; }
+.actor-detail-page > .resource-editor-body > :not(.actor-detail-layout):not(.actor-detail-tabs) { flex:none; }
+.actor-detail-page .actor-detail-layout { flex:1; height:auto; }
+.actor-detail-tabs { flex:1; min-height:0; }
+@media (max-width:1199px), (max-height:739px) { .actor-detail-tabs .actor-fields { padding:16px; background:white; border-radius:12px; } }
+
+.actor-long-field { grid-column:1 / -1; }
+.actor-fields { gap:10px; }
+.actor-facts-grid { gap:8px 12px; }
+.actor-feature-image { flex:1; min-height:100px; display:flex; align-items:center; justify-content:center; background:#f6f8fb; border-radius:8px; overflow:hidden; }
+.actor-feature-trigger { border:0; padding:12px; background:transparent; width:100%; height:100%; min-height:0; cursor:zoom-in; }
+.actor-feature-trigger .ant-image { display:block; height:100%; width:100%; }
+.actor-feature-trigger .ant-image-img { width:100%; height:100%; object-fit:contain; }
+.actor-feature-trigger:focus-visible,.actor-thumbnails button:focus-visible { outline:2px solid #245fc5; outline-offset:-2px; }
+.actor-preview-caption { display:flex; align-items:center; gap:8px; flex:none; min-height:28px; font-size:12px; }
+.actor-thumbnail-row { display:flex; align-items:center; gap:8px; flex:none; min-width:0; }
+.actor-view-all.ant-btn { flex:none; white-space:nowrap; padding-inline:8px; font-size:12px; }
+.actor-thumbnails { display:flex; gap:8px; overflow-x:auto; flex:1; min-width:0; padding:4px 0 8px; }
+.actor-thumbnails button { border:1px solid #e5eaf0; border-radius:6px; background:white; flex:0 0 68px; padding:4px; cursor:pointer; }
+.actor-thumbnails button[aria-pressed='true'] { border-color:#245fc5; background:#edf3fc; }
+.actor-thumbnails img { width:58px; height:60px; object-fit:contain; }
+.actor-thumbnails span { display:block; font-size:11px; white-space:nowrap; }
+.actor-image-parameters { flex:none; min-height:64px; box-sizing:border-box; font-size:12px; padding:6px 0; border-top:1px solid #f0f3f8; }
+.actor-image-parameters .ant-skeleton-paragraph { margin:0; }
+.actor-image-parameters-empty { display:flex; align-items:center; color:#607386; }
+.actor-image-parameters > .ant-space { display:flex; }
+.actor-image-parameters .ant-btn { font-size:12px; padding:0; }
+.actor-task-summary { flex:none; font-size:12px; }
+@media (min-width:1200px) and (min-height:850px) {
+ .actor-fields > label:has(textarea) textarea { height:110px; }
+ .actor-long-field textarea { height:72px; }
+}
+
+.resource-editor-inline.actor-detail-page > .resource-editor-body { box-sizing:border-box; min-height:0; }
+.character-fields { height:100%; grid-template-rows:auto minmax(0,1fr) auto; }
+.character-description textarea { height:100% !important; }
+.actor-detail-tabs .character-fields { min-height:500px; }
+
+.actor-detail-tabs .actor-fields { padding:16px; background:white; border-radius:12px; }
+.actor-detail-tabs .actor-pictures { min-height:580px; }
+
+.character-description { grid-template-rows:auto minmax(0,1fr); min-height:0; }
+.character-description textarea { min-height:0; }
+
+/* 新建面板与详情共用铺满正文的设定、图片区。 */
+.resource-editor-drawer .actor-detail-page > .ant-drawer-body { overflow-y:hidden; }
+.resource-editor-drawer .actor-detail-page .resource-editor-drawer-content { max-width:none; height:100%; display:flex; flex-direction:column; gap:12px; }
+.resource-editor-drawer .actor-detail-page .actor-detail-layout { flex:1; min-height:0; }
+.resource-editor-drawer .actor-detail-page:has(.actor-detail-tabs) > .ant-drawer-body { overflow-y:auto; }
+.resource-editor-drawer .actor-detail-page:has(.actor-detail-tabs) .resource-editor-drawer-content { height:auto; min-height:100%; }
+
+.actor-detail-page:has(.actor-detail-tabs) > .resource-editor-body { overflow-y:auto; }

@@ -1,4 +1,5 @@
 """设计关系通过保存 HTTP 保持诊断、首错顺序与草稿语义。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 from copy import deepcopy
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -15,7 +16,7 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 ])
 @pytest.mark.parametrize('problem', ['disconnected', 'missing_identity', 'foreign_canvas', 'duplicate', 'wrong_port'])
 async def test_design_binding_errors_keep_exact_diagnostic(canvas_client, kind, code, message, problem):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '关系校验'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '关系校验'})).json()['data']
     doc = canvas['document']
     port = 'acceptance_basis' if kind == 'acceptance' else 'speaker' if kind == 'dialogue' else 'participant'
     binding = {'id': 'selected', 'input_port': port, 'source': {
@@ -45,7 +46,7 @@ async def test_design_binding_errors_keep_exact_diagnostic(canvas_client, kind, 
         code, message = 'INVALID_NARRATIVE_BINDING', '请选择直接候选中的明确关系'
     if kind == 'performance' and problem in ('duplicate', 'wrong_port'):
         message = '请选择已接入的明确关系用途'
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422, response.text
     assert response.json()['detail'] == {'code': code, 'severity': 'error', 'message': message,
@@ -54,7 +55,7 @@ async def test_design_binding_errors_keep_exact_diagnostic(canvas_client, kind, 
 
 @pytest.mark.asyncio
 async def test_acceptance_error_precedes_earlier_card_and_binding_errors(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '首错'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '首错'})).json()['data']
     source = {'canvas_id': canvas['id'], 'card_id': 'missing', 'port_id': 'object', 'position': 0}
     doc = canvas['document']
     doc['cards'] = [
@@ -63,7 +64,7 @@ async def test_acceptance_error_precedes_earlier_card_and_binding_errors(canvas_
         {'id': 'later', 'type': 'direction.shot', 'input_bindings': [
             {'id': 'other', 'input_port': 'participant', 'source': source},
             {'id': 'criterion', 'input_port': 'acceptance_basis', 'source': {**source, 'port_id': 'criterion'}}]}]
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422, response.text
     assert response.json()['detail'] == {'code': 'INVALID_REQUIREMENT_BINDING', 'severity': 'error',
@@ -74,7 +75,7 @@ async def test_acceptance_error_precedes_earlier_card_and_binding_errors(canvas_
 @pytest.mark.asyncio
 @pytest.mark.parametrize('reverse', [False, True])
 async def test_binding_order_keeps_category_error_before_later_declaration_error(canvas_client, reverse):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '绑定顺序'})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '绑定顺序'})).json()['data']
     source = {'canvas_id': canvas['id'], 'card_id': 'place', 'port_id': 'object', 'position': 0, 'object_id': 'place'}
     bindings = [{'id': 'category', 'input_port': 'participant', 'source': source},
                 {'id': 'declaration', 'input_port': 'unknown', 'source': source}]
@@ -85,7 +86,7 @@ async def test_binding_order_keeps_category_error_before_later_declaration_error
         {'id': 'act', 'type': 'direction.performance', 'input_bindings': bindings}],
         edges=[{'id': 'edge', 'source_card': 'place', 'source_port': 'object', 'target_card': 'act', 'target_port': 'participant'}],
         input_order={'act': {'participant': ['edge']}})
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422, response.text
     assert response.json()['detail'] == {'code': 'INVALID_DESIGN_BINDING' if reverse else 'INVALID_DESIGN_CATEGORY',
@@ -103,8 +104,8 @@ async def test_adopted_reference_draft_saves_but_cannot_publish_or_run(canvas_cl
 
     file = (await canvas_client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': ('reference.png', b'image', 'image/png')})).json()['data']
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '草稿'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '草稿'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}
     reference = {'id': 'reference', 'type': 'reference.character', 'object_id': 'person', 'name': '人物',
                  'image_binding': {'file_id': file['id'], 'source': source}}

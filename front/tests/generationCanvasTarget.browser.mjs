@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-target-')
-const api = 'http://127.0.0.1:8280', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8280', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8280' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -62,13 +62,15 @@ try {
   for (const [source, target] of [['A', 'B'], ['B', 'C']]) {
     document.edges.push({ id: source + target, source_card: source, source_port: 'text', target_card: target, target_port: 'text' })
     document.input_order[target] = { text: [source + target] }
-    document.cards.find(card => card.id === target).prompt.segments = [{ kind: 'reference', id: target + 'ref', source: { canvas_id: canvas.id, card_id: source, port_id: 'text', position: 0 } }]
+    const card = document.cards.find(card => card.id === target)
+    card.input_bindings = [{ id: target + 'input', input_port: 'text', source: { canvas_id: canvas.id, card_id: source, port_id: 'text', position: 0 } }]
+    card.prompt.segments = [{ kind: 'reference', id: target + 'ref', binding_id: target + 'input' }]
   }
   await request('', { request_id: 'bind-existing', expected_revision: 1, document }, 'PUT')
   await control({ release: 2 })
   let streamConnections = 0
   page.on('request', request => { if (/\/events(?:\?|$)/.test(request.url())) streamConnections++ })
-  await page.goto(`http://127.0.0.1:4280/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4280/canvases/${canvas.id}`)
   const card = await openCanvasCard(page, 'C')
   assert.equal(await page.getByRole('button', { name: '运行到此处', exact: true }).count(), 0)
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
@@ -83,7 +85,7 @@ try {
     const details = await openCanvasCard(page, id)
     await details.getByRole('button', { name: '预检运行', exact: true }).click()
     await preview.waitFor()
-    const [response] = await Promise.all([page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs')),
+    const [response] = await Promise.all([page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs')),
       preview.getByRole('button', { name: '确认执行', exact: true }).click()])
     const accepted = (await response.json()).data
     const run = await waitRun(accepted.run_id)

@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-mixed-')
-const api = 'http://127.0.0.1:8295', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8295', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8295' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -34,10 +35,9 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '混合管道' }) })).json()).data
-  const url = `${base}/${canvas.id}`
+  const canvas = await createStoryboardCanvas(base, '混合管道')
   const request = async (path, body, method = 'POST') => {
-    const response = await fetch(url + path, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
+    const response = await fetch(storyboardCanvasApi(base, canvas.id, path), { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
     assert.ok(response.ok, await response.clone().text())
     return (await response.json()).data
   }
@@ -45,28 +45,28 @@ try {
   const poll = async predicate => { for (let i = 0; i < 100; i++) { const state = await request('/runtime', undefined, 'GET'); if (predicate(state)) return state; await delay(100) } throw Error('runtime did not settle') }
   const source = (id, port, object_id) => ({ canvas_id: canvas.id, card_id: id, port_id: port, position: 0, ...(object_id ? { object_id } : {}) })
   const document = { ...canvas.document, cards: [{ id: 'producer', type: 'model.image', model_id: 'canvas-image-model', config: { count: 3 }, prompt: { segments: [{ id: 'p', kind: 'text', text: 'portrait' }] } }] }
-  await request('', { request_id: 'seed', expected_revision: 0, document }, 'PUT')
+  await request('', { request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }, 'PUT')
   const first = await request('/precheck', { card_id: 'producer' })
   await request('/runs', { request_id: 'producer', preview_token: first.preview_token })
   const runtime = await poll(state => state.current_outputs.producer?.length === 3)
   const image = runtime.current_outputs.producer[0]
   document.cards.push(
-    { id: 'ref', type: 'reference.character', objects: [{ object_id: 'alice', name: '小雪', category: 'character' }], image_binding: { source: image.source, file_id: image.file_id, result_set_id: image.result_set_id } },
+    { id: 'fixed-image', type: 'content.image', file_id: image.file_id },
+    { id: 'ref', type: 'reference.character', object_id: 'alice', name: '小雪', image_binding: { source: source('fixed-image', 'image'), file_id: image.file_id } },
     { id: 'act', type: 'direction.performance', physical_action: { state: 'fact', text: '缓慢伸手' }, input_bindings: [{ id: 'person', input_port: 'participant', source: source('ref', 'object', 'alice') }] },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config: { count: 3 } })
   document.edges = [
-    { id: 'fixed', source_card: 'producer', source_port: 'image', target_card: 'ref', target_port: 'image_source' },
+    { id: 'fixed', source_card: 'fixed-image', source_port: 'image', target_card: 'ref', target_port: 'image_source' },
     { id: 'actor', source_card: 'ref', source_port: 'object', target_card: 'act', target_port: 'participant' },
     { id: 'design', source_card: 'act', source_port: 'text', target_card: 'consumer', target_port: 'text' },
     { id: 'image', source_card: 'ref', source_port: 'image', target_card: 'consumer', target_port: 'image' }]
   document.input_order = { ref: { image_source: ['fixed'] }, act: { participant: ['actor'] }, consumer: { text: ['design'], image: ['image'] } }
   document.cards[0].prompt.segments[0].text = 'stale portrait'
-  await request('', { request_id: 'mixed', expected_revision: (await read()).revision, document }, 'PUT')
-  await page.goto(`http://127.0.0.1:4295/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await request('', { request_id: 'mixed', expected_revision: (await read()).revision, document: withFixedSource(canvas, document) }, 'PUT')
+  await page.goto(`http://127.0.0.1:4295${storyboardCanvasPath(canvas)}`)
   const card = page.locator('.wb-details:not([hidden])')
   const open = id => openCanvasCard(page, id)
   await open('consumer')
-  await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
   await card.getByRole('button', { name: '采用 @小雪', exact: true }).click()
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
@@ -84,7 +84,7 @@ try {
   await page.screenshot({ path: join(output, 'mixed-desktop.png'), fullPage: true })
   await page.reload()
   await open('consumer')
-  await card.getByRole('button', { name: '取消采用 @文本1', exact: true }).waitFor()
+  await card.getByRole('button', { name: '解除关联 @文本1', exact: true }).waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)
   await page.screenshot({ path: join(output, 'mixed-mobile.png'), fullPage: true })

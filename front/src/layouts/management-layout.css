@@ -13,7 +13,7 @@
 
 .management-links {
   display: flex;
-  flex: 0 0 216px;
+  flex: 0 0 var(--app-sidebar-width, 216px);
   flex-direction: column;
   gap: 4px;
   min-height: 0;

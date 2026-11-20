@@ -1,4 +1,4 @@
-"""Seed system-managed prompt templates after the database schema is migrated."""
+"""Seed global model settings and system prompt templates after the database schema is migrated."""
 
 import asyncio
 from pathlib import Path
@@ -9,7 +9,7 @@ from app.config import settings
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-PROMPT_TEMPLATE_SEED = BACKEND_ROOT / "sql" / "001-init-prompt-template.sql"
+SYSTEM_SEED = BACKEND_ROOT / "sql" / "001-init-prompt-template.sql"
 
 
 def _split_sql_statements(sql: str) -> list[str]:
@@ -44,21 +44,15 @@ def _split_sql_statements(sql: str) -> list[str]:
 def _seed_statements() -> list[str]:
     """Load only executable seed statements and preserve user-owned templates."""
     statements: list[str] = []
-    for statement in _split_sql_statements(PROMPT_TEMPLATE_SEED.read_text(encoding="utf-8")):
+    for statement in _split_sql_statements(SYSTEM_SEED.read_text(encoding="utf-8")):
         normalized = statement.lstrip().upper()
-        if normalized.startswith(("BEGIN", "COMMIT", "SET NAMES")):
-            continue
-        if normalized.startswith("DELETE FROM `PROMPT_TEMPLATES`"):
-            # The legacy seed replaced IDs 1-6 unconditionally. Restrict the
-            # replacement to system rows so a user record is never deleted.
-            statement = statement.replace(" WHERE ", " WHERE is_system = 1 AND ", 1)
-        if normalized.startswith(("DELETE", "INSERT")):
+        if normalized.startswith("INSERT"):
             statements.append(statement)
     return statements
 
 
 async def _execute_seed(connection: AsyncConnection, dry_run: bool) -> int:
-    """Execute system prompt template seed statements on one transaction."""
+    """Execute the model settings and template seed in one transaction."""
     statements = _seed_statements()
     if dry_run:
         return len(statements)

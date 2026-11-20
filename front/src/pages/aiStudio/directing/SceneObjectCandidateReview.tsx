@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Modal, Space, Spin } from 'antd'
+import { Alert, Button, ConfigProvider, Modal, Space, Spin, theme } from 'antd'
+import { ExclamationCircleOutlined } from '@ant-design/icons'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneObjectCandidate, SceneObjectCandidateReview as CandidateReview } from '../../../services/generated'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 
 function Changes({ label, objects, note }: {
   label: string; objects: SceneObjectCandidate[]; note?: (object: SceneObjectCandidate) => string;
@@ -17,7 +18,7 @@ function Changes({ label, objects, note }: {
 }
 
 function choiceLabel(object: SceneObjectCandidate) {
-  return [object.asset_id && '资产关联', object.image_file_id && '参考图'].filter(Boolean).join('和')
+  return [object.asset_id && '资源选用'].filter(Boolean).join('和')
 }
 
 const taskStatus = { queued: '对象提取排队中', running: '正在提取对象', failed: '对象提取失败',
@@ -28,6 +29,8 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
   projectId: string; chapterId: string; sequenceId: string; taskId: string;
   editable: boolean; onClose: () => void; management?: boolean;
 }) {
+  const { token } = theme.useToken()
+  const warningStyle = { color: token.colorWarningTextActive, borderColor: token.colorWarningBorder, backgroundColor: token.colorWarningBg }
   const [preview, setPreview] = useState<CandidateReview>()
   const [loading, setLoading] = useState(true)
   const [refresh, setRefresh] = useState(0)
@@ -52,7 +55,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
           timer = window.setTimeout(() => setRefresh(value => value + 1), 1200)
         }
       }
-    }).catch(cause => { if (active) setReadError(directingError(cause)) })
+    }).catch(cause => { if (active) setReadError(apiErrorMessage(cause)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false; window.clearTimeout(timer); request.cancel() }
   }, [projectId, chapterId, sequenceId, taskId, refresh])
@@ -72,18 +75,31 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
     } catch (cause) {
       if (!mounted.current) return
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) {
-        setApplyError(directingError(cause)); reread()
+        setApplyError(apiErrorMessage(cause)); reread()
       } else {
         setUnknown(true); setApplyError('应用结果待核实，可使用原确认再次核实。')
       }
     } finally { if (mounted.current) setApplying(false) }
+  }
+  const discard = async () => {
+    if (!editable || applying || unknown) return
+    setApplying(true); setApplyError('')
+    try {
+      await StudioDirectingService.directingSceneObjectCandidateDiscard({ projectId, chapterId, sequenceId, taskId })
+      if (mounted.current) onClose()
+    } catch (cause) { if (mounted.current) setApplyError(apiErrorMessage(cause)) }
+    finally { if (mounted.current) setApplying(false) }
   }
   const adopted = typeof preview?.applied_revision === 'number'
   const hasCandidate = preview?.candidate_available
   return <Modal className={management ? 'management-object-dialog management-object-review-dialog' : undefined} title={hasCandidate ? '核对对象差异' : '对象提取任务'} open width={660} closable={!applying} keyboard={!applying}
     maskClosable={false} onCancel={onClose}
     styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
-    footer={<Space><Button disabled={applying} onClick={onClose}>{adopted || !hasCandidate ? '关闭' : '暂不应用'}</Button>
+    footer={<Space wrap><Button disabled={applying} onClick={onClose}>{adopted || !hasCandidate ? '关闭' : '暂不应用'}</Button>
+      {hasCandidate && !adopted && <ConfigProvider theme={{ token: { colorPrimary: token.colorWarning, colorPrimaryHover: token.colorWarningTextActive, colorPrimaryActive: token.colorWarningActive }, components: { Button: { defaultColor: token.colorWarningTextActive, defaultBorderColor: token.colorWarningBorder, defaultBg: token.colorWarningBg } } }}><Button icon={<ExclamationCircleOutlined />} aria-label="退出本次提取" disabled={!editable || applying || unknown} onClick={() => Modal.confirm({
+        title: '确认退出本次提取？', content: '本轮未应用的提取结果将被忽略，已有对象和资源引用保持不变。退出后可重新提取。',
+        okText: '确认退出', cancelText: '继续核对', okType: 'default', okButtonProps: { style: warningStyle }, onOk: discard,
+      })}>退出本次提取</Button></ConfigProvider>}
       {hasCandidate && !adopted && <Button type="primary" disabled={!editable || !preview?.preview_token} loading={applying}
         onClick={() => void apply()}>{unknown ? '核实应用结果' : '应用整批对象'}</Button>}
     </Space>}>
@@ -100,7 +116,7 @@ export function SceneObjectCandidateReview({ projectId, chapterId, sequenceId, t
       <Changes label="移除" objects={preview.removed} note={object => choiceLabel(object) ? `本场${choiceLabel(object)}将移除` : ''} />
       <Changes label="修改" objects={preview.modified} note={object => object.description} />
       <Changes label="保留人工选择" objects={preview.retained_choices} note={object => `保留${choiceLabel(object)}`} />
-      <p>确认后整批更新本场对象准备。项目资产仍可在资产库使用。</p>
+      <p>确认后整批更新本场对象准备。项目对象与已关联资产仍保留在项目资源中。</p>
     </>}
   </Modal>
 }

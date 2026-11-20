@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert } from 'antd'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import { buildFileDownloadUrl } from '../assets/utils'
 
 // The duration is an exclusive upper bound. Match the video's microsecond timestamp precision.

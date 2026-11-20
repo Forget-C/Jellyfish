@@ -12,7 +12,7 @@ import { ReferencedDesignFieldEditor as FieldEditor } from './DesignReferenceEdi
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard
 
@@ -20,7 +20,7 @@ export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | Narrativ
 export function NarrativeDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
   const { cardDefinitions } = useGraphRules()
   const card = raw as NarrativeCard
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || []
   const beats = bindings.filter(binding => binding.input_port === 'covered_beat')
   const orderBeats = (ids: string[]) => {

@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8585'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8585' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -35,15 +36,17 @@ try {
   const page = await context.newPage()
   page.on('pageerror',error=>console.error(error))
   page.setDefaultTimeout(15000)
-  await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'编辑卡滚动样式'})})
-  const canvas=(await response.json()).data
-  const catalog = (await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data
+  await context.addInitScript(() => {
+    window.__ENV = { BACKEND_URL: window.location.origin }
+    localStorage.setItem('jellyfish_canvas_appearance', 'dark')
+  })
+  const canvas = await createStoryboardCanvas(base, '编辑卡滚动样式')
+  const catalog = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/catalog`))).json()).data
   const cards = catalog.cards.map(({ type }, index) => ({ id: `card-${index}`, type, ...(type === 'direction.dialogue' ? { dialogue_id: 'dialogue' } : {}) }))
   const document = { ...canvas.document, cards, edges: [], input_order: {} }
-  const seed = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seed = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seed.ok, await seed.clone().text())
-  await page.goto(`http://127.0.0.1:4585/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4585${storyboardCanvasPath(canvas)}`)
   const editor = page.locator('.generation-card-editor:not([hidden])')
   const open = async card => {
     console.log('Checking', card.type)

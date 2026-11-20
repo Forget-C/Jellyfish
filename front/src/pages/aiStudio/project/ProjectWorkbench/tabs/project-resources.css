@@ -1,0 +1,34 @@
+.project-workbench-content:has(> .project-resource-page:not([hidden])) {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-resource-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.project-resource-page[hidden] { display: none; }
+.project-resource-page .project-resource-list-content { margin-inline: 0; }
+.project-resource-page .app-card-list-pagination { padding-inline: 0; }
+.project-resource-page .ant-pagination { margin-top: 0; }
+.project-resource-scroll { scrollbar-gutter: stable; }
+.project-resource-scroll > .ant-alert { margin-bottom: 12px; }
+.project-resource-measure {
+  display: grid;
+  grid-template-columns: repeat(var(--app-media-card-columns, 1), minmax(0, 1fr));
+  gap: 16px;
+}
+.project-resource-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-resource-tools .ant-input-search { width: min(220px, 100%); }
+.project-resource-create { margin-inline-start: auto; }
+.project-resource-filter-panel { max-width: min(360px, calc(100vw - 48px)); }
+.project-resource-filter-panel fieldset { min-width: 0; margin: 0 0 12px; padding: 0; border: 0; }
+.project-resource-filter-panel legend { margin-bottom: 6px; }

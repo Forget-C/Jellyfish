@@ -16,8 +16,8 @@ from app.core.db import Base
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task
 from app.services.task_service import TaskService
-from app.schemas.studio.experiment_sessions import ExperimentMessageCreate, ExperimentSessionCreate
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.schemas.studio.experiment_sessions import ExperimentSessionCreate
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
 
 
 def test_experiment_session_routes_are_registered(client: TestClient) -> None:
@@ -25,8 +25,14 @@ def test_experiment_session_routes_are_registered(client: TestClient) -> None:
     response = client.get("/openapi.json")
     paths = response.json()["paths"]
     assert "/api/v1/studio/experiment-sessions" in paths
-    assert "/api/v1/studio/experiment-sessions/{session_id}/messages" in paths
-    message_parameters = paths["/api/v1/studio/experiment-sessions/{session_id}/messages"]["get"]["parameters"]
+    messages = paths["/api/v1/studio/experiment-sessions/{session_id}/messages"]
+    assert set(messages) == {"get", "delete"}
+    assert "/api/v1/studio/experiment-sessions/messages/{message_id}" not in paths
+    base = "/api/v1/studio/experiment-sessions"
+    message_id = "0123456789abcdef0123456789abcdef"
+    assert client.post(f"{base}/fixture-session/messages", json={}).status_code == 405
+    assert client.patch(f"{base}/messages/{message_id}", json={}).status_code == 404
+    message_parameters = messages["get"]["parameters"]
     assert {parameter["name"] for parameter in message_parameters} >= {"session_id", "page", "page_size"}
     session_schema = response.json()["components"]["schemas"]["ExperimentSessionRead"]
     assert {"last_message_preview", "has_running_task"} <= set(session_schema["properties"])
@@ -145,33 +151,39 @@ async def test_append_experiment_messages_reserves_continuous_sequences() -> Non
 
 
 @pytest.mark.asyncio
-async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path) -> None:
-    """不同事务并发追加同一会话时，原子计数器不应分配重复序号。"""
-    engine = create_async_engine(
-        f"sqlite+aiosqlite:///{tmp_path / 'concurrent-messages.db'}",
-        future=True,
-    )
-    session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-    async with session_local() as db:
-        db.add(ExperimentSession(id="concurrent-session", lab_type="image", title="并发顺序"))
-        await db.commit()
-
-    async def _append(content: str) -> int:
-        """在独立事务中追加一条消息并返回服务端序号。"""
-        async with session_local() as db:
-            items = await append_experiment_messages(
-                db,
-                session_id="concurrent-session",
-                drafts=[ExperimentMessageDraft(role="user", content=content)],
-            )
-            await db.commit()
-            return items[0].sequence
-
+@pytest.mark.parametrize("mysql", [False, pytest.param(True, marks=pytest.mark.integration)])
+async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path, mysql) -> None:
+    """并发追加同一会话后，历史以独立、连续的服务端序号返回。"""
+    if mysql:
+        from tests.services.test_task_mysql import isolated_database_url
+        database_url = isolated_database_url()
+    else:
+        database_url = f"sqlite+aiosqlite:///{tmp_path / 'concurrent-messages.db'}"
+    engine = create_async_engine(database_url)
+    session_local = async_sessionmaker(engine, expire_on_commit=False)
     try:
-        sequences = await asyncio.gather(_append("并发输入 A"), _append("并发输入 B"))
-        assert sorted(sequences) == [1, 2]
+        if not mysql:
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+        async with session_local() as db:
+            session = await route.create_experiment_session(ExperimentSessionCreate(lab_type="text"), db)
+        session_id = session.data.id
+
+        async def append(content: str) -> None:
+            async with session_local.begin() as db:
+                await append_experiment_messages(
+                    db, session_id=session_id, drafts=[experiment_user_message(prompt=content, model_id=None)],
+                )
+
+        try:
+            await asyncio.gather(append("并发输入 A"), append("并发输入 B"))
+            async with session_local() as db:
+                history = await route.list_experiment_messages(session_id, db, page=1, page_size=50)
+                assert [item.sequence for item in history.data] == [1, 2]
+                assert {item.content for item in history.data} == {"并发输入 A", "并发输入 B"}
+        finally:
+            async with session_local() as db:
+                await route.delete_experiment_session(session_id, db)
     finally:
         await engine.dispose()
 
@@ -187,8 +199,8 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             )
             assert created.data is not None
             session_id = created.data.id
-            await route.create_experiment_message(
-                session_id, ExperimentMessageCreate(role="user", content="生成视频"), db
+            await append_experiment_messages(
+                db, session_id=session_id, drafts=[experiment_user_message(prompt="生成视频", model_id=None)],
             )
             task = await TaskService(db).submit(kind="video_generation", snapshot={},
                 target_type="experiment_session", target_id=session_id)
@@ -217,7 +229,6 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
 async def test_task_message_status_is_read_projection_and_rejects_cross_session(terminal):
     """任务状态只在 TaskService 维护；消息不存副本，也不展示其他会话的结果。"""
     from app.services.studio.experiment_messages import read_experiment_messages
-    from app.schemas.studio.experiment_sessions import ExperimentMessageUpdate
 
     db, engine = await _build_session()
     try:
@@ -257,11 +268,5 @@ async def test_task_message_status_is_read_projection_and_rejects_cross_session(
                 assert views[0].payload["error"]
             await db.refresh(message)
             assert message.status is None and message.payload == {"modality": "text"}
-            with pytest.raises(HTTPException) as error:
-                await route.update_experiment_message(message.id, ExperimentMessageUpdate(status="failed"), db)
-            assert error.value.status_code == 409
-            with pytest.raises(HTTPException) as error:
-                await route.create_experiment_message("other", ExperimentMessageCreate(role="task", content="伪造", task_id=task.id), db)
-            assert error.value.status_code == 422
     finally:
         await engine.dispose()

@@ -160,7 +160,7 @@ async def test_batch_keeps_fixed_source_after_asset_deletion_and_rechecks_files(
 
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add(Scene(id='fixed-source', name='选择时场所', style='真人都市'))
+            db.add(Scene(id='fixed-source', project_id='p1', name='选择时场所', style='真人都市'))
             await db.flush()
             db.add_all([ProjectSceneLink(project_id='p1', scene_id='fixed-source'),
                         SceneImage(id=990, scene_id='fixed-source', file_id='image1')])

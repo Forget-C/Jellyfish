@@ -16,8 +16,8 @@ const actors = [
   { id: 'actor-broken', name: '失败图片演员', thumbnail: '/api/broken' },
   { id: 'actor-new', name: '待关联演员' },
 ]
-let links = actors.slice(0,3).map((a,i) => ({ id: i+1, project_id: 'actors-project', actor_id: a.id }))
-let unlinkAttempts = 0
+for (const actor of actors) Object.assign(actor,{project_id:actor.id==='actor-new'?null:'actors-project',visual_style:'现实',style:'真人都市'})
+let deleteAttempts = 0
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -30,18 +30,22 @@ try {
     if(path==='/api/cover') return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="240" height="100"><rect width="240" height="100" fill="navy"/></svg>'})
     if(path==='/api/broken') return route.fulfill({status:404,body:'missing'})
     if(path.endsWith('/projects/actors-project')) return respond({id:'actors-project',name:'演员测试项目',stats:{}})
-    if(path.endsWith('/project-assets/actor')) {
-      if(req.method()==='POST') { links.push({id:4,project_id:'actors-project',actor_id:req.postDataJSON().asset_id}); return respond(links.at(-1)) }
-      return respond({items:links,pagination:{total:links.length}})
-    }
-    if(path.includes('/project-assets/actor/')) {
-      unlinkAttempts++
-      if(unlinkAttempts===1) return route.fulfill({status:503,json:{detail:'取消关联失败'}})
-      links=links.filter(l=>l.id!==Number(path.split('/').at(-1))); return respond({})
-    }
+    assert.ok(!path.includes('/project-assets/actor'), 'the list and deletion use independent project objects')
     const actor=actors.find(a=>path.endsWith('/entities/actor/'+a.id))
-    if(actor)return respond(actor)
-    if(path.endsWith('/entities/actor')) return respond({items:actors,pagination:{total:actors.length}})
+    if(actor) {
+      if(req.method()==='DELETE') {
+        deleteAttempts++
+        if(deleteAttempts===1) return route.fulfill({status:503,json:{detail:'删除失败'}})
+        actors.splice(actors.indexOf(actor),1)
+        return respond({})
+      }
+      return respond(actor)
+    }
+    if(path.endsWith('/entities/actor')) {
+      const projectId=new URL(req.url()).searchParams.get('project_id')
+      const items=actors.filter(a=>a.project_id===projectId)
+      return respond({items,pagination:{total:items.length}})
+    }
     return respond({items:[],next_cursor:null})
   })
   await page.goto('http://127.0.0.1:4542/projects/actors-project?tab=actors')
@@ -62,9 +66,10 @@ try {
   const nameLink=page.getByRole('button',{name:actors[0].name,exact:true})
   const originalUrl=page.url()
   await nameLink.click()
-  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
+  await page.getByRole('textbox',{name:'名称',exact:true}).waitFor()
+  assert.equal(await page.getByRole('link',{name:'在资产库编辑 ↗',exact:true}).count(),0)
   assert.equal(page.url(),originalUrl)
-  await page.getByRole('button',{name:'返回演员资产',exact:true}).click()
+  await page.getByRole('button',{name:'返回',exact:true}).click()
   await nameLink.waitFor()
 
   for(const appearance of ['雾蓝微渐变','雾蓝纯色']) {
@@ -81,43 +86,16 @@ try {
     }
   }
   await page.setViewportSize({width:1440,height:900})
-  await page.getByRole('button',{name:/从资产库关联/}).click()
-  const associate=page.getByRole('dialog',{name:'从资产库关联演员',exact:true})
-  await associate.getByRole('button',{name:'关联到项目',exact:true}).click()
-  await associate.waitFor({state:'hidden'})
-  await page.getByRole('button',{name:'待关联演员',exact:true}).waitFor()
-  assert.ok(links.some(l=>l.actor_id==='actor-new'))
   await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'编辑',exact:true}).waitFor()
-  await page.keyboard.press('Escape')
-  await page.getByRole('menuitem',{name:'编辑',exact:true}).waitFor({state:'hidden'})
-  await page.getByRole('button',{name:actors[0].name+'更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'取消关联',exact:true}).click()
-  const confirm=page.getByRole('dialog').filter({hasText:'仅移除此演员与当前项目的关联'})
-  await confirm.getByRole('button',{name:'取消关联',exact:true}).click()
-  await page.getByText('取消关联失败',{exact:true}).waitFor()
-  assert.equal(await confirm.isVisible(),true)
-  await nameLink.waitFor()
-  await confirm.getByRole('button',{name:'取消关联',exact:true}).click()
+  await page.getByRole('menuitem',{name:'删除项目对象',exact:true}).click()
+  const confirm=page.getByRole('dialog').filter({hasText:'删除此项目对象'})
+  await confirm.getByRole('button',{name:'删除项目对象',exact:true}).click()
+  await confirm.getByText('删除失败',{exact:true}).waitFor()
+  await confirm.getByRole('button',{name:'删除项目对象',exact:true}).click()
   await confirm.waitFor({state:'hidden'})
   await nameLink.waitFor({state:'hidden'})
-  assert.equal(unlinkAttempts,2)
-  links = [{id:4,project_id:'actors-project',actor_id:'actor-new'}]
-  await page.reload()
-  const single = page.getByRole('article').filter({has:page.getByRole('button',{name:'待关联演员',exact:true})})
-  await single.waitFor()
-  const singleBox = await single.boundingBox()
-  assert.ok(singleBox.width >= 228 && singleBox.width < 400, 'single project resource keeps a normal column width')
+  assert.equal(deleteAttempts,2)
   await page.getByRole('button',{name:'查看资产库',exact:true}).click()
-  const libraryCard=page.getByRole('article').filter({has:page.getByRole('link',{name:'待关联演员',exact:true})})
-  await libraryCard.waitFor()
-  assert.ok(Math.abs((await libraryCard.boundingBox()).width-singleBox.width)<2, 'same asset uses the same card grid across project/library')
-  assert.equal(await libraryCard.getByText('暂无标签',{exact:true}).count(),0)
-  await libraryCard.getByText('未填写简介',{exact:true}).waitFor()
-  await page.goto('http://127.0.0.1:4542/projects/actors-project?tab=actors')
-  await page.getByRole('button',{name:'待关联演员更多操作',exact:true}).click()
-  await page.getByRole('menuitem',{name:'编辑',exact:true}).click()
-  await page.getByRole('heading',{name:'基本信息',exact:true}).waitFor()
-  assert.equal(page.url(),originalUrl)
+  await page.getByRole('link',{name:'待关联演员',exact:true}).waitFor()
   console.log(JSON.stringify({output,passed:true}))
 } finally { await cleanup() }

@@ -17,13 +17,13 @@ from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
 AUTO_CHECK_DISPATCH = 'canvas_auto_check'
-
 TASK_KINDS = frozenset({
-    "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation", "scene_export",
+    "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation",
     "script_consistency",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
-    "directing_storyboard", "directing_storyboard_check", "directing_object_extract", "directing_unit_design", "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check",
+    "directing_storyboard", "directing_storyboard_check", "directing_object_extract", "directing_shooting_check", "directing_divide",
+    "directing_design", "directing_review", "directing_review_revision",
 })
 MEDIA_KINDS = frozenset({"image_generation", "video_generation"})
 Delivery = Callable[[AsyncSession, Task], Awaitable[None]]

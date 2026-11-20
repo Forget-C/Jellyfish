@@ -1,4 +1,4 @@
-import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url)), output = await browserOutput('jellyfish-c58-text-model-')
-const api = 'http://127.0.0.1:8558', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8558', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8558' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -33,7 +33,7 @@ try {
   const model = (id, prompt='', adopt=false, selected=true) => ({id,type:'model.text',model_id:selected?'canvas-runtime-text':null,prompt:{segments:prompt?[{id:'p',kind:'text',text:prompt}]:[]},config:{},input_bindings:adopt?[binding(id)]:[]})
   const document = {...canvas.document,cards:[{id:'source',type:'content.text',text:'清晨，人物走过安静的街道。'},model('m','保持自然步态、柔和侧光与人物身份。',true),model('empty'),model('adopted','',true),model('unselected','尚未选择模型的独立状态',false,false)],edges:['m','adopted'].map(id=>({id:`edge-${id}`,source_card:'source',source_port:'text',target_card:id,target_port:'text'})),input_order:{m:{text:['edge-m']},adopted:{text:['edge-adopted']}}}
   await request(`${base}/${canvas.id}`,{request_id:'seed',expected_revision:0,document},'PUT')
-  await page.goto(`http://127.0.0.1:4558/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4558/canvases/${canvas.id}`)
   const editor=page.locator('.wb-details:not([hidden])'), material=editor.getByLabel('管理候选与采用',{exact:true})
   const close=()=>closeCanvasDetails(page)
   const open=async id=>{await close(); await page.locator(`[data-card-id="${id}"]`).press('Enter'); await editor.waitFor();await editor.getByRole('textbox',{name:'模型正文',exact:true}).waitFor();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))}
@@ -75,7 +75,7 @@ try {
   for(const id of ['adopted','unselected']){await open(id);await editor.screenshot({path:join(output,`${id}-distinct-editor.png`)})}
   await open('m')
   await editor.locator('.generation-material-reference').first().click()
-  await editor.getByRole('region',{name:'已保存直接输入',exact:true}).getByText('清晨，人物走过安静的街道。',{exact:true}).last().waitFor()
+  await page.locator('.canvas-association-inspect:visible').getByText('清晨，人物走过安静的街道。',{exact:true}).waitFor()
   await material.press('Escape')
   await material.click();if(await refs.locator('..').getAttribute('open')===null)await refs.click();await editor.getByRole('button',{name:'@文本1',exact:true}).click()
   await material.press('Escape')
@@ -96,17 +96,22 @@ try {
   assert.equal(await readonly.getByRole('textbox',{name:'模型正文',exact:true}).getAttribute('contenteditable'),'false')
   assert.equal(await readonly.getByRole('button',{name:'预检运行',exact:true}).isDisabled(),true)
   await observer.screenshot({path:join(output,'text-model-readonly.png'),fullPage:true});await observer.close()
-  await editor.getByLabel('管理候选与采用',{exact:true}).click()
-  await editor.getByRole('region',{name:'已保存直接输入',exact:true}).getByRole('button',{name:/取消采用/}).click()
+  const basis=editor.locator('.generation-material-reference').first()
+  const basisBefore=await basis.boundingBox()
+  await body.press('ControlOrMeta+End');await page.keyboard.insertText('\n长正文阅读。'.repeat(80));await body.press('ControlOrMeta+End')
+  assert.ok(await body.evaluate(e=>e.scrollHeight>e.clientHeight),'long creation text scrolls inside its own editor')
+  const basisAfter=await basis.boundingBox()
+  assert.equal(basisAfter.y,basisBefore.y,'scrolling creation text does not move the independent basis')
+  await page.screenshot({path:join(output,'text-model-long-independent-scroll.png'),fullPage:true})
+  await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
+  await openModelInspection(page)
+  const cancel = editor.getByRole('region',{name:'已保存直接输入',exact:true}).getByRole('button',{name:/取消采用/})
+  assert.equal(await cancel.isDisabled(), true, 'a reference still used in the prompt cannot be removed')
+  await body.fill('编辑后保留中文正文与来源。')
+  await cancel.click()
   await material.press('Escape')
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   assert.equal((await request(`${base}/${canvas.id}`)).data.document.cards.find(c=>c.id==='m').input_bindings.length,0)
-  const basisBefore=await editor.locator('.generation-material-references').boundingBox()
-  await body.fill('长正文阅读。\n'.repeat(80));await body.press('ControlOrMeta+End')
-  assert.ok(await body.evaluate(e=>e.scrollHeight>e.clientHeight),'long creation text scrolls inside its own editor')
-  const basisAfter=await editor.locator('.generation-material-references').boundingBox()
-  assert.equal(basisAfter.y,basisBefore.y,'scrolling creation text does not move the independent basis')
-  await page.screenshot({path:join(output,'text-model-long-independent-scroll.png'),fullPage:true})
   await close();await page.getByRole('button',{name:'运行历史',exact:true}).click();await page.getByRole('region',{name:'画布运行历史',exact:true}).waitFor()
   assert.equal((await request(`${api}/test/runtime-controls`)).calls.length,1,'viewing and editing never auto-runs')
   writeFileSync(join(output,'manifest.json'),JSON.stringify(manifest,null,2));console.log('PASS C58 public page+HTTP, actual text Worker and F07–F09 threeviewports',output)

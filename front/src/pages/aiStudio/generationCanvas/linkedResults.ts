@@ -1,6 +1,6 @@
 import type { CanvasResolvedOutput, CanvasRunRead } from '../../../services/generated'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
-import type { GraphSize } from '../directing/graphLayout'
+import type { GraphSize } from './graphLayout'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { resultScopeIncludes } from './resultConnections'
 

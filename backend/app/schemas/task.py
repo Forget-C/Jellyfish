@@ -28,9 +28,7 @@ class TaskSourceRead(BaseModel):
     title: str
     project_id: str | None = None
     chapter_id: str | None = None
-    version_id: str | None = None
-    unit_id: str | None = None
-    shot_id: str | None = None
+    sequence_id: str | None = None
     canvas_id: str | None = None
     run_id: str | None = None
     node_id: str | None = None
@@ -107,3 +105,15 @@ class TaskOutputPageRead(BaseModel):
 
     items: list[TaskOutputHistoryRead]
     next_cursor: str | None = None
+
+
+class ActorImageParametersRead(BaseModel):
+    """当前演员图片的历史生成参数；只投影已保存的公开字段。"""
+
+    task_id: str
+    created_at_ts: float
+    model_name: str | None = None
+    view_angle: str | None = None
+    reference_count: int | None = None
+    execution_prompt: str | None = None
+    parameters: dict[str, str] = Field(default_factory=dict)

@@ -14,9 +14,14 @@ sessions = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def database():
-    """请求内事务确保刷新只能读到已提交的保存。"""
-    async with sessions.begin() as db:
-        yield db
+    """与生产依赖一致，允许选帧服务先提交、再读取或更新画布。"""
+    async with sessions() as db:
+        try:
+            yield db
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
 
 async def prepare():

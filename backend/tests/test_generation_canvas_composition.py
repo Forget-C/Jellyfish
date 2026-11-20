@@ -1,4 +1,5 @@
 """独立构图通过公开保存与编译保持自己的参数。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -6,8 +7,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_composition_preserves_framing_and_whole_design(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '构图'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '构图'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document.update(cards=[{'id': 'composition', 'type': 'direction.composition', 'fields': {
         'shot_size': {'size': 'close_up', 'text': '人物特写', 'state': 'fact'},

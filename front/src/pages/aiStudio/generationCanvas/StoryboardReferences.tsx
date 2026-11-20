@@ -3,8 +3,8 @@ import { Alert, Select } from 'antd'
 import { PictureOutlined } from '@ant-design/icons'
 import type { CanvasDocument, ImageContentCard, NamedImageReferenceCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
-import { WorkbenchButton as Button, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from '../directing/ui/WorkbenchModal'
+import { WorkbenchButton as Button, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 import { storyboardImageCards, storyboardReferenceCard } from './storyboardReferenceEdits'
 
 /** 显式分镜画布的对象参考设置，选图只使用当前画布的真实内容卡。 */

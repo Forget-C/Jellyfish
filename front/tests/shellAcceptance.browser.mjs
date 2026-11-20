@@ -3,15 +3,14 @@ import { createRequire } from 'node:module'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
-import { makeWorkspace } from './directing-fixtures.mjs'
+import { makeSequence } from './directing-fixtures.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = process.env.SHELL_EVIDENCE_DIR || '/tmp/jellyfish-shell-acceptance'
 await mkdir(output, { recursive: true })
 process.chdir(root)
-const workspace = makeWorkspace()
-workspace.sequence.title = '旧信重逢'
+const sequence = makeSequence('旧信重逢')
 const project = { id: 'p1', name: '旧信', description: '布局验收项目', style: '现实主义', visual_style: '现实', progress: 25, stats: { chapters: 1, roles: 1, updated_at: '2026-09-15 10:00' } }
 const chapter = { id: 'ch1', project_id: 'p1', index: 2, title: '第二章', raw_text: '他递出旧信，她认出了他。', status: 'draft', sequence_count: 1 }
 const asset = { id: 'a1', name: '旧信档案', description: '用于检查长表单和工作区滚动。'.repeat(20), tags: ['验收'], visual_style: '现实', style: '现实主义', view_count: 1 }
@@ -48,13 +47,9 @@ try {
     if (path.endsWith('/projects/p1')) return failProject ? route.fulfill({ status: 503, json: { detail: '测试加载失败' } }) : respond(project)
     if (path.endsWith('/chapters/ch1') && !path.includes('/directing/')) return respond(chapter)
     if (path.endsWith('/chapters')) return respond(list([chapter]))
-    if (path.endsWith('/s1')) return respond(workspace)
-    if (path.endsWith('/directing/chapters/ch1/assembly')) return respond({ chapter_id: 'ch1', title: chapter.title, sequences: [], transitions: [], gaps: [] })
-    if (path.endsWith('/directing/chapters/ch1/overview')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [workspace.sequence], task_ids: [] })
-    if (path.endsWith('/directing/chapters/ch1')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [workspace.sequence], task_ids: [] })
-    if (path.endsWith('/s1/feedback')) return respond({ active_cut_revision_id: 'c-active', current_review_id: null, reviews: [], repairs: [], knowledge: [] })
-    if (path.endsWith('/s1/continuity')) return respond({ active_cut_revision_id: 'c-active', frames: [], seams: [], units: [] })
-    if (/\/entities\/[^/]+\/a1$/.test(path)) { if (request.method() === 'PATCH') Object.assign(asset, request.postDataJSON()); return respond(asset) }
+    if (path.endsWith('/directing/chapters/ch1/overview')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [sequence], task_ids: [] })
+    if (path.endsWith('/directing/chapters/ch1')) return respond({ chapter_id: 'ch1', title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: [sequence], task_ids: [] })
+    if (/\/entities\/[^/]+\/a1$/.test(path)) { if (request.method() === 'PATCH') Object.assign(asset, request.postDataJSON()); return respond({...asset,project_id:path.includes('/character/')?'p1':null}) }
     if (/\/entities\/[^/]+$/.test(path)) return respond(list([asset]))
     if (path.endsWith('/images')) return respond(list([{ id: 1, view_angle: 'FRONT', file_id: 'test-image', width: 192, height: 288, format: 'svg' }]))
     if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实', '动漫'], styles: ['现实主义'] })
@@ -130,7 +125,7 @@ try {
   const projectNavigation = page.getByRole('navigation', { name: '项目导航', exact: true })
   await projectNavigation.getByRole('link', { name: '项目概览', exact: true }).waitFor()
   assert.deepEqual(await projectNavigation.getByRole('link').allTextContents(), [
-    '项目概览', '画布生成', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
+    '项目概览', '章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置',
   ])
   await projectNavigation.getByText('旧信', { exact: true }).waitFor()
   for (const label of ['章节', '演员', '角色', '场景', '道具', '服装', '文件', '项目设置', '项目概览']) {
@@ -166,8 +161,9 @@ try {
     console.log('Asset save', path)
     const name = page.getByRole('textbox', { name: '名称', exact: true })
     await name.fill('保存后的档案名称')
-    await page.getByRole('button', { name: '保存资产', exact: true }).click()
-    await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+    await page.getByRole('button', { name: '保存设定', exact: true }).click()
+    await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
+    assert.equal(asset.name,'保存后的档案名称')
     const generation = page.getByRole('button', { name: /重新生成|生成图片/ }).first()
     await generation.scrollIntoViewIfNeeded()
     assert.equal(await generation.evaluate(element => {
@@ -178,11 +174,12 @@ try {
     asset.name = '旧信档案'
   }
   await visit('/assets/actors/a1/edit')
-  await page.getByRole('button', { name: '放大当前视角图片', exact: true }).click()
-  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor()
+  await page.getByRole('button', { name: '放大正面图片 1', exact: true }).click()
+  await page.locator('.ant-image-preview-wrap').waitFor()
+  await page.waitForFunction(()=>document.activeElement?.closest('.ant-image-preview-wrap'))
   await snapshot('asset-image-preview')
   await page.keyboard.press('Escape')
-  await page.getByRole('dialog', { name: '旧信档案 · 正面', exact: true }).waitFor({ state: 'hidden' })
+  await page.locator('.ant-image-preview-wrap').waitFor({ state: 'hidden' })
   await visit('/models')
   await page.getByRole('cell', { name: 'openai', exact: true }).click()
   await snapshot('provider-details')
@@ -220,9 +217,8 @@ try {
   }
   for (const mode of ['text', 'image', 'video']) {
     await visit(`/${mode}-lab?mode=${mode}&keep=1`)
-    await page.waitForURL(url => url.pathname === '/lab')
-    assert.equal(new URL(page.url()).searchParams.get('keep'), '1')
-    assert.equal(new URL(page.url()).searchParams.get('mode'), mode)
+    await page.getByText('404', { exact: true }).waitFor()
+    assert.equal(new URL(page.url()).pathname, `/${mode}-lab`)
     interactions.push(`legacy-${mode}`)
   }
   if (!process.env.SHELL_LAB_REGRESSION_ONLY) {

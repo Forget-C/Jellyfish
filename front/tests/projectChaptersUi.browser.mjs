@@ -46,14 +46,6 @@ try {
     if (chapter && path.endsWith('/objects')) return respond({ revision: 0, objects: [], assets: [] })
     if (chapter && path.includes('/directing/')) return respond({ chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, sequences: chapter.id === 'manage' ? [sequence] : [] })
     if (chapter) return respond(chapter)
-    if (path.endsWith('/generation-canvases/p-failed')) return route.fulfill({ status: 503, json: { detail: '画布暂不可用' } })
-    if (path.includes('/generation-canvases/')) return respond(path.endsWith('/p-manage') ? [
-      { id: 'c1', project_id: 'p-manage', revision: 1, document: { id: 'c1', project_id: 'p-manage', name: '真实生成画布', cover_file_id: 'cover-1' } },
-    ] : [])
-    if (path.endsWith('/files/cover-1/download')) return route.fulfill({
-      contentType: 'image/svg+xml',
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="navy"/></svg>',
-    })
     return respond({ items: [], next_cursor: null })
   })
 
@@ -78,7 +70,7 @@ try {
   await raw.getByRole('button', { name: '工作台管理', exact: true }).waitFor()
   await raw.getByRole('button', { name: '编辑原文', exact: true }).click()
   await page.getByRole('textbox', { name: '章节原文', exact: true }).waitFor()
-  await page.locator('.chapter-editor-modal .ant-modal-footer').getByRole('button', {name:/关\s*闭/}).click()
+  await page.locator('.chapter-editor-drawer').getByRole('button', {name:'返回',exact:true}).click()
   for (const theme of ['mist','solid']) {
     await page.evaluate(value => localStorage.setItem('jellyfish_appearance', value), theme)
     await page.reload()
@@ -87,10 +79,10 @@ try {
       await page.getByRole('heading',{name:'章节场次',exact:true}).waitFor()
       await page.screenshot({path:join(output, `chapter-list-${theme}-${viewport.width}-${viewport.height}.png`),animations:'disabled'})
       await raw.getByRole('button', { name: '编辑原文', exact: true }).press('Enter')
-      const close = page.locator('.chapter-editor-modal .ant-modal-footer').getByRole('button', {name:/关\s*闭/})
+      const close = page.locator('.chapter-editor-drawer').getByRole('button', {name:'返回',exact:true})
       await close.scrollIntoViewIfNeeded()
       const box=await close.boundingBox()
-      assert.ok(box.y+box.height<=viewport.height+1, '编辑器底部操作可达')
+      assert.ok(box.y+box.height<=viewport.height+1, '编辑器返回操作可达')
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), true)
       await page.screenshot({path:join(output, `chapter-${theme}-${viewport.width}-${viewport.height}.png`),animations:'disabled'})
       await close.click()

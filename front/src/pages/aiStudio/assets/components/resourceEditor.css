@@ -1,0 +1,75 @@
+.resource-editor-drawer.ant-drawer { position: fixed; z-index: 100; pointer-events: auto; color: #263244; font-size: 14px; line-height: 1.5715; }
+.resource-editor-drawer .ant-drawer-content-wrapper { height: 100%; width: 100%; }
+.resource-editor-drawer .ant-drawer-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.resource-editor-drawer .ant-drawer-body { flex: 1; min-height: 0; overflow-y: auto; }
+.resource-editor-drawer .ant-drawer-content-wrapper { animation: resource-editor-enter 180ms ease-out; }
+@keyframes resource-editor-enter { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .resource-editor-drawer .ant-drawer-content-wrapper { animation: none; } }
+.resource-editor-drawer .ant-drawer-body { background: transparent; }
+.resource-editor-desktop { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.2fr); gap: 24px; }
+.resource-editor-fields { display: grid; gap: 16px; }
+.resource-editor-fields label:not(.ant-checkbox-wrapper) { display: grid; gap: 6px; }
+.resource-editor-empty { border: 1px dashed #cad5df; padding: 40px 20px; text-align: center; color: #607386; }
+.resource-editor-mobile { display: none; }
+.resource-reference-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin: 16px 0; }
+.resource-reference-tile.ant-btn { display: flex; flex-direction: column; align-items: center; height: auto; white-space: normal; padding: 8px; }
+.resource-reference-tile img { width: 100%; max-height: 180px; object-fit: contain; }
+.resource-reference-tile[aria-pressed="true"] { outline: 2px solid #567a9c; }
+@media (max-width: 767px) { .resource-editor-desktop { display: none; } .resource-editor-mobile { display: block; } }
+.resource-editor-fields, .resource-editor-desktop > div { min-width: 0; overflow-wrap: anywhere; }
+.resource-reference-grid > div { min-width: 0; }
+.resource-reference-grid .ant-image img { max-height: 320px; object-fit: contain; }
+.resource-editor-page { min-width: 0; }
+.resource-editor-page > .app-page-toolbar { gap: 12px; min-height: 56px; padding: 10px var(--app-page-gutter, 20px); flex-shrink: 0; }
+.resource-editor-page-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.resource-editor-page-heading .app-page-title { font-size: 16px; line-height: 24px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resource-editor-page-actions { margin-left: auto; min-width: 0; }
+.resource-editor-body { padding: var(--app-detail-content-gap) var(--app-detail-inline-padding); }
+.resource-editor-inline > .app-page-toolbar { position: sticky; top: 0; z-index: 3; }
+.resource-editor-inline > .resource-editor-body { padding: var(--app-detail-content-gap) 0; }
+.resource-editor-page .resource-editor-desktop > div { padding: 16px; background: white; border-radius: 12px; }
+@media (max-width: 767px) {
+  .resource-editor-page > .app-page-toolbar { flex-wrap: wrap; }
+  .resource-editor-page-actions { width: 100%; margin-left: 0; }
+}
+
+/* 与页面共用背景定义；整张视口渐变在右边缘对齐，避免抽屉内重启渐变。 */
+.resource-editor-drawer .ant-drawer-content { border-radius: 0; background: var(--app-page-background); background-size: 100vw 100dvh; background-position: right top; background-repeat: no-repeat; }
+.resource-editor-drawer .ant-drawer-content-wrapper { box-shadow: none; }
+@media (forced-colors: active) {
+  .resource-editor-drawer .ant-drawer-content { background: Canvas; }
+}
+.resource-editor-drawer .ant-drawer-body { padding: var(--app-detail-content-gap) var(--app-detail-inline-padding); }
+.resource-create-content { display: grid; gap: 16px; min-width: 0; padding: 16px; border-radius: 12px; background: #fff; }
+.resource-create-content .ant-collapse { background: transparent; }
+.resource-create-content .ant-collapse-header { padding-inline: 0 !important; }
+.resource-create-content .asset-dossier-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 767px) {
+  .resource-editor-drawer .ant-drawer-content-wrapper { width: 100% !important; max-width: 100%; }
+  .resource-editor-drawer .ant-drawer-content { border-radius: 0; }
+  .resource-create-content .asset-dossier-fields { grid-template-columns: minmax(0, 1fr); }
+}
+.resource-editor-drawer .ant-drawer-content-wrapper { max-width: 100%; }
+
+
+.resource-editor-drawer.resource-editor-no-side .ant-drawer-content-wrapper { box-shadow: none; }
+
+.resource-editor-drawer-content { width: 100%; max-width: 880px; box-sizing: border-box; }
+.resource-editor-drawer .app-page-toolbar { min-height: 56px; padding: 10px 20px; gap: 8px; background: transparent; border: 0; }
+.resource-editor-drawer .resource-editor-page-heading > .ant-btn { padding-inline: 0 8px; flex-shrink: 0; }
+.resource-editor-drawer .app-page-title { font-size: 16px; font-weight: 600; }
+.resource-editor-drawer .resource-editor-page-actions .ant-space { justify-content: flex-end; }
+.resource-editor-drawer.resource-editor-scrolled .app-page-toolbar { box-shadow: 0 1px 0 rgb(38 50 68 / 8%); }
+.resource-editor-drawer:not(.resource-editor-no-side)::before { content: ''; position: absolute; left: -12px; top: 0; bottom: 0; width: 12px; pointer-events: none; background: linear-gradient(to left, rgb(38 50 68 / 4%), transparent); mask-image: linear-gradient(to bottom, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
+@media (max-width: 767px) {
+  .resource-editor-drawer .app-page-toolbar { padding-inline: 16px; }
+  .resource-editor-drawer .resource-editor-page-heading { width: 100%; }
+  .resource-editor-drawer .resource-editor-page-actions { width: 100%; }
+}
+
+/* Toolbar content is also portaled into the project toolbar. */
+.resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { font-size: 13px; min-height: 32px; border-radius: 8px; }
+.resource-editor-page-heading > .ant-tag { font-size: 12px; }
+@media (max-width: 767px) {
+  .resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { min-height: 36px; }
+}

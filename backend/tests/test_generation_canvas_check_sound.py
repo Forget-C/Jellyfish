@@ -1,4 +1,5 @@
 """P08 matches adopted audio requirements without widening generation input."""
+from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
 import asyncio
 import json
 from copy import deepcopy
@@ -47,9 +48,9 @@ async def test_sound_matches_actual_model_and_keeps_technical_constraints(canvas
             Model(id='seedance', name='doubao-seedance-2-0-260128', category='video', provider_id='p08-ark'),
             Model(id='q3', name='viduq3-pro', category='video', provider_id='p08-vidu'),
         ])
-    canvas = (await client.post('/canvases/p', json={'name': '核对声音能力'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
-    checks = f'{url}/checks/check'
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '核对声音能力'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
+    checks = (url + f'/checks/check')
     document = sound_canvas(canvas['document'], [
         guidance('native', '随视频同步生成声音'),
         guidance('switch', '关闭声音输出'),
@@ -63,7 +64,7 @@ async def test_sound_matches_actual_model_and_keeps_technical_constraints(canvas
 
     async def run():
         preview = (await client.get(checks)).json()['data']
-        response = await client.post(f'{checks}/runs', json=run_request(preview))
+        response = await client.post(append_canvas_path(checks, f'/runs'), json=run_request(preview))
         assert response.status_code == 200, response.text
         data = response.json()['data']
         assert not data['executions']
@@ -89,9 +90,9 @@ async def test_sound_matches_actual_model_and_keeps_technical_constraints(canvas
     assert results['native']['outcome'] == 'risk'
     assert results['switch']['outcome'] == 'indeterminate' and '未知' in results['switch']['message']
     assert newer['basis']['model_id'] == 'q3'
-    assert (await client.get(f'{checks}/reports')).json()['data'][-1] == first
+    assert (await client.get(append_canvas_path(checks, f'/reports'))).json()['data'][-1] == first
     old_switch = next(item for item in first['items'] if item['source']['card_id'] == 'switch')
-    reviewed = await client.post(f"{checks}/reports/{first['id']}/recheck", json={
+    reviewed = await client.post(append_canvas_path(checks, f"/reports/{first['id']}/recheck"), json={
         'item_id': old_switch['id'], 'clarification': '当前模型可能已经支持，按已接入算。',
     })
     assert reviewed.status_code == 200, reviewed.text
@@ -141,7 +142,7 @@ async def test_sound_text_classifier_needs_real_source_evidence_and_uses_frozen_
     requirement = '请在本次生成时把输出声轨关掉，声音后面再铺。'
     document = sound_canvas(runtime.document, [guidance('strategy', requirement)], check_model=runtime.model_id)
     await save_canvas(runtime.client, runtime.url, document, 1)
-    checks = f'{runtime.url}/checks/check'
+    checks = (runtime.url + f'/checks/check')
     calls = []
 
     class Classifier:
@@ -161,7 +162,7 @@ async def test_sound_text_classifier_needs_real_source_evidence_and_uses_frozen_
     try:
         for expected in ('risk', 'indeterminate'):
             preview = (await runtime.client.get(checks)).json()['data']
-            response = await runtime.client.post(f'{checks}/runs', json=run_request(preview))
+            response = await runtime.client.post(append_canvas_path(checks, f'/runs'), json=run_request(preview))
             assert response.status_code == 200, response.text
             data = response.json()['data']
             assert data['results'] == [] and data['executions'][0]['status'] == 'queued'
@@ -172,7 +173,7 @@ async def test_sound_text_classifier_needs_real_source_evidence_and_uses_frozen_
                 await save_canvas(runtime.client, runtime.url, current['document'], current['revision'])
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-            report = (await runtime.client.get(f'{checks}/reports')).json()['data'][0]
+            report = (await runtime.client.get(append_canvas_path(checks, f'/reports'))).json()['data'][0]
             assert report['executions'][0]['status'] == 'succeeded'
             assert report['results'][0]['outcome'] == expected
             if expected == 'risk':
@@ -183,14 +184,14 @@ async def test_sound_text_classifier_needs_real_source_evidence_and_uses_frozen_
         assert calls[0]['capabilities']['audio_switch'] == {'declaration': 'supported', 'connected': False}
         assert calls[1]['target_model_id'] == 'unknown-video'
         assert calls[1]['capabilities']['audio_switch'] == {'declaration': 'unknown', 'connected': False}
-        original = (await runtime.client.get(f'{checks}/reports')).json()['data'][-1]
-        response = await runtime.client.post(f"{checks}/reports/{original['id']}/recheck", json={
+        original = (await runtime.client.get(append_canvas_path(checks, f'/reports'))).json()['data'][-1]
+        response = await runtime.client.post(append_canvas_path(checks, f"/reports/{original['id']}/recheck"), json={
             'item_id': original['items'][0]['id'], 'clarification': '根据原文字核对输出声轨开关',
         })
         assert response.status_code == 200, response.text
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
-        latest = (await runtime.client.get(f'{checks}/reports')).json()['data'][0]
+        latest = (await runtime.client.get(append_canvas_path(checks, f'/reports'))).json()['data'][0]
         assert latest['results'][0]['outcome'] == 'risk'
         assert latest['basis']['model_id'] == 'seedance' and len(calls) == 3
         assert calls[-1]['recheck']['original_result'] == original['results'][0]

@@ -1,14 +1,16 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
 from app.core.contracts.generation_canvas import CanvasStoryboardMode, ReferenceDesignField, StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
+from datetime import datetime
 from typing import Annotated, Any, ClassVar, Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.core.contracts.directing.storyboard_prompt import GeneratedVideoPrompt
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.video_generation import AudioCapability
 from app.core.contracts.generation_canvas import DesignMediaUse, CompositionDesignFields, DesignFrameTarget, DesignMediaOrigin, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
-from app.core.contracts.photography import PhotographyTextPayload, ImageFrameTarget
+from app.core.contracts.photography import ImageFrameTarget
 
 
 class CardDefinition(BaseModel):
@@ -97,7 +99,7 @@ class PromptReference(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1)
     kind: Literal['reference'] = Field(json_schema_extra={'enum': ['reference']})
-    binding_id: str | None = None
+    binding_id: str = Field(min_length=1)
     source: OutputIdentity | None = Field(default=None, exclude=True)
 
 
@@ -142,61 +144,28 @@ class ModelCard(CardDefinition):
     model_id: str | None = None
     show_result_cards: bool = Field(default=False, exclude_if=lambda value: not value, description='在画布展开正式结果，仅控制显示')
     detached_results: list[CanvasDetachedResult] = Field(default_factory=list, exclude_if=lambda value: not value)
-    missing_designs: list[str] = Field(default_factory=list, description='已移除设计的稳定身份，补充或明确处理前阻塞运行')
     prompt: PromptDocument = Field(default_factory=PromptDocument)
     input_bindings: list[InputBinding] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def resolve_prompt_bindings(self):
-        """读取旧文档时规范化来源；写出的提示词只保留绑定身份。"""
+        """验证稳定绑定，并为编译器取得同一份来源。"""
         positions = [result.position for result in self.detached_results]
         if len(positions) != len(set(positions)):
             raise ValueError('同一输出位置只能保留最后一次固定记录')
         bindings = {binding.id: binding for binding in self.input_bindings}
-        legacy_groups = {binding.id for binding in self.input_bindings if 'subject_name' not in binding.model_fields_set}
         if len(bindings) != len(self.input_bindings):
             raise ValueError('输入绑定身份必须唯一')
         # after 校验器收到的是 PromptDocument；Pylint 误将默认工厂推断为 FieldInfo。
         for segment in self.prompt.segments:  # pylint: disable=no-member
             refs = [segment] if isinstance(segment, PromptReference) else segment.references if isinstance(segment, PromptInstruction) else []
-            port = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}.get(
-                getattr(segment, 'command', ''), None)
             for ref in refs:
-                subject_name = segment.parameters.get('name', '').strip() if isinstance(segment, PromptInstruction) and segment.command == '主体参考' else None
-                if ref.binding_id is None:
-                    if ref.source is None:
-                        raise ValueError('引用缺少输入绑定')
-                    actual_port = port or ref.source.port_id
-                    if self.type == 'model.video' and actual_port in ('image', 'video'):
-                        actual_port = 'subject_' + actual_port
-                    if actual_port == 'subject_image' and ref.source.port_id == 'video':
-                        actual_port = 'subject_video'
-                    existing = next((binding for binding in bindings.values()
-                        if binding.source == ref.source and binding.input_port == actual_port and binding.subject_name == subject_name), None)
-                    binding = existing or InputBinding(id='input-' + ref.id, source=ref.source, input_port=actual_port, subject_name=subject_name)
-                    bindings[binding.id] = binding
-                    ref.binding_id = binding.id
                 binding = bindings.get(ref.binding_id)
                 if binding is None:
                     raise ValueError('引用的输入绑定不存在')
                 if ref.source is not None and ref.source != binding.source:
                     raise ValueError('引用来源与输入绑定不一致')
-                # 旧 v2 跨主体复用绑定；规范化时拆开用途，不能静默任选第一个主体。
-                if subject_name is not None and binding.id in legacy_groups and binding.subject_name not in (None, subject_name):
-                    grouped = next((value for value in bindings.values() if value.source == binding.source
-                        and value.input_port == binding.input_port and value.subject_name == subject_name), None)
-                    if grouped is None:
-                        identifier = 'input-' + ref.id
-                        while identifier in bindings:
-                            identifier += '-group'
-                        grouped = binding.model_copy(update={'id': identifier, 'subject_name': subject_name})
-                        bindings[grouped.id] = grouped
-                    binding = grouped
-                    ref.binding_id = binding.id
-                if subject_name is not None and binding.subject_name is None:
-                    binding.subject_name = subject_name
                 ref.source = binding.source
-        self.input_bindings = list(bindings.values())
         return self
 
 
@@ -241,6 +210,7 @@ class ImageModelCard(ModelCard):
 class VideoModelCard(ModelCard):
     """视频处理卡；目标端口固定帧与主体用途。"""
     type: Literal['model.video'] = 'model.video'
+    generated_prompt: GeneratedVideoPrompt | None = Field(default=None, exclude_if=lambda value: value is None)
     config: VideoModelConfig = Field(default_factory=VideoModelConfig)
     design_media_uses: list[DesignMediaUse] = Field(default_factory=list)
     input_ports: ClassVar[tuple[str, ...]] = ('text', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video')
@@ -385,6 +355,13 @@ class AudioContentCard(MediaContentCard):
 
 
 
+class SceneObjectSource(BaseModel):
+    """场次提取对象身份；资源选用与实际用图不复制到画布。"""
+    model_config = ConfigDict(extra='forbid')
+    sequence_id: str = Field(min_length=1, max_length=64)
+    object_id: str = Field(min_length=1, max_length=64)
+
+
 class NamedImageReferenceCard(CardDefinition):
     """单张图片、单个映射名称；允许未完成草稿，名称有效后才发布输出。"""
     type_version: Literal[2] = 2
@@ -394,6 +371,7 @@ class NamedImageReferenceCard(CardDefinition):
     object_id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
     name_binding: OutputIdentity | None = None
     image_binding: ReferenceImageBinding | None = None
+    scene_object_source: SceneObjectSource | None = None
     input_ports: ClassVar[tuple[str, ...]] = ('name', 'image_source')
     output_ports: ClassVar[tuple[str, ...]] = ('image', 'object')
 
@@ -784,6 +762,8 @@ class CanvasFixedSource(BaseModel):
     card_id: str
     chapter_id: str
     chapter_version: str
+    source_explanations: list[dict] = Field(default_factory=list, exclude_if=lambda value: not value)
+    shooting_notes: list[dict] = Field(default_factory=list, exclude_if=lambda value: not value)
 
 
 class CanvasSourceIndex(BaseModel):
@@ -895,7 +875,7 @@ class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
     id: str
-    project_id: str
+    project_id: str | None = None
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
@@ -924,8 +904,15 @@ class CanvasDocument(BaseModel):
 
 
 class CanvasCreate(BaseModel):
-    """创建无需章节或场次的项目画布。"""
+    """创建不依赖项目、章节或场次的自由画布。"""
     name: str = Field(default='未命名画布', min_length=1, max_length=255)
+
+    @field_validator('name')
+    @classmethod
+    def require_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('画布名称不能为空白')
+        return value
 
 
 class CanvasSave(BaseModel):
@@ -945,7 +932,7 @@ class CanvasSceneAssociation(BaseModel):
 class CanvasRead(BaseModel):
     """当前保存的内容和 CAS 修订。"""
     id: str
-    project_id: str
+    project_id: str | None = None
     revision: int
     document: CanvasDocument
     source_changed: bool | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -978,7 +965,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: Literal['text', 'image', 'video', 'audio']
-    payload: Annotated[BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload | PhotographyTextPayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -997,7 +984,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (BasisTextOutputPayload, DialogueReferencePayload, ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload, CriterionReferencePayload, PhotographyTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (BasisTextOutputPayload, DialogueReferencePayload, ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload, CriterionReferencePayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self
@@ -1120,3 +1107,18 @@ class CanvasRuntimeEvent(BaseModel):
 class CanvasStreamConnection(BaseModel):
     """由 generated operation 提供流地址，通用 transport 负责 SSE。"""
     url: str
+
+
+class CanvasSummary(BaseModel):
+    """列表只返回展示摘要，不传输画布正文。"""
+    id: str
+    name: str
+    revision: int
+    cover_file_id: str | None = None
+    updated_at: datetime
+
+
+class CanvasRename(CanvasCreate):
+    """以已确认修订重命名，避免覆盖编辑器保存。"""
+    name: str = Field(min_length=1, max_length=255)
+    expected_revision: int = Field(ge=0)

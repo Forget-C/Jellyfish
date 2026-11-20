@@ -576,6 +576,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       </WorkspaceScrollPanel>
 
       <Drawer
+        className="app-detail-drawer"
         title={<h2 className="m-0 text-base font-semibold">模型详情</h2>}
         open={detailPanelOpen}
         placement="right"
@@ -602,6 +603,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       </Drawer>
 
       <Drawer
+        className="app-detail-drawer"
         title={<h2 className="m-0 text-base font-semibold">全局默认模型</h2>}
         placement="right"
         open={defaultModelsDrawerOpen}

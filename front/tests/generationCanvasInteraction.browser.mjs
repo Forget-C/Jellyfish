@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8610', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8610', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8610' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -36,17 +37,13 @@ try {
   page.on('console', message => { if (message.type() === 'error') console.log('BROWSER ERROR', message.text()) })
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const request = async (path, body) => {
-    const response = await fetch(api + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined)
-    assert.ok(response.ok, await response.clone().text()); return (await response.json()).data
-  }
 
-  const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', {name:'画布交互回归'})
-  const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[{id:'director',type:'direction.fact',input_bindings:[],examples:[],scope:{}},{id:'place',type:'reference.place',title:'',angle:'正面',objects:[]},{id:'other',type:'reference.place',title:'其他场所',angle:'正面',objects:[]},{id:'note',type:'content.text',text:'编辑输入测试'},{id:'dependent',type:'model.text',prompt:{segments:[{id:'ref',kind:'reference',source:{canvas_id:canvas.id,card_id:'note',port_id:'text',position:0}}]}}],edges:[{id:'note-input',source_card:'note',source_port:'text',target_card:'dependent',target_port:'text'}],input_order:{dependent:{text:['note-input']}}}})})
+  const canvas = await createStoryboardCanvas(base, '画布交互回归')
+  const seeded=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: { ...canvas.document, cards: [...canvas.document.cards, {id:'director',type:'direction.fact',input_bindings:[],examples:[],scope:{}},{id:'place',type:'reference.place',angle:'正面'},{id:'other',type:'reference.place',name:'其他场所',angle:'正面'},{id:'note',type:'content.text',text:'编辑输入测试'},{id:'dependent',type:'model.text',input_bindings:[{id:'note-input',input_port:'text',source:{canvas_id:canvas.id,card_id:'note',port_id:'text',position:0}}],prompt:{segments:[{id:'ref',kind:'reference',binding_id:'note-input'}]}}],edges:[{id:'note-input',source_card:'note',source_port:'text',target_card:'dependent',target_port:'text'}],input_order:{dependent:{text:['note-input']}}}})})
   assert.ok(seeded.ok,await seeded.text())
   const layoutKey=`jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   await page.addInitScript(({layoutKey})=>{if (!sessionStorage.getItem('interaction-seeded')) {sessionStorage.setItem('interaction-seeded','1');localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions:{director:{x:1800,y:250},place:{x:400,y:250},other:{x:1000,y:250},note:{x:1500,y:250},dependent:{x:1800,y:700}},sizes:{place:{width:300,height:251}},transform:{x:0,y:0,scale:.8}}))}},{layoutKey})
-  await page.goto(`http://127.0.0.1:4610/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4610${storyboardCanvasPath(canvas)}`)
   const card=page.locator('[data-card-id="place"]');await card.waitFor()
   const director=page.locator('[data-card-id="director"]')
   // Q5: complex cards retain pointer selection, but keyboard activation opens their editor.

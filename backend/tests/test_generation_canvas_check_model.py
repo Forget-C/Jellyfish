@@ -1,4 +1,5 @@
 """Model checks through the saved canvas API, task admission and real Worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import json
 from types import SimpleNamespace
@@ -14,7 +15,7 @@ from tests.test_generation_canvas_runs import runtime  # noqa: F401
 @pytest.mark.asyncio
 async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results(runtime, monkeypatch):
     client, url = runtime.client, runtime.url
-    checks = f'{url}/checks/check'
+    checks = (url + f'/checks/check')
     document = duration_canvas(runtime.document)
     document['cards'][0].update(
         visible_result={'text': '关门但不关灯', 'state': 'fact', 'purpose': 'constraint'},
@@ -40,14 +41,14 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
         return response.json()['data']
 
     async def run(basis, item_id=None):
-        response = await client.post(f'{checks}/runs', json={
+        response = await client.post(append_canvas_path(checks, f'/runs'), json={
             'expected_revision': basis['revision'], 'basis_hash': basis['basis_hash'], 'item_id': item_id,
         })
         assert response.status_code == 200, response.text
         return response.json()['data']
 
     async def history():
-        response = await client.get(f'{checks}/reports')
+        response = await client.get(append_canvas_path(checks, f'/reports'))
         assert response.status_code == 200, response.text
         for secret in ('private-secret', 'changed-secret', 'frozen.test', 'changed.test', 'execution_config'):
             assert secret not in response.text
@@ -157,7 +158,7 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
         assert len(calls) == 5
 
         original_result = next(row for row in finished['results'] if row['item_id'] == visible_result['id'])
-        path = f"{checks}/reports/{finished['id']}/recheck"
+        path = append_canvas_path(checks, f"/reports/{finished['id']}/recheck")
         response = await client.post(path, json={'item_id': visible_result['id'], 'clarification': '实际房间已经全黑'})
         assert response.status_code == 200, response.text
         rechecked = response.json()['data']

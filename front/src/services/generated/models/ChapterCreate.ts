@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ChapterStatus } from './ChapterStatus';
+import type { SourceExplanation } from './SourceExplanation';
 export type ChapterCreate = {
     /**
      * 所属项目 ID
@@ -24,6 +25,7 @@ export type ChapterCreate = {
      * 章节原文
      */
     raw_text?: string;
+    source_explanations?: (Array<SourceExplanation> | null);
     /**
      * 精简原文
      */

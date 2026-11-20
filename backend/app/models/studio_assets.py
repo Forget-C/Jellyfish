@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import case, func, literal, JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Computed, case, func, literal, JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,25 @@ from app.models.types import ProjectStyle, ProjectVisualStyle
 
 class StructuredAssetMixin:
     """从分类设定派生描述，保证摘要、搜索和生成读取相同的资产事实。"""
+
+    project_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True,
+        comment="所属项目；空值表示共享资产",
+    )
+
+    # MySQL 的 CASCADE 外键不支持参与 STORED 计算列，使用 VIRTUAL 范围键。
+    name_scope: Mapped[str] = mapped_column(
+        String(64), Computed("coalesce(project_id, '')", persisted=False),
+    )
+
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="created", server_default="created")
+    details_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    source_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    references: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    library_copy_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     supplementary_info: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="补充信息")
 
@@ -50,7 +69,7 @@ class Scene(StructuredAssetMixin, Base, TimestampMixin):
     environment_features: Mapped[str | None] = mapped_column(Text, nullable=True, comment="环境特征")
     materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="主要材质")
     color_palette: Mapped[str | None] = mapped_column(Text, nullable=True, comment="色彩")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -65,10 +84,9 @@ class Scene(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -82,12 +100,12 @@ class Scene(StructuredAssetMixin, Base, TimestampMixin):
 
     __table_args__ = (
         Index("ix_scenes_name", "name"),
-        UniqueConstraint("name", name="uq_scenes_name"),
+        UniqueConstraint("name_scope", "name", name="uq_scenes_scope_name"),
     )
 
 
 class Prop(StructuredAssetMixin, Base, TimestampMixin):
-    """道具表。角色道具绑定见 CharacterPropLink。"""
+    """道具档案。"""
 
     __tablename__ = "props"
 
@@ -99,7 +117,7 @@ class Prop(StructuredAssetMixin, Base, TimestampMixin):
     size_description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="尺寸或相对尺度")
     materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="材质")
     colors: Mapped[str | None] = mapped_column(Text, nullable=True, comment="颜色")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -114,10 +132,9 @@ class Prop(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -128,20 +145,15 @@ class Prop(StructuredAssetMixin, Base, TimestampMixin):
         passive_deletes=True,
         order_by="PropImage.id",
     )
-    character_prop_links: Mapped[list["CharacterPropLink"]] = relationship(
-        back_populates="prop",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
 
     __table_args__ = (
         Index("ix_props_name", "name"),
-        UniqueConstraint("name", name="uq_props_name"),
+        UniqueConstraint("name_scope", "name", name="uq_props_scope_name"),
     )
 
 
 class Costume(StructuredAssetMixin, Base, TimestampMixin):
-    """服装表。角色服装见 Character.costume_id。"""
+    """服装档案。"""
 
     __tablename__ = "costumes"
 
@@ -153,7 +165,7 @@ class Costume(StructuredAssetMixin, Base, TimestampMixin):
     materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="材质")
     colors: Mapped[str | None] = mapped_column(Text, nullable=True, comment="颜色")
     patterns_accessories: Mapped[str | None] = mapped_column(Text, nullable=True, comment="纹样与附属配饰")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -168,10 +180,9 @@ class Costume(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -182,11 +193,10 @@ class Costume(StructuredAssetMixin, Base, TimestampMixin):
         passive_deletes=True,
         order_by="CostumeImage.id",
     )
-    characters: Mapped[list["Character"]] = relationship(back_populates="costume")
 
     __table_args__ = (
         Index("ix_costumes_name", "name"),
-        UniqueConstraint("name", name="uq_costumes_name"),
+        UniqueConstraint("name_scope", "name", name="uq_costumes_scope_name"),
     )
 
 
@@ -195,10 +205,21 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
 
     说明：
     - 使用 ActorImage（旧） 的字段集合，作为“演员形象/立绘资产”的主表。
-    - 归属由 ProjectActorLink（project/chapter/shot 维度）表达。
+    - project_id 表达直接归属；库中演员通过独立导入成为项目副本。
     """
 
     __tablename__ = "actors"
+
+    @hybrid_property
+    def source_character_id(self) -> str | None:
+        """从统一的来源字段读取入库角色的身份。"""
+        if self.origin == "project" and self.source_kind == "character":
+            return self.source_id
+        return None
+
+    @source_character_id.expression
+    def source_character_id(cls):  # pylint: disable=no-self-argument
+        return case(((cls.origin == "project") & (cls.source_kind == "character"), cls.source_id))
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")
@@ -209,7 +230,7 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
     facial_features: Mapped[str | None] = mapped_column(Text, nullable=True, comment="五官特征")
     skin_tone: Mapped[str | None] = mapped_column(Text, nullable=True, comment="肤色")
     hair: Mapped[str | None] = mapped_column(Text, nullable=True, comment="发型发色")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -224,10 +245,9 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
         index=True,
         comment="提示词模板 ID",
     )
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
 
@@ -238,26 +258,30 @@ class Actor(StructuredAssetMixin, Base, TimestampMixin):
         passive_deletes=True,
         order_by="ActorImage.id",
     )
-    characters: Mapped[list["Character"]] = relationship(back_populates="actor")
 
     __table_args__ = (
         Index("ix_actors_name", "name"),
-        UniqueConstraint("name", name="uq_actors_name"),
+        UniqueConstraint("name_scope", "name", name="uq_actors_scope_name"),
     )
 
 
 class Character(Base, TimestampMixin):
     """角色表（归属项目）。
 
-    组成约定：
-    - 角色由：Actor（演员） + Costume（服装） + Props（道具）组成。
-    - 场次设计通过版本化资产需求引用角色。
-
-    应用层保证：
-    - `costume_id` 所指服装应为该角色所属项目或全局资产，避免跨项目误用。
+    角色保留自身设定，主体、服装和道具均通过明确图片参考表达。
     """
 
     __tablename__ = "characters"
+
+    details_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="created", server_default="created")
+    source_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    references: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    library_copy_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="角色 ID")
     project_id: Mapped[str] = mapped_column(
@@ -269,37 +293,13 @@ class Character(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="角色名称")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="角色描述")
-    style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
-    visual_style: Mapped[ProjectVisualStyle] = mapped_column(
+    style: Mapped[ProjectStyle | None] = mapped_column(String(32), nullable=True, comment="题材/风格")
+    visual_style: Mapped[ProjectVisualStyle | None] = mapped_column(
         String(16),
-        nullable=False,
-        default=ProjectVisualStyle.live_action,
+        nullable=True,
         comment="画面表现形式（现实/动漫等）",
     )
-    actor_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("actors.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
-        comment="对应演员 ID",
-    )
-    costume_id: Mapped[str | None] = mapped_column(
-        String(64),
-        ForeignKey("costumes.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="服装 ID（可空）；应用层需保证与角色同项目或全局",
-    )
-
     project: Mapped["Project"] = relationship(back_populates="characters")
-    actor: Mapped["Actor"] = relationship(back_populates="characters")
-    costume: Mapped["Costume | None"] = relationship(back_populates="characters")
-    prop_links: Mapped[list["CharacterPropLink"]] = relationship(
-        back_populates="character",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-        order_by="CharacterPropLink.index",
-    )
     images: Mapped[list["CharacterImage"]] = relationship(
         back_populates="character",
         cascade="all, delete-orphan",
@@ -313,47 +313,10 @@ class Character(Base, TimestampMixin):
     )
 
 
-class CharacterPropLink(Base,TimestampMixin):
-    """角色与道具绑定（多对多）。
-
-    应用层保证：
-    - `prop_id` 所指道具应为该角色所属项目或全局资产，避免跨项目误用。
-    """
-
-    __tablename__ = "character_prop_links"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="关联行 ID")
-    character_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("characters.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-        comment="角色 ID",
-    )
-    prop_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("props.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-        comment="道具 ID",
-    )
-    index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="角色道具排序")
-    note: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="备注（可选）")
-
-    character: Mapped["Character"] = relationship(back_populates="prop_links")
-    prop: Mapped["Prop"] = relationship(back_populates="character_prop_links")
-
-    __table_args__ = (
-        UniqueConstraint("character_id", "prop_id", name="uq_character_prop_links_character_prop"),
-        UniqueConstraint("character_id", "index", name="uq_character_prop_links_character_index"),
-    )
-
-
 __all__ = [
     "Scene",
     "Prop",
     "Costume",
     "Actor",
     "Character",
-    "CharacterPropLink",
 ]

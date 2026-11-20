@@ -13,7 +13,7 @@ export default function ActorAssetEditPage() {
   const backTo = decodeAssetEditReturnTo(searchParams.get('returnTo'), adapter.backTo)
 
   return (
-    <AssetEditPageBase<any, any>
+    <AssetEditPageBase
       key={actorImageId}
       assetId={actorImageId}
       onNavigate={onNavigate}

@@ -4,9 +4,12 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
+from typing import TYPE_CHECKING
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.chapters.explanations import explanation_basis
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
 from app.models.directing import Sequence
 from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
@@ -14,11 +17,14 @@ from app.models.studio import Chapter, FileUsage, Project
 from app.models.task import Task
 from app.schemas.generation_canvas import (
     CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasRead,
-    CanvasSave, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
+    CanvasSave, CanvasSummary, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
 )
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.capabilities import model_capability
+
+if TYPE_CHECKING:
+    from app.services.directing.storyboard_save import StoryboardSaveEvidence
 
 
 
@@ -33,17 +39,50 @@ class SceneCanvasSeed:
 
 
 class CanvasStore:
-    """使用项目作用域读取，文档写入及回执由调用方事务共同提交。"""
-    def __init__(self, db: AsyncSession, project_id: str):
+    """按真实归属读取，文档写入及回执由调用方事务共同提交。"""
+    def __init__(self, db: AsyncSession, project_id: str | None):
         self.db = db
-        self.project_id = project_id
+        self.project_id = project_id or None
+
+    async def summaries(self, *, q: str, page: int, page_size: int) -> tuple[list[CanvasSummary], int]:
+        """按归属和名称筛选摘要，稳定分页且不读取或排序大文档。"""
+        scope = [GenerationCanvas.project_id == self.project_id,
+                 GenerationCanvas.kind == ('scene' if self.project_id else 'free')]
+        if q.strip():
+            # 名称检索也与排序隔离，避免 JSON 条件使 MySQL 携带文档排序。
+            matches = list((await self.db.scalars(select(GenerationCanvas.id).where(*scope,
+                GenerationCanvas.document['name'].as_string().contains(q.strip(), autoescape=True)))).all())
+            scope.append(GenerationCanvas.id.in_(matches))
+        total = await self.db.scalar(select(func.count()).select_from(GenerationCanvas).where(*scope))
+        ids = list((await self.db.scalars(select(GenerationCanvas.id).where(*scope)
+            .order_by(GenerationCanvas.updated_at.desc(), GenerationCanvas.id.desc())
+            .offset((page - 1) * page_size).limit(page_size))).all())
+        if not ids:
+            return [], total
+        # JSON 摘要单独读取，避免 MySQL 将大文档带入排序缓冲。
+        rows = (await self.db.execute(select(GenerationCanvas.id, GenerationCanvas.revision, GenerationCanvas.updated_at,
+            GenerationCanvas.document['name'].as_string().label('name'),
+            GenerationCanvas.document['cover_file_id'].as_string().label('cover_file_id'))
+            .where(GenerationCanvas.id.in_(ids)))).all()
+        summaries = {row.id: CanvasSummary.model_validate(row._mapping) for row in rows}
+        return [summaries[canvas_id] for canvas_id in ids if canvas_id in summaries], total
+
+    async def rename(self, canvas_id: str, name: str, expected_revision: int) -> CanvasRead:
+        """重命名复用完整保存与 CAS，避免覆盖其他编辑器的新修订。"""
+        current = await self.read(canvas_id)
+        document = current.document.model_copy(update={'name': name})
+        await self.save(canvas_id, CanvasSave(request_id=uuid4().hex, expected_revision=expected_revision,
+                                             document=document.model_dump()))
+        return await self.read(canvas_id)
 
     async def list(self) -> list[GenerationCanvas]:
         """列出项目画布，沿用现有项目存在性边界。"""
-        await get_or_404(self.db, Project, self.project_id, detail="Project not found")
-        rows = list((await self.db.scalars(select(GenerationCanvas).where(
+        if self.project_id is not None:
+            await get_or_404(self.db, Project, self.project_id, detail="Project not found")
+        # 仅让轻量 ID 参与排序，避免大 JSON 文档耗尽 MySQL 排序缓冲。
+        ids = list((await self.db.scalars(select(GenerationCanvas.id).where(
             GenerationCanvas.project_id == self.project_id).order_by(GenerationCanvas.created_at, GenerationCanvas.id))).all())
-        return [await self.get(row.id) for row in rows]
+        return [await self.get(canvas_id) for canvas_id in ids]
 
     async def get(self, canvas_id: str, *, lock: bool = False) -> GenerationCanvas:
         """锁住文档行后再读回执，使同画布的竞争请求按数据库顺序核实。"""
@@ -58,7 +97,7 @@ class CanvasStore:
                                       .execution_options(synchronize_session=False))
             stmt = stmt.with_for_update().execution_options(populate_existing=True)
         canvas = await self.db.scalar(stmt)
-        if canvas is None:
+        if canvas is None or canvas.kind != ('scene' if self.project_id else 'free'):
             raise HTTPException(404, 'Canvas not found')
         return canvas
 
@@ -66,12 +105,15 @@ class CanvasStore:
         """附带固定依据的新鲜度，普通画布仍只读取自身文档。"""
         canvas = await self.get(canvas_id)
         document = CanvasDocument.model_validate(canvas.document)
+        from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+        validate_canvas_cards(canvas, document)
         source = document.fixed_source
         source_changed = None
         if source:
-            chapter_text = await self.db.scalar(select(Chapter.raw_text).where(
+            chapter = await self.db.scalar(select(Chapter).where(
                 Chapter.id == source.chapter_id, Chapter.project_id == self.project_id))
-            source_changed = chapter_text is None or hashlib.sha256(chapter_text.encode()).hexdigest() != source.chapter_version
+            source_changed = (chapter is None or hashlib.sha256(chapter.raw_text.encode()).hexdigest() != source.chapter_version
+                              or source.source_explanations != explanation_basis(chapter)['items'])
         return CanvasRead(id=canvas.id, project_id=canvas.project_id, revision=canvas.revision,
                           document=document, source_changed=source_changed, scene=await self._scene_association(canvas))
 
@@ -86,15 +128,16 @@ class CanvasStore:
             return None
         return CanvasSceneAssociation(chapter_id=row.chapter_id, sequence_id=canvas.sequence_id, is_current=row.is_current)
 
-    async def create(self, name: str, *, scene: SceneCanvasSeed | None = None) -> GenerationCanvas:
+    async def create(self, name: str, *, scene: SceneCanvasSeed | None = None, canvas_id: str | None = None) -> GenerationCanvas:
         """建立共同文档和运行事件头，场次入口可提供已校验的固定依据。"""
-        await get_or_404(self.db, Project, self.project_id, detail="Project not found")
-        canvas_id = scene.canvas_id if scene and scene.canvas_id else uuid4().hex
+        if self.project_id is not None:
+            await get_or_404(self.db, Project, self.project_id, detail="Project not found")
+        canvas_id = scene.canvas_id if scene and scene.canvas_id else canvas_id or uuid4().hex
         document = CanvasDocument(id=canvas_id, project_id=self.project_id, name=name,
                                   cards=[scene.basis] if scene else [],
                                   fixed_source=scene.fixed_source if scene else None)
         canvas = GenerationCanvas(id=canvas_id, project_id=self.project_id,
-                                  sequence_id=scene.sequence_id if scene else None,
+                                  sequence_id=scene.sequence_id if scene else None, kind='scene' if self.project_id else 'free',
                                   document=document.model_dump(), revision=0,
                                   card_types={scene.basis.id: scene.basis.type} if scene else {})
         if scene:
@@ -109,6 +152,29 @@ class CanvasStore:
         self.db.add(CanvasEventHead(canvas_id=canvas_id))
         await self.db.flush()
         return canvas
+
+    async def read_free_draft(self, canvas_id: str) -> CanvasRead:
+        """新建入口允许刷新未落库的草稿。普通详情仍对缺失的画布返回 404。"""
+        if await self.db.get(GenerationCanvas, canvas_id) is not None:
+            return await self.read(canvas_id)
+        return CanvasRead(id=canvas_id, revision=-1, document=CanvasDocument(id=canvas_id, name='未命名画布'))
+
+    async def save_free_draft(self, canvas_id: str, command: CanvasSave) -> dict:
+        """首次写入与正文校验共用事务；重复提交只接受原请求的回执。"""
+        if command.expected_revision != 0:
+            raise diagnostic('REVISION_CONFLICT', '新画布必须从初始修订保存', {'canvas_id': canvas_id}, status=409)
+        digest = self.command_digest(command.model_dump(exclude={'request_id'}))
+        try:
+            canvas = await self.create('未命名画布', canvas_id=canvas_id)
+        except IntegrityError:
+            # 此入口的第一个写操作是插入唯一画布身份。竞争方提交后核实原回执。
+            await self.db.rollback()
+            await self.get(canvas_id, lock=True)
+            receipt = await self.save_receipt(canvas_id, command.request_id, digest)
+            if receipt:
+                return receipt
+            raise diagnostic('REVISION_CONFLICT', '画布已创建，请重新读取', {'canvas_id': canvas_id}, status=409) from None
+        return await self._write(canvas, command, digest, creating=True)
 
     async def save(self, canvas_id: str, command: CanvasSave) -> dict:
         """原回执优先于当前 revision；CAS 与回执在同一外层事务内落库。"""
@@ -133,59 +199,32 @@ class CanvasStore:
         return receipt.response if receipt else None
 
     async def save_scene_application(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
-                                     *, chapter_version: str, scene_sources: dict, source_history: dict | None = None,
-                                     accepted_risks: 'list[dict] | None' = None,
-                                     restored_continuity: frozenset[str] = frozenset()) -> CanvasRead:
+                                     *, chapter_version: str, evidence: 'StoryboardSaveEvidence') -> CanvasRead:
         """Write the checked workbench plan using the ordinary save transaction."""
-        result = await self._write(canvas, command, digest, chapter_version=chapter_version,
-                                   scene_sources=scene_sources, source_history=source_history,
-                                   accepted_risks=accepted_risks, restored_continuity=restored_continuity)
+        result = await self._write(canvas, command, digest, chapter_version=chapter_version, evidence=evidence)
         return CanvasRead.model_validate(result['scene_canvas'])
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
-                     *, chapter_version: str | None = None, scene_sources: dict | None = None,
-                     source_history: dict | None = None, accepted_risks: 'list[dict] | None' = None,
-                     restored_continuity: frozenset[str] = frozenset()) -> dict:
+                     *, chapter_version: str | None = None, evidence: 'StoryboardSaveEvidence | None' = None,
+                     creating: bool = False) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         from app.services.generation_canvas.checks import CanvasChecks, changed_check_connections
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
-        prepared = await prepare_document(self.db, self.project_id, canvas, command.document, scene_sources=scene_sources,
-                                          restored_continuity=restored_continuity)
-        storyboard = prepared.document.storyboard
-        previous = prepared.previous_document.storyboard
-        if chapter_version is None and canvas.sequence_id and (
-                (storyboard.continuity_check_task_id if storyboard else None) !=
-                (previous.continuity_check_task_id if previous else None)):
-            raise diagnostic('STORYBOARD_REVIEW_REQUIRED', '分镜检查只能通过确认应用或撤销恢复',
-                             {'canvas_id': canvas_id}, status=409)
-        if chapter_version is None and canvas.sequence_id and storyboard and (not previous or storyboard.task_id != previous.task_id):
-            from app.services.directing.storyboard_assembly import STORYBOARD_KIND
-            from app.services.directing.storyboard_review import require_storyboard_review
-            task = await self.db.get(Task, storyboard.task_id)
-            if (not task or task.kind != STORYBOARD_KIND or task.project_id != self.project_id
-                    or task.target_id != canvas.sequence_id or task.input_snapshot.get('canvas_id') != canvas_id):
-                raise diagnostic('INVALID_STORYBOARD_TASK', '分镜任务不属于此画布', {'canvas_id': canvas_id}, status=409)
-            require_storyboard_review(task, canvas_id)
-            result = task.result or {}
-            if result.get('review_state'):
-                baseline = {'expected_revision': result['base_revision'], 'document': result['document']}
-                initial = (baseline['expected_revision'] == canvas.revision and not task.input_snapshot.get('reextract_canvas_id')
-                           and not task.input_snapshot.get('review_retry_from')
-                           and prepared.document.model_dump(mode='json') == baseline['document'])
-                if not initial:
-                    applied = await self.db.get(CanvasSaveReceipt, (canvas_id, 'storyboard:' + task.id))
-                    history = applied.response.get('source_history', {}) if applied else {}
-                    restored = applied and (applied.request_hash == self.command_digest(baseline)
-                                            or history.get('after', {}).get('task_id') == task.id)
-                    if not restored:
-                        raise diagnostic('STORYBOARD_APPLICATION_REVIEW_REQUIRED', '请核对分镜差异后应用',
-                                         {'canvas_id': canvas_id}, status=409)
+        prepared = await prepare_document(self.db, self.project_id, canvas, command.document,
+                                          scene_sources=evidence.scene_sources if evidence else None,
+                                          restored_continuity=evidence.restored_continuity if evidence else frozenset())
+        if creating and prepared.document == prepared.previous_document:
+            raise diagnostic('EMPTY_CANVAS', '请先添加画布内容或修改设置', {'canvas_id': canvas_id})
+        if evidence is None:
+            from app.services.directing.storyboard_save import require_ordinary_save
+            await require_ordinary_save(self.db, canvas, prepared.previous_document, prepared.document)
         if canvas.sequence_id and prepared.document.name != prepared.previous_document.name and not prepared.document.name.strip():
             raise diagnostic('INVALID_CANVAS_NAME', '场次画布名称不能为空白', {'canvas_id': canvas_id, 'path': ['name']})
-        if canvas.sequence_id and chapter_version is None and previous and previous.visual_continuity:
+        previous = prepared.previous_document.storyboard
+        if canvas.sequence_id and evidence is None and previous and previous.visual_continuity:
             from app.services.directing.storyboard_visual_continuity import retain_removed_visual_continuity
             await retain_removed_visual_continuity(self.db, prepared.previous_document, prepared.document, command.request_id)
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, prepared.media_references)
@@ -206,15 +245,8 @@ class CanvasStore:
                 revision=response['revision'], document=prepared.document,
                 source_changed=prepared.document.fixed_source.chapter_version != chapter_version,
                 scene=await self._scene_association(canvas)).model_dump(mode='json')
-        if source_history is not None:
-            response['source_history'] = source_history
-        if accepted_risks is not None:
-            from app.services.directing.storyboard_review_basis import canvas_review_fingerprint, risk_basis
-            response['review_history'] = {
-                'before': canvas_review_fingerprint(prepared.previous_document, full=True),
-                'after': canvas_review_fingerprint(prepared.document, full=True),
-                'risks': [{**risk, 'basis': risk_basis(prepared.document, risk['shot_ids'])} for risk in accepted_risks],
-            }
+        if evidence is not None:
+            response.update(evidence.receipt_fields(prepared.previous_document, prepared.document))
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()
         return response
@@ -262,12 +294,37 @@ class CanvasStore:
     async def delete(self, canvas_id: str, *, expected_revision: int) -> None:
         """删除前核实真实占用；历史、引用与文档在调用方事务内一起释放。"""
         canvas = await self.get(canvas_id, lock=True)
+        await self.delete_record(canvas, expected_revision=expected_revision)
+
+    async def delete_record(self, canvas: GenerationCanvas, *, expected_revision: int) -> None:
+        """删除调用方已锁定且核实归属的记录；供普通删除与旧画布退出共用。"""
+        canvas_id = canvas.id
         if canvas.revision != expected_revision:
             raise diagnostic('DELETE_REVISION_CHANGED', '画布已保存新修订，请重新核对并确认删除',
                              {'canvas_id': canvas_id}, status=409, blocks=['delete'])
+        await self.require_idle(canvas)
+        # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
+        from app.services.generation_canvas.runtime import delete_runtime
+        await delete_runtime(self.db, canvas_id)
+        await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
+        await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
+        await self.db.execute(delete(FileUsage).where(
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source', 'generation_upload')),
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
+        await self.db.delete(canvas)
+        await self.db.flush()
+
+
+    async def require_idle(self, canvas: GenerationCanvas) -> None:
+        """画布删除、项目删除及维护清理共用活动任务门禁；调用方已锁定文档。"""
+        canvas_id = canvas.id
         from app.models.generation_canvas import CanvasScopeOccupancy
         if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):
             raise diagnostic('RUN_SCOPE_BUSY', '画布仍有活动运行，任务结束后可删除',
+                             {'canvas_id': canvas_id}, status=409, blocks=['delete'])
+        from app.services.generation_canvas.runtime import active_canvas_task
+        if await active_canvas_task(self.db, [canvas_id]):
+            raise diagnostic('CANVAS_TASK_BUSY', '画布仍有活动检查或派发任务，请等待任务结束',
                              {'canvas_id': canvas_id}, status=409, blocks=['delete'])
         if canvas.sequence_id:
             from app.services.directing.storyboard_assembly import STORYBOARD_KIND
@@ -282,13 +339,3 @@ class CanvasStore:
             if active_task:
                 raise diagnostic('STORYBOARD_BUSY', '画布仍有活动分镜任务，任务结束后可删除',
                                  {'canvas_id': canvas_id, 'task_id': active_task}, status=409, blocks=['delete'])
-        # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
-        from app.services.generation_canvas.runtime import delete_runtime
-        await delete_runtime(self.db, canvas_id)
-        await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
-        await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
-        await self.db.execute(delete(FileUsage).where(
-            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source')),
-            FileUsage.source_ref.like(f'{canvas_id}:%')))
-        await self.db.delete(canvas)
-        await self.db.flush()

@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { closeCanvasDetails, openCanvasCard, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-history-')
-const api = 'http://127.0.0.1:8637', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8637', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8637', CORS_ORIGINS: 'http://127.0.0.1:4637' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,7 +36,7 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '流式文本' }) })).json()).data
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4637/canvases/${canvas.id}`)
   await page.getByLabel('生成画布视口', {exact:true}).waitFor()
   await page.mouse.click(1100, 700, {button:'right'})
   const menu=page.getByRole('menu',{name:'画布右键菜单'})
@@ -86,9 +87,9 @@ try {
   assert.deepEqual(dimensions, [[400, 172], [400, 172], [400, 172]], 'new, pasted and restored text cards share their dimensions')
   await page.screenshot({path:join(output,'context-menu.png')})
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
-  const request=async(path,body,method='POST')=>{const response=await fetch(base+path,body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);assert.ok(response.ok,await response.clone().text());return(await response.json()).data}
-  const placement = await request('', { name: '设计卡放置和收纳' })
-  const placementPath = '/' + placement.id
+  const request=async(path,body,method='POST')=>{const response=await fetch(path.startsWith('http') ? path : base + path, body?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);assert.ok(response.ok,await response.clone().text());return(await response.json()).data}
+  const placement = await createStoryboardCanvas(base, '设计卡放置和收纳')
+  const placementPath = storyboardCanvasApi(base, placement.id)
   await request(placementPath, { request_id: 'seed', expected_revision: 0, document: { ...placement.document,
     cards: [
       { id: 'short', type: 'direction.fact', fact: { state: 'fact', text: '门朝里开。' } },
@@ -97,6 +98,7 @@ try {
       { id: 'group-far', type: 'direction.fact', fact: { state: 'fact', text: '从门后进入大厅。' } },
       { id: 'stack-head', type: 'direction.fact' },
       { id: 'stack-far', type: 'direction.fact', fact: { state: 'fact', text: '灯光由左侧缓慢转到右侧。'.repeat(18) } },
+      ...placement.document.cards,
     ],
     groups: [
       { id: 'collapsed', name: '折叠编组', card_ids: ['group-head', 'group-far'], collapsed: true },
@@ -110,7 +112,7 @@ try {
       'group-far': { x: 6100, y: 6000 }, 'stack-head': { x: 1000, y: 160 }, 'stack-far': { x: 120, y: 180 },
     }, sizes: { 'group-far': { width: 360, height: 240 }, 'stack-far': { width: 360, height: 240 } }, transform: { x: 0, y: 0, scale: 1 } },
   })
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${placement.id}`)
+  await page.goto(`http://127.0.0.1:4637${storyboardCanvasPath(placement)}`)
   const shortFact = page.locator('[data-card-id="short"]')
   await shortFact.waitFor()
   const point = locator => locator.evaluate(el => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }))
@@ -184,7 +186,7 @@ try {
   const precheck=await request('/'+imageCanvas.id+'/precheck',{card_id:'m'})
   await request('/'+imageCanvas.id+'/runs',{request_id:'run',preview_token:precheck.preview_token})
   for(let i=0;i<120;i++){const runtime=await request('/'+imageCanvas.id+'/runtime');if(runtime.runs.some(run=>run.nodes.some(node=>node.status==='succeeded')))break;await delay(100)}
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${imageCanvas.id}`)
+  await page.goto(`http://127.0.0.1:4637/canvases/${imageCanvas.id}`)
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   await page.getByRole('button',{name:'适应全部',exact:true}).click()
   const model=page.locator('[data-card-id="m"]'),bound=page.locator('[data-card-id="bound"]'),text=page.locator('[data-card-id="text"]')
@@ -301,11 +303,9 @@ try {
   assert.ok(file.data.usages.some(usage=>usage.source_ref===imageCanvas.id+':cover'),'cover independently protects its file')
   await page.reload()
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
-  await page.getByRole('button',{name:'画布管理',exact:true}).click()
-  await page.locator('.ant-select[aria-label="选择画布"]').click()
-  await page.getByAltText('画布封面').first().waitFor()
-  await page.keyboard.press('Escape');await page.keyboard.press('Escape')
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.getByRole('button', { name: '返回画布列表', exact: true }).click()
+  await page.locator(`a[href="/canvases/${imageCanvas.id}"] img`).waitFor()
+  await page.goto(`http://127.0.0.1:4637/canvases/${canvas.id}`)
   await page.getByRole('status',{name:'画布保存状态',exact:true}).filter({hasText:'已保存'}).waitFor()
   await page.getByLabel('生成画布视口',{exact:true}).focus()
   await page.keyboard.press(process.platform==='darwin'?'Meta+v':'Control+v')
@@ -330,7 +330,7 @@ try {
   await readonly.close()
   const boundary=await request('',{name:'快捷键焦点边界'})
   await request('/'+boundary.id,{request_id:'seed',expected_revision:0,document:{...boundary.document,cards:[{id:'a',type:'content.text',text:'A'},{id:'b',type:'content.text',text:'B'}],groups:[{id:'g',name:'测试组',card_ids:['a','b']}]}},'PUT')
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${boundary.id}`)
+  await page.goto(`http://127.0.0.1:4637/canvases/${boundary.id}`)
   await page.locator('.generation-group-title').waitFor()
   await page.locator('.generation-group-title').focus();await page.keyboard.press('Shift+F10')
   assert.equal(await page.getByRole('menu').count(),0,'group controls do not open a canvas keyboard menu')
@@ -356,7 +356,7 @@ try {
   const delayed=await request('',{name:'异步粘贴视口'})
   const fileId=afterDelete.document.cover_file_id
   await request('/'+delayed.id,{request_id:'seed',expected_revision:0,document:{...delayed.document,cards:[{id:'image',type:'content.image',file_id:fileId}]}},'PUT')
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${delayed.id}`)
+  await page.goto(`http://127.0.0.1:4637/canvases/${delayed.id}`)
   await page.locator('[data-card-id="image"]').waitFor()
   await page.locator('[data-card-id="image"]').click({button:'right'})
   await cardMenu.getByRole('menuitem',{name:'复制',exact:true}).click()
@@ -457,7 +457,7 @@ try {
     await request(path + '/runs', { request_id, preview_token })
   }
   await generate('first-generation')
-  await page.goto(`http://127.0.0.1:4637/projects/canvas-project/generation-canvas?canvas=${resultCanvas.id}`)
+  await page.goto(`http://127.0.0.1:4637/canvases/${resultCanvas.id}`)
   const linked = page.getByRole('article', { name: '图片生成结果 1', exact: true })
   await linked.waitFor()
   const details = await openCanvasCard(page, consumer.id)

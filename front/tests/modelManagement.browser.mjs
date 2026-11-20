@@ -1,3 +1,4 @@
+import { assertDetailDrawerLayout } from './detailLayout.assertions.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -129,6 +130,7 @@ try {
   await page.keyboard.press('Enter')
   const details = page.getByRole('dialog').filter({ hasText: '模型详情' })
   await details.getByText(model.description, { exact: true }).waitFor()
+  await assertDetailDrawerLayout(details)
   await details.getByText(model.created_by, { exact: true }).waitFor()
   const parameters = details.getByLabel('完整参数 JSON')
   assert.match(await parameters.innerText(), /abcdefghijklmnopqrstuvwxyz/)

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from typing import Self
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.studio.asset_fields import ActorFields
+
+from app.core.contracts.asset_prompts import AssetPromptReference
 
 from app.models.studio import ProjectStyle, ProjectVisualStyle
 
@@ -24,7 +27,11 @@ class ActorBase(BaseModel):
 class ActorCreate(ActorFields, ActorBase):
     """创建演员的身份设定，不接收派生描述写入。"""
 
-    project_id: str | None = Field(None, description="可选：创建成功后写入 project_actor_links（与演员创建同一事务）")
+    adopt_reference: AssetPromptReference | None = None
+
+    references: list[AssetPromptReference] = Field(default_factory=list)
+
+    project_id: str | None = Field(None, description="所属项目；不传时创建共享资产")
     chapter_id: str | None = Field(None, description="可选：章节 ID")
 
     @field_validator("project_id", "chapter_id", mode="before")
@@ -46,6 +53,9 @@ class ActorCreate(ActorFields, ActorBase):
 class ActorUpdate(ActorFields):
     """局部更新演员设定，区分未传与显式清空。"""
 
+    references: list[AssetPromptReference] = Field(default_factory=list)
+
+    details_editable: bool | None = None
     name: str | None = None
     tags: list[str] | None = None
     prompt_template_id: str | None = None
@@ -54,9 +64,26 @@ class ActorUpdate(ActorFields):
     visual_style: ProjectVisualStyle | None = None
 
 
-class ActorRead(ActorFields, ActorBase):
+class SourceInfo(BaseModel):
+    """对象来源只由创建工作流写入。"""
+    origin: str = "created"
+    source_kind: str | None = None
+    source_id: str | None = None
+
+
+class ActorRead(SourceInfo, ActorFields, ActorBase):
     """返回演员设定及后端派生的完整描述。"""
 
+    style: ProjectStyle | None = None
+    created_at: datetime | None = None
+    visual_style: ProjectVisualStyle | None = None
+
+    references: list[AssetPromptReference] = Field(default_factory=list)
+
+    library_copy_id: str | None = None
+    source_character_id: str | None = None
+    details_editable: bool = False
+    project_id: str | None = Field(None, description="所属项目；空值表示共享资产")
     description: str = Field("", description="只读完整描述")
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,18 +91,20 @@ class ActorRead(ActorFields, ActorBase):
 
 
 class CharacterBase(BaseModel):
+
+    references: list[AssetPromptReference] = Field(default_factory=list)
     id: str = Field(..., description="角色 ID")
     project_id: str = Field(..., description="所属项目 ID")
     name: str = Field(..., description="角色名称")
     description: str = Field("", description="角色描述")
     style: ProjectStyle = Field(ProjectStyle.real_people_city, description="题材/风格")
     visual_style: ProjectVisualStyle = Field(ProjectVisualStyle.live_action, description="画面表现形式（现实/动漫等）")
-    actor_id: str | None = Field(None, description="演员 ID（可空；用于仅导入角色文案但不关联演员时）")
-    costume_id: str | None = Field(None, description="服装 ID（可空）")
 
 
 class CharacterCreate(CharacterBase):
-    """创建角色组合，拒绝未声明的字段。"""
+    """创建项目角色及明确图片参考，拒绝未声明的字段。"""
+
+    adopt_reference: AssetPromptReference | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -98,44 +127,26 @@ class CharacterCreate(CharacterBase):
 
 
 class CharacterUpdate(BaseModel):
-    """更新角色组合，避免分类设定被错误吞掉。"""
+    """更新角色自身设定和明确参考，拒绝未知分类字段。"""
+
+    references: list[AssetPromptReference] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str | None = None
+    details_editable: bool | None = None
     name: str | None = None
     description: str | None = None
     style: ProjectStyle | None = None
     visual_style: ProjectVisualStyle | None = None
-    actor_id: str | None = None
-    costume_id: str | None = None
 
 
-class CharacterRead(CharacterBase):
+class CharacterRead(SourceInfo, CharacterBase):
+    details_editable: bool = False
+    created_at: datetime | None = None
+    style: ProjectStyle | None = None
+    visual_style: ProjectVisualStyle | None = None
+
+    library_copy_id: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
     thumbnail: str = Field("", description="缩略图下载地址")
-
-
-class CharacterPropLinkBase(BaseModel):
-    id: int = Field(..., description="关联行 ID")
-    character_id: str = Field(..., description="角色 ID")
-    prop_id: str = Field(..., description="道具 ID")
-    index: int = Field(0, description="角色道具排序")
-    note: str = Field("", description="备注")
-
-
-class CharacterPropLinkCreate(BaseModel):
-    character_id: str
-    prop_id: str
-    index: int = 0
-    note: str = ""
-
-
-class CharacterPropLinkUpdate(BaseModel):
-    index: int | None = None
-    note: str | None = None
-
-
-class CharacterPropLinkRead(CharacterPropLinkBase):
-    model_config = ConfigDict(from_attributes=True)

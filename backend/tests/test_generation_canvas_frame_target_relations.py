@@ -1,10 +1,11 @@
 """独立构图定位运镜及静帧目标经公开接口验收。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
 async def setup_target(client):
-    canvas = (await client.post('/canvases/p', json={'name': '定位'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '定位'})).json()['data']
     source = {'canvas_id': canvas['id'], 'card_id': 'composition', 'port_id': 'text', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[{'id': 'movement', 'type': 'direction.movement', 'fields': {
@@ -16,7 +17,7 @@ async def setup_target(client):
         {'id': 'model', 'type': 'model.image', 'input_bindings': [{'id': 'use', 'source': source, 'input_port': 'text'}]}],
         edges=[{'id': 'e', 'source_card': 'composition', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
         input_order={'model': {'text': ['e']}})
-    return f"/canvases/p/{canvas['id']}", doc
+    return canvas_url(f"/canvases/p/{canvas['id']}"), doc
 
 
 @pytest.mark.asyncio

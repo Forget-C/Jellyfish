@@ -2,9 +2,9 @@ import { useRef, useState } from 'react'
 import { Alert } from 'antd'
 import type { CanvasVideoFrameRequest, ImageContentCard } from '../../../services/generated'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from '../directing/ui/WorkbenchModal'
-import { directingError } from '../directing/common'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { VideoFramePicker } from './VideoFramePicker'
 
 export type VideoFrameSource = Omit<CanvasVideoFrameRequest, 'request_id' | 'at_ms'>
@@ -38,7 +38,7 @@ export function SaveVideoFrameDialog({ source, projectId, canvasId, disabled, on
       if (await onSave(request.card)) onClose()
       else setError('图片尚未保存，请核对画布状态后重试')
     } catch (cause) {
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     } finally {
       submitting.current = false
       setBusy(false)

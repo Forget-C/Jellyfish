@@ -9,4 +9,6 @@ export type CanvasFixedSource = {
     card_id: string;
     chapter_id: string;
     chapter_version: string;
+    source_explanations?: Array<Record<string, any>>;
+    shooting_notes?: Array<Record<string, any>>;
 };

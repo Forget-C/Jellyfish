@@ -97,7 +97,7 @@ class NamedImageObject(BaseModel):
 
 
 class ReferenceImageBinding(BaseModel):
-    """固定具体文件；新增来源仅支持图片内容卡，旧的直接文件与历史产物绑定仍保留。"""
+    """固定具体文件。绑定来源使用图片内容卡；明确解除来源后仍可保留固定文件。"""
     model_config = ConfigDict(extra='forbid')
     file_id: str = Field(min_length=1, max_length=36)
     source: OutputIdentity | None = None
@@ -352,12 +352,6 @@ class DialogueBasis(BaseModel):
     model_config = ConfigDict(extra='forbid')
     dialogue_id: str
     speaker: ObjectReferencePayload | None = None
-
-    @model_validator(mode='before')
-    @classmethod
-    def read_historical_basis(cls, value):
-        """旧运行记录可读，但正文不再是关系出口的一部分。"""
-        return {key: item for key, item in value.items() if key != 'content'} if isinstance(value, dict) else value
 
 
 class DialogueReferencePayload(DialogueBasis):

@@ -1,8 +1,11 @@
 """通过公共接口核对失败任务重试的本次输入和已受理结果。"""
 
+from tests.canvas_urls import canvas_url
 import asyncio
 import json
 from types import SimpleNamespace
+
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
 
 import pytest
 
@@ -23,6 +26,8 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
@@ -62,7 +67,7 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
         assert preview['basis']['source_text'] == excerpt and preview['basis']['objects'] == []
         assert (await client.get((retry + '/basis').replace('/p1/', '/p2/'))).status_code == 404
 
-        canvas_path = '/api/v1/studio/generation-canvases/p1/' + original['canvas_id']
+        canvas_path = canvas_url('/api/v1/studio/generation-canvases/p1/') + original['canvas_id']
         canvas = await data(await client.get(canvas_path))
         document = {**canvas['document'], 'name': '保留人工修改'}
         saved = await data(await client.put(canvas_path, json={'request_id': 'edit-before-retry',

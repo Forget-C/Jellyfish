@@ -24,21 +24,12 @@ import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
 import { WorkbenchManagementPage } from './pages/aiStudio/directing/WorkbenchManagementPage'
 import { chapterCompositionRetired, legacyChapterManagementLocation } from './pages/aiStudio/directing/chapterNavigation'
-import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
 import { SceneCanvasWorkbench } from './pages/aiStudio/directing/SceneCanvasWorkbench'
-import { GenerationCanvasRoute } from './pages/aiStudio/generationCanvas/GenerationCanvasRoute'
-import { generationCanvasLocation } from './pages/aiStudio/generationCanvas/navigation'
+import { CanvasListPage } from './pages/aiStudio/generationCanvas/CanvasListPage'
+import { GenerationCanvasPage } from './pages/aiStudio/generationCanvas/GenerationCanvasPage'
 import './App.css'
 
-/** 兼容旧实验室地址，并保留原 URL 的会话定位参数。 */
-function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
-  const location = useLocation()
-  const params = new URLSearchParams(location.search)
-  if (!params.get('session')) params.set('mode', mode)
-  return <Navigate to={`/lab?${params.toString()}`} replace />
-}
-
-/** 旧画布与章节抽屉链接在初始化项目页之前重定向。 */
+/** 章节抽屉链接在初始化项目页之前重定向。 */
 function ProjectEntry() {
   const location = useLocation()
   const { projectId } = useParams()
@@ -50,12 +41,10 @@ function ProjectEntry() {
       state={assembly ? chapterCompositionRetired : undefined} />
   }
   if (projectId && assembly) return <Alert type="error" showIcon message="章节组合已停用，旧链接缺少章节标识。" />
-  return projectId && params.get('tab') === 'generation'
-    ? <Navigate replace to={generationCanvasLocation(projectId, params)} />
-    : <ProjectWorkbench key={projectId} />
+  return <ProjectWorkbench key={projectId} />
 }
 
-const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStudio/directing/ui/WorkbenchExamples')) : undefined
+const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./components/workbench/WorkbenchExamples')) : undefined
 
 const router = createBrowserRouter(createRoutesFromElements(
       <>
@@ -67,10 +56,10 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="roles/:characterId/edit" element={<RoleDetailPage />} />
             <Route path="chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
           </Route>
-          <Route path="projects/:projectId/generation-canvas" element={<GenerationCanvasRoute />} />
+          <Route path="canvases" element={<CanvasListPage />} />
+          <Route path="canvases/:canvasId" element={<GenerationCanvasPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/workbench-management" element={<WorkbenchManagementPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId/canvas-workbench" element={<SceneCanvasWorkbench />} />
-          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
           <Route element={<ManagementLayout />}>
             <Route path="assets" element={<AssetManager />} />
             <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
@@ -84,9 +73,6 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="models" element={<ModelManagement />} />
           </Route>
           <Route path="lab" element={<ExperimentLabPage />} />
-          <Route path="text-lab" element={<LegacyLabRedirect mode="text" />} />
-          <Route path="image-lab" element={<LegacyLabRedirect mode="image" />} />
-          <Route path="video-lab" element={<LegacyLabRedirect mode="video" />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

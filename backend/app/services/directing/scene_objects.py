@@ -1,5 +1,6 @@
 """前置对象提取交付与场次参考选择，不读取或更新旧场次版本。"""
 
+from app.services.chapters.explanations import explanation_basis, source_version
 from hashlib import sha256
 
 from fastapi import HTTPException
@@ -14,7 +15,7 @@ from app.core.contracts.directing.workspace import SourceSpan
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.models.directing import Sequence
 from app.models.llm import ModelCategoryKey, Provider
-from app.models.studio import FileItem, FileUsage
+from app.models.studio import FileUsage
 from app.models.task import Task
 from app.services.directing.scene_canvas import SCENE_TASK_ORDER, SceneCanvasService
 from app.services.directing.store import RevisionConflict
@@ -64,20 +65,9 @@ class SceneObjectService(SceneCanvasService):
         """将统一任务状态投影为场次对象状态。"""
         return SceneObjectTaskRead(task_id=task.id, status=TaskStatus(task.status), stage=task.stage, error=task.error_message)
 
-    async def _uploads(self, chapter_id: str, sequence_id: str, objects: list[SceneObjectCandidate]) -> set[tuple[str, str]]:
-        references = {f'scene-object:{sequence_id}:{item.id}': item.id for item in objects}
-        if not references:
-            return set()
-        rows = await self.db.execute(select(FileUsage.source_ref, FileItem.id)
-            .join(FileItem, FileItem.id == FileUsage.file_id).where(
-                FileUsage.project_id == self.project_id, FileUsage.chapter_id == chapter_id,
-                FileUsage.usage_kind == 'generation_upload', FileUsage.source_ref.in_(references),
-                FileItem.type == 'image', FileItem.deleted_at.is_(None), FileItem.delete_requested_at.is_(None)))
-        return {(references[source_ref], file_id) for source_ref, file_id in rows}
-
     async def read_objects(self, chapter_id: str, sequence_id: str) -> SceneObjectsRead:
         """保留上次成功准备，单独展示最新任务及当前文件有效性。"""
-        sequence, _ = await self._scene(chapter_id, sequence_id)
+        sequence, chapter = await self._scene(chapter_id, sequence_id)
         task = (await self.db.execute(self._tasks(sequence_id)
             .with_only_columns(Task.id, Task.status, Task.stage, Task.error_message)
             .order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
@@ -85,27 +75,24 @@ class SceneObjectService(SceneCanvasService):
             # 任务可能在两次查询之间提交，成功状态要随最新准备结果返回。
             await self.db.refresh(sequence, ['object_preparation'])
         prepared = sequence.object_preparation or {}
-        assets = await self.assets()
+        assets = await self.assets(main_only=True)
         by_identity = {(asset.kind, asset.id): asset for asset in assets}
         candidates = [SceneObjectCandidate.model_validate(value) for value in prepared.get('objects', [])]
-        uploads = await self._uploads(chapter_id, sequence_id, candidates)
         objects = []
         for candidate in candidates:
             asset = by_identity.get((candidate.kind, candidate.asset_id))
-            if candidate.image_file_id:
-                ready = (candidate.id, candidate.image_file_id) in uploads or bool(
-                    asset and candidate.image_file_id in asset.image_file_ids)
-                state = 'ready' if ready else 'unavailable'
-            else:
-                state = 'unassociated' if not candidate.asset_id else 'missing' if asset else 'unavailable'
-            objects.append(SceneObjectRead(**candidate.model_dump(), reference_state=state))
+            main = asset.main_image_file_id if asset else None
+            state = 'ready' if main else 'unassociated' if not candidate.asset_id else 'missing' if asset else 'unavailable'
+            objects.append(SceneObjectRead(**candidate.model_dump(), image_file_id=main, reference_state=state))
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
-        candidate_task_id = await self.db.scalar(self._tasks(sequence_id).with_only_columns(Task.id).where(
+        latest_result = (await self.db.execute(self._tasks(sequence_id).with_only_columns(Task.id, Task.result).where(
             Task.input_snapshot['chapter_id'].as_string() == chapter_id,
-            Task.status == TaskStatus.succeeded, Task.result['pending_application'].as_boolean().is_(True),
-        ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))
+            Task.status == TaskStatus.succeeded,
+        ).order_by(SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()).limit(1))).one_or_none()
+        candidate_task_id = latest_result.id if latest_result and (latest_result.result or {}).get('pending_application') else None
         return SceneObjectsRead(revision=prepared.get('revision', 0), source_version=prepared.get('source_version'),
-            source_changed=bool(prepared and prepared['source_digest'] != digest), objects=objects, assets=assets,
+            source_changed=bool(prepared and (prepared['source_digest'] != digest or
+                (prepared.get('explanation_version') or source_version('[]')) != explanation_basis(chapter)['version'])), objects=objects, assets=assets,
             task=self.task_read(task) if task else None, candidate_task_id=candidate_task_id)
 
     async def submit_extraction(self, chapter_id: str, sequence_id: str, body: ObjectExtractionRequest) -> SceneObjectTaskRead:
@@ -127,8 +114,10 @@ class SceneObjectService(SceneCanvasService):
         provider = await self.db.get(Provider, model.provider_id)
         config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
         assets = sorted(await self.assets(), key=lambda asset: (asset.kind, asset.name, asset.id))
-        args = {'sequence_id': sequence_id, 'script_text': sequence.source_text, 'source_version': source.version,
+        args = {'sequence_id': sequence_id, 'script_text': sequence.source_text, 'source_start': sequence.source_start, 'source_version': source.version,
                 'source_digest': _source_digest(sequence.source_text, source.version, sequence.source_start),
+                'source_explanations': explanation_basis(chapter)['items'] if source.version == source_version(chapter.raw_text) else [],
+                'explanation_version': explanation_basis(chapter)['version'] if source.version == source_version(chapter.raw_text) else source_version('[]'),
                 'preparation_revision': (sequence.object_preparation or {}).get('revision', 0),
                 'existing_assets': [{'id': asset.id, 'kind': asset.kind, 'name': asset.name, 'description': asset.description[:800]}
                                     for asset in assets[:120]]}
@@ -139,7 +128,7 @@ class SceneObjectService(SceneCanvasService):
         return self.task_read(task)
 
     async def save_choice(self, chapter_id: str, sequence_id: str, object_id: str, body: SceneObjectChoice) -> SceneObjectsRead:
-        """按候选、资产类型、项目与真实图片归属校验，再保存本场选择。"""
+        """按候选、资产类型与项目归属校验，只保存本场资源选用。"""
         sequence, _ = await self._scene(chapter_id, sequence_id, lock=True)
         if not sequence.is_current:
             raise ValueError('此场次已退出当前划分')
@@ -150,15 +139,12 @@ class SceneObjectService(SceneCanvasService):
         candidate = next((item for item in candidates if item.id == object_id), None)
         if candidate is None:
             raise HTTPException(404, 'Object not found in scene')
-        asset = next((item for item in await self.assets() if item.kind == candidate.kind and item.id == body.asset_id), None)
+        from app.models.studio import Project
+        await self.db.scalar(select(Project).where(Project.id == self.project_id).with_for_update())
+        asset = next((item for item in await self.assets(main_only=True) if item.kind == candidate.kind and item.id == body.asset_id), None)
         if body.asset_id and not asset:
             raise ValueError('所选资产不属于当前项目或类型不符')
-        if body.image_file_id and not (asset and body.image_file_id in asset.image_file_ids):
-            uploads = await self._uploads(chapter_id, sequence_id, [candidate])
-            if (candidate.id, body.image_file_id) not in uploads:
-                raise ValueError('所选图片不属于该资产或本场对象的可用上传')
         candidate.asset_id = body.asset_id
-        candidate.image_file_id = body.image_file_id
         sequence.object_preparation = {**preparation, 'revision': body.expected_revision + 1,
                                        'objects': [item.model_dump(mode='json') for item in candidates]}
         await self.db.flush()
@@ -178,13 +164,16 @@ class SceneObjectService(SceneCanvasService):
             return None
         return SceneObjectExtractionResult.model_validate(task.result)
 
-    def _candidate_plan(self, sequence: Sequence, task: Task, result: SceneObjectExtractionResult
+    async def _candidate_plan(self, sequence: Sequence, task: Task, result: SceneObjectExtractionResult
                         ) -> tuple[SceneObjectCandidateReview, list[SceneObjectCandidate]]:
         """按冻结出处产生的身份匹配，保留当前人工选择，并绑定当前准备修订。"""
         prepared = sequence.object_preparation or {}
         revision = prepared.get('revision', 0)
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
-        source_changed = digest != task.input_snapshot['run_args']['source_digest']
+        current_explanation_version = explanation_basis(await self.chapter(sequence.chapter_id))['version']
+        source_changed = (digest != task.input_snapshot['run_args']['source_digest'] or
+            task.input_snapshot['run_args'].get('explanation_version', source_version('[]'))
+            != current_explanation_version)
         previous = {row['id']: SceneObjectCandidate.model_validate(row) for row in prepared.get('objects', [])}
         new_ids = {row.id for row in result.objects}
         added, modified, retained_choices, merged = [], [], [], []
@@ -192,10 +181,10 @@ class SceneObjectService(SceneCanvasService):
         for row in result.objects:
             prior = previous.get(row.id)
             if prior:
-                row = row.model_copy(update={'asset_id': prior.asset_id, 'image_file_id': prior.image_file_id})
+                row = row.model_copy(update={'asset_id': prior.asset_id})
                 if row != prior:
                     modified.append(row)
-                if prior.asset_id or prior.image_file_id:
+                if prior.asset_id:
                     retained_choices.append(row)
             else:
                 added.append(row)
@@ -213,12 +202,26 @@ class SceneObjectService(SceneCanvasService):
         sequence, _ = await self._scene(chapter_id, sequence_id)
         task = await self._extraction_task(chapter_id, sequence_id, task_id)
         result = self._extraction_result(task)
-        if result is None:
+        if result is None or not result.pending_application and result.applied_revision is None:
             return SceneObjectCandidateReview(task=self.task_read(task), candidate_available=False,
                 revision=(sequence.object_preparation or {}).get('revision', 0), source_changed=False,
                 is_current=sequence.is_current, added=[], removed=[], modified=[], retained_choices=[])
-        review, _ = self._candidate_plan(sequence, task, result)
+        review, _ = await self._candidate_plan(sequence, task, result)
         return review
+
+    async def discard_candidate(self, chapter_id: str, sequence_id: str, task_id: str) -> SceneObjectTaskRead:
+        """只退出尚未应用的候选，幂等保留任务结果和当前场次准备。"""
+        await self._scene(chapter_id, sequence_id, lock=True)
+        task = await self._extraction_task(chapter_id, sequence_id, task_id)
+        result = self._extraction_result(task)
+        if result is None:
+            raise HTTPException(409, '此对象提取尚无可退出的候选')
+        if result.applied_revision is not None:
+            raise RevisionConflict('该对象提取结果已应用，不能退出')
+        result.pending_application = False
+        task.result = result.model_dump(mode='json')
+        await self.db.flush()
+        return self.task_read(task)
 
     async def apply_candidate(self, chapter_id: str, sequence_id: str, task_id: str,
                               body: SceneObjectCandidateApplication) -> SceneObjectCandidateReceipt:
@@ -231,8 +234,8 @@ class SceneObjectService(SceneCanvasService):
         if not result.pending_application:
             if result.application == body and result.applied_revision is not None:
                 return SceneObjectCandidateReceipt(task_id=task.id, revision=result.applied_revision)
-            raise RevisionConflict('该对象提取结果已应用')
-        review, merged = self._candidate_plan(sequence, task, result)
+            raise RevisionConflict('该对象提取结果已应用或已退出')
+        review, merged = await self._candidate_plan(sequence, task, result)
         if not review.is_current:
             raise RevisionConflict('此场次已退出当前划分，不能应用对象候选')
         if review.source_changed:
@@ -240,7 +243,7 @@ class SceneObjectService(SceneCanvasService):
         if review.revision != body.expected_revision or review.preview_token != body.preview_token:
             raise RevisionConflict('场次对象准备已更新，请重新核对差异')
         revision = review.revision + 1
-        self._save_preparation(sequence, task.input_snapshot['run_args'], merged, revision)
+        await self._save_preparation(sequence, task.input_snapshot['run_args'], merged, revision)
         result.pending_application = False
         result.applied_revision = revision
         result.application = body
@@ -248,11 +251,17 @@ class SceneObjectService(SceneCanvasService):
         await self.db.flush()
         return SceneObjectCandidateReceipt(task_id=task.id, revision=revision)
 
-    @staticmethod
-    def _save_preparation(sequence: Sequence, args: dict, objects: list[SceneObjectCandidate], revision: int) -> None:
+    async def _save_preparation(self, sequence: Sequence, args: dict, objects: list[SceneObjectCandidate], revision: int) -> None:
         """沿用准备存储，使既有分镜输入只读取已采用对象。"""
+        from sqlalchemy import delete
+        previous = {item['id'] for item in (sequence.object_preparation or {}).get('objects', [])}
+        removed = previous - {item.id for item in objects}
+        if removed:
+            await self.db.execute(delete(FileUsage).where(FileUsage.project_id == self.project_id,
+                FileUsage.usage_kind == 'directing_reference',
+                FileUsage.source_ref.in_([f'scene-object:{sequence.id}:{id_}' for id_ in removed])))
         sequence.object_preparation = {'revision': revision, 'source_version': args['source_version'],
-            'source_digest': args['source_digest'], 'objects': [item.model_dump(mode='json') for item in objects]}
+            'source_digest': args['source_digest'], 'explanation_version': args.get('explanation_version'), 'objects': [item.model_dump(mode='json') for item in objects]}
 
     async def complete_extraction(self, task: Task, result: SceneObjectExtraction) -> SceneObjectExtractionResult:
         """首次适用结果直接交付，其他成功结果保留为待核对候选。"""
@@ -265,7 +274,10 @@ class SceneObjectService(SceneCanvasService):
         objects = object_candidates(result, args)
         digest = _source_digest(sequence.source_text, sequence.source['version'], sequence.source_start)
         revision = (sequence.object_preparation or {}).get('revision', 0)
-        if sequence.is_current and digest == args['source_digest'] and revision == args['preparation_revision'] == 0:
-            self._save_preparation(sequence, args, objects, 1)
+        current_explanation_version = explanation_basis(await self.chapter(sequence.chapter_id))['version']
+        if (sequence.is_current and digest == args['source_digest'] and revision == args['preparation_revision'] == 0
+                and args.get('explanation_version', source_version('[]'))
+                == current_explanation_version):
+            await self._save_preparation(sequence, args, objects, 1)
             return SceneObjectExtractionResult(objects=objects, pending_application=False, applied_revision=1)
         return SceneObjectExtractionResult(objects=objects, pending_application=True)

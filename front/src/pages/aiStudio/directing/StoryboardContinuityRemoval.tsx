@@ -3,8 +3,8 @@ import { Alert, Space } from 'antd'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasRead } from '../../../services/generated'
 import type { WorkbenchModelMenuContext } from '../generationCanvas/GenerationCanvasWorkspace'
-import { directingError } from './common'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import { activeVisualContinuity } from './visualContinuityRules'
 import { planVisualContinuityRemoval } from './visualContinuityRemoval'
 
@@ -12,7 +12,7 @@ type Offer = NonNullable<Awaited<ReturnType<typeof previewRemoval>>>
 
 async function previewRemoval(before: CanvasRead, target: string) {
   const { document } = before
-  const projectId = document.project_id, canvasId = document.id
+  const projectId = (document.project_id || ''), canvasId = document.id
   const card = document.cards?.find(item => item.id === target)
   const modelId = card && 'model_id' in card ? card.model_id : undefined
   const [latest, capability] = await Promise.all([
@@ -81,7 +81,7 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
       })) onComplete()
       else setError('操作尚未确认，请核对画布保存状态后重试')
     } catch (cause) {
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     } finally {
       sending.current = false
       setBusy(false); onBusy(false)

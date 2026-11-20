@@ -1,5 +1,5 @@
 import { usePageTitle } from '../../../../layouts/pageTitle'
-import { useEffect, useState, type FC } from 'react'
+import { useEffect, useRef, useState, type FC } from 'react'
 import { Card, Button, Space, Dropdown, Empty } from 'antd'
 import type { MenuProps } from 'antd'
 import {
@@ -11,10 +11,7 @@ import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { DEFAULT_TAB, projectTabLabel, projectTabLocation, resolveProjectTab, type TabKey } from './constants'
 import { DashboardTab } from './tabs/DashboardTab'
 import { ChaptersTab } from './tabs/ChaptersTab'
-import { ActorsTab } from './tabs/ActorsTab'
-import { RolesTab } from './tabs/RolesTab'
-import { ScenesTab } from './tabs/ScenesTab'
-import { CostumesTab, PropsTab } from './tabs/PropsTab'
+import { ProjectResourcesTab, type ProjectResourceKind, type ProjectResourcePageResult } from './tabs/ProjectResourcesTab'
 import { FilesTab } from './tabs/FilesTab'
 import { SettingsTab } from './tabs/SettingsTab'
 import { useProject, useChapters } from './hooks/useProjectData'
@@ -27,6 +24,9 @@ import { ProjectToolbarProvider } from './ProjectContentToolbar'
 import './project-production.css'
 
 const TAB_PARAM = 'tab'
+const resourceKinds: Partial<Record<TabKey, ProjectResourceKind>> = {
+  actors: 'actor', roles: 'character', scenes: 'scene', props: 'prop', costumes: 'costume',
+}
 
 const ProjectWorkbench: FC = () => {
   const { projectId } = useParams<{ projectId: string }>()
@@ -34,6 +34,8 @@ const ProjectWorkbench: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
   const activeTab = resolveProjectTab(tabFromUrl)
+  const resourceKind = resourceKinds[activeTab]
+  const resourceResults = useRef(new Map<string, ProjectResourcePageResult>())
   const productionPage = activeTab === 'dashboard' || activeTab === 'chapters'
 
   const { project, loading: projectLoading, saving, saveProject } = useProject(projectId)
@@ -124,11 +126,8 @@ const ProjectWorkbench: FC = () => {
 
           {activeTab === 'chapters' && <ChaptersTab />}
 
-          {activeTab === 'actors' && <ActorsTab />}
-          {activeTab === 'roles' && <RolesTab />}
-          {activeTab === 'scenes' && <ScenesTab />}
-          {activeTab === 'props' && <PropsTab />}
-          {activeTab === 'costumes' && <CostumesTab />}
+          {resourceKind && projectId && <ProjectResourcesTab key={`${projectId}:${resourceKind}`} projectId={projectId}
+            kind={resourceKind} resultCache={resourceResults.current} />}
           {activeTab === 'files' && <FilesTab />}
           {activeTab === 'settings' && project && project.id === projectId && (
             <SettingsTab key={project.id} project={project} saving={saving} onSave={saveProject} />

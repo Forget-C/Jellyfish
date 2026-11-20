@@ -34,13 +34,17 @@ export type ProjectRead = {
      */
     progress?: number;
     /**
-     * 项目级默认视频比例；分镜未覆盖时生效
+     * 项目保存的默认视频比例；现行生成使用各次提交的画幅
      */
     default_video_ratio?: (string | null);
     /**
      * 聚合统计（JSON）
      */
     stats?: Record<string, any>;
+    /**
+     * 已保存的项目封面副本 ID
+     */
+    cover_file_id?: (string | null);
     id: string;
 };
 

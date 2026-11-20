@@ -19,6 +19,8 @@ const submissions = []
 const deletions = []
 let failLibrary = true
 let failUpload = false
+let libraryGate
+let releaseLibrary
 let uploadGate
 let uploadCount = 0
 
@@ -49,7 +51,9 @@ try {
     }
     if (url.pathname.endsWith('/files')) {
       if (failLibrary) return route.fulfill({ status: 503, json: { detail: '资料库不可用' } })
-      return respond({ items: files, total: files.length })
+      const snapshot = structuredClone(files)
+      await libraryGate
+      return respond({ items: snapshot, total: snapshot.length })
     }
     if (url.pathname.endsWith('/download')) {
       if (url.pathname.includes('/file-6/')) return route.fulfill({ status: 404 })
@@ -215,6 +219,7 @@ try {
   await panel.waitFor({ state: 'hidden' })
   await page.setViewportSize({ width: 1024, height: 440 })
   await page.getByRole('button', { name: '查看全部 5 项素材', exact: true }).waitFor()
+  await summary.waitFor({ state: 'hidden' })
   assert.equal(await summary.isVisible(), false)
   await page.setViewportSize({ width: 375, height: 812 })
   await openLabAddition(page, '添加参考图')
@@ -249,6 +254,25 @@ try {
   await page.getByRole('dialog', { name: '预览参考图：参考图片 2', exact: true }).getByRole('button', { name: '移除参考图', exact: true }).click()
   await page.getByRole('button', { name: '查看全部 5 项素材', exact: true }).waitFor()
   assert.equal(submissions.length, 2)
+  // A stale list response must not remove an upload completed while it was in flight.
+  libraryGate = new Promise(resolve => { releaseLibrary = resolve })
+  await page.reload()
+  await openLabAddition(page, '添加参考图')
+  await pickUpload()
+  await panel.getByText('上传图片 6 已上传，尚未应用', { exact: true }).waitFor()
+  const pendingList = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/files'))
+  releaseLibrary()
+  await pendingList
+  await panel.getByRole('tab', { name: '资料库', exact: true }).click()
+  await panel.getByText('正在读取图片资料库', { exact: true }).waitFor({ state: 'hidden' })
+  const concurrentUpload = panel.getByRole('checkbox', { name: '上传图片 6', exact: true })
+  await concurrentUpload.waitFor()
+  assert.equal(await concurrentUpload.isChecked(), true)
+  await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
+  await panel.waitFor({ state: 'hidden' })
+  await openLabAddition(page, '添加参考图')
+  await panel.getByRole('tab', { name: '资料库', exact: true }).click()
+  assert.equal(await concurrentUpload.isChecked(), false)
   assert.deepEqual(deletions, [])
   console.log(`Image reference browser checks passed. Evidence: ${output}`)
 } catch (error) {

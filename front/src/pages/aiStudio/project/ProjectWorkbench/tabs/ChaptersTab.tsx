@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Input, Modal, Space, Table, message } from 'antd'
+import { Alert, Button, Empty, Input, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { flushSync } from 'react-dom'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StudioChaptersService } from '../../../../../services/generated'
 import { useChapters, newId } from '../hooks/useProjectData'
-import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
-import { directingError } from '../../../directing/common'
+import { ChapterRawTextEditorDrawer, type ChapterDraft } from '../../../chapter/components/ChapterRawTextEditorDrawer'
 import { chapterAction, chapterActionLocation, chapterLocation, readChapterBrowse, saveChapterBrowse, workbenchManagementLocation } from '../../../directing/chapterNavigation'
-import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
+import { WorkspaceDrafts } from '../../../directing/WorkspaceDrafts'
 import { chapterProduction } from '../../chapterProduction'
 import { ProjectContentToolbar } from '../ProjectContentToolbar'
 import '../project-production.css'
@@ -29,9 +28,6 @@ function ChaptersContent() {
   const [query, setQuery] = useState(() => readChapterBrowse(projectId).query || '')
   const { chapters, loading, total, totalKnown, error, refresh } = useChapters(projectId, { page, pageSize: 10, query })
   const [creating, setCreating] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
   const editingId = params.get('edit') || undefined
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLElement | null>(null)
@@ -97,27 +93,21 @@ function ChaptersContent() {
     else root.current?.querySelector<HTMLInputElement>('input[aria-label="搜索章节"]')?.focus({ preventScroll: true })
   }
   /** 分页列表不能推算最后一章序号；沿现有接口按序号倒序读取一条。 */
-  const create = async (enter = true) => {
-    if (busy) return false
-    if (!title.trim()) { message.warning('请输入章节标题'); return false }
-    setBusy(true)
-    try {
-      const last = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({ projectId, page: 1, pageSize: 1, order: 'index', isDesc: true })
-      if (!last.data) throw new Error('章节顺序读取失败，请重试')
-      const id = newId('c')
-      await StudioChaptersService.createChapterApiV1StudioChaptersPost({ requestBody: {
-        id, project_id: projectId, index: (last.data.items[0]?.index || 0) + 1,
-        title: title.trim(), summary: '', raw_text: content, status: 'draft',
-      } })
-      const hasText = !!content.trim()
-      flushSync(() => { setCreating(false); setTitle(''); setContent(''); setBusy(false) })
-      void refresh()
-      if (enter) navigate(hasText ? workbenchManagementLocation(projectId, id, undefined, 'division') : `${chapterLocation(projectId)}&edit=${id}`)
-      return true
-    } catch (cause) { message.error(directingError(cause)); return false } finally { setBusy(false) }
+  const create = async (draft: ChapterDraft, enter: boolean) => {
+    const last = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({ projectId, page: 1, pageSize: 1, order: 'index', isDesc: true })
+    if (!last.data) throw new Error('章节顺序读取失败，请重试')
+    const id = newId('c')
+    await StudioChaptersService.createChapterApiV1StudioChaptersPost({ requestBody: {
+      ...draft, id, project_id: projectId, index: (last.data.items[0]?.index || 0) + 1, summary: '', status: 'draft',
+    } })
+    flushSync(() => setCreating(false))
+    void refresh()
+    if (enter) {
+      navigate(draft.raw_text?.trim()
+        ? workbenchManagementLocation(projectId, id, undefined, 'division')
+        : `${chapterLocation(projectId)}&edit=${id}`)
+    }
   }
-  const guardCreate = useWorkspaceDraft({ name: '新建章节', dirty: creating && !!(title || content), busy, save: () => create(false),
-    discard: () => { setTitle(''); setContent('') } })
   const changePage = (nextPage: number, nextQuery = query) => {
     saveChapterBrowse(projectId, '', { page: nextPage, query: nextQuery, top: 0 })
     setPage(nextPage); setQuery(nextQuery)
@@ -130,7 +120,7 @@ function ChaptersContent() {
         <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
           onChange={event => changePage(1, event.target.value)} />
       </div>
-      <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建章节</Button>
+      <Button type="primary" icon={<PlusOutlined />} onClick={event => { trigger.current = event.currentTarget; setCreating(true) }}>新建章节</Button>
     </ProjectContentToolbar>
     <div className="project-production-surface">
       {showOffPageChapter && <Alert type="info" message={`返回章节：${showOffPageChapter.title}`} action={<Space wrap>
@@ -165,14 +155,9 @@ function ChaptersContent() {
             } },
           ]} />}
     </div>
-    {editingId && <ChapterRawTextEditorModal open chapterId={editingId} projectId={projectId} onClose={closeEditor}
+    {editingId && <ChapterRawTextEditorDrawer key={editingId} open chapterId={editingId} projectId={projectId} onClose={closeEditor}
       onReviewSequences={() => navigate(workbenchManagementLocation(projectId, editingId, undefined, 'division'), { replace: true })}
       onSaved={() => void refresh()} />}
-    <Modal title="新建章节" open={creating} confirmLoading={busy} onCancel={() => guardCreate(() => setCreating(false))} onOk={() => void create()} okText="创建并继续" closable={!busy} maskClosable={!busy} keyboard={!busy}>
-      <Space direction="vertical" className="w-full">
-        <Input aria-label="章节标题" placeholder="章节标题" value={title} disabled={busy} onChange={event => setTitle(event.target.value)} />
-        <Input.TextArea aria-label="章节原文" placeholder="粘贴章节原文" rows={8} value={content} disabled={busy} onChange={event => setContent(event.target.value)} />
-      </Space>
-    </Modal>
+    {creating && <ChapterRawTextEditorDrawer open projectId={projectId} onClose={() => setCreating(false)} onCreate={create} />}
   </div>
 }

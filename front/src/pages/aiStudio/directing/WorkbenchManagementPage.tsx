@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { ArrowLeftOutlined, ClockCircleOutlined, ExclamationCircleOutlined, MenuOutlined, ScissorOutlined, AppstoreOutlined, LayoutOutlined, DownOutlined } from '@ant-design/icons'
-import { Alert, message, Button, Drawer, Empty, Grid, Input, Select, Spin, Tooltip } from 'antd'
+import { Alert, message, Button, Drawer, Empty, Grid, Input, Dropdown, Spin, Tooltip } from 'antd'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components/layout/PageLayout'
 import { managementBrowseKey, readManagementBrowse, saveManagementBrowse } from './managementBrowse'
@@ -10,7 +10,7 @@ import {
   managementStep, readChapterBrowse,
   saveChapterBrowse, type WorkbenchManagementStep,
 } from './chapterNavigation'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { SceneObjectPreparation } from './SceneObjectPreparation'
 import { WorkbenchCanvasCards } from './WorkbenchCanvasCards'
 import { WorkbenchDivisionStep } from './WorkbenchDivisionStep'
@@ -47,7 +47,7 @@ function SceneList({ overview, selected, historyOpen, setHistoryOpen, onSelect, 
   const list = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => { if (list.current) list.current.scrollTop = scrollTop.current }, [scrollTop])
   const keyword = query.trim().toLocaleLowerCase()
-  const matching = (rows: WorkbenchSceneSummary[]) => rows.filter(row => row.title.toLocaleLowerCase().includes(keyword))
+  const matching = (rows: WorkbenchSceneSummary[]) => rows.filter(row => `${row.position + 1}. ${row.title}`.toLocaleLowerCase().includes(keyword))
   const current = matching(overview.sequences)
   const historical = matching(overview.historical_sequences)
   const rows = (items: WorkbenchSceneSummary[]) => <ul className="management-scenes">
@@ -60,12 +60,12 @@ function SceneList({ overview, selected, historyOpen, setHistoryOpen, onSelect, 
     </li>)}
   </ul>
   return <div ref={list} className="management-scene-list" onScroll={event => { scrollTop.current = event.currentTarget.scrollTop }}>
-    <Input aria-label="搜索场次" placeholder="按名称搜索场次" allowClear value={query} onChange={event => setQuery(event.target.value)} />
+    <Input aria-label="搜索场次" placeholder="搜索名称或序号" allowClear value={query} onChange={event => setQuery(event.target.value)} />
     {current.length ? rows(current) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={keyword ? '没有匹配的场次' : '本章尚无场次'} />}
     <Button className="management-history-toggle" type="text" aria-expanded={historyOpen}
       onClick={() => setHistoryOpen(!historyOpen)}>{historyOpen ? '收起历史场次' : '查看历史场次'}</Button>
-    {historyOpen && <section aria-label="历史场次">
+    {(historyOpen || !!keyword) && <section aria-label="历史场次">
       {historical.length ? rows(historical) : <p>{keyword ? '没有匹配的历史场次' : '暂无历史场次'}</p>}
     </section>}
   </div>
@@ -90,6 +90,9 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const [storyboardActions, setStoryboardActions] = useState<HTMLDivElement | null>(null)
   const [objectActions, setObjectActions] = useState<HTMLDivElement | null>(null)
   const navigationToggle = useRef<HTMLButtonElement>(null)
+  const [filterHost, setFilterHost] = useState<HTMLDivElement | null>(null)
+  const picker = useRef<HTMLDivElement>(null)
+  const [sceneSlots, setSceneSlots] = useState(1)
   const sceneToggle = useRef<HTMLButtonElement>(null)
   const divisionButton = useRef<HTMLButtonElement>(null)
   const regionHeading = useRef<HTMLHeadingElement>(null)
@@ -110,8 +113,18 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const rememberedScene = current.find(scene => scene.id === remembered.managementSequence)
   const retired = history.find(scene => scene.id === (retiredSelection ?? remembered.managementSequence))
   const division = explicitStep === 'division' || (!explicitId && !current.length && (!explicitStep || !history.length))
+  const hasOverview = !!overview
+  useLayoutEffect(() => {
+    const element = picker.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => setSceneSlots(Math.max(0, Math.min(3, Math.floor((entry.contentRect.width - 120) / 168)))))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [hasOverview, division])
   const selected = explicitId ? scenes.find(scene => scene.id === explicitId) : !retired ? rememberedScene ?? current[0] : undefined
   const historical = history.some(scene => scene.id === selected?.id)
+  const sceneStart = Math.max(0, Math.min(current.length - sceneSlots, current.findIndex(scene => scene.id === selected?.id) - Math.floor(sceneSlots / 2)))
+  const visibleScenes = current.slice(sceneStart, sceneStart + sceneSlots)
   const invalidScene = !!overview && !!explicitId && !selected
   const rememberedStep = remembered.managementStep
   const initialStep = (scene?: WorkbenchSceneSummary): ProductionStep =>
@@ -135,7 +148,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
         setError('')
         setUpdatingDivision(false)
       }
-    }).catch(cause => { if (active) setError(directingError(cause)) })
+    }).catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false }
   }, [projectId, chapterId, revision])
 
@@ -192,42 +205,11 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
     }
     previousDivision.current = division
   }, [overview, division])
-  const readingPanel = useRef<HTMLDivElement>(null)
-  const browseKey = managementBrowseKey(projectId, chapterId, selected?.id ?? '', step)
-  const ready = !!overview
-  const hasTarget = !!(params.get('canvas') || params.get('storyboardTask') || params.get('objectTask'))
-  useLayoutEffect(() => {
-    const panel = readingPanel.current
-    if (!panel || division) return
-    const top = hasTarget ? 0 : readManagementBrowse(browseKey).top ?? 0
-    let restoring = true
-    const observer = new ResizeObserver(() => restore())
-    const stop = () => { restoring = false; observer.disconnect() }
-    const restore = () => {
-      panel.scrollTop = top
-      if (panel.scrollHeight >= top + panel.clientHeight) stop()
-    }
-    const remember = () => { if (!restoring) saveManagementBrowse(browseKey, { top: panel.scrollTop }) }
-    if (panel.firstElementChild) observer.observe(panel.firstElementChild)
-    restore()
-    panel.addEventListener('scroll', remember, { passive: true })
-    panel.addEventListener('wheel', stop, { passive: true })
-    panel.addEventListener('pointerdown', stop)
-    panel.addEventListener('keydown', stop)
-    return () => {
-      if (!restoring) saveManagementBrowse(browseKey, { top: panel.scrollTop })
-      stop()
-      panel.removeEventListener('scroll', remember)
-      panel.removeEventListener('wheel', stop)
-      panel.removeEventListener('pointerdown', stop)
-      panel.removeEventListener('keydown', stop)
-    }
-  }, [browseKey, ready, division, hasTarget])
   const list = overview && <SceneList overview={overview} selected={selected?.id} historyOpen={historyOpen ?? (historical || !current.length)}
     query={sceneQuery} setQuery={setSceneQuery} scrollTop={sceneScroll}
     setHistoryOpen={setHistoryOpen} onSelect={id => {
       if (id === selected?.id && id === explicitId) closeDrawer()
-      else { select(id, step); closeDrawer() }
+      else { closeDrawer(); drafts.transition(() => select(id, step)) }
     }} />
   const retiredNotice = retired && (division || !explicitId) && <Alert type="info" showIcon
     message={`原场次“${retired.title}”已转入历史`} action={<div className="management-steps">
@@ -245,6 +227,14 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
   const preparationNotice = selected?.preparation_stale && !historical && step !== 'objects' && <Alert type="warning" showIcon
     message="对象准备依据已过时。请重新提取并采用适用对象，再创建新分镜画布。"
     action={<Button size="small" onClick={() => select(selected.id, 'objects')}>更新对象与参考</Button>} />
+  const sceneNotices = <>
+    {historical && <Alert type="info" showIcon message="此场次已退出当前划分，可查看原有准备和画布。" />}
+    <div className="management-scene-notices" aria-label="本场制作提示">
+      {preparationNotice}
+      {sourceNotice && (preparationNotice ? <details><summary>章节原文也已变化，查看范围核对入口</summary>{sourceNotice}</details> : sourceNotice)}
+    </div>
+  </>
+  const showCanvasList = step === 'storyboard' && !!selected
   const activeStep = division ? 'division' : step
   const chapterHeading = <div className="management-chapter-heading">
     <Button type="text" icon={<ArrowLeftOutlined aria-hidden />} title="返回章节列表" aria-label="返回章节列表" disabled={updatingDivision} onClick={returnToChapters} />
@@ -311,37 +301,45 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           <div className="management-identity">
             <h2 id="management-current-scene" ref={regionHeading} tabIndex={-1}>{step === 'objects' ? '对象参考' : '分镜画布'}</h2>
           </div>
-          {selected && step === 'objects' && <div className="management-object-actions" ref={setObjectActions} />}
-          {selected && step === 'storyboard' && <div className="management-storyboard-actions" ref={setStoryboardActions} />}
+          <div ref={picker} className="management-title-scenes" role="group" aria-label="选择场次">
+            {!compact && !historical && visibleScenes.map(scene => <Button key={scene.id} type="text" aria-pressed={selected?.id === scene.id} title={`${scene.position + 1}. ${scene.title}`} onClick={() => { if (selected?.id !== scene.id) drafts.transition(() => select(scene.id, step)) }}>{scene.position + 1}. {scene.title}</Button>)}
+            {!!scenes.length && <Dropdown trigger={['click']} placement="bottomRight" open={drawerOpen} onOpenChange={open => { if (open) setDrawerOpen(true); else closeDrawer() }}
+              dropdownRender={() => <div className="management-scene-popup" role="dialog" aria-label="本章场次" onKeyDown={event => {
+                if (event.key === 'Escape') { event.stopPropagation(); closeDrawer() }
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.management-scene-row'))
+                  if (!buttons.length) return
+                  event.preventDefault()
+                  const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+                  buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
+                }
+              }}>{list}</div>}>
+              <Button ref={sceneToggle} type="text" aria-expanded={drawerOpen} title={selected?.title}>{compact || sceneSlots === 0 || historical ? `${historical ? '历史场次：' : ''}${selected ? `${selected.position + 1}. ${selected.title}` : '选择场次'}` : '全部场次'}<DownOutlined aria-hidden /></Button>
+            </Dropdown>}
+          </div>
         </PageToolbar>
-        <div className="management-scene-picker">
-          {compact ? <Select aria-label="选择场次" value={selected?.id} showSearch optionFilterProp="label" options={[...current, ...(historical && selected ? [selected] : [])].map(scene => ({ value: scene.id, label: `${scene.position + 1}. ${scene.title}` }))} onChange={id => drafts.transition(() => select(id, step))} /> : <div className="management-scene-tabs" role="group" aria-label="选择场次">{current.map(scene => <Button key={scene.id} type="text" aria-pressed={selected?.id === scene.id} title={scene.title} onClick={() => { if (selected?.id !== scene.id) drafts.transition(() => select(scene.id, step)) }}>{scene.position + 1}. {scene.title}</Button>)}</div>}
-          <Button ref={sceneToggle} type="text" onClick={() => setDrawerOpen(true)}>全部场次<DownOutlined aria-hidden /></Button>
-          {historical && <span>历史场次：{selected?.title}</span>}
-        </div>
-        <WorkspaceScrollPanel ref={readingPanel} className="management-panel">
-          {loadError}
-          {retiredNotice}
+        {!!selected && <div className="management-browse-toolbar">
+          <div ref={setFilterHost} className="management-filter-host" />
+          {step === 'objects' ? <div className="management-object-actions" ref={setObjectActions} /> : <div className="management-storyboard-actions" ref={setStoryboardActions} />}
+        </div>}
+        <WorkspaceScrollPanel className={showCanvasList ? 'management-panel management-storyboard-panel' : 'management-panel management-object-panel'}>
+          {!selected && <>{loadError}{retiredNotice}</>}
           {invalidScene && <Alert type="error" showIcon message="此场次不属于当前章节或已不可用" />}
           {!selected && !invalidScene && <p>{current.length ? '请选择当前场次继续制作。' : '本章没有当前场次，可从历史场次查看已有内容。'}</p>}
-          {selected && <section key={selected.id} aria-labelledby="management-current-scene">
-            {historical && <Alert type="info" showIcon message="此场次已退出当前划分，可查看原有准备和画布。" />}
-            <div className="management-scene-notices" aria-label="本场制作提示">
-              {preparationNotice}
-              {sourceNotice && (preparationNotice ? <details><summary>章节原文也已变化，查看范围核对入口</summary>{sourceNotice}</details> : sourceNotice)}
-            </div>
+          {selected && <section key={selected.id} className="management-scene-production" aria-labelledby="management-current-scene">
             {step === 'objects' && <SceneObjectPreparation {...{ projectId, chapterId }} sequenceId={selected.id}
               editable={!historical && !!selected.source_excerpt.trim()}
-              management={{ host: objectActions,
+              management={{ host: objectActions, filterHost, notices: <>{loadError}{retiredNotice}{sceneNotices}</>,
                 onChange: () => setRevision(value => value + 1), candidateTaskId: params.get('objectTask'),
                 clearCandidateTask: () => setParams(previous => {
                   const next = new URLSearchParams(previous)
                   next.delete('objectTask')
                   return next
                 }, { replace: true }) }} />}
-            {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id}
+            {step === 'storyboard' && <WorkbenchCanvasCards {...{ projectId, chapterId, historical }} sequenceId={selected.id} sceneName={selected.title}
               onReviewSource={reviewSource}
-              canCreate={!historical && !!selected.source_excerpt.trim()} actionHost={storyboardActions}
+              canCreate={!historical && !!selected.source_excerpt.trim()} actionHost={storyboardActions} filterHost={filterHost}
+              sceneNotices={<>{loadError}{retiredNotice}{sceneNotices}</>}
               targetCanvas={params.get('canvas')} targetTask={params.get('storyboardTask')}
               onCloseTask={canvasId => setParams(previous => {
                 const next = new URLSearchParams(previous)
@@ -353,9 +351,6 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           </section>}
         </WorkspaceScrollPanel>
       </div>
-      {<Drawer afterOpenChange={open => { if (!open) sceneToggle.current?.focus({ preventScroll: true }) }} aria-label="本章场次" title="本章场次" placement="left" width="min(320px, 100vw)" open={drawerOpen}
-        styles={{ body: { display: 'flex', flexDirection: 'column' } }}
-        onClose={closeDrawer}>{list}</Drawer>}
     </div>}
     </div>
   </WorkspaceLayout>

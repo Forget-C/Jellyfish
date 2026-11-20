@@ -2,7 +2,7 @@ import { ConfigProvider, Popover } from 'antd'
 import { FilterOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import type { DesignScope } from '../../../services/generated'
-import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { DesignScopeEditor } from './DesignScopeEditor'
 
 /** 整卡限制共用同一入口；只读时仍可查看，编辑继续沿用画布自动保存。 */

@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ActorCreate } from '../models/ActorCreate';
 import type { ActorUpdate } from '../models/ActorUpdate';
+import type { AdoptReferenceMainRequest } from '../models/AdoptReferenceMainRequest';
 import type { ApiResponse_dict_str__Any__ } from '../models/ApiResponse_dict_str__Any__';
 import type { ApiResponse_EntityNameExistenceCheckResponse_ } from '../models/ApiResponse_EntityNameExistenceCheckResponse_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
@@ -13,6 +14,8 @@ import type { CharacterUpdate } from '../models/CharacterUpdate';
 import type { CostumeCreate } from '../models/CostumeCreate';
 import type { CostumeUpdate } from '../models/CostumeUpdate';
 import type { EntityNameExistenceCheckRequest } from '../models/EntityNameExistenceCheckRequest';
+import type { ImageSourceRequest } from '../models/ImageSourceRequest';
+import type { LibraryCopyRequest } from '../models/LibraryCopyRequest';
 import type { PropCreate } from '../models/PropCreate';
 import type { PropUpdate } from '../models/PropUpdate';
 import type { SceneCreate } from '../models/SceneCreate';
@@ -21,6 +24,87 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class StudioEntitiesService {
+    /**
+     * 从上传图片或资产库创建独立图片来源对象
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static createImageSourceEntityApiV1StudioEntitiesEntityTypeImageSourcePost({
+        entityType,
+        requestBody,
+    }: {
+        entityType: string,
+        requestBody: ImageSourceRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/entities/{entity_type}/image-source',
+            path: {
+                'entity_type': entityType,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 采用参考图的独立副本作为对象主图
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static adoptEntityReferenceMainApiV1StudioEntitiesEntityTypeEntityIdAdoptReferenceMainPost({
+        entityType,
+        entityId,
+        requestBody,
+    }: {
+        entityType: string,
+        entityId: string,
+        requestBody: AdoptReferenceMainRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/entities/{entity_type}/{entity_id}/adopt-reference-main',
+            path: {
+                'entity_type': entityType,
+                'entity_id': entityId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 将项目对象独立复制到资产库
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static publishEntityToLibraryApiV1StudioEntitiesEntityTypeEntityIdPublishToLibraryPost({
+        entityType,
+        entityId,
+        requestBody,
+    }: {
+        entityType: string,
+        entityId: string,
+        requestBody: LibraryCopyRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/entities/{entity_type}/{entity_id}/publish-to-library',
+            path: {
+                'entity_type': entityType,
+                'entity_id': entityId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * 批量检测资产名称是否存在（模糊匹配，不分页）
      * @returns ApiResponse_EntityNameExistenceCheckResponse_ Successful Response
@@ -48,7 +132,11 @@ export class StudioEntitiesService {
      */
     public static listEntitiesApiV1StudioEntitiesEntityTypeGet({
         entityType,
+        projectId,
         q,
+        exactName,
+        source,
+        hasCover,
         style,
         visualStyle,
         order,
@@ -58,9 +146,25 @@ export class StudioEntitiesService {
     }: {
         entityType: string,
         /**
+         * 所属项目；不传时仅查询共享资产
+         */
+        projectId?: (string | null),
+        /**
          * 关键字，过滤 name/description
          */
         q?: (string | null),
+        /**
+         * 按数据库名称规则匹配同名对象
+         */
+        exactName?: (string | null),
+        /**
+         * 卡片来源，多个值取并集
+         */
+        source?: (Array<'created' | 'library' | 'upload' | 'project' | 'role_conversion'> | null),
+        /**
+         * 是否有可解析的已保存封面引用
+         */
+        hasCover?: (boolean | null),
         /**
          * 题材/风格（单值）
          */
@@ -81,7 +185,11 @@ export class StudioEntitiesService {
                 'entity_type': entityType,
             },
             query: {
+                'project_id': projectId,
                 'q': q,
+                'exact_name': exactName,
+                'source': source,
+                'has_cover': hasCover,
                 'style': style,
                 'visual_style': visualStyle,
                 'order': order,
@@ -193,6 +301,7 @@ export class StudioEntitiesService {
                 'entity_id': entityId,
             },
             errors: {
+                409: `来源仍被长期参考使用，请先更换或解除参考`,
                 422: `Validation Error`,
             },
         });
@@ -290,6 +399,7 @@ export class StudioEntitiesService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                409: `来源仍被长期参考使用，请先更换或解除参考`,
                 422: `Validation Error`,
             },
         });
@@ -317,6 +427,7 @@ export class StudioEntitiesService {
                 'image_id': imageId,
             },
             errors: {
+                409: `来源仍被长期参考使用，请先更换或解除参考`,
                 422: `Validation Error`,
             },
         });

@@ -1,7 +1,7 @@
 """提示词模板相关路由：CRUD。
 
 业务规则：
-- is_system=True 的记录禁止修改和删除（403）。
+- 系统模板只允许切换默认，禁止编辑正文或删除（403）。
 - is_default=True 的记录禁止删除（403）。
 - 同一 category 下至多一条 is_default=True：创建/更新时将同 category 其余记录置为 False。
 - id 由后端自动生成 UUID；is_system 不接受客户端传入（固定为 False）。
@@ -9,11 +9,8 @@
 
 from __future__ import annotations
 
-import uuid
-from typing import cast
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
@@ -25,8 +22,11 @@ from app.schemas.studio.prompts import (
     PromptTemplateCreate,
     PromptTemplateRead,
     PromptTemplateUpdate,
+    PromptTemplateSummary,
 )
 from app.services.common import entity_not_found
+from app.services.studio.template_search import search_template_summaries
+from app.services.studio.template_defaults import apply_template_changes, create_template, editable_template
 
 router = APIRouter()
 
@@ -53,22 +53,6 @@ _PROMPT_CATEGORY_ZH: dict[PromptCategory, tuple[str, str]] = {
     PromptCategory.bgm: ("背景音乐提示词", "用于生成背景音乐描述的提示词"),
     PromptCategory.sfx: ("音效提示词", "用于生成音效描述的提示词"),
 }
-
-
-async def _clear_category_default(
-    db: AsyncSession,
-    *,
-    category: PromptCategory,
-    exclude_id: str | None = None,
-) -> None:
-    """将同 category 下所有记录的 is_default 置为 False（排除 exclude_id）。"""
-    stmt = (
-        update(PromptTemplate)
-        .where(PromptTemplate.category == category, PromptTemplate.is_default.is_(True))
-    )
-    if exclude_id:
-        stmt = stmt.where(PromptTemplate.id != exclude_id)
-    await db.execute(stmt)
 
 
 # ---------- 列表 ----------
@@ -105,13 +89,24 @@ async def list_prompt_templates(
         allow_fields=_ORDER_FIELDS,
         default="created_at",
     )
-    items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
+    items, total = await paginate(db, stmt=stmt.order_by(PromptTemplate.id), page=page, page_size=page_size)
     return paginated_response(
         [PromptTemplateRead.model_validate(x) for x in items],
         page=page,
         page_size=page_size,
         total=total,
     )
+
+
+@router.get("/summaries", response_model=ApiResponse[PaginatedData[PromptTemplateSummary]],
+            summary="按名称或简介搜索模板摘要")
+async def list_prompt_summaries(
+    db: AsyncSession = Depends(get_db), q: str = Query(""),
+    page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100),
+) -> ApiResponse[PaginatedData[PromptTemplateSummary]]:
+    """对名称与简介做字面包含匹配，先稳定分页再交由界面分组。"""
+    items, total = await search_template_summaries(db, q=q, page=page, page_size=page_size)
+    return paginated_response(items, page=page, page_size=page_size, total=total)
 
 
 @router.get(
@@ -154,27 +149,9 @@ async def get_prompt_template(
 )
 async def create_prompt_template(
     body: PromptTemplateCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[PromptTemplateRead]:
-    # 若设为默认，先清除同类别其他默认
-    if body.is_default:
-        await _clear_category_default(db, category=body.category)
-
-    obj = PromptTemplate(
-        id=str(uuid.uuid4()),
-        category=body.category,
-        name=body.name,
-        content=body.content,
-        preview=body.preview,
-        variables=body.variables,
-        variable_defaults=body.variable_defaults,
-        version=1,
-        is_default=body.is_default,
-        is_system=False,  # 客户端不可设置
-    )
-    db.add(obj)
-    await db.flush()
-    await db.refresh(obj)
+    obj = await create_template(db, body)
     return created_response(PromptTemplateRead.model_validate(obj))
 
 
@@ -183,32 +160,15 @@ async def create_prompt_template(
 @router.patch(
     "/{template_id}",
     response_model=ApiResponse[PromptTemplateRead],
+    responses={409: {"model": ApiResponse[None], "description": "请先将同类别的其他模板设为默认"}},
     summary="局部更新提示词模板",
 )
 async def update_prompt_template(
     template_id: str,
     body: PromptTemplateUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[PromptTemplateRead]:
-    obj = await db.get(PromptTemplate, template_id)
-    if obj is None:
-        raise HTTPException(status_code=404, detail=entity_not_found("PromptTemplate"))
-    update_data = body.model_dump(exclude_unset=True)
-    if obj.is_system and set(update_data) != {"is_default"}:
-        raise HTTPException(status_code=403, detail="系统预置提示词不可修改")
-
-    # 若将当前记录设为默认，先清除同类别其他默认
-    if body.is_default is True:
-        await _clear_category_default(db, category=cast(PromptCategory, cast(object, obj.category)), exclude_id=template_id)
-
-    # 模板的任何可编辑字段变化都会产生新的可追溯版本；不维护历史版本实体。
-    if update_data:
-        obj.version += 1
-    for field, value in update_data.items():
-        setattr(obj, field, value)
-
-    await db.flush()
-    await db.refresh(obj)
+    obj = await apply_template_changes(db, template_id, body.model_dump(exclude_unset=True))
     return success_response(PromptTemplateRead.model_validate(obj))
 
 
@@ -221,11 +181,9 @@ async def update_prompt_template(
 )
 async def delete_prompt_template(
     template_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[None]:
-    obj = await db.get(PromptTemplate, template_id)
-    if obj is None:
-        raise HTTPException(status_code=404, detail=entity_not_found("PromptTemplate"))
+    obj = await editable_template(db, template_id)
     if obj.is_system:
         raise HTTPException(status_code=403, detail="系统预置提示词不可删除")
     if obj.is_default:

@@ -1,8 +1,11 @@
 """复杂分镜的正式任务、保存和编译使用同一共同画布。"""
 
+from tests.canvas_urls import append_canvas_path, canvas_url
 import asyncio
 import json
 from types import SimpleNamespace
+
+from tests.directing.storyboard_prompt_fixture import video_prompt_response
 
 import pytest
 
@@ -67,6 +70,8 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
@@ -102,7 +107,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             db.add_all([Model(id='scope-text', name='fixture-text', category='text', provider_id='scope-openai'),
                         Model(id='scope-image', name='gpt-image-1', category='image', provider_id='scope-openai'),
                         Model(id='scope-video', name='viduq2', category='video', provider_id='scope-vidu'),
-                        CharacterImage(character_id='scope-character', file_id='image1')])
+                        CharacterImage(character_id='scope-character', file_id='image1', is_primary=True)])
         chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = await read_data(client, 'GET', chapter_path)
         scene = await read_data(client, 'POST', chapter_path + '/sequences', {'title': '码头', 'position': 0,
@@ -118,7 +123,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             await work()
             prepared = await read_data(client, 'GET', endpoint + '/objects')
             await read_data(client, 'PUT', endpoint + '/objects/' + prepared['objects'][0]['id'],
-                            {'expected_revision': prepared['revision'], 'asset_id': 'scope-character', 'image_file_id': 'image1'})
+                            {'expected_revision': prepared['revision'], 'asset_id': 'scope-character'})
 
             async def build(model):
                 task = await read_data(client, 'POST', endpoint + '/storyboards',
@@ -127,7 +132,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
                 finished = await read_data(client, 'GET', endpoint + '/storyboards/' + task['task_id'])
                 assert finished['status'] == 'succeeded', finished
                 candidate = finished['candidate']
-                path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+                path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
                 await read_data(client, 'PUT', path, {'request_id': 'storyboard:' + task['task_id'],
                     'expected_revision': candidate['base_revision'], 'document': candidate['document']})
                 return path, await read_data(client, 'GET', path)
@@ -137,7 +142,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             verify_all_design_fields(image['document'], outputs[0])
             image_story = image['document']['storyboard']
             first_model = image_story['shots'][0]['model_card_ids'][0]
-            compiled = await read_data(client, 'GET', f'{image_path}/cards/{first_model}/compile')
+            compiled = await read_data(client, 'GET', append_canvas_path(image_path, f'/cards/{first_model}/compile'))
             used_cards = {item['source']['card_id'] for item in compiled['used']}
             origins = image_story['origins']
             adopted_anchor = [key for key in used_cards if origins.get(key, {}).get('semantic_key', '').startswith('scene:design:anchor')]
@@ -195,10 +200,10 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
                 group['card_ids'] = [key for key in group['card_ids'] if key not in (card['id'], ungrouped)]
             data['groups'].append({'id': 'manual-model-group', 'name': '人工制作组', 'card_ids': [card['id']]})
             await read_data(client, 'PUT', video_path, {'request_id': 'manual', 'expected_revision': video['revision'], 'document': data})
-            edited = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
+            edited = await read_data(client, 'GET', append_canvas_path(video_path, f"/cards/{card['id']}/compile"))
             assert '分段动作举高' not in edited['text']
             before_reextract = await read_data(client, 'GET', video_path)
-            rerun = await read_data(client, 'POST', endpoint + '/canvases/' + video_path.rsplit('/', 1)[-1] + '/storyboards',
+            rerun = await read_data(client, 'POST', endpoint + canvas_url('/canvases/') + video['id'] + '/storyboards',
                 {'request_id': 'repeat-segmented', 'text_model_id': 'scope-text', 'production_model_id': 'scope-video'})
             await work()
             application = endpoint + '/storyboards/' + rerun['task_id']
@@ -213,7 +218,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
             assert [group['id'] for group in groups if card['id'] in group['card_ids']] == ['manual-model-group']
             assert all(ungrouped not in group['card_ids'] for group in groups)
             assert merged['document']['storyboard']['origins'][specific]['applicability'] == data['storyboard']['origins'][specific]['applicability']
-            after = await read_data(client, 'GET', f"{video_path}/cards/{card['id']}/compile")
+            after = await read_data(client, 'GET', append_canvas_path(video_path, f"/cards/{card['id']}/compile"))
             assert '分段动作举高' not in after['text']
             assert [item['file_id'] for item in after['media']] == ['image1']
             undo = await read_data(client, 'POST', application + '/restore',
@@ -239,6 +244,8 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             pass
 
         def invoke(self, messages):
+            if response := video_prompt_response(messages):
+                return response
             if 'storyboard_draft' in json.loads(messages[1].content):
                 return SimpleNamespace(content='{"issues": []}')
             args = json.loads(messages[1].content)
@@ -264,12 +271,12 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             (await db.get(Chapter, 'ch1')).raw_text = original
             db.add_all([Provider(id='rain-text', name='openai', base_url='https://fixture.test/v1', api_key='test'),
                         Provider(id='rain-video', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
-                        Prop(id='parked-van', name='白色面包车', style='真人都市')])
+                        Prop(id='parked-van', project_id='p1', name='白色面包车', style='真人都市')])
             await db.flush()
             db.add_all([Model(id='rain-text-model', name='text', category='text', provider_id='rain-text'),
                         Model(id='rain-video-model', name='viduq2', category='video', provider_id='rain-video'),
                         ProjectPropLink(project_id='p1', prop_id='parked-van'),
-                        PropImage(prop_id='parked-van', file_id='image1')])
+                        PropImage(prop_id='parked-van', file_id='image1', is_primary=True)])
         chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = await read_data(client, 'GET', chapter_path)
         scene = await read_data(client, 'POST', chapter_path + '/sequences', {'title': '车旁等候', 'position': 0,
@@ -282,7 +289,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             await asyncio.gather(*worker.jobs.values())
             objects = await read_data(client, 'GET', endpoint + '/objects')
             await read_data(client, 'PUT', endpoint + '/objects/' + objects['objects'][0]['id'],
-                            {'expected_revision': objects['revision'], 'asset_id': 'parked-van', 'image_file_id': 'image1'})
+                            {'expected_revision': objects['revision'], 'asset_id': 'parked-van'})
             task = await read_data(client, 'POST', endpoint + '/storyboards', {'request_id': 'rain-storyboard',
                 'text_model_id': 'rain-text-model', 'production_model_id': 'rain-video-model'})
             await worker.tick()
@@ -290,7 +297,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
             finished = await read_data(client, 'GET', endpoint + '/storyboards/' + task['task_id'])
             assert finished['status'] == 'succeeded', finished
             candidate = finished['candidate']
-            path = '/api/v1/studio/generation-canvases/p1/' + task['canvas_id']
+            path = canvas_url('/api/v1/studio/generation-canvases/p1/') + task['canvas_id']
             await read_data(client, 'PUT', path, {'request_id': 'storyboard:' + task['task_id'],
                 'expected_revision': candidate['base_revision'], 'document': candidate['document']})
             document = (await read_data(client, 'GET', path))['document']

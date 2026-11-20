@@ -1,12 +1,7 @@
-"""单模型规划与历史运行推进：新请求固定当前模型，已受理依赖按快照执行。"""
-from sqlalchemy import select
-from fastapi import HTTPException
-from pydantic import ValidationError
-from app.models.generation_canvas import CanvasRun, CanvasRunNode
-from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead
+"""单模型规划与受理：固定当前模型及实际引用的输入。"""
+from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.generation_canvas.reference_rules import storyboard_reference_warnings
-from app.services.generation_canvas.execution_basis import digest, restore_basis
 
 
 async def plan(current_state, canvas, command, *, lock_config=False):
@@ -26,29 +21,21 @@ async def plan(current_state, canvas, command, *, lock_config=False):
     card_id = command.card_id
     basis = await current_state.current_basis(canvas, card_id, outputs, lock_config=lock_config, context=context)
     compiled = basis.compiled
-    nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis, 'hash': basis.basis_hash,
-        'dependencies': [], 'private': basis.to_snapshot()}}
+    nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis}}
     reused = {item.result_set_id for item in compiled.used if item.result_set_id}
-    diagnostics = compiled.diagnostics + storyboard_reference_warnings(context, basis.card, basis.capability)
+    diagnostics = compiled.diagnostics + storyboard_reference_warnings(context, basis.card, basis.capability, model_outputs=outputs)
     return {'nodes': nodes, 'diagnostics': diagnostics,
         'can_run': compiled.can_run and not any('run' in issue.blocks for issue in diagnostics),
-        'reused': sorted(reused), 'hash': digest({key: {'hash': item['hash'], 'dependencies': item['dependencies']} for key, item in nodes.items()})}
+        'reused': sorted(reused), 'basis': basis}
 
 
-async def start_node(db, node, producers=None):
-    """使用受理快照和本轮成功结果创建真实 Task；不重新解析可变配置。"""
+async def start_node(db, node, basis):
+    """使用已固定的单卡输入创建任务。"""
     from app.core.contracts.generation import GenerationCommand, GenerationTarget, GenerationSubmitRequest
     from app.core.contracts.text_generation import TextChatInput, TextChatMessage
     from app.services.generation.gate import GenerationEntityGate
     from app.services.generation.submission.submitter import GenerationSubmitter
-    private = node.execution_snapshot
-    basis = restore_basis(private, node.card_id,
-        {card_id: producers[card_id].outputs for card_id in private['dependencies']})
     compiled = basis.compiled
-    if not compiled.can_run:
-        raise HTTPException(422, {'code': 'INPUT_VALIDATION_FAILED', 'message': '固定上游结果不满足下游输入要求'})
-    node.basis, node.basis_hash = basis.public_basis, basis.basis_hash
-    node.status, node.stage = 'queued', 'queued'
     card = basis.card
     modality = card.type.removeprefix('model.')
     if modality == 'text':
@@ -70,52 +57,3 @@ async def start_node(db, node, producers=None):
     accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
     node.task_id = accepted.task_id
     await db.flush()
-
-
-async def stop_waiting(db, node, head, status, code, message):
-    """无 Task 的节点也必须产生明确终态、事件并释放占用。"""
-    from app.services.generation_canvas.node_completion import finish_node
-    if node.status != 'waiting':
-        return
-    node.status, node.stage = status, status
-    node.error_code, node.error_message = code, message
-    await finish_node(db, node, head)
-
-
-async def advance(db, run_id, head, *, interrupted=False):
-    """事件头已锁；只创建新 Task，不取得既有 Task 锁，避免反向死锁。"""
-    from app.services.generation_canvas.events import TERMINAL, append_event
-    nodes = list(await db.scalars(select(CanvasRunNode).where(CanvasRunNode.run_id == run_id).execution_options(populate_existing=True)))
-    producers = {node.card_id: node for node in nodes}
-    for node in nodes:
-        if node.status != 'waiting':
-            continue
-        dependencies = [producers[card_id] for card_id in node.execution_snapshot['dependencies']]
-        if interrupted:
-            await stop_waiting(db, node, head, 'blocked', 'FLOW_INTERRUPTED', '画布流程已确认中断，请明确发起新的运行')
-        elif any(item.status in TERMINAL and item.status != 'succeeded' for item in dependencies):
-            await stop_waiting(db, node, head, 'blocked', 'UPSTREAM_FAILED', '必要上游未成功完成')
-        elif all(item.status == 'succeeded' for item in dependencies):
-            try:
-                async with db.begin_nested():
-                    await start_node(db, node, producers)
-            except (HTTPException, ValidationError) as exc:
-                await db.refresh(node)
-                code = 'LEGACY_DESIGN_SNAPSHOT' if isinstance(exc, HTTPException) and isinstance(exc.detail, dict) and exc.detail.get('code') == 'LEGACY_DESIGN_SNAPSHOT' else 'INPUT_VALIDATION_FAILED'
-                await stop_waiting(db, node, head, 'failed', code, str(exc))
-            else:
-                await append_event(db, head, 'node.updated', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
-    # Failure may have occurred after a follower was visited; cascade to a fixed point.
-    changed = True
-    while changed:
-        changed = False
-        for node in nodes:
-            if node.status == 'waiting' and any(producers[key].status in TERMINAL and producers[key].status != 'succeeded'
-                                               for key in node.execution_snapshot['dependencies']):
-                await stop_waiting(db, node, head, 'blocked', 'UPSTREAM_FAILED', '必要上游未成功完成')
-                changed = True
-    if all(node.status in TERMINAL for node in nodes):
-        run = await db.get(CanvasRun, run_id)
-        if run.lifecycle != 'finished':
-            run.lifecycle = 'finished'
-            await append_event(db, head, 'run.finished', run_id=run.id, payload={'run_id': run.id})

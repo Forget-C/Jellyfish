@@ -38,13 +38,13 @@
 .generation-selection-box { position: absolute; border: 1px solid var(--ant-color-primary, #1677ff); background: rgb(22 119 255 / 10%); pointer-events: none; z-index: 20; }
 
 /* 独立画布只组织区域；字段、保存和运行仍由原控制器管理。 */
-.generation-workbench { height: 100dvh; min-height: 0; padding: 12px 16px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; color: var(--wb-text); background: var(--wb-canvas); }
+.generation-workbench { height: 100dvh; min-height: 0; padding: 12px 16px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; color: var(--wb-text); background: var(--wb-background, var(--wb-canvas)); }
 .generation-workbench-header.workbench-toolbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; flex: none; padding: 4px 0; border-bottom-color: var(--wb-border); }
 .generation-document-controls .ant-input { width: 180px; }
 .generation-document-controls [role="status"] { color: var(--wb-muted); }
 .generation-stage { flex: 1; min-height: 0; position: relative; margin-top: 8px; }
 .generation-stage .generation-graph { height: 100%; position: relative; }
-.generation-stage .generation-surface { position: absolute; inset: 0; height: auto; border-color: var(--wb-border); background: var(--wb-canvas); background-image: radial-gradient(var(--wb-border) 1px, transparent 1px); background-size: 24px 24px; }
+.generation-stage .generation-surface { position: absolute; inset: 0; height: auto; border-color: var(--wb-border); background: var(--wb-canvas); background-image: radial-gradient(var(--wb-border) 1px, transparent 1px), var(--wb-background-image, none); background-size: 24px 24px, 100% 100%; }
 .generation-stage .generation-connection-reason { position: absolute; z-index: 5; bottom: 56px; left: 12px; max-width: calc(100% - 24px); color: var(--wb-muted); background: var(--wb-surface); border-radius: var(--wb-radius); padding: 4px 8px; }
 .generation-feedback { flex: none; max-height: 24dvh; overflow-y: auto; }
 .generation-feedback > [aria-label="运行连接"] { display: block; color: var(--wb-muted); font-size: 12px; }
@@ -84,7 +84,7 @@
 .generation-workbench .canvas-toolbar-actions > section { display: contents; }
 @media(max-width: 700px) {
   .generation-workbench .generation-toolbar-center { display: none; }
-  .generation-workbench .generation-feedback { top: 108px; }
+  .generation-workbench .generation-feedback { top: var(--workbench-toolbar-bottom, 108px); }
 }
 
 .generation-card-list-host { position: fixed; left: 16px; z-index: 950; top: 190px; bottom: 90px; width: 56px; display: flex; align-items: center; pointer-events: none; }
@@ -188,7 +188,7 @@
 /* Generation editors are anchored to content; shared workbench details retain their own positioning. */
 .generation-card-editor.wb-details { position: fixed; right: auto; bottom: auto; width: min(680px, calc(100vw - 32px)); max-height: min(360px, calc(100vh - 160px)); z-index: 900; }
 /* 编辑卡隐藏外壳滚动条；输入控件和公共页签正文使用同一暗色细滚动条。 */
-.generation-card-editor, .generation-card-editor * { color-scheme: dark; scrollbar-color: var(--wb-primary) transparent; }
+.generation-card-editor, .generation-card-editor * { color-scheme: var(--wb-scheme, dark); scrollbar-color: var(--wb-primary) transparent; }
 .generation-card-editor, .generation-card-editor :not(textarea, [contenteditable], .canvas-editor-tab-page) { scrollbar-width: none; }
 .generation-card-editor ::-webkit-scrollbar { display: none; }
 .generation-card-editor :is(textarea, [contenteditable], .canvas-editor-tab-page) { scrollbar-width: thin; }
@@ -217,8 +217,8 @@
 .generation-stack-face>img { width:100%; max-height:180px; object-fit:contain; }
 .generation-stack-face .canvas-card-summary { display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
 
-.generation-card[data-filter-match="true"] .generation-card-body, .generation-stack-reading article[data-filter-match="true"] { border-color: #8581ff; box-shadow: 0 0 0 1px #8581ff; }
-.generation-stack[data-filter-match="true"] .generation-stack-face { border-color: #8581ff; outline: 1px solid #8581ff; }
+.generation-card[data-filter-match="true"] .generation-card-body, .generation-stack-reading article[data-filter-match="true"] { border-color: var(--wb-light-filter, #8581ff); box-shadow: 0 0 0 1px var(--wb-light-filter, #8581ff); }
+.generation-stack[data-filter-match="true"] .generation-stack-face { border-color: var(--wb-light-filter, #8581ff); outline: 1px solid var(--wb-light-filter, #8581ff); }
 .generation-card[data-filter-match="true"][data-selected="true"] .generation-card-body { outline-offset: 4px; }
 
 /* Modal editors cover canvas chrome while AntD operation dialogs retain their higher layer. */
@@ -244,10 +244,10 @@
 .generation-card[data-card-type="content.image"],
 .generation-card[data-card-type="model.text"],
 .generation-card[data-card-type="model.image"] {
-  --wb-surface: #202427;
-  --wb-border: #435057;
-  --wb-text: #e8eaeb;
-  --wb-muted: #929b9f;
+  --wb-surface: var(--wb-light-surface, #202427);
+  --wb-border: var(--wb-light-border, #435057);
+  --wb-text: var(--wb-light-text, #e8eaeb);
+  --wb-muted: var(--wb-light-muted, #929b9f);
   color: var(--wb-text);
 }
 .generation-card-editor[data-focus-layout="true"] {
@@ -290,7 +290,7 @@
 .generation-card-editor[data-narrow="true"] :is(.generation-material-basis, .generation-composer-parameters) { padding-right: 64px; }
 
 /* Menu primitives use their own tokens; workbench action-button styles do not apply. */
-.generation-context-host { position: fixed; z-index: 1100; width: 220px; box-sizing: border-box; padding: 4px; border: 1px solid var(--wb-border); border-radius: 12px; background: var(--wb-raised); box-shadow: 0 8px 32px #0008; }
+.generation-context-host { position: fixed; z-index: 1100; width: 220px; box-sizing: border-box; padding: 4px; border: 1px solid var(--wb-border); border-radius: 12px; background: var(--wb-raised); box-shadow: 0 8px 32px var(--wb-light-shadow, #0008); }
 .generation-context-host[data-narrow=true] { width: min(240px, calc(100vw - 16px)); }
 .generation-context-menu.ant-menu { border: 0; max-height: calc(100dvh - 26px); overflow-y: auto; }
 .generation-context-host:has(.generation-context-back) .generation-context-menu { max-height: calc(100dvh - 70px); }
@@ -299,7 +299,7 @@
 .generation-context-menu .ant-menu-item-disabled, .generation-context-popup .ant-menu-item-disabled { background: transparent; }
 .generation-context-menu .ant-menu-submenu-open > .ant-menu-submenu-title, .generation-context-popup .ant-menu-submenu-open > .ant-menu-submenu-title { background: var(--wb-selected); }
 .generation-context-popup.ant-menu-submenu-popup { z-index: 1100; }
-.generation-context-popup .ant-menu { width: 240px; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 4px; border: 1px solid var(--wb-border); border-radius: 12px; box-shadow: 0 8px 32px #0008; }
+.generation-context-popup .ant-menu { width: 240px; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 4px; border: 1px solid var(--wb-border); border-radius: 12px; box-shadow: 0 8px 32px var(--wb-light-shadow, #0008); }
 .generation-context-menu, .generation-context-popup .ant-menu { scrollbar-width: thin; scrollbar-color: var(--wb-border) transparent; }
 .generation-context-menu::-webkit-scrollbar, .generation-context-popup .ant-menu::-webkit-scrollbar { width: 6px; }
 .generation-context-menu::-webkit-scrollbar-thumb, .generation-context-popup .ant-menu::-webkit-scrollbar-thumb { background: var(--wb-border); border-radius: 4px; }
@@ -369,3 +369,69 @@
 .generation-source-list button:hover { background: var(--wb-surface); }
 .generation-source-list small { color: var(--wb-muted); }
 @media (max-width: 700px) { .generation-source-list button { min-height: 36px; } }
+
+.canvas-toolbar-menu--compact > .canvas-toolbar-popover {
+  width: min(176px, calc(100vw - 24px));
+  padding: 4px;
+  gap: 2px;
+  border-radius: var(--wb-radius);
+}
+.canvas-toolbar-menu--compact > .canvas-toolbar-popover > .wb-action.ant-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding-inline: 8px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 13px;
+  text-align: start;
+}
+.canvas-toolbar-menu--compact > .canvas-toolbar-popover > .wb-action.ant-btn:not(:disabled):is(:hover, :focus-visible) {
+  border-color: transparent;
+  background: var(--wb-raised);
+}
+.canvas-toolbar-menu--compact > .canvas-toolbar-popover > .wb-action.ant-btn[data-variant="danger"]:not(:disabled) {
+  color: var(--wb-light-error, #ff7875);
+}
+.canvas-toolbar-menu--compact > .canvas-toolbar-popover > .wb-action.ant-btn[data-variant="danger"]:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--wb-light-errorSurface, #ff78751a);
+}
+.canvas-toolbar-menu--compact > .canvas-toolbar-popover > [role="status"] {
+  margin-top: 2px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--wb-border);
+}
+
+.canvas-settings-dialog .ant-modal { top: 0; padding-bottom: 0; }
+.canvas-settings-form, .canvas-settings-field { display: grid; gap: 8px; min-width: 0; }
+.canvas-settings-form { gap: 16px; }
+.canvas-settings-field > span { font-weight: 500; }
+.canvas-settings-cover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.canvas-settings-cover-actions { display: grid; justify-items: start; gap: 4px; }
+.canvas-settings-preview {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  border: 1px solid var(--wb-border);
+  border-radius: var(--wb-radius);
+  background: var(--wb-inset);
+  color: var(--wb-muted);
+}
+.canvas-settings-preview > span { display: grid; justify-items: center; gap: 4px; font-size: 12px; }
+.canvas-settings-preview > span .anticon { font-size: 20px; }
+.canvas-settings-preview img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: cover; }
+@media (max-width: 480px) {
+  .canvas-toolbar-menu--compact > .canvas-toolbar-popover > .wb-action.ant-btn { min-height: 36px; }
+  .canvas-settings-dialog .ant-modal-content { padding: 16px; }
+  .canvas-settings-cover { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .canvas-settings-cover-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+}

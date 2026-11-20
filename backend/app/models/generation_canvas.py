@@ -3,33 +3,19 @@ from datetime import datetime
 from typing import Any
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.mysql import DATETIME
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.sql.functions import FunctionElement
 from app.core.db import Base
-from app.models.base import TimestampMixin
-
-
-class _CanvasCreationTime(FunctionElement):
-    """与画布创建时间列精度一致的数据库默认值。"""
-
-    type = DateTime(timezone=True)
-    inherit_cache = True
-
-
-@compiles(_CanvasCreationTime)
-def _compile_canvas_creation_time(_element, compiler, **_kwargs):
-    """MySQL 的 DATETIME(6) 要求默认函数也指定六位小数秒。"""
-    return 'CURRENT_TIMESTAMP(6)' if compiler.dialect.name == 'mysql' else 'CURRENT_TIMESTAMP'
+from app.models.base import HighPrecisionCurrentTimestamp, TimestampMixin
 
 
 class GenerationCanvas(Base, TimestampMixin):
     """当前文档，revision 只由完整文档 CAS 保存推进。"""
     __tablename__ = 'generation_canvases'
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'), server_default=_CanvasCreationTime())
+        DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'), server_default=HighPrecisionCurrentTimestamp())
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey('projects.id', ondelete='CASCADE'), index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default='free', server_default='free')
     sequence_id: Mapped[str | None] = mapped_column(
         ForeignKey('directing_sequences.id', name='fk_generation_canvas_sequence', ondelete='SET NULL'), index=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -62,7 +48,6 @@ class CanvasRun(Base, TimestampMixin):
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     lifecycle: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    scope: Mapped[list] = mapped_column(JSON, nullable=False)
 
 
 class CanvasRunNode(Base):
@@ -127,8 +112,6 @@ class CanvasPreview(Base):
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     card_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False, default='single')
-    card_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     basis_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[Any] = mapped_column(DateTime, nullable=False)

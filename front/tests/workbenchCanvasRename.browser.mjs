@@ -1,3 +1,4 @@
+import { renameFreeCanvas } from './generationCanvasWorkbench.browser-helpers.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -6,7 +7,6 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
-import { openCanvasManagement } from './generationCanvasWorkbench.browser-helpers.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -38,7 +38,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('隔离后端退出')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -50,10 +50,10 @@ try {
     source_version: source.source_version, span: { start: 0, end: raw.length } })
   const sceneApi = `${chapterApi}/sequences/${sequence.id}`
   const canvas = await request(`${sceneApi}/canvases`, 'POST', { name: '原方案' })
-  const read = () => request(`${studio}/generation-canvases/${project}/${canvas.id}`)
+  const read = () => request(`${studio}/generation-canvases/${canvas.id}?project_id=${project}`)
   const manage = `${origin}/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
   const workbench = `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${canvas.id}`
-  const projectCanvas = id => `${origin}/projects/${project}/generation-canvas?canvas=${id}`
+  const sceneCanvasPage = id => `${origin}/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${id}`
   const control = body => request(`${api}/test/runtime-controls`, 'POST', body)
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: {
     host: '127.0.0.1', port: 4389, strictPort: true, proxy: { '/api': api },
@@ -88,15 +88,15 @@ try {
   assert.equal((await read()).revision, 0)
   assert.equal((await read()).document.name, '原方案')
 
-  const canvasApi = `${studio}/generation-canvases/${project}/${canvas.id}`
+  const canvasApi = `${studio}/generation-canvases/${canvas.id}?project_id=${project}`
   const model = { id: 'model', type: 'model.text', model_id: 'canvas-runtime-text', config: {},
     prompt: { segments: [{ id: 'prompt', kind: 'text', text: '保留冻结的模型输入' }] } }
   const seed = await request(canvasApi, 'PUT', { request_id: 'seed-model', expected_revision: 0,
     document: { ...canvas.document, cards: [...canvas.document.cards, model] } })
-  const preview = await request(`${canvasApi}/precheck`, 'POST', { card_id: model.id })
+  const preview = await request(`${studio}/generation-canvases/${canvas.id}/precheck?project_id=${project}`, 'POST', { card_id: model.id })
   assert.ok(preview.can_run)
-  const run = await request(`${canvasApi}/runs`, 'POST', { request_id: 'model-before-rename', preview_token: preview.preview_token })
-  const frozen = (await request(`${canvasApi}/runtime`)).runs.find(item => item.id === run.run_id)
+  const run = await request(`${studio}/generation-canvases/${canvas.id}/runs?project_id=${project}`, 'POST', { request_id: 'model-before-rename', preview_token: preview.preview_token })
+  const frozen = (await request(`${studio}/generation-canvases/${canvas.id}/runtime?project_id=${project}`)).runs.find(item => item.id === run.run_id)
 
   const editingTab = await context.newPage()
   await editingTab.goto(workbench)
@@ -112,7 +112,7 @@ try {
   await rename.getByText(/结束其他页面的画布编辑/).waitFor({ state: 'hidden' })
   assert.equal(await input.inputValue(), '并发后保留的名称')
 
-  const saveRoute = `**/generation-canvases/${project}/${canvas.id}`
+  const saveRoute = `**/generation-canvases/${canvas.id}?project_id=${project}`
   let concurrentDocument
   await page.route(saveRoute, async route => {
     if (route.request().method() !== 'PUT' || concurrentDocument) return route.fallback()
@@ -146,29 +146,28 @@ try {
   await page.unroute(saveRoute)
   await page.reload()
   await openRename('并发后保留的名称')
-  const replay = page.waitForRequest(req => req.method() === 'PUT' && req.url().endsWith(canvas.id))
+  const replay = page.waitForRequest(req => req.method() === 'PUT' && new URL(req.url()).pathname.endsWith('/' + canvas.id))
   await verify.click()
   assert.deepEqual((await replay).postDataJSON(), command)
   await rename.waitFor({ state: 'hidden' })
   assert.equal((await read()).revision, renamed.revision)
-  const activeRun = (await request(`${canvasApi}/runtime`)).runs.find(item => item.id === run.run_id)
+  const activeRun = (await request(`${studio}/generation-canvases/${canvas.id}/runtime?project_id=${project}`)).runs.find(item => item.id === run.run_id)
   assert.equal(activeRun?.lifecycle, 'active')
   assert.deepEqual(activeRun?.nodes.map(node => node.basis), frozen.nodes.map(node => node.basis))
-  const stalePrecheck = await fetch(`${canvasApi}/runs`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const stalePrecheck = await fetch(`${studio}/generation-canvases/${canvas.id}/runs?project_id=${project}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id: 'stale-after-rename', preview_token: preview.preview_token }) })
   assert.equal(stalePrecheck.status, 409)
   await control({ release: 2 })
 
-  await page.goto(projectCanvas(canvas.id))
+  await page.goto(sceneCanvasPage(canvas.id))
   await page.locator('.canvas-sequence-name').filter({ hasText: '并发后保留的名称' }).waitFor()
-  await openCanvasManagement(page)
+
   assert.equal(await page.getByRole('textbox', { name: '画布名称', exact: true }).count(), 0)
-  const free = await request(`${studio}/generation-canvases/${project}`, 'POST', { name: '自由方案' })
-  await page.goto(projectCanvas(free.id))
-  await openCanvasManagement(page)
-  await page.getByRole('textbox', { name: '画布名称', exact: true }).fill('自由方案仍可更名')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await poll(() => request(`${studio}/generation-canvases/${project}/${free.id}`), row => row.document.name === '自由方案仍可更名')
+  const free = await request(`${studio}/generation-canvases`, 'POST', { name: '自由方案' })
+  await page.goto(`${origin}/canvases/${free.id}`)
+
+  await renameFreeCanvas(page, '自由方案仍可更名')
+  await poll(() => request(`${studio}/generation-canvases/${free.id}`), row => row.document.name === '自由方案仍可更名')
 
   await request(`${sceneApi}/objects/extractions`, 'POST', { request_id: 'object-prep' })
   await poll(() => request(`${sceneApi}/objects`), row => row.task?.status === 'succeeded')
@@ -177,7 +176,7 @@ try {
     request_id: 'active-storyboard', name: '生成中的名称', mode: 'faithful', text_model_id: 'canvas-runtime-text',
   })
   const taskPath = `${sceneApi}/storyboards/${storyboard.task_id}`
-  const storyboardCanvas = `${studio}/generation-canvases/${project}/${storyboard.canvas_id}`
+  const storyboardCanvas = `${studio}/generation-canvases/${storyboard.canvas_id}?project_id=${project}`
   await poll(() => request(taskPath), task => task.status === 'running')
   await page.goto(manage)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -195,7 +194,7 @@ try {
   assert.equal((await request(storyboardCanvas)).revision, 1)
   await control({ storyboard_release: 1 })
   await poll(() => request(taskPath), task => task.status === 'succeeded')
-  await page.goto(projectCanvas(storyboard.canvas_id))
+  await page.goto(sceneCanvasPage(storyboard.canvas_id))
   await page.getByRole('dialog', { name: '处理分镜提取结果', exact: true }).waitFor()
   assert.equal((await request(storyboardCanvas)).document.storyboard, undefined)
 

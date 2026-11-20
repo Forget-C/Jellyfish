@@ -1,8 +1,3 @@
-import type { SequenceOverview } from '../../../services/generated'
-
-type Stage = 'design' | 'shoot' | 'cut'
-type Action = { label: string; view: Stage | null }
-
 export type WorkbenchManagementStep = 'division' | 'objects' | 'storyboard'
 export const chapterCompositionRetired = { chapterCompositionRetired: true }
 
@@ -28,19 +23,6 @@ export function readChapterBrowse(projectId: string, chapterId = ''): ChapterBro
 
 export function saveChapterBrowse(projectId: string, chapterId: string, value: ChapterBrowse) {
   try { sessionStorage.setItem(`chapter-browse:${JSON.stringify([projectId, chapterId])}`, JSON.stringify({ ...readChapterBrowse(projectId, chapterId), ...value })) } catch { /* 存储受限时仍可浏览。 */ }
-}
-
-/** 整场汇总仅用于建议入口，不作为执行准备度或采用状态的替代判断。 */
-export function sequenceAction(sequence: SequenceOverview, remembered?: string | null): Action {
-  if (remembered === 'design' || remembered === 'shoot' || remembered === 'cut') {
-    return { label: { design: '继续设计', shoot: '继续试拍', cut: '继续剪辑' }[remembered], view: remembered }
-  }
-  if (sequence.unreviewed_take_count) return { label: '审片', view: 'cut' }
-  if (sequence.active_cut_revision_id) return { label: '查看剪辑', view: 'cut' }
-  if (!sequence.confirmed_design_count) return { label: '继续设计', view: 'design' }
-  if (!sequence.plan_count) return { label: '准备试拍', view: 'shoot' }
-  if (sequence.take_count) return { label: '审片与剪辑', view: 'cut' }
-  return { label: '继续试拍', view: 'shoot' }
 }
 
 export function chapterLocation(projectId: string, chapterId?: string, sequenceId?: string): string {
@@ -80,10 +62,6 @@ export function sceneCanvasLocation(projectId: string, chapterId: string, sequen
   const query = new URLSearchParams({ canvas: canvasId })
   if (taskId) query.set('storyboardTask', taskId)
   return `${sequencePath(projectId, chapterId, sequenceId)}/canvas-workbench?${query}`
-}
-
-export function sequenceLocation(projectId: string, chapterId: string, sequenceId: string, view: Stage): string {
-  return `${sequencePath(projectId, chapterId, sequenceId)}?view=${view}`
 }
 
 /** 未知字段不能当作空章；数量入口仍允许查看缺少原文的历史场次。 */

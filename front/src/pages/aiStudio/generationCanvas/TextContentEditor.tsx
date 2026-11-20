@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { Alert, Input, InputNumber, Space } from 'antd'
 import { UploadOutlined } from '@ant-design/icons'
-import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import type { CreativeBasisCard, TextContentCard } from '../../../services/generated'
 import './textContentEditor.css'
 

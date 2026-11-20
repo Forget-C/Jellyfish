@@ -73,14 +73,14 @@ export function analysisDivision(chapter: ChapterSequences, detail: DivisionAnal
     lineage: draft.lineage.map(row => ({ ...row, target_keys: [] })) }
 }
 
-/** 历史内容以最新正式集合提交；旧原文范围必须在当前原文重新定位。 */
+/** 恢复历史范围和原文，以当前场次集合进行并发校验。 */
 export function versionDivision(chapter: ChapterSequences, detail: DivisionVersionDetail): ChapterDivisionDraft {
   const draft = initialDivision(chapter), sourceChanged = chapter.source_version !== detail.chapter.source_version
   const members = detail.chapter.sequences.map(row => ({ key: row.id, sequence_id: row.id, title: row.title,
-    span: sourceChanged || row.source_changed ? undefined : row.span || undefined,
-    reconfirm_source: sourceChanged || row.source_changed || undefined, suggested_excerpt: row.source_text }))
+    span: row.source_changed ? undefined : row.span || undefined,
+    reconfirm_source: row.source_changed || chapter.sequences.find(current => current.id === row.id)?.source?.version !== detail.chapter.source_version || undefined, suggested_excerpt: row.source_text }))
   const retained = new Set(members.map(row => row.sequence_id))
-  return { ...draft, source_revision_id: detail.version.id, history_reconfirmed: sourceChanged,
+  return { ...draft, source_version: detail.chapter.source_version, source_basis_id: sourceChanged ? detail.version.id : undefined, source_revision_id: detail.version.id,
     restored_baseline: detail.restored_baseline.filter(row => retained.has(row.sequence_id)), members,
     exited_sequence_ids: draft.baseline.filter(row => !retained.has(row.sequence_id)).map(row => row.sequence_id),
     lineage: draft.lineage.map(row => ({ ...row, target_keys: retained.has(row.sequence_id) ? [row.sequence_id] : [] })) }

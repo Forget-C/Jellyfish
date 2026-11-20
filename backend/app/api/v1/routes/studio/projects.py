@@ -2,25 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.dependencies import get_db
 from app.models.studio import Project
-from app.models.types import ProjectStyle, ProjectVisualStyle
+from app.models.types import ProjectVisualStyle
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
-from app.services.common import (
-    create_and_refresh,
-    delete_if_exists,
-    entity_already_exists,
-    entity_not_found,
-    ensure_not_exists,
-    flush_and_refresh,
-    get_or_404,
-    patch_model,
-)
 from app.schemas.studio.projects import (
     ProjectCreate,
     ProjectRead,
@@ -28,37 +19,19 @@ from app.schemas.studio.projects import (
     ProjectUpdate,
     StyleOption,
 )
+from app.services.common import (
+    create_and_refresh,
+    entity_already_exists,
+    entity_not_found,
+    ensure_not_exists,
+    get_or_404,
+)
+from app.services.studio.project_settings import (
+    build_project_style_options, remove_project, save_project, validate_project_style_combo,
+)
+from app.services.studio.project_listing import list_project_page
 
 router = APIRouter()
-
-PROJECT_ORDER_FIELDS = {"name", "created_at", "updated_at", "progress"}
-
-
-def _build_project_style_options() -> tuple[dict[ProjectVisualStyle, list[ProjectStyle]], dict[ProjectVisualStyle, ProjectStyle]]:
-    mapping: dict[ProjectVisualStyle, list[ProjectStyle]] = {key: [] for key in ProjectVisualStyle}
-    for item in ProjectStyle:
-        if item.name.startswith("real_people_"):
-            mapping[ProjectVisualStyle.live_action].append(item)
-            continue
-        if item.name.startswith("anime_") or item.name in {"guoman", "ink_wash"}:
-            mapping[ProjectVisualStyle.anime].append(item)
-            continue
-    defaults: dict[ProjectVisualStyle, ProjectStyle] = {
-        visual: styles[0]
-        for visual, styles in mapping.items()
-        if styles
-    }
-    return mapping, defaults
-
-
-def _validate_project_style_combo(*, visual_style: ProjectVisualStyle, style: ProjectStyle) -> None:
-    mapping, _defaults = _build_project_style_options()
-    allowed = mapping.get(visual_style, [])
-    if style not in allowed:
-        raise ValueError(
-            f"style is not allowed for visual_style: visual_style={visual_style.value}, "
-            f"style={style.value}, allowed={[item.value for item in allowed]}"
-        )
 
 
 @router.get(
@@ -68,7 +41,7 @@ def _validate_project_style_combo(*, visual_style: ProjectVisualStyle, style: Pr
 )
 async def get_project_style_options(
 ) -> ApiResponse[ProjectStyleOptionsRead]:
-    mapping, defaults = _build_project_style_options()
+    mapping, defaults = build_project_style_options()
     data = ProjectStyleOptionsRead(
         visual_styles=[StyleOption(value=x.value, label=x.value) for x in ProjectVisualStyle],
         styles_by_visual_style={
@@ -88,15 +61,16 @@ async def get_project_style_options(
 async def list_projects(
     db: AsyncSession = Depends(get_db),
     q: str | None = Query(None, description="关键字，过滤 name/description"),
-    order: str | None = Query(None, description="排序字段"),
+    stage: Literal["edit_raw"] | None = Query(None, description="待补原文：无章节，或至少一章原文为空"),
+    order: str | None = Query(None, description="排序字段，支持 chapter_count（章节数量）"),
     is_desc: bool = Query(False, description="是否倒序"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ) -> ApiResponse[PaginatedData[ProjectRead]]:
-    stmt = select(Project)
-    stmt = apply_keyword_filter(stmt, q=q, fields=[Project.name, Project.description])
-    stmt = apply_order(stmt, model=Project, order=order, is_desc=is_desc, allow_fields=PROJECT_ORDER_FIELDS, default="created_at")
-    items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
+    items, total = await list_project_page(
+        db, q=q, order=order, is_desc=is_desc, missing_source=stage == "edit_raw",
+        page=page, page_size=page_size,
+    )
     return paginated_response([ProjectRead.model_validate(x) for x in items], page=page, page_size=page_size, total=total)
 
 
@@ -117,7 +91,7 @@ async def create_project(
         detail=entity_already_exists("Project"),
     )
     try:
-        _validate_project_style_combo(visual_style=body.visual_style, style=body.style)
+        validate_project_style_combo(visual_style=body.visual_style, style=body.style)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     obj = await create_and_refresh(db, Project(**body.model_dump()))
@@ -145,20 +119,30 @@ async def get_project(
 async def update_project(
     project_id: str,
     body: ProjectUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[ProjectRead]:
-    obj = await get_or_404(db, Project, project_id, detail=entity_not_found("Project"))
-    update_data = body.model_dump(exclude_unset=True)
-    visual_style = update_data.get("visual_style", obj.visual_style)
-    style = update_data.get("style", obj.style)
-    if visual_style is not None and style is not None:
-        try:
-            _validate_project_style_combo(visual_style=visual_style, style=style)
-        except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    patch_model(obj, update_data)
-    await flush_and_refresh(db, obj)
-    return success_response(ProjectRead.model_validate(obj))
+    return success_response(ProjectRead.model_validate(await save_project(db, project_id, body)))
+
+
+@router.patch(
+    "/{project_id}/cover-upload",
+    response_model=ApiResponse[ProjectRead],
+    summary="上传项目封面并保存项目设置",
+)
+async def update_project_with_cover_upload(
+    project_id: str,
+    file: UploadFile = File(...),
+    settings: str = Form("{}", description="ProjectUpdate 的 JSON，封面由上传文件提供"),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> ApiResponse[ProjectRead]:
+    """在单次保存中提交图片和其他项目字段。"""
+    try:
+        body = ProjectUpdate.model_validate_json(settings)
+    except ValidationError as exc:
+        raise HTTPException(422, "项目设置格式无效") from exc
+    if "cover_file_id" in body.model_fields_set:
+        raise HTTPException(422, "上传封面时请省略 cover_file_id")
+    return success_response(ProjectRead.model_validate(await save_project(db, project_id, body, file)))
 
 
 @router.delete(
@@ -168,9 +152,7 @@ async def update_project(
 )
 async def delete_project(
     project_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[None]:
-    from app.services.generation_canvas.runtime import ensure_project_idle
-    await ensure_project_idle(db, project_id)
-    await delete_if_exists(db, Project, project_id)
+    await remove_project(db, project_id)
     return empty_response()

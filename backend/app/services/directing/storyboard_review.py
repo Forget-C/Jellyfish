@@ -5,14 +5,15 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
+from app.core.contracts.directing.diagnostics import DirectingOutputDiagnostics
 from app.core.contracts.directing.scene_storyboard import StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
+from app.services.directing.errors import DirectingOutputError
 from app.services.generation_canvas.errors import diagnostic
 
 
-def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str):
-    """One provider call, strict JSON and a stable failure message."""
-    from app.services.directing.ai import DirectingOutputError
+def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_message: str, *, include_output: bool = False, response_label: str = '审查响应'):
+    """单次调用校验 JSON，失败时将阶段和响应正文保存在技术诊断中。"""
     response = llm.invoke([
         SystemMessage(content=instruction + '\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(inputs, ensure_ascii=False)),
@@ -23,14 +24,16 @@ def invoke_storyboard_json(llm, inputs: dict, contract, instruction: str, error_
         if content.startswith('```') and '\n' in content:
             content = content.split('\n', 1)[1].rsplit('```', 1)[0].strip()
     try:
-        return contract.model_validate_json(content)
+        parsed = contract.model_validate_json(content)
+        return (parsed, content) if include_output else parsed
     except (ValidationError, TypeError) as error:
-        raise DirectingOutputError(error_message) from error
+        raise DirectingOutputError(error_message, DirectingOutputDiagnostics(
+            output=content if isinstance(content, str) else '',
+            issues=[f'{response_label}格式无效：{type(error).__name__}'])) from error
 
 
 def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
     """Make one semantic review request and reject unresolvable shot identities."""
-    from app.services.directing.ai import DirectingOutputError
     instruction = (
         '审查固定分镜草案，不重写分镜，不批准应用。逐镜核对可执行性，并对比相邻镜头前态和后态。'
         '实际矛盾标为 conflict，例如同时要求入场和静止，头手双脚必须同框却规定不可能容纳的景别，'
@@ -44,6 +47,9 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         '冲突必须引用具体字段原文并解释为何无法同时满足；只因描述含糊、空间基准不明或可能省略扭身动作时标 insufficient_basis。不得因修正困难把真实冲突降级。'
         '没有问题返回空 issues。只返回符合以下结构的 JSON：'
     )
+    if inputs.get('video_prompts'):
+        instruction += ('同时核对 video_prompts 的实际正文、真实引用与前后附加设计，正文遗漏、对象越界或与设计冲突须报告；'
+                        '提示词自身有误而设计正确时，使用 prompt_unit_ids 列出 video_prompts 的 card_id，不得伪造设计字段 repair_target。')
     if inputs.get('saved_canvas_check'):
         instruction += ('本次检查已保存画布，repair_targets.design_id 必须是 cards 中的实际卡片 ID，'
                         '包括镜头卡自身。shot_id 使用 shots 中的逻辑 id，共享设计留空。'
@@ -52,10 +58,26 @@ def review_storyboard(llm, inputs: dict) -> StoryboardReviewReport:
         instruction += ('本次是重新提取。以 effective_canvas 的合并结果及实际采用关系为审查依据，'
                         '其中包含保留的人工设计。storyboard_draft 只用于镜头、设计和字段的逻辑身份索引。'
                         '若合并内容与草案不同，以合并内容为准，禁止将保留的人工设计列为定向修正目标。')
-    report = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction, '分镜审查返回无效，请重试审查')
+    inputs = {**inputs, 'valid_shots': [
+        {'id': shot['id'], 'label': f'镜头 {index + 1:02d}'} for index, shot in enumerate(inputs['storyboard_draft']['shots'])]}
+    instruction += 'shot_ids 只能使用 valid_shots 中的 id，不使用序号或卡片身份，同一问题内不可重复。'
+    report, output = invoke_storyboard_json(llm, inputs, StoryboardReviewReport, instruction,
+                                           '分镜审查返回无效，请重试审查', include_output=True)
     known = {shot['id'] for shot in inputs['storyboard_draft']['shots']}
-    if any(len(set(issue.shot_ids)) != len(issue.shot_ids) or not set(issue.shot_ids) <= known for issue in report.issues):
-        raise DirectingOutputError('分镜审查引用了无效镜头，请重试审查')
+    errors = []
+    prompt_ids = {row['card_id'] for row in inputs.get('video_prompts', [])}
+    for index, issue in enumerate(report.issues):
+        if len(set(issue.prompt_unit_ids)) != len(issue.prompt_unit_ids) or not set(issue.prompt_unit_ids) <= prompt_ids:
+            errors.append(f'issues.{index}.prompt_unit_ids 包含无效或重复的视频单元')
+        unknown = sorted(set(issue.shot_ids) - known)
+        repeated = sorted({key for key in issue.shot_ids if issue.shot_ids.count(key) > 1})
+        if unknown:
+            errors.append(f'issues.{index}.shot_ids 引用了不存在的镜头：{unknown}')
+        if repeated:
+            errors.append(f'issues.{index}.shot_ids 重复引用镜头：{repeated}')
+    if errors:
+        raise DirectingOutputError('审查结果包含不存在或重复的镜头引用，请重试审查',
+            DirectingOutputDiagnostics(output=output, issues=[*errors, f'合法镜头：{sorted(known)}']))
     return report
 
 

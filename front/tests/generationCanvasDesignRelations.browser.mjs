@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-design-relations-')
-const api = 'http://127.0.0.1:8670', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8670', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8670' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -32,7 +33,7 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '摄影设计')
   const source = (card_id,port_id,object_id) => ({canvas_id:canvas.id,card_id,port_id,position:0,...(object_id?{object_id}:{})})
   const document={...canvas.document,cards:[
     {id:'person',type:'content.character',object_id:'person-id',name:'张三',text:'人物描述'},
@@ -50,10 +51,10 @@ try {
       document.input_order[target][target_port]=[id]
     }
   }
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})});assert.ok(seed.ok,await seed.text())
-  const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})});assert.ok(seed.ok,await seed.text())
+  const read=async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('design relation save did not arrive')}
-  await page.goto(`http://127.0.0.1:4670/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4670${storyboardCanvasPath(canvas)}`)
   const detail=page.locator('.wb-details:visible')
   for(const kind of ['camera','lighting','focus','composition','movement']) {
     await page.locator(`[data-card-id="${kind}"]`).press('Enter')
@@ -127,7 +128,7 @@ try {
       await poll(state=>state.document.cards.find(c=>c.id===kind).input_bindings?.some(b=>b.input_port==='attention_object'))
     }
     await page.keyboard.press('Escape')
-    const payload=(await (await fetch(`${base}/${canvas.id}/cards/${kind}/outputs`)).json()).data.outputs[0].payload
+    const payload=(await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/${kind}/outputs`))).json()).data.outputs[0].payload
     if(kind==='movement') assert.equal(payload.objects[0].name,'张三');else assert.equal(payload.objects.length,0);assert.equal(payload.references[0].name,'反应镜头');assert.equal(payload.acceptance_basis[0].name,'手部可见')
     await detail.screenshot({path:join(output,kind+'-relations-desktop.png'),animations:'disabled'})
     await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)

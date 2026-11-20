@@ -11,6 +11,7 @@ type RelationTaskNotificationOptions = {
   settledTask?: RelationTaskState | null
   title: string
   sourceLabel?: string | null
+  placement?: 'topRight' | 'bottomRight'
   runningDescription: string
   cancellingDescription: string
   successDescription?: string
@@ -68,6 +69,7 @@ export function useRelationTaskNotification({
   settledTask,
   title,
   sourceLabel,
+  placement = 'topRight',
   runningDescription,
   cancellingDescription,
   successDescription,
@@ -124,7 +126,7 @@ export function useRelationTaskNotification({
       message: task.cancelRequested ? `${title}正在取消` : `${title}进行中`,
       description,
       duration: 0,
-      placement: 'topRight',
+      placement,
       btn:
         onNavigate || (onCancel && !task.cancelRequested) ? (
           <Space size={8}>
@@ -141,7 +143,7 @@ export function useRelationTaskNotification({
           </Space>
         ) : undefined,
     })
-  }, [description, onCancel, onNavigate, sourceLabel, task, title])
+  }, [description, onCancel, onNavigate, placement, sourceLabel, task, title, upsertTask])
 
   useEffect(() => {
     if (!settledTask) return
@@ -197,10 +199,10 @@ export function useRelationTaskNotification({
         </div>
       ),
       duration: statusMeta.duration,
-      placement: 'topRight',
+      placement,
       btn: onNavigate ? <Button size="small" onClick={onNavigate}>查看</Button> : undefined,
     })
-  }, [cancelledDescription, failedDescription, onNavigate, removeTask, settledTask, sourceLabel, successDescription, title, upsertTask])
+  }, [cancelledDescription, failedDescription, onNavigate, placement, removeTask, settledTask, sourceLabel, successDescription, title, upsertTask])
 
   useEffect(() => {
     return () => {

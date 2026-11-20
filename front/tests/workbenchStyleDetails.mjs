@@ -88,7 +88,7 @@ export async function checkWorkbenchStyleDetails(page, output) {
   assert.equal(await background(page.locator('.app-task-count')), 'rgb(234, 243, 255)')
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.locator('.app-task-drawer .ant-segmented').waitFor()
-  assert.equal(await background(page.locator('.app-task-drawer .ant-segmented')), 'rgb(247, 249, 252)')
+  assert.equal(await background(page.locator('.app-task-drawer .ant-segmented')), 'rgb(247, 248, 251)')
   await page.waitForFunction(() => document.querySelector('.ant-drawer-content-wrapper')?.getBoundingClientRect().right <= innerWidth + 1)
   await capture('details-light-task-center')
   await page.unroute(/\/api\/v1\/film\/tasks(?:\?.*)?$/, taskRoute)

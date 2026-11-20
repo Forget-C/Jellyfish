@@ -6,9 +6,9 @@ import { ApiError, StudioDirectingService as Directing } from '../../../services
 import type { StoryboardApplication, StoryboardCandidate, StoryboardConflictChoice, StoryboardDiff, StoryboardDiffCard,
   StoryboardReviewIssue, StoryboardReviewReport, StoryboardRetry, StoryboardTaskRead } from '../../../services/generated'
 import type { StoryboardReviewPreparation, StoryboardScope } from '../generationCanvas/useGenerationCanvasEditor'
-import { directingError } from './common'
-import { WorkbenchButton as ButtonBase } from './ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as ButtonBase } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
 function ReviewButton({ light, variant, ...props }: ComponentProps<typeof ButtonBase> & { light: boolean }) {
   return light ? <LightButton {...props} type={variant === 'primary' ? 'primary' : variant === 'quiet' ? 'text' : 'default'} />
@@ -50,7 +50,7 @@ export function StoryboardReviewFindings({ report, candidate, action, compact = 
 }
 
 /** Compare the saved revision and exact overwrite selection before applying. */
-export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, savedCheck, reviewedOverwrite, repairDetails, structureIssues, inline = false, actionHost, onAlreadyApplied, onOpenCanvas }: {
+export function SceneStoryboardReview({ scope, editable, prepare, reload, apply, applying, saveError, report, candidate, onRepaired, onRepairAccepted, onRepairSubmissionChange, savedCheck, reviewedOverwrite, repairDetails, structureIssues, inline = false, actionHost, onAlreadyApplied, onOpenCanvas }: {
   scope: StoryboardScope & { projectId: string }; editable: boolean; prepare: () => Promise<StoryboardReviewPreparation | undefined>;
   reload: () => Promise<boolean>; apply: (choice: StoryboardApplication) => Promise<boolean>; applying: boolean; saveError?: string;
   report?: StoryboardReviewReport | null; candidate?: StoryboardCandidate | null;
@@ -58,6 +58,8 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
   structureIssues?: string[];
   onAlreadyApplied?: () => void; actionHost?: HTMLElement | null; inline?: boolean; onOpenCanvas?: () => void;
   onRepaired: (result: StoryboardTaskRead) => void;
+  onRepairAccepted?: (taskId: string) => void;
+  onRepairSubmissionChange?: (submitting: boolean) => void;
   savedCheck?: boolean;
   reviewedOverwrite?: string[];
 }) {
@@ -84,7 +86,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     void request.then(response => {
       if (!response.data) throw new Error('无法读取分镜差异')
       if (active) setReview({ choice, diff: response.data })
-    }).catch(cause => { if (active) setError(directingError(cause)) })
+    }).catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
   }, [baseline, selected, projectId, chapterId, sequenceId, taskId])
   const open = async (refresh = false) => {
@@ -131,7 +133,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
         } else if (result.stage !== repairTask.stage) {
           setRepairTask(result)
         }
-      } catch (cause) { if (!cancelled) setError(directingError(cause)) }
+      } catch (cause) { if (!cancelled) setError(apiErrorMessage(cause)) }
     }
     const timer = window.setInterval(() => void read(), 700)
     return () => { cancelled = true; window.clearInterval(timer) }
@@ -143,18 +145,20 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       catch { setError('无法保存修正请求，请检查浏览器存储后重试。'); return }
     }
     setRepairing(true); setRepairIntent(intent); setError('')
+    onRepairSubmissionChange?.(true)
     try {
       const response = await Directing.directingStoryboardRetry({ projectId, chapterId, sequenceId, taskId, requestBody: intent })
       if (!response.data) throw new Error('审查提交待核实')
       setRepairTask(response.data); setRepairIntent(undefined)
+      onRepairAccepted?.(response.data.task_id)
       if (inline) localStorage.removeItem(repairKey)
     } catch (cause) {
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) {
         setRepairIntent(undefined)
         if (inline) localStorage.removeItem(repairKey)
       }
-    } finally { setRepairing(false) }
+    } finally { setRepairing(false); onRepairSubmissionChange?.(false) }
   }
   const repair = (conflict: StoryboardConflictChoice) => {
     if (busy || !ready || !review || !continuity || continuity.stale) return

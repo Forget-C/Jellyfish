@@ -11,5 +11,6 @@ export type StoryboardReviewIssue = {
     shot_ids: Array<string>;
     requirements: string;
     suggestion: string;
+    prompt_unit_ids?: Array<string>;
     repair_targets?: Array<StoryboardRepairTarget>;
 };

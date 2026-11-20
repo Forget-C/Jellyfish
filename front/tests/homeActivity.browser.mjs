@@ -19,7 +19,23 @@ const session = { id: 'image1', lab_type: 'image', title: '真实图片会话', 
 const olderSessions = Array.from({ length: 5 }, (_, index) => ({
   ...session, id: 'older' + index, title: '更早会话 ' + index, updated_at: '2026-11-09T10:00:00Z',
 }))
+const updated_at = '2026-11-10T10:30:00Z'
+const canvasRows = [
+  { id: 'scene-canvas', kind: 'scene', name: '真实场次画布', project_name: project.name, cover_file_id: 'home-cover', updated_at },
+  { id: 'free-canvas', kind: 'free', name: '真实生成画布', project_name: null, cover_file_id: null, updated_at },
+]
+const coverSizes = [[360, 160], [180, 480], [240, 240]]
+const mediaCanvases = coverSizes.map((_, index) => ({
+  ...canvasRows[0], id: 'media-' + index, cover_file_id: 'corners-' + index,
+  name: '超长画布名称'.repeat(10) + index, project_name: '超长项目名称'.repeat(10),
+}))
+const assetRows = ['actor', 'scene', 'prop', 'costume', 'actor', 'scene'].map((type, index) => ({
+  id: String(index), type, name: '真实资产 ' + index, updated_at,
+  thumbnail: index === 2 ? null : '/api/v1/studio/files/home-image/download',
+}))
 let state = 'loaded'
+let pendingActivity
+let failedHome = ''
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
@@ -28,15 +44,33 @@ try {
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(5000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
-  await page.route('**/api/**', route => {
+  await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     const { pathname } = url
+    if (/\/(recent-canvases|recent-assets|projects|experiment-sessions)$/.test(pathname)) await pendingActivity
+    const visibleRows = rows => state === 'empty' ? [] : state === 'single' ? rows.slice(0, 1) : rows
     const respond = data => route.fulfill({ json: { code: 200, data } })
     const fail = () => route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
+    if (pathname.endsWith('/recent-canvases')) return state === 'error' || failedHome === 'canvases' ? fail() : respond(state === 'media' ? mediaCanvases : visibleRows(canvasRows))
+    if (pathname.endsWith('/recent-assets')) return state === 'error' || failedHome === 'assets' ? fail() : respond(visibleRows(assetRows))
+    const corners = pathname.match(/\/files\/corners-(\d)\/download$/)
+    if (corners) {
+      const [width, height] = coverSizes[Number(corners[1])]
+      return route.fulfill({ contentType: 'image/svg+xml', body:
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+          <rect width="100%" height="100%" fill="#088a48"/>
+          <g fill="red"><rect width="32" height="32"/><rect x="${width - 32}" width="32" height="32"/>
+          <rect y="${height - 32}" width="32" height="32"/><rect x="${width - 32}" y="${height - 32}" width="32" height="32"/></g>
+        </svg>` })
+    }
+    if (/\/files\/home-(?:image|cover)\/download$/.test(pathname)) return route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6aYAAAAASUVORK5CYII=', 'base64'),
+    })
     if (pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     if (pathname.endsWith('/projects')) {
       if (state === 'error') return fail()
-      return respond(list(state === 'empty' ? [] : [project, partialProject, newProject]))
+      return respond(list(visibleRows([project, partialProject, newProject])))
     }
     if (pathname.endsWith('/projects/p1')) return respond(project)
     if (pathname.endsWith('/chapters')) {
@@ -49,7 +83,7 @@ try {
       if (state === 'error') return fail()
       const type = url.searchParams.get('lab_type')
       if (state === 'partial-error' && type === 'text') return fail()
-      return respond(state !== 'empty' && type === 'image' ? [session, ...olderSessions] : [])
+      return respond(type === 'image' ? visibleRows([session, ...olderSessions]) : [])
     }
     if (pathname.endsWith('/messages')) return respond([])
     return respond(list([]))
@@ -62,6 +96,10 @@ try {
   const assets = page.getByRole('region', { name: '最近资产', exact: true })
   const assetCards = assets.getByRole('listitem')
   await page.getByRole('heading', { name: '工作概览', level: 1 }).waitFor({ state: 'attached' })
+  await canvases.getByRole('heading', { name: canvasRows[0].name, exact: true }).waitFor()
+  await canvases.getByText('独立画布', { exact: false }).waitFor()
+  assert.equal(await canvases.getByRole('article').count(), 2)
+  assert.equal(await canvases.getByText('示例数据', { exact: true }).count(), 0)
   const canvasHeading = await canvases.getByRole('heading').first().boundingBox()
   const main = await page.getByRole('main').boundingBox()
   assert.ok(canvasHeading.y - main.y <= 32, '首页首个可见区块应紧接页面顶栏')
@@ -84,19 +122,45 @@ try {
   assert.ok((await canvases.boundingBox()).y < (await progress.boundingBox()).y)
   assert.equal((await progress.boundingBox()).y, (await sessions.boundingBox()).y)
   const assetButton = assetCards.first().getByRole('button')
+  const canvasCard = canvases.getByRole('article').first()
+  const canvasBounds = await canvasCard.boundingBox()
+  const secondCanvas = await canvases.getByRole('article').nth(1).boundingBox()
+  assert.ok(Math.abs(canvasBounds.width - secondCanvas.width) <= 1, '画布卡应等宽')
+  const title = await canvasCard.getByRole('heading').boundingBox()
+  const timestamp = await canvasCard.locator('time').boundingBox()
+  assert.ok(title.x + title.width <= timestamp.x && timestamp.y < title.y + title.height, '名称和时间应同排')
+  await assetButton.hover()
+  const assetShadow = await assetButton.evaluate(element => getComputedStyle(element).boxShadow)
+  await canvasCard.hover()
+  assert.notEqual(assetShadow, 'none')
+  assert.equal(await canvasCard.evaluate(element => getComputedStyle(element).boxShadow), assetShadow)
+  assert.deepEqual(await canvasCard.boundingBox(), canvasBounds)
+
+  const sessionRow = sessions.getByRole('link', { name: new RegExp(session.title) })
+  const projectRow = progress.getByRole('listitem').filter({ hasText: project.name })
+  await sessionRow.hover()
+  const sessionHighlight = await sessionRow.evaluate(element => getComputedStyle(element).backgroundColor)
+  await projectRow.hover()
+  assert.notEqual(sessionHighlight, 'rgba(0, 0, 0, 0)')
+  assert.equal(await projectRow.evaluate(element => getComputedStyle(element).backgroundColor), sessionHighlight)
+
   const assetName = await assetButton.getAttribute('aria-label')
   await assetButton.focus()
   await page.keyboard.press('Enter')
   const preview = page.getByRole('dialog', { name: assetName, exact: true })
-  await preview.getByText('示例资产', { exact: true }).waitFor()
+  await preview.getByText('演员', { exact: true }).waitFor()
   await preview.getByRole('img', { name: assetName, exact: true }).waitFor()
   await page.waitForFunction(() => document.activeElement?.closest('.home-asset-preview'))
   await page.keyboard.press('Escape')
   await preview.waitFor({ state: 'hidden' })
   await page.waitForFunction(name => document.activeElement?.getAttribute('aria-label') === name, assetName)
   assert.equal(await assets.getByRole('link', { name: '查看资产库' }).getAttribute('href'), '/assets')
-  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 440]]) {
+  for (const [width, height] of [[1366, 768], [1366, 700], [1440, 900], [1920, 1080], [1024, 440]]) {
     await page.setViewportSize({ width, height })
+    if (height === 768 || height === 440) {
+      const cover = await canvasCard.locator('img').boundingBox()
+      assert.equal(Math.round(cover.height), height === 768 ? 120 : 64)
+    }
     const left = await progress.boundingBox()
     const right = await sessions.boundingBox()
     assert.ok(Math.abs(left.width - right.width) <= 1 && left.height === right.height)
@@ -122,7 +186,7 @@ try {
       const drawerCard = drawer.getByRole('listitem').last().getByRole('button')
       await drawerCard.click()
       const drawerPreview = page.getByRole('dialog', { name: await drawerCard.getAttribute('aria-label'), exact: true })
-      await drawerPreview.getByText('示例资产', { exact: true }).waitFor()
+      await drawerPreview.getByText('场景', { exact: true }).waitFor()
       await drawerPreview.getByRole('button', { name: 'Close', exact: true }).click({ trial: true })
       await page.waitForFunction(() => document.activeElement?.closest('.home-asset-preview'))
       await page.keyboard.press('Escape')
@@ -133,7 +197,7 @@ try {
       await drawer.waitFor({ state: 'hidden' })
       await page.waitForFunction(() => document.activeElement?.textContent.trim() === '查看最近资产')
     } else {
-      await assets.getByText('示例数据', { exact: true }).waitFor()
+      assert.equal(await assets.getByText('示例数据', { exact: true }).count(), 0)
       assert.equal(await assets.getByRole('button', { name: '查看最近资产' }).count(), 0)
       const cards = await assetCards.all()
       assert.equal(cards.length, width === 1366 ? 4 : 6)
@@ -180,8 +244,151 @@ try {
     await page.screenshot({ path: output + '/' + width + '-home.png', animations: 'disabled' })
   }
 
+  await canvases.getByRole('heading', { name: canvasRows[0].name, exact: true }).waitFor()
+  for (const [failure, region, other, otherText] of [
+    ['canvases', canvases, assets, assetRows[0].name],
+    ['assets', assets, canvases, canvasRows[0].name],
+  ]) {
+    failedHome = failure
+    await page.reload()
+    await region.getByRole('alert').waitFor()
+    await other.getByText(otherText, { exact: true }).waitFor()
+    failedHome = ''
+    await region.getByRole('button', { name: '重试' }).click()
+    await region.getByRole('alert').waitFor({ state: 'hidden' })
+    await region.getByText(failure === 'assets' ? assetRows[0].name : canvasRows[0].name, { exact: true }).waitFor()
+  }
+
+  state = 'media'
+  await page.setViewportSize({ width: 480, height: 812 })
+  await page.reload()
+  async function inspectCover(image) {
+    const screenshot = await image.screenshot()
+    return page.evaluate(async base64 => {
+      const bitmap = new Image()
+      bitmap.src = 'data:image/png;base64,' + base64
+      await bitmap.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const context = canvas.getContext('2d')
+      context.drawImage(bitmap, 0, 0)
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+      const quadrants = new Set()
+      for (let pixel = 0; pixel < data.length / 4; pixel++) {
+        const i = pixel * 4
+        if (data[i] > 240 && data[i + 1] < 20 && data[i + 2] < 20) {
+          quadrants.add(Number(pixel % canvas.width >= canvas.width / 2) + 2 * Number(pixel >= canvas.width * canvas.height / 2))
+        }
+      }
+      const sample = (x, y) => Array.from(context.getImageData(x, y, 1, 1).data).slice(0, 3)
+      return { corners: quadrants.size, side: sample(8, canvas.height / 2), top: sample(canvas.width / 2, 4) }
+    }, screenshot.toString('base64'))
+  }
+  function assertSoftBackdrop([red, green]) {
+    assert.ok(green - red > 12 && red > 70, '两侧应显示降低对比度的绿色底图')
+  }
+  for (const [index, item] of mediaCanvases.entries()) {
+    const card = canvases.getByRole('article').filter({ hasText: item.name })
+    const name = await card.getByRole('heading').boundingBox()
+    const time = await card.locator('time').boundingBox()
+    const bounds = await card.boundingBox()
+    assert.ok(name.width > 0 && name.x + name.width <= time.x && time.y < name.y + name.height)
+    assert.ok(time.x + time.width <= bounds.x + bounds.width)
+    assert.equal(await card.getByText(item.project_name, { exact: true }).isVisible(), false)
+    const image = card.locator('img')
+    await image.evaluate(element => element.decode())
+    const pixels = await inspectCover(image)
+    assert.equal(pixels.corners, 4, '横图、竖图和方图均应完整显示四角')
+    if (index > 0) assertSoftBackdrop(pixels.side)
+  }
+  // The 360×160 fixture occupies 252px in a 112px-high cover, leaving exactly 30% of a 360px card.
+  const landscape = canvases.getByRole('article').first().locator('img')
+  const plain = [237, 241, 247]
+  for (const [width, softened] of [[762, false], [764, true], [766, true], [762, false]]) {
+    await page.setViewportSize({ width, height: 812 })
+    const { side, corners } = await inspectCover(landscape)
+    if (softened) {
+      assertSoftBackdrop(side)
+    } else {
+      assert.deepEqual(side, plain, '不足 30% 留白时保留纯色底')
+    }
+    assert.equal(corners, 4)
+  }
+  await page.setViewportSize({ width: 768, height: 812 })
+  assert.deepEqual((await inspectCover(landscape)).top, plain, '只有上下留白时保留纯色底')
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await canvases.screenshot({ path: output + '/mixed-canvas-covers.png' })
+  await page.route('**/files/corners-0/download', failImage)
+  await page.reload()
+  await canvases.getByRole('heading', { name: mediaCanvases[0].name }).waitFor()
+  await canvases.getByRole('article').first().locator('img').waitFor({ state: 'detached' })
+  assert.equal((await canvases.getByRole('article').first().boundingBox()).height,
+    (await canvases.getByRole('article').last().boundingBox()).height)
+  const layoutAnchors = [
+    canvases, progress, sessions, assets, progress.getByRole('link', { name: '查看全部项目' }),
+    sessions.getByRole('link', { name: '打开实验室' }), assets.getByRole('link', { name: '查看资产库' }),
+  ]
+  async function measureHome() {
+    return Promise.all(layoutAnchors.map(anchor => anchor.evaluate(element => {
+      const { top, height } = element.getBoundingClientRect()
+      return [top + element.closest('main').scrollTop, height]
+    })))
+  }
+  async function checkPlaceholders(counts, animated) {
+    for (const [index, region] of [canvases, progress, sessions, assets].entries()) {
+      const slots = region.locator('.home-slot:visible')
+      assert.equal(await slots.count(), counts[index])
+      assert.ok(await slots.evaluateAll((nodes, expectedMotion) => nodes.every(node =>
+        node.getAttribute('aria-hidden') === 'true' && Boolean(node.getAnimations().length) === expectedMotion
+      ), animated))
+    }
+  }
+  for (const [width, height] of [[1440, 900], [1024, 440], [375, 812]]) {
+    await page.setViewportSize({ width, height })
+    const assetSlots = height === 440 ? 0 : 6
+    await page.emulateMedia({ reducedMotion: width === 375 ? 'reduce' : 'no-preference' })
+    const assetEntry = assets.getByRole('button', { name: height === 440 ? '查看最近资产' : assetRows[0].name, exact: true })
+    state = 'loaded'
+    await page.reload()
+    await progress.getByRole('link', { name: project.name }).waitFor()
+    await sessions.getByText(session.title).waitFor()
+    await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
+    await assetEntry.waitFor()
+    const expectedLayout = await measureHome()
+    for (const next of ['single', 'empty', 'error']) {
+      state = next
+      let release
+      pendingActivity = new Promise(resolve => { release = resolve })
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      try {
+        await progress.getByRole('status').waitFor()
+        await checkPlaceholders([3, 3, 3, assetSlots], width !== 375)
+        assert.deepEqual(await measureHome(), expectedLayout, '请求中保持区块和底部入口的位置')
+      } finally {
+        release()
+        pendingActivity = undefined
+      }
+      if (next === 'single') {
+        await progress.getByRole('link', { name: project.name }).waitFor()
+        await sessions.getByText(session.title).waitFor()
+        await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
+        await assetEntry.waitFor()
+        await checkPlaceholders([2, 2, 2, Math.max(0, assetSlots - 1)], false)
+        assert.equal(await canvases.getByRole('article').count(), 1)
+      } else {
+        await Promise.all([progress, sessions, canvases, assets].map(region =>
+          region.getByRole(next === 'error' ? 'alert' : 'status')
+            .filter({ hasText: next === 'error' ? /失败/ : /暂无/ }).waitFor()))
+        await checkPlaceholders([3, 3, 3, assetSlots], false)
+      }
+      assert.deepEqual(await measureHome(), expectedLayout, next + ' 状态保持首页布局')
+    }
+  }
   state = 'empty'
   await page.reload()
+  await canvases.getByText('暂无画布', { exact: true }).waitFor()
+  await assets.getByText('暂无资产', { exact: true }).waitFor()
   await progress.getByText('暂无项目', { exact: true }).waitFor()
   await sessions.getByText('暂无实验室会话', { exact: true }).waitFor()
   state = 'partial-error'

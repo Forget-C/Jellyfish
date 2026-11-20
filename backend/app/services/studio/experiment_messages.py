@@ -10,6 +10,8 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.generation import ImageGenerationOperationInput, VideoGenerationOperationInput
+from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task
 
@@ -25,10 +27,24 @@ class ExperimentMessageDraft:
     task_id: str | None = None
 
 
+def experiment_user_message(
+    *, prompt: str, model_id: str | None,
+    media: ImageMediaInput | VideoMediaInput | None = None,
+    operation_input: ImageGenerationOperationInput | VideoGenerationOperationInput | None = None,
+) -> ExperimentMessageDraft:
+    """冻结用户可编辑的输入，供实验历史回填。"""
+    snapshot: dict[str, Any] = {"version": 1, "prompt": prompt, "model_id": model_id}
+    if media is not None:
+        snapshot["media"] = media.model_dump(mode="json")
+    if operation_input is not None:
+        snapshot["operation_input"] = operation_input.model_dump(mode="json")
+    return ExperimentMessageDraft(role="user", content=prompt, payload={"input_snapshot": snapshot})
+
+
 def task_message_display_payload(*, modality: str) -> dict[str, Any]:
     """构造异步任务消息的初始展示投影，不复制任务请求快照。
 
-    消息只保存模态标签；任务输入、状态、结果都在读取时从任务记录获取。
+    任务消息只保存模态标签，状态与结果读取时从任务记录获取。
     """
 
     return {"modality": modality}
@@ -141,6 +157,7 @@ async def append_experiment_messages(
 __all__ = [
     "ExperimentMessageDraft",
     "append_experiment_messages",
+    "experiment_user_message",
     "read_experiment_messages",
     "reserve_message_sequences",
     "task_message_display_payload",

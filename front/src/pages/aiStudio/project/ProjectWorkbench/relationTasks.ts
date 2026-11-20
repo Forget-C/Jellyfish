@@ -118,7 +118,6 @@ async function loadTaskState(taskId: string): Promise<RelationTaskState | null> 
   const data = statusRes.data
   if (!data) return null
   const taskState = toRelationTaskStateFromStatusRead(data)
-  if (!isActiveTaskStatus(data.status)) return taskState
   return taskState
 }
 

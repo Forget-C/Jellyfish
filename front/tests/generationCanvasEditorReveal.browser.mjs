@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-images-')
-const api = 'http://127.0.0.1:8631', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8631', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8631' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -44,14 +45,14 @@ try {
   const results=[]
   const probe=async(name,run,documentOverrides={},contextOptions={})=>{
     const facts={}
-    const fixture=await request('/api/v1/studio/generation-canvases/canvas-project',{name})
+    const fixture=await createStoryboardCanvas(base, name)
     const cards=[{id:'place',type:'reference.place',name:'场所',angle:'正面'}, {id:'other',type:'reference.place',name:'其他场所',angle:'正面'}, {id:'director',type:'direction.fact',scope:{},examples:[],input_bindings:[]}]
-    const seeded=await fetch(`${base}/${fixture.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...fixture.document,cards,edges:[],...documentOverrides}})})
+    const seeded=await fetch(storyboardCanvasApi(base, fixture.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(fixture, { ...fixture.document, cards, edges: [], ...documentOverrides })})})
     assert.ok(seeded.ok,await seeded.text())
     const isolated=await browser.newContext({viewport:{width:1920,height:790},...contextOptions})
     page=await isolated.newPage();page.setDefaultTimeout(6000)
     await page.addInitScript(({key})=>{window.__ENV={BACKEND_URL:location.origin};if(!sessionStorage.getItem(key)){sessionStorage.setItem(key,'seeded');localStorage.setItem(key,JSON.stringify({schema:1,positions:{place:{x:innerWidth<700?120:400,y:innerWidth<700?300:250},other:{x:1000,y:250},director:{x:1800,y:250}},sizes:{},transform:{x:0,y:0,scale:.8}}))}},{key:`jellyfish:generation-layout:canvas-project:${fixture.id}:view:canvas`})
-    await page.goto(`http://127.0.0.1:4631/projects/canvas-project/generation-canvas?canvas=${fixture.id}`)
+    await page.goto(`http://127.0.0.1:4631${storyboardCanvasPath(fixture)}`)
     const card=page.locator('[data-card-id="place"]');await page.locator('[data-card-id], [data-stack-id]').first().waitFor();await delay(100)
     const position=(target=card)=>target.evaluate(e=>({x:parseFloat(e.style.left),y:parseFloat(e.style.top)}))
     const view=()=>page.locator('.generation-world').getAttribute('style')

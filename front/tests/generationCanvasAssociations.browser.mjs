@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-associations-')
-const api = 'http://127.0.0.1:8291', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8291', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8291' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -33,9 +34,8 @@ try {
   debugPage = page
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '统一关联区' }) })
-  const canvas = (await response.json()).data
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const canvas = await createStoryboardCanvas(base, '统一关联区')
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 100; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('association edit did not save') }
   const document = { ...canvas.document, cards: [
     { id: 'empty', type: 'direction.movement' }, { id: 'movement', type: 'direction.movement' },
@@ -67,11 +67,11 @@ try {
     const ports = document.input_order[edge.target_card] ||= {}
     ;(ports[edge.target_port] ||= []).push(edge.id)
   }
-  const seed = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seed = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seed.ok, await seed.text())
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.goto(`http://127.0.0.1:4291/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4291${storyboardCanvasPath(canvas)}`)
   await page.locator('[data-card-id="broken-style"]').getByText(/失效来源/).waitFor({ state: 'attached' })
   const detail = page.locator('.wb-details:visible')
   const strip = detail.getByRole('region', { name: '关联来源', exact: true })
@@ -133,7 +133,7 @@ try {
   await page.screenshot({ path: join(output, 'associations-desktop.png'), animations: 'disabled' })
   await closeCanvasDetails(page)
   const revision = (await read()).revision
-  await page.route('**/precheck', async route => {
+  await page.route('**/precheck?project_id=*', async route => {
     const response = await route.fetch(), payload = await response.json()
     payload.data.diagnostics = [{
       code: 'EDGE_DIAGNOSTIC', severity: 'warning', message: '请核对明确的候选连接', blocks: [],

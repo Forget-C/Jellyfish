@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { CanvasCheckProduct } from '../../../services/generated'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 import { ImageContentReader } from './ImageContentReader'
 import { PlaybackContent } from './MediaContentEditor'
 

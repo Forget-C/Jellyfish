@@ -10,10 +10,10 @@ from app.models.studio import (
     Chapter,
     FileItem,
     FileUsage,
-    ProjectActorLink,
-    ProjectCostumeLink,
-    ProjectPropLink,
-    ProjectSceneLink,
+    Actor,
+    Costume,
+    Prop,
+    Scene,
 )
 from app.models.types import FileUsageKind
 
@@ -22,7 +22,7 @@ async def upsert_file_usage(
     session: AsyncSession,
     *,
     file_id: str,
-    project_id: str,
+    project_id: str | None,
     chapter_id: str | None,
 
     usage_kind: FileUsageKind | str,
@@ -97,7 +97,7 @@ async def sync_usage_from_character(
 
 def _scope_filters(
     *,
-    project_id: str,
+    project_id: str | None,
     chapter_title: str | None,
 
 ) -> list:
@@ -115,7 +115,7 @@ def _scope_filters(
 async def list_files_by_scope_paginated(
     session: AsyncSession,
     *,
-    project_id: str,
+    project_id: str | None,
     chapter_title: str | None = None,
 
     q: str | None = None,
@@ -125,6 +125,7 @@ async def list_files_by_scope_paginated(
     page_size: int = 10,
     allow_order_fields: set[str] | None = None,
     default_order: str = "created_at",
+    file_type: str | None = None,
 ) -> tuple[list[FileItem], int]:
     """按项目及可选章节标题过滤文件（标题多命中时并集），去重后分页。"""
     allow_fields = allow_order_fields or {"name", "created_at", "updated_at"}
@@ -146,9 +147,11 @@ async def list_files_by_scope_paginated(
     grouped = (
         select(FileItem.id, func.max(ord_attr).label("_ord_key"))
         .join(FileUsage, FileUsage.file_id == FileItem.id)
-        .where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None))
+        .where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None), FileItem.is_project_cover.is_(False))
     )
     grouped = _apply_scope_filters(grouped)
+    if file_type is not None:
+        grouped = grouped.where(FileItem.type == file_type)
     if qn:
         grouped = grouped.where(FileItem.name.ilike(f"%{qn}%"))
     grouped = grouped.group_by(FileItem.id)
@@ -180,22 +183,22 @@ async def list_files_by_scope_paginated(
 
 
 async def first_project_id_for_scene(session: AsyncSession, scene_id: str) -> str | None:
-    stmt = select(ProjectSceneLink.project_id).where(ProjectSceneLink.scene_id == scene_id).limit(1)
+    stmt = select(Scene.project_id).where(Scene.id == scene_id)
     return (await session.execute(stmt)).scalars().first()
 
 
 async def first_project_id_for_prop(session: AsyncSession, prop_id: str) -> str | None:
-    stmt = select(ProjectPropLink.project_id).where(ProjectPropLink.prop_id == prop_id).limit(1)
+    stmt = select(Prop.project_id).where(Prop.id == prop_id)
     return (await session.execute(stmt)).scalars().first()
 
 
 async def first_project_id_for_costume(session: AsyncSession, costume_id: str) -> str | None:
-    stmt = select(ProjectCostumeLink.project_id).where(ProjectCostumeLink.costume_id == costume_id).limit(1)
+    stmt = select(Costume.project_id).where(Costume.id == costume_id)
     return (await session.execute(stmt)).scalars().first()
 
 
 async def first_project_id_for_actor(session: AsyncSession, actor_id: str) -> str | None:
-    stmt = select(ProjectActorLink.project_id).where(ProjectActorLink.actor_id == actor_id).limit(1)
+    stmt = select(Actor.project_id).where(Actor.id == actor_id)
     return (await session.execute(stmt)).scalars().first()
 
 

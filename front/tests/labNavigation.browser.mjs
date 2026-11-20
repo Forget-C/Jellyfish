@@ -108,7 +108,7 @@ try {
     return respond([])
   })
 
-  await page.goto(origin + '/image-lab?keep=1')
+  await page.goto(origin + '/lab?mode=image&keep=1')
   await page.waitForURL(url => url.pathname === '/lab' && url.searchParams.get('mode') === 'image' && url.searchParams.get('keep') === '1')
   const types = page.locator('.experiment-navigation')
   const startDraft = async label => {

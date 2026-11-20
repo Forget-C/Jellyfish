@@ -1,4 +1,5 @@
 """声音层次随卡片保存并进入实际采用该安排的生成输入。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -7,8 +8,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_sound_hierarchy_roundtrips_compiles_and_can_be_cleared(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '声音层次'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '声音层次'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     sound = {
         'id': 'sound',
@@ -36,7 +37,7 @@ async def test_sound_hierarchy_roundtrips_compiles_and_can_be_cleared(canvas_cli
         assert response.status_code == 200, response.text
 
     async def compile_text():
-        response = await client.get(f'{url}/cards/target/compile')
+        response = await client.get((url + f'/cards/target/compile'))
         assert response.status_code == 200, response.text
         return response.json()['data']['text']
 
@@ -62,8 +63,8 @@ async def test_sound_hierarchy_roundtrips_compiles_and_can_be_cleared(canvas_cli
 
 @pytest.mark.asyncio
 async def test_shared_sound_hierarchy_keeps_its_condition_in_each_adopting_target(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '跨目标声音层次'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '跨目标声音层次'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     condition = '只在两人于窗边交谈时'
     hierarchy = '对白优先，雨声退后'
     prompts = {
@@ -97,7 +98,7 @@ async def test_shared_sound_hierarchy_keeps_its_condition_in_each_adopting_targe
     assert {edge['target_card'] for edge in stored['edges'] if edge['source_card'] == 'sound'} == {'window', 'outside'}
 
     for target, prompt in prompts.items():
-        response = await canvas_client.get(f'{url}/cards/{target}/compile')
+        response = await canvas_client.get((url + f'/cards/{target}/compile'))
         assert response.status_code == 200, response.text
         compiled = response.json()['data']
         assert prompt in compiled['text']

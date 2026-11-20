@@ -3,10 +3,10 @@ import { Alert } from 'antd'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { CanvasRead, StoryboardApplication, StoryboardTaskRead } from '../../../services/generated'
 import type { StoryboardReviewPreparation, StoryboardScope } from '../generationCanvas/useGenerationCanvasEditor'
-import { directingError } from './common'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { SceneStoryboardReview, StoryboardReviewFindings } from './SceneStoryboardReview'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
-import { WorkbenchModal } from './ui/WorkbenchModal'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
 type Scope = Omit<StoryboardScope, 'taskId'> & { projectId: string }
 
@@ -46,7 +46,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
     const request = Directing.directingSavedStoryboardCheckGet({ projectId, chapterId, sequenceId, canvasId })
     void request.then(({ data }) => {
       if (live) setTask(data ?? undefined)
-    }).catch(cause => { if (live) setError(directingError(cause)) })
+    }).catch(cause => { if (live) setError(apiErrorMessage(cause)) })
     return () => { live = false; request.cancel() }
   }, [projectId, chapterId, sequenceId, canvasId, current.revision])
 
@@ -59,7 +59,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
     const request = Directing.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: appliedId })
     void request.then(({ data }) => {
       if (live) setAppliedCheck(data ?? undefined)
-    }).catch(cause => { if (live) setError(directingError(cause)) })
+    }).catch(cause => { if (live) setError(apiErrorMessage(cause)) })
     return () => { live = false; request.cancel() }
   }, [appliedId, taskId, projectId, chapterId, sequenceId, current.revision])
   const polling = active(task)
@@ -75,7 +75,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
         setTask(data)
         if (active(data)) timer = window.setTimeout(() => void read(), 800)
       } catch (cause) {
-        if (live) { setError(directingError(cause)); timer = window.setTimeout(() => void read(), 1600) }
+        if (live) { setError(apiErrorMessage(cause)); timer = window.setTimeout(() => void read(), 1600) }
       }
     }
     timer = window.setTimeout(() => void read(), 250)
@@ -101,7 +101,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
       setTask(response.data)
     } catch (cause) {
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) intent.current = undefined
-      setError(directingError(cause))
+      setError(apiErrorMessage(cause))
     } finally { setSubmitting(false) }
   }
 
@@ -112,7 +112,7 @@ export function SceneStoryboardCheck({ scope, current, editable, saving, prepare
     <Button disabled={!editable || polling || saving} loading={submitting} onClick={() => void submit()}>
       {intent.current ? '核实检查提交' : '检查分镜连续性'}
     </Button>
-    {task && <span role="status">{statusLabel(task)}</span>}
+    {task && (polling || retryable || task.pending_application) && <span role="status">{statusLabel(task)}</span>}
     {retryable && !intent.current && <Button disabled={!editable || submitting} onClick={() => void submit(task?.task_id)}>重试检查</Button>}
     {(task?.review || task?.error || error) && <Button onClick={() => setReportOpen('latest')}>查看检查报告</Button>}
     {appliedRisks && <Button onClick={() => setReportOpen('applied')}>

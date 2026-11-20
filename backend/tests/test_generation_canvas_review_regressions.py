@@ -1,13 +1,14 @@
 """公开接口与真实 worker 保留审查发现的回归覆盖。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store
 
 @pytest.mark.asyncio
 async def test_reference_aware_frame_target_is_available(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': 'review'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': 'review'})).json()['data']
     doc = canvas['document']
-    url = '/canvases/p/' + canvas['id']
+    url = canvas_url('/canvases/p/') + canvas['id']
     source = lambda card, port: {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0}
     doc.update(cards=[{'id': 'brief', 'type': 'content.text', 'text': '站在窗边'}, {'id': 'move', 'type': 'direction.movement', 'phases': [{'id': 'end', 'name': '落幅', 'frame': {'state': 'proposal', 'document': {'segments': [{'id': 'ref', 'kind': 'reference', 'source': source('brief', 'text')}]}}}]}, {'id': 'composition', 'type': 'direction.composition', 'fields': {'composition': {'state': 'proposal', 'text': '左侧构图'}}, 'frame_target': {'card_id': 'move', 'state_id': 'phase:end'}}, {'id': 'model', 'type': 'model.image', 'model_id': 'canvas-image', 'input_bindings': [{'id': 'use', 'input_port': 'text', 'source': source('composition', 'text')}]}], edges=[{'id': 'text', 'source_card': 'brief', 'source_port': 'text', 'target_card': 'move', 'target_port': 'text'}, {'id': 'design', 'source_card': 'composition', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}], input_order={'move': {'text': ['text']}, 'model': {'text': ['design']}})
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
@@ -21,8 +22,8 @@ async def test_reference_aware_frame_target_is_available(canvas_client):
 @pytest.mark.asyncio
 async def test_composition_uses_explicit_whole_description_reference(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': 'review'})).json()['data']
-    url = '/canvases/p/' + canvas['id']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': 'review'})).json()['data']
+    url = canvas_url('/canvases/p/') + canvas['id']
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'person', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'person-id', 'name': '张三', 'text': '人物'}, {'id': 'composition', 'type': 'direction.composition', 'fields': {'composition': {'state': 'proposal', 'text': '@引用左侧构图', 'document': {'segments': [{'id': 'person', 'kind': 'reference', 'source': source}, {'id': 'text', 'kind': 'text', 'text': '左侧构图'}]}}}}], edges=[{'id': 'obj', 'source_card': 'person', 'source_port': 'text', 'target_card': 'composition', 'target_port': 'text'}], input_order={'composition': {'text': ['obj']}})

@@ -11,17 +11,20 @@ import { PhotographyInputScope } from './PhotographyInputScope'
 import { NamedImageSummary } from './NamedImageSummary'
 import { VideoInputBindings } from './VideoInputBindings'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor'
+import type { EditorPromptDocument } from './inputBindings'
+import { WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 import { editorPrompt, promptInputPort, withEditorPrompt, withoutInputBinding } from './inputBindings'
 import { useCardCandidates } from './useCardCandidates'
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import { ImageModelParameters, VideoModelParameters } from './ModelParameters'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 import { sourceKey, referencesIn } from './promptRules'
 import { referenceLabels } from './referenceLabels'
-import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
-import { useEffect, useRef, useState } from 'react'
+import { PromptEditingContext } from './PromptEditingContext'
+import { useContext, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CardComposer } from './CardComposer'
 import { availableDefaultModel, defaultVideoRatio } from './modelCardDefaults'
@@ -39,7 +42,28 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const attemptedDefault = useRef<string | undefined>(undefined)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
-  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
+  const generated = card.type === 'model.video' ? (card as VideoModelCard).generated_prompt : undefined
+  const [promptDraft, setPromptDraft] = useState<EditorPromptDocument>()
+  const promptSession = useId()
+  const editingKey = card.id + ':' + promptSession
+  const editingPrompt = !!promptDraft
+  const reportEditing = useContext(PromptEditingContext)
+  useEffect(() => {
+    reportEditing(editingKey, editingPrompt)
+    return () => reportEditing(editingKey, false)
+  }, [editingKey, editingPrompt, reportEditing])
+  const [editRisk, setEditRisk] = useState(false)
+  const [confirmedHere, setConfirmedHere] = useState(false)
+  const confirmationKey = JSON.stringify(['jellyfish:prompt-edit', document.project_id, document.id, card.id])
+  const startPromptEdit = () => {
+    let confirmed = confirmedHere || generated?.edit_confirmed
+    try { confirmed ||= localStorage.getItem(confirmationKey) === '1' } catch { /* Saved card confirmation remains available. */ }
+    if (!confirmed) setEditRisk(true)
+    else setPromptDraft(editorPrompt(card))
+  }
+  useEffect(() => { setPromptDraft(undefined); setEditRisk(false); setConfirmedHere(false) }, [card.id])
+
+  const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs)
   const { isIndependentDesignEdge, cardTitles, cardDefinitions, candidatePorts } = useGraphRules()
   const adopted = card.input_bindings || []
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs
@@ -114,7 +138,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const labels = referenceLabels(document, sources, card.id)
   const displayLabel = (output: CanvasResolvedOutput) => output.token ? labels.get(sourceKey(output.source)) || output.token : labelFor(output)
   const hasInput = adopted.length > 0 || (editorPrompt(card).segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())
-  const submitDisabled = !!(disabled || busy || checking || runDisabled || !hasInput)
+  const submitDisabled = !!(disabled || busy || checking || runDisabled || promptDraft || !hasInput)
   const submit = () => { if (!submitDisabled) onPrecheck?.() }
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" data-diagnostic-control="model_id" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
@@ -217,7 +241,6 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const associations = <CanvasAssociations entries={entries} sourceActions={sourceActions} sessionKey={`${card.id}:${editorOpen}`} loading={resolved.loading} error={resolved.error} renderDetails={renderDetails} onLocateSource={onLocateDesign} onInspect={() => { if (management.current) management.current.open = false }} />
   return <CardComposer associations={associations} parameters={modelParameters} parameterAction={resultDisplay} status={status}
     submit={<WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={submitDisabled} onClick={submit} />}>
-    {!!card.missing_designs?.length && <Alert type="warning" message="旧摄影设计已移除，需要补充设计依据" description={<><p>缺失设计：{card.missing_designs.join('、')}</p><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, missing_designs: [] })}>已处理缺失设计</WorkbenchButton></>} />}
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
     {card.type === 'model.video' && card.model_id && <small aria-label="原生声音输出能力">
       {hasSavedSoundDesign && '已保存输入采用声音设计 · '}原生声音输出：{audioCapabilityStatus(capability?.native_audio_output)}
@@ -235,7 +258,23 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
 
     <div className="generation-material-prompt">
       {resolved.error && <Alert type="warning" message={resolved.error} />}
-      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, inputPorts: supportedPorts(item), disabledReason: candidateIssue(item), ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)) } : {}) }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
+      {generated && <Space>
+        {promptDraft ? <><WorkbenchButton disabled={disabled} onClick={() => {
+          const next = withEditorPrompt(card, promptDraft) as VideoModelCard
+          onChange({ ...next, generated_prompt: { ...generated, edit_confirmed: true } })
+          setPromptDraft(undefined)
+        }}>保存修改</WorkbenchButton><WorkbenchButton onClick={() => setPromptDraft(undefined)}>取消编辑</WorkbenchButton></>
+          : <WorkbenchButton disabled={disabled || busy} onClick={startPromptEdit}>编辑提示词</WorkbenchButton>}
+        <details><summary>查看完整执行提示词</summary><CanvasTextPreview text={resolved.compiled?.text || '保存并读取后查看完整提示词'} label="完整执行提示词" /></details>
+      </Space>}
+      <WorkbenchModal title="编辑提示词" open={editRisk} okText="继续编辑" cancelText="取消" onCancel={() => setEditRisk(false)} onOk={() => {
+        setConfirmedHere(true)
+        try { localStorage.setItem(confirmationKey, '1') } catch { /* Confirmation is also saved with the card. */ }
+        onChange({ ...card, generated_prompt: { ...generated!, edit_confirmed: true } } as VideoModelCard)
+        setEditRisk(false)
+        setPromptDraft(editorPrompt(card))
+      }}><p>修改主体提示词可能改变分镜表达，已采用的设计仍会参与生成。修改不会同步更新设计卡。</p></WorkbenchModal>
+      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={promptDraft || editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, inputPorts: supportedPorts(item), disabledReason: candidateIssue(item), ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)) } : {}) }))} disabled={disabled || !!generated && !promptDraft} onChange={prompt => promptDraft ? setPromptDraft(prompt) : onChange(withEditorPrompt(card, prompt))} />
     </div>
     {(disabled || busy || runDisabled) && <small role="status">{busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
   </CardComposer>

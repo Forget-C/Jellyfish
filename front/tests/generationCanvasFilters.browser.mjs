@@ -12,7 +12,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-')
 const api = 'http://127.0.0.1:8421'
-const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
     CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8421' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -38,7 +38,7 @@ try {
   const canvas=(await response.json()).data
   const source={canvas_id:canvas.id,card_id:'source',port_id:'text',position:0}
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'未匹配但明确采用的内容'},
-    {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[{id:'reference',kind:'reference',source}]},config:{}}],
+    {id:'model',type:'model.text',model_id:'canvas-runtime-text',input_bindings:[{id:'source',input_port:'text',source}],prompt:{segments:[{id:'reference',kind:'reference',binding_id:'source'}]},config:{}}],
     edges:[{id:'candidate',source_card:'source',source_port:'text',target_card:'model',target_port:'text'}],input_order:{model:{text:['candidate']}}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok,await seed.clone().text())
@@ -47,7 +47,7 @@ try {
   const precheck=async()=>(await(await fetch(`${base}/${canvas.id}/precheck`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:'model'})})).json()).data
   const initialPreview=await precheck()
   assert.match(initialPreview.input.text,/未匹配但明确采用的内容/)
-  await page.goto(`http://127.0.0.1:4421/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4421/canvases/${canvas.id}`)
   await page.getByRole('navigation',{name:'生成画布位置',exact:true}).getByRole('button',{name:'总览',exact:true}).waitFor()
   if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible())await closeCanvasDetails(page)
   const world=()=>page.locator('.generation-world').getAttribute('style')

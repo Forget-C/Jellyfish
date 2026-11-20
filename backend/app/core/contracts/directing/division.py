@@ -36,6 +36,7 @@ class DivisionDraft(Contract):
     """最终整章方案；遗漏不等于退出，所有旧身份必须保留或明确退出。"""
 
     source_version: Text
+    source_basis_id: Identity | None = None
     source_task_id: Identity | None = None
     source_revision_id: Identity | None = None
     restored_baseline: list[DivisionBaseline] = Field(default_factory=list)

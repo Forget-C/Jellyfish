@@ -1,4 +1,5 @@
 """Automatic checks through real generation admission, settlement, and the Worker."""
+from tests.canvas_urls import append_canvas_path
 import asyncio
 import json
 
@@ -26,7 +27,7 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
 
     runtime.app.include_router(tasks_router)
     client, url = runtime.client, runtime.url
-    checks = f'{url}/checks/check'
+    checks = (url + f'/checks/check')
     document = runtime.document
     document['cards'][0].update(id='image', type='model.image', config={'count': 3})
     document['cards'].extend([
@@ -101,12 +102,12 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
             assert disabled['automatic_checks'] == []
             old = await submit('disabled', disabled)
             await drain()
-            assert await get(f'{checks}/reports') == []
+            assert await get(append_canvas_path(checks, f'/reports')) == []
 
             def enable(doc):
                 doc['cards'][-1].update(auto_post_check=True, post_check_categories=['R01', 'R03'])
             await save(enable)
-            assert await get(f'{checks}/reports') == []
+            assert await get(append_canvas_path(checks, f'/reports')) == []
             accepted_preview = await preview()
             estimate, = accepted_preview['automatic_checks']
             assert estimate['check_card_id'] == 'check' and estimate['target_card_id'] == 'image'
@@ -121,15 +122,19 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
                 (await db.get(Provider, 'vision-provider')).api_key = 'new-key'
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
+            from tests.canvas_urls import canvas_params
+            current = await get(url)
+            blocked = await client.delete(url, params={**canvas_params(url), 'expected_revision': current['revision']})
+            assert blocked.status_code == 409 and blocked.json()['detail']['code'] == 'CANVAS_TASK_BUSY'
             async with runtime.sessions.begin() as db:
                 service = TaskService(db)
                 interrupted = await service.claim_next(worker_id='interrupted-worker', kinds=(AUTO_CHECK_DISPATCH,))
                 assert interrupted is not None
-            assert await get(f'{checks}/reports') == []
+            assert await get(append_canvas_path(checks, f'/reports')) == []
             async with runtime.sessions.begin() as db:
                 assert await TaskService(db).interrupt_previous_workers(worker_id=worker.worker_id) == 1
             await drain()
-            reports = await get(f'{checks}/reports')
+            reports = await get(append_canvas_path(checks, f'/reports'))
             assert len(reports) == 3 and {row['product']['position'] for row in reports} == {0, 1, 2}
             assert {row['product']['run_id'] for row in reports} == {accepted['run_id']}
             assert all(row['automatic'] and row['check_model_id'] == 'vision' for row in reports)
@@ -148,7 +153,7 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
             assert all({item['category'] for item in row['items']} == {'R01', 'R03'} for row in reports)
             assert len(calls) == 3 and {header for header, _ in calls} == {'Bearer frozen-check-key'}
             assert all('红色背景' in str(requirements) and '蓝色背景' not in str(requirements) for _, requirements in calls)
-            state = await get(f'{url}/runtime')
+            state = await get((url + f'/runtime'))
             node = next(row['nodes'][0] for row in state['runs'] if row['id'] == accepted['run_id'])
             assert node['status'] == 'succeeded' and not node['current_output_updated']
             assert await submit('enabled', accepted_preview) == accepted
@@ -156,10 +161,10 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
                 # Deliver the same terminal notification again.
                 await TaskService(db).finish(accepted['task_ids'][0])
             await drain()
-            assert len(calls) == 3 and await get(f'{checks}/reports') == reports
+            assert len(calls) == 3 and await get(append_canvas_path(checks, f'/reports')) == reports
 
-            product = next(row for row in await get(f'{checks}/products') if row['run_id'] == old['run_id'])
-            product_url = f"{checks}/products/{product['run_id']}/{product['node_id']}/{product['position']}"
+            product = next(row for row in await get(append_canvas_path(checks, f'/products')) if row['run_id'] == old['run_id'])
+            product_url = append_canvas_path(checks, f"/products/{product['run_id']}/{product['node_id']}/{product['position']}")
             manual = await get(product_url)
             assert manual['estimated_calls'] == 0
             assert {item['category'] for item in manual['items'] if item['enabled']} == {'R03'}
@@ -175,32 +180,32 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
             await save(detach)
             await save(lambda doc: connect_check(doc, source='image'))
             await drain()
-            assert len(calls) == 3 and await get(f'{checks}/reports') == reports
-            generations = (await get(f'{url}/runtime'))['runs']
+            assert len(calls) == 3 and await get(append_canvas_path(checks, f'/reports')) == reports
+            generations = (await get((url + f'/runtime')))['runs']
             assert next(row for row in generations if row['id'] == detached['run_id'])['nodes'][0]['status'] == 'succeeded'
 
             cancel_run = await submit('cancel-report', await preview())
             for _ in range(2):
                 await worker.tick()
                 await asyncio.gather(*worker.jobs.values())
-            pending = [row for row in await get(f'{checks}/reports') if row['product']['run_id'] == cancel_run['run_id']]
+            pending = [row for row in await get(append_canvas_path(checks, f'/reports')) if row['product']['run_id'] == cancel_run['run_id']]
             assert len(pending) == 3 and all(row['executions'][0]['status'] == 'queued' for row in pending)
-            cancelled = await client.post(f"{checks}/reports/{pending[0]['id']}/cancel")
+            cancelled = await client.post(append_canvas_path(checks, f"/reports/{pending[0]['id']}/cancel"))
             assert cancelled.status_code == 200, cancelled.text
             assert cancelled.json()['data']['executions'][0]['status'] == 'cancelled'
             await drain()
-            final = await get(f'{checks}/reports')
+            final = await get(append_canvas_path(checks, f'/reports'))
             assert len(calls) == 5 and len(final) == 6
             assert next(row for row in final if row['id'] == pending[0]['id'])['results'] == []
-            generations = (await get(f'{url}/runtime'))['runs']
+            generations = (await get((url + f'/runtime')))['runs']
             assert next(row for row in generations if row['id'] == cancel_run['run_id'])['nodes'][0]['status'] == 'succeeded'
 
             partial = True
             incomplete = await submit('partial', await preview())
             await drain()
-            assert len(calls) == 5 and await get(f'{checks}/reports') == final
+            assert len(calls) == 5 and await get(append_canvas_path(checks, f'/reports')) == final
             assert any(row['run_id'] == incomplete['run_id'] and row['generation_status'] == 'failed'
-                       for row in await get(f'{checks}/products'))
+                       for row in await get(append_canvas_path(checks, f'/products')))
 
             async with runtime.sessions.begin() as db:
                 await db.delete(await db.get(Model, 'vision'))
@@ -208,12 +213,12 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
                 await db.delete(await db.get(Provider, 'vision-provider'))
             original = next(row for row in reports if row['results'])
             item_id = original['results'][0]['item_id']
-            response = await client.post(f"{checks}/reports/{original['id']}/recheck", json={
+            response = await client.post(append_canvas_path(checks, f"/reports/{original['id']}/recheck"), json={
                 'item_id': item_id, 'clarification': '请复核原画面',
             })
             assert response.status_code == 200, response.text
             await drain()
-            reviewed = next(row for row in await get(f'{checks}/reports') if row['id'] == response.json()['data']['id'])
+            reviewed = next(row for row in await get(append_canvas_path(checks, f'/reports')) if row['id'] == response.json()['data']['id'])
             assert reviewed['product'] == original['product'] and len(reviewed['results']) == 1
             assert 'frozen-check-key' not in str(reviewed) and calls[-1][0] == 'Bearer frozen-check-key'
         finally:

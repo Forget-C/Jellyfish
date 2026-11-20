@@ -2,12 +2,15 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetPromptReference } from './AssetPromptReference';
 import type { ProjectStyle } from './ProjectStyle';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 /**
  * 创建Costume，只接收该类别的可编辑设定。
  */
 export type CostumeCreate = {
+    adopt_reference?: (AssetPromptReference | null);
+    references?: Array<AssetPromptReference>;
     id: string;
     name: string;
     tags?: Array<string>;
@@ -16,7 +19,7 @@ export type CostumeCreate = {
     style?: ProjectStyle;
     visual_style?: ProjectVisualStyle;
     /**
-     * 可选：创建成功后写入 project_*_link（与资产创建同一事务）
+     * 所属项目；不传时创建共享资产
      */
     project_id?: (string | null);
     /**

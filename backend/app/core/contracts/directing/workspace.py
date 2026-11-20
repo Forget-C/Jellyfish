@@ -6,9 +6,6 @@ from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, Role
 from app.core.contracts.directing.design import SceneDesign
-from app.core.contracts.directing.scene_version import EditableSceneDesign
-from app.core.contracts.directing.instruction_check import InstructionCheckResult
-from app.core.contracts.directing.scene_instruction import SceneInstructionResult
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate, ReviewRevisionRequest, ReviewRevisionApplication
 from app.core.contracts.directing.production import ProductionPlan, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.revisions import (
@@ -261,9 +258,6 @@ class DirectingTaskRead(Contract):
     division_baseline: dict[Identity, int] | None = None
     division: DivisionResult | None = None
     design: SceneDesign | None = None
-    scene_design: EditableSceneDesign | None = None
-    scene_instruction: SceneInstructionResult | None = None
-    instruction_check: InstructionCheckResult | None = None
     review: ReviewPacket | None = None
     revision: ReviewRevisionCandidate | None = None
     revision_request: ReviewRevisionRequest | None = None
@@ -282,6 +276,18 @@ class VisualRequest(Contract):
     ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
 
 
+class AssetReferenceImage(Contract):
+    """可选参考的具体文件、原始资产与视角；不根据文件排序猜测视角。"""
+
+    file_id: Identity
+    view_angle: str
+    source_kind: Literal['character', 'scene', 'prop']
+    source_id: Identity
+    slot_id: int
+    is_primary: bool = False
+    is_view_default: bool = False
+
+
 class AssetSummary(Contract):
     """场次可复用的项目资产身份，不复制本场调度状态到资产。"""
 
@@ -290,7 +296,10 @@ class AssetSummary(Contract):
     name: str
     description: str
     image_file_ids: list[Identity] = Field(default_factory=list)
+    main_image_file_id: Identity | None = None
     unavailable_image_count: int = Field(default=0, ge=0)
+    actor_id: Identity | None = None
+    reference_images: list[AssetReferenceImage] = Field(default_factory=list)
 
 
 class AssetCreateRequest(Contract):

@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 import { closeCanvasDetails, openCanvasCard, connectCanvasCards } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-descriptions-')
-const api = 'http://127.0.0.1:8623', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8623', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8623' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,11 +36,11 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const json = async (path, method = 'GET', body) => {
-    const response = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
+    const response = await fetch(new URL(path, api), { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
     assert.ok(response.ok, await response.clone().text()); return (await response.json()).data
   }
-  const canvas = await json('/api/v1/studio/generation-canvases/canvas-project','POST',{name:'四类描述与参考关联'})
-  const endpoint=`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`
+  const canvas = await createStoryboardCanvas(base, '四类描述与参考关联')
+  const endpoint=storyboardCanvasApi(base, canvas.id)
   const kinds=['character','place','prop','costume']
   const cards=[...kinds.map(kind=>({id:'d-'+kind,type:'content.'+kind,category:kind,object_id:'entity-'+kind,name:'名称-'+kind,text:'保密正文-'+kind})),
     ...kinds.map(kind=>({id:'r-'+kind,type:'reference.'+kind,name:'',angle:'正面'})),
@@ -49,9 +50,9 @@ try {
     {id:'side-name',source_card:'d-character',source_port:'object',target_card:'side',target_port:'name'}]
   const initialEdges=edges.filter(edge=>edge.id!=='name-character')
   const orders=Object.fromEntries(initialEdges.map(edge=>[edge.target_card,{name:[edge.id]}]))
-  await json(endpoint,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:initialEdges,input_order:orders}})
+  await json(endpoint,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[...cards, ...canvas.document.cards],edges:initialEdges,input_order:orders}})
   // 重现旧规则下已保存的跨类候选，仅修改本用例的隔离数据库。
-  execFileSync(join(root,'../backend/.venv/bin/python'),['-c',`
+  execFileSync(process.env.CANVAS_TEST_PYTHON || join(root,'../backend/.venv/bin/python'),['-c',`
 import json,sqlite3,sys
 with sqlite3.connect(sys.argv[1]) as db:
     document=json.loads(db.execute('SELECT document FROM generation_canvases WHERE id=?',(sys.argv[2],)).fetchone()[0])
@@ -62,7 +63,7 @@ with sqlite3.connect(sys.argv[1]) as db:
   const layoutKey=`jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   const positions=Object.fromEntries(cards.map((card,index)=>[card.id,{x:80+(index%4)*380,y:140+Math.floor(index/4)*320}]))
   await page.addInitScript(({layoutKey,positions})=>{if(!sessionStorage.getItem('seeded')){localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions,sizes:{'d-costume':{width:440,height:204}},transform:{x:0,y:0,scale:.8},manuallyPlaced:['d-character']}));sessionStorage.setItem('seeded','1')}},{layoutKey,positions})
-  await page.goto(`http://127.0.0.1:4623/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4623${storyboardCanvasPath(canvas)}`)
   await page.locator('[data-card-id="basis"]').waitFor()
   writeFileSync(join(output,'description-geometry.json'),JSON.stringify(await page.locator('[data-card-type^="content."]').evaluateAll(cards=>cards.filter(card=>['content.character','content.place','content.prop','content.costume'].includes(card.dataset.cardType)).map(card=>({id:card.dataset.cardId,width:card.offsetWidth,height:card.offsetHeight,bodyHeight:card.querySelector('.generation-card-body').offsetHeight}))),null,2))
   const geometry=await page.locator('[data-card-type^="content."]').evaluateAll(cards=>cards.filter(card=>['content.character','content.place','content.prop','content.costume'].includes(card.dataset.cardType)).map(card=>({id:card.dataset.cardId,width:card.offsetWidth,height:card.offsetHeight})))
@@ -70,14 +71,14 @@ with sqlite3.connect(sys.argv[1]) as db:
   assert.deepEqual(await page.locator('[data-card-id="r-character"]').evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),{width:300,height:251},'reference geometry remains independent')
   assert.deepEqual(await page.locator('[data-card-id="basis"]').evaluate(card=>({width:card.offsetWidth,height:card.offsetHeight})),{width:400,height:172},'creative basis uses the compact text geometry')
   const restored=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
-  assert.deepEqual(restored.positions,positions)
+  assert.deepEqual(Object.fromEntries(Object.keys(positions).map(id => [id, restored.positions[id]])), positions)
   assert.deepEqual(restored.transform,{x:0,y:0,scale:.8})
   assert.deepEqual(restored.manuallyPlaced,['d-character'])
   const editor=page.locator('.wb-details:visible')
   const read=()=>json(endpoint)
   const poll=async predicate=>{for(let i=0;i<100;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('saved state not reached')}
   const open=async id=>{await closeCanvasDetails(page);await page.getByRole('button',{name:'适应全部',exact:true}).click();await openCanvasCard(page,id)}
-  const outputs=async id=>(await json(endpoint+`/cards/${id}/outputs`)).outputs
+  const outputs=async id=>(await json(storyboardCanvasApi(base, canvas.id, `/cards/${id}/outputs`))).outputs
   const nameField=()=>editor.getByRole('combobox',{name:'参考名称',exact:true})
   await connectCanvasCards(page,'d-character','r-character','名称关联')
   await poll(state=>state.document.edges.some(edge=>edge.source_card==='d-character'&&edge.target_card==='r-character'&&edge.target_port==='name'))
@@ -107,7 +108,7 @@ with sqlite3.connect(sys.argv[1]) as db:
     assert.equal(await nameField().isDisabled(),true)
     const nameEdge=(await read()).document.edges.find(edge=>edge.source_card==='d-'+kind&&edge.target_card==='r-'+kind&&edge.target_port==='name')
     assert.equal(await page.locator(`[data-generation-edge-id="${nameEdge.id}"] .generation-edge-adopted`).count(),1,'selected name is shown as an adopted edge')
-    const candidateState=await json(endpoint+`/cards/r-${kind}/outputs`)
+    const candidateState=await json(storyboardCanvasApi(base, canvas.id, `/cards/r-${kind}/outputs`))
     assert.deepEqual(candidateState.candidates.map(item=>item.source.card_id),['d-'+kind])
     const result=candidateState.outputs
     assert.equal(result[0].payload.object_id,'entity-'+kind)

@@ -1,4 +1,5 @@
-import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
+import { openDesignAssociation, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-performance-')
-const api = 'http://127.0.0.1:8285', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8285', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8285' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -34,29 +35,28 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '命名图片参考')
   const extractionLocator = '第三章第2段'.repeat(20)
   const document = { ...canvas.document, cards: [
-    { id: 'ref', type: 'reference.character', objects: [{ object_id: 'alice', name: '小雪', category: 'character' }] },
-    { id: 'act', type: 'direction.performance', source_locator: '原文第三章', physical_action: { text: '旧动作', state: 'not_applicable', purpose: 'background', source_locator: extractionLocator, authorship: 'model' }, voice: { state: 'absent', authorship: 'model' }, hands: { authorship: 'model' }, breath: { text: '历史呼吸', state: 'proposal', source_locator: '旧记录' } },
-    { id: 'situation', type: 'direction.situation', input_bindings: [{ id: 'old-object', input_port: 'effect_object', source: { canvas_id: canvas.id, card_id: 'ref', port_id: 'object', position: 0, object_id: 'alice' } }] },
+    { id: 'ref', type: 'reference.character', object_id: 'alice', name: '小雪' },
+    { id: 'act', type: 'direction.performance', source_locator: '原文第三章', physical_action: { text: '旧动作', state: 'not_applicable', purpose: 'background', source_locator: extractionLocator, authorship: 'model', metadata_fields: ['state', 'purpose', 'source_locator'] }, voice: { state: 'absent', authorship: 'model', metadata_fields: ['state'] }, hands: { authorship: 'model' }, breath: { text: '历史呼吸', state: 'proposal', source_locator: '旧记录' } },
+    { id: 'situation', type: 'direction.situation' },
     { id: 'rule', type: 'direction.performance_rule' },
     { id: 'activity', type: 'direction.activity', task: { text: '持续整理' } },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config: { count: 3 } }],
     edges: [
-      { id: 'old-object', source_card: 'ref', source_port: 'object', target_card: 'situation', target_port: 'effect_object' },
       { id: 'person', source_card: 'ref', source_port: 'object', target_card: 'act', target_port: 'participant' },
       { id: 'design', source_card: 'act', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
     input_order: { act: { participant: ['person'] }, consumer: { text: ['design'] } } }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4285/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4285${storyboardCanvasPath(canvas)}`)
   const card = page.locator('.wb-details:not([hidden])')
   const open = async (id, advanced = true) => {
     await openCanvasCard(page, id)
     if (advanced && await card.getByRole('button', { name: '高级设置', exact: true }).count()) await card.getByRole('button', { name: '高级设置', exact: true }).click()
   }
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('situation', false)
   assert.equal(await card.getByRole('button', { name: /作用对象/ }).count(), 0)
@@ -82,34 +82,46 @@ try {
   await open('act')
   assert.equal(await card.getByRole('button', { name: /作用对象/ }).count(), 0)
   assert.equal(await card.getByRole('switch', { name: '显示状态与来源', exact: true }).count(), 0)
-  await card.getByText(`不适用 · 不参与生成 · 背景 · 来源：${extractionLocator}`, { exact: true }).waitFor()
+  const physicalMetadata = card.getByRole('region', { name: '身体动作', exact: true }).locator('.design-field-metadata')
+  await physicalMetadata.waitFor()
+  assert.equal(await physicalMetadata.getAttribute('aria-label'), `状态：不适用 · 不参与生成 · 用途：背景 · 来源：${extractionLocator}`)
+  await card.getByRole('tab', { name: /表现细节/ }).click()
   assert.equal(await card.getByRole('region', { name: '手部', exact: true }).locator('.design-field-metadata').count(), 0)
-  await card.getByRole('region', { name: '声音表现', exact: true }).getByText('明确没有', { exact: true }).waitFor()
+  await card.getByRole('region', { name: '声音表现', exact: true }).getByLabel('状态：明确没有', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'extracted-metadata-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
+  await card.getByRole('tab', { name: /动作过程/ }).click()
   const metadata = card.getByRole('region', { name: '身体动作', exact: true }).locator('.design-field-metadata')
   await metadata.scrollIntoViewIfNeeded()
   assert.equal(await metadata.evaluate(element => element.scrollWidth <= element.clientWidth), true, 'long source wraps inside a narrow field')
   await page.screenshot({ path: join(output, 'extracted-metadata-mobile.png'), fullPage: true })
   await page.setViewportSize({ width: 1440, height: 960 })
+  const scope = card.getByRole('button', { name: /^整卡适用限制/ })
+  await scope.click()
   await card.getByText('卡片原始来源：原文第三章', { exact: true }).waitFor()
+  await scope.click()
   assert.equal(await card.getByRole('textbox', { name: '设计来源', exact: true }).count(), 0)
   const original = await read()
   await card.getByRole('textbox', { name: '身体动作内容', exact: true }).focus()
   await card.getByRole('textbox', { name: '身体动作内容', exact: true }).blur()
   assert.equal((await read()).revision, original.revision, 'focus does not replace extraction metadata')
   assert.equal((await read()).document.cards.find(item => item.id === 'act').physical_action.authorship, 'model')
-  await card.getByRole('button', { name: '选择参与对象 小雪', exact: true }).click()
+  await openDesignAssociation(card, /候选.*小雪/)
+  await page.getByRole('button', { name: '用作参与对象', exact: true }).click()
+  await page.keyboard.press('Escape')
   await card.getByRole('textbox', { name: '身体动作内容', exact: true }).fill('缓慢伸手')
   await poll(state => state.document.cards.find(item => item.id === 'act').physical_action?.authorship === 'user')
   assert.equal(await card.getByText(/第三章第2段/).count(), 0)
-  await card.getByText('提议 · 来源：旧记录', { exact: true }).waitFor()
-  const outputData = (await (await fetch(`${base}/${canvas.id}/cards/act/outputs`)).json()).data
+  await card.getByRole('tab', { name: /表现细节/ }).click()
+  await card.getByLabel('状态：提议 · 来源：旧记录', { exact: true }).waitFor()
+  await card.getByRole('tab', { name: /动作过程/ }).click()
+  const outputData = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/act/outputs`))).json()).data
   assert.equal(outputData.outputs[0].payload.adoption, 'whole_card')
   await card.getByRole('textbox', { name: '结束状态内容', exact: true }).fill('掌心朝上')
   await poll(state => state.document.cards.find(item => item.id === 'act').exit_state?.text === '掌心朝上')
   assert.equal(await card.getByRole('switch', { name: '显示状态与来源', exact: true }).count(), 0)
   assert.equal(await card.getByRole('combobox', { name: '声音表现状态', exact: true }).count(), 0)
+  await card.getByRole('tab', { name: /表现细节/ }).click()
   await card.getByRole('textbox', { name: '声音表现内容', exact: true }).fill('明确没有声音表现')
   await poll(state => state.document.cards.find(item => item.id === 'act').voice?.authorship === 'user')
   const authored = (await read()).document.cards.find(item => item.id === 'act').voice
@@ -144,7 +156,6 @@ try {
   await poll(state => state.document.cards.find(item => item.id === 'activity').task?.text === '持续整理')
   await page.getByRole('button', { name: '重做操作', exact: true }).click()
   await poll(state => state.document.cards.find(item => item.id === 'activity').task?.text === '持续整理并看向门口')
-  assert.equal((await read()).document.cards.some(item => item.input_bindings?.some(binding => binding.input_port === 'effect_object' && ['direction.situation', 'direction.performance', 'direction.activity'].includes(item.type))), false)
   await page.reload()
   await open('activity')
   assert.equal(await card.getByRole('textbox', { name: '持续任务内容', exact: true }).innerText(), '持续整理并看向门口')

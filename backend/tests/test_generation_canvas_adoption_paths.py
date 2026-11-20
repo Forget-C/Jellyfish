@@ -1,4 +1,5 @@
 """来源多路径采用和解除经公开 HTTP 验证。"""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -6,8 +7,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_requirement_paths_release_independently(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '逐路径解除'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '逐路径解除'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = lambda card: {'canvas_id': canvas['id'], 'card_id': card, 'port_id': 'text', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'content.text', 'text': '来源唯一正文'},
@@ -73,8 +74,8 @@ async def test_requirement_paths_release_independently(canvas_client):
 
 @pytest.mark.asyncio
 async def test_equal_requirement_text_keeps_distinct_sources(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '同文不同身份'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '同文不同身份'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc.update(cards=[*[
         {'id': name, 'type': 'direction.criterion', 'criterion_id': name, 'name': name,
@@ -91,8 +92,8 @@ async def test_equal_requirement_text_keeps_distinct_sources(canvas_client):
 
 @pytest.mark.asyncio
 async def test_missing_effective_source_blocks_only_adopted_standard_and_retains_protection(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={'name': '失效来源草稿'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '失效来源草稿'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'a', 'port_id': 'text', 'position': 0}
     doc = canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'content.text', 'text': '参考正文'},

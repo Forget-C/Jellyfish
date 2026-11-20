@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-frame-targets-')
-const api = 'http://127.0.0.1:8669', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8669', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8669' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -32,18 +33,18 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '摄影设计')
   const identity = id => ({canvas_id:canvas.id,card_id:id,port_id:'text',position:0})
   const document = {...canvas.document,cards:[
     {id:'movement',type:'direction.movement',fields:{movement_start:{state:'fact',text:'门外全景'}},phases:[{id:'end',name:'落幅',frame:{state:'proposal',text:'窗边停顿'}}]},
     {id:'composition',type:'direction.composition',fields:{composition:{state:'proposal',text:'保持人物偏左'}}},
     {id:'image',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'composition-use',input_port:'text',source:identity('composition')},{id:'movement-use',input_port:'text',source:identity('movement')}]}],
     edges:[{id:'frame-candidate',source_card:'movement',source_port:'text',target_card:'composition',target_port:'text'},...['composition','movement'].map(id=>({id,source_card:id,source_port:'text',target_card:'image',target_port:'text'}))],input_order:{composition:{text:['frame-candidate']},image:{text:['composition','movement']}}}
-  const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
+  const seed=await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok,await seed.text())
-  const read=async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read=async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('target save did not arrive')}
-  await page.goto(`http://127.0.0.1:4669/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4669${storyboardCanvasPath(canvas)}`)
   const detail=page.locator('.wb-details:not([hidden])')
   await page.locator('[data-card-id="composition"]').locator('.generation-card-body').click()
   await detail.locator('[data-design-source]').first().click()
@@ -97,7 +98,7 @@ try {
   const saved = await read()
   assert.equal(saved.document.cards.find(card=>card.id==='composition').frame_target?.state_id,'phase:end','deletion retains invalid composition target')
   assert.equal(saved.document.cards.find(card=>card.id==='image').frame_targets?.[0]?.state_id,'phase:end','deletion retains invalid model target')
-  const compiled = (await (await fetch(`${base}/${canvas.id}/cards/image/compile`)).json()).data
+  const compiled = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/image/compile`))).json()).data
   assert.ok(compiled.diagnostics.some(issue=>issue.code==='DESIGN_FRAME_TARGET_MISSING' && issue.blocks.includes('run')))
   assert.ok(compiled.diagnostics.some(issue=>issue.code==='FRAME_TARGET_MISSING' && issue.blocks.includes('run')))
   await page.reload()

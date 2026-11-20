@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-history-')
-const api = 'http://127.0.0.1:8277', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8277', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8277' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -37,7 +37,7 @@ try {
   const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.text', model_id: 'canvas-runtime-text', prompt: { segments: [{ id: 'p', kind: 'text', text: '原始提示词' }] }, config: {} }, { id: 'consumer', type: 'model.text', model_id: 'canvas-runtime-text', prompt: { segments: [] }, config: {} }], edges: [{ id: 'downstream', source_card: 'm', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { consumer: { text: ['downstream'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4277/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4277/canvases/${canvas.id}`)
   const sourceSummary = page.locator('[data-card-id="m"]')
   const card = await openCanvasCard(page, 'm')
   const historyToggle = page.getByRole('button', { name: '运行历史', exact: true })
@@ -50,7 +50,7 @@ try {
     if (await history.count()) await toggleHistory()
     await openCanvasCard(page, 'm')
     await card.getByRole('button', { name: '预检运行', exact: true }).click()
-    const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+    const accepted = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/runs'))
     await page.getByRole('region', { name: '运行预检' }).getByRole('button', { name: '确认执行', exact: true }).click()
     const receipt = (await (await accepted).json()).data
     await waitText(card.locator(`[data-run-id="${receipt.run_id}"]`).getByRole('region', { name: '运行正文', exact: true }), '第一段')
@@ -72,7 +72,7 @@ try {
   const first = await startRun()
   await control({ duplicate_next: true, release: 1 })
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
-  await page.route(`**/generation-canvases/canvas-project/${canvas.id}/events/connection`, route => blockedReconnect ? route.abort('failed') : route.continue())
+  await page.route(`**/generation-canvases/${canvas.id}/events/connection?project_id=`, route => blockedReconnect ? route.abort('failed') : route.continue())
   await control({ disconnect: true })
   await page.getByRole('button', { name: '更多操作', exact: true }).click()
   await page.getByRole('status', { name: '运行连接', exact: true }).filter({ hasText: '运行连接恢复中' }).waitFor()
@@ -88,7 +88,7 @@ try {
   assert.equal(completed.runs[0].nodes[0].status, 'succeeded')
   await control({ expire_events: true })
   blockedReconnect = false
-  await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}/events/connection`)
+  await page.unroute(`**/generation-canvases/${canvas.id}/events/connection?project_id=`)
   await card.getByRole('region', { name: '本次运行', exact: true }).getByRole('status').filter({ hasText: '已完成' }).waitFor()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段第三段')
   assert.equal((await control()).calls.length, 1)
@@ -102,7 +102,7 @@ try {
   await control({ release: 0 })
   const second = await startRun()
   record = await showRun(second)
-  await page.route(`**/runs/${second.id}/nodes/${second.nodes[0].id}/cancel`, async route => { await route.fetch(); await route.abort('failed') })
+  await page.route(`**/runs/${second.id}/nodes/${second.nodes[0].id}/cancel?project_id=`, async route => { await route.fetch(); await route.abort('failed') })
   await record.getByRole('button', { name: '取消此节点', exact: true }).click()
   await record.getByRole('status').filter({ hasText: '取消中，等待任务终态' }).waitFor()
   await page.getByRole('alert').filter({ hasText: '取消请求结果未知' }).waitFor()
@@ -138,7 +138,7 @@ try {
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '第一段')
   let enteredCopy, releaseCopy
   const entered = new Promise(resolve => { enteredCopy = resolve })
-  await page.route(`**/runs/${second.id}/nodes/${second.nodes[0].id}/outputs/0/content`, async route => {
+  await page.route(`**/runs/${second.id}/nodes/${second.nodes[0].id}/outputs/0/content?project_id=`, async route => {
     const response = await route.fetch(); enteredCopy()
     await new Promise(resolve => { releaseCopy = resolve }); await route.fulfill({ response })
   })
@@ -157,7 +157,7 @@ try {
   await toggleHistory()
   await openCanvasCard(page, 'consumer')
   await card.getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(`文本内容卡 · ${copy.id.slice(0, 8)} → 文本`, { exact: true }).click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(new RegExp(`${copy.id.slice(0, 8)}$`)).click()
   await card.getByRole('button', { name: '@文本2', exact: true }).click()
   const prompt = card.getByRole('textbox', { name: '模型正文', exact: true })
   assert.equal(JSON.parse(await prompt.locator('[data-segment]').getAttribute('data-segment')).source.card_id, copy.id)
@@ -174,7 +174,7 @@ try {
   await page.goto('http://127.0.0.1:4277/projects/canvas-project?tab=dashboard')
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.locator('.app-task-card').filter({ hasText: '流式文本' }).first().getByRole('button', { name: /查看/ }).click()
-  await page.waitForURL(url => url.searchParams.get('canvas') === canvas.id && url.searchParams.get('run') === third.id && url.searchParams.get('node') === third.nodes[0].id)
+  await page.waitForURL(url => url.pathname === `/canvases/${canvas.id}` && url.searchParams.get('run') === third.id && url.searchParams.get('node') === third.nodes[0].id)
   const targeted = history.locator(`[data-history-node="${third.nodes[0].id}"]`)
   await targeted.getByRole('status').filter({ hasText: '已取消 · 未完成' }).waitFor()
   assert.equal(await sourceSummary.count(), 0)

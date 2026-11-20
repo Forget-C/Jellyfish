@@ -1,4 +1,5 @@
-import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
+import { openDesignAssociation, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-narrative-')
-const api = 'http://127.0.0.1:8293', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8293', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8293' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -35,7 +36,7 @@ try {
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '命名图片参考')
 
   const document = { ...canvas.document, cards: [
     { id: 'brief', type: 'content.text', text: '引用文本依据' },
@@ -56,12 +57,12 @@ try {
       { id: 'photo', source_card: 'shot', source_port: 'shot', target_card: 'photo', target_port: 'shot' },
       { id: 'design', source_card: 'shot', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
     input_order: { overview: { text: ['brief-overview'] }, beat: { text: ['brief-beat'] }, event: { text: ['brief-event'] }, photo: { shot: ['photo'] }, shot: { text: ['brief-shot'], related_event: ['event'], covered_beat: ['beat', 'beat2'] }, performance: { received_event: ['received'] }, consumer: { text: ['design'] } } }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4293/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4293${storyboardCanvasPath(canvas)}`)
   const card = page.locator('.wb-details:not([hidden])')
   const open = async id => { await openCanvasCard(page, id); const advanced = card.getByRole('button', { name: '高级设置', exact: true }); if (await advanced.count()) await advanced.click(); const relations = card.locator('summary').filter({ hasText: /^叙事关系/ }); if (await relations.count()) await relations.click() }
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   for (const [id, preset, label, key] of [['overview', '信息逐步揭示', '观察视点', 'viewpoint'], ['beat', '目标受阻', '行动目标', 'objective'], ['event', '外部刺激', '动作或变化说明', 'action_change'], ['shot', '反应揭示', '可见结果', 'visible_result']]) {
     await open(id)
@@ -88,26 +89,35 @@ try {
   await card.getByRole('textbox', { name: '预期变化内容', exact: true }).fill('获得主动')
   await poll(state => state.document.cards.find(item => item.id === 'beat').expected_change?.text === '获得主动')
   await open('shot')
-  await card.getByRole('button', { name: '选择覆盖节拍 决定', exact: true }).click()
-  await card.getByRole('button', { name: '选择覆盖节拍 逃离', exact: true }).click()
+  await openDesignAssociation(card, /候选.*决定/)
+  await page.getByRole('button', { name: '用作覆盖节拍', exact: true }).click()
+  await openDesignAssociation(card, /候选.*逃离/)
+  await page.getByRole('button', { name: '用作覆盖节拍', exact: true }).click()
+  await page.keyboard.press('Escape')
+  const beatRelations = card.locator('summary').filter({ hasText: /^叙事关系/ })
+  await beatRelations.waitFor()
+  if (await beatRelations.locator('..').getAttribute('open') === null) await beatRelations.click()
   await card.getByRole('button', { name: '上移覆盖节拍 逃离', exact: true }).click()
   await card.getByLabel('覆盖节拍 逃离',{exact:true}).press('Control+Shift+ArrowDown')
   await poll(state => state.document.cards.find(item => item.id === 'shot').input_bindings?.filter(binding => binding.input_port === 'covered_beat')[0]?.source.object_id === 'decision')
   await card.getByLabel('覆盖节拍 逃离',{exact:true}).press('Control+Shift+ArrowUp')
   await poll(state => state.document.cards.find(item => item.id === 'shot').input_bindings?.filter(binding => binding.input_port === 'covered_beat')[0]?.source.object_id === 'escape')
-  await card.getByRole('button', { name: '选择关联事件 钟响', exact: true }).click()
+  await openDesignAssociation(card, /候选.*钟响/)
+  await page.getByRole('button', { name: '用作关联事件', exact: true }).click()
   await card.getByRole('textbox', { name: '可见结果内容', exact: true }).fill('看向门口')
   await card.getByRole('textbox', { name: '预计时长内容', exact: true }).fill('约五秒，尚未拍摄')
   await poll(state => state.document.cards.find(item => item.id === 'shot').estimated_duration?.text === '约五秒，尚未拍摄')
   await page.screenshot({ path: join(output, 'narrative-desktop.png'), fullPage: true })
   await open('performance')
-  await card.getByRole('button', { name: '选择接收事件 钟响', exact: true }).click()
+  await openDesignAssociation(card, /候选.*钟响/)
+  await page.getByRole('button', { name: '用作接收事件', exact: true }).click()
   await card.getByRole('textbox', { name: '身体动作内容', exact: true }).fill('抬头')
   await poll(state => state.document.cards.find(item => item.id === 'performance').input_bindings?.length === 1)
   await open('photo')
-  await card.getByRole('button', { name: '选择所属镜头 反应镜头', exact: true }).click()
+  await openDesignAssociation(card, /候选.*反应镜头/)
+  await page.getByRole('button', { name: '选择所属镜头 反应镜头', exact: true }).click()
   await poll(state => state.document.cards.find(item => item.id === 'photo').input_bindings?.length === 1)
-  const photoOutput = (await (await fetch(`${base}/${canvas.id}/cards/photo/outputs`)).json()).data.outputs[0]
+  const photoOutput = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/photo/outputs`))).json()).data.outputs[0]
   assert.match(photoOutput.text, /所属镜头：反应镜头/)
   assert.doesNotMatch(photoOutput.text, /看向门口|约五秒|秘密事件正文/)
   await open('consumer')
@@ -117,7 +127,7 @@ try {
   await card.getByRole('combobox', { name: '画面目标 @文本1', exact: true }).press('ArrowDown')
   await card.getByRole('combobox', { name: '画面目标 @文本1', exact: true }).press('Enter')
   await poll(state => state.document.cards.find(item => item.id === 'consumer').frame_targets?.[0]?.state_id === 'field:visible_result')
-  const compiled = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
+  const compiled = (await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/consumer/compile`))).json()).data
   assert.match(compiled.text, /看向门口/)
   assert.match(compiled.text, /约五秒，尚未拍摄/)
   assert.doesNotMatch(compiled.text, /秘密事件正文/)
@@ -128,7 +138,8 @@ try {
   await page.reload()
   await open('shot')
   assert.equal(await card.getByRole('textbox', { name: '可见结果内容', exact: true }).innerText(), '看向门口')
-  await card.getByRole('button', { name: '取消覆盖节拍 决定', exact: true }).waitFor()
+  await openDesignAssociation(card, /候选.*决定/)
+  await page.getByRole('button', { name: '解除覆盖节拍', exact: true }).waitFor()
   const reopened = await read()
   assert.deepEqual(reopened.document.cards.find(item => item.id === 'shot').input_bindings.filter(binding => binding.input_port === 'covered_beat').map(binding => binding.source.object_id), ['escape', 'decision'])
   await page.setViewportSize({ width: 390, height: 844 })
@@ -144,8 +155,11 @@ try {
   for (const [id, label] of [['overview', '观察视点'], ['beat', '行动目标'], ['event', '动作或变化说明'], ['shot', '可见结果']]) {
     await observer.locator(`[data-card-id="${id}"]`).press('Enter')
     const readonly = observer.locator('.wb-details:not([hidden])')
-    await readonly.getByRole('button', { name: '高级设置', exact: true }).click()
-    assert.equal(await readonly.getByRole('textbox', { name: label + '内容', exact: true }).isDisabled(), true)
+    const field = readonly.getByRole('textbox', { name: label + '内容', exact: true })
+    const advanced = readonly.getByRole('button', { name: '高级设置', exact: true })
+    await field.or(advanced).first().waitFor()
+    if (!await field.isVisible()) await advanced.click()
+    assert.equal(await field.isDisabled(), true)
     assert.equal(await readonly.getByRole('button', { name: '编辑' + { overview: '叙事名称', beat: '节拍名称', event: '事件名称', shot: '镜头名称' }[id], exact: true }).count(), 0)
     await readonly.getByRole('button', { name: '关闭详情', exact: true }).click()
   }

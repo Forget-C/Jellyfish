@@ -2,13 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ApiResponse_ExperimentMessageRead_ } from '../models/ApiResponse_ExperimentMessageRead_';
 import type { ApiResponse_ExperimentSessionRead_ } from '../models/ApiResponse_ExperimentSessionRead_';
 import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { ApiResponse_list_ExperimentSessionRead__ } from '../models/ApiResponse_list_ExperimentSessionRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
-import type { ExperimentMessageCreate } from '../models/ExperimentMessageCreate';
-import type { ExperimentMessageUpdate } from '../models/ExperimentMessageUpdate';
 import type { ExperimentSessionCreate } from '../models/ExperimentSessionCreate';
 import type { ExperimentSessionUpdate } from '../models/ExperimentSessionUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -139,32 +136,6 @@ export class StudioExperimentSessionsService {
         });
     }
     /**
-     * Create Experiment Message
-     * 追加一条用户可见消息；该数据不会传入模型上下文。
-     * @returns ApiResponse_ExperimentMessageRead_ Successful Response
-     * @throws ApiError
-     */
-    public static createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({
-        sessionId,
-        requestBody,
-    }: {
-        sessionId: string,
-        requestBody: ExperimentMessageCreate,
-    }): CancelablePromise<ApiResponse_ExperimentMessageRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/experiment-sessions/{session_id}/messages',
-            path: {
-                'session_id': sessionId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * Clear Experiment Messages
      * 清空不含生成任务的会话历史，避免运行任务失去展示归属。
      *
@@ -183,32 +154,6 @@ export class StudioExperimentSessionsService {
             path: {
                 'session_id': sessionId,
             },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Update Experiment Message
-     * 更新普通或流式消息；异步任务消息只能从任务事实派生。
-     * @returns ApiResponse_ExperimentMessageRead_ Successful Response
-     * @throws ApiError
-     */
-    public static updateExperimentMessageApiV1StudioExperimentSessionsMessagesMessageIdPatch({
-        messageId,
-        requestBody,
-    }: {
-        messageId: string,
-        requestBody: ExperimentMessageUpdate,
-    }): CancelablePromise<ApiResponse_ExperimentMessageRead_> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/studio/experiment-sessions/messages/{message_id}',
-            path: {
-                'message_id': messageId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

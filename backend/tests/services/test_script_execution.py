@@ -1,6 +1,7 @@
 """剧本纯计算与新 Worker 的结果保存、缺失输入失败边界。"""
 
 import pytest
+from hashlib import sha256
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
@@ -61,9 +62,12 @@ async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(m
                 assert saved.status == "failed" and saved.result is None
                 assert not calls
             else:
-                assert saved.status == "succeeded" and saved.result == expected
+                assert saved.status == "succeeded"
+                assert saved.result == {**expected, "check_scope": "source_consistency", "policy_version": 2, "review_version": sha256(b"[]").hexdigest(),
+                    "source_version": sha256(args["script_text"].encode()).hexdigest(),
+                    "explanation_version": sha256(b"[]").hexdigest()}
                 assert len(calls) == 1
-                assert calls[0] == args
+                assert calls[0] == {**args, "explanations": "[]"}
     finally:
         worker.text_pool.shutdown(wait=True)
         await engine.dispose()

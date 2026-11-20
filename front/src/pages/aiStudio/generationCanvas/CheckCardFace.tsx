@@ -1,5 +1,5 @@
 import { CheckStatus } from './CheckStatus'
-import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import { useCheckCard, reportPending } from './CheckCardSession'
 import './checkCard.css'
 

@@ -9,8 +9,16 @@
     "mist": "雾蓝微渐变",
     "solid": "雾蓝纯色"
   },
+  "canvasAppearance": {
+    "label": "画布配色",
+    "follow": "跟随主站",
+    "dark": "经典深色",
+    "mist": "雾蓝微渐变",
+    "solid": "雾蓝纯色"
+},
   "menu": {
     "home": "首页",
+    "canvases": "画布",
     "projects": "项目",
     "management": "管理",
     "lab": "实验室",

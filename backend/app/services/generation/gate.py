@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.task import Task
 
 from app.core.contracts.generation import (
     FrozenGenerationConfig,
@@ -14,7 +16,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
 from app.models.experiment_sessions import ExperimentSession
-from app.models.directing import DirectingRevision, Sequence, SceneVideoExecution, SceneVersionRecord
+from app.models.directing import DirectingRevision, Sequence
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.types import FileType
@@ -41,21 +43,28 @@ class GenerationEntityGate:
     async def validate(self, db: AsyncSession, command: GenerationCommand) -> ResolvedGenerationSnapshot:
         """校验生成输入；画布沿用私有固定配置，其他媒体配置由提交器补齐。"""
         await self._validate_target(db, command)
+        if command.request.asset_references is not None:
+            if command.target.kind != GenerationTargetKind.asset_image_slot:
+                raise HTTPException(400, "对象参考仅适用于对象图片生成")
+            spec = entity_spec(command.target.asset_type)
+            asset = await db.get(spec.model, command.target.entity_id)
+            references = command.request.asset_references
+            actual = {ref.file_id for ref in _iter_media(command.request.media)}
+            if {ref.file_id for ref in references} != actual:
+                raise HTTPException(400, "对象参考与实际生成图片不一致")
+            from app.services.studio.resource_references import validate_resource_references
+            await validate_resource_references(db, command.target.asset_type, asset.project_id,
+                [ref.model_dump(exclude_none=True) for ref in references])
         frozen = None
         if command.target.kind == GenerationTargetKind.canvas_node:
             from app.models.generation_canvas import CanvasRunNode
             node = await db.get(CanvasRunNode, command.target.entity_id)
-            private = node.execution_snapshot or {}
-            if private.get('execution_config'):
-                frozen = FrozenGenerationConfig.model_validate(private['execution_config'])
+            private = node.execution_snapshot
+            if not private or not private.get('execution_config'):
+                raise HTTPException(422, 'canvas_execution_config_missing')
+            frozen = FrozenGenerationConfig.model_validate(private['execution_config'])
         model = None if frozen else await self._resolve_model(db, command)
         await self._validate_media(db, command.request.media)
-        if frozen is None and command.target.kind == GenerationTargetKind.canvas_node:
-            from app.services.llm.provider_resolver import resolve_provider_config_from_provider
-            provider = await db.get(Provider, model.provider_id)
-            cfg = resolve_provider_config_from_provider(provider=provider, category=model.category)
-            frozen = FrozenGenerationConfig(model_name=model.name, model_params=model.params or {}, provider_id=provider.id,
-                provider_key=cfg.provider_key, api_key=cfg.api_key, base_url=cfg.base_url)
         return ResolvedGenerationSnapshot(
             execution_config=frozen,
             model_id=command.request.model_id if frozen else model.id,
@@ -66,6 +75,7 @@ class GenerationEntityGate:
             operation_input=command.request.operation_input,
             execution_prompt=command.request.execution_prompt,
             asset_prompt_audit=command.request.asset_prompt_audit,
+            asset_references=command.request.asset_references,
         )
 
     async def _resolve_model(self, db: AsyncSession, command: GenerationCommand) -> Model:
@@ -120,15 +130,6 @@ class GenerationEntityGate:
         elif target.kind == GenerationTargetKind.directing_unit:
             revision = await db.get(DirectingRevision, target.entity_id)
             exists = revision is not None and revision.kind == "prompt" and revision.confirmed_at is not None
-        elif target.kind == GenerationTargetKind.scene_video:
-            execution = await db.get(SceneVideoExecution, target.entity_id)
-            version = await db.get(SceneVersionRecord, execution.version_id) if execution else None
-            sequence = await db.get(Sequence, version.sequence_id, with_for_update=True, populate_existing=True) if version else None
-            exists = sequence is not None
-            if sequence is not None and not sequence.is_current:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="场次已退出当前划分，不能发起生成")
-            if execution and execution.preparation['request'] != command.request.model_dump(mode='json'):
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="执行输入与固定视频记录不一致")
         elif target.kind == GenerationTargetKind.asset_image_slot:
             exists = target.slot_id is not None and await self._asset_slot_belongs_to(
                 db,
@@ -136,6 +137,17 @@ class GenerationEntityGate:
                 entity_id=target.entity_id,
                 asset_type=target.asset_type,
             )
+            if exists:
+                if getattr(command.request.operation_input, "save_as_candidate", False):
+                    raise HTTPException(422, "对象生成直接新增图片，不支持新的候选生成")
+                spec = entity_spec(target.asset_type)
+                row = await db.get(spec.image_model, int(target.slot_id))
+                previous = await db.scalar(select(Task.id).where(
+                    Task.target_type == f"{target.asset_type}_image_slot",
+                    Task.target_id == str(target.slot_id),
+                ).limit(1))
+                if row.file_id or previous is not None:
+                    raise HTTPException(409, "每次生成必须使用新的空图片记录")
         elif target.kind == GenerationTargetKind.script_processing:
             exists = bool(target.entity_id)
         if exists and target.kind in (GenerationTargetKind.directing_image, GenerationTargetKind.directing_unit):
@@ -152,6 +164,7 @@ class GenerationEntityGate:
         except ValueError:
             return False
         spec = entity_spec(asset_type)
+        await db.get(spec.model, entity_id, with_for_update=True)
         row = await db.get(spec.image_model, numeric_id)
         return row is not None and getattr(row, spec.id_field) == entity_id
 

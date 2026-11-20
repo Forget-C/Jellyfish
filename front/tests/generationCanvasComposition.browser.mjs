@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -9,7 +10,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-presets-')
-const api = 'http://127.0.0.1:18044', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:18044', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '18044' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -31,12 +32,12 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '摄影设计')
   const document = { ...canvas.document, cards: [{id:'composition', type:'direction.composition'}, {id:'second',type:'direction.composition',fields:{negative_space:{text:'保留独立留白',state:'fact'}}}], edges:[], input_order:{} }
-  assert.ok((await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})).ok)
-  const read = async()=> (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  assert.ok((await fetch(storyboardCanvasApi(base, canvas.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})).ok)
+  const read = async()=> (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate=> { for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('composition save timeout') }
-  await page.goto(`http://127.0.0.1:4404/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4404${storyboardCanvasPath(canvas)}`)
   const card=page.locator('[data-card-id="composition"]');await card.locator('.generation-card-body').click()
   const detail=page.locator('.wb-details:not([hidden])');await detail.getByRole('button',{name:'高级设置',exact:true}).waitFor()
   assert.equal(await detail.getByRole('tab').count(),0)

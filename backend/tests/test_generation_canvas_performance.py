@@ -1,4 +1,5 @@
 """Performance cards exercised through saved canvas HTTP boundaries."""
+from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -6,8 +7,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 @pytest.mark.asyncio
 async def test_complete_performance_output_keeps_states_and_only_direct_identity(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '表演'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '表演'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     def source(card, port, **extra):
         return {'canvas_id': canvas['id'], 'card_id': card, 'port_id': port, 'position': 0, **extra}
@@ -46,13 +47,13 @@ async def test_complete_performance_output_keeps_states_and_only_direct_identity
 ])
 async def test_design_relations_require_specific_eligible_direct_objects(canvas_client, objects, selected, port, code):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '选择对象'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '选择对象'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': ident, 'type': 'reference.' + category, 'object_id': ident, 'name': ident} for ident, category in objects] +
                      [{'id': 'act', 'type': 'direction.performance', 'input_bindings': [{'id': str(index), 'input_port': port,
                       'source': {'canvas_id': canvas['id'], 'card_id': ident if ident in dict(objects) else objects[0][0], 'port_id': 'object', 'position': 0, 'object_id': ident}} for index, ident in enumerate(selected)]}],
                edges=[{'id': ident, 'source_card': ident, 'source_port': 'object', 'target_card': 'act', 'target_port': port} for ident, _ in objects], input_order={'act': {port: [ident for ident, _ in objects]}})
-    response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    response = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422, response.text
     assert response.json()['detail']['code'] == code
 
@@ -61,8 +62,8 @@ async def test_design_relations_require_specific_eligible_direct_objects(canvas_
 async def test_retired_performance_examples_are_rejected(canvas_client):
     client = canvas_client
     file = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('demo.mp4', b'video', 'video/mp4')})).json()['data']
-    canvas = (await client.post('/canvases/p', json={'name': '示例'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '示例'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'v', 'port_id': 'video', 'position': 0}
     doc.update(cards=[{'id': 'v', 'type': 'content.video', 'file_id': file['id']},
@@ -76,8 +77,8 @@ async def test_retired_performance_examples_are_rejected(canvas_client):
 @pytest.mark.asyncio
 async def test_incomplete_performance_can_be_analyzed_but_visual_action_needs_its_subject(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '独立设计'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '独立设计'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'act', 'port_id': 'text', 'position': 0}
     doc.update(cards=[{'id': 'act', 'type': 'direction.performance', 'physical_action': {'text': '伸手', 'state': 'proposal'}},
@@ -96,8 +97,8 @@ async def test_incomplete_performance_can_be_analyzed_but_visual_action_needs_it
 async def test_example_keeps_fixed_file_when_source_content_changes(canvas_client):
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': (f'{index}.png', b'image', 'image/png')})).json()['data']['id'] for index in range(2)]
-    canvas = (await client.post('/canvases/p', json={'name': '固定示例'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '固定示例'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': files[0]}, {'id': 'rule', 'type': 'direction.anchor',
         'examples': [{'id': 'e', 'file_id': files[0], 'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}}]}],
@@ -124,8 +125,8 @@ async def test_example_keeps_fixed_file_when_source_content_changes(canvas_clien
 @pytest.mark.parametrize('state,phrase,visible', [('empty', '', False), ('not_applicable', '', False), ('absent', '明确没有', True), ('undecided', '待确定', True), ('proposal', '提议', True), ('fact', '事实', True)])
 async def test_situation_retains_explicit_field_meaning_without_text_correction(canvas_client, state, phrase, visible):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '情境状态'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '情境状态'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     doc['cards'] = [{'id': 's', 'type': 'direction.situation', 'situation': {'state': state, 'text': '特写和全景同时存在', 'purpose': 'background', 'source_locator': '原文1'},
                     'scope': {'description': '窗边', 'condition': '下雨时', 'phase': 'video'}, 'source_locator': '导演备注'}]
@@ -142,8 +143,8 @@ async def test_situation_retains_explicit_field_meaning_without_text_correction(
 @pytest.mark.asyncio
 async def test_design_rejects_field_adoption_and_preserves_all_performance_fields(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '完整字段'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '完整字段'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     fields = ['objective', 'obstacle', 'subtext', 'attention', 'internal_adjustment', 'physical_action', 'gaze', 'breath', 'weight', 'hands', 'voice', 'delivery', 'reaction_order', 'exit_state', 'avoid']
     doc['cards'] = [{'id': 'act', 'type': 'direction.performance', **{field: {'text': field, 'state': 'proposal'} for field in fields}}, {'id': 'model', 'type': 'model.text'}]
@@ -162,13 +163,13 @@ async def test_design_rejects_field_adoption_and_preserves_all_performance_field
 @pytest.mark.asyncio
 async def test_design_example_and_object_relations_share_cycle_protection(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '无环'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '无环'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': 'act', 'type': 'direction.performance'}, {'id': 'image', 'type': 'model.image'}],
         edges=[{'id': 'a', 'source_card': 'act', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'},
                {'id': 'b', 'source_card': 'image', 'source_port': 'image', 'target_card': 'act', 'target_port': 'image'}],
         input_order={'image': {'text': ['a']}, 'act': {'image': ['b']}})
-    result = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    result = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert result.status_code == 422 and result.json()['detail']['code'] == 'GRAPH_CYCLE'
 
 
@@ -248,11 +249,11 @@ async def test_actual_worker_receives_whole_design_with_explicit_ancestor_descri
 @pytest.mark.parametrize('port,start,end', [('image', 0, 10), ('video', 10, 10), ('video', 20, 10), ('video', -1, 10), ('video', None, 10)])
 async def test_example_rejects_invalid_or_nonvideo_intervals(canvas_client, port, start, end):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '无效区间'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '无效区间'})).json()['data']
     doc = canvas['document']
     doc['cards'] = [{'id': 'rule', 'type': 'direction.anchor', 'examples': [{'id': 'example', 'file_id': 'file',
         'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': port, 'position': 0}, 'start_ms': start, 'end_ms': end}]}]
-    result = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    result = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert result.status_code == 422
 
 
@@ -261,8 +262,8 @@ async def test_example_rejects_invalid_or_nonvideo_intervals(canvas_client, port
 @pytest.mark.parametrize('target_type', ['direction.situation', 'direction.performance'])
 async def test_costume_object_can_participate_without_description_or_image(canvas_client, source_type, target_type):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '服装参与'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '服装参与'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'id': 'costume', 'type': source_type}
     if source_type == 'content.costume':
@@ -286,8 +287,8 @@ async def test_costume_object_can_participate_without_description_or_image(canva
 async def test_example_field_location_is_saved_and_rejects_other_card_fields(canvas_client, card_type, field_id):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('example.png', b'image', 'image/png')})).json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={'name': '字段定位'})).json()['data']
-    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '字段定位'})).json()['data']
+    url, doc = canvas_url(f"/canvases/p/{canvas['id']}"), canvas['document']
     doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id}, {'id': 'design', 'type': card_type, 'examples': [{'id': 'ex', 'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}, 'file_id': file_id, 'field_id': field_id, 'purpose': 'negative'}]}],
         edges=[{'id': 'edge', 'source_card': 'image', 'source_port': 'image', 'target_card': 'design', 'target_port': 'image_example'}], input_order={'design': {'image_example': ['edge']}})
     saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
@@ -303,8 +304,8 @@ async def test_example_field_location_is_saved_and_rejects_other_card_fields(can
 @pytest.mark.parametrize('kind,field', [('situation', 'situation'), ('performance', 'physical_action'), ('activity', 'task')])
 async def test_retired_object_binding_is_rejected_with_valid_subject_and_field_reference(canvas_client, kind, field):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '明确主体与引用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '明确主体与引用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     actor = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'position': 0, 'object_id': 'alice'}
     text = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'text', 'position': 0}
     doc = canvas['document']
@@ -322,8 +323,8 @@ async def test_retired_object_binding_is_rejected_with_valid_subject_and_field_r
 @pytest.mark.parametrize('kind,field', [('situation', 'situation'), ('performance', 'physical_action'), ('activity', 'task')])
 async def test_retired_object_binding_is_rejected_without_other_uses(canvas_client, kind, field):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '候选不采用'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '候选不采用'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'actor', 'port_id': 'object', 'object_id': 'alice', 'position': 0}
     doc.update(cards=[{'id': 'actor', 'type': 'content.character', 'name': '甲', 'object_id': 'alice', 'text': '不应隐式携带的描述'},

@@ -2,7 +2,7 @@ import type { InputBinding, OutputIdentity, PromptDocument, PromptInstruction, P
 import type { GenerationCard } from './graphRules'
 
 /** 编辑表面可显示来源，但保存的来源权威只在输入绑定中。 */
-export type EditorPromptReference = PromptReference & { source: OutputIdentity }
+export type EditorPromptReference = Omit<PromptReference, 'binding_id'> & { binding_id?: string; source: OutputIdentity }
 export type EditorPromptInstruction = Omit<PromptInstruction, 'references'> & { references?: EditorPromptReference[] }
 export type EditorPromptDocument = { segments?: ((PromptText & { literal?: boolean }) | EditorPromptReference | EditorPromptInstruction)[] }
 const key = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.object_id || source.position])
@@ -22,9 +22,8 @@ export function editorPrompt(card: GenerationCard): EditorPromptDocument {
   if (!('prompt' in card)) return { segments: [] }
   const bindings = new Map((card.input_bindings || []).map(binding => [binding.id, binding]))
   const hydrate = (reference: PromptReference): EditorPromptReference => {
-    const legacy = reference as EditorPromptReference
-    const source = bindings.get(reference.binding_id || '')?.source || legacy.source
-    return { ...reference, source }
+    const binding = bindings.get(reference.binding_id || '')!
+    return { ...reference, binding_id: binding.id, source: binding.source }
   }
   return { segments: (card.prompt?.segments || []).map(segment => segment.kind === 'reference' ? hydrate(segment)
     : segment.kind === 'instruction' ? { ...segment, parameters: segment.command === '主体参考' ? { ...segment.parameters, name: bindings.get(segment.references?.[0]?.binding_id || '')?.subject_name ?? segment.parameters?.name ?? '' } : segment.parameters, references: segment.references?.map(hydrate) } : segment) }

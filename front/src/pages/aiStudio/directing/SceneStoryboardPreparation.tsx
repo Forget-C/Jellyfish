@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Checkbox, Radio, Select, Space } from 'antd'
 import { ApiError, LlmService, StudioDirectingService as Directing } from '../../../services/generated'
 import type { ModelRead, StoryboardReextractRequest, StoryboardTaskRead, StoryboardTaskSummary } from '../../../services/generated'
-import { directingError } from './common'
-import { WorkbenchButton as Button } from './ui/WorkbenchButton'
-import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
+import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
 type Scope = { projectId: string; chapterId: string; sequenceId: string }
 type Submission = { kind: 'reextract'; body: StoryboardReextractRequest }
@@ -20,6 +20,7 @@ function pendingSubmission(key: string): Submission | undefined {
 
 function taskLabel(task: StoryboardTaskSummary) {
   if (task.status === 'queued') return '分镜任务排队中'
+  if (task.stage === 'writing_video_prompts') return '正在编写视频提示词'
   if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
   if (task.stage === 'repairing_storyboard') return '正在定向修正分镜'
   if (task.stage === 'rechecking_storyboard') return '正在复核分镜连续性'
@@ -52,6 +53,9 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   const [submitting, setSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
+  const [readError, setReadError] = useState('')
+  const [readRevision, setReadRevision] = useState(0)
+  const [reading, setReading] = useState(false)
   const [reportedTask, setTask] = useState<StoryboardTaskSummary>()
   const task = reportedTask && reportedTask.task_id === target.appliedTaskId
     ? { ...reportedTask, candidate_available: false,
@@ -74,6 +78,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
   }, [])
 
   useEffect(() => {
+    setReadError(''); setReading(true)
     const version = ++load.current
     let active = true
     wait.current = undefined
@@ -87,9 +92,10 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
       const row = Array.isArray(response.data) ? response.data[0] : response.data
       if (row && row.canvas_id !== targetId) throw new Error('此分镜任务不属于当前画布')
       setTask(row ?? undefined)
-    }).catch(cause => { if (active && version === load.current) setError(directingError(cause)) })
+    }).catch(cause => { if (active && version === load.current) setReadError(apiErrorMessage(cause)) })
+      .finally(() => { if (active && version === load.current) setReading(false) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, targetId, selectedTaskId, navigationKey, key])
+  }, [projectId, chapterId, sequenceId, targetId, selectedTaskId, navigationKey, key, readRevision])
 
   const showConfig = !!draft
   useEffect(() => {
@@ -129,20 +135,13 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         latestSettle.current(response.data)
         if (activeTask(response.data)) timer = setTimeout(() => void read(), 1000)
       } catch (cause) {
-        if (active) { setError(directingError(cause)); timer = setTimeout(() => void read(), 2500) }
+        if (active) { setError(apiErrorMessage(cause)); timer = setTimeout(() => void read(), 2500) }
       }
     }
     timer = setTimeout(() => void read(), 350)
     return () => { active = false; clearTimeout(timer) }
   }, [projectId, chapterId, sequenceId, taskId, polling, navigationKey])
 
-  const start = () => {
-    if (polling) { setWaiting(true); return }
-    if (pending) { setDraft(pending.body); return }
-    setDraft({ request_id: crypto.randomUUID(), mode: 'complete',
-      production_model_id: target.productionModelId, pending_modality: target.pendingModality })
-    setError('')
-  }
   const submit = async (submission: Submission, follow = false) => {
     if (!editable || sending.current) return
     try {
@@ -151,7 +150,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         setPending(stored); close(); throw new Error('请先核实此前的分镜提交')
       }
       localStorage.setItem(key, JSON.stringify(submission))
-    } catch (cause) { setError(directingError(cause)); return }
+    } catch (cause) { setError(apiErrorMessage(cause)); return }
     const captured = live.current
     const flow: typeof wait.current = follow && captured ? { ...captured } : undefined
     wait.current = flow
@@ -176,7 +175,7 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
       latestSettle.current(response.data)
     } catch (cause) {
       if (cause instanceof ApiError && [400, 404, 409, 422].includes(cause.status)) clear()
-      if (captured && isLive(captured)) setError(directingError(cause))
+      if (captured && isLive(captured)) setError(apiErrorMessage(cause))
     } finally {
       sending.current = false
       if (captured && isLive(captured)) setSubmitting(false)
@@ -195,14 +194,14 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         resultHandler.current(response.data, false)
       }
     } catch (cause) {
-      if (captured && isLive(captured)) setError(directingError(cause))
+      if (captured && isLive(captured)) setError(apiErrorMessage(cause))
     } finally { if (captured && isLive(captured)) setChecking(false) }
   }
   const failed = task?.status === 'failed' || task?.status === 'cancelled'
   return <>
     <Space wrap>
-      <Button variant="primary" onClick={start} disabled={!editable}>{action}</Button>
-      {!open && task && <span role="status">{taskLabel(task)}</span>}
+
+      {!open && task && task.task_id !== target.appliedTaskId && <span role="status">{taskLabel(task)}</span>}
       {!open && task?.review_state === 'incomplete' &&
         <Button onClick={() => onReviewRetry(task.task_id)}>前往重试审查</Button>}
       {!open && pending && <Button loading={submitting} disabled={!editable} onClick={() => void submit(pending)}>核实提交</Button>}
@@ -210,6 +209,8 @@ export function SceneStoryboardPreparation({ scope, editable, target, selectedTa
         <Button loading={checking} onClick={() => void viewResult()}>查看分镜结果</Button>}
     </Space>
     {!open && pending && !submitting && <Alert type="warning" message="分镜提交结果待核实，将使用原请求身份。" />}
+    {readError && <Alert type="warning" showIcon message="分镜任务记录读取失败，当前画布仍保留。"
+      description={readError} action={<Button disabled={reading || submitting || open} onClick={() => setReadRevision(value => value + 1)}>重试读取分镜任务</Button>} />}
     {!open && error && <Alert type="warning" showIcon message={error} />}
     {failed && task.error && <Alert type="error" showIcon message={task.error} />}
     <WorkbenchModal title={action} open={open} width={480} onCancel={close}

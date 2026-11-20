@@ -1,19 +1,24 @@
 :root {
+  --app-detail-content-gap: 16px;
+  --app-detail-inline-padding: 20px;
+  --app-detail-control-height: 32px;
   --app-inspector-width: 344px;
   --app-border: #e5eaf0;
 }
 
-:is(.app-shell, .app-appearance-swatch) {
+:is(.app-shell, .app-appearance-swatch, .resource-editor-drawer) {
   --app-page-background: linear-gradient(125deg, #f0f5fc, #f7f8fb);
 }
 
-:is(.app-shell, .app-appearance-swatch)[data-appearance='solid'] {
+:is(.app-shell, .app-appearance-swatch)[data-appearance='solid'],
+.resource-editor-drawer.resource-editor-appearance-solid {
   --app-page-background: #f7f8fb;
 }
 
 .app-shell {
   --app-header-height: 56px;
   --app-page-gutter: 20px;
+  --app-sidebar-width: 216px;
   --app-text: #263244;
   --app-muted: #536174;
   --app-accent: #245fc5;
@@ -111,3 +116,29 @@
 
 .app-sidebar-drawer .ant-tree-treenode { min-height: 36px; align-items: center; }
 .app-sidebar-drawer .ant-tree-node-content-wrapper { min-height: 36px; line-height: 36px; }
+
+/* Column counts stay independent of item count; each track shares the available width. */
+.app-shell { --app-media-card-columns: 1; --app-object-card-columns: 1; --app-canvas-card-columns: 1; }
+@media (min-width: 480px) { .app-shell { --app-media-card-columns: 2; } }
+@media (min-width: 576px) { .app-shell { --app-object-card-columns: 2; } }
+@media (min-width: 768px) { .app-shell { --app-media-card-columns: 3; --app-canvas-card-columns: 2; } }
+@media (min-width: 840px) { .app-shell { --app-object-card-columns: 3; } }
+@media (min-width: 1024px) { .app-shell { --app-media-card-columns: 4; --app-object-card-columns: 2; } }
+@media (min-width: 1080px) { .app-shell { --app-object-card-columns: 3; } }
+@media (min-width: 1280px) { .app-shell { --app-media-card-columns: 6; } }
+@media (min-width: 1360px) { .app-shell { --app-object-card-columns: 4; } }
+@media (min-width: 1400px) { .app-shell { --app-canvas-card-columns: 3; } }
+@media (min-width: 1640px) { .app-shell { --app-object-card-columns: 5; } }
+@media (min-width: 1760px) { .app-shell { --app-canvas-card-columns: 4; } }
+@media (min-width: 1880px) { .app-shell { --app-object-card-columns: 6; } }
+
+/* Ordinary detail drawers opt in; navigation and canvas panels keep their own layout. */
+.app-detail-drawer .ant-drawer-header { min-height:56px; padding:10px var(--app-detail-inline-padding); }
+.app-detail-drawer .ant-drawer-title { font-size:16px; font-weight:600; line-height:24px; }
+.app-detail-drawer .ant-drawer-header .ant-btn,
+.app-detail-drawer .ant-drawer-footer .ant-btn { font-size:13px; min-height:var(--app-detail-control-height); border-radius:8px; }
+.app-detail-drawer .ant-drawer-close { width:var(--app-detail-control-height); height:var(--app-detail-control-height); margin-inline-end:8px; }
+.app-detail-drawer .ant-drawer-body { padding:var(--app-detail-content-gap) var(--app-detail-inline-padding); }
+@media (max-width:767px) {
+  :root { --app-detail-content-gap:12px; --app-detail-inline-padding:16px; --app-detail-control-height:36px; }
+}

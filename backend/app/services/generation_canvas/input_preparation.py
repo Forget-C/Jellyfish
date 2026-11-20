@@ -157,7 +157,7 @@ def build_video_inputs(card: ModelCard, media: list[CanvasResolvedOutput]) -> Vi
             if media:
                 group['media'].append(media)
     for binding in card.input_bindings:
-        ref = PromptReference(kind='reference', id=binding.id, source=binding.source)
+        ref = PromptReference(kind='reference', id=binding.id, binding_id=binding.id, source=binding.source)
         frame = reference(ref, len(result.frames.keys) if binding.input_port == 'key_frame' else 0)
         if binding.input_port in ('subject_image', 'subject_video') and binding.source.port_id == binding.input_port.removeprefix('subject_') and (binding.subject_name or '').strip():
             add_subject(binding.subject_name.strip(), [ref])
@@ -169,7 +169,7 @@ def build_video_inputs(card: ModelCard, media: list[CanvasResolvedOutput]) -> Vi
     for item in media:
         key = identity_key(item.source)
         if key in body_names:
-            add_subject(body_names[key], [PromptReference(kind='reference', id='implicit', source=item.source)])
+            add_subject(body_names[key], [PromptReference(kind='reference', id='implicit', binding_id='implicit', source=item.source)])
     result.subjects = [VideoSubjectMediaReference(**group) for group in groups.values() if group['media']]
     return VideoInputCompilation(result, body_names, locations)
 

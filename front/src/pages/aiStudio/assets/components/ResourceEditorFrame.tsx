@@ -1,0 +1,105 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { ArrowLeftOutlined } from '@ant-design/icons'
+import { Button } from 'antd'
+import { useAppStore } from '../../../../store/useAppStore'
+import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
+
+type Props = {
+  className?: string
+  drawerWidth?: number
+  id: string; open: boolean; drawer: boolean; inline?: boolean; title: string; backLabel: string
+  titleExtra?: ReactNode; onClose: () => void; actions: ReactNode; children: ReactNode
+  onBodyReady?: (node: HTMLElement | null) => void
+  actionsRef?: (node: HTMLDivElement | null) => void
+  renderToolbar?: (children: ReactNode) => ReactNode
+}
+
+/** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
+export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra, onBodyReady, drawerWidth }: Props) {
+  const appearance = useAppStore(state => state.appearance)
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
+  const [body, setBody] = useState<HTMLElement | null>(null)
+  const captureBody = useCallback((node: HTMLDivElement | null) => {
+    const element = node?.parentElement ?? null
+    setBody(element); onBodyReady?.(element)
+  }, [onBodyReady])
+  useEffect(() => {
+    if (!drawer || !open || !body) return
+    const update = () => setScrollEdges({ top: body.scrollTop > 0, bottom: body.scrollTop + body.clientHeight < body.scrollHeight - 1 })
+    const observer = new ResizeObserver(update)
+    observer.observe(body)
+    if (body.firstElementChild) observer.observe(body.firstElementChild)
+    body.addEventListener('scroll', update, { passive: true })
+    update()
+    return () => { observer.disconnect(); body.removeEventListener('scroll', update) }
+  }, [drawer, open, body])
+  const anchor = useRef<HTMLSpanElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  const [bounds, setBounds] = useState<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    if (!drawer || !open) return
+    const source = anchor.current
+    const target = source?.closest('.management-content')
+      ?? source?.closest('.project-workbench-content')?.parentElement
+      ?? source?.closest('.app-route-viewport')
+      ?? source?.closest('.app-workspace')
+      ?? document.body
+    const update = () => setBounds(target.getBoundingClientRect())
+    const observer = new ResizeObserver(update)
+    observer.observe(target)
+    // 导航行换行或断点切换会改变位置，即使内容宽度不变也要重新定位。
+    window.addEventListener('resize', update)
+    update()
+    const previous = document.activeElement as HTMLElement | null
+    const covered = [...target.children].filter((node): node is HTMLElement => node instanceof HTMLElement)
+    const inertStates = covered.map(node => node.inert)
+    covered.forEach(node => { node.inert = true })
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+      covered.forEach((node, index) => { node.inert = inertStates[index] })
+      if (previous?.isConnected) previous.focus({ preventScroll: true })
+    }
+  }, [drawer, open])
+  const positioned = !!bounds
+  const width = bounds ? Math.min(drawerWidth ?? bounds.width, bounds.width, document.documentElement.clientWidth) : 0
+  // Responsive navigation can briefly move the anchor outside the viewport without changing its width.
+  const left = bounds ? Math.max(0, Math.min(bounds.right, document.documentElement.clientWidth) - width) : 0
+  useEffect(() => {
+    if (drawer && open && positioned) panel.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
+  }, [drawer, open, positioned])
+  const toolbar = <>
+    <div className="resource-editor-page-heading"><Button type="text" icon={<ArrowLeftOutlined />} aria-label={backLabel} onClick={onClose}>{backLabel}</Button>
+      <h1 className="app-page-title" title={title}>{title}</h1>{titleExtra}</div>
+    <div ref={actionsRef} className="resource-editor-page-actions">{actions}</div>
+  </>
+  if (drawer) return <><span ref={anchor} hidden />{open && bounds && createPortal(
+    <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${left > 0 ? '' : ' resource-editor-no-side'}`}
+      style={{ top: bounds.y, left, width, height: bounds.height, maxWidth: `calc(100vw - ${left}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
+      <div className="ant-drawer-content-wrapper">
+        <div ref={panel} id={id} role="dialog" aria-modal="false" aria-label={title} className={`ant-drawer-content ${className ?? ''}`}
+          style={{ backgroundPosition: `right -${bounds.y}px` }} onKeyDown={event => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return
+            if ([...document.querySelectorAll<HTMLElement>('.ant-image-preview-wrap')].some(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')) return
+            event.stopPropagation()
+            onClose()
+          }}>
+          <PageToolbar>{toolbar}</PageToolbar>
+          <div className="ant-drawer-body"><div className="resource-editor-drawer-content" ref={captureBody}>{children}</div></div>
+        </div>
+      </div>
+    </div>, document.body)}</>
+  if (!open) return null
+  const escape = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape' && backLabel !== '返回' && !event.defaultPrevented) { event.stopPropagation(); onClose() }
+  }
+  if (inline || renderToolbar) return <section onKeyDown={escape} id={id} aria-label={title} className={`resource-editor-page resource-editor-inline ${className ?? ''}`}>
+    {renderToolbar ? renderToolbar(toolbar) : <PageToolbar>{toolbar}</PageToolbar>}
+    <div className="resource-editor-body">{children}</div>
+  </section>
+  return <WorkspaceLayout onKeyDown={escape} id={id} aria-label={title} className={`resource-editor-page ${className ?? ''}`}>
+    <PageToolbar>{toolbar}</PageToolbar>
+    <WorkspaceScrollPanel className="resource-editor-body">{children}</WorkspaceScrollPanel>
+  </WorkspaceLayout>
+}

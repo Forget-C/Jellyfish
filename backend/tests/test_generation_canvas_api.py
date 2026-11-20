@@ -1,4 +1,6 @@
 """画布公共 HTTP 边界：真实数据库与服务。"""
+from tests.canvas_prompt_fixtures import bind_document_prompts
+from tests.canvas_urls import append_canvas_path, canvas_params, canvas_url, seed_scene_canvas
 import asyncio
 import httpx
 import pytest
@@ -41,6 +43,9 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
         db.add_all([Model(id=f'canvas-{kind}', name=f'canvas-{kind}', category=kind, provider_id='canvas-provider')
                     for kind in ('text', 'image', 'video')])
         await db.commit()
+    async with sessions() as db:
+        from app.models.generation_canvas import GenerationCanvas
+        initial_canvas_ids = set(await db.scalars(select(GenerationCanvas.id)))
     async def database():
         async with sessions() as db:
             try:
@@ -57,6 +62,8 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
         from app.api.v1.routes.studio.chapters import router as chapters_router
         from app.api.v1.routes.studio.directing import router as directing_router
         app.include_router(router, prefix='/canvases')
+        from app.api.v1.routes.studio.projects import router as projects_router
+        app.include_router(projects_router, prefix='/projects')
         app.include_router(chapters_router, prefix='/chapters')
         app.include_router(directing_router)
     from app.api.v1.routes.studio.files import router as files_router
@@ -71,9 +78,10 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
         app.include_router(files_router, prefix='/files')
     previous_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = database
-    base_url = 'http://test/api/v1/studio/generation-canvases/' if real_app else 'http://test'
+    base_url = 'http://test'
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=base_url) as client:
+            client.canvas_sessions = sessions
             yield client
     finally:
         app.dependency_overrides.clear()
@@ -81,7 +89,7 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
     if mysql:
         async with sessions.begin() as db:
             from app.models.generation_canvas import GenerationCanvas
-            ids = list((await db.scalars(select(GenerationCanvas.id).where(GenerationCanvas.project_id.in_(['p', 'other'])))).all())
+            ids = list((await db.scalars(select(GenerationCanvas.id).where(GenerationCanvas.id.not_in(initial_canvas_ids)))).all())
             from app.models.generation_canvas import CanvasSaveReceipt
             await db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id.in_(ids)))
             await db.execute(delete(GenerationCanvas).where(GenerationCanvas.id.in_(ids)))
@@ -92,42 +100,96 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
     await engine.dispose()
 
 @pytest.mark.asyncio
+async def test_first_free_canvas_write_is_atomic_and_replayable(canvas_client):
+    from uuid import uuid4
+    canvas_id = str(uuid4())
+    draft = f'/canvases/drafts/{canvas_id}'
+    url = f'/canvases/{canvas_id}'
+    initial = (await canvas_client.get(draft)).json()['data']
+    assert initial['revision'] == -1
+    command = {'expected_revision': 0, 'request_id': 'first-edit', 'document': initial['document']}
+    assert (await canvas_client.put(draft, json=command)).status_code == 422
+    assert (await canvas_client.get(url)).status_code == 404
+    command['document']['cards'] = [{'id': 'card', 'type': 'unknown'}]
+    assert (await canvas_client.put(draft, json=command)).status_code == 422
+    assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 0
+    command['document']['cards'] = [{'id': 'card', 'type': 'content.text', 'text': '第一笔内容'}]
+    saved = await canvas_client.put(draft, json=command)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['data']['revision'] == 1
+    assert (await canvas_client.put(draft, json=command)).json() == saved.json()
+    assert (await canvas_client.put(draft, json={**command, 'request_id': 'other'})).status_code == 409
+    assert (await canvas_client.get(url)).json()['data']['document']['cards'][0]['text'] == '第一笔内容'
+    assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 1
+
+
+@pytest.mark.asyncio
 async def test_create_canvas_returns_created_response_and_readable_document(canvas_client):
-    response = await canvas_client.post('/canvases/p', json={'name': '新画布'})
+    response = await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '新画布'})
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body['code'] == 201
+    assert body['code'] == 200
     assert body['data']['document']['name'] == '新画布'
-    reopened = await canvas_client.get(f"/canvases/p/{body['data']['id']}")
+    reopened = await canvas_client.get(canvas_url(f"/canvases/p/{body['data']['id']}"))
     assert reopened.json()['data'] == body['data']
     assert 'scene' not in reopened.json()['data']
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', [None, 'mysql'], indirect=True)
+async def test_canvas_list_orders_large_documents_and_keeps_free_scope(canvas_client, canvas_file_store):
+    from datetime import datetime
+    from app.models.generation_canvas import GenerationCanvas
+    from app.schemas.generation_canvas import CanvasDocument
+
+    text = 'large canvas content ' * 50000
+    expected = ['same-b', 'same-a', 'earlier']
+    async with canvas_file_store['sessions'].begin() as db:
+        for canvas_id, project_id, day in [('same-b', None, 2), ('outside', 'other', 1),
+                                           ('earlier', None, 1), ('same-a', None, 2)]:
+            document = CanvasDocument(id=canvas_id, project_id=project_id, name=canvas_id,
+                cards=[{'id': 'text', 'type': 'content.text', 'text': text}])
+            db.add(GenerationCanvas(id=canvas_id, project_id=project_id, kind='scene' if project_id else 'free',
+                document=document.model_dump(), created_at=datetime(2026, 1, day), updated_at=datetime(2026, 1, day)))
+
+    response = await canvas_client.get('/canvases')
+    assert response.status_code == 200, response.text[:500]
+    canvases = response.json()['data']['items']
+    assert [canvas['id'] for canvas in canvases] == expected
+    assert all('document' not in canvas for canvas in canvases)
+    filtered = await canvas_client.get('/canvases', params={'q': 'same', 'page_size': 1})
+    assert filtered.json()['data']['pagination']['total'] == 2
+    assert [canvas['id'] for canvas in filtered.json()['data']['items']] == ['same-b']
+    for canvas in canvases:
+        reopened = await canvas_client.get('/canvases/' + canvas['id'])
+        assert reopened.json()['data']['document']['cards'][0]['text'] == text
+    assert (await canvas_client.get('/canvases/missing')).status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_project_canvas_can_save_empty_text_and_reopen_independently(canvas_client):
     client = canvas_client
-    first = (await client.post('/canvases/p', json={'name': '画布一'})).json()['data']
-    second = (await client.post('/canvases/p', json={'name': '画布二'})).json()['data']
+    first = (await seed_scene_canvas(client, '/canvases/p', json={'name': '画布一'})).json()['data']
+    second = (await seed_scene_canvas(client, '/canvases/p', json={'name': '画布二'})).json()['data']
     document = first['document']
     document['cards'] = [{'id': 'text-one', 'type': 'content.text', 'type_version': 1, 'text': ''}]
     document['name'] = '已命名'
-    saved = await client.put(f"/canvases/p/{first['id']}", json={'request_id': 'save-one', 'expected_revision': 0, 'document': document})
+    saved = await client.put(canvas_url(f"/canvases/p/{first['id']}"), json={'request_id': 'save-one', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
     assert saved.json()['data']['revision'] == 1
-    reopened = (await client.get(f"/canvases/p/{first['id']}")).json()['data']
+    reopened = (await client.get(canvas_url(f"/canvases/p/{first['id']}"))).json()['data']
     assert reopened['document'] == document
     assert reopened['revision'] == 1
-    assert (await client.get(f"/canvases/p/{second['id']}")).json()['data']['document']['cards'] == []
-    assert (await client.get(f"/canvases/other/{first['id']}")).status_code == 404
-    assert (await client.delete(f"/canvases/other/{first['id']}", params={'expected_revision': 1})).status_code == 404
-    assert len((await client.get('/canvases/p')).json()['data']) == 2
-    assert (await client.delete(f"/canvases/p/{second['id']}", params={'expected_revision': 0})).status_code == 200
+    assert (await client.get(canvas_url(f"/canvases/p/{second['id']}"))).json()['data']['document']['cards'] == []
+    assert (await client.get(canvas_url(f"/canvases/other/{first['id']}"))).status_code == 404
+    assert (await client.delete(canvas_url(f"/canvases/other/{first['id']}"), params={**canvas_params(canvas_url(f"/canvases/other/{first['id']}")), **({'expected_revision': 1})})).status_code == 404
+    assert (await client.delete(canvas_url(f"/canvases/p/{second['id']}"), params={**canvas_params(canvas_url(f"/canvases/p/{second['id']}")), **({'expected_revision': 0})})).status_code == 200
 
 @pytest.mark.asyncio
 async def test_original_receipt_replays_after_new_revision_and_conflicts_do_not_overwrite(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '画布'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '画布'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     command = {'request_id': 'first', 'expected_revision': 0, 'document': canvas['document']}
     original = (await client.put(url, json=command)).json()
     newer = {**command, 'request_id': 'second', 'expected_revision': 1,
@@ -155,8 +217,8 @@ async def test_original_receipt_replays_after_new_revision_and_conflicts_do_not_
 ])
 async def test_invalid_document_reports_structural_diagnostic_and_preserves_revision(canvas_client, change, code):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '画布'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '画布'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     response = await client.put(url, json={'request_id': 'invalid', 'expected_revision': 0,
                                          'document': {**canvas['document'], **change}})
     assert response.status_code == 422
@@ -170,8 +232,8 @@ async def test_invalid_document_reports_structural_diagnostic_and_preserves_revi
 @pytest.mark.parametrize('canvas_client', ['mysql'], indirect=True)
 async def test_mysql_real_http_connections_serialize_cas_and_identical_request_races(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '并发画布'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '并发画布'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     commands = [{'request_id': f'competitor-{index}', 'expected_revision': 0,
                  'document': {**canvas['document'], 'name': f'获胜候选-{index}'}} for index in range(4)]
     responses = await asyncio.gather(*(client.put(url, json=command) for command in commands))
@@ -197,8 +259,8 @@ async def test_mysql_real_http_connections_serialize_cas_and_identical_request_r
 @pytest.mark.asyncio
 async def test_non_object_document_has_machine_readable_save_diagnostic(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '画布'})).json()['data']
-    response = await client.put(f"/canvases/p/{canvas['id']}", json={
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '画布'})).json()['data']
+    response = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'bad-shape', 'expected_revision': 0, 'document': []})
     assert response.status_code == 422
     assert response.json()['detail']['code'] == 'INVALID_DOCUMENT'
@@ -207,7 +269,7 @@ async def test_non_object_document_has_machine_readable_save_diagnostic(canvas_c
 @pytest.mark.asyncio
 async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '图'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '图'})).json()['data']
     doc = canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'content.text', 'text': 'first'},
                       {'id': 'b', 'type': 'content.text', 'text': 'second'},
@@ -216,7 +278,7 @@ async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_clie
                       {'id': 'e2', 'source_card': 'b', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}],
                input_order={'m': {'text': ['e2', 'e1']}},
                groups=[{'id': 'g', 'name': '组一', 'card_ids': ['a', 'm'], 'collapsed': True}])
-    url = f"/canvases/p/{canvas['id']}"
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     saved = await client.put(url, json={'request_id': 'graph', 'expected_revision': 0, 'document': doc})
     assert saved.status_code == 200, saved.text
     reopened = (await client.get(url)).json()['data']['document']
@@ -234,9 +296,9 @@ async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_clie
     ({'groups': [{'id': 'g', 'name': '损坏组', 'card_ids': ['missing']}]}, 'INVALID_GROUP'),
 ])
 async def test_invalid_graph_has_located_save_diagnostic(canvas_client, change, code):
-    canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
     document = {**canvas['document'], 'cards': [{'id': 'm', 'type': 'model.text'}, {'id': 'n', 'type': 'model.text'}], **change}
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'broken-graph', 'expected_revision': 0, 'document': document})
     assert response.status_code == 422
     assert response.json()['detail']['code'] == code
@@ -245,8 +307,8 @@ async def test_invalid_graph_has_located_save_diagnostic(canvas_client, change, 
 @pytest.mark.asyncio
 async def test_new_incompatible_connection_rejected_but_model_switch_keeps_existing_candidates(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = {**canvas['document'], 'cards': [{'id': 'a', 'type': 'content.text', 'text': 'x'},
                                         {'id': 'm', 'type': 'model.image'}],
            'edges': [{'id': 'e', 'source_card': 'a', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}],
@@ -273,8 +335,8 @@ async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_
             provider = await db.get(Provider, 'canvas-provider')
             provider.name = 'vidu'
             await db.commit()
-        canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
-        base = f"/canvases/p/{canvas['id']}"
+        canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
+        base = canvas_url(f"/canvases/p/{canvas['id']}")
         text = (await canvas_client.get(base + '/models/canvas-text/capability')).json()['data']
         assert text['input_ports'] == ['text']
         assert not text['supports_seed']
@@ -311,10 +373,10 @@ async def test_media_uploads_are_project_files_and_canvas_content_protects_them(
     file = audio.json()['data']
     assert file['type'] == 'audio'
     assert (await client.get(f"/files/{file['id']}/download")).headers['content-type'] == 'audio/mpeg'
-    listed = (await client.get('/files', params={'project_id': 'p'})).json()['data']['items']
+    listed = (await client.get('/files', params={**canvas_params('/files'), **({'project_id': 'p'})})).json()['data']['items']
     assert [item['id'] for item in listed] == [file['id']]
-    canvas = (await client.post('/canvases/p', json={'name': '媒体'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '媒体'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     document['cards'] = [{'id': 'audio', 'type': 'content.audio', 'file_id': file['id']},
                          {'id': 'empty-image', 'type': 'content.image'},
@@ -323,11 +385,11 @@ async def test_media_uploads_are_project_files_and_canvas_content_protects_them(
     assert saved.status_code == 200, saved.text
     assert (await client.get(url)).json()['data']['document']['cards'][0]['file_id'] == file['id']
     assert (await client.delete(f"/files/{file['id']}")).status_code == 409
-    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'p'})).status_code == 409
-    assert (await client.delete(url, params={'expected_revision': 1})).status_code == 200
-    assert (await client.get('/files', params={'project_id': 'p'})).json()['data']['pagination']['total'] == 1
-    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'other'})).status_code == 404
-    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'p'})).status_code == 200
+    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={**canvas_params(f"/files/{file['id']}/upload-retention"), **({'project_id': 'p'})})).status_code == 409
+    assert (await client.delete(url, params={**canvas_params(url), **({'expected_revision': 1})})).status_code == 200
+    assert (await client.get('/files', params={**canvas_params('/files'), **({'project_id': 'p'})})).json()['data']['pagination']['total'] == 1
+    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={**canvas_params(f"/files/{file['id']}/upload-retention"), **({'project_id': 'other'})})).status_code == 404
+    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={**canvas_params(f"/files/{file['id']}/upload-retention"), **({'project_id': 'p'})})).status_code == 200
     assert (await client.delete(f"/files/{file['id']}")).status_code == 200
 
 
@@ -338,8 +400,8 @@ async def test_media_card_rejects_missing_foreign_and_wrong_type_files_without_l
                                data={'project_id': 'p', 'usage_kind': 'generation_upload'})).json()['data']
     foreign = (await client.post('/files/upload', files={'file': ('foreign.png', b'image', 'image/png')},
                                  data={'project_id': 'other', 'usage_kind': 'generation_upload'})).json()['data']
-    canvas = (await client.post('/canvases/p', json={'name': '图片'})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '图片'})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = {**canvas['document'], 'cards': [{'id': 'image', 'type': 'content.image', 'file_id': image['id']}]}
     assert (await client.put(url, json={'request_id': 'valid', 'expected_revision': 0, 'document': document})).status_code == 200
     for index, (file_id, card_type) in enumerate([('missing', 'content.image'), (foreign['id'], 'content.image'), (image['id'], 'content.video')]):
@@ -364,8 +426,8 @@ async def test_each_media_content_can_replace_clear_and_save_during_upload_witho
                                      data={'project_id': 'p', 'usage_kind': 'generation_upload'})
         assert response.status_code == 201
         files.append(response.json()['data']['id'])
-    canvas = (await client.post('/canvases/p', json={'name': modality})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': modality})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     document = canvas['document']
     for revision, (file_id, uploading) in enumerate([(files[0], False), (files[0], True), (files[1], False), (None, False)]):
         document['cards'] = [{'id': 'stable-source', 'type': f'content.{modality}', 'file_id': file_id, 'uploading': uploading}]
@@ -377,7 +439,7 @@ async def test_each_media_content_can_replace_clear_and_save_during_upload_witho
         assert reopened['uploading'] == uploading
         usages = (await client.get(f'/files/{files[0]}')).json()['data']['usages']
         assert any(usage['usage_kind'] == 'canvas_content' for usage in usages) is (file_id == files[0])
-    assert (await client.get('/files', params={'project_id': 'p'})).json()['data']['pagination']['total'] == 2
+    assert (await client.get('/files', params={**canvas_params('/files'), **({'project_id': 'p'})})).json()['data']['pagination']['total'] == 2
 
 
 @pytest.mark.asyncio
@@ -388,8 +450,8 @@ async def test_upload_rejects_missing_project_before_retaining_file(canvas_clien
 
 @pytest.mark.asyncio
 async def test_new_source_during_model_switch_requires_supported_purpose(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
-    base = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
+    base = canvas_url(f"/canvases/p/{canvas['id']}")
     doc = {**canvas['document'], 'cards': [{'id': 'a', 'type': 'model.video'},
                                         {'id': 'm', 'type': 'model.video', 'model_id': None}]}
     assert (await canvas_client.put(base, json={'request_id': 'before', 'expected_revision': 0, 'document': doc})).status_code == 200
@@ -405,27 +467,28 @@ async def test_new_source_during_model_switch_requires_supported_purpose(canvas_
 @pytest.mark.asyncio
 async def test_reference_protects_disconnect_but_final_document_cleanup_saves_once(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={})).json()['data']
     doc = canvas['document']
     reference = {'id': 'ref', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': 'text', 'position': 0}}
     doc['cards'] = [{'id': 'source', 'type': 'content.text', 'text': 'actual'}, {'id': 'receiver', 'type': 'model.text', 'prompt': {'segments': [reference]}}]
     doc['edges'] = [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'receiver', 'target_port': 'text'}]
     doc['input_order'] = {'receiver': {'text': ['edge']}}
-    url = f"/canvases/p/{canvas['id']}"
-    assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
+    assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': bind_document_prompts(doc)})).status_code == 200
     doc['edges'] = []
     doc['input_order'] = {}
-    blocked = await client.put(url, json={'request_id': 'blocked', 'expected_revision': 1, 'document': doc})
+    blocked = await client.put(url, json={'request_id': 'blocked', 'expected_revision': 1, 'document': bind_document_prompts(doc)})
     assert blocked.status_code == 422
     assert blocked.json()['detail']['code'] == 'REFERENCE_IN_USE'
     doc['cards'][1]['prompt']['segments'] = []
-    assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': doc})).status_code == 200
+    doc['cards'][1]['input_bindings'] = []
+    assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': bind_document_prompts(doc)})).status_code == 200
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
 async def test_real_app_handler_preserves_located_canvas_diagnostic_envelope(canvas_client):
-    canvas = (await canvas_client.post('p', json={})).json()['data']
-    base = f"p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(canvas_client, '/api/v1/studio/generation-canvases/p', json={})).json()['data']
+    base = canvas_url(f"/api/v1/studio/generation-canvases/p/{canvas['id']}")
     response = await canvas_client.put(base, json={'request_id': 'bad-order', 'expected_revision': 0,
         'document': {**canvas['document'], 'input_order': {'absent': {'text': ['missing']}}}})
     assert response.status_code == 422
@@ -438,39 +501,40 @@ async def test_real_app_handler_preserves_located_canvas_diagnostic_envelope(can
     conflict = await canvas_client.put(base, json={'request_id': 'stale', 'expected_revision': 5, 'document': canvas['document']})
     assert conflict.status_code == 409 and conflict.json()['data']['code'] == 'REVISION_CONFLICT'
     # 普通 API 异常保留原有统一封套，不扩大诊断协议影响范围。
-    missing = await canvas_client.get('other/missing')
+    missing = await canvas_client.get(canvas_url('/api/v1/studio/generation-canvases/other/missing'))
     assert missing.json() == {'code': 404, 'message': 'Canvas not found', 'data': None, 'meta': None}
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
 async def test_real_http_compile_preserves_mapping_and_locates_disconnect(canvas_client):
     client = canvas_client
-    canvas = (await client.post('p', json={})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/api/v1/studio/generation-canvases/p', json={})).json()['data']
     ref = {'id': 'reference', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': 'text', 'position': 0}}
     doc = {**canvas['document'], 'cards': [{'id': 'source', 'type': 'content.text', 'text': 'literal @图片1'},
            {'id': 'model', 'type': 'model.text', 'model_id': 'canvas-text', 'prompt': {'segments': [ref]}}],
            'edges': [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
            'input_order': {'model': {'text': ['edge']}}}
-    url = f"p/{canvas['id']}"
-    assert (await client.put(url, json={'request_id': 'seed', 'expected_revision': 0, 'document': doc})).status_code == 200
-    compiled = (await client.get(f'{url}/cards/model/compile')).json()['data']
+    url = canvas_url(f"/api/v1/studio/generation-canvases/p/{canvas['id']}")
+    assert (await client.put(url, json={'request_id': 'seed', 'expected_revision': 0, 'document': bind_document_prompts(doc)})).status_code == 200
+    compiled = (await client.get((url + f'/cards/model/compile'))).json()['data']
     assert compiled['revision'] == 1
     assert compiled['text'] == 'literal @图片1' and compiled['can_run']
-    assert compiled['mapping'] == [{'token': '@文本1', 'source': ref['source'], 'media_position': None}]
+    assert compiled['mapping'] == [{'token': '@文本1', 'source': doc['cards'][1]['input_bindings'][0]['source'], 'media_position': None}]
     doc['edges'] = []
     doc['input_order'] = {}
-    blocked = await client.put(url, json={'request_id': 'disconnect', 'expected_revision': 1, 'document': doc})
+    blocked = await client.put(url, json={'request_id': 'disconnect', 'expected_revision': 1, 'document': bind_document_prompts(doc)})
     assert blocked.json()['data']['target'] == {'card_id': 'model', 'segment_id': 'reference', 'path': ['prompt', 'segments', 'reference']}
     assert blocked.json()['data']['blocks'] == ['save']
     doc['cards'][1]['prompt']['segments'] = []
-    assert (await client.put(url, json={'request_id': 'clear-and-disconnect', 'expected_revision': 1, 'document': doc})).status_code == 200
+    doc['cards'][1]['input_bindings'] = []
+    assert (await client.put(url, json={'request_id': 'clear-and-disconnect', 'expected_revision': 1, 'document': bind_document_prompts(doc)})).status_code == 200
 
 @pytest.mark.asyncio
 async def test_duplicate_prompt_segment_identity_cannot_save(canvas_client):
-    canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
     doc = {**canvas['document'], 'cards': [{'id': 'model', 'type': 'model.text', 'prompt': {'segments': [
         {'id': 'same', 'kind': 'text', 'text': 'first'}, {'id': 'same', 'kind': 'text', 'text': 'second'}]}}]}
-    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'duplicate', 'expected_revision': 0, 'document': doc})
+    response = await canvas_client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'duplicate', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422
 
 
@@ -478,7 +542,7 @@ async def test_duplicate_prompt_segment_identity_cannot_save(canvas_client):
 async def test_creative_basis_is_saved_and_exposes_only_its_declared_text(canvas_client):
     """创作依据不依赖章节，直接出口与编译使用同一份已保存文本。"""
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '创作依据'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '创作依据'})).json()['data']
     document = canvas['document']
     document['cards'] = [
         {'id': 'basis', 'type': 'content.basis', 'text': '张三望向门口',
@@ -488,20 +552,20 @@ async def test_creative_basis_is_saved_and_exposes_only_its_declared_text(canvas
     document['edges'] = [{'id': 'edge', 'source_card': 'basis', 'source_port': 'text',
                           'target_card': 'model', 'target_port': 'text'}]
     document['input_order'] = {'model': {'text': ['edge']}}
-    saved = await client.put(f"/canvases/p/{canvas['id']}", json={
+    saved = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'save-basis', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
-    reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']
+    reopened = (await client.get(canvas_url(f"/canvases/p/{canvas['id']}"))).json()['data']
     assert reopened['document']['cards'][0]['source_locator'] == '用户导入的段落'
-    outputs = await client.get(f"/canvases/p/{canvas['id']}/cards/basis/outputs")
+    outputs = await client.get(canvas_url(f"/canvases/p/{canvas['id']}/cards/basis/outputs"))
     assert outputs.status_code == 200, outputs.text
     result = outputs.json()['data']
     assert result['revision'] == 1
     assert result['outputs'][0]['payload'] == {'kind': 'basis', 'text': '张三望向门口', 'source_locator': '用户导入的段落', 'selection_start': 2, 'selection_end': 9}
     assert result['outputs'][0]['source']['port_id'] == 'text'
-    candidates = await client.get(f"/canvases/p/{canvas['id']}/cards/model/outputs")
+    candidates = await client.get(canvas_url(f"/canvases/p/{canvas['id']}/cards/model/outputs"))
     assert candidates.json()['data']['candidates'][0]['payload']['text'] == '张三望向门口'
-    compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
+    compiled = (await client.get(canvas_url(f"/canvases/p/{canvas['id']}/cards/model/compile"))).json()['data']
     assert compiled['text'] == ''
     assert compiled['used'] == []
 
@@ -511,7 +575,7 @@ async def test_creative_basis_is_saved_and_exposes_only_its_declared_text(canvas
 async def test_input_binding_owns_source_and_prompt_only_references_binding(canvas_client, prompt_owned):
     """提示词与选择区共享同一采用记录，不再保存第二份来源。"""
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '统一采用'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '统一采用'})).json()['data']
     document = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'text', 'port_id': 'text', 'position': 0}
     document['cards'] = [
@@ -523,39 +587,39 @@ async def test_input_binding_owns_source_and_prompt_only_references_binding(canv
     document['edges'] = [{'id': 'edge', 'source_card': 'text', 'source_port': 'text',
                           'target_card': 'model', 'target_port': 'text'}]
     document['input_order'] = {'model': {'text': ['edge']}}
-    saved = await client.put(f"/canvases/p/{canvas['id']}", json={
+    saved = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'save-binding', 'expected_revision': 0, 'document': document})
     assert saved.status_code == 200, saved.text
-    reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']
+    reopened = (await client.get(canvas_url(f"/canvases/p/{canvas['id']}"))).json()['data']
     model = reopened['document']['cards'][1]
     assert model['input_bindings'][0]['source'] == source
     assert model['input_bindings'][0].get('prompt_owned') is prompt_owned
     assert ('prompt_owned' in model['input_bindings'][0]) == (prompt_owned is not None)
     assert model['prompt']['segments'][0] == {'id': 'mention', 'kind': 'reference', 'binding_id': 'selected-text'}
-    compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
+    compiled = (await client.get(canvas_url(f"/canvases/p/{canvas['id']}/cards/model/compile"))).json()['data']
     assert compiled['text'] == '直接上游正文'
     assert compiled['used'][0]['source'] == source
     model['prompt']['segments'] = []
     model['input_bindings'] = []
     document['cards'][1] = model
-    saved = await client.put(f"/canvases/p/{canvas['id']}", json={
+    saved = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={
         'request_id': 'remove-binding', 'expected_revision': 1, 'document': document})
     assert saved.status_code == 200, saved.text
-    compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
+    compiled = (await client.get(canvas_url(f"/canvases/p/{canvas['id']}/cards/model/compile"))).json()['data']
     assert compiled['used'] == []
 
 
 @pytest.mark.asyncio
 async def test_legacy_document_version_is_rejected(canvas_client):
     client = canvas_client
-    canvas = (await client.post('/canvases/p', json={'name': '旧文档读取'})).json()['data']
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '旧文档读取'})).json()['data']
     document = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'text', 'port_id': 'text', 'position': 0}
     document.update(schema_version=1, cards=[{'id': 'text', 'type': 'content.text', 'text': '原始依据'},
         {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': source}]}}],
         edges=[{'id': 'e', 'source_card': 'text', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
         input_order={'model': {'text': ['e']}})
-    response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'legacy', 'expected_revision': 0, 'document': document})
+    response = await client.put(canvas_url(f"/canvases/p/{canvas['id']}"), json={'request_id': 'legacy', 'expected_revision': 0, 'document': document})
     assert response.status_code == 422, response.text
 
 
@@ -571,8 +635,8 @@ async def test_media_output_identity_survives_upload_and_file_replacement(canvas
         uploaded = await client.post('/files/upload', files={'file': (f'media-{index}.{extension}', b'content', mime)},
                                      data={'project_id': 'p', 'usage_kind': 'generation_upload'})
         files.append(uploaded.json()['data']['id'])
-    canvas = (await client.post('/canvases/p', json={})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'media', 'port_id': modality, 'position': 0}
     document = canvas['document']
     for revision, (file_id, uploading) in enumerate([(files[0], False), (files[0], True), (files[1], False)]):
@@ -597,8 +661,8 @@ async def test_unavailable_saved_media_has_no_usable_output_and_locates_adopted_
     uploaded = await client.post('/files/upload', files={'file': ('image.png', b'image', 'image/png')},
                                  data={'project_id': 'p', 'usage_kind': 'generation_upload'})
     file_id = uploaded.json()['data']['id']
-    canvas = (await client.post('/canvases/p', json={})).json()['data']
-    url = f"/canvases/p/{canvas['id']}"
+    canvas = (await seed_scene_canvas(client, '/canvases/p', json={})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}")
     source = {'canvas_id': canvas['id'], 'card_id': 'media', 'port_id': 'image', 'position': 0}
     document = canvas['document']
     document.update(cards=[{'id': 'media', 'type': 'content.image', 'file_id': file_id},
@@ -643,8 +707,8 @@ async def test_video_usage_capability_keeps_canvas_policy(canvas_client, provide
             (await db.get(Provider, 'canvas-provider')).name = provider_name
             (await db.get(Model, 'canvas-video')).name = model_name
             await db.commit()
-        canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
-        response = await canvas_client.get(f"/canvases/p/{canvas['id']}/models/canvas-video/capability")
+        canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
+        response = await canvas_client.get(canvas_url(f"/canvases/p/{canvas['id']}/models/canvas-video/capability"))
         assert response.status_code == 200
         actual = response.json()['data']
         expected = ports + (['subject_image', 'subject_video'] if provider_name == 'vidu' and model_name == 'unknown' else [])
@@ -685,7 +749,7 @@ async def test_scene_canvases_open_through_both_entries_and_keep_independent_ide
     second = (await canvas_client.post(scene_canvas_path, json={'name': '我的分镜'})).json()['data']
     assert second['id'] != first['id']
     assert second['document']['name'] == '我的分镜'
-    project_canvas = (await canvas_client.get(f"/canvases/p/{first['id']}")).json()['data']
+    project_canvas = (await canvas_client.get(canvas_url(f"/canvases/p/{first['id']}"))).json()['data']
     assert project_canvas == first
     assert project_canvas['scene'] == {'chapter_id': 'chapter', 'sequence_id': 'scene-a', 'is_current': True}
     scene = (await canvas_client.get(scene_canvas_path)).json()['data']
@@ -699,13 +763,13 @@ async def test_scene_canvases_open_through_both_entries_and_keep_independent_ide
 @pytest.mark.asyncio
 async def test_candidate_discovery_is_scoped_to_the_verified_canvas(canvas_client, scene_canvas_path):
     canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']
-    path = f"{scene_canvas_path}/{canvas['id']}/storyboards/candidate"
+    path = append_canvas_path(scene_canvas_path, f"/{canvas['id']}/storyboards/candidate")
     response = await canvas_client.get(path)
     assert response.status_code == 200 and response.json()['data'] is None
-    assert (await canvas_client.get(path, params={'task_id': 'missing'})).status_code == 404
+    assert (await canvas_client.get(path, params={**canvas_params(path), **({'task_id': 'missing'})})).status_code == 404
     assert (await canvas_client.get(path.replace('scene-a', 'scene-b'))).status_code == 404
     assert (await canvas_client.get(path.replace('/p/', '/other/'))).status_code == 404
-    free_canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    free_canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
     assert (await canvas_client.get(path.replace(canvas['id'], free_canvas['id']))).status_code == 404
 
 
@@ -729,11 +793,11 @@ async def test_historical_scene_canvas_still_saves_but_cannot_reextract(canvas_c
     saved = await canvas_client.put(chapter_path + '/division', json={'request_id': 'retire', 'draft': draft,
         'preview_token': preview.json()['data']['preview_token'], 'identity_changes_confirmed': True})
     assert saved.status_code == 200, saved.text
-    path = f"/canvases/p/{canvas['id']}"
+    path = canvas_url(f"/canvases/p/{canvas['id']}")
     archived = (await canvas_client.get(path)).json()['data']
     assert archived['scene']['is_current'] is False
     assert archived['document'] == canvas['document']
-    result = await canvas_client.post(f"{scene_canvas_path}/{canvas['id']}/storyboards", json={
+    result = await canvas_client.post(append_canvas_path(scene_canvas_path, f"/{canvas['id']}/storyboards"), json={
         'request_id': 'old-scene', 'text_model_id': 'canvas-text', 'mode': 'faithful',
     })
     assert result.status_code == 409, result.text
@@ -747,7 +811,7 @@ async def test_historical_scene_canvas_still_saves_but_cannot_reextract(canvas_c
 @pytest.mark.parametrize('invalid', ['', '  \t', '长' * 256])
 async def test_scene_canvas_rejects_blank_or_long_saved_name(canvas_client, scene_canvas_path, invalid):
     created = (await canvas_client.post(scene_canvas_path, json={'name': '旧名称'})).json()['data']
-    path = f"/canvases/p/{created['id']}"
+    path = canvas_url(f"/canvases/p/{created['id']}")
     response = await canvas_client.put(path, json={'request_id': 'invalid-name', 'expected_revision': created['revision'],
         'document': {**created['document'], 'name': invalid}})
     assert response.status_code == 422, response.text
@@ -758,7 +822,7 @@ async def test_scene_canvas_rejects_blank_or_long_saved_name(canvas_client, scen
 @pytest.mark.parametrize('alteration', ['text', 'locator', 'marker', 'card', 'identity'])
 async def test_fixed_scene_source_survives_ordinary_canvas_save(canvas_client, scene_canvas_path, alteration):
     canvas = (await canvas_client.post(scene_canvas_path, json={})).json()['data']
-    path = f"/canvases/p/{canvas['id']}"
+    path = canvas_url(f"/canvases/p/{canvas['id']}")
     document = (await canvas_client.get(path)).json()['data']['document']
     if alteration == 'text':
         document['cards'][0]['text'] = '替换原文'
@@ -786,7 +850,7 @@ async def test_scene_source_change_warns_without_altering_saved_canvas(canvas_cl
     data = (await canvas_client.get(scene_canvas_path)).json()['data']
     assert data['sequence']['source_changed']
     assert data['canvases'][0]['source_changed']
-    reopened = (await canvas_client.get(f"/canvases/p/{canvas['id']}")).json()['data']
+    reopened = (await canvas_client.get(canvas_url(f"/canvases/p/{canvas['id']}"))).json()['data']
     assert reopened['source_changed']
     assert reopened['document'] == canvas['document']
     assert reopened['revision'] == canvas['revision']

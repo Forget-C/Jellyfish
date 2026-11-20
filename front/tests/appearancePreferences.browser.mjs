@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { browserCleanup, browserOutput } from './browser-runtime.mjs'
-import { makeWorkspace } from './directing-fixtures.mjs'
+import { makeSequence } from './directing-fixtures.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-appearance-')
@@ -21,15 +21,40 @@ try {
   page = await context.newPage()
   page.setDefaultTimeout(8000)
   const errors = []
-  const workspace = makeWorkspace()
+  const sequence = makeSequence()
+  const canvases = [
+    { path: '/canvases/free-appearance', id: 'free-appearance', projectId: null, name: '自由画布配色验收' },
+    { path: '/projects/p1/chapters/ch1/sequences/s1/canvas-workbench?canvas=storyboard-appearance',
+      id: 'storyboard-appearance', projectId: 'p1', name: '分镜配色验收' },
+  ]
+  const sceneCanvas = canvases[1]
+  let sceneUnavailable = false
   const installFixtures = async target => {
     target.on('pageerror', error => errors.push(error.message))
     await target.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
     await target.route('**/api/**', route => {
-      const { pathname } = new URL(route.request().url())
+      const { pathname, searchParams } = new URL(route.request().url())
       const respond = data => route.fulfill({ json: { code: 200, data } })
-      if (pathname.endsWith('/directing/sequences/s1')) return respond(workspace)
-      if (pathname.endsWith('/versions') || pathname.includes('/generation-canvases/')) return respond([])
+      if (pathname === '/api/v1/studio/projects/p1/directing/chapters/ch1/sequences/s1/canvases') {
+        return respond({ sequence, canvases: sceneUnavailable ? [] : [
+          { id: sceneCanvas.id, name: sceneCanvas.name, can_open: true },
+        ] })
+      }
+      const canvasRequest = pathname.match(/^\/api\/v1\/studio\/generation-canvases\/([^/]+)(.*)$/)
+      if (canvasRequest) {
+        const [, id, operation] = canvasRequest
+        const canvas = canvases.find(item => item.id === id && (item.projectId ?? '') === (searchParams.get('project_id') ?? ''))
+        if (!canvas) return route.fulfill({ status: 404, json: { code: 404, message: '画布不存在', data: null } })
+        if (!operation) return respond({
+          id, project_id: canvas.projectId, revision: 0,
+          document: { id, project_id: canvas.projectId, name: canvas.name, schema_version: 2, cards: [], edges: [], input_order: {}, groups: [] },
+          ...(canvas.projectId ? { scene: { chapter_id: 'ch1', sequence_id: 's1', is_current: true } } : {}),
+        })
+        if (operation === '/catalog') return respond({ cards: [], connection_policies: [] })
+        if (operation === '/runtime') return respond({ cursor: 0, runs: [], current_outputs: {} })
+        if (operation === '/events/connection') return respond({ url: `${origin}${pathname.replace(/\/connection$/, '')}?${searchParams}` })
+        if (operation === '/events') return route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' })
+      }
       return respond({ items: [], next_cursor: null })
     })
   }
@@ -39,14 +64,10 @@ try {
     return { backgroundColor, backgroundImage, color }
   })
   const solidBackground = { backgroundColor: 'rgb(247, 248, 251)', backgroundImage: 'none', color: 'rgb(38, 50, 68)' }
-  const canvases = [
-    ['/projects/p1/generation-canvas', '生成画布工作台'],
-    ['/projects/p1/chapters/ch1/sequences/s1', '场次画布工作台'],
-  ]
-  const canvasColors = async (path, label) => {
+  const canvasColors = async ({ path, name }) => {
     await page.goto(`${origin}${path}`)
-    const canvas = page.getByRole('region', { name: label, exact: true })
-    await canvas.waitFor()
+    const canvas = page.getByRole('region', { name: '生成画布工作台', exact: true })
+    await canvas.getByText(name, { exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: '用户与语言设置' }).count(), 0)
     const task = canvas.getByRole('button', { name: '任务中心', exact: true })
     await task.click()
@@ -56,13 +77,13 @@ try {
       const { backgroundColor, backgroundImage, color } = getComputedStyle(element)
       return { backgroundColor, backgroundImage, color }
     }
-    const colors = { canvas: await canvas.evaluate(readColors), overlay: await overlay.evaluate(readColors) }
+    const colors = { canvas: await canvas.locator('.generation-surface').evaluate(readColors), overlay: await overlay.evaluate(readColors) }
     await overlay.getByRole('button', { name: /Close|关闭/ }).click()
     await overlay.waitFor({ state: 'hidden' })
     return colors
   }
   const originalCanvasColors = []
-  for (const [path, label] of canvases) originalCanvasColors.push(await canvasColors(path, label))
+  for (const canvas of canvases) originalCanvasColors.push(await canvasColors(canvas))
   await page.goto(`${origin}/settings`)
 
   const settings = page.getByRole('radiogroup', { name: '外观' })
@@ -122,14 +143,67 @@ try {
   assert.deepEqual(await background(reopened), solidBackground)
   await reopened.close()
 
-  for (const [index, [path, label]] of canvases.entries()) {
-    const colors = await canvasColors(path, label)
-    assert.deepEqual(colors, originalCanvasColors[index])
-    assert.equal(colors.canvas.backgroundColor, 'rgb(13, 13, 13)')
-    assert.notEqual(colors.overlay.backgroundColor, 'rgb(255, 255, 255)')
+  for (const [index, canvas] of canvases.entries()) {
+    const colors = await canvasColors(canvas)
+    assert.equal(colors.canvas.backgroundColor, solidBackground.backgroundColor)
+    assert.doesNotMatch(colors.canvas.backgroundImage, /linear-gradient/, 'default follows the current site appearance')
+    assert.notDeepEqual(colors.canvas, originalCanvasColors[index].canvas)
+    assert.equal(colors.overlay.backgroundColor, 'rgb(237, 242, 248)', 'task portal follows light theme')
+    const picker = page.getByRole('button', { name: '画布配色', exact: true })
+    const choose = async name => {
+      await picker.press('Enter')
+      const option = page.getByRole('menuitemradio', { name, exact: true })
+      await option.waitFor()
+      await option.click()
+      await option.waitFor({ state: 'hidden' })
+    }
+    await choose('经典深色')
+    const dark = await canvasColors(canvas)
+    assert.equal(dark.canvas.backgroundColor, 'rgb(13, 13, 13)')
+    assert.equal(dark.canvas.color, 'rgb(229, 229, 229)')
+    assert.equal(dark.overlay.backgroundColor, 'rgb(36, 36, 36)')
+    await choose('雾蓝微渐变')
+    const light = await canvasColors(canvas)
+    assert.match(light.canvas.backgroundImage, /linear-gradient/)
+    assert.equal(light.canvas.color, 'rgb(38, 50, 68)')
+    await page.reload()
+    await picker.waitFor()
+    await picker.press('Enter')
+    assert.equal(await page.getByRole('menuitemradio', { name: '雾蓝微渐变', exact: true }).getAttribute('aria-checked'), 'true')
+    await page.keyboard.press('Escape')
+    await choose('雾蓝纯色')
+    assert.deepEqual((await canvasColors(canvas)).canvas, colors.canvas)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await picker.press('Enter')
+    const palette = page.getByRole('menu')
+    await palette.waitFor()
+    await page.waitForFunction(() => {
+      const option = [...document.querySelectorAll('[role="menuitemradio"]')].find(element => element.getClientRects().length)
+      if (!option) return false
+      const box = option.getBoundingClientRect(), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+      return !!hit && option.contains(hit)
+    })
+    const bounds = await palette.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390, 'palette fits narrow viewport')
+    await page.screenshot({ path: `${output}/canvas-palette-${index}-390.png`, animations: 'disabled' })
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await choose('跟随主站')
   }
 
+  sceneUnavailable = true
+  await page.goto(`${origin}${sceneCanvas.path}`)
+  await page.getByText('此画布不属于当前场次或已不可用', { exact: true }).waitFor()
+  assert.equal(await page.locator('.workbench-ui').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(247, 248, 251)', 'storyboard unavailable state follows the same appearance')
+  sceneUnavailable = false
   await page.goto(`${origin}/settings`)
+  const canvasSettings = page.getByRole('radiogroup', { name: '画布配色', exact: true })
+  await canvasSettings.getByRole('radio', { name: '经典深色', exact: true }).check()
+  await nickname.fill('画布切换不提交表单')
+  await canvasSettings.getByRole('radio', { name: '雾蓝纯色', exact: true }).check()
+  assert.equal(await nickname.inputValue(), '画布切换不提交表单')
+  await page.reload()
+  assert.equal(await canvasSettings.getByRole('radio', { name: '雾蓝纯色', exact: true }).isChecked(), true)
   await page.setViewportSize({ width: 375, height: 812 })
   await account.press('Enter')
   await solidMenu.waitFor()
@@ -144,9 +218,11 @@ try {
 
   const fallback = await browser.newPage({ locale: 'zh-CN' })
   await installFixtures(fallback)
-  await fallback.addInitScript(() => localStorage.setItem('jellyfish_appearance', 'unsupported'))
+  await fallback.addInitScript(() => { localStorage.setItem('jellyfish_appearance', 'unsupported'); localStorage.setItem('jellyfish_canvas_appearance', 'unsupported') })
   await fallback.goto(origin)
   assert.deepEqual(await background(fallback), initial)
+  await fallback.goto(`${origin}/settings`)
+  assert.equal(await fallback.getByRole('radiogroup', { name: '画布配色' }).getByRole('radio', { name: '跟随主站', exact: true }).isChecked(), true)
   await fallback.close()
 
   const blocked = await browser.newPage({ locale: 'zh-CN' })
@@ -155,14 +231,16 @@ try {
     for (const method of ['getItem', 'setItem']) {
       const original = Storage.prototype[method]
       Storage.prototype[method] = function (key, ...args) {
-        if (key === 'jellyfish_appearance') throw new DOMException('Appearance storage disabled', 'SecurityError')
+        if (key === 'jellyfish_appearance' || key === 'jellyfish_canvas_appearance') throw new DOMException('Appearance storage disabled', 'SecurityError')
         return original.call(this, key, ...args)
       }
     }
   })
   await blocked.goto(`${origin}/settings`)
   assert.deepEqual(await background(blocked), initial)
-  await blocked.getByRole('radio', { name: '雾蓝纯色' }).check()
+  await blocked.getByRole('radiogroup', { name: '画布配色' }).getByRole('radio', { name: '经典深色' }).check()
+  assert.equal(await blocked.getByRole('radiogroup', { name: '画布配色' }).getByRole('radio', { name: '经典深色' }).isChecked(), true)
+  await blocked.getByRole('radiogroup', { name: '外观', exact: true }).getByRole('radio', { name: '雾蓝纯色' }).check()
   assert.deepEqual(await background(blocked), solidBackground)
   await blocked.getByRole('link', { name: '首页', exact: true }).click()
   await blocked.waitForURL(`${origin}/`)

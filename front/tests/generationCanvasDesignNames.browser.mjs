@@ -1,3 +1,4 @@
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
 import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -11,7 +12,7 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-design-name-fields-')
-const api = 'http://127.0.0.1:8692', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const api = 'http://127.0.0.1:8692', base = `${api}/api/v1/studio/generation-canvases`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8692' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -36,13 +37,13 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const labels = { creative_control: '创作控制名称', guidance: '生成指导名称', criterion: '验收要求名称', narrative: '叙事名称', beat: '节拍名称', event: '事件名称', shot: '镜头名称', anchor: '锚点名称', blocking: '调度名称' }
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '设计名称字段审计' }) })).json()).data
+  const canvas = await createStoryboardCanvas(base, '设计名称字段审计')
   const document = { ...canvas.document, cards: [...Object.keys(labels).map(id => ({ id, type: 'direction.' + id, name: '' })), { id: 'other-criterion', type: 'direction.criterion', name: '已占用名称' }] }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  const seeded = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: withFixedSource(canvas, document) }) })
   assert.ok(seeded.ok, await seeded.text())
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const read = async () => (await (await fetch(storyboardCanvasApi(base, canvas.id))).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('name save timeout') }
-  await page.goto(`http://127.0.0.1:4692/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await page.goto(`http://127.0.0.1:4692${storyboardCanvasPath(canvas)}`)
   for (const [id, label] of Object.entries(labels)) {
     const detail = await openCanvasCard(page, id)
     const input = detail.getByRole('textbox', { name: label, exact: true })
@@ -104,10 +105,14 @@ try {
       await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
     }
     assert.equal(await input.isVisible(), true)
+    await input.press('Escape')
     await page.setViewportSize({ width: 390, height: 844 })
-    if (!await input.isVisible()) await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
+    await detail.getByRole('button', { name: '编辑' + label, exact: true }).click()
     await input.waitFor()
-    const box = await input.boundingBox(), panel = await detail.boundingBox()
+    const { box, panel } = await input.evaluate(node => ({
+      box: node.getBoundingClientRect().toJSON(),
+      panel: node.closest('.wb-details').getBoundingClientRect().toJSON(),
+    }))
     assert.ok(box.width > 100 && box.x >= panel.x && box.x + box.width <= panel.x + panel.width, 'name fits narrow heading')
     await detail.screenshot({ path: join(output, id + '-name-mobile.png') })
     await page.setViewportSize({ width: 1440, height: 1000 })
@@ -152,15 +157,14 @@ try {
   const failedDetail = await openCanvasCard(page, 'guidance')
   await failedDetail.getByRole('button', { name: '编辑' + labels.guidance, exact: true }).click()
   const failedInput = failedDetail.getByRole('textbox', { name: labels.guidance, exact: true })
-  let rejectSave
-  const rejected = new Promise(resolve => { rejectSave = resolve })
-  const saveUrl = `**/generation-canvases/canvas-project/${canvas.id}`
+  const saveUrl = url => url.pathname.endsWith(`/generation-canvases/${canvas.id}`)
   await page.route(saveUrl, route => {
-    if (route.request().method() === 'PUT') { rejectSave(); return route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) }
+    if (route.request().method() === 'PUT') return route.fulfill({ status: 503, contentType: 'application/json', body: '{}' })
     return route.continue()
   })
   const savedRevision = (await read()).revision
   await failedDetail.getByText(`revision ${savedRevision}`, { exact: true }).waitFor()
+  const rejected = page.waitForResponse(response => saveUrl(new URL(response.url())) && response.request().method() === 'PUT' && response.status() === 503)
   await failedInput.fill('网络失败保留的名称')
   await rejected
   assert.equal(await failedDetail.getByText(`revision ${savedRevision}`, { exact: true }).count(), 1, 'failed save retains confirmed revision')

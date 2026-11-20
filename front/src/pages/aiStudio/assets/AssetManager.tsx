@@ -18,7 +18,7 @@ export default function AssetManager() {
   const activeTab = isValidTab(tabFromUrl) ? tabFromUrl : 'actor'
 
   useEffect(() => {
-    if (tabFromUrl === null || tabFromUrl === '') {
+    if (!isValidTab(tabFromUrl)) {
       const next = new URLSearchParams(searchParams)
       next.set(TAB_PARAM, 'actor')
       setSearchParams(next, { replace: true })
@@ -31,13 +31,14 @@ export default function AssetManager() {
         if (!isValidTab(tab)) return
         const next = new URLSearchParams(searchParams)
         next.set(TAB_PARAM, tab)
+        next.delete('focusAsset')
         setSearchParams(next, { replace: true })
       }}
       renderTabBar={(props, TabBar) => <PageToolbar title="资产库" className="management-heading">
         <TabBar {...props} />
       </PageToolbar>}
       items={(Object.keys(assetLibraryTypes) as LibraryAssetType[]).map(key => ({
-        key, label: assetLibraryTypes[key].label, children: <AssetLibraryTab assetType={key} />,
+        key, label: assetLibraryTypes[key].label, children: <AssetLibraryTab assetType={key} active={key === activeTab} />,
       }))}
     />
   </WorkspaceLayout>

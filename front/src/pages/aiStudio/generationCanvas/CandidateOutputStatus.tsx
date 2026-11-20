@@ -6,7 +6,7 @@ import { useCardCandidates } from './useCardCandidates'
 export function CandidateOutputStatus({ document, savedDocument, cardId, savedRevision, published }: {
   document: CanvasDocument; savedDocument?: CanvasDocument; cardId: string; savedRevision?: number; published?: Record<string, CanvasResolvedOutput[]>
 }) {
-  const resolved = useCardCandidates(document.project_id, document.id, cardId, savedRevision, published, false)
+  const resolved = useCardCandidates((document.project_id || ''), document.id, cardId, savedRevision, published, false)
   const { cardTitles, cardDefinitions } = useGraphRules()
   const edges = (document.edges || []).filter(edge => edge.target_card === cardId)
   if (!edges.length) return null

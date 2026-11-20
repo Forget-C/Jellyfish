@@ -18,8 +18,9 @@
 ## 设计
 
 - [章节划分与场次版本设计](design/chapter-and-scene-versions.md)
-- [场次设计、生产与交付设计](design/scene-production.md)
+- [旧场次设计、生产与交付交互参考](design/scene-production.md)
 - [场次工作台与共同画布设计](design/shared-canvas-workbench.md)
+- [对象参考卡片与资源选用设计](design/scene-object-resource-selection.md)
 - [生成画布首版检查项目录](design/generation-canvas-check-catalog.md)
 - [ComfyUI 多结果与局部执行调研](design/research/comfyui-canvas-research.md)
 
@@ -29,9 +30,9 @@
 - [前端基础布局](architecture/frontend-layout.md)
 - [AI 工作流](architecture/ai-workflow.md)
 - [章节划分架构](architecture/chapter-division.md)
-- [场次版本架构](architecture/scene-versions.md)
-- [场次工作台架构](architecture/directing-foundation.md)
-- [场次素材、剪辑与交付](architecture/directing-edit-delivery.md)
+- [旧场次版本后端契约与历史编辑说明](architecture/scene-versions.md)
+- [场次工作台架构与旧四画布退役范围](architecture/directing-foundation.md#旧四画布退役范围)
+- [场次素材、剪辑与交付后端契约](architecture/directing-edit-delivery.md)
 - [场次固定版本与历史素材契约](architecture/directing-fixed-records.md)
 - [资产图片管理架构](architecture/asset-image-management.md)
 - [生成准备架构](architecture/generation-workspace.md)
@@ -48,6 +49,15 @@
 - [生成画布检查卡的范围与职责](adr/0003-generation-canvas-check-cards.md)
 - [声音设计与生成职责](adr/0004-sound-design-and-generation-responsibilities.md)
 - [场次工作台与自由生成共享画布基础](adr/0005-shared-canvas-foundation.md)
+- [项目角色身份与共享资产复用](adr/0006-project-character-and-shared-assets.md)
+- [项目专属资源与独立入库副本（完整方案已最终确认，尚未实施）](adr/0007-project-resource-ownership-and-library-copies.md)
+- [图片来源资源与独立项目导入](adr/0008-image-source-resources-and-project-imports.md)
+- [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
+- [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
+- [原文异常修复与补充解释的边界](adr/0011-chapter-source-explanations.md)
+- [分镜生成前拍摄准备的归属与固定采用（历史决策）](adr/0012-pre-generation-shooting-preparation.md)
+- [拍摄解释按章节原文版本维护](adr/0013-chapter-shooting-explanations.md)
+- [退役旧场次版本 HTTP 接口](adr/0014-retire-scene-version-api.md)
 
 ## 开发与维护指南
 
@@ -57,18 +67,17 @@
 - [后端说明](guides/backend.md)
 - [OpenAPI](guides/openapi.md)
 - [LLM 供应商注册与扩展](guides/llm-provider-registration.md)
-- [接入共享画布 graph](guides/canvas-graph.md)
+- [旧场次版本 graph 契约与接入参考](guides/canvas-graph.md)
 - [运行与排查异步任务](guides/task-operations.md)
 - [数据库升级与回退](guides/database-upgrade.md)
-- [接入章节划分历史](guides/chapter-division-history-import.md)
 - [身份参考存量整理](guides/identity-reference-cleanup.md)
-- [资产结构化切换](guides/structured-asset-switch.md)
 - [开发与站点维护 FAQ](guides/developer-faq.md)
 - [站点维护](../../site/README.md)
 
 ## 技术参考
 
 - [接口与 OpenAPI](reference/api.md)
+- [旧四画布退役清单（接口、函数与类、测试、文件）](reference/four-canvas-retirement/README.md)
 - [数据模型](reference/data-model.md)
 - [环境变量](reference/env.md)
 - [六部门专业输出契约](reference/six-department-contracts.md)

@@ -32,6 +32,7 @@ try {
   page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(8000)
   const errors = []
+  let failCreate = true
   const deletes = []
   const saves = []
   let releaseSave
@@ -47,6 +48,7 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (pathname.endsWith('/studio/projects')) {
       if (request.method() === 'POST') {
+        if (failCreate) return route.fulfill({ status: 503, json: { detail: '项目暂时无法创建' } })
         const created = request.postDataJSON()
         projects.push(created)
         return respond(created)
@@ -54,10 +56,23 @@ try {
       if (failProjects) return route.fulfill({ status: 503, json: { detail: 'fixture unavailable' } })
       const order = url.searchParams.get('order'), descending = url.searchParams.get('is_desc') === 'true'
       orderRequests.push({ order, descending })
-      if (order !== 'updated_at') return respond(list(projects))
       const updateOrder = ['p3', 'p4', 'p2', 'p1']
-      const ordered = [...projects].sort((left, right) => updateOrder.indexOf(left.id) - updateOrder.indexOf(right.id))
-      return respond(list(descending ? ordered.reverse() : ordered))
+      const counts = { p1: 1, p2: 4, p3: 1, p4: 0 }
+      const keyword = url.searchParams.get('q')?.toLowerCase()
+      const missingSource = url.searchParams.get('stage') === 'edit_raw'
+      const ordered = projects.filter(project =>
+        (!keyword || [project.name, project.description].some(text => text?.toLowerCase().includes(keyword))) &&
+        (!missingSource || !chapters[project.id]?.raw_text?.trim()),
+      ).sort((left, right) => {
+        const byField = order === 'name' ? left.name.localeCompare(right.name)
+          : order === 'chapter_count' ? (counts[left.id] ?? 0) - (counts[right.id] ?? 0)
+            : updateOrder.indexOf(left.id) - updateOrder.indexOf(right.id)
+        return (descending ? -byField : byField) || left.id.localeCompare(right.id)
+      })
+      const pageNumber = Number(url.searchParams.get('page'))
+      const pageSize = Number(url.searchParams.get('page_size'))
+      const start = (pageNumber - 1) * pageSize
+      return respond(list(ordered.slice(start, start + pageSize), ordered.length))
     }
     const projectId = pathname.match(/\/studio\/projects\/([^/]+)$/)?.[1]
     if (projectId) {
@@ -159,14 +174,11 @@ try {
     await page.getByRole('option', { name, exact: true }).click()
   }
   await filterStage('待补原文')
-  const chapterFailure = page.getByRole('alert').filter({ hasText: '部分项目的章节状态读取失败，未纳入此筛选' })
-  await chapterFailure.waitFor()
-  assert.equal(await page.getByText(/^显示 \d+ 个$/).count(), 0)
+  await page.getByText('匹配 2 个项目', { exact: true }).waitFor()
+  await emptyCard.getByText('读取失败', { exact: true }).first().waitFor()
   failChapter = false
-  await chapterFailure.getByRole('button', { name: /^重\s*试$/ }).click()
+  await emptyCard.getByRole('button', { name: '重试读取章节', exact: true }).click()
   await emptyCard.getByText('未创建章节', { exact: true }).waitFor()
-  await chapterFailure.waitFor({ state: 'hidden' })
-  await page.getByText('显示 2 个', { exact: true }).waitFor()
   await filterStage('全部状态')
   await emptyCard.getByText('未设置类型', { exact: true }).waitFor()
   await emptyCard.getByText('未创建场次', { exact: true }).waitFor()
@@ -176,13 +188,13 @@ try {
 
   const search = page.getByRole('textbox', { name: '搜索项目' })
   await search.fill('夜市调查')
-  await page.getByText('显示 1 个', { exact: true }).waitFor()
+  await page.getByText('匹配 1 个项目', { exact: true }).waitFor()
   await card.waitFor()
   await search.fill('不存在的项目')
   await page.getByText('没有匹配的项目', { exact: true }).waitFor()
-  await page.getByText('显示 0 个', { exact: true }).waitFor()
+  await page.getByText('匹配 0 个项目', { exact: true }).waitFor()
   await search.clear()
-  await page.getByText('显示 4 个', { exact: true }).waitFor()
+  await page.getByText('共 4 个项目', { exact: true }).waitFor()
 
   const displayOptions = page.getByRole('button', { name: /排序与批量/ })
   const menu = page.getByRole('menu')
@@ -205,12 +217,22 @@ try {
   await page.getByRole('article').first().getByText('共 4 章', { exact: true }).waitFor()
   await chooseDisplay('最近更新')
 
-  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 900], [375, 812]]) {
+  for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080], [1024, 900], [600, 900], [375, 1500]]) {
     await page.setViewportSize({ width, height })
+    assert.ok(await page.locator('.project-lobby-grid').evaluate(node => {
+      const style = getComputedStyle(node)
+      const gutter = parseFloat(getComputedStyle(document.querySelector('.app-shell')).getPropertyValue('--app-page-gutter'))
+      const sidebar = false && window.innerWidth >= 1024 ? 216 : 0
+      const expectedWidth = document.documentElement.clientWidth - sidebar - 2 * gutter
+      if (Math.abs(node.getBoundingClientRect().width - expectedWidth) > 17) return false
+      const columns = style.gridTemplateColumns.split(' ').map(parseFloat)
+      const remainder = node.getBoundingClientRect().width - columns.reduce((sum, size) => sum + size, 0) - (columns.length - 1) * parseFloat(style.columnGap)
+      return Math.abs(remainder) < 1
+    }), 'project grid tracks fill the content area')
     await card.getByText('待补原文', { exact: true }).waitFor()
     const scenes = await card.getByText('未创建场次', { exact: true }).boundingBox()
     const chapters = await card.getByText('共 1 章', { exact: true }).boundingBox()
-    assert.equal(scenes.y, chapters.y, '场次和章节总数应同排')
+    assert.ok(Math.abs(scenes.y - chapters.y) <= 1, '场次和章节总数应同排')
     if (width >= 1366) {
       const rows = await page.getByRole('article').evaluateAll(cards => cards.map(article =>
         Array.from(article.querySelector('.project-lobby-card-body').children, row => row.getBoundingClientRect().top),
@@ -229,7 +251,7 @@ try {
     const createButton = page.getByRole('button', { name: /新建项目/ })
     const create = await createButton.boundingBox()
     const searchBox = await search.boundingBox()
-    const count = await page.getByText('显示 4 个', { exact: true }).boundingBox()
+    const count = await page.getByText('共 4 个项目', { exact: true }).boundingBox()
     const center = box => box.y + box.height / 2
     assert.ok(Math.abs(center(title) - center(count)) < 3, `${width}px 的标题和数量应在同一行`)
     assert.ok(Math.abs(center(title) - center(create)) < 3, `${width}px 的标题和新建应在同一行`)
@@ -278,7 +300,7 @@ try {
   await visitProjects()
   const projectFailure = page.getByRole('alert').filter({ hasText: '无法读取项目列表' })
   await projectFailure.waitFor()
-  assert.equal(await page.getByText(/^显示 \d+ 个$/).count(), 0)
+  assert.equal(await page.getByText(/^共 \d+ 个项目$/).count(), 0)
   assert.equal(await page.getByText(/暂无项目/).count(), 0)
   failProjects = false
   await projectFailure.getByRole('button', { name: /^重\s*试$/ }).click()
@@ -324,14 +346,123 @@ try {
   await deleteDialog.getByRole('button', { name: /^删\s*除$/ }).click()
   await deleteDialog.waitFor({ state: 'hidden' })
   await projectCard('轨道尽头').waitFor({ state: 'hidden' })
-  await page.getByText('显示 1 个', { exact: true }).waitFor()
+  await page.getByText('共 1 个项目', { exact: true }).waitFor()
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  await page.getByRole('button', { name: /新建项目/ }).click()
+  const openCreate = page.getByRole('button', { name: /新建项目/ })
   const createDialog = page.getByRole('dialog', { name: '新建短剧项目' })
-  await createDialog.getByRole('textbox', { name: /项目名称/ }).fill('新的制作项目')
-  await createDialog.getByRole('button', { name: '创建并进入' }).click()
+  const createName = createDialog.getByRole('textbox', { name: /项目名称/ })
+  const submitProject = createDialog.getByRole('button', { name: '创建并进入' })
+  await openCreate.click()
+  const drawerFrame = page.locator('.resource-editor-drawer', { has: createDialog })
+  const desktopDrawer = await drawerFrame.boundingBox()
+  assert.equal(desktopDrawer.width, 720)
+  assert.equal(desktopDrawer.x + desktopDrawer.width, 1440)
+  assert.ok(desktopDrawer.y > 0, '保留顶栏导航')
+  const heading = createDialog.getByRole('heading', { name: '新建短剧项目' })
+  assert.equal(await heading.evaluate(node => getComputedStyle(node).fontSize), '16px')
+  assert.equal(await submitProject.evaluate(node => getComputedStyle(node).fontSize), '13px')
+  assert.equal(await submitProject.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(36, 95, 197)')
+  await submitProject.click()
+  await createDialog.getByText('请输入项目名称').waitFor()
+  await createName.fill('临时项目')
+  await createName.press('Escape')
+  await createDialog.waitFor({ state: 'detached' })
+  assert.ok(await openCreate.evaluate(node => node === document.activeElement))
+  await page.setViewportSize({ width: 375, height: 600 })
+  await openCreate.click()
+  assert.equal(await createName.inputValue(), '')
+  const mobileDrawer = await drawerFrame.boundingBox()
+  assert.equal(mobileDrawer.x, 0)
+  assert.equal(mobileDrawer.width, 375)
+  const visualStyle = await createDialog.getByRole('combobox', { name: '视觉风格' }).boundingBox()
+  const videoStyle = await createDialog.getByRole('combobox', { name: '视频风格' }).boundingBox()
+  assert.ok(videoStyle.y > visualStyle.y)
+  const mobileAction = await submitProject.boundingBox()
+  assert.ok(mobileAction.height >= 36)
+  await createDialog.getByRole('switch', { name: '风格统一' }).click()
+  assert.equal((await submitProject.boundingBox()).y, mobileAction.y, '滚动到底部时创建按钮仍固定在顶栏')
+  assert.equal(await createDialog.evaluate(node => node.scrollWidth), 375)
+  await createName.fill('新的制作项目')
+  await submitProject.click()
+  await createDialog.getByRole('alert').filter({ hasText: '项目暂时无法创建' }).waitFor()
+  assert.equal(await createName.inputValue(), '新的制作项目')
+  failCreate = false
+  await submitProject.click()
   await page.waitForURL(url => url.pathname === `/projects/${projects.find(project => project.name === '新的制作项目')?.id}`)
+  assert.equal(projects.find(project => project.name === '新的制作项目').unify_style, false)
+  projects.splice(0, projects.length, ...Array.from({ length: 23 }, (_, index) => ({
+    id: `fixture-${String(index + 1).padStart(2, '0')}`,
+    name: `分页项目 ${String(index + 1).padStart(2, '0')}`,
+    description: index === 22 ? '独有面包车描述' : '',
+  })))
+  await page.setViewportSize({ width: 1440, height: 1540 })
+  await visitProjects()
+  await page.getByText('共 23 个项目', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('article').count(), 20, '四列五行应请求 20 个项目')
+  await search.fill('分页项目')
+  await page.getByText('匹配 23 个项目', { exact: true }).waitFor()
+  const pagination = page.getByRole('navigation', { name: '项目列表分页' })
+  const footer = await pagination.boundingBox()
+  assert.ok(footer.x > 1000 && footer.y > 1480, '分页显示在列表右下方')
+  await pagination.getByText('2', { exact: true }).click()
+  await projectCard('分页项目 21').waitFor()
+  assert.equal(await page.getByRole('article').count(), 3)
+  assert.equal((await pagination.boundingBox()).y, footer.y)
+  await projectCard('分页项目 21').getByRole('link').click()
+  await page.waitForURL(url => url.pathname === '/projects/fixture-21')
+  await page.goBack()
+  await projectCard('分页项目 21').waitFor()
+  assert.equal(await page.getByRole('article').count(), 3)
+
+  await projectCard('分页项目 21').getByRole('link').click()
+  await page.waitForURL(url => url.pathname === '/projects/fixture-21')
+  await page.reload()
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '项目', exact: true }).click()
+  await projectCard('分页项目 21').waitFor()
+
+  assert.equal(await search.inputValue(), '分页项目')
+
+  await page.setViewportSize({ width: 375, height: 950 })
+  await pagination.getByRole('button', { name: '下一页' }).waitFor()
+  await projectCard('分页项目 21').waitFor()
+  await chooseDisplay('批量管理')
+  const twoRowHeight = await page.locator('.project-lobby-scroll').evaluate(panel =>
+    innerHeight - panel.clientHeight + 2 * panel.querySelector('article').getBoundingClientRect().height + 16 + 50,
+  )
+  await page.setViewportSize({ width: 375, height: Math.ceil(twoRowHeight) })
+  await projectCard('分页项目 22').getByRole('checkbox').check()
+  await projectCard('分页项目 21').getByRole('checkbox').check()
+  await page.getByText('已选 2 个项目', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 375, height: Math.floor(twoRowHeight - 80) })
+  await page.getByText('已选 1 个项目', { exact: true }).waitFor()
+  assert.equal(await projectCard('分页项目 21').getByRole('checkbox').isChecked(), true)
+  await pagination.getByRole('button', { name: '下一页' }).click()
+  await projectCard('分页项目 22').waitFor()
+  await page.getByText('已选 0 个项目', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '退出批量管理' }).click()
+  await search.fill('独有面包车描述')
+  await page.getByText('匹配 1 个项目', { exact: true }).waitFor()
+  await projectCard('分页项目 23').waitFor()
+  assert.equal(await pagination.count(), 0)
+  // One remaining project on the last page should return to the previous page when deleted.
+  projects.splice(20, 2)
+  await page.setViewportSize({ width: 1440, height: 1540 })
+  await page.goto(`${origin}/projects?offset=20`)
+  await projectCard('分页项目 23').getByRole('button', { name: '删除 分页项目 23' }).click()
+  await deleteDialog.getByRole('button', { name: /^删\s*除$/ }).click()
+  await page.getByText('共 20 个项目', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('article').count(), 20)
+  assert.equal(await pagination.count(), 0)
+  assert.equal(new URL(page.url()).searchParams.has('offset'), false)
+
+  projects.push(...Array.from({ length: 85 }, (_, index) => ({
+    id: `cap-${index}`, name: `上限测试项目 ${index}`,
+  })))
+  await page.setViewportSize({ width: 1920, height: 5500 })
+  await visitProjects()
+  await page.getByText('共 105 个项目', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('article').count(), 96, '六列时接口上限内只能取 16 整行')
   assert.deepEqual(errors, [])
   console.log(`Project lobby browser acceptance passed. Evidence: ${output}`)
 } catch (error) {

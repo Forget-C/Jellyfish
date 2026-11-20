@@ -1,57 +1,30 @@
 # 数据库迁移与系统种子
 
-日常维护见[数据库升级与回退](../guides/database-upgrade.md)。
+新环境的配置与执行命令见[数据库升级与回退](../guides/database-upgrade.md)。
 
 ## 执行链路
 
-Compose 在 MySQL 就绪后按下列依赖启动服务。本地分开启动时也先迁移和种子，再启动 API 和 Worker。
+MySQL 就绪后，Compose 先运行 `backend-migrate`，随后运行 `backend-seed-system-data`。两者成功退出后才启动 API 和 Worker。本地独立启动也遵循这个顺序。
 
-```text
-MySQL healthy
-→ backend-migrate
-→ backend-seed-system-data
-→ backend / task-worker
-```
+迁移入口 `app.scripts.migrate_database` 使用与应用相同的 `DATABASE_URL`。空库执行 `alembic upgrade head`。新基线纳管的数据库沿此版本链升级。非空库缺少有效版本记录时拒绝启动，入口不为现有库自动登记版本。旧 revision 已退出版本链，现有旧库应继续使用与其版本对应的代码。
 
-`backend-migrate` 执行 `app.scripts.migrate_database`，使用 `DATABASE_URL` 连接数据库：
+`backend/alembic/versions/68e14fd0c209_initial_schema.py` 是初始 revision，显式定义 56 张业务表与约束。后续变更追加独立 revision。迁移不调用 ORM 建表，`backend/init_db.py` 也使用正式迁移入口。Alembic `env.py` 通过 SQLAlchemy 异步桥接连接数据库，导入当前模型供后续 autogenerate 比较。应用运行连接在 MySQL 使用 READ COMMITTED，避免文件删除检查沿用旧快照。
 
-- 空数据库执行 `alembic upgrade head`；
-- 已有 `alembic_version` 的数据库执行升级到 `head`；
-- 非空但没有 `alembic_version` 的数据库直接拒绝，不通过当前 ORM 表名猜测旧版本；
-- 未纳管数据库必须使用空库，或由维护者核对结构后显式建立正确基线。迁移入口不会自动 stamp。
-
-结构变更只通过 `backend/alembic/versions/` 下的 Alembic revision 发布。开发命令 `backend/init_db.py` 也调用同一迁移入口；`Base.metadata.create_all()` 只用于隔离测试，不用于应用初始化。
-
-## Alembic 配置
-
-- `backend/alembic.ini` 定义 backend 本地脚本位置；
-- `backend/alembic/env.py` 读取应用的 `settings.database_url`；
-- `env.py` 显式导入 `app.models`，并使用 `Base.metadata` 支持 revision autogenerate；
-- 异步驱动通过 SQLAlchemy 的 `run_sync` 桥接执行 Alembic，因此运行时和迁移共用 `mysql+aiomysql` URL。
-
-应用运行连接在 MySQL 使用 READ COMMITTED，避免文件删除检查沿用旧快照；迁移独立连接不承担应用并发读取。
+退役跨场衔接接口后，空库初始化省略 `directing_chapter_transitions`。此前已到达 `68e14fd0c209` 的库沿用原版本号，保留该表、记录及外键。同一 revision 下的这处结构差异是预期行为。若将来通过 Alembic autogenerate 比较已初始化的库，需从生成结果中排除这张历史表的删除操作，除非另行确认存量退役。
 
 ## 系统种子
 
-`backend-seed-system-data` 在迁移完成后运行 `app.scripts.seed_system_data`：
+`app.scripts.seed_system_data` 在同一事务执行 `backend/sql/001-init-prompt-template.sql`。缺失时创建 `model_settings.id = 1`，已有默认模型及设置不被覆盖。首次初始化为演员、角色、道具、服装各创建一个可生成的默认模板。重复初始化只补缺失的系统模板，保留已有模板的版本、显式引用和类别默认选择。已有用户模板保留，若占用系统保留 ID，种子失败并回滚，请检查冲突来源。
 
-- 当前只处理系统提示词模板；
-- 同一事务内替换固定 ID 的系统提示词模板，正常重复执行保持模板数量稳定。
-- 删除条件限定固定 ID 且 `is_system = 1`。用户模板使用系统保留 ID 时，插入冲突会使种子事务失败，维护者需先核对冲突来源。
-- 种子读取 `backend/sql/001-init-prompt-template.sql` 中的删除和插入语句。Compose 直接调用种子入口。
+## 存储取舍
 
-历史 Alembic 模板迁移的作用范围与系统种子不同。演员设定图迁移会删除 `actor_image_front` / `actor_image_other` 模板及关联的未完成演员图片任务，并写入唯一的 `actor_image` 系统模板。已完成任务的结果文件和已有演员图片关联不受影响。
+| 处置 | 数据及读写依赖 |
+| --- | --- |
+| 移除旧四画布专属存储 | 版本、复制来源、单元身份、指令、视频执行、审查、尾帧和交付共 12 张表。旧任务与交付读取、专属素材使用登记随旧功能退出。现行生产计划使用自身的修订、批次、Take 和剪辑记录。见[退役决定](../adr/0014-retire-scene-version-api.md#从空库初始化的新基线)。 |
+| 排除历史迁移产物 | 既往迁移创建的三个画布备份表、旧 Shot 与时间线、生成任务与 outbox 等执行结构已退出。旧格式转换、文件引用回填和未纳管版本导入入口随之移除。 |
+| 收敛现行字段与格式 | 单卡画布预检和受理不持久化恒定执行范围或空卡片列表，保留单卡身份与校验依据。角色来源由统一类型和身份读取。图片来源对象的风格可为空。章节划分请求身份由提交回执记录。实验消息使用实际受理输入恢复。 |
+| 保留数据库约束所需的计算列 | `directing_sequences.current_position` 仅对当前场次参与章内排序唯一性。演员、场所、道具和服装的 `name_scope` 把空项目归属映射到共享范围，配合唯一索引约束并发同名记录。 |
+| 保留业务身份及证据 | 章节和画布使用业务版本、当前指针与提交回执校验冲突并重放原结果。画布以固定输入、结果集和当前结果指针分开记录历史与现行输出。实验消息序号由数据库维护并发排序。任务输入、输出和文件使用关系分别支持执行、文件追溯及占用保护。 |
+| 保留项目默认视频比例 | 项目创建及设置可以保存该字段。手工视频卡从模型能力选择默认比例，分镜视频卡使用本轮分段比例或模型允许值，画布提交将卡片配置冻结为执行输入。生产试拍从已确认的生产单元读取画幅。上述提交入口均不读取项目默认比例。改变该公开设置需独立决定。 |
 
-角色、道具和服装使用同样的迁移规则：清理各自旧的正面/其他视角模板和未完成图片任务，写入单一默认模板；已生成的图片文件和关联保持不变。
-
-旧的结构迁移 SQL (`002`—`008`) 仅作为历史与短期回退资料保留，不参与当前启动链路。
-
-## 任务与文件收敛迁移
-
-`13b6a9d2e401` 接在 `f2a3b4c5d6e7` 后：创建 tasks、task_inputs、task_outputs，删除旧任务、Run、Artifact、ProviderOperation、Blob 和 outbox 等执行表；调整 files 为唯一对象身份，并将 project_id 加入文件使用关系唯一键。
-
-此迁移不转换旧任务历史；业务表、已有文件 ID、storage_key 和对象存储字节保留。旧 thumbnail URL 与 content_version 移除，已有文件的 content_type 初始化为 application/octet-stream。新任务从新表形成历史。旧实验消息中已失效的任务关联不会被解释为新任务状态。
-
-升级前必须停止 API 与新旧 Worker，备份数据库。文件 key 按数据库 `LENGTH` 计算超过 700或多条文件记录共享同一 key 时，迁移在任何 DDL 前失败，不自动截断或合并。MySQL DDL 不具备整段事务回滚能力；失败后先核对已执行步骤，不盲目重跑。此收缩迁移不支持 downgrade，回退需恢复备份并使用对应旧代码。
-
-隔离 SQLite 适合验证应用逻辑。迁移实际 DDL、索引和外键结构及并发约束应在目标版本的隔离 MySQL 中核对。
+验证围绕正式迁移与种子、现行 API 和 Worker。隔离 MySQL 负责全库结构反射和真实并发，SQLite 用于需要独立数据库的应用测试。

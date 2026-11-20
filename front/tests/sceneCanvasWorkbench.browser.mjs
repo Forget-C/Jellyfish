@@ -29,7 +29,7 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
     if (backend.exitCode !== null) throw new Error('isolated backend exited')
-    try { if ((await fetch(`${studio}/generation-canvases/${project}`)).ok) { ready = true; break } } catch {}
+    try { if ((await fetch(`${studio}/generation-canvases`)).ok) { ready = true; break } } catch {}
     await delay(250)
   }
   assert.ok(ready)
@@ -51,24 +51,22 @@ try {
   const management = `${origin}/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=storyboard`
   const canvasCard = name => page.getByRole('list', { name: '本场画布', exact: true }).getByRole('listitem')
     .filter({ has: page.getByRole('heading', { name, exact: true }) })
-  const open = name => canvasCard(name).getByRole('button', { name: '打开画布', exact: true }).click()
+  const open = name => canvasCard(name).getByRole('button', { name, exact: true }).click()
   await page.goto(chapterPage)
   await page.getByRole('button', { name: '工作台管理', exact: true }).click()
-  await page.getByRole('heading', { name: '推开门', exact: true }).waitFor()
-  await page.getByRole('button', { name: '编辑场次名称与顺序' }).click()
-  const metadata = page.getByRole('dialog', { name: '编辑场次名称与顺序' })
-  await metadata.getByRole('textbox', { name: '场次标题' }).fill('推开门与照明')
-  await metadata.getByRole('button', { name: /^保\s*存$/ }).click()
-  await page.getByRole('heading', { name: '推开门与照明', exact: true }).waitFor()
-  await page.getByRole('navigation', { name: '当前位置' }).getByRole('link', { name: '章节', exact: true }).click()
+  await page.waitForURL(url => url.pathname.endsWith('/workbench-management'))
+  await page.getByRole('button', { name: '返回章节列表', exact: true }).click()
   await page.waitForURL(chapterPage)
   await page.goto(`${origin}/projects/${project}?tab=dashboard`)
-  await page.getByRole('button', { name: '推开门与照明 · 打开工作台管理', exact: true }).click()
+  await page.getByRole('link', { name: '推开门', exact: true }).click()
   await page.waitForURL(url => url.pathname.endsWith('/workbench-management') && url.searchParams.get('sequence') === sequence.id)
-  await page.getByRole('button', { name: '分镜与画布〔本场〕', exact: true }).click()
-  const create = page.getByRole('button', { name: '新建空白画布', exact: true })
-  await create.press('Enter')
-  const modal = page.getByRole('region', { name: '新建空白画布配置' })
+  await page.getByRole('navigation', { name: '制作步骤' }).getByRole('button', { name: '分镜画布', exact: true }).click()
+  const create = async () => {
+    await page.getByRole('button', { name: '画布更多操作', exact: true }).click()
+    await page.getByRole('menuitem', { name: '新建空白画布', exact: true }).click()
+  }
+  await create()
+  const modal = page.getByRole('dialog', { name: '新建空白画布' })
   const input = modal.getByRole('textbox', { name: '画布名称' })
   assert.match(await input.inputValue(), /^分镜画布-\d{8}-\d{6}$/)
   await input.fill('第一套方案')
@@ -77,7 +75,9 @@ try {
   await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
   const id = new URL(page.url()).searchParams.get('canvas')
   assert.ok(id)
-  const base = `${studio}/generation-canvases/${project}`, read = () => request(`${base}/${id}`)
+  const base = `${studio}/generation-canvases`
+  const canvasUrl = (id, suffix = '') => `${base}/${id}${suffix}?project_id=${project}`
+  const read = () => request(canvasUrl(id))
   const source = (await read()).document.cards[0]
   assert.equal(source.text, excerpt)
   const card = page.locator(`[data-card-id="${source.id}"]`)
@@ -101,7 +101,7 @@ try {
   await page.goto(management)
 
   const beforeNote = await read()
-  await request(`${base}/${id}`, 'PUT', { request_id: 'prepare-note', expected_revision: beforeNote.revision,
+  await request(canvasUrl(id), 'PUT', { request_id: 'prepare-note', expected_revision: beforeNote.revision,
     document: { ...beforeNote.document, cards: [...beforeNote.document.cards, { id: 'ordinary-note', type: 'content.text', text: '备注' }] } })
 
   const sceneRead = url => url.pathname.endsWith('/sequences/' + sequence.id + '/canvases')
@@ -127,7 +127,7 @@ try {
   await workspace.getByRole('button', { name: '返回工作台管理', exact: true }).click()
   await canvasCard('改名后方案').waitFor()
 
-  await page.goto(`http://127.0.0.1:4259/projects/${project}/generation-canvas?canvas=${id}`)
+  await page.goto(`http://127.0.0.1:4259/projects/${project}/chapters/${chapter}/sequences/${sequence.id}/canvas-workbench?canvas=${id}`)
   await card.press('Enter')
   assert.equal(await body.inputValue(), excerpt)
   assert.equal(await body.getAttribute('aria-readonly'), 'true')
@@ -164,7 +164,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: join(output, 'prep-mobile.png'), animations: 'disabled' })
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-  await create.click()
+  await create()
   assert.match(await input.inputValue(), /^分镜画布-\d{8}-\d{6}$/)
   await modal.waitFor()
   await modal.screenshot({ path: join(output, 'create-mobile.png'), animations: 'disabled' })
@@ -174,7 +174,7 @@ try {
   await page.getByRole('region', { name: '生成画布工作台' }).waitFor()
   const second = new URL(page.url()).searchParams.get('canvas')
   assert.ok(second && second !== id)
-  assert.equal((await request(`${base}/${second}`)).document.cards[0].text, excerpt)
+  assert.equal((await request(canvasUrl(second))).document.cards[0].text, excerpt)
   assert.equal((await read()).document.name, '改名后方案')
   process.stdout.write(JSON.stringify({ output, passed: true }) + '\n')
 } finally { await cleanup() }

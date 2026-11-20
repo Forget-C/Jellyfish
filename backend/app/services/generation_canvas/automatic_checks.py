@@ -43,7 +43,7 @@ async def automatic_check_plan(db, canvas, nodes):
     return plans, estimates
 
 
-async def enqueue_automatic_checks(db, node: CanvasRunNode, project_id: str) -> None:
+async def enqueue_automatic_checks(db, node: CanvasRunNode, project_id: str | None) -> None:
     """Record a durable dispatch only on the generation Task's successful settlement."""
     plans = (node.execution_snapshot or {}).get('automatic_checks')
     if node.result_set_id and plans and all(len(node.outputs) == plan['count'] for plan in plans):

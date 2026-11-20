@@ -53,6 +53,9 @@ class ControlledModel:
 
     def invoke(self, messages):
         """为场次准备和分镜浏览器旅程替换外部模型输出。"""
+        from tests.directing.storyboard_prompt_fixture import video_prompt_response
+        if response := video_prompt_response(messages):
+            return response
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') != '1':
             raise AssertionError('Unexpected direct text request')
         args = json.loads(messages[1].content)
@@ -125,7 +128,10 @@ class ControlledModel:
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'front', 'excerpt': revised}]}, ensure_ascii=False))
         if control.get('storyboard_structure_choices') and args.get('mode') == 'complete':
             subject = next(item['id'] for item in args['objects'] if item['kind'] == 'character')
-            selected = '"selected_option": {' in messages[-1].content
+            if '测试依据不足' in messages[-1].content:
+                return SimpleNamespace(content=json.dumps({'structure_choices': [], 'reason': '镜头缺少人物出镜依据，请调整适用范围。'}))
+            selected = ('"selected_option": {' in messages[-1].content
+                        or '保留等待设计，仅补齐参与对象关联' in messages[-1].content)
             if len(messages) > 2 and not selected:
                 return SimpleNamespace(content=json.dumps({'structure_choices': [{
                     'id': 'include-subject', 'title': '补充镜头参与对象',
@@ -405,7 +411,7 @@ if __name__ == '__main__':
             """只替换外部对象存储 I/O，保留真实文件路由及服务。"""
             path = object_path(key)
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data.read())
+            path.write_bytes(data if isinstance(data, bytes) else data.read())
 
         def readable_path(key, operation):
             path = object_path(key)

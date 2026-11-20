@@ -6,7 +6,6 @@ import { resultScopeIncludes, resultScopeWithPosition, sameResultConnection } fr
 import type { GenerationCard, GenerationEdge, createGraphRules } from './graphRules'
 import { referenceProtection, sourceKey } from './promptRules'
 import { cleanObjectSources } from './objectSourceCleanup'
-import { cleanReferenceImageSources } from './referenceCardRules'
 import { retargetResultReferences } from './detachedResults'
 
 type Protection = NonNullable<ReturnType<typeof referenceProtection>>
@@ -34,7 +33,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
     return (document.edges || []).filter(member => sameResultConnection(member, edge)).reduce((next, member) => disconnect(next, member.id), document)
   }
   return {
-    clean: (document: CanvasDocument) => cleanConnectionDocument(cleanReferenceImageSources(cleanObjectSources(document)), { connectionPolicy, cardDefinitions, cleanDirectDesignCandidates, sourceOptions }),
+    clean: (document: CanvasDocument) => cleanConnectionDocument(cleanObjectSources(document), { connectionPolicy, cardDefinitions, cleanDirectDesignCandidates, sourceOptions }),
     connect: addConnection,
     connectResult(document: CanvasDocument, edge: GenerationEdge, position: number, capability?: CanvasModelCapability): CanvasOperationResult {
       const existing = findConnection(document, edge)

@@ -33,7 +33,7 @@ class SceneObjectExtraction(Contract):
 
 
 class SceneObjectCandidate(Contract):
-    """服务端建立对象身份，并独立保存用户的关联与图片选择。"""
+    """服务端建立故事对象身份，独立保存当前项目资源选用。"""
 
     id: Identity
     kind: Literal['character', 'scene', 'prop']
@@ -43,21 +43,20 @@ class SceneObjectCandidate(Contract):
     span: SourceSpan
     suggested_asset_id: Identity | None = None
     asset_id: Identity | None = None
-    image_file_id: Identity | None = None
 
 
 class SceneObjectRead(SceneObjectCandidate):
-    """实际文件可用性按当前项目资产读取，已选文件不可用时仍可识别旧选择。"""
+    """读取当前资源主图投影；图片身份不写入场次准备。"""
 
+    image_file_id: Identity | None = None
     reference_state: Literal['unassociated', 'missing', 'ready', 'unavailable']
 
 
 class SceneObjectChoice(Contract):
-    """在同一准备修订上保存明确选择。省略图片表示当前不选。"""
+    """在同一准备修订上保存明确选择。只选用项目对象，不提前固定图片。"""
 
     expected_revision: int = Field(gt=0)
     asset_id: Identity | None = None
-    image_file_id: Identity | None = None
 
 
 class SceneObjectTaskRead(Contract):
