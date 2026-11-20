@@ -1,4 +1,4 @@
-import { openCanvasSettings, renameFreeCanvas, openCardList, openCanvasCard, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { canvasSettingsAction, openCanvasSettings, renameFreeCanvas, openCardList, openCanvasCard, selectCanvasByName } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -68,6 +68,15 @@ try {
   assert.equal(first.document.cards[0].text, '刷新后仍然存在的正文')
 
   const more = page.getByRole('button', { name: '更多操作', exact: true })
+  const menu = page.getByRole('group', { name: '更多操作选项' })
+  const assertCompactMenu = async () => {
+    await canvasSettingsAction(page)
+    const bounds = await menu.boundingBox()
+    assert.ok(bounds && bounds.width <= 180 && bounds.x >= 0)
+    assert.ok(bounds.x + bounds.width <= await page.evaluate(() => innerWidth))
+  }
+  await assertCompactMenu()
+  await page.screenshot({ path: join(output, 'canvas-menu-desktop.png'), animations: 'disabled' })
   let coverSettings = await openCanvasSettings(page)
   await coverSettings.getByRole('textbox', { name: '画布名称' }).fill('取消的名称')
   await coverSettings.getByRole('button', { name: '取消', exact: true }).click()
@@ -116,6 +125,8 @@ try {
   assert.match(await firstCard.locator('img').getAttribute('src'), new RegExp(coverId))
   await firstCard.getByRole('link', { name: '第一张独立画布带封面' }).click()
   await page.setViewportSize({ width: 390, height: 700 })
+  await assertCompactMenu()
+  await page.screenshot({ path: join(output, 'canvas-menu-narrow.png'), animations: 'disabled' })
   coverSettings = await openCanvasSettings(page)
   await coverSettings.getByRole('button', { name: '恢复默认', exact: true }).click()
   await coverSettings.getByText('默认封面', { exact: true }).waitFor()
@@ -223,5 +234,18 @@ try {
   assert.equal(recoveredDocument.name, '冲突后恢复的名称')
   assert.equal(recoveredDocument.cards[0].text, '来自另一会话', 'settings-only recovery keeps new server content')
   await page.unroute(recoverRoute)
+  await page.evaluate(() => localStorage.setItem('jellyfish_canvas_appearance', 'dark'))
+  await page.reload()
+  await assertCompactMenu()
+  const darkSettings = await openCanvasSettings(page)
+  const darkName = darkSettings.getByRole('textbox', { name: '画布名称' })
+  assert.equal(await darkName.evaluate(input => getComputedStyle(input).colorScheme), 'dark')
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('.canvas-settings-dialog .ant-modal')
+    return dialog && !dialog.className.includes('zoom') && getComputedStyle(dialog).opacity === '1'
+  })
+  await page.screenshot({ path: join(output, 'canvas-settings-dark.png'), animations: 'disabled' })
+  await page.keyboard.press('Escape')
+  await more.and(page.locator(':focus')).waitFor()
   console.log('new → edit → save → second canvas → switch → refresh: persistent content and revision verified')
 } finally { await cleanup() }

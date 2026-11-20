@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Input, Space } from 'antd'
-import { PictureOutlined } from '@ant-design/icons'
+import { Alert, Input } from 'antd'
+import { FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
 import { WorkbenchButton as Button } from '../../../components/workbench/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 import { StudioFilesService, type CanvasDocument } from '../../../services/generated'
@@ -97,7 +97,8 @@ export function CanvasSettingsDialog({ document, recoveredDraft, blocked, pendin
     }
   }
 
-  return <WorkbenchModal title={library ? '从文件管理选择图片' : '画布设置'} open={!blocked} width={520}
+  return <WorkbenchModal title={library ? '从文件管理选择图片' : '画布设置'} open={!blocked} width={480}
+    centered rootClassName="canvas-settings-dialog"
     onCancel={close} closable={!busy && !pending} keyboard={!busy && !pending} maskClosable={false}
     footer={library
       ? <WorkbenchDialogActions secondary={<Button variant="quiet" onClick={returnFromLibrary}>返回设置</Button>}>{null}</WorkbenchDialogActions>
@@ -119,16 +120,18 @@ export function CanvasSettingsDialog({ document, recoveredDraft, blocked, pendin
       </label>
       <section className="canvas-settings-field" aria-label="画布封面">
         <span>画布封面</span>
-        <div className="canvas-settings-preview">
-          {source && source !== failedSource ? <img src={source} alt="画布封面预览" onError={() => setFailedSource(source)} />
-            : <span><PictureOutlined aria-hidden /> 默认封面</span>}
+        <div className="canvas-settings-cover">
+          <div className="canvas-settings-preview">
+            {source && source !== failedSource ? <img src={source} alt="画布封面预览" onError={() => setFailedSource(source)} />
+              : <span><PictureOutlined aria-hidden />默认封面</span>}
+          </div>
+          <div className="canvas-settings-cover-actions">
+            <Button icon={<UploadOutlined />} disabled={inputsDisabled} onClick={() => upload.current?.click()}>上传图片</Button>
+            <Button ref={libraryTrigger} icon={<FolderOpenOutlined />} disabled={inputsDisabled} onClick={() => setLibrary(true)}>从文件管理选择</Button>
+            {(localFile || fileId) && <Button variant="quiet" disabled={inputsDisabled}
+              onClick={() => chooseCover(document.cover_file_id ? null : undefined)}>恢复默认</Button>}
+          </div>
         </div>
-        <Space wrap>
-          <Button disabled={inputsDisabled} onClick={() => upload.current?.click()}>上传图片</Button>
-          <Button ref={libraryTrigger} disabled={inputsDisabled} onClick={() => setLibrary(true)}>从文件管理选择</Button>
-          {(localFile || fileId) && <Button variant="quiet" disabled={inputsDisabled}
-            onClick={() => chooseCover(document.cover_file_id ? null : undefined)}>恢复默认</Button>}
-        </Space>
         <input ref={upload} type="file" hidden accept=".jpg,.jpeg,.png,.webp,.gif" aria-label="上传画布封面" disabled={inputsDisabled}
           onChange={event => {
             const file = event.target.files?.[0]

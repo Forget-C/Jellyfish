@@ -213,7 +213,7 @@ export function GenerationCanvasWorkspace({
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         <CanvasAppearancePicker compact />
         <TaskCenter workbench />
-        <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
+        <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />} compact={!!renderCanvasManagement}>
           {focusMenu => <>
             {renderCanvasManagement?.(management, focusMenu)}
             {!uncreated && <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>}

@@ -255,7 +255,7 @@
   .canvas-toolbar-views .ant-btn { flex: 1; padding-inline: 6px; }
   .canvas-toolbar-actions { grid-column: 1; grid-row: 3; max-width: none; }
   .canvas-toolbar-primary { flex: 1 1 100%; order: 1; }
-  .canvas-toolbar-popover { position: fixed; left: 12px !important; right: 12px !important; top: var(--workbench-toolbar-bottom, 150px); width: auto; max-height: calc(100dvh - var(--workbench-toolbar-bottom, 150px) - 24px); overflow: auto; }
+  :where(.canvas-toolbar-menu:not(.canvas-toolbar-menu--compact)) > .canvas-toolbar-popover { position: fixed; left: 12px !important; right: 12px !important; top: var(--workbench-toolbar-bottom, 150px); width: auto; max-height: calc(100dvh - var(--workbench-toolbar-bottom, 150px) - 24px); overflow: auto; }
   .director-canvas-object-content { max-height: calc(100dvh - var(--workbench-content-top, 180px) - 110px); }
   .director-canvas-bottom { bottom: 12px; left: 12px; gap: 2px; }
   .canvas-director-browse { width: 100%; justify-content: space-between; gap: 2px; }

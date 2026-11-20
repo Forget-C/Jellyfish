@@ -3,7 +3,13 @@ import type { ReactNode } from 'react'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 
 /** 工具菜单只改变可见性，子组件持续挂载，避免收起菜单中断任务或丢失输入。 */
-export function CanvasToolbarMenu({ label, children, icon, caption }: { label: string; children: ReactNode | ((focusTrigger: () => void) => ReactNode); icon?: ReactNode; caption?: ReactNode }) {
+export function CanvasToolbarMenu({ label, children, icon, caption, compact = false }: {
+  label: string
+  children: ReactNode | ((focusTrigger: () => void) => ReactNode)
+  icon?: ReactNode
+  caption?: ReactNode
+  compact?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -22,7 +28,7 @@ export function CanvasToolbarMenu({ label, children, icon, caption }: { label: s
     window.addEventListener('keydown', escape)
     return () => { document.removeEventListener('pointerdown', dismiss); window.removeEventListener('keydown', escape) }
   }, [open])
-  return <div className="canvas-toolbar-menu" ref={root} onKeyDown={event => {
+  return <div className={`canvas-toolbar-menu${compact ? ' canvas-toolbar-menu--compact' : ''}`} ref={root} onKeyDown={event => {
     if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }) }
   }}>
     <WorkbenchButton ref={trigger} variant="quiet" icon={icon} aria-label={label} title={label} aria-expanded={open} aria-controls={id}
