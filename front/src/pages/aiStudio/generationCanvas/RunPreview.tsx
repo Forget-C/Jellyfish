@@ -14,13 +14,10 @@ export function RunPreview({ preview, canvas, catalog, submitting, disabled, onS
     video_sequence: '视频序列检查', video_mixed: '视频序列与静帧检查' }
   const labels = canvas ? referenceLabels(canvas, preview.input.used || [], preview.card_id) : new Map<string, string>()
   const mediaKinds = new Map((preview.input.used || []).map(output => [sourceKey(output.source), output.modality]))
-  const awaitingUpstream = preview.input.used?.some(item => preview.execution_nodes.includes(item.source.card_id))
-  const inputLabel = awaitingUpstream ? '受理时输入预览' : '实际提交文本'
   return <section aria-label="运行预检" className="generation-run-preview">
     <strong>运行预检 · revision {preview.revision}</strong>
     <p>执行 {preview.execution_nodes.join('、')} · 复用已有结果 {preview.reused_results?.length || 0} 项</p>
-    {awaitingUpstream && <p>本轮上游完成后将使用新结果，下方为受理时已有输入。</p>}
-    <section aria-label={inputLabel}><CanvasTextPreview text={preview.input.text || ''} label={inputLabel} /></section>
+    <section aria-label="实际提交文本"><CanvasTextPreview text={preview.input.text || ''} label="实际提交文本" /></section>
     {!preview.input.video_media && !!preview.input.media?.length && <section aria-label="实际参考图片">
       {preview.input.media.filter(output => output.modality === 'image').map((output, index) => <div key={`${output.source.card_id}:${output.source.position}`}>
         <p>参考图片 {index + 1} · {labels.get(sourceKey(output.source)) || output.token} → image {index + 1} · 来源 {output.source.card_id} / 输出 {output.source.position + 1}</p>
