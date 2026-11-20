@@ -48,6 +48,7 @@ def test_empty_database_is_migrated_and_seeded_without_replacing_user_data(tmp_p
         run("migrate_database")
         run("seed_system_data")
         with engine.begin() as connection:
+            assert "directing_chapter_transitions" not in sa.inspect(connection).get_table_names()
             assert connection.exec_driver_sql(
                 "SELECT id, api_timeout, log_level FROM model_settings"
             ).all() == [(1, 30, "info")]

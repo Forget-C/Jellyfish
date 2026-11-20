@@ -294,24 +294,6 @@ class SeamReview(Base):
     __table_args__ = (CheckConstraint("verdict IN ('pass','revise')", name='ck_directing_seam_verdict'),)
 
 
-class ChapterTransition(Base):
-    """不可变跨场审查固定两端采用和实际帧，顺序改变后仅保留历史。"""
-
-    __tablename__ = 'directing_chapter_transitions'
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    chapter_id: Mapped[str] = mapped_column(ForeignKey('chapters.id', ondelete='RESTRICT'), index=True)
-    left_sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'))
-    right_sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'))
-    left_cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'))
-    right_cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'))
-    left_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'))
-    right_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'))
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at)
-
-
 class RepairPlanLink(Base):
     """连接明确返工诊断与派生计划，后续任务和 Take 沿计划身份追溯。"""
 

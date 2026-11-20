@@ -1041,30 +1041,6 @@ def upgrade() -> None:
     op.create_index('ix_generation_canvas_run_nodes_run_id', 'generation_canvas_run_nodes', ['run_id'], unique=False)
 
     op.create_table(
-        'directing_chapter_transitions',
-        sa.Column('id', sa.String(length=64), nullable=False),
-        sa.Column('chapter_id', sa.String(length=64), nullable=False),
-        sa.Column('left_sequence_id', sa.String(length=64), nullable=False),
-        sa.Column('right_sequence_id', sa.String(length=64), nullable=False),
-        sa.Column('left_cut_revision_id', sa.String(length=64), nullable=False),
-        sa.Column('right_cut_revision_id', sa.String(length=64), nullable=False),
-        sa.Column('left_frame_id', sa.String(length=64), nullable=False),
-        sa.Column('right_frame_id', sa.String(length=64), nullable=False),
-        sa.Column('payload', sa.JSON(), nullable=False),
-        sa.Column('actor_id', sa.String(length=64), nullable=False),
-        sa.Column('created_at', sa.DateTime().with_variant(mysql.DATETIME(fsp=6), 'mysql'), nullable=False),
-        sa.ForeignKeyConstraint(['chapter_id'], ['chapters.id'], ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['left_cut_revision_id'], ['directing_revisions.id'], ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['left_frame_id'], ['directing_cut_frames.id'], ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['left_sequence_id'], ['directing_sequences.id'], ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['right_cut_revision_id'], ['directing_revisions.id'], ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['right_frame_id'], ['directing_cut_frames.id'], ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['right_sequence_id'], ['directing_sequences.id'], ondelete='RESTRICT'),
-        sa.PrimaryKeyConstraint('id'),
-    )
-    op.create_index('ix_directing_chapter_transitions_chapter_id', 'directing_chapter_transitions', ['chapter_id'], unique=False)
-
-    op.create_table(
         'directing_seam_reviews',
         sa.Column('id', sa.String(length=64), nullable=False),
         sa.Column('sequence_id', sa.String(length=64), nullable=False),
