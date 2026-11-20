@@ -57,7 +57,7 @@ async def validate_references(db, document, previous, project_id, media_referenc
         source = context.cards.get(image.source.card_id) if image.source else None
         keeps_pinned_file = (image.source is None and previous_image is not None
                                and previous_image.file_id == image.file_id and previous_image.result_set_id == image.result_set_id)
-        if not (keeps_pinned_file or (source and source.type == 'content.image' and image.source.canvas_id == document.id)):
+        if not (keeps_pinned_file or (source and source.type == 'content.image')):
             raise diagnostic('INVALID_REFERENCE_SOURCE', '新增参考图仅可从图片内容卡选择', {**target, 'path': ['image_binding']})
         await validate_media_file(db, project_id, media_references[card.id][0])
         if image.source:

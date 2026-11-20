@@ -14,7 +14,7 @@ export type CanvasOperationResult = { document: CanvasDocument; reason?: never; 
 
 /** Stateless document operations. Callers commit successful results once and retain
  * ownership, confirmation, geometry and history; server validation remains authoritative. */
-export function createCanvasOperations({ connectionReason, sourceOptions, connectionPolicy, cardDefinitions, connect, disconnect }: ReturnType<typeof createGraphRules>) {
+export function createCanvasOperations({ connectionReason, sourceOptions, connectionPolicy, cardDefinitions, connect, disconnect, cleanDirectDesignCandidates }: ReturnType<typeof createGraphRules>) {
   const stackFor = (document: CanvasDocument, id: string) => document.groups?.find(group => group.kind === 'stack' && group.card_ids?.includes(id))
   const addConnection = (document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability): CanvasOperationResult => {
     if (findConnection(document, edge)) return { document }
@@ -33,7 +33,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
     return (document.edges || []).filter(member => sameResultConnection(member, edge)).reduce((next, member) => disconnect(next, member.id), document)
   }
   return {
-    clean: (document: CanvasDocument) => cleanConnectionDocument(cleanObjectSources(document), { connectionPolicy, cardDefinitions, sourceOptions }),
+    clean: (document: CanvasDocument) => cleanConnectionDocument(cleanObjectSources(document), { connectionPolicy, cardDefinitions, cleanDirectDesignCandidates, sourceOptions }),
     connect: addConnection,
     connectResult(document: CanvasDocument, edge: GenerationEdge, position: number, capability?: CanvasModelCapability): CanvasOperationResult {
       const existing = findConnection(document, edge)

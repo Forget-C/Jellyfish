@@ -74,7 +74,19 @@ function disconnect(document: CanvasDocument, id: string): CanvasDocument {
   return { ...document, cards, edges, input_order: order }
 }
 
-  return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions, connectionPolicy, candidatePorts, isIndependentDesignEdge, connect, disconnect }
+/** 清理旧的未采用独立设计及验收候选，避免升级时增加生成输入。 */
+function cleanDirectDesignCandidates(document: CanvasDocument): CanvasDocument {
+  let next = document
+  for (const edge of document.edges || []) {
+    if (!isIndependentDesignEdge(document, edge) && connectionPolicy(document, edge)?.connect !== 'associate_acceptance') continue
+    const card = document.cards?.find(item => item.id === edge.target_card)
+    if (!card || !('input_bindings' in card) || !card.input_bindings?.some(binding => binding.input_port === edge.target_port && binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port)) next = disconnect(next, edge.id)
+    else if (isIndependentDesignEdge(document, edge) && card.input_bindings?.some(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port && binding.prompt_owned !== false)) next = { ...next, cards: next.cards?.map(item => item.id === card.id && 'input_bindings' in item ? { ...item, input_bindings: item.input_bindings?.map(binding => binding.source.card_id === edge.source_card && binding.source.port_id === edge.source_port && binding.input_port === edge.target_port ? { ...binding, prompt_owned: false } : binding) } : item) }
+  }
+  return next
+}
+
+  return { catalog, cardDefinitions, cardTitles, portLabels, inputPorts, outputPorts, connectionReason, sourceOptions, connectionPolicy, candidatePorts, isIndependentDesignEdge, connect, disconnect, cleanDirectDesignCandidates }
 }
 
 /** 卡片之间共享一条来源连接，内部用途边保留原身份和独立顺序。 */
