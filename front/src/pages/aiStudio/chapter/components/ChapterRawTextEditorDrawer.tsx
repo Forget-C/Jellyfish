@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
-import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Popconfirm, Space, Spin, Tag, Select, message } from 'antd'
+import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Popconfirm, Space, Spin, Tag, Select, Tooltip, message } from 'antd'
 import { flushSync } from 'react-dom'
 import {
   CloseCircleOutlined,
+  CommentOutlined,
   HistoryOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -113,9 +114,11 @@ export function ChapterRawTextEditorDrawer({
         ? textStats.current.offsetHeight + parseFloat(getComputedStyle(textStats.current).marginTop)
         : 0
       const bottomGap = layout.current ? parseFloat(getComputedStyle(layout.current).marginBottom) : 0
+      const card = field.closest('.chapter-source-card')
+      const cardPadding = card ? parseFloat(getComputedStyle(card).paddingBottom) : 0
       // Measure in the drawer's content coordinates so scrolling does not resize the editor.
       const fieldTop = field.getBoundingClientRect().top - drawerBody.getBoundingClientRect().top + drawerBody.scrollTop
-      const budget = drawerBody.clientHeight - bottomPadding - fieldTop - statsSpace - bottomGap
+      const budget = drawerBody.clientHeight - bottomPadding - fieldTop - statsSpace - bottomGap - cardPadding
       const cap = `${Math.max(0, Math.floor(budget))}px`
       if (textFields.style.getPropertyValue('--chapter-text-budget') !== cap) {
         textFields.style.setProperty('--chapter-text-budget', cap)
@@ -129,7 +132,7 @@ export function ChapterRawTextEditorDrawer({
     observer.observe(drawerBody)
     observer.observe(textFields)
     if (drawerBody.firstElementChild) observer.observe(drawerBody.firstElementChild)
-    if (tools.current) observer.observe(tools.current)
+    if (tools.current) observer.observe(tools.current.parentElement ?? tools.current)
     drawerBody.querySelectorAll('.chapter-editor-name-row, .chapter-editor-pane-switch, .chapter-editor-feedback').forEach(element => observer.observe(element))
     fitTextToDrawer()
     return () => {
@@ -167,13 +170,41 @@ export function ChapterRawTextEditorDrawer({
     focusExplanation.current = false
   }, [editingExplanation, expandedExplanation, pane])
   const [selectingFor, setSelectingFor] = useState<string>()
-  const [selectionTarget, setSelectionTarget] = useState<{ span?: SourceSpan }>()
+  const [selectionTarget, setSelectionTarget] = useState<{ span?: SourceSpan; fromStart: boolean }>()
+  const [rawSelection, setRawSelection] = useState<{ span: SourceSpan; whole: boolean; source: string }>()
+  const reselectReturn = useRef<string>()
+  useLayoutEffect(() => {
+    const id = reselectReturn.current
+    if (!id) return
+    const trigger = layout.current?.querySelector<HTMLButtonElement>(`[data-reselect-id="${CSS.escape(id)}"]`)
+    const target = trigger?.disabled ? layout.current?.querySelector<HTMLElement>('.chapter-explanation-heading h2') : trigger
+    target?.focus()
+    reselectReturn.current = undefined
+  }, [selectingFor, pane])
   const rawInput = useRef<ComponentRef<typeof Input.TextArea>>(null)
   const [rawText, setRawText] = useState('')
   const [condensedText, setCondensedText] = useState('')
-  const selectInRaw = (span?: SourceSpan) => {
+  const selectedRaw = rawSelection?.source === rawText ? rawSelection : undefined
+  const captureRawSelection = useCallback((input: HTMLTextAreaElement) => {
+    if (document.activeElement !== input) return
+    const { selectionStart, selectionEnd } = input
+    const span = textareaSpan(rawText, selectionStart, selectionEnd)
+    setRawSelection(span ? {
+      span, whole: selectionStart === 0 && selectionEnd === input.value.length, source: rawText,
+    } : undefined)
+  }, [rawText])
+  useEffect(() => {
+    const input = rawInput.current?.resizableTextArea?.textArea
+    if (creating || !textFields || !input) return
+    const capture = () => captureRawSelection(input)
+    // Textarea selectionchange also catches adjustments from touch selection handles.
+    input.addEventListener('selectionchange', capture)
+    return () => input.removeEventListener('selectionchange', capture)
+  }, [captureRawSelection, creating, textFields])
+  const selectInRaw = (span?: SourceSpan, fromStart = false) => {
+    setRawSelection(undefined)
     switchView('raw', 'body')
-    setSelectionTarget({ span })
+    setSelectionTarget({ span, fromStart })
   }
   useLayoutEffect(() => {
     if (!selectionTarget) return
@@ -200,23 +231,49 @@ export function ChapterRawTextEditorDrawer({
       input.parentElement?.appendChild(mirror)
       input.scrollTop = marker.offsetTop - input.clientHeight / 2
       mirror.remove()
+      if (!creating) captureRawSelection(input)
+    } else if (selectionTarget.fromStart) {
+      input.setSelectionRange(0, 0)
+      input.scrollTop = 0
     }
     setSelectionTarget(undefined)
-  }, [rawText, selectionTarget])
+  }, [captureRawSelection, creating, rawText, selectionTarget])
 
   const readRawSelection = () => {
     const input = rawInput.current?.resizableTextArea?.textArea
     return mode === 'raw' && input ? textareaSpan(rawText, input.selectionStart, input.selectionEnd) : undefined
   }
+  const explanationBinding = (span?: SourceSpan) => ({
+    start: span?.start, end: span?.end, excerpt: span ? sourceSlice(rawText, span) : '',
+    source_version: span ? rawVersion : '',
+  })
   const addExplanation = (span?: SourceSpan) => {
     const id = crypto.randomUUID()
-    setExplanations(items => [...items, {
-      id, ...span, excerpt: span ? sourceSlice(rawText, span) : '', text: '',
-      source_version: span ? rawVersion : '',
-    }])
+    setRawSelection(undefined)
+    setExplanations(items => [...items, { id, ...explanationBinding(span), text: '' }])
     focusExplanation.current = true
     setExpandedExplanation(id)
     setEditingExplanation(id)
+    switchView(mode, 'explanations')
+  }
+
+  const finishReselect = (apply: boolean) => {
+    if (!selectingFor) return
+    const span = creating ? readRawSelection() : selectedRaw?.span
+    if (apply && !span) { message.warning('请先选中一段原文'); return }
+    if (apply) {
+      const binding = explanationBinding(!creating && selectedRaw?.whole ? undefined : span)
+      setExplanations(items => items.map(item => item.id === selectingFor
+        ? { ...item, ...binding, policy_version: undefined } : item))
+    }
+    setSelectingFor(undefined)
+    if (creating && !apply) return
+    if (creating) focusExplanation.current = true
+    else {
+      setExpandedExplanation(selectingFor)
+      reselectReturn.current = selectingFor
+      setRawSelection(undefined)
+    }
     switchView(mode, 'explanations')
   }
 
@@ -787,42 +844,44 @@ export function ChapterRawTextEditorDrawer({
               <Button aria-pressed={pane === 'body'} onClick={() => switchView(mode, 'body')}>正文</Button>
               <Button aria-pressed={pane === 'explanations'} onClick={() => switchView(mode, 'explanations')}>解释（{explanations.length}）</Button>
             </div>
-            <section className="chapter-editor-body-pane" aria-label="正文编辑">
-              <div ref={tools} className="chapter-editor-tools">
-                {!creating && <h2>原文</h2>}
-                {creating && <Space wrap role="group" aria-label="正文视图">
+            <section className={creating ? 'chapter-editor-body-pane' : 'chapter-editor-body-pane chapter-source-card'}
+              aria-label="正文编辑" onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setRawSelection(undefined)
+              }}>
+              {!creating && <div ref={tools} className="chapter-source-tools chapter-source-heading">
+                <h2 className="chapter-editor-label">原文</h2>
+                <span className="chapter-editor-meta">
+                  {selectingFor ? '请选择新的原文范围' : selectedRaw?.whole ? '已选中全文，可添加全章解释' : '选中文本后可添加解释'}
+                </span>
+              </div>}
+              {creating && <div ref={tools} className="chapter-editor-tools">
+                <Space wrap role="group" aria-label="正文视图">
                   <Button aria-label="原文" aria-pressed={mode === 'raw'} disabled={actionsLoading} onClick={() => switchView('raw')}>原文</Button>
                   <Button aria-pressed={mode === 'condensed'} disabled={actionsLoading} onClick={() => switchView('condensed')}>精简内容</Button>
                   <Button aria-label={mode === 'compare' ? '退出对比' : '对比'} aria-pressed={mode === 'compare'} disabled={actionsLoading} onClick={() => {
                     if (mode === 'compare') switchView(compareReturn.current)
                     else { compareReturn.current = mode; switchView('compare') }
                   }}>{mode === 'compare' ? '退出对比' : '对比'}</Button>
-                </Space>}
+                </Space>
                 {mode === 'raw' && !selectingFor && <Button disabled={actionsLoading || !rawVersion || !rawText.trim()} onClick={() => {
                   const span = readRawSelection()
                   if (span) addExplanation(span)
                   else message.warning('请先选中一段原文')
                 }}>选段添加解释</Button>}
                 {selectingFor && mode === 'raw' && <Space wrap>
-                  <Button disabled={actionsLoading || !rawVersion} onClick={() => {
-                    const span = readRawSelection()
-                    if (!span) { message.warning('请先选中一段原文'); return }
-                    setExplanations(items => items.map(item => item.id === selectingFor
-                      ? { ...item, ...span, excerpt: sourceSlice(rawText, span), source_version: rawVersion, policy_version: undefined }
-                      : item))
-                    setSelectingFor(undefined)
-                    focusExplanation.current = true
-                    switchView(mode, 'explanations')
-                  }}>使用所选原文</Button>
-                  <Button type="text" onClick={() => setSelectingFor(undefined)}>取消选段</Button>
+                  <Button disabled={actionsLoading || !rawVersion} onClick={() => finishReselect(true)}>使用所选原文</Button>
+                  <Button type="text" onClick={() => finishReselect(false)}>取消选段</Button>
                 </Space>}
-              </div>
+              </div>}
               <div ref={setTextFields} className="chapter-editor-texts">
                 <label hidden={mode === 'condensed'}>
                   {mode === 'compare' && <span className="chapter-editor-label">原文</span>}
                   <span className="chapter-editor-input" data-text={rawText}>
                     <Input.TextArea ref={rawInput} aria-label={mode === 'compare' ? '对比原文' : '章节原文'}
-                      value={rawText} onChange={event => setRawText(event.target.value)} disabled={rawLocked}
+                      value={rawText} onChange={event => {
+                        setRawSelection(undefined)
+                        setRawText(event.target.value)
+                      }} onSelect={creating ? undefined : event => captureRawSelection(event.currentTarget)} disabled={rawLocked}
                       placeholder="编辑章节原文…" className="chapter-editor-text" />
                   </span>
                 </label>
@@ -835,11 +894,26 @@ export function ChapterRawTextEditorDrawer({
                   </span>
                 </label>}
               </div>
+              {!creating && <div className="chapter-source-actions">
+                {selectingFor ? <Space wrap>
+                  {selectedRaw && <Button disabled={actionsLoading || !rawVersion} onPointerDown={event => event.preventDefault()}
+                    onClick={() => finishReselect(true)}>使用所选原文</Button>}
+                  <Button type="text" onClick={() => finishReselect(false)}>取消选段</Button>
+                </Space> : selectedRaw && <Tooltip title="为所选原文添加解释" trigger={['hover', 'focus']}>
+                  <Button type="text" className="chapter-editor-icon" aria-label="选段添加解释" icon={<CommentOutlined aria-hidden />}
+                    disabled={actionsLoading || !rawVersion} onPointerDown={event => event.preventDefault()}
+                    onClick={() => addExplanation(selectedRaw.whole ? undefined : selectedRaw.span)} />
+                </Tooltip>}
+              </div>}
               <div ref={textStats} className="chapter-editor-meta chapter-editor-stats">{plainWordCount} 字 · {paragraphCount} 段</div>
             </section>
             <aside className="chapter-editor-explanations" aria-label="原文补充解释">
               <SourceExplanationsEditor flat={!creating} editing={editingExplanation} onEdit={setEditingExplanation} items={explanations} savedItems={savedExplanations} version={rawVersion} rawText={rawText} disabled={actionsLoading}
                 onChange={setExplanations} expanded={expandedExplanation} onExpand={(id, focus) => {
+                  if (selectingFor && id !== selectingFor) {
+                    setSelectingFor(undefined)
+                    setRawSelection(undefined)
+                  }
                   if (focus) {
                     const input = layout.current?.querySelector<HTMLTextAreaElement>('textarea[data-explanation-editor]')
                     if (editingExplanation === id && expandedExplanation === id) input?.focus()
@@ -847,8 +921,11 @@ export function ChapterRawTextEditorDrawer({
                   }
                   setExpandedExplanation(id)
                 }}
-                onAdd={() => addExplanation()} onLocate={selectInRaw}
-                onReselect={id => { setSelectingFor(id); selectInRaw() }} />
+                onAdd={creating ? () => addExplanation() : undefined} onLocate={span => {
+                  if (!creating) setSelectingFor(undefined)
+                  selectInRaw(span, !creating)
+                }}
+                onReselect={(id, span) => { setSelectingFor(id); selectInRaw(span, !creating) }} />
             </aside>
           </div>
         )}

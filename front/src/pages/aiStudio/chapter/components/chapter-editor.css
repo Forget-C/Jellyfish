@@ -161,8 +161,29 @@
 }
 .chapter-editor-existing .chapter-editor-field { flex: 1 1 100%; }
 .chapter-editor-tasks { justify-content: flex-end; margin-inline-start: auto; }
+.chapter-source-card {
+  --chapter-source-card-padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: var(--chapter-source-card-padding);
+  background: var(--app-surface, #fff);
+  border-radius: 12px;
+}
+.chapter-source-card .chapter-editor-input { --chapter-input-padding: 4px 0; }
+.chapter-source-card .chapter-editor-input::before { border: 0; }
+.chapter-editor-drawer .chapter-source-card .chapter-editor-input .chapter-editor-text {
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+}
+.chapter-editor-drawer .chapter-source-card .chapter-editor-text:focus-visible {
+  outline: 2px solid var(--app-accent, #245fc5);
+  outline-offset: 2px;
+  box-shadow: none;
+}
 .chapter-editor-existing .chapter-editor-input { flex: none; height: var(--chapter-input-max); }
-.chapter-editor-existing .chapter-editor-tools,
 .chapter-explanation-heading {
   display: flex;
   flex-wrap: wrap;
@@ -172,18 +193,41 @@
   margin-bottom: 8px;
   min-height: 32px;
 }
-.chapter-editor-existing .chapter-editor-tools h2,
+.chapter-source-heading h2,
 .chapter-explanation-heading h2 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
+}
+.chapter-source-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.chapter-editor-drawer .chapter-source-tools { min-height: 32px; }
+.chapter-source-card .chapter-editor-texts,
+.chapter-source-card .chapter-editor-stats { grid-column: 1 / -1; }
+.chapter-source-card .chapter-editor-texts { margin-top: 8px; }
+.chapter-source-actions { grid-area: 1 / 2; min-width: 32px; justify-self: end; }
+.chapter-source-tools { grid-area: 1 / 1; }
+.chapter-editor-drawer .chapter-editor-icon.ant-btn {
+  flex: none;
+  width: 32px;
+  padding: 0;
+  font-size: 16px;
+}
+.chapter-editor-icon:focus-visible {
+  outline: 2px solid var(--app-accent, #245fc5);
+  outline-offset: 1px;
 }
 .chapter-editor-existing .chapter-explanation-row { border: 0; }
 .chapter-editor-existing .chapter-explanation-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px;
-  align-items: start;
+  align-items: end;
 }
 .chapter-editor-existing .chapter-explanation-summary {
   border-radius: 8px;
@@ -201,7 +245,15 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.chapter-explanation-reading .ant-btn { justify-self: start; padding-inline: 0; }
+.chapter-explanation-excerpt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+.chapter-explanation-footer { display: flex; flex-wrap: wrap; gap: 8px; }
+.chapter-explanation-footer .ant-btn:first-child { padding-inline-start: 0; }
+.chapter-explanation-footer .ant-btn-dangerous { margin-inline-start: auto; }
 
 .chapter-simplify-compare {
   display: grid;
@@ -233,6 +285,10 @@
   .chapter-editor-tasks { align-self: flex-start; }
 }
 @media (max-width: 767px) {
+  .chapter-source-card { --chapter-source-card-padding: 12px; }
+  .chapter-editor-drawer .chapter-source-tools { min-height: 36px; }
+  .chapter-editor-drawer .chapter-editor-icon.ant-btn,
+  .chapter-source-actions { min-width: 36px; }
   .chapter-simplify-compare { grid-template-columns: minmax(0, 1fr); }
   .chapter-simplify-compare .chapter-editor-text { height: clamp(84px, 22dvh, 260px); }
   .chapter-simplify-actions .ant-btn { min-height: 36px; }

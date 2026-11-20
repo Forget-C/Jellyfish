@@ -1,5 +1,5 @@
-import { EditOutlined } from '@ant-design/icons'
-import { Button, Card, Input, Select, Space, Tag } from 'antd'
+import { EditOutlined, SelectOutlined } from '@ant-design/icons'
+import { Button, Card, Input, Select, Space, Tag, Tooltip } from 'antd'
 import type { SourceExplanation, SourceSpan } from '../../../../services/generated'
 import { selectionSpan, sourceSlice } from '../../directing/sourceSelection'
 
@@ -36,9 +36,9 @@ export function SourceExplanationsEditor({ flat, editing, onEdit, items, savedIt
   onChange: (items: SourceExplanation[]) => void
   expanded?: string
   onExpand: (id?: string, focus?: boolean) => void
-  onAdd: () => void
-  onLocate: (span: SourceSpan) => void
-  onReselect: (id: string) => void
+  onAdd?: () => void
+  onLocate: (span?: SourceSpan) => void
+  onReselect: (id: string, span?: SourceSpan) => void
 }) {
   const openEditor = (id: string) => {
     onEdit(id)
@@ -68,13 +68,14 @@ export function SourceExplanationsEditor({ flat, editing, onEdit, items, savedIt
     : item))
 
   const title = `原文补充解释（${items.length}）`
-  const add = <Button disabled={disabled} onClick={onAdd}>添加解释</Button>
+  const add = onAdd && <Button disabled={disabled} onClick={onAdd}>添加解释</Button>
   const content = <>
-    {!items.length && <p className="chapter-editor-meta">选段添加解释，或添加适用于全章的说明。</p>}
+    {!items.length && <p className="chapter-editor-meta">{flat ? '在原文中选中文本后添加解释。' : '选段添加解释，或添加适用于全章的说明。'}</p>}
     {rows.map(({ item, matches, span, confirmed, location, canConfirm }, index) => {
       const open = expanded === item.id
       const status = confirmed ? '已确认' : version && item.source_version === version && typeof item.policy_version === 'number'
         ? '需按文字表达边界复核' : '待复核'
+      const remove = () => { onChange(items.filter(row => row.id !== item.id)); onExpand(undefined) }
       const saved = savedItems.find(row => row.id === item.id)
       const comparison = saved && !confirmed && <dl className="chapter-explanation-comparison">
         <div><dt>保存时的摘录</dt><dd>{saved.excerpt || '全章'}</dd></div>
@@ -90,45 +91,61 @@ export function SourceExplanationsEditor({ flat, editing, onEdit, items, savedIt
             <span><strong>{location}</strong><Tag>{item.kind === 'normal' ? '正常表述确认 · ' : ''}{status}</Tag></span>
             <span className="chapter-explanation-preview">{item.text.trim() || '待填写解释'}</span>
           </button>
-          {flat && <Button aria-label={`编辑解释 ${index + 1}`} icon={<EditOutlined aria-hidden />}
-            disabled={disabled} onClick={() => openEditor(item.id)} />}
+          {flat && <Tooltip title="编辑解释" trigger={['hover', 'focus']}>
+            <Button type="text" className="chapter-editor-icon" aria-label={`编辑解释 ${index + 1}`} icon={<EditOutlined aria-hidden />}
+              disabled={disabled} onClick={() => openEditor(item.id)} />
+          </Tooltip>}
         </div>
-        {flat && open && editing !== item.id && <div className="chapter-explanation-details chapter-explanation-reading">
-          {comparison || (item.excerpt && <blockquote>{item.excerpt}</blockquote>)}
-          <p>{item.text}</p>
-          {span && <Button type="link" disabled={disabled} onClick={() => onLocate(span)}>定位原文</Button>}
-        </div>}
-        {open && (!flat || editing === item.id) && <div className="chapter-explanation-details">
-          {comparison}
-          <label>原文摘录
-            <Input.TextArea aria-label={`解释${index + 1}原文摘录`} placeholder="留空表示全章" value={item.excerpt}
-              autoSize={{ minRows: 1, maxRows: 5 }} disabled={disabled}
-              onChange={event => patch(item.id, { excerpt: event.target.value, start: undefined, end: undefined, source_version: '' })} />
-          </label>
-          {matches.length > 1 && <Select aria-label={`解释${index + 1}原文位置`} placeholder="选择这条解释对应的原文位置"
-            value={span?.start} disabled={disabled}
-            options={matches.map((match, i) => ({
-              value: match.start,
-              label: `第${i + 1}处：${sourceSlice(rawText, { start: Math.max(0, match.start - 12), end: match.end + 12 })}`,
-            }))}
-            onChange={value => patch(item.id, { ...matches.find(match => match.start === value), source_version: version })} />}
-          <Space wrap>
-            {span && <Button type="link" disabled={disabled} onClick={() => onLocate(span)}>定位原文</Button>}
-            <Button type="link" disabled={disabled || !rawText.trim()} onClick={() => onReselect(item.id)}>重新选段</Button>
-            {!!item.excerpt && <Button type="link" disabled={disabled} onClick={() => patch(item.id, {
-              excerpt: '', start: undefined, end: undefined, source_version: '',
-            })}>适用全章</Button>}
-          </Space>
-          <label>补充解释
-            <Input.TextArea data-explanation-editor aria-label={`解释${index + 1}内容`} placeholder="说明这段原文的含义" value={item.text}
-              autoSize={{ minRows: 2, maxRows: 8 }} disabled={disabled}
-              onChange={event => patch(item.id, { text: event.target.value, source_version: item.excerpt ? item.source_version : '' })} />
-          </label>
-          <Space wrap>
-            <Button disabled={disabled || !version || !canConfirm} onClick={() => confirm(item.id)}>确认此解释</Button>
-            <Button disabled={disabled} onClick={() => patch(item.id, {})}>退出采用，保留待调整</Button>
-            <Button disabled={disabled} onClick={() => { onChange(items.filter(row => row.id !== item.id)); onExpand(undefined) }}>删除解释</Button>
-          </Space>
+        {open && <div className={flat ? 'chapter-explanation-details chapter-explanation-reading' : 'chapter-explanation-details'}>
+          {flat ? <div className="chapter-explanation-excerpt">
+            {comparison || <blockquote>{item.excerpt || '全章'}</blockquote>}
+            <Tooltip title="重新选段" trigger={['hover', 'focus']}>
+              <Button type="text" className="chapter-editor-icon" aria-label={`重新选段 ${index + 1}`}
+                data-reselect-id={item.id} icon={<SelectOutlined aria-hidden />}
+                disabled={disabled || !rawText.trim()} onClick={() => onReselect(item.id, span)} />
+            </Tooltip>
+          </div> : <>
+            {comparison}
+            <label>原文摘录
+              <Input.TextArea aria-label={`解释${index + 1}原文摘录`} placeholder="留空表示全章" value={item.excerpt}
+                autoSize={{ minRows: 1, maxRows: 5 }} disabled={disabled}
+                onChange={event => patch(item.id, { excerpt: event.target.value, start: undefined, end: undefined, source_version: '' })} />
+            </label>
+            {matches.length > 1 && <Select aria-label={`解释${index + 1}原文位置`} placeholder="选择这条解释对应的原文位置"
+              value={span?.start} disabled={disabled}
+              options={matches.map((match, i) => ({
+                value: match.start,
+                label: `第${i + 1}处：${sourceSlice(rawText, { start: Math.max(0, match.start - 12), end: match.end + 12 })}`,
+              }))}
+              onChange={value => patch(item.id, { ...matches.find(match => match.start === value), source_version: version })} />}
+            <Space wrap>
+              {span && <Button type="link" disabled={disabled} onClick={() => onLocate(span)}>定位原文</Button>}
+              <Button type="link" disabled={disabled || !rawText.trim()} onClick={() => onReselect(item.id)}>重新选段</Button>
+              {!!item.excerpt && <Button type="link" disabled={disabled} onClick={() => patch(item.id, {
+                excerpt: '', start: undefined, end: undefined, source_version: '',
+              })}>适用全章</Button>}
+            </Space>
+          </>}
+          {flat && editing !== item.id ? <p>{item.text}</p> : <>
+            <label>补充解释
+              <Input.TextArea data-explanation-editor aria-label={`解释${index + 1}内容`} placeholder="说明这段原文的含义" value={item.text}
+                autoSize={{ minRows: 2, maxRows: 8 }} disabled={disabled}
+                onChange={event => patch(item.id, { text: event.target.value, source_version: item.excerpt ? item.source_version : '' })} />
+            </label>
+            <Space wrap>
+              <Button disabled={disabled || !version || !canConfirm} onClick={() => confirm(item.id)}>确认此解释</Button>
+              <Button disabled={disabled} onClick={() => patch(item.id, {})}>退出采用，保留待调整</Button>
+              {!flat && <Button disabled={disabled} onClick={remove}>删除解释</Button>}
+            </Space>
+          </>}
+          {flat && <div className="chapter-explanation-footer">
+            {(span || !item.excerpt) && <Button type="link" disabled={disabled} onClick={() => onLocate(span)}>定位原文</Button>}
+            <Button type="text" danger disabled={disabled} onClick={event => {
+              // The row is removed, so leave focus on the list heading.
+              event.currentTarget.closest('aside')?.querySelector('h2')?.focus()
+              remove()
+            }}>移除解释</Button>
+          </div>}
         </div>}
       </div>
     })}
@@ -136,6 +153,6 @@ export function SourceExplanationsEditor({ flat, editing, onEdit, items, savedIt
       onClick={() => confirm()}>已查看，全部确认</Button>}
   </>
   return flat
-    ? <><div className="chapter-explanation-heading"><h2>{title}</h2>{add}</div>{content}</>
+    ? <><div className="chapter-explanation-heading"><h2 tabIndex={-1}>{title}</h2></div>{content}</>
     : <Card size="small" title={title} extra={add}>{content}</Card>
 }
