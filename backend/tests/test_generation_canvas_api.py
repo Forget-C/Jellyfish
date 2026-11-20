@@ -99,6 +99,30 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
     await engine.dispose()
 
 @pytest.mark.asyncio
+async def test_first_free_canvas_write_is_atomic_and_replayable(canvas_client):
+    from uuid import uuid4
+    canvas_id = str(uuid4())
+    draft = f'/canvases/drafts/{canvas_id}'
+    url = f'/canvases/{canvas_id}'
+    initial = (await canvas_client.get(draft)).json()['data']
+    assert initial['revision'] == -1
+    command = {'expected_revision': 0, 'request_id': 'first-edit', 'document': initial['document']}
+    assert (await canvas_client.put(draft, json=command)).status_code == 422
+    assert (await canvas_client.get(url)).status_code == 404
+    command['document']['cards'] = [{'id': 'card', 'type': 'unknown'}]
+    assert (await canvas_client.put(draft, json=command)).status_code == 422
+    assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 0
+    command['document']['cards'] = [{'id': 'card', 'type': 'content.text', 'text': '第一笔内容'}]
+    saved = await canvas_client.put(draft, json=command)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['data']['revision'] == 1
+    assert (await canvas_client.put(draft, json=command)).json() == saved.json()
+    assert (await canvas_client.put(draft, json={**command, 'request_id': 'other'})).status_code == 409
+    assert (await canvas_client.get(url)).json()['data']['document']['cards'][0]['text'] == '第一笔内容'
+    assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 1
+
+
+@pytest.mark.asyncio
 async def test_create_canvas_returns_created_response_and_readable_document(canvas_client):
     response = await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '新画布'})
     assert response.status_code == 200, response.text

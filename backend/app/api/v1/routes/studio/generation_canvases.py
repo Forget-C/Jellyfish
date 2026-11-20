@@ -1,5 +1,6 @@
 """独立生成画布 HTTP 适配，仅负责收参与响应。"""
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,19 @@ async def list_canvases(q: str = '', page: int = Query(1, ge=1), page_size: int 
 async def create_canvas(body: CanvasCreate, db: AsyncSession = Depends(get_db, scope='function')):
     """创建不依赖项目的自由画布。"""
     return created_response(await CanvasStore(db, None).create(body.name))
+
+
+@router.get('/drafts/{canvas_id}', response_model=ApiResponse[CanvasRead], operation_id='canvas_draft_read')
+async def read_free_draft(canvas_id: UUID, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取独立草稿，修订 -1 表示尚未创建。"""
+    return success_response(await CanvasStore(db, None).read_free_draft(str(canvas_id)))
+
+
+@router.put('/drafts/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_draft_save',
+            responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
+async def save_free_draft(canvas_id: UUID, body: CanvasSave, db: AsyncSession = Depends(get_db, scope='function')):
+    """原子创建并保存首份有效内容；未知结果可重放原请求。"""
+    return success_response(await CanvasStore(db, None).save_free_draft(str(canvas_id), body))
 
 
 @router.patch('/{canvas_id}/name', response_model=ApiResponse[CanvasRead], operation_id='canvas_rename')
@@ -160,11 +174,17 @@ from app.core.contracts.canvas_catalog import CanvasCatalog
 from app.services.generation_canvas.catalog import canvas_catalog
 
 
+@router.get('/catalog/free', response_model=ApiResponse[CanvasCatalog], operation_id='free_canvas_catalog')
+async def get_free_canvas_catalog():
+    """新建独立画布使用与已有独立画布相同的卡片目录。"""
+    return success_response(canvas_catalog(kind='free'))
+
+
 @router.get('/{canvas_id}/catalog', response_model=ApiResponse[CanvasCatalog], operation_id='canvas_catalog')
 async def get_canvas_catalog(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """核实画布归属后提供卡片、兼容用途、采用策略及单值输入约束。"""
     canvas = await CanvasStore(db, project_id).get(canvas_id)
-    return success_response(canvas_catalog(canvas))
+    return success_response(canvas_catalog(kind=canvas.kind))
 
 
 from app.schemas.canvas_checks import CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest

@@ -69,12 +69,12 @@ def design_fields(card_model):
     return definitions
 
 
-def canvas_catalog(canvas=None):
+def canvas_catalog(*, kind=None):
     """从文档联合类型发现实际卡类；六类设计具有各自真实类型。"""
     cards = []
     for card_model in get_args(get_args(CanvasDocument.model_fields['cards'].annotation)[0]):
         for card_type in get_args(card_model.model_fields['type'].annotation):
-            if canvas is not None and canvas.kind == 'free':
+            if kind == 'free':
                 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
                 if card_type not in FREE_CARD_TYPES:
                     continue

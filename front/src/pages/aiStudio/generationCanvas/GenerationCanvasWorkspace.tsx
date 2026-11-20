@@ -64,6 +64,7 @@ export type WorkbenchModelMenuContext = CanvasModelCardMenuContext & {
 }
 
 interface GenerationCanvasWorkspaceProps {
+  freeDraft?: boolean
   sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>
   renderFeedback?: (current?: CanvasRead) => ReactNode
   layoutPolicy?: CanvasLayoutPolicy
@@ -91,7 +92,7 @@ interface GenerationCanvasWorkspaceProps {
 
 /** 按项目与画布身份承载编辑、保存和执行。宿主提供导航和画布管理。 */
 export function GenerationCanvasWorkspace({
-  sceneSave, renderFeedback, projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
+  freeDraft, sceneSave, renderFeedback, projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const toolbar = useRef<HTMLElement>(null)
@@ -107,7 +108,7 @@ export function GenerationCanvasWorkspace({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [inspectTarget, setInspectTarget] = useState<CanvasInspectTarget>()
   const pendingInspect = useRef<CanvasInspectTarget>()
-  const editor = useGenerationCanvasEditor(projectId, canvasId, true, sceneSave)
+  const editor = useGenerationCanvasEditor(projectId, canvasId, true, sceneSave, freeDraft)
   const [promptEditors, setPromptEditors] = useState<Set<string>>(() => new Set())
   const reportPromptEditing = useCallback((cardId: string, editing: boolean) => setPromptEditors(previous => {
     if (previous.has(cardId) === editing) return previous
@@ -138,14 +139,16 @@ export function GenerationCanvasWorkspace({
     catalog.current = value
     configureEditorCatalog(value)
   }, [configureEditorCatalog])
-  useEffect(() => { if (current) onCanvasRead?.(current) }, [current, onCanvasRead])
+  const canPublishRead = !freeDraft || (!dirty && !saving && !editor.needsLeaveProtection() && !promptEditors.size && blocker.state === 'unblocked')
+  useEffect(() => { if (current && canPublishRead) onCanvasRead?.(current) }, [current, onCanvasRead, canPublishRead])
   const liveCheck = !!checkCardId && !!current?.document.cards?.some(card => card.id === checkCardId && card.type === 'review.check')
   useEffect(() => {
     if (current?.id === canvasId && checkCardId && checkReportId && liveCheck) {
       setInspectTarget({ cardId: checkCardId, reportId: checkReportId, serial: Date.now() })
     }
   }, [canvasId, current?.id, checkCardId, checkReportId, liveCheck])
-  const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit, current?.revision)
+  const uncreated = current?.revision === -1
+  const runtime = useGenerationCanvasRuntime(projectId, (!current || uncreated) ? null : canvasId, save, ownership.canEdit, current?.revision)
   useEffect(() => { if (runtime.preview) setPreviewOpen(true) }, [runtime.preview])
   const change: typeof edit = (next, arrangement) => { runtime.invalidate(); edit(next, arrangement) }
   const scope = `${projectId}:${canvasId}`, latestScope = useRef(scope); latestScope.current = scope
@@ -196,7 +199,7 @@ export function GenerationCanvasWorkspace({
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
-        <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : current ? '已保存' : '尚无画布'}</span>
+        <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : uncreated ? '尚未创建' : current ? '已保存' : '尚无画布'}</span>
         {current && <WorkbenchIconButton label="保存画布" variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
         <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={requestLeave} />}</div>
       </div>
@@ -213,7 +216,7 @@ export function GenerationCanvasWorkspace({
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
           {focusMenu => <>
             {renderCanvasManagement?.(management, focusMenu)}
-            <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
+            {!uncreated && <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>}
           </>}
         </CanvasToolbarMenu>
       </div>
@@ -257,7 +260,7 @@ export function GenerationCanvasWorkspace({
           },
         }))}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
-          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptEditingContext.Provider>
+          disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptEditingContext.Provider>
     </div>}
   </section></WorkbenchDetailsProvider></WorkbenchTheme>
 }

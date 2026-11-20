@@ -59,7 +59,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
   ? `${reason.body?.data?.code || reason.status}: ${reason.body?.data?.message || reason.body?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
 
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
-export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true, sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>) {
+export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true, sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>, freeDraft = false) {
   const key = canvasRecoveryKey(projectId, canvasId)
   const ownership = useCanvasEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [current, setCurrent] = useState<CanvasRead>()
@@ -96,6 +96,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       setStorageError('')
     } catch { setStorageError('浏览器存储不可用，本地恢复保护失败；请保存后再离开') }
   }
+  const readCanvas = useCallback((id: string, allowDraft: boolean) => freeDraft && allowDraft
+    ? Canvases.canvasDraftRead({ canvasId: id })
+    : Canvases.canvasGet({ projectId, canvasId: id }), [freeDraft, projectId])
   useEffect(() => {
     let active = true
     state.current = { scope: key, conflict: false }; inFlight.current = undefined; cleaner.current = undefined
@@ -103,7 +106,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setStoryboardApplication(undefined)
     setSettingsDraft(undefined)
     setCurrent(undefined); setDocument(undefined); setError(''); setConflict(false); setRecovery(undefined); setSaving(false); setInitialApplying(false)
-    if (canvasId) void Canvases.canvasGet({ projectId, canvasId }).then(response => {
+    if (canvasId) void readCanvas(canvasId, true).then(response => {
       if (!active || !response.data) return
       const server = response.data
       state.current = { scope: key, current: server, document: server.document, conflict: false }
@@ -125,7 +128,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       } catch { setStorageError('本地恢复记录无法读取；未覆盖服务器内容') }
     }).catch(reason => { if (active) setError(reason instanceof ApiError && reason.status === 404 ? '此画布已不可用' : describe(reason)) })
     return () => { active = false }
-  }, [key, projectId, canvasId])
+  }, [key, projectId, canvasId, readCanvas])
   const edit = (next: CanvasDocument | ((previous: CanvasDocument) => CanvasDocument), arrangement?: CanvasArrangementChange) => {
     const s = state.current
     if (!ownership.canEdit() || !s.document || s.recovery || s.initialBefore || s.scope !== key) return
@@ -192,7 +195,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       if (!sceneSave) throw new Error('当前画布不支持场次操作')
       return sceneSave(projectId, canvas, command)
     }
-    const result = await Canvases.canvasSave({ projectId, canvasId: canvas.id, requestBody: command })
+    const result = canvas.revision === -1
+      ? await Canvases.canvasDraftSave({ canvasId: canvas.id, requestBody: { ...command, expected_revision: 0 } })
+      : await Canvases.canvasSave({ projectId, canvasId: canvas.id, requestBody: command })
     if (!result.data || result.data.request_id !== command.request_id || result.data.canvas_id !== canvas.id) throw new Error('invalid receipt')
     return { ...canvas, revision: result.data.revision, document: cleanObjectSources(command.document as CanvasDocument) }
   }
@@ -267,17 +272,22 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           staged = false
         }
       }
-      const response = await Canvases.canvasGet({ projectId, canvasId: baseline.id })
+      const response = await readCanvas(baseline.id, baseline.revision === -1)
       if (!response.data || s !== state.current) return
       if (!staged && !preservesFixedSource(response.data.document, recovered)) {
         setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
         return
       }
       if (!cleaner.current) {
-        const catalog = await Canvases.canvasCatalog({ projectId, canvasId: baseline.id })
+        const catalog = await (baseline.revision === -1 ? Canvases.freeCanvasCatalog() : Canvases.canvasCatalog({ projectId, canvasId: baseline.id }))
         if (s !== state.current) return
         if (!catalog.data) throw new Error('empty catalog')
         configureCatalog(catalog.data)
+      }
+      // 首次写入回执确认该修订属于原请求，以服务端补全默认字段后的文档为基线。
+      if (saved.baseline.revision === -1 && command && baseline.revision === response.data.revision && baseline.revision >= 0) {
+        if (staged || same(recovered, command.document)) recovered = response.data.document
+        baseline = response.data
       }
       const changed = response.data.revision !== baseline.revision || !same(cleaner.current!(response.data.document), cleaner.current!(baseline.document))
       const settingsOnly = recoveredSettings && same(cleaner.current!(saved.document), cleaner.current!(saved.baseline.document))
@@ -318,8 +328,11 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     const s = state.current
     if (s.pending || s.recovery?.pending) { setError('请先核实未明保存请求，再处理冲突或放弃内容'); return false }
     try {
-      const response = await Canvases.canvasGet({ projectId, canvasId: canvasId! })
+      const snapshot = s.document
+      const response = await readCanvas(canvasId!, s.current?.revision === -1)
       if (!response.data || s !== state.current) return false
+      // 取得编辑权后的读取可能晚于首次输入或保存回执。
+      if (s.document !== snapshot || s.pending) return false
       keepLocal = keepLocal && !same(s.document, s.current?.document)
       if (keepLocal && s.document && !preservesFixedSource(response.data.document, s.document)) {
         setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')

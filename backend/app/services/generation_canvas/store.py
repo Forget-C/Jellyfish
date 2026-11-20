@@ -7,6 +7,7 @@ from uuid import uuid4
 from typing import TYPE_CHECKING
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.chapters.explanations import explanation_basis
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
@@ -127,11 +128,11 @@ class CanvasStore:
             return None
         return CanvasSceneAssociation(chapter_id=row.chapter_id, sequence_id=canvas.sequence_id, is_current=row.is_current)
 
-    async def create(self, name: str, *, scene: SceneCanvasSeed | None = None) -> GenerationCanvas:
+    async def create(self, name: str, *, scene: SceneCanvasSeed | None = None, canvas_id: str | None = None) -> GenerationCanvas:
         """建立共同文档和运行事件头，场次入口可提供已校验的固定依据。"""
         if self.project_id is not None:
             await get_or_404(self.db, Project, self.project_id, detail="Project not found")
-        canvas_id = scene.canvas_id if scene and scene.canvas_id else uuid4().hex
+        canvas_id = scene.canvas_id if scene and scene.canvas_id else canvas_id or uuid4().hex
         document = CanvasDocument(id=canvas_id, project_id=self.project_id, name=name,
                                   cards=[scene.basis] if scene else [],
                                   fixed_source=scene.fixed_source if scene else None)
@@ -151,6 +152,29 @@ class CanvasStore:
         self.db.add(CanvasEventHead(canvas_id=canvas_id))
         await self.db.flush()
         return canvas
+
+    async def read_free_draft(self, canvas_id: str) -> CanvasRead:
+        """新建入口允许刷新未落库的草稿。普通详情仍对缺失的画布返回 404。"""
+        if await self.db.get(GenerationCanvas, canvas_id) is not None:
+            return await self.read(canvas_id)
+        return CanvasRead(id=canvas_id, revision=-1, document=CanvasDocument(id=canvas_id, name='未命名画布'))
+
+    async def save_free_draft(self, canvas_id: str, command: CanvasSave) -> dict:
+        """首次写入与正文校验共用事务；重复提交只接受原请求的回执。"""
+        if command.expected_revision != 0:
+            raise diagnostic('REVISION_CONFLICT', '新画布必须从初始修订保存', {'canvas_id': canvas_id}, status=409)
+        digest = self.command_digest(command.model_dump(exclude={'request_id'}))
+        try:
+            canvas = await self.create('未命名画布', canvas_id=canvas_id)
+        except IntegrityError:
+            # 此入口的第一个写操作是插入唯一画布身份。竞争方提交后核实原回执。
+            await self.db.rollback()
+            await self.get(canvas_id, lock=True)
+            receipt = await self.save_receipt(canvas_id, command.request_id, digest)
+            if receipt:
+                return receipt
+            raise diagnostic('REVISION_CONFLICT', '画布已创建，请重新读取', {'canvas_id': canvas_id}, status=409) from None
+        return await self._write(canvas, command, digest, creating=True)
 
     async def save(self, canvas_id: str, command: CanvasSave) -> dict:
         """原回执优先于当前 revision；CAS 与回执在同一外层事务内落库。"""
@@ -181,7 +205,8 @@ class CanvasStore:
         return CanvasRead.model_validate(result['scene_canvas'])
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
-                     *, chapter_version: str | None = None, evidence: 'StoryboardSaveEvidence | None' = None) -> dict:
+                     *, chapter_version: str | None = None, evidence: 'StoryboardSaveEvidence | None' = None,
+                     creating: bool = False) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
@@ -191,6 +216,8 @@ class CanvasStore:
         prepared = await prepare_document(self.db, self.project_id, canvas, command.document,
                                           scene_sources=evidence.scene_sources if evidence else None,
                                           restored_continuity=evidence.restored_continuity if evidence else frozenset())
+        if creating and prepared.document == prepared.previous_document:
+            raise diagnostic('EMPTY_CANVAS', '请先添加画布内容或修改设置', {'canvas_id': canvas_id})
         if evidence is None:
             from app.services.directing.storyboard_save import require_ordinary_save
             await require_ordinary_save(self.db, canvas, prepared.previous_document, prepared.document)

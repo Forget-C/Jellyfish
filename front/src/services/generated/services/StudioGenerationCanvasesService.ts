@@ -86,6 +86,55 @@ export class StudioGenerationCanvasesService {
         });
     }
     /**
+     * Read Free Draft
+     * 读取独立草稿，修订 -1 表示尚未创建。
+     * @returns ApiResponse_CanvasRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasDraftRead({
+        canvasId,
+    }: {
+        canvasId: string,
+    }): CancelablePromise<ApiResponse_CanvasRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}',
+            path: {
+                'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Free Draft
+     * 原子创建并保存首份有效内容；未知结果可重放原请求。
+     * @returns ApiResponse_CanvasSaved_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasDraftSave({
+        canvasId,
+        requestBody,
+    }: {
+        canvasId: string,
+        requestBody: CanvasSave,
+    }): CancelablePromise<ApiResponse_CanvasSaved_> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}',
+            path: {
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                409: `Conflict`,
+                422: `Unprocessable Entity`,
+            },
+        });
+    }
+    /**
      * Rename Canvas
      * 按修订重命名独立画布，复用完整保存校验。
      * @returns ApiResponse_CanvasRead_ Successful Response
@@ -565,6 +614,18 @@ export class StudioGenerationCanvasesService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Get Free Canvas Catalog
+     * 新建独立画布使用与已有独立画布相同的卡片目录。
+     * @returns ApiResponse_CanvasCatalog_ Successful Response
+     * @throws ApiError
+     */
+    public static freeCanvasCatalog(): CancelablePromise<ApiResponse_CanvasCatalog_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/catalog/free',
         });
     }
     /**

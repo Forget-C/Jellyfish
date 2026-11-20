@@ -90,19 +90,6 @@ export function CanvasListPage() {
     if (pageSize && (legacyPage || offset !== (page - 1) * pageSize)) setPage(page)
   }, [legacyPage, offset, page, pageSize, setPage])
 
-  const create = async () => {
-    setBusy(true)
-    setActionError('')
-    try {
-      const { data } = await Canvases.canvasCreate({ requestBody: {} })
-      if (data) navigate(`/canvases/${data.id}`, { state: returnState })
-    } catch (reason) {
-      setActionError(apiErrorMessage(reason))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const rename = async () => {
     if (!target || !name.trim() || busy) return
     setBusy(true)
@@ -126,7 +113,7 @@ export function CanvasListPage() {
       }} />
   </div>
   const createControl = <Button key="create" className="canvas-list-create" type="primary" icon={<PlusOutlined />}
-    loading={busy && !target} onClick={() => void create()}>新建画布</Button>
+    onClick={() => navigate(`/canvases/${crypto.randomUUID()}`, { state: { ...returnState, canvasDraft: true } })}>新建画布</Button>
 
   return <WorkspaceLayout className="canvas-list-page" aria-label="画布列表">
     <PageToolbar>

@@ -617,7 +617,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     modelOptions.current = Promise.all([settings, listed]).then(([settings, models]) => ({ settings, models }))
     return () => { active = false }
   }, [document.id])
+  const uncreated = savedRevision === -1
   useEffect(() => {
+    if (uncreated) return
     let active = true
     setCapabilities({}); setCapabilityErrors({})
     for (const modelId of new Set(modelIds.split('|').filter(Boolean))) {
@@ -626,7 +628,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       }).catch(() => { if (active) setCapabilityErrors(previous => ({ ...previous, [modelId]: '模型能力读取失败，原配置和连接已保留' })) })
     }
     return () => { active = false }
-  }, [document.id, document.project_id, modelIds])
+  }, [document.id, document.project_id, modelIds, uncreated])
   useEffect(() => {
     const requests = pendingModelAssignments.current
     return () => requests.clear()
@@ -1816,7 +1818,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
 
 export function GenerationCanvasGraph(props: ComponentProps<typeof GenerationCanvasGraphContent>) {
-  return <CanvasCatalogProvider key={`${(props.document.project_id || '')}:${props.document.id}`} projectId={(props.document.project_id || '')} canvasId={props.document.id} onReady={props.onCatalogReady}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
+  const draftCatalog = useRef(props.savedRevision === -1)
+  return <CanvasCatalogProvider freeDraft={draftCatalog.current} key={`${(props.document.project_id || '')}:${props.document.id}`} projectId={(props.document.project_id || '')} canvasId={props.document.id} onReady={props.onCatalogReady}><GenerationCanvasGraphContent {...props} /></CanvasCatalogProvider>
 }
 
 function DesignReferenceBoundary({ children, ...props }: ComponentProps<typeof DesignReferenceEditor>) {
