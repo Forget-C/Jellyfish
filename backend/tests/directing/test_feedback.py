@@ -224,24 +224,3 @@ async def test_repair_cannot_lose_retained_range_or_implicitly_request_media(tmp
             data['result_cut_revision_id'] = result.id
             saved = await frozen(service, sid, 'repair', data)
             assert saved.payload['retained_ranges'][0]['media_range']['source_in_ms'] == 1000
-
-
-@pytest.mark.asyncio
-async def test_feedback_blocks_lossy_downgrade(tmp_path):
-    """已有验收记录时迁移必须拒绝回退，不能静默丢失反馈。"""
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    from tests.directing.test_migration import revision_module
-    async with database(tmp_path) as sessions:
-        async with sessions.begin() as db:
-            service, sid, _, _, cut = await prepared(db)
-            saved = await frozen(service, sid, 'cut_review', review(cut.id))
-            connection = await db.connection()
-            def downgrade(sync):
-                """执行真实迁移回退守卫并验证在删除任何表前中止。"""
-                migration = revision_module('79b3d6f1ae47_add_directing_feedback.py')
-                migration.op = Operations(MigrationContext.configure(sync))
-                with pytest.raises(RuntimeError, match='feedback records'):
-                    migration.downgrade()
-            await connection.run_sync(downgrade)
-            assert (await service.revision(saved.id)).confirmed_at is not None

@@ -446,49 +446,6 @@ async def test_mysql_activity_guard_sees_run_committed_after_earlier_read(runtim
 
 
 @pytest.mark.asyncio
-async def test_runtime_migration_preserves_existing_scene_canvas_observation(tmp_path):
-    """An existing document must have an event mutex before its first subscription."""
-    import importlib.util
-    from pathlib import Path
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    from app.models.directing import Sequence
-    from app.models.generation_canvas import GenerationCanvas, CanvasSaveReceipt
-    from app.models.studio import Chapter, FileItem
-    from app.services.generation_canvas.runtime import CanvasRuntime
-    engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path}/upgrade.db')
-    async with engine.begin() as db:
-        def migrate(connection):
-            FileItem.__table__.create(connection)
-            Project.__table__.create(connection)
-            # The current canvas metadata can reference the earlier chapter and scene tables.
-            Chapter.__table__.create(connection)
-            Sequence.__table__.create(connection)
-            GenerationCanvas.__table__.create(connection)
-            CanvasSaveReceipt.__table__.create(connection)
-            connection.execute(Project.__table__.insert().values(id='existing-project', name='existing', style='真人都市'))
-            connection.execute(GenerationCanvas.__table__.insert().values(id='existing-canvas', project_id='existing-project', kind='scene', revision=7,
-                card_types={}, document={'id': 'existing-canvas', 'project_id': 'existing-project', 'name': 'old'}))
-            path = Path(__file__).parents[1] / 'alembic/versions/473ab089b58f_generation_canvas_runtime.py'
-            spec = importlib.util.spec_from_file_location('canvas_runtime_migration', path)
-            migration = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            with Operations.context(MigrationContext.configure(connection)):
-                migration.upgrade()
-                snapshot_path = path.with_name('8a10d04c631e_canvas_dag_snapshots.py')
-                snapshot_spec = importlib.util.spec_from_file_location('canvas_dag_migration', snapshot_path)
-                snapshot_migration = importlib.util.module_from_spec(snapshot_spec)
-                snapshot_spec.loader.exec_module(snapshot_migration)
-                snapshot_migration.upgrade()
-        await db.run_sync(migrate)
-    sessions = async_sessionmaker(engine)
-    async with sessions.begin() as db:
-        snapshot = await CanvasRuntime(db, 'existing-project').snapshot('existing-canvas')
-        assert snapshot.cursor == 0 and snapshot.runs == [] and snapshot.current_outputs == {}
-    await engine.dispose()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', ['mysql', 'app-handler'], indirect=True)
 async def test_canvas_cancel_running_intent_retains_scope_until_actual_terminal(runtime):
     from app.services.task_service import TaskService

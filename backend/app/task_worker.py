@@ -458,8 +458,6 @@ class TaskWorker:
         """Persist each completed unit before proceeding; retry never repeats valid writing."""
         from app.services.directing.storyboard_prompt import writing_inputs, input_identity, write_video_prompt, apply_video_prompt
         from app.schemas.generation_canvas import VideoModelCard
-        if not task.input_snapshot.get('video_prompt_version'):
-            return checkpoint
         document = CanvasDocument.model_validate(checkpoint['document'])
         saved_cards = {card['id']: card for card in prior.get('document', {}).get('cards', [])}
         identities = dict(prior.get('prompt_inputs', {}))

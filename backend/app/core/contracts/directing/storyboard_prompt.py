@@ -25,7 +25,7 @@ class StoryboardPromptOutput(BaseModel):
 
 
 class GeneratedVideoPrompt(BaseModel):
-    """Opt-in compilation semantics; legacy cards and frozen runs retain their format."""
+    """Prompt placements written by storyboard generation for a video model card."""
     version: Literal[1] = 1
     designs: list[StoryboardPromptDesign] = Field(default_factory=list)
     edit_confirmed: bool = False

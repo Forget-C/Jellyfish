@@ -4,13 +4,10 @@ import asyncio
 import os
 
 import pytest
-from alembic.autogenerate import compare_metadata
-from alembic.migration import MigrationContext
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.db import Base
 from app.models.directing import DirectingRevision, Take
 from app.models.task import Task
 from app.models.studio import Project, Chapter, FileItem
@@ -22,8 +19,8 @@ from tests.directing.test_store import setup_story, output
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_mysql_schema_roundtrip_and_concurrent_writes():
-    """空库迁移结果与 ORM 一致；竞争保存只有一个胜者，重复产物只有一个 Take。"""
+async def test_mysql_concurrent_design_cut_and_take_writes():
+    """竞争保存只有一个胜者，重复产物只有一个 Take。"""
     value = os.environ.get("JELLYFISH_DIRECTING_MYSQL_URL")
     if not value:
         pytest.skip("JELLYFISH_DIRECTING_MYSQL_URL required")
@@ -33,16 +30,6 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
     engine = create_async_engine(value, isolation_level="READ COMMITTED")
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
-        async with engine.connect() as connection:
-            def verify(sync):
-                """仅比较本阶段表，MySQL now() 显示形式不作为语义差异。"""
-                context = MigrationContext.configure(sync, opts={
-                    "compare_type": True,
-                    "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
-                })
-                assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "c3e7f9a1b524"
-            await connection.run_sync(verify)
         async with sessions.begin() as db:
             db.add(Project(id="p1", name="测试", style="真人都市"))
             await db.flush()
@@ -415,45 +402,6 @@ async def test_mysql_atomic_division_competition(isolation):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_mysql_division_migration_preserves_populated_history():
-    """在隔离库已有设计、素材、采用及引用上往返结构升级，逐字段核对旧数据。"""
-    from alembic.operations import Operations
-    from tests.directing.test_migration import revision_module
-    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
-    if not value:
-        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
-    url = make_url(value)
-    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
-        raise ValueError('only an isolated directing validation database is allowed')
-    engine = create_async_engine(value)
-    try:
-        async with engine.begin() as connection:
-            def verify(sync):
-                migration = revision_module('b2d6e8f0a413_add_chapter_division_membership.py')
-                migration.op = Operations(MigrationContext.configure(sync))
-                migration.downgrade()
-                tables = [table for table in Base.metadata.sorted_tables if table.name.startswith('directing_') and table.name != 'directing_division_commits']
-                def snapshot():
-                    result = {}
-                    for table in tables:
-                        columns = [column for column in table.c if column.name not in ('is_current', 'current_position')]
-                        result[table.name] = sync.execute(select(*columns).order_by(*table.primary_key.columns)).mappings().all()
-                    return result
-                before = snapshot()
-                # 本文件前置主流程生成真实业务成果，避免空表通过数据保留检查。
-                for name in ('directing_sequences', 'directing_revisions', 'directing_takes', 'directing_active_cuts', 'directing_revision_dependencies'):
-                    assert before[name], name
-                migration.upgrade()
-                assert snapshot() == before
-                assert sync.scalar(text('SELECT COUNT(*) FROM directing_sequences WHERE is_current != 1 OR current_position != position')) == 0
-                assert sync.scalar(text('SELECT COUNT(*) FROM directing_division_commits')) == 0
-            await connection.run_sync(verify)
-    finally:
-        await engine.dispose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.integration
 @pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
 async def test_mysql_division_later_failure_rolls_back(isolation):
     """后续 SQL 失败后提交外层事务，仍不得留下改名、临时顺序、新身份或回执。"""
@@ -514,46 +462,6 @@ async def test_mysql_division_later_failure_rolls_back(isolation):
             assert await db.get(DivisionCommit, (chapter_id, 'failed')) is None
             saved = await service.save_division(chapter_id, DivisionSave(request_id='failed', draft=draft, preview_token=preview.preview_token))
             assert len(saved.chapter.sequences) == 3
-    finally:
-        await engine.dispose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_mysql_version_migration_with_existing_production_data():
-    """有快照时拒绝降级；从前序结构升级不会改写已有成果和回执。"""
-    from alembic.operations import Operations
-    from tests.directing.test_migration import revision_module
-    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
-    if not value:
-        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
-    url = make_url(value)
-    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
-        raise ValueError('only an isolated directing validation database is allowed')
-    engine = create_async_engine(value)
-    try:
-        async with engine.begin() as connection:
-            def verify(sync):
-                from app.models.directing import DivisionVersion
-                migration = revision_module('c3e7f9a1b524_add_chapter_division_versions.py')
-                migration.op = Operations(MigrationContext.configure(sync))
-                with pytest.raises(RuntimeError):
-                    migration.downgrade()
-                # 仅重置隔离测试库的新版本夹具，模拟升级前仍有真实旧生产记录的状态。
-                sync.execute(text('DELETE FROM directing_division_heads'))
-                for identity in sync.scalars(select(DivisionVersion.id).order_by(DivisionVersion.number.desc())).all():
-                    sync.execute(text('DELETE FROM directing_division_versions WHERE id=:id'), {'id': identity})
-                migration.downgrade()
-                tables = [table for table in Base.metadata.sorted_tables if table.name.startswith('directing_')
-                    and table.name not in ('directing_division_versions', 'directing_division_heads')]
-                def snapshot():
-                    return {table.name: sync.execute(select(table).order_by(*table.primary_key.columns)).mappings().all() for table in tables}
-                before = snapshot()
-                assert before['directing_revisions'] and before['directing_takes'] and before['directing_division_commits']
-                migration.upgrade()
-                assert snapshot() == before
-                assert sync.scalar(text('SELECT COUNT(*) FROM directing_division_versions')) == 0
-            await connection.run_sync(verify)
     finally:
         await engine.dispose()
 

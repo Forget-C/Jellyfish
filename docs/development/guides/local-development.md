@@ -18,7 +18,7 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 用同一 Compose 命令的 `ps -a` 查看状态。等 MySQL 和 RustFS 就绪，迁移和系统种子任务成功退出后，再启动宿主机上的 API 和 Worker。若已自行提供 MySQL 与 S3 兼容存储，配置连接后按[后端维护说明](../../../backend/README.md)运行迁移与系统种子。
 
-更新代码后重跑 Compose 初始化命令时保留 `--build`。若迁移报 `Can't locate revision identified by ...`，检查当前代码是否包含对应 revision，并核对初始化镜像的代码版本。若缺少 revision，切换到包含该 revision 的代码再操作。保留数据库卷及版本标记。
+更新代码后重跑 Compose 初始化命令时保留 `--build`。若迁移报 `Can't locate revision identified by ...`，检查当前代码是否包含对应 revision，并核对初始化镜像的代码版本。若数据库仍使用旧 revision，请保留其卷及版本标记，使用与其匹配的代码。新版本初次启动应另选空库，见[数据库升级与回退](database-upgrade.md)。
 
 若调整 Compose 的 MySQL 或 RustFS 凭据、宿主端口或存储桶名称，同步修改后端环境。宿主机进程使用映射端口，Compose 容器仍通过内部服务名和端口通信。改完环境后重启 API 和 Worker。配置字段见[环境变量](../reference/env.md)。
 

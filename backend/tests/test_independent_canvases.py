@@ -120,26 +120,6 @@ async def test_independent_text_generation_survives_reopen_and_retains_history(r
     assert snapshot['runs'][0]['nodes'][0]['text'] == '独立结果'
 
 
-@pytest.mark.asyncio
-async def test_explicit_retirement_releases_only_legacy_canvas_records(canvas_client, canvas_file_store):
-    from app.models.generation_canvas import GenerationCanvas, CanvasEventHead
-    from app.schemas.generation_canvas import CanvasDocument
-    from app.scripts.retire_project_free_canvases import retire
-    free = (await canvas_client.post('/canvases', json={'name': '新自由画布'})).json()['data']
-    async with canvas_file_store['sessions'].begin() as db:
-        db.add(GenerationCanvas(id='legacy', project_id='p', kind='free',
-            document=CanvasDocument(id='legacy', project_id='p', name='旧自由画布').model_dump()))
-        await db.flush()
-        db.add(CanvasEventHead(canvas_id='legacy'))
-    async with canvas_file_store['sessions'].begin() as db:
-        assert await retire(db) == ['legacy']
-        assert await retire(db, apply=True) == ['legacy']
-    async with canvas_file_store['sessions'].begin() as db:
-        assert await retire(db) == []
-    assert (await canvas_client.get('/canvases/' + free['id'])).status_code == 200
-    assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 1
-
-
 from tests.test_generation_canvas_images import image_storage, image_card, accept as accept_image
 
 

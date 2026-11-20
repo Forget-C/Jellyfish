@@ -139,30 +139,6 @@ async def test_manually_created_asset_keeps_required_style(client, field):
     assert saved[field] == body[field]
 
 
-def test_uploaded_details_migration_preserves_existing_facts():
-    import importlib.util
-    from pathlib import Path
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    import sqlalchemy as sa
-    path = Path(__file__).parents[1] / "alembic/versions/e82cfa190b64_uploaded_asset_details.py"
-    spec = importlib.util.spec_from_file_location("uploaded_detail_migration", path)
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    engine = sa.create_engine("sqlite:///:memory:")
-    try:
-        with engine.begin() as connection:
-            for table in ("scenes", "props", "costumes"):
-                connection.execute(sa.text(f"CREATE TABLE {table} (id TEXT PRIMARY KEY, supplementary_info TEXT)"))
-                connection.execute(sa.text(f"INSERT INTO {table} VALUES ('existing', '原资料')"))
-            with Operations.context(MigrationContext.configure(connection)):
-                migration.upgrade()
-            for table in ("scenes", "props", "costumes"):
-                assert connection.execute(sa.text(f"SELECT supplementary_info, details_editable FROM {table}")).one() == ("原资料", False)
-    finally:
-        engine.dispose()
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["actor", "character", "scene", "prop", "costume"])
 async def test_import_and_publish_copy_only_images(client, kind):
@@ -260,38 +236,6 @@ async def test_role_conversion_permissions_and_generation(client):
     assert "30岁" in rendered.json()["data"]["execution_prompt"]
     assert (await client.patch("/api/v1/studio/entities/actor/converted", json={"age_appearance": "35岁"})).status_code == 200
     assert (await client.patch("/api/v1/studio/entities/actor/converted", json={"details_editable": False})).status_code == 422
-
-
-def test_origin_migration_preserves_existing_facts():
-    import importlib.util
-    from pathlib import Path
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    import sqlalchemy as sa
-    path = Path(__file__).parents[1] / "alembic/versions/c6e5a1b8d203_add_asset_origins.py"
-    spec = importlib.util.spec_from_file_location("origin_migration", path)
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    engine = sa.create_engine("sqlite:///:memory:")
-    try:
-        with engine.begin() as connection:
-            for table in ("actors", "characters", "scenes", "props", "costumes"):
-                connection.execute(sa.text(f"CREATE TABLE {table} (id TEXT PRIMARY KEY, name TEXT, description TEXT)"))
-                connection.execute(sa.text(f"INSERT INTO {table} VALUES ('existing', '原名称', '原设定')"))
-            with Operations.context(MigrationContext.configure(connection)):
-                migration.upgrade()
-            for table in ("actors", "characters", "scenes", "props", "costumes"):
-                assert connection.execute(sa.text(f"SELECT name, description, origin, source_id FROM {table}")).one() == ("原名称", "原设定", "created", None)
-            connection.execute(sa.text("UPDATE actors SET origin='upload'"))
-            with Operations.context(MigrationContext.configure(connection)), pytest.raises(RuntimeError, match="image-source"):
-                migration.downgrade()
-            assert 'origin' in {column['name'] for column in sa.inspect(connection).get_columns('actors')}
-            connection.execute(sa.text("UPDATE actors SET origin='created'"))
-            with Operations.context(MigrationContext.configure(connection)):
-                migration.downgrade()
-            assert connection.execute(sa.text("SELECT name, description FROM actors")).one() == ("原名称", "原设定")
-    finally:
-        engine.dispose()
 
 
 @pytest.mark.asyncio
