@@ -151,3 +151,89 @@
   .chapter-editor-drawer .resource-editor-page-heading .app-page-title { flex: 1 1 0; }
   .chapter-editor-title-note { flex-basis: 100%; }
 }
+
+.chapter-editor-drawer:not(.chapter-editor-existing) .chapter-editor-name-row { display: contents; }
+.chapter-editor-existing .chapter-editor-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
+}
+.chapter-editor-existing .chapter-editor-field { flex: 1 1 100%; }
+.chapter-editor-tasks { justify-content: flex-end; margin-inline-start: auto; }
+.chapter-editor-existing .chapter-editor-input { flex: none; height: var(--chapter-input-max); }
+.chapter-editor-existing .chapter-editor-tools,
+.chapter-explanation-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-height: 32px;
+}
+.chapter-editor-existing .chapter-editor-tools h2,
+.chapter-explanation-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.chapter-editor-existing .chapter-explanation-row { border: 0; }
+.chapter-editor-existing .chapter-explanation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: start;
+}
+.chapter-editor-existing .chapter-explanation-summary {
+  border-radius: 8px;
+  padding-inline: 10px;
+}
+.chapter-editor-existing .chapter-explanation-summary:is(:hover, [aria-expanded="true"]) {
+  background: var(--app-selected, #e4edfb);
+}
+.chapter-editor-existing .chapter-explanation-summary[aria-expanded="true"] strong {
+  color: var(--app-accent, #245fc5);
+}
+.chapter-explanation-reading { padding-inline: 10px; }
+.chapter-explanation-reading :is(p, blockquote) {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.chapter-explanation-reading .ant-btn { justify-self: start; padding-inline: 0; }
+
+.chapter-simplify-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-block-start: 12px;
+}
+.chapter-simplify-compare .chapter-editor-text {
+  font: inherit;
+  line-height: 1.7;
+  height: clamp(100px, 46dvh, 520px);
+  resize: none;
+  overflow-wrap: anywhere;
+}
+.chapter-editor-simplify.ant-modal { top: min(8dvh, 64px); padding-bottom: 0; }
+.chapter-editor-simplify .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2 * min(8dvh, 64px));
+}
+.chapter-editor-simplify .ant-modal-body { min-height: 0; overflow-y: auto; }
+.chapter-editor-simplify :is(.ant-modal-header, .ant-modal-footer) { flex-shrink: 0; }
+.chapter-editor-simplify .ant-btn { font-size: 13px; border-radius: 8px; min-height: 32px; }
+.chapter-simplify-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.chapter-simplify-actions .ant-btn + .ant-btn { margin-inline-start: 0; }
+
+@container chapter-editor (width >= 824px) {
+  .chapter-editor-existing .chapter-editor-field { flex: 1 1 270px; }
+  .chapter-editor-tasks { align-self: flex-start; }
+}
+@media (max-width: 767px) {
+  .chapter-simplify-compare { grid-template-columns: minmax(0, 1fr); }
+  .chapter-simplify-compare .chapter-editor-text { height: clamp(84px, 22dvh, 260px); }
+  .chapter-simplify-actions .ant-btn { min-height: 36px; }
+}

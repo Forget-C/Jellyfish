@@ -30,9 +30,9 @@ export const TASK_COPY = {
   },
   scriptSimplify: {
     title: '智能精简',
-    runningDescription: '精简完成后会自动回填最新文本。',
+    runningDescription: '完成后可在「精简结果」中查看。',
     cancellingDescription: '已发送取消请求，系统会在当前步骤结束后停止。',
-    successDescription: '智能精简已完成，最新文本已自动回填。',
+    successDescription: '智能精简已完成，可查看结果并手动采用。',
     cancelledDescription: '智能精简已取消。',
     failedDescription: '智能精简失败，请稍后重试。',
     startedMessage: '已开始智能精简',

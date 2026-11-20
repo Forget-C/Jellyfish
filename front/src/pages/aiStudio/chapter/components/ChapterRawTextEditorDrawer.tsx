@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
-import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Space, Spin, Tag, Select, message } from 'antd'
+import { Alert, Button, Card, Collapse, Empty, Input, List, Modal, Popconfirm, Space, Spin, Tag, Select, message } from 'antd'
 import { flushSync } from 'react-dom'
 import {
   CloseCircleOutlined,
@@ -16,11 +16,13 @@ import {
   CONSISTENCY_CHECK_RELATION_TYPE,
   SCRIPT_OPTIMIZATION_RELATION_TYPE,
   SCRIPT_SIMPLIFICATION_RELATION_TYPE,
+  isActiveTaskStatus,
   useCancelableRelationTask,
 } from '../../project/ProjectWorkbench/relationTasks'
 import { executeAsyncTaskCreate, executeTaskCancel, notifyExistingTask } from '../../components/taskActionHelpers'
 import { handleTaskResultSafely } from '../../components/taskResultHelpers'
 import { useRelationTaskNotification } from '../../components/taskNotificationHelpers'
+import { useTaskUiStore } from '../../components/taskUiStore'
 import { useTaskPageContext } from '../../components/taskPageContext'
 import { TASK_COPY } from '../../components/taskCopy'
 import { apiErrorMessage } from '../../../../services/apiErrorMessage'
@@ -72,6 +74,12 @@ export function ChapterRawTextEditorDrawer({
   const [checkingConsistency, setCheckingConsistency] = useState(false)
   const [optimizingScript, setOptimizingScript] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [simplifyOpen, setSimplifyOpen] = useState(false)
+  const [readingSimplify, setReadingSimplify] = useState(false)
+  const [simplifyResult, setSimplifyResult] = useState<{ source?: string; resumed?: boolean }>()
+  const simplifyTrigger = useRef<HTMLButtonElement>(null)
+  const simplifyInput = useRef<{ taskId: string; source: string }>()
+  const checkResults = useRef<HTMLDivElement>(null)
   const [chapterTitle, setChapterTitle] = useState('')
   const [savedTitle, setSavedTitle] = useState('')
   const [sequenceCount, setSequenceCount] = useState<number>()
@@ -122,6 +130,7 @@ export function ChapterRawTextEditorDrawer({
     observer.observe(textFields)
     if (drawerBody.firstElementChild) observer.observe(drawerBody.firstElementChild)
     if (tools.current) observer.observe(tools.current)
+    drawerBody.querySelectorAll('.chapter-editor-name-row, .chapter-editor-pane-switch, .chapter-editor-feedback').forEach(element => observer.observe(element))
     fitTextToDrawer()
     return () => {
       cancelAnimationFrame(nextFrame)
@@ -150,12 +159,13 @@ export function ChapterRawTextEditorDrawer({
     }
   }, [drawerBody, mode, pane])
   const [expandedExplanation, setExpandedExplanation] = useState<string>()
+  const [editingExplanation, setEditingExplanation] = useState<string>()
   const focusExplanation = useRef(false)
   useLayoutEffect(() => {
     if (!focusExplanation.current) return
     layout.current?.querySelector<HTMLTextAreaElement>('textarea[data-explanation-editor]')?.focus()
     focusExplanation.current = false
-  }, [expandedExplanation, pane])
+  }, [editingExplanation, expandedExplanation, pane])
   const [selectingFor, setSelectingFor] = useState<string>()
   const [selectionTarget, setSelectionTarget] = useState<{ span?: SourceSpan }>()
   const rawInput = useRef<ComponentRef<typeof Input.TextArea>>(null)
@@ -206,6 +216,7 @@ export function ChapterRawTextEditorDrawer({
     }])
     focusExplanation.current = true
     setExpandedExplanation(id)
+    setEditingExplanation(id)
     switchView(mode, 'explanations')
   }
 
@@ -268,18 +279,21 @@ export function ChapterRawTextEditorDrawer({
   }, [])
 
   const applySimplifyResult = useCallback(async (taskId: string) => {
+    const source = simplifyInput.current?.taskId === taskId ? simplifyInput.current.source : null
+    simplifyInput.current = undefined
+    setReadingSimplify(true)
     await handleTaskResultSafely(taskId, {
       readErrorMessage: '读取智能精简结果失败',
       failedFallbackMessage: '智能精简失败',
       onSucceeded: (resultValue) => {
-        const result = resultValue as Record<string, any>
-        const simplified = String(result?.simplified_script_text ?? '').trim()
+        const result = resultValue as { simplified_script_text?: unknown } | null
+        const simplified = typeof result?.simplified_script_text === 'string' ? result.simplified_script_text.trim() : ''
         if (!simplified) {
           message.error('智能精简失败：未返回有效内容')
           return
         }
         setCondensedText(simplified)
-        if (mode !== 'compare') setMode('condensed')
+        setSimplifyResult(source === null ? { resumed: true } : { source })
         message.success('智能精简完成')
       },
       onFailed: (errorMessage) => {
@@ -289,7 +303,8 @@ export function ChapterRawTextEditorDrawer({
         message.error('读取智能精简结果失败')
       },
     })
-  }, [mode])
+    setReadingSimplify(false)
+  }, [])
 
   const applyOptimizeResult = useCallback(async (taskId: string) => {
     await handleTaskResultSafely(taskId, {
@@ -320,7 +335,7 @@ export function ChapterRawTextEditorDrawer({
     onTaskSettled: applyConsistencyTaskResult,
   })
 
-  const { task: simplifyTask, settledTask: simplifySettledTask, trackTaskData: trackSimplifyTaskData, applyCancelData: applySimplifyCancelData } = useCancelableRelationTask({
+  const { task: simplifyTask, settledTask: simplifySettledTask, trackTaskData: trackSimplifyTaskData, applyCancelData: applySimplifyCancelData, setTrackedTask: setTrackedSimplifyTask } = useCancelableRelationTask({
     enabled: open && !!chapterId,
     relationType: SCRIPT_SIMPLIFICATION_RELATION_TYPE,
     relationEntityId: chapterId,
@@ -355,8 +370,11 @@ export function ChapterRawTextEditorDrawer({
   const editorText = mode === 'condensed' ? condensedText : rawText
   const plainWordCount = useMemo(() => editorText.trim().length, [editorText])
   const paragraphCount = useMemo(() => editorText.split(/\n\s*\n/).filter((p) => p.trim()).length, [editorText])
-  const actionsLoading =
-    loading || !!loadError || saving || extracting || checkingConsistency || optimizingScript || !!simplifyTask || !!optimizeTask || !!consistencyTask
+  const rawLocked = loading || !!loadError || saving || checkingConsistency || optimizingScript || !!optimizeTask || !!consistencyTask
+  const simplifyBusy = extracting || !!simplifyTask || readingSimplify
+  const actionsLoading = rawLocked || simplifyBusy
+  const sourceChangedSinceSimplify = simplifyResult?.source !== undefined && simplifyResult.source !== rawText
+  const confirmSimplifyReplace = sourceChangedSinceSimplify || !!simplifyResult?.resumed
   const consistencyIssues = useMemo(() => {
     const list = consistencyResult?.issues ?? []
     return Array.isArray(list) ? list : []
@@ -379,6 +397,7 @@ export function ChapterRawTextEditorDrawer({
         const nextCondensed = data?.condensed_text ?? ''
         setRawText(nextRaw)
         setCondensedText(nextCondensed)
+        setSimplifyResult(nextCondensed ? {} : undefined)
         setBasisVersion(data.basis_version)
         setExplanations(data.source_explanations ?? []); setSavedExplanations(data.source_explanations ?? [])
         setRepairPreview(undefined)
@@ -408,14 +427,23 @@ export function ChapterRawTextEditorDrawer({
     setExtracting(true)
     try {
       await executeAsyncTaskCreate({
-        request: () =>
-          ScriptProcessingService.simplifyScriptAsyncApiV1ScriptProcessingSimplifyScriptAsyncPost({
+        request: async () => {
+          const response = await ScriptProcessingService.simplifyScriptAsyncApiV1ScriptProcessingSimplifyScriptAsyncPost({
             requestBody: {
               chapter_id: chapterId ?? null,
               script_text: rawText,
             },
-          }),
-        trackTaskData: trackSimplifyTaskData,
+          })
+          if (response.data && !response.data.reused) {
+            simplifyInput.current = { taskId: response.data.task_id, source: rawText }
+          }
+          return response
+        },
+        trackTaskData: data => {
+          if (isActiveTaskStatus(data.status)) return trackSimplifyTaskData(data)
+          void applySimplifyResult(data.task_id)
+          return null
+        },
         startedMessage: simplifyTaskCopy.startedMessage,
         reusedMessage: simplifyTaskCopy.reusedMessage,
         fallbackErrorMessage: '智能精简失败',
@@ -425,6 +453,13 @@ export function ChapterRawTextEditorDrawer({
     } finally {
       setExtracting(false)
     }
+  }
+
+  const replaceSourceWithSimplified = () => {
+    if (actionsLoading || !condensedText.trim()) return
+    setRawText(condensedText)
+    switchView('raw', 'body')
+    setSimplifyOpen(false)
   }
 
   const handleCheckConsistency = async () => {
@@ -528,7 +563,15 @@ export function ChapterRawTextEditorDrawer({
       await executeTaskCancel({
         taskId: simplifyTask.taskId,
         reason: '用户在原文编辑抽屉取消智能精简任务',
-        applyCancelData: applySimplifyCancelData,
+        applyCancelData: data => {
+          const next = applySimplifyCancelData(data)
+          if (next && !isActiveTaskStatus(next.status)) {
+            setTrackedSimplifyTask(null)
+            useTaskUiStore.getState().removeTask(next.taskId)
+            if (next.status === 'succeeded') void applySimplifyResult(next.taskId)
+          }
+          return next
+        },
         cancelledImmediatelyMessage: simplifyTaskCopy.cancelledImmediatelyMessage,
         cancelRequestedMessage: simplifyTaskCopy.cancelRequestedMessage,
         fallbackErrorMessage: '取消智能精简任务失败',
@@ -559,6 +602,7 @@ export function ChapterRawTextEditorDrawer({
     settledTask: consistencySettledTask,
     title: consistencyTaskCopy.title,
     sourceLabel: '章节原文编辑',
+    placement: 'bottomRight',
     runningDescription: consistencyTaskCopy.runningDescription,
     cancellingDescription: consistencyTaskCopy.cancellingDescription,
     successDescription: consistencyTaskCopy.successDescription,
@@ -572,6 +616,7 @@ export function ChapterRawTextEditorDrawer({
     settledTask: simplifySettledTask,
     title: simplifyTaskCopy.title,
     sourceLabel: '章节原文编辑',
+    placement: 'bottomRight',
     runningDescription: simplifyTaskCopy.runningDescription,
     cancellingDescription: simplifyTaskCopy.cancellingDescription,
     successDescription: simplifyTaskCopy.successDescription,
@@ -585,6 +630,7 @@ export function ChapterRawTextEditorDrawer({
     settledTask: optimizeSettledTask,
     title: optimizeTaskCopy.title,
     sourceLabel: '章节原文编辑',
+    placement: 'bottomRight',
     runningDescription: optimizeTaskCopy.runningDescription,
     cancellingDescription: optimizeTaskCopy.cancellingDescription,
     successDescription: optimizeTaskCopy.successDescription,
@@ -651,7 +697,7 @@ export function ChapterRawTextEditorDrawer({
     finally { setSaving(false) }
   }
   const guard = useWorkspaceDraft({ name: creating ? '新建章节' : '章节编辑', dirty: open && !loadError && hasUnsavedChanges,
-    busy: saving || extracting || checkingConsistency || optimizingScript || !!simplifyTask || !!optimizeTask || !!consistencyTask,
+    busy: actionsLoading && !loading && !loadError,
     saveWarning: impact, save: () => creating ? createChapter(false) : handleSave(true), discard: () => {
       flushSync(() => {
         setExplanations(savedExplanations); setChapterTitle(savedTitle); setRawText(savedRawText); setCondensedText(savedCondensedText); setConfirmRaw(undefined)
@@ -686,10 +732,10 @@ export function ChapterRawTextEditorDrawer({
 
   return (
     <>
-      <ResourceEditorFrame id={drawerId} open={open} drawer className="chapter-editor-drawer" onBodyReady={setDrawerBody}
+      <ResourceEditorFrame id={drawerId} open={open} drawer className={creating ? 'chapter-editor-drawer' : 'chapter-editor-drawer chapter-editor-existing'} onBodyReady={setDrawerBody}
         title={creating ? '新建章节' : savedTitle ? `编辑章节 · ${savedTitle}` : '编辑章节'}
         titleExtra={!!sequenceCount && <span className="chapter-editor-title-note">修改原文不会同步已有场次</span>}
-        backLabel="返回" onClose={historyOpen ? () => setHistoryOpen(false) : handleRequestClose}
+        backLabel="返回" onClose={simplifyOpen ? () => setSimplifyOpen(false) : historyOpen ? () => setHistoryOpen(false) : handleRequestClose}
         actions={creating
           ? <Button type="primary" loading={saving} onClick={() => void createChapter(true)}>创建并继续</Button>
           : <Space wrap>
@@ -700,15 +746,39 @@ export function ChapterRawTextEditorDrawer({
         </Space>}
       >
         {loadError && <Alert type="error" showIcon message={loadError} action={<Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />}
-        {!loading && !loadError && <label className="chapter-editor-field">章节名称<Input aria-label="章节名称" value={chapterTitle} disabled={actionsLoading} onChange={event => setChapterTitle(event.target.value)} /></label>}
-        <div ref={saveFeedback}>
+        {!loading && !loadError && <div className="chapter-editor-name-row">
+          <label className="chapter-editor-field">章节名称<Input aria-label="章节名称" value={chapterTitle} disabled={actionsLoading} onChange={event => setChapterTitle(event.target.value)} /></label>
+          {!creating && <Space wrap className="chapter-editor-tasks" aria-label="原文工具" role="group">
+            <Button icon={<ReloadOutlined aria-hidden />} loading={checkingConsistency || !!consistencyTask}
+              disabled={actionsLoading || !rawText.trim()} onClick={() => void handleCheckConsistency()}>
+              {checkingConsistency || consistencyTask ? '检查中' : '原文一致性检查'}
+            </Button>
+            {consistencyTask && <Button danger disabled={consistencyTask.cancelRequested} onClick={() => void handleCancelConsistencyTask()}>
+              {consistencyTask.cancelRequested ? '正在取消' : '取消检查'}
+            </Button>}
+            {consistencyResult && <Button onClick={() => {
+              flushSync(() => switchView('raw', 'body'))
+              checkResults.current?.focus({ preventScroll: true })
+              checkResults.current?.scrollIntoView({ block: 'start' })
+            }}>查看检查结果</Button>}
+            <Button ref={simplifyTrigger} icon={<ThunderboltOutlined aria-hidden />} loading={simplifyBusy}
+              disabled={actionsLoading || (!simplifyResult && !rawText.trim())}
+              onClick={() => simplifyResult ? setSimplifyOpen(true) : void handleSmartSimplify()}>
+              {simplifyBusy ? '精简中' : simplifyResult ? '精简结果' : '智能精简'}
+            </Button>
+            {!simplifyOpen && simplifyTask && <Button danger disabled={simplifyTask.cancelRequested} onClick={() => void handleCancelSimplifyTask()}>
+              {simplifyTask.cancelRequested ? '正在取消' : '取消精简'}
+            </Button>}
+          </Space>}
+        </div>}
+        <div className="chapter-editor-feedback" ref={saveFeedback}>
           {saveError && <Alert type="error" showIcon message={saveError} />}
           {showRawConfirmation && <Alert type="warning" showIcon message={impact} action={<Space wrap>
             <Button disabled={saving} onClick={() => setConfirmRaw(undefined)}>继续编辑</Button>
             <Button type="primary" loading={saving} onClick={() => void handleSave(true)}>确认保存原文</Button>
           </Space>} style={{ marginBottom: 12 }} />}
+          {needsReview && <Alert type="warning" message="原文已保存，请逐场核对原文范围及设计与计划依据。" action={<Button onClick={() => onReviewSequences && guard(onReviewSequences)}>查看本章场次并核对</Button>} style={{ marginBottom: 12 }} />}
         </div>
-        {needsReview && <Alert type="warning" message="原文已保存，请逐场核对原文范围及设计与计划依据。" action={<Button onClick={() => onReviewSequences && guard(onReviewSequences)}>查看本章场次并核对</Button>} style={{ marginBottom: 12 }} />}
         {loading ? (
           <div className="flex justify-center items-center py-10"><Spin /></div>
         ) : !loadError && (
@@ -719,51 +789,14 @@ export function ChapterRawTextEditorDrawer({
             </div>
             <section className="chapter-editor-body-pane" aria-label="正文编辑">
               <div ref={tools} className="chapter-editor-tools">
-                <Space wrap role="group" aria-label="正文视图">
+                {!creating && <h2>原文</h2>}
+                {creating && <Space wrap role="group" aria-label="正文视图">
                   <Button aria-label="原文" aria-pressed={mode === 'raw'} disabled={actionsLoading} onClick={() => switchView('raw')}>原文</Button>
                   <Button aria-pressed={mode === 'condensed'} disabled={actionsLoading} onClick={() => switchView('condensed')}>精简内容</Button>
                   <Button aria-label={mode === 'compare' ? '退出对比' : '对比'} aria-pressed={mode === 'compare'} disabled={actionsLoading} onClick={() => {
                     if (mode === 'compare') switchView(compareReturn.current)
                     else { compareReturn.current = mode; switchView('compare') }
                   }}>{mode === 'compare' ? '退出对比' : '对比'}</Button>
-                </Space>
-                {!creating && <Space wrap aria-label="原文工具" role="group">
-                  <Button
-                    icon={<ReloadOutlined aria-hidden />}
-                    loading={checkingConsistency || !!consistencyTask}
-                    disabled={actionsLoading || !!consistencyTask}
-                    onClick={() => void handleCheckConsistency()}
-                  >
-                    {consistencyTask ? '检查中' : '原文一致性检查'}
-                  </Button>
-                  {consistencyTask ? (
-                    <Button
-                      danger
-                      icon={<CloseCircleOutlined aria-hidden />}
-                      disabled={consistencyTask.cancelRequested}
-                      onClick={() => void handleCancelConsistencyTask()}
-                    >
-                      {consistencyTask.cancelRequested ? '正在取消' : '取消检查'}
-                    </Button>
-                  ) : null}
-                  <Button
-                    icon={<ThunderboltOutlined aria-hidden />}
-                    loading={extracting || !!simplifyTask}
-                    disabled={actionsLoading || !!simplifyTask}
-                    onClick={() => void handleSmartSimplify()}
-                  >
-                    {simplifyTask ? '精简中' : '智能精简'}
-                  </Button>
-                  {simplifyTask ? (
-                    <Button
-                      danger
-                      icon={<CloseCircleOutlined aria-hidden />}
-                      disabled={simplifyTask.cancelRequested}
-                      onClick={() => void handleCancelSimplifyTask()}
-                    >
-                      {simplifyTask.cancelRequested ? '正在取消' : '取消精简'}
-                    </Button>
-                  ) : null}
                 </Space>}
                 {mode === 'raw' && !selectingFor && <Button disabled={actionsLoading || !rawVersion || !rawText.trim()} onClick={() => {
                   const span = readRawSelection()
@@ -789,30 +822,37 @@ export function ChapterRawTextEditorDrawer({
                   {mode === 'compare' && <span className="chapter-editor-label">原文</span>}
                   <span className="chapter-editor-input" data-text={rawText}>
                     <Input.TextArea ref={rawInput} aria-label={mode === 'compare' ? '对比原文' : '章节原文'}
-                      value={rawText} onChange={event => setRawText(event.target.value)} disabled={actionsLoading}
+                      value={rawText} onChange={event => setRawText(event.target.value)} disabled={rawLocked}
                       placeholder="编辑章节原文…" className="chapter-editor-text" />
                   </span>
                 </label>
-                <label hidden={mode === 'raw'}>
+                {creating && <label hidden={mode === 'raw'}>
                   {mode === 'compare' && <span className="chapter-editor-label">精简内容</span>}
                   <span className="chapter-editor-input" data-text={condensedText}>
                     <Input.TextArea aria-label={mode === 'compare' ? '对比精简内容' : '精简内容'}
                       value={condensedText} onChange={event => setCondensedText(event.target.value)} disabled={actionsLoading}
                       placeholder="编辑精简内容…" className="chapter-editor-text" />
                   </span>
-                </label>
+                </label>}
               </div>
               <div ref={textStats} className="chapter-editor-meta chapter-editor-stats">{plainWordCount} 字 · {paragraphCount} 段</div>
             </section>
             <aside className="chapter-editor-explanations" aria-label="原文补充解释">
-              <SourceExplanationsEditor items={explanations} savedItems={savedExplanations} version={rawVersion} rawText={rawText} disabled={actionsLoading}
-                onChange={setExplanations} expanded={expandedExplanation} onExpand={setExpandedExplanation}
+              <SourceExplanationsEditor flat={!creating} editing={editingExplanation} onEdit={setEditingExplanation} items={explanations} savedItems={savedExplanations} version={rawVersion} rawText={rawText} disabled={actionsLoading}
+                onChange={setExplanations} expanded={expandedExplanation} onExpand={(id, focus) => {
+                  if (focus) {
+                    const input = layout.current?.querySelector<HTMLTextAreaElement>('textarea[data-explanation-editor]')
+                    if (editingExplanation === id && expandedExplanation === id) input?.focus()
+                    else focusExplanation.current = true
+                  }
+                  setExpandedExplanation(id)
+                }}
                 onAdd={() => addExplanation()} onLocate={selectInRaw}
                 onReselect={id => { setSelectingFor(id); selectInRaw() }} />
             </aside>
           </div>
         )}
-        {!loading && !loadError && mode !== 'compare' && <div className="chapter-editor-checks space-y-3" data-pane={pane}>
+        {!loading && !loadError && mode !== 'compare' && <div ref={checkResults} tabIndex={-1} className="chapter-editor-checks space-y-3" data-pane={pane}>
             {consistencyResult && (consistencyResult.review_version !== reviewVersion || consistencyResult.policy_version !== SOURCE_POLICY_VERSION || consistencyResult.source_version !== rawVersion || consistencyResult.explanation_version !== explanationVersion) && <Alert type="warning" message="检查结果已过期或为旧版检查，请重新检查后修复" />}
             {repairPreview && <Card title="原文异常修复预览">
               <p>修改前</p><pre className="chapter-editor-text" style={{ whiteSpace: 'pre-wrap' }}>{repairPreview.source}</pre>
@@ -918,6 +958,46 @@ export function ChapterRawTextEditorDrawer({
             ) : null}
         </div>}
       </ResourceEditorFrame>
+
+      <Modal className="chapter-editor-simplify" title="精简结果" open={simplifyOpen}
+        width={960} onCancel={() => setSimplifyOpen(false)} maskClosable={false}
+        focusTriggerAfterClose={false} afterClose={() => {
+          const trigger = simplifyTrigger.current
+          const target = trigger?.disabled ? drawerBody?.closest('[role="dialog"]')?.querySelector<HTMLButtonElement>('button[aria-label="返回"]') : trigger
+          target?.focus({ preventScroll: true })
+        }}
+        footer={<div className="chapter-simplify-actions">
+          <Button danger disabled={simplifyBusy} onClick={() => {
+            setCondensedText('')
+            setSimplifyResult(undefined)
+            setSimplifyOpen(false)
+          }}>放弃精简结果</Button>
+          {simplifyTask ? <Button danger disabled={simplifyTask.cancelRequested} onClick={() => void handleCancelSimplifyTask()}>
+            {simplifyTask.cancelRequested ? '正在取消' : '取消精简'}
+          </Button> : <Popconfirm title="重新精简将替换右侧精简内容" okText="重新精简" cancelText="取消"
+            disabled={!condensedText.trim()} onConfirm={() => void handleSmartSimplify()}>
+            <Button loading={simplifyBusy} disabled={actionsLoading || !rawText.trim()}
+              onClick={() => { if (!condensedText.trim()) void handleSmartSimplify() }}>重新精简</Button>
+          </Popconfirm>}
+          <Button aria-label="关闭" onClick={() => setSimplifyOpen(false)}>关闭</Button>
+          <Popconfirm title="确认用精简稿替换当前原文？" okText="确认替换" cancelText="取消"
+            disabled={!confirmSimplifyReplace} onConfirm={replaceSourceWithSimplified}>
+            <Button type="primary" disabled={actionsLoading || !condensedText.trim()} onClick={() => { if (!confirmSimplifyReplace) replaceSourceWithSimplified() }}>用精简稿替换原文</Button>
+          </Popconfirm>
+        </div>}
+      >
+        {sourceChangedSinceSimplify && <Alert type="warning" showIcon message="原文在精简后有修改，可重新精简。" />}
+        {simplifyResult?.resumed && <Alert type="info" showIcon message="无法核对本次任务使用的原文，请对照当前原文后再采用。" />}
+        <div className="chapter-simplify-compare">
+          <label><span className="chapter-editor-label">当前原文</span>
+            <Input.TextArea aria-label="当前原文" className="chapter-editor-text" value={rawText} readOnly />
+          </label>
+          <label><span className="chapter-editor-label">精简内容</span>
+            <Input.TextArea aria-label="精简内容" className="chapter-editor-text" value={condensedText} disabled={actionsLoading}
+              onChange={event => setCondensedText(event.target.value)} />
+          </label>
+        </div>
+      </Modal>
 
       <Modal className="chapter-editor-history"
         title={

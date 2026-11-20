@@ -1,3 +1,4 @@
+import { EditOutlined } from '@ant-design/icons'
 import { Button, Card, Input, Select, Space, Tag } from 'antd'
 import type { SourceExplanation, SourceSpan } from '../../../../services/generated'
 import { selectionSpan, sourceSlice } from '../../directing/sourceSelection'
@@ -23,7 +24,10 @@ function lineNumber(raw: string, offset: number) {
   return sourceSlice(raw, { start: 0, end: offset }).split(/\r\n?|\n/).length
 }
 
-export function SourceExplanationsEditor({ items, savedItems, version, rawText, disabled, onChange, expanded, onExpand, onAdd, onLocate, onReselect }: {
+export function SourceExplanationsEditor({ flat, editing, onEdit, items, savedItems, version, rawText, disabled, onChange, expanded, onExpand, onAdd, onLocate, onReselect }: {
+  flat: boolean
+  editing?: string
+  onEdit: (id?: string) => void
   items: SourceExplanation[]
   savedItems: SourceExplanation[]
   version: string
@@ -31,11 +35,15 @@ export function SourceExplanationsEditor({ items, savedItems, version, rawText, 
   disabled: boolean
   onChange: (items: SourceExplanation[]) => void
   expanded?: string
-  onExpand: (id?: string) => void
+  onExpand: (id?: string, focus?: boolean) => void
   onAdd: () => void
   onLocate: (span: SourceSpan) => void
   onReselect: (id: string) => void
 }) {
+  const openEditor = (id: string) => {
+    onEdit(id)
+    onExpand(id, true)
+  }
   const patch = (id: string, update: Partial<SourceExplanation>) =>
     onChange(items.map(item => item.id === id ? { ...item, policy_version: undefined, ...update } : item))
   const rows = items.map(item => {
@@ -59,25 +67,39 @@ export function SourceExplanationsEditor({ items, savedItems, version, rawText, 
     ? { ...item, start: span?.start, end: span?.end, source_version: version, policy_version: SOURCE_POLICY_VERSION }
     : item))
 
-  return <Card size="small" title={`原文补充解释（${items.length}）`} extra={<Button disabled={disabled} onClick={onAdd}>添加解释</Button>}>
+  const title = `原文补充解释（${items.length}）`
+  const add = <Button disabled={disabled} onClick={onAdd}>添加解释</Button>
+  const content = <>
     {!items.length && <p className="chapter-editor-meta">选段添加解释，或添加适用于全章的说明。</p>}
     {rows.map(({ item, matches, span, confirmed, location, canConfirm }, index) => {
       const open = expanded === item.id
       const status = confirmed ? '已确认' : version && item.source_version === version && typeof item.policy_version === 'number'
         ? '需按文字表达边界复核' : '待复核'
       const saved = savedItems.find(row => row.id === item.id)
-      const showComparison = saved && !confirmed
+      const comparison = saved && !confirmed && <dl className="chapter-explanation-comparison">
+        <div><dt>保存时的摘录</dt><dd>{saved.excerpt || '全章'}</dd></div>
+        <div><dt>当前选段</dt><dd>{span ? sourceSlice(rawText, span) : item.excerpt ? '请选择原文位置' : '全章'}</dd></div>
+      </dl>
       return <div className="chapter-explanation-row" key={item.id}>
-        <button type="button" className="chapter-explanation-summary" aria-expanded={open}
-          onClick={() => onExpand(open ? undefined : item.id)}>
-          <span><strong>{location}</strong><Tag>{item.kind === 'normal' ? '正常表述确认 · ' : ''}{status}</Tag></span>
-          <span className="chapter-explanation-preview">{item.text.trim() || '待填写解释'}</span>
-        </button>
-        {open && <div className="chapter-explanation-details">
-          {showComparison && <dl className="chapter-explanation-comparison">
-            <div><dt>保存时的摘录</dt><dd>{saved?.excerpt || '全章'}</dd></div>
-            <div><dt>当前选段</dt><dd>{span ? sourceSlice(rawText, span) : item.excerpt ? '请选择原文位置' : '全章'}</dd></div>
-          </dl>}
+        <div className="chapter-explanation-actions">
+          <button type="button" className="chapter-explanation-summary" aria-expanded={open}
+            onClick={() => {
+              onEdit(undefined)
+              onExpand(open ? undefined : item.id)
+            }}>
+            <span><strong>{location}</strong><Tag>{item.kind === 'normal' ? '正常表述确认 · ' : ''}{status}</Tag></span>
+            <span className="chapter-explanation-preview">{item.text.trim() || '待填写解释'}</span>
+          </button>
+          {flat && <Button aria-label={`编辑解释 ${index + 1}`} icon={<EditOutlined aria-hidden />}
+            disabled={disabled} onClick={() => openEditor(item.id)} />}
+        </div>
+        {flat && open && editing !== item.id && <div className="chapter-explanation-details chapter-explanation-reading">
+          {comparison || (item.excerpt && <blockquote>{item.excerpt}</blockquote>)}
+          <p>{item.text}</p>
+          {span && <Button type="link" disabled={disabled} onClick={() => onLocate(span)}>定位原文</Button>}
+        </div>}
+        {open && (!flat || editing === item.id) && <div className="chapter-explanation-details">
+          {comparison}
           <label>原文摘录
             <Input.TextArea aria-label={`解释${index + 1}原文摘录`} placeholder="留空表示全章" value={item.excerpt}
               autoSize={{ minRows: 1, maxRows: 5 }} disabled={disabled}
@@ -112,5 +134,8 @@ export function SourceExplanationsEditor({ items, savedItems, version, rawText, 
     })}
     {items.length > 1 && <Button disabled={disabled || !version || rows.some(row => !row.canConfirm)}
       onClick={() => confirm()}>已查看，全部确认</Button>}
-  </Card>
+  </>
+  return flat
+    ? <><div className="chapter-explanation-heading"><h2>{title}</h2>{add}</div>{content}</>
+    : <Card size="small" title={title} extra={add}>{content}</Card>
 }

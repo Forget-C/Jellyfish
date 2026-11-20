@@ -14,9 +14,11 @@ const evidence = await browserOutput('jellyfish-chapter-list-')
 const chapters = Array.from({ length: 105 }, (_, i) => ({ id: `ch${i + 1}`, project_id: 'p1', index: i + 1, title: `章节 ${i + 1}`, raw_text: '她推开门。', condensed_text: '推门。', sequence_count: i === 0 ? 2 : 0, status: 'draft' }))
 delete chapters[104].sequence_count
 chapters[2].raw_text = ''
+chapters[3].condensed_text = ''
 const writes = [], requests = [], errors = []
 const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: " 她推开门。优化后的原文。\n" } }
-let checkCount = 0
+let checkCount = 0, simplifyCount = 0
+let holdSimplify = false
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -43,9 +45,15 @@ try {
       return respond({ task_id: `check${++checkCount}`, status: 'queued' })
     }
     if (path.endsWith('/script-processing/optimize-script-async')) return respond({ task_id: 'optimize', status: 'queued' })
-    if (path.endsWith('/script-processing/simplify-script-async')) return respond({ task_id: 'simplify', status: 'queued' })
-    const taskPath = path.match(/\/film\/tasks\/(check\d+|optimize|simplify)\/(status|result)$/)
-    if (taskPath) return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, result: taskResults[taskPath[1].startsWith('check') ? 'check' : taskPath[1]] })
+    if (path.endsWith('/script-processing/simplify-script-async')) return respond({ task_id: `simplify${++simplifyCount}`, status: 'queued' })
+    const cancelled = path.match(/\/film\/tasks\/(simplify\d+)\/cancel$/)
+    if (cancelled) return respond({ task_id: cancelled[1], status: 'cancelled', effective_immediately: true })
+    const taskPath = path.match(/\/film\/tasks\/(check\d+|optimize|simplify\d+)\/(status|result)$/)
+    if (taskPath) {
+      const key = taskPath[1].replace(/\d+$/, '')
+      if (key === 'simplify' && holdSimplify) return respond({ task_id: taskPath[1], status: 'running', progress: 30 })
+      return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, result: taskResults[key] })
+    }
     if (path.endsWith('/projects/p1')) return respond({ id: 'p1', name: '章节管理测试', stats: {} })
     if (path.endsWith('/chapters')) {
       if (req.method() === 'POST') {
@@ -146,25 +154,40 @@ try {
   assert.ok(await editor.isVisible())
   assert.deepEqual(writes.at(-1), { title: '第一章重命名' })
   assert.equal(await editor.getByRole('button', { name: '确认保存原文', exact: true }).count(), 0)
-  await editor.getByRole('button', { name: '精简内容', exact: true }).click()
-  await editor.getByRole('textbox', { name: '精简内容', exact: true }).fill('开门。')
+  const result = page.getByRole('dialog', { name: '精简结果', exact: true })
+  const openResult = () => editor.getByRole('button', { name: '精简结果', exact: true }).click()
+  const closeResult = async () => {
+    await result.getByRole('button', { name: '关闭', exact: true }).click()
+    await result.waitFor({ state: 'hidden' })
+  }
+  const resultText = result.getByRole('textbox', { name: '精简内容', exact: true })
+  const currentRaw = editor.getByRole('textbox', { name: '章节原文', exact: true })
+  await openResult()
+  assert.equal(await result.getByRole('textbox', { name: '当前原文', exact: true }).evaluate(input => input.readOnly), true)
+  await resultText.fill('开门。')
+  await page.keyboard.press('Escape')
+  await result.waitFor({ state: 'hidden' })
+  await page.waitForFunction(() => document.activeElement?.textContent === '精简结果')
+  assert.equal(await currentRaw.inputValue(), '她推开门。')
   await save()
-  await page.getByText('章节已保存', { exact: true }).first().waitFor()
   await page.waitForFunction(() => !document.querySelector('.chapter-editor-drawer .ant-btn-loading'))
   assert.deepEqual(writes.at(-1), { condensed_text: '开门。' })
-  await editor.getByRole('button', { name: '对比', exact: true }).click()
-  assert.equal(await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).inputValue(), '开门。')
-  await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('模式往返原文。')
-  await editor.getByRole('button', { name: '智能精简', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('textarea[aria-label="对比精简内容"]')?.value === '智能精简内容。')
-  assert.equal(await editor.getByRole('textbox', { name: '对比原文', exact: true }).inputValue(), '模式往返原文。')
-  await editor.getByRole('button', { name: '原文', exact: true }).click()
-  assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '模式往返原文。')
-  await editor.getByRole('button', { name: '精简内容', exact: true }).click()
-  assert.equal(await editor.getByRole('textbox', { name: '精简内容', exact: true }).inputValue(), '智能精简内容。')
-  await editor.getByRole('textbox', { name: '精简内容', exact: true }).fill('开门。')
+  await openResult()
+  assert.equal(await resultText.inputValue(), '开门。')
+  await resultText.fill('')
+  await closeResult()
+  await openResult()
+  assert.equal(await resultText.inputValue(), '')
+  await resultText.fill('开门。')
+  holdSimplify = true
+  await result.getByRole('button', { name: '重新精简', exact: true }).click()
+  await page.getByRole('button', { name: '重新精简', exact: true }).last().click()
+  await result.getByRole('button', { name: '取消精简', exact: true }).click()
+  await result.getByRole('button', { name: '取消精简', exact: true }).waitFor({ state: 'hidden' })
+  assert.equal(await resultText.inputValue(), '开门。')
+  holdSimplify = false
+  await closeResult()
 
-  await editor.getByRole('button', { name: '原文', exact: true }).click()
   await editor.getByRole('textbox', { name: '章节原文', exact: true }).fill('她推开门！')
   const beforeRaw = writes.length
   await save()
@@ -207,30 +230,30 @@ try {
   await editor.getByRole('button', { name: '确认保存原文', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('.chapter-editor-drawer .ant-btn-loading'))
   assert.deepEqual(writes.at(-1), { raw_text: ' 她推开门。优化后的原文。\n' })
-  await editor.getByRole('button', { name: '对比', exact: true }).click()
-  await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('她推开门。新的一天。')
-  await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).fill('新的一天。')
+  await currentRaw.fill('她推开门。新的一天。')
+  await openResult()
+  await resultText.fill('新的一天。')
+  await closeResult()
   await save()
   await editor.getByRole('button', { name: '确认保存原文', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('.chapter-editor-drawer .ant-btn-loading'))
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门。新的一天。', condensed_text: '新的一天。' })
-  await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('她推开门。新的一天！')
+  await currentRaw.fill('她推开门。新的一天！')
   await editor.getByRole('button', { name: '返回', exact: true }).click()
   const guard = page.getByRole('dialog', { name: '有未保存的修改', exact: true })
   await guard.getByText(/本章已有 2 个场次/).waitFor()
   await guard.getByRole('button', { name: '取消，继续编辑', exact: true }).click()
-  assert.equal(await editor.getByRole('textbox', { name: '对比原文', exact: true }).inputValue(), '她推开门。新的一天！')
+  assert.equal(await currentRaw.inputValue(), '她推开门。新的一天！')
   await editor.getByRole('button', { name: '返回', exact: true }).click()
   await guard.getByRole('button', { name: '保存后继续', exact: true }).click()
   await editor.waitFor({ state: 'hidden' })
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门。新的一天！' })
   await page.getByRole('textbox', { name: '搜索章节', exact: true }).fill('')
   await page.getByRole('button', { name: '1. 第一章重命名 · 编辑章节', exact: true }).click()
-  await editor.getByRole('button', { name: '智能精简', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('textarea[aria-label="精简内容"]')?.value === '智能精简内容。')
-  await editor.getByRole('button', { name: '对比', exact: true }).click()
-  await editor.getByRole('textbox', { name: '对比原文', exact: true }).fill('待放弃原文')
-  await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).fill('待放弃精简')
+  await currentRaw.fill('待放弃原文')
+  await openResult()
+  await resultText.fill('待放弃精简')
+  await closeResult()
   const beforeDiscard = writes.length
   await editor.getByRole('button', { name: '返回', exact: true }).click()
   await guard.getByRole('button', { name: '放弃修改并继续', exact: true }).click()
@@ -239,8 +262,9 @@ try {
   await page.getByRole('button', { name: '1. 第一章重命名 · 编辑章节', exact: true }).click()
   await editor.getByRole('textbox', { name: '章节原文', exact: true }).waitFor()
   assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).inputValue(), '她推开门。新的一天！')
-  await editor.getByRole('button', { name: '精简内容', exact: true }).click()
-  assert.equal(await editor.getByRole('textbox', { name: '精简内容', exact: true }).inputValue(), '新的一天。')
+  await openResult()
+  assert.equal(await resultText.inputValue(), '新的一天。')
+  await closeResult()
   assert.equal(await editor.getByRole('button', { name: /^保\s*存$/ }).isDisabled(), true)
   await editor.getByRole('button', { name: '返回', exact: true }).click()
   // A patch response without sequence_count must not overwrite the reliable count with zero.
@@ -289,13 +313,6 @@ try {
     })
     const expectedGap = width === 375 ? 108 : 33
     assert.ok(Math.abs(backToNameGap - expectedGap) <= 2, `${width}px: return-to-name gap is ${backToNameGap}px`)
-    if (width === 375) {
-      await editor.getByRole('button', { name: '对比', exact: true }).click()
-      const raw = await editor.getByRole('textbox', { name: '对比原文', exact: true }).boundingBox()
-      const condensed = await editor.getByRole('textbox', { name: '对比精简内容', exact: true }).boundingBox()
-      assert.ok(condensed.y >= raw.y + raw.height && condensed.x === raw.x)
-      await editor.getByRole('button', { name: '原文', exact: true }).click()
-    }
     assert.equal(await editor.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `${width}: editor overflow`)
     const close = editor.getByRole('button', { name: '返回', exact: true })
     await close.scrollIntoViewIfNeeded()
@@ -415,17 +432,45 @@ try {
   const saveButton = editor.getByRole('button', { name: '保存', exact: true })
   const explanations = editor.getByRole('complementary', { name: '原文补充解释' })
   const selectExcerpt = editor.getByRole('button', { name: '选段添加解释', exact: true })
-  const rawView = editor.getByRole('button', { name: '原文', exact: true })
+  const nameInput = editor.getByRole('textbox', { name: '章节名称', exact: true })
+  const simplifyButton = editor.getByRole('button', { name: '智能精简', exact: true })
   const stats = editor.getByText('162 字 · 1 段')
-  const [shortBox, sideBox, saveBox, selectBox, rawButtonBox] = await Promise.all(
-    [shortText, explanations, saveButton, selectExcerpt, rawView].map(element => element.boundingBox()),
+  const [shortBox, sideBox, saveBox, selectBox, nameBox, simplifyBox] = await Promise.all(
+    [shortText, explanations, saveButton, selectExcerpt, nameInput, simplifyButton].map(element => element.boundingBox()),
   )
   assert.ok(Math.abs(sideBox.x + sideBox.width - saveBox.x - saveBox.width) <= 2, '解释栏与保存按钮右边缘对齐')
   assert.ok(sideBox.width > 340 && sideBox.width <= 520)
-  assert.ok(Math.abs(rawButtonBox.y - selectBox.y) <= 2, '宽屏工具同一行')
-  assert.ok(shortBox.height >= 190 && shortBox.height <= 212)
-  assert.ok((await stats.boundingBox()).y >= shortBox.y + shortBox.height)
+  assert.ok(Math.abs(nameBox.y - simplifyBox.y) <= 2, '宽屏任务与章节名称同行')
+  assert.ok(Math.abs(sideBox.y - selectBox.y) <= 2, '宽屏正文工具与解释标题同行')
+  assert.ok(shortBox.height > 550, `正文高度 ${shortBox.height}px`)
+  const statsBox = await stats.boundingBox()
+  assert.ok(statsBox.y >= shortBox.y + shortBox.height && statsBox.y + statsBox.height > 870)
   await page.screenshot({ path: join(evidence, 'chapter-short-wide.png'), animations: 'disabled' })
+
+  const beforeApply = writes.length
+  holdSimplify = true
+  await simplifyButton.click()
+  await editor.getByRole('button', { name: '取消精简', exact: true }).waitFor()
+  await shortText.fill('精简期间更新了原文。')
+  holdSimplify = false
+  await openResult()
+  assert.equal(await result.getByRole('textbox', { name: '当前原文', exact: true }).inputValue(), '精简期间更新了原文。')
+  assert.equal(await resultText.inputValue(), '智能精简内容。')
+  await result.getByRole('button', { name: '用精简稿替换原文', exact: true }).click()
+  await page.getByRole('button', { name: '确认替换', exact: true }).click()
+  await result.waitFor({ state: 'hidden' })
+  assert.equal(await shortText.inputValue(), '智能精简内容。')
+  assert.equal(writes.length, beforeApply)
+  await openResult()
+  await result.getByRole('button', { name: '放弃精简结果', exact: true }).click()
+  await simplifyButton.waitFor()
+  assert.equal(await shortText.inputValue(), '智能精简内容。')
+  assert.equal(writes.length, beforeApply)
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/studio/chapters/ch4') && response.request().method() === 'PATCH' && response.ok()),
+    save(),
+  ])
+  assert.deepEqual(writes.at(-1), { raw_text: '智能精简内容。' })
 
   chapters[4].raw_text = '雨停了。\n' + '他沿着路走。\n'.repeat(60)
   chapters[4].source_explanations = [
@@ -444,28 +489,42 @@ try {
   const [longSideBox, longSaveBox] = await Promise.all([explanations.boundingBox(), saveButton.boundingBox()])
   assert.ok(Math.abs(longSideBox.x + longSideBox.width - longSaveBox.x - longSaveBox.width) <= 2, '滚动条显示时右边缘仍对齐')
   const longBox = await shortText.boundingBox()
-  assert.ok(longBox.height > shortBox.height && longBox.y + longBox.height < 885)
+  assert.ok(Math.abs(longBox.height - shortBox.height) <= 2 && longBox.y + longBox.height < 885)
   assert.equal(await shortText.evaluate(input => input.scrollHeight > input.clientHeight), true)
-  await explanations.getByRole('button', { name: /这里是时间转折/ }).click()
+  const explanationRow = explanations.getByRole('button', { name: /这里是时间转折/ })
+  await explanationRow.click()
+  assert.equal(await explanationRow.getAttribute('aria-expanded'), 'true')
   await explanations.getByText('保存时的摘录', { exact: true }).waitFor()
   await explanations.getByText('当前选段', { exact: true }).waitFor()
+  assert.equal(await explanations.getByRole('textbox', { name: '解释1内容', exact: true }).count(), 0)
+  await explanations.getByRole('button', { name: '定位原文', exact: true }).click()
+  assert.equal(await shortText.evaluate(input => input.value.slice(input.selectionStart, input.selectionEnd)), '雨停了。')
+  await explanations.getByRole('button', { name: '编辑解释 1', exact: true }).click()
+  assert.equal(await explanations.getByRole('textbox', { name: '解释1内容', exact: true }).evaluate(input => document.activeElement === input), true)
+  assert.ok(Math.abs((await shortText.boundingBox()).height - longBox.height) <= 2)
   await page.screenshot({ path: join(evidence, 'chapter-long-wide.png'), animations: 'disabled' })
 
-  await editor.getByRole('button', { name: '对比', exact: true }).click()
-  const compareRaw = editor.getByRole('textbox', { name: '对比原文', exact: true })
-  const compareCondensed = editor.getByRole('textbox', { name: '对比精简内容', exact: true })
-  const [rawCompareBox, condensedCompareBox] = await Promise.all([compareRaw.boundingBox(), compareCondensed.boundingBox()])
+  await openResult()
+  const compareRaw = result.getByRole('textbox', { name: '当前原文', exact: true })
+  const [rawCompareBox, condensedCompareBox] = await Promise.all([compareRaw.boundingBox(), resultText.boundingBox()])
   assert.ok(Math.abs(rawCompareBox.height - condensedCompareBox.height) <= 1)
   assert.ok(Math.abs(rawCompareBox.width - condensedCompareBox.width) <= 1)
+  assert.ok(condensedCompareBox.x > rawCompareBox.x + rawCompareBox.width)
   await page.setViewportSize({ width: 375, height: 812 })
   await page.waitForFunction(() => {
-    const raw = document.querySelector('textarea[aria-label="对比原文"]')
-    const condensed = document.querySelector('textarea[aria-label="对比精简内容"]')
+    const raw = document.querySelector('textarea[aria-label="当前原文"]')
+    const condensed = document.querySelector('textarea[aria-label="精简内容"]')
     return raw && condensed && raw.getBoundingClientRect().bottom < condensed.getBoundingClientRect().top
   })
-  assert.ok((await compareRaw.boundingBox()).height > (await compareCondensed.boundingBox()).height)
-  assert.equal(await compareRaw.evaluate(input => input.scrollHeight <= input.clientHeight + 1), true, '窄屏对比由抽屉滚动')
-  await editor.getByRole('button', { name: '退出对比', exact: true }).click()
+  const beforeClear = writes.length
+  await result.getByRole('button', { name: '放弃精简结果', exact: true }).click()
+  await simplifyButton.waitFor()
+  assert.equal(writes.length, beforeClear)
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/studio/chapters/ch5') && response.request().method() === 'PATCH' && response.ok()),
+    save(),
+  ])
+  assert.deepEqual(writes.at(-1), { condensed_text: '' })
   await page.setViewportSize({ width: 1920, height: 400 })
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="章节原文"]')?.clientHeight < 190)
   assert.deepEqual(errors, [])
