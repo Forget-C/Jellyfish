@@ -17,7 +17,6 @@ import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_Direc
 import type { ApiResponse_DivisionAnalysisDetail_ } from '../models/ApiResponse_DivisionAnalysisDetail_';
 import type { ApiResponse_DivisionHistoryPage_ } from '../models/ApiResponse_DivisionHistoryPage_';
 import type { ApiResponse_DivisionPreview_ } from '../models/ApiResponse_DivisionPreview_';
-import type { ApiResponse_DivisionReceiptDetail_ } from '../models/ApiResponse_DivisionReceiptDetail_';
 import type { ApiResponse_DivisionSaved_ } from '../models/ApiResponse_DivisionSaved_';
 import type { ApiResponse_DivisionVersionDetail_ } from '../models/ApiResponse_DivisionVersionDetail_';
 import type { ApiResponse_EditableRevisionFields_ } from '../models/ApiResponse_EditableRevisionFields_';
@@ -1108,36 +1107,8 @@ export class StudioDirectingService {
         });
     }
     /**
-     * Division Legacy Receipt
-     * 只读查看尚未接入的旧保存记录，缺失数据保留说明。
-     * @returns ApiResponse_DivisionReceiptDetail_ Successful Response
-     * @throws ApiError
-     */
-    public static directingDivisionLegacyReceipt({
-        projectId,
-        chapterId,
-        requestId,
-    }: {
-        projectId: string,
-        chapterId: string,
-        requestId: string,
-    }): CancelablePromise<ApiResponse_DivisionReceiptDetail_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/history/receipts/{request_id}',
-            path: {
-                'project_id': projectId,
-                'chapter_id': chapterId,
-                'request_id': requestId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * Division Analysis
-     * 展开分析时读取业务快照，旧资料缺失不冒充完整版本。
+     * 展开分析时按需读取业务快照与资料缺失说明。
      * @returns ApiResponse_DivisionAnalysisDetail_ Successful Response
      * @throws ApiError
      */

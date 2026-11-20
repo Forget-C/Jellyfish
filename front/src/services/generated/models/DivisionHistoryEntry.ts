@@ -7,7 +7,7 @@
  */
 export type DivisionHistoryEntry = {
     id: string;
-    kind: 'version' | 'analysis' | 'receipt';
+    kind: 'version' | 'analysis';
     number: (number | null);
     origin: string;
     created_at: string;
@@ -16,5 +16,5 @@ export type DivisionHistoryEntry = {
     progress: (number | null);
     is_current: boolean;
     source_task_id: (string | null);
-    save_relation?: 'saved' | 'unsaved' | 'unknown' | 'not_applicable';
+    save_relation?: 'saved' | 'unsaved' | 'not_applicable';
 };
