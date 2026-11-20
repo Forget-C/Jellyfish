@@ -38,15 +38,17 @@ try {
     const { pathname, searchParams } = new URL(route.request().url())
     const respond = data => route.fulfill({ json: { code: 200, data } })
     if (pathname.endsWith('/prompts/categories')) return respond([{ value: 'video_prompt', label: '视频提示词' }])
-    if (pathname.endsWith('/prompts')) {
+    if (pathname.endsWith('/prompts/summaries')) {
       lastQuery = searchParams.get('q') ?? ''
       lastPage = Number(searchParams.get('page') || 1)
       if (listFails) return route.fulfill({ status: 500, json: { message: '读取失败' } })
       const size = Number(searchParams.get('page_size') || 10)
       listRequests.push({ page: lastPage, size, q: lastQuery })
-      const matches = allTemplates.filter(item => !lastQuery || item.name.includes(lastQuery))
-      return respond({ items: matches.slice((lastPage - 1) * size, lastPage * size), pagination: { total: matches.length, page: lastPage, page_size: size, max_page: Math.ceil(matches.length / size) } })
+      const matches = allTemplates.filter(item => !lastQuery || item.name.includes(lastQuery) || item.preview.includes(lastQuery))
+      return respond({ items: matches.slice((lastPage - 1) * size, lastPage * size).map(({id, category, name}) => ({id, category, name})), pagination: { total: matches.length, page: lastPage, page_size: size, max_page: Math.ceil(matches.length / size) } })
     }
+    if (route.request().method() === 'GET' && pathname.includes('/prompts/'))
+      return respond(allTemplates.find(item => item.id === pathname.split('/').pop()))
     if (pathname.endsWith('/prompts/custom') && route.request().method() === 'PATCH') {
       patches += 1
       const data = route.request().postDataJSON()
@@ -100,11 +102,34 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 })
   const search = page.getByRole('textbox', { name: '搜索模板名称或简介' })
   assert.ok(listRequests.every(request => request.page === 1 && request.size === 10), '普通浏览只读取当前页')
+  // Older successful or failed searches must not replace the most recent page.
+  for (const status of [200, 503]) {
+    let release
+    const held = new Promise(resolve => { release = resolve })
+    const slow = '**/summaries?q=slow*'
+    await page.route(slow, async route => {
+      await held
+      await route.fulfill({ status, json: { data: { items: [], pagination: { total: 0 } } } })
+    })
+    const pending = page.waitForRequest(request => request.url().includes('q=slow'))
+    await search.fill('slow')
+    await search.press('Enter')
+    await pending
+    await search.fill('创作模板')
+    await search.press('Enter')
+    await page.getByText('共 1 项', { exact: true }).waitFor()
+    const finished = page.waitForEvent('requestfinished', request => request.url().includes('q=slow'))
+    release()
+    await finished
+    await name.waitFor()
+    assert.equal(await page.getByText('刷新模板失败，已保留当前内容', { exact: true }).count(), 0)
+    await page.unroute(slow)
+  }
   await search.fill('后续页简介')
   await search.press('Enter')
   await page.getByRole('button', { name: lateMatch.name, exact: true }).waitFor()
   await page.getByText('共 1 项', { exact: true }).waitFor()
-  assert.ok(listRequests.some(request => request.page === 2 && request.size === 100 && !request.q))
+  assert.ok(listRequests.some(request => request.page === 1 && request.size === 10 && request.q === '后续页简介'))
   await search.fill('简短')
   await search.press('Enter')
   await name.waitFor()
@@ -116,7 +141,7 @@ try {
   listFails = false
   await page.getByRole('button', { name: /重\s*试/ }).click()
   await page.getByText('刷新模板失败，已保留当前内容', { exact: true }).waitFor({ state: 'hidden' })
-  assert.equal(lastQuery, '', '不能把简介查询发送给只匹配名称的后端 q')
+  assert.equal(lastQuery, '简短')
   await search.fill('正文不会参与搜索')
   await search.press('Enter')
   await page.getByText('没有匹配的模板', { exact: true }).waitFor()

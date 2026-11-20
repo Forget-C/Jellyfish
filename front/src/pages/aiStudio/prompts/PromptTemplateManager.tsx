@@ -3,10 +3,9 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../com
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FC } from 'react'
 import { Alert, Skeleton, Input, Tag, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
-import { searchManagementList } from '../managementListSearch'
 import './prompt-manager.css'
 import { StudioPromptsService } from '../../../services/generated'
-import type { PromptCategory, PromptTemplateRead } from '../../../services/generated'
+import type { PromptCategory, PromptTemplateRead, PromptTemplateSummary } from '../../../services/generated'
 
 const fallbackCategoryLabels: Record<string, string> = {
   frame_head_image: '首帧图片',
@@ -102,7 +101,7 @@ function getGroupKey(category: string): (typeof groupOrder)[number] {
 }
 
 const PromptTemplateManager: FC = () => {
-  const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
+  const [templates, setTemplates] = useState<PromptTemplateSummary[]>([])
   const [selected, setSelected] = useState<PromptTemplateRead | null>(null)
   const [searchText, setSearchText] = useState('')
   const [query, setQuery] = useState('')
@@ -137,29 +136,46 @@ const PromptTemplateManager: FC = () => {
     return () => media.removeEventListener('change', update)
   }, [])
 
+  const activeDetail = useRef<string | null>(null)
+  const detailRequest = useRef(0)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [detailError, setDetailError] = useState(false)
+
+  const clearDetail = () => {
+    activeDetail.current = null
+    setDetailId(null)
+    detailRequest.current += 1
+    setSelected(null)
+    setDetailError(false)
+  }
+
+  const loadDetail = async (id: string) => {
+    const request = ++detailRequest.current
+    activeDetail.current = id
+    setDetailId(id)
+    setSelected(null)
+    setDetailError(false)
+    try {
+      const { data } = await StudioPromptsService.getPromptTemplateApiV1StudioPromptsTemplateIdGet({ templateId: id })
+      if (!data) throw new Error('模板详情响应无效')
+      if (request === detailRequest.current) setSelected(data)
+    } catch {
+      if (request === detailRequest.current) setDetailError(true)
+    }
+  }
+
   const loadTemplates = async (nextPage: number, nextQuery: string) => {
     const requestId = ++requestIdRef.current
     setLoading(true)
     setLoadError(false)
     try {
-      const isCurrent = () => requestId === requestIdRef.current
-      const readPage = async (requestedPage: number, pageSize: number) => {
-        const { data } = await StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ page: requestedPage, pageSize })
-        if (!data || !Array.isArray(data.items)) throw new Error('模板列表响应无效')
-        return { items: data.items, total: data.pagination?.total }
-      }
-      const keyword = nextQuery.trim().toLocaleLowerCase()
-      const filtered = keyword ? await searchManagementList(
-        requestedPage => readPage(requestedPage, 100), 100,
-        item => item.name.toLocaleLowerCase().includes(keyword) || (item.preview ?? '').toLocaleLowerCase().includes(keyword),
-        isCurrent,
-      ) : undefined
-      if (!isCurrent()) return
-      const result = filtered
-        ? { items: filtered.slice((nextPage - 1) * PAGE_SIZE, nextPage * PAGE_SIZE), total: filtered.length }
-        : await readPage(nextPage, PAGE_SIZE)
-      if (!isCurrent()) return
-      const { items, total: totalCount } = result
+      const { data } = await StudioPromptsService.listPromptSummariesApiV1StudioPromptsSummariesGet({
+        page: nextPage, pageSize: PAGE_SIZE, q: nextQuery || undefined,
+      })
+      if (requestId !== requestIdRef.current) return
+      if (!data) throw new Error('模板列表响应无效')
+      const { items, pagination } = data
+      const totalCount = pagination.total
 
       // 空页时自动回退上一页，避免用户停留在无数据页。
       if (nextPage > 1 && items.length === 0 && totalCount !== undefined && totalCount > 0) {
@@ -168,7 +184,7 @@ const PromptTemplateManager: FC = () => {
       }
 
       setTemplates(items)
-      setSelected(previous => previous ? items.find(item => item.id === previous.id) ?? null : null)
+      if (activeDetail.current && !items.some(item => item.id === activeDetail.current)) clearDetail()
       setTotal(totalCount)
       setLoaded(true)
     } catch {
@@ -207,12 +223,13 @@ const PromptTemplateManager: FC = () => {
   }, [])
 
   useEffect(() => {
-    void loadTemplates(page, query)
-    return () => { requestIdRef.current += 1 }
+    let current = true
+    queueMicrotask(() => { if (current) void loadTemplates(page, query) })
+    return () => { current = false; requestIdRef.current += 1 }
   }, [page, query])
 
   const templateGroups = useMemo(() => {
-    const grouped = new Map<(typeof groupOrder)[number], PromptTemplateRead[]>()
+    const grouped = new Map<(typeof groupOrder)[number], PromptTemplateSummary[]>()
     groupOrder.forEach((key) => grouped.set(key, []))
 
     templates.forEach((template) => {
@@ -234,13 +251,13 @@ const PromptTemplateManager: FC = () => {
   }, [templates])
 
   const handleSearch = (value: string) => {
-    setSelected(null)
+    clearDetail()
     setPage(1)
     setQuery(value.trim())
   }
 
   const handlePageChange = (nextPage: number) => {
-    setSelected(null)
+    clearDetail()
     setPage(nextPage)
   }
 
@@ -315,11 +332,11 @@ const PromptTemplateManager: FC = () => {
         message.success('提示词已添加')
         setFormOpen(false)
         createForm.resetFields()
-        setSelected(null)
+        clearDetail()
         setSearchText('')
         setQuery('')
         setPage(1)
-        void loadTemplates(1, '')
+        if (page === 1 && !query) void loadTemplates(1, '')
         return
       }
 
@@ -374,7 +391,7 @@ const PromptTemplateManager: FC = () => {
           }
           message.success('提示词已删除')
           if (selected?.id === template.id) {
-            setSelected(null)
+            clearDetail()
             selectedButton.current = null
             setReaderOpen(false)
           }
@@ -445,7 +462,9 @@ const PromptTemplateManager: FC = () => {
     {Object.keys(selected.variable_defaults ?? {}).length
       ? <pre className="management-prompt-reader-defaults">{JSON.stringify(selected.variable_defaults, null, 2)}</pre>
       : <p>暂无默认值</p>}
-  </> : <p className="management-prompt-reader-empty">选择模板阅读正文</p>
+  </> : detailId ? (detailError
+    ? <Alert type="error" message="无法读取模板详情" action={<Button onClick={() => void loadDetail(detailId)}>重试</Button>} />
+    : <Skeleton active />) : <p className="management-prompt-reader-empty">选择模板阅读正文</p>
 
   return (
     <WorkspaceLayout className="management-page prompt-manager">
@@ -457,7 +476,7 @@ const PromptTemplateManager: FC = () => {
               setSearchText(event.target.value)
               if (!event.target.value) handleSearch('')
             }} />
-          <Button onClick={() => void loadTemplates(page, query)} disabled={loading}>刷新模板</Button>
+          <Button onClick={() => { void loadTemplates(page, query); if (detailId) void loadDetail(detailId) }} disabled={loading}>刷新模板</Button>
         </div>
         <Button type="primary" className="management-primary" onClick={openCreateModal}>添加提示词</Button>
       </PageToolbar>
@@ -473,9 +492,9 @@ const PromptTemplateManager: FC = () => {
             {templateGroups.map(group => <section key={group.key} className="prompt-group">
               <h2>{group.title}</h2>
               {group.children.map(item => <button type="button" key={item.key} title={item.title}
-                aria-pressed={selected?.id === item.key} onClick={event => {
+                aria-pressed={detailId === item.key} onClick={event => {
                   selectedButton.current = event.currentTarget
-                  setSelected(templates.find(template => template.id === item.key) ?? null)
+                  void loadDetail(item.key)
                   if (!wide) setReaderOpen(true)
                 }}>{item.title}</button>)}
             </section>)}
