@@ -48,8 +48,6 @@ RESULT_CONTRACTS = {
 def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
 
-    if kind == 'directing_design' and args.get('scene_version_design'):
-        raise ValueError('旧场次版本任务已退役')
     contract = RESULT_CONTRACTS[kind]
     instruction = {
         STORYBOARD_KIND: (
@@ -322,8 +320,6 @@ class DirectingAIService(WorkspaceService):
         task = await self.db.get(Task, task_id)
         if task is None or task.project_id != self.project_id or task.target_id != sequence_id or task.kind != "directing_design" or task.status != "succeeded":
             raise ValueError("没有可采用的导演任务结果")
-        if task.input_snapshot.get("scene_design"):
-            raise ValueError("场次版本建议须在原版本预览并明确应用")
         args = task.input_snapshot["run_args"]
         content = SceneDesign.model_validate(task.result)
         # Model provenance stays separate from the exact chapter version used for generation.

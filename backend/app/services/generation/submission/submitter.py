@@ -89,7 +89,7 @@ class GenerationSubmitter:
             }[snapshot.operation_input.operation]
         source = (await resolve_task_sources(db, [SimpleNamespace(
             id="submission", target_type=target_type, target_id=target_id,
-            target_parent_id=data.get("target_parent_id"), scene_version_id=None, scene_unit_id=None,
+            target_parent_id=data.get("target_parent_id"),
         )])).get("submission")
         task = await TaskService(db).submit(
             kind=kind, snapshot=data, title=kind, target_type=target_type, target_id=target_id,

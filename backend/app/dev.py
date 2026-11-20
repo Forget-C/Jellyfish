@@ -37,9 +37,6 @@ async def task_report(task_id: str, sessions=None) -> dict | None:
             task = await db.get(Task, task_id)
             if task is None:
                 return None
-            snapshot = task.input_snapshot if isinstance(task.input_snapshot, dict) else {}
-            args = snapshot.get('run_args', {})
-            args = args if isinstance(args, dict) else {}
             result = task.result if isinstance(task.result, dict) else {}
             diagnostic = result.get('design_diagnostics')
             output = diagnostic.get('output') if isinstance(diagnostic, dict) else None
@@ -49,7 +46,6 @@ async def task_report(task_id: str, sessions=None) -> dict | None:
                 'task': {**{key: getattr(task, key) for key in ('id', 'kind', 'title', 'status', 'stage',
                     'worker_instance_id', 'error_code', 'error_message')},
                     **{key: _local_time(getattr(task, key)) for key in ('created_at', 'started_at', 'finished_at')}},
-                'design_flags': {key: args.get(key) for key in ('scene_version_design', 'design_scope_version', 'design_scope')},
                 'diagnostics': {'available': isinstance(diagnostic, dict),
                     'issues': diagnostic.get('issues', []) if isinstance(diagnostic, dict) else [],
                     'output_chars': len(output) if isinstance(output, str) else 0},
