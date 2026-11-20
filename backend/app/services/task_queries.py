@@ -213,23 +213,29 @@ class TaskQueries:
         """批量投影消息关联任务，查询次数不随消息数增加。"""
         if not task_ids:
             return {}
-        tasks = list(await self.db.scalars(select(Task).where(Task.id.in_(task_ids))))
-        rows = (await self.db.execute(select(TaskOutput, FileItem).join(
+        tasks = (await self.db.execute(select(
+            Task.id, Task.status, Task.stage, Task.progress, Task.cancel_requested_at,
+            Task.started_at, Task.finished_at, Task.kind, Task.result, Task.provider_task_id,
+            Task.error_code, Task.error_message,
+        ).where(Task.id.in_(task_ids)))).all()
+        rows = (await self.db.execute(select(
+            TaskOutput, FileItem.type, FileItem.deleted_at,
+        ).join(
             FileItem, FileItem.id == TaskOutput.file_id,
         ).where(TaskOutput.task_id.in_(task_ids)).order_by(TaskOutput.ordinal))).all()
         grouped: dict[str, list] = {}
-        for output, file in rows:
-            grouped.setdefault(output.task_id, []).append((output, file))
+        for row in rows:
+            grouped.setdefault(row[0].task_id, []).append(row)
         return {task.id: _result_view(task, grouped.get(task.id, [])) for task in tasks}
 
 
-def _result_view(task: Task, rows: list) -> TaskResultRead:
+def _result_view(task, rows: list) -> TaskResultRead:
     """将数据库事实组成响应；不会回写消息或其他业务表。"""
     outputs = [TaskOutputRead(
-        ordinal=output.ordinal, file_id=file.id, media_type=file.type,
+        ordinal=output.ordinal, file_id=output.file_id, media_type=media_type,
         delivery_status=output.delivery_status, delivery_reason=output.delivery_reason,
-        deleted=file.deleted_at is not None,
-    ) for output, file in rows]
+        deleted=deleted_at is not None,
+    ) for output, media_type, deleted_at in rows]
     delivery = None
     if task.kind in {"image_generation", "video_generation"} and task.status in TERMINAL_TASK_STATUSES:
         delivery = GenerationDeliveryResult(
