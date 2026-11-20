@@ -111,6 +111,9 @@ def provider_response(request):
         return httpx.Response(200, json={'data': [{'b64_json': base64.b64encode(IMAGE).decode()}]})
     if request.url.host == 'video.test':
         if request.method == 'POST':
+            content = json.loads(request.content)['content']
+            first_frame = next(item for item in content if item.get('role') == 'first_frame')
+            assert first_frame['image_url']['url'] == 'data:image/png;base64,' + base64.b64encode(IMAGE).decode()
             return httpx.Response(200, json={'id': 'baseline-video'})
         return httpx.Response(200, json={'status': 'succeeded', 'content': {'video_url': 'https://media.test/take.mp4'}})
     assert request.url.host == 'media.test', request.url
