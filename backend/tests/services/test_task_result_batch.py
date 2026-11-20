@@ -59,7 +59,7 @@ async def test_history_query_count_and_order(baseline_client):
             db.add(ExperimentMessage(id=uuid4().hex, session_id=sid, sequence=i+2, role="task", task_id=tid))
             if i:
                 for ordinal in ((2, 1) if i == 1 else (2, 0, 1)):
-                    db.add(TaskOutput(task_id=tid, ordinal=ordinal, file_id=files[ordinal].id))
+                    db.add(TaskOutput(task_id=tid, ordinal=ordinal, file_id=files[ordinal].id.upper() if engine.dialect.name == "mysql" else files[ordinal].id))
 
     one, one_count = await read(history + "?page_size=1")
     many, many_count = await read(history + "?page_size=100")
@@ -75,5 +75,6 @@ async def test_history_query_count_and_order(baseline_client):
         assert msg["status"] == "failed" and payload["error"] == "partial"
         assert [out["ordinal"] for out in payload["outputs"]] == ([1, 2] if index == 1 else [0, 1, 2])
         assert [out["ordinal"] for out in payload["outputs"] if out["deleted"]] == [1]
+        assert all(out["file_id"] == files[out["ordinal"]].id for out in payload["outputs"])
         assert payload["result"]["primary_file_id"] == (None if index == 1 else files[0].id)
         assert all(a["artifact_id"].startswith(msg["task_id"] + ":") for a in payload["result"]["artifacts"])
