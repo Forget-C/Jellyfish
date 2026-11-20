@@ -44,7 +44,7 @@ class _Submitter:
         """返回固定 task ID，避免测试触及实体门禁与持久化细节。"""
         self.command = command
         type(self).command = command
-        return GenerationAccepted(task_id="task-1")
+        return GenerationAccepted(task_id="task-1", model_id="resolved-model")
 
 
 

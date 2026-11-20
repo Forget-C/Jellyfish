@@ -28,9 +28,10 @@ class GenerationEntityGate(Protocol):
 
 @dataclass(frozen=True)
 class GenerationAccepted:
-    """调用方以任务 ID 查询进度和历史结果。"""
+    """返回任务身份，以及受理时实际解析的模型身份。"""
 
     task_id: str
+    model_id: str
 
 
 class GenerationSubmitter:
@@ -103,4 +104,4 @@ class GenerationSubmitter:
             asset = await db.get(spec.model, command.target.entity_id)
             await validate_resource_references(db, command.target.asset_type, asset.project_id,
                 [ref.model_dump(exclude_none=True) for ref in command.request.asset_references])
-        return GenerationAccepted(task_id=task.id)
+        return GenerationAccepted(task_id=task.id, model_id=snapshot.model_id)

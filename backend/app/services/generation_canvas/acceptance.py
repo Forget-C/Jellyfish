@@ -34,9 +34,6 @@ def synchronize_acceptance(document, previous):
                  if edge.source_port == 'criterion' and edge.target_port == 'acceptance_basis'}
     from app.services.generation_canvas.connection_policy import connection_policy
     previous_cards = {card.id: card for card in previous.cards}
-    old_candidates = {(source, target) for source, target in old_edges
-        if not any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source
-                   for binding in getattr(previous_cards.get(target), 'input_bindings', []))}
     cards = {card.id: card for card in document.cards}
     removed = set()
     for edge in document.edges:
@@ -50,7 +47,8 @@ def synchronize_acceptance(document, previous):
             continue
         bound = any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source.id
                     for binding in target.input_bindings)
-        if not bound and ((source.id, target.id) in old_candidates or any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source.id for binding in getattr(previous_cards.get(target.id), 'input_bindings', []))):
+        if not bound and any(binding.input_port == 'acceptance_basis' and binding.source.card_id == source.id
+                             for binding in getattr(previous_cards.get(target.id), 'input_bindings', [])):
             removed.add(edge.id)
         elif not bound:
             from app.core.contracts.generation_canvas import OutputIdentity

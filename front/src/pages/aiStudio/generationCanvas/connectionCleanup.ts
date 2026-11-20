@@ -5,7 +5,7 @@ import { resultScopeIncludes, sameResultConnection } from './resultConnections'
 import type { createGraphRules, GenerationCard, GenerationEdge } from './graphRules'
 
 /** 恢复与撤销使用当前策略；只补足明确采用，不把候选升级为采用。 */
-export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<ReturnType<typeof createGraphRules>, 'connectionPolicy' | 'cardDefinitions' | 'cleanDirectDesignCandidates' | 'sourceOptions'>): CanvasDocument {
+export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<ReturnType<typeof createGraphRules>, 'connectionPolicy' | 'cardDefinitions' | 'sourceOptions'>): CanvasDocument {
   const document = structuredClone(original)
   const endpoint = (source: OutputIdentity, card: GenerationCard, port: string): GenerationEdge => ({ id: '', source_card: source.card_id, source_port: source.port_id, target_card: card.id, target_port: port })
   const valid = (source: OutputIdentity, card: GenerationCard, port: string) => {
@@ -137,6 +137,5 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
     const values = ports[edge.target_port] ||= []
     if (!values.includes(edge.id)) values.push(edge.id)
   }
-  const cleaned = rules.cleanDirectDesignCandidates(document)
-  return JSON.stringify(cleaned) === JSON.stringify(original) ? original : cleaned
+  return JSON.stringify(document) === JSON.stringify(original) ? original : document
 }

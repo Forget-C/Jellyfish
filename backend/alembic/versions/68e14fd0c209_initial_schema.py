@@ -143,7 +143,7 @@ def upgrade() -> None:
         sa.Column('seed', sa.Integer(), nullable=False, comment='随机种子'),
         sa.Column('unify_style', sa.Boolean(), nullable=False, comment='是否统一风格（跨章节）'),
         sa.Column('progress', sa.Integer(), nullable=False, comment='进度百分比（0-100）'),
-        sa.Column('default_video_ratio', sa.String(length=16), nullable=True, comment='项目级默认视频比例（可为空；分镜未覆盖时使用）'),
+        sa.Column('default_video_ratio', sa.String(length=16), nullable=True, comment='项目保存的默认视频比例（可为空）'),
         sa.Column('stats', sa.JSON(), nullable=False, comment='聚合统计（JSON）'),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),

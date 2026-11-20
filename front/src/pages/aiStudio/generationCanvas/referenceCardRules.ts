@@ -1,4 +1,4 @@
-import type { CanvasDocument, CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
+import type { CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 
 /** 草稿允许空名和重名保存，但无有效名称时不能用于参考映射。 */
@@ -25,21 +25,4 @@ export function referenceImageCompatible(card: NamedImageReferenceCard, source?:
 /** 实际图片产物身份包含文件与结果集，保留历史图片时仍可重新选择同一位置的新产物。 */
 export function referenceImageKey(image: { file_id?: string | null; source?: CanvasResolvedOutput['source'] | null; result_set_id?: string | null }) {
   return JSON.stringify([image.source || null, image.result_set_id || null, image.file_id])
-}
-
-/** 清理旧来源边时保留固定图片与下游身份；只解除不再支持的来源指针。 */
-export function cleanReferenceImageSources(document: CanvasDocument): CanvasDocument {
-  const cards = new Map((document.cards || []).map(card => [card.id, card]))
-  const removed = new Set((document.edges || []).filter(edge => cards.get(edge.target_card)?.type?.startsWith('reference.') && edge.target_port === 'image_source' && cards.has(edge.source_card) && cards.get(edge.source_card)?.type !== 'content.image').map(edge => edge.id))
-  let changed = removed.size > 0
-  const updated = (document.cards || []).map(card => {
-    if (!card.type?.startsWith('reference.') || !('image_binding' in card) || !card.image_binding?.source) return card
-    const source = cards.get(card.image_binding.source.card_id)
-    if (!source || source.type === 'content.image') return card
-    changed = true
-    return { ...card, image_binding: { ...card.image_binding, source: null } }
-  })
-  if (!changed) return document
-  return { ...document, cards: updated, edges: document.edges?.filter(edge => !removed.has(edge.id)),
-    input_order: Object.fromEntries(Object.entries(document.input_order || {}).map(([id, ports]) => [id, Object.fromEntries(Object.entries(ports).map(([port, order]) => [port, order.filter(id => !removed.has(id))]))])) }
 }

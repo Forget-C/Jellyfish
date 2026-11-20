@@ -43,7 +43,7 @@ class Project(Base, TimestampMixin):
         String(16),
         nullable=True,
         default=None,
-        comment="项目级默认视频比例（可为空；分镜未覆盖时使用）",
+        comment="项目保存的默认视频比例（可为空）",
     )
     stats: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="聚合统计（JSON）")
 

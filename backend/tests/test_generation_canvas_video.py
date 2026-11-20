@@ -124,6 +124,8 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
         doc['edges'] = doc['edges'][:2]
         doc['input_order'] = {'v': {'first_frame': ['a'], 'key_frame': ['b']}}
     if named:
+        # JSON object member order can change on persistence; the edge arrays retain order.
+        doc['input_order']['v'] = dict(reversed(list(doc['input_order']['v'].items())))
         doc['cards'][0] = {'id': 'a', 'type': 'reference.character', 'name': '小雪正面', 'object_id': 'alice', 'image_binding': {'file_id': files[0]}}
         doc['cards'][1] = {'id': 'b', 'type': 'reference.character', 'name': '小雪侧面', 'object_id': 'alice', 'angle': '侧面', 'image_binding': {'file_id': files[1]}}
     reference_image_sources(doc)

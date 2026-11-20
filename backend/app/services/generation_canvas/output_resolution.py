@@ -91,7 +91,11 @@ class CanvasOutputContext:
         retained = [ref.source for ref, _ in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [ref.source for ref, _, _ in design_field_references(receiver)]
         result, seen, counts = [], set(), {}
         edges = self.edges
-        for order in document.input_order.get(card_id, {}).values():
+        port_order = document.input_order.get(card_id, {})
+        # 跨用途使用入边首次出现的顺序；JSON 对象键在 MySQL 中不会保序。
+        ports = dict.fromkeys(edge.target_port for edge in self.incoming.get(card_id, ()))
+        for port in ports:
+            order = port_order.get(port, ())
             order_index = {edge_id: index for index, edge_id in enumerate(order)}
             candidates = []
             for edge_id in order:

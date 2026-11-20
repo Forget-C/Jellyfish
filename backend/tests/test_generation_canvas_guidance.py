@@ -311,33 +311,6 @@ async def test_linked_acceptance_carries_effective_standard_media_and_checks_cap
 
 
 @pytest.mark.asyncio
-async def test_store_reads_unadopted_acceptance_candidates_without_rewriting(canvas_client, canvas_file_store):
-    from app.models.generation_canvas import GenerationCanvas
-    client = canvas_client
-    canvas = (await seed_scene_canvas(client, '/canvases/p', json={'name': '旧候选'})).json()['data']
-    url = canvas_url(f"/canvases/p/{canvas['id']}")
-    doc = canvas['document']
-    doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '未采用标准'}, {'id': 'shot', 'type': 'direction.shot', 'name': '镜头'}],
-        edges=[{'id': 'old', 'source_card': 'criterion', 'source_port': 'criterion', 'target_card': 'shot', 'target_port': 'acceptance_basis'}],
-        input_order={'shot': {'acceptance_basis': ['old']}})
-    # Seed a historical document to verify that Store reads do not rewrite it.
-    async with canvas_file_store['sessions'].begin() as db:
-        row = await db.get(GenerationCanvas, canvas['id'])
-        row.document = doc
-    from copy import deepcopy
-    from app.services.generation_canvas.store import CanvasStore
-    async with canvas_file_store['sessions']() as db:
-        row = await db.get(GenerationCanvas, canvas['id'])
-        before = (deepcopy(row.document), deepcopy(row.card_types), row.revision)
-        store = CanvasStore(db, 'p')
-        await store.get(canvas['id'])
-        await store.get(canvas['id'])
-        await store.list()
-        await db.refresh(row)
-        assert (row.document, row.card_types, row.revision) == before
-        assert not db.dirty
-
-@pytest.mark.asyncio
 async def test_independent_design_connection_adopts_and_disconnects(canvas_client):
     canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '独立设计'})).json()['data']
     url = canvas_url(f"/canvases/p/{canvas['id']}")

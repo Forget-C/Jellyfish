@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { StoryboardPromptDesign } from './StoryboardPromptDesign';
 /**
- * Opt-in compilation semantics; legacy cards and frozen runs retain their format.
+ * Prompt placements written by storyboard generation for a video model card.
  */
 export type GeneratedVideoPrompt = {
     version?: number;

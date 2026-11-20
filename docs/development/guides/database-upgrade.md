@@ -21,10 +21,12 @@ uv run alembic current
 ```bash
 uv run python -m tests.isolated_mysql migrate
 uv run python -m tests.isolated_mysql seed
-uv run python -m tests.isolated_mysql pytest -q tests/services/test_task_mysql.py tests/directing/test_mysql.py
+uv run python -m tests.isolated_mysql pytest -q \
+  'tests/test_database_baseline_business.py::test_new_project_reads_current_canvas_assets_and_production[mysql]' \
+  tests/services/test_task_mysql.py tests/directing/test_mysql.py
 ```
 
-重复执行前两个命令应保持唯一的版本记录、全局设置和内置模板数量。
+重复执行迁移和种子应保持唯一的版本记录、全局设置和内置模板数量。业务用例通过 API 创建本轮数据，使用模型与对象存储替身，实际运行 Worker；再次执行整组用例时使用专用空库。
 
 ## 新基线之后的升级与回退
 

@@ -207,7 +207,7 @@ def validate_candidate(context, raw):
 class ReviewRevisionService(ProductionService):
     """候选只存任务，采用通过 DirectingStore 创建隔离版本并重新审稿。"""
 
-    async def freeze_revision_input(self, sequence_id, body, *, original_request=None):
+    async def freeze_revision_input(self, sequence_id, body):
         """检查来源与指令必须完全匹配；全量输入都纳入身份。"""
         sequence = await self.read_sequence(sequence_id)
         if sequence.source_changed:
@@ -240,7 +240,7 @@ class ReviewRevisionService(ProductionService):
         directions = sorted([item.model_dump(mode='json') for item in body.directions], key=problem_key)
         if len({problem_key(item) for item in directions}) != len(directions) or any(problem_key(item) not in keys for item in directions):
             raise ValueError('方向不属于固定检查问题')
-        context = {'request': original_request if original_request is not None else body.model_dump(mode='json'), 'sequence': sequence.model_dump(mode='json'),
+        context = {'request': body.model_dump(mode='json'), 'sequence': sequence.model_dump(mode='json'),
                    'design_revision_id': design.id, 'design_version': design.version, 'design': design.payload,
                    'plan_revision_id': plan.id, 'plan_version': plan.version, 'plan': plan.payload,
                    'prompt_revision_id': prompt.id, 'prompt_version': prompt.version, 'prompt': prompt.payload,
@@ -312,27 +312,14 @@ class ReviewRevisionService(ProductionService):
         candidate.preview_text, candidate.preview_decisions = await self.render_unit(sequence_id, design, unit)
         candidate.source_prompt_revision_id = context['prompt_revision_id']
         candidate.candidate_identity = None
-        excluded = {'summary'} if candidate.summary is None else set()
-        if 'scope' not in context['request']:
-            # 已保存旧任务的身份不因新增展示映射改变，原采用请求仍可恢复。
-            excluded.add('preview_decisions')
-        candidate.candidate_identity = fingerprint(candidate.model_dump(mode='json', exclude=excluded))
+        candidate.candidate_identity = fingerprint(candidate.model_dump(mode='json'))
         return candidate
 
     async def read_task(self, task_id):
         result = await read_directing_task(self.db, self.project_id, task_id)
         if result.revision:
             task = await self.db.get(Task, task_id)
-            frozen = task.input_snapshot.get('revision_preview')
-            if frozen:
-                result.revision = ReviewRevisionCandidate.model_validate(frozen)
-            else:
-                # 旧任务没有预览快照；首次可渲染时补齐，不依赖模型返回的预览字段。
-                try:
-                    result.revision = await self.complete_candidate(task, task.result)
-                except HTTPException as error:
-                    if error.status_code != 404:
-                        raise
+            result.revision = ReviewRevisionCandidate.model_validate(task.input_snapshot['revision_preview'])
         return result
 
     async def complete_candidate(self, task, raw):
@@ -380,27 +367,30 @@ class ReviewRevisionService(ProductionService):
             current_context = current_snapshot['run_args']['revision_context']
             directions = sorted([item.model_dump(mode='json') for item in body.directions], key=problem_key)
             if (body.input_identity != current_context['input_identity'] or directions != current_context['directions']
-                    or body.instruction != current_context['request'].get('instruction', '')
-                    or (None if body.scope is None else [item.model_dump(mode='json') for item in body.scope]) != current_context['request'].get('scope')
-                    or [edit.model_dump(mode='json') for edit in body.edits] != current_context['request'].get('edits', [])):
+                    or body.instruction != current_context['request']['instruction']
+                    or (None if body.scope is None else [item.model_dump(mode='json') for item in body.scope]) != current_context['request']['scope']
+                    or [edit.model_dump(mode='json') for edit in body.edits] != current_context['request']['edits']):
                 raise RevisionConflict('方向或输入已变化，请重新生成方案')
+            frozen = ReviewRevisionCandidate.model_validate(current_snapshot['revision_preview'])
+            if body.candidate_identity != frozen.candidate_identity:
+                raise RevisionConflict('候选或预览已变化，请重新查看方案')
             current_state = current_snapshot.get('revision_application')
             if current_state and current_state['request_id'] != body.request_id:
                 raise RevisionConflict('该方案已有采用请求，请继续原请求')
-            return current_task, current_snapshot, current_context, current_state
+            return current_task, current_snapshot, current_context, current_state, frozen
 
-        task, snapshot, context, state = await read_application()
+        task, snapshot, context, state, preview = await read_application()
         if state and state.get('review_task_id') and state['stage'] == 'reviewing':
             return ReviewRevisionApplication.model_validate(state)
         await self.db.execute(update(Sequence).where(Sequence.id == sequence_id).values(version=Sequence.version))
-        task, snapshot, context, state = await read_application(locked=True)
+        task, snapshot, context, state, preview = await read_application(locked=True)
         if state and state.get('review_task_id') and state['stage'] == 'reviewing':
             return ReviewRevisionApplication.model_validate(state)
-        current = await self.freeze_revision_input(sequence_id, ReviewRevisionRequest.model_validate(context['request']), original_request=context['request'])
+        current = await self.freeze_revision_input(sequence_id, ReviewRevisionRequest.model_validate(context['request']))
         if current['input_identity'] != context['input_identity']:
             raise RevisionConflict('原文、检查或目标版本已变化，请重新生成方案')
-        preview = await self.candidate_preview(sequence_id, context, task.result)
-        if body.candidate_identity != preview.candidate_identity and (body.candidate_identity is not None or 'instruction' in context['request']):
+        current_preview = await self.candidate_preview(sequence_id, context, task.result)
+        if current_preview.candidate_identity != preview.candidate_identity:
             raise RevisionConflict('候选或预览已变化，请重新查看方案')
         candidate, design, unit = validate_candidate(context, task.result)
         if (not candidate.changes or any(item.status != 'planned' for item in candidate.outcomes)
