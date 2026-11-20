@@ -20,8 +20,9 @@ export function readExperimentInputSnapshot(message: ExperimentMessageRead): Exp
   const snapshot = message.payload?.input_snapshot
   if (message.role !== 'user' || !snapshot || typeof snapshot !== 'object') return
   const value = snapshot as Record<string, unknown>
+  const modelId = value.model_id
   if (value.version === 1 && typeof value.prompt === 'string'
-    && (value.model_id == null || typeof value.model_id === 'string')) return value as ExperimentInputSnapshot
+    && (modelId === null || modelId === undefined || typeof modelId === 'string')) return value as ExperimentInputSnapshot
 }
 
 /** 同组媒体按提交时的顺序回填。 */
