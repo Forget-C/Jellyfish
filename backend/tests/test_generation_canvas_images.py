@@ -20,7 +20,7 @@ def image_storage(monkeypatch):
         content, mime, extra = objects[key]
         return storage.StoredFileInfo(key=key, url='unused', size=len(content), content_type=mime, extra=extra)
     async def upload(*, key, data, content_type, extra_args=None):
-        objects[key] = (data.read(), content_type, extra_args)
+        objects[key] = (data if isinstance(data, bytes) else data.read(), content_type, extra_args)
     async def download(*, key):
         return objects[key][0]
     monkeypatch.setattr(storage, 'get_file_info', head)
