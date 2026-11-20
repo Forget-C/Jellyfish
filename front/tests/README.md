@@ -83,7 +83,7 @@ node front/tests/shellFocus.browser.mjs
 
 `backend/tests/test_generation_canvas_journey.py` 使用显式 `JELLYFISH_TEST_MYSQL_URL` 的隔离MySQL库，依次真实生成文本、图片、视频，前一成果完成后才创建下一引用，并比对预检与真实供应商payload；无真实模型费用。
 
-`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs legacy-labs` 验证三个退役实验室地址显示 404。应用壳的项目、资产和实验室交互可从 `front` 目录运行 `PLAYWRIGHT_CHANNEL=chrome node tests/shellAcceptance.browser.mjs` 单独检查。现行场次画布与管理入口由 `independent-canvas` 和 `scene-canvas-legacy-routes` 覆盖，后者使用只有一条历史交付引用的文件验证删除保护。
+`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs legacy-labs` 验证三个退役实验室地址显示 404。应用壳的项目、资产和实验室交互可从 `front` 目录运行 `PLAYWRIGHT_CHANNEL=chrome node tests/shellAcceptance.browser.mjs` 单独检查。现行场次画布与管理入口由 `independent-canvas` 和 `scene-canvas-legacy-routes` 覆盖，后者使用现行剪辑引用的文件验证删除保护。
 
 `generation-canvas-guidance` 验证创作控制、生成指导、验收要求的真实编辑，拖拽建立验收候选、三类使用方明确关联及取消、只读采用记录、完整标准的模型直接采用、保存重开和窄屏。测试只替换供应商与媒体存储边界。
 

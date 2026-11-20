@@ -1,8 +1,11 @@
 BEGIN;
 SET NAMES utf8mb4;
 
+INSERT IGNORE INTO `model_settings` (`id`, `api_timeout`, `log_level`)
+VALUES (1, 30, 'info');
+
 DELETE FROM `prompt_templates`
-WHERE `id` IN ('system_actor_image', 'system_character_image', 'system_prop_image', 'system_costume_image');
+WHERE `is_system` = 1 AND `id` IN ('system_actor_image', 'system_character_image', 'system_prop_image', 'system_costume_image');
 
 INSERT INTO `prompt_templates`
     (`id`, `category`, `name`, `preview`, `content`, `variables`, `variable_defaults`, `version`, `created_at`, `updated_at`, `is_system`, `is_default`)

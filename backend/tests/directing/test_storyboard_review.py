@@ -450,9 +450,9 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict', 'notes_conflict_legacy', 'shared', 'shared_unsafe', 'shared_multiple_legacy'])
+@pytest.mark.parametrize('outcome', ['correct', 'unsafe', 'unsafe_association', 'choice', 'choice_timeout', 'choice_custom', 'notes_conflict', 'shared', 'shared_unsafe', 'shared_multiple'])
 async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, monkeypatch, outcome):
-    notes = '仅将四项共享站位排除镜头 01，保留其他范围和正文' if outcome == 'shared_multiple_legacy' else '保留等待表演，仅补齐张三的出镜关联'
+    notes = '仅将四项共享站位排除镜头 01，保留其他范围和正文' if outcome == 'shared_multiple' else '保留等待表演，仅补齐张三的出镜关联'
     calls = []
     prompt_notes = []
     class ControlledModel:
@@ -473,7 +473,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 'missed_objects': [{'id': 'zs', 'name': '张三', 'kind': 'character', 'excerpt': '张三等待。'}]}
             if outcome.startswith('shared'):
                 result['designs'] = result['shots'][0].pop('designs')
-            if outcome == 'shared_multiple_legacy':
+            if outcome == 'shared_multiple':
                 result['shots'].append({'id': 'second', 'excerpt': '张三离开。', 'object_ids': ['zs']})
                 result['designs'][0]['fields']['path'] = {
                     'state': 'proposal', 'text': '停留原地', 'scope': {'phase': 'video'}}
@@ -491,7 +491,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
             if len(calls) == 3 and outcome == 'choice_timeout':
                 raise httpx.ReadTimeout('controlled structural correction timeout')
             if len(calls) >= 3:
-                if outcome == 'shared_multiple_legacy':
+                if outcome == 'shared_multiple':
                     for design in result['designs']:
                         for note in design['fields'].values():
                             note['scope'] = {**(note.get('scope') or {}), 'shot_ids': ['second']}
@@ -505,37 +505,24 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            (await db.get(Chapter, 'ch1')).raw_text = '张三等待。张三离开。' if outcome == 'shared_multiple_legacy' else '张三等待。'
+            (await db.get(Chapter, 'ch1')).raw_text = '张三等待。张三离开。' if outcome == 'shared_multiple' else '张三等待。'
             db.add(Provider(id='structure-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='structure-text', name='text', category='text', provider_id='structure-provider'))
         chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         source = await read_data(client, 'GET', chapter)
         scene = await read_data(client, 'POST', chapter + '/sequences', {'title': '等待', 'position': 0,
-            'source_version': source['source_version'], 'span': {'start': 0, 'end': 10 if outcome == 'shared_multiple_legacy' else 5}})
+            'source_version': source['source_version'], 'span': {'start': 0, 'end': 10 if outcome == 'shared_multiple' else 5}})
         path = chapter + '/sequences/' + scene['id'] + '/storyboards'
-        task = await read_data(client, 'POST', path, {'request_id': 'structure', 'text_model_id': 'structure-text', 'pending_modality': 'video' if outcome == 'shared_multiple_legacy' else 'image'})
+        task = await read_data(client, 'POST', path, {'request_id': 'structure', 'text_model_id': 'structure-text', 'pending_modality': 'video' if outcome == 'shared_multiple' else 'image'})
         worker = TaskWorker(sessions)
         try:
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
             first = await read_data(client, 'GET', path + '/' + task['task_id'])
             assert first['status'] == 'failed'
-            if outcome == 'shared_multiple_legacy':
-                async with sessions.begin() as db:
-                    historical = await db.get(Task, task['task_id'])
-                    saved = {**historical.result['storyboard_structure']}
-                    saved.pop('draft_issues', None)
-                    saved['issues'] = saved['issues'][:1]
-                    historical.result = {**historical.result, 'storyboard_structure': {**saved, 'draft': None}}
-                without_draft = await read_data(client, 'GET', path + '/' + task['task_id'] + '/retry/basis')
-                assert not without_draft['structure_only']
-                assert without_draft['user_issues'] == []
-                async with sessions.begin() as db:
-                    historical = await db.get(Task, task['task_id'])
-                    historical.result = {**historical.result, 'storyboard_structure': saved}
             basis = await read_data(client, 'GET', path + '/' + task['task_id'] + '/retry/basis')
-            assert len(basis['user_issues']) == (4 if outcome == 'shared_multiple_legacy' else 1)
+            assert len(basis['user_issues']) == (4 if outcome == 'shared_multiple' else 1)
             assert basis['structure_only']
             assert basis['user_issues'][0]['title'] == ('镜头 01 · 共享站位与走位' if outcome.startswith('shared') else '镜头 01 · 对象关联')
             assert '张三' in basis['user_issues'][0]['explanation']
@@ -558,6 +545,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 again = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
                 assert again['structure_only']
                 assert again['current_attempt']['title'] == '本轮执行未完成'
+                assert again['current_attempt']['diagnostics'] == [result['error']]
                 assert len(again['user_issues']) == 1
                 resumed = await read_data(client, 'POST', path + '/' + retry['task_id'] + '/retry', {
                     'request_id': 'resume-structure', 'basis_token': again['basis']['token'], 'structure_choice_id': 'include'})
@@ -565,14 +553,6 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 await asyncio.gather(*worker.jobs.values())
                 result = await read_data(client, 'GET', path + '/' + resumed['task_id'])
             if outcome.startswith('notes_conflict'):
-                if outcome.endswith('legacy'):
-                    async with sessions.begin() as db:
-                        for identity in (task['task_id'], retry['task_id']):
-                            historical = await db.get(Task, identity)
-                            saved = {**historical.result['storyboard_structure']}
-                            saved.pop('draft_issues', None)
-                            saved.pop('attempt_issues', None)
-                            historical.result = {**historical.result, 'storyboard_structure': saved}
                 assert result['status'] == 'failed'
                 next_basis = await read_data(client, 'GET', path + '/' + retry['task_id'] + '/retry/basis')
                 assert next_basis['previous_correction_notes'] == notes
@@ -603,7 +583,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 assert result['status'] == 'succeeded', result
                 assert result['pending_application']
                 assert len(calls) == (5 if outcome == 'choice_timeout' else 4)
-            if outcome == 'shared_multiple_legacy':
+            if outcome == 'shared_multiple':
                 assert prompt_notes == [notes, notes]
                 assert all(f'blocking_{index}' in calls[2][-1].content.split('"issues":')[1] for index in range(4))
             assert '继续修正保留草案' in calls[2][-1].content
@@ -617,22 +597,6 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
             worker.text_pool.shutdown(wait=False)
             if worker.client:
                 await worker.client.aclose()
-
-
-@pytest.mark.parametrize(('issues', 'expected'), [
-    (['历史越界', '本轮格式错误'], ['本轮格式错误']),
-    (['无法确认归属的旧问题'], []),
-])
-def test_legacy_attempt_diagnostics_require_an_exact_history_prefix(issues, expected):
-    from datetime import datetime
-    from app.services.directing.storyboard_structure import structure_attempt
-    task = SimpleNamespace(id='current', created_at=datetime(2026, 11, 17), status='failed',
-        input_snapshot={'run_args': {'structure_resume': {'issues': ['历史越界']}}},
-        result={'storyboard_structure': {'issues': issues}}, error_message=None)
-    report = structure_attempt(task)
-    assert report['diagnostics'] == expected
-    if not expected:
-        assert report['reason'] == '该轮未记录独立原因，请查看技术诊断。'
 
 
 @pytest.mark.parametrize(('status', 'title'), [('succeeded', '本轮执行已完成'), ('cancelled', '本轮已取消')])

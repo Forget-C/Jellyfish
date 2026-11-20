@@ -92,7 +92,7 @@ uv run python -m app.scripts.migrate_database
 uv run python -m app.scripts.seed_system_data
 ```
 
-迁移命令拒绝没有 Alembic 版本记录的非空数据库。遇到这种库时先核对实际结构和迁移记录，不能用自动登记代替核对。开发启动与健康检查见上面的指南，当前 API 入口见[接口参考](../docs/development/reference/api.md)。
+初次启动请使用空库。迁移命令拒绝没有 Alembic 版本记录的非空数据库，旧 revision 由对应版本的代码管理。隔离 MySQL 的验证入口见[数据库升级与回退](../docs/development/guides/database-upgrade.md#在专用-mysql-核对基线)。开发启动与健康检查见上面的指南，当前 API 入口见[接口参考](../docs/development/reference/api.md)。
 
 ## 常用命令
 
