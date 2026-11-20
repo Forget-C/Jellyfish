@@ -35,15 +35,23 @@ async def test_large_storyboard_history_is_bounded_and_ordered(tmp_path):
                     result={'review_state': 'pending', 'output': '草案' * 262144}))
         engine = sessions.kw['bind']
         sorted_statements = []
+        window_projections = []
         def observe(_connection, _cursor, statement, _parameters, _context, _executemany):
-            if 'ORDER BY' in statement and 'row_number' not in statement.lower() and ('tasks' in statement or 'generation_canvases' in statement):
+            if 'row_number()' in statement.lower():
+                ranked = statement.lower().partition('from (select')[2]
+                if ranked:
+                    window_projections.append(ranked.partition('from tasks')[0])
+            elif 'ORDER BY' in statement and ('tasks' in statement or 'generation_canvases' in statement):
                 sorted_statements.append(statement.split('FROM')[0])
         event.listen(engine.sync_engine, 'before_cursor_execute', observe)
         try:
             rows = await read_data(client, 'GET', scene_path + '/storyboards?canvas_id=' + canvas['id'])
             listed = await read_data(client, 'GET', scene_path + '/canvases')
             assert listed['canvases'][0]['id'] == canvas['id']
-            assert listed['canvases'][0]['latest_storyboard']['task_id'] == 'history-24'
+            summary = listed['canvases'][0]['latest_storyboard']
+            assert summary['task_id'] == 'history-24'
+            assert summary['error'] == '诊断' * 32768
+            assert summary['review_state'] == 'incomplete'
         finally:
             event.remove(engine.sync_engine, 'before_cursor_execute', observe)
         assert [row['task_id'] for row in rows] == [f'history-{index:02d}' for index in range(24, 4, -1)]
@@ -51,6 +59,10 @@ async def test_large_storyboard_history_is_bounded_and_ordered(tmp_path):
         assert rows[0]['error'] == '诊断' * 32768
         # SQLite cannot reproduce MySQL filesort exhaustion. Keep its payload boundary explicit,
         # alongside the API assertions and the real-MySQL canvas replay.
+        assert len(window_projections) == 1
+        assert all(field not in window_projections[0] for field in (
+            'error_message', 'retry_of_task_id', 'reextract_canvas_id', 'tasks.result',
+        ))
         assert sorted_statements
         assert all('error_message' not in statement and 'result' not in statement
                    and 'input_snapshot' not in statement and 'document' not in statement for statement in sorted_statements)

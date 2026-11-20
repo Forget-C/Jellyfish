@@ -5,6 +5,7 @@ from hashlib import sha256
 from uuid import NAMESPACE_URL, uuid4, uuid5
 from fastapi import HTTPException
 from sqlalchemy import Integer, case, cast, func, literal, select, update
+from sqlalchemy.orm import aliased
 from app.core.contracts.directing.scene_canvas import SceneCanvasCreate, SceneCanvasesRead, SceneCanvasSummary
 from app.core.contracts.directing.scene_storyboard import StoryboardTaskSummary
 from app.core.contracts.task import TaskStatus
@@ -109,19 +110,14 @@ class SceneCanvasService(WorkspaceService):
         return func.json_extract(document, func.substring_index(id_path, '.', 2))
 
     async def _canvas_storyboards(self, chapter_id: str, sequence_id: str):
-        """每张画布最多读取一条成功任务与一条其他任务，不传输候选正文。"""
+        """先按任务 ID 排名，再读取每张画布入选任务的摘要。"""
         canvas_id = Task.input_snapshot['canvas_id'].as_string()
         priority = case((Task.status.in_((TaskStatus.queued, TaskStatus.running)), 0), else_=1)
         ranked = select(
-            Task.id, Task.created_at, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id,
-            canvas_id.label('canvas_id'), priority.label('priority'), SCENE_TASK_ORDER.label('admission_order'),
-            Task.input_snapshot['reextract_canvas_id'].as_string().label('reextract_target'),
-            func.first_value(Task.input_snapshot['reextract_canvas_id'].as_string()).over(
+            Task.id, canvas_id.label('canvas_id'),
+            func.first_value(Task.id).over(
                 partition_by=canvas_id, order_by=(SCENE_TASK_ORDER, Task.created_at, Task.id),
-            ).label('original_target'),
-            Task.result['base_revision'].as_integer().label('base_revision'),
-            Task.result['review_state'].as_string().label('review_state'),
-            Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from'),
+            ).label('original_task_id'),
             func.row_number().over(
                 partition_by=(canvas_id, Task.status == TaskStatus.succeeded),
                 order_by=(priority, SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()),
@@ -131,11 +127,21 @@ class SceneCanvasService(WorkspaceService):
             Task.kind == STORYBOARD_KIND, Task.input_snapshot['chapter_id'].as_string() == chapter_id,
             GenerationCanvas.project_id == self.project_id, GenerationCanvas.sequence_id == sequence_id,
         ).subquery()
-        rows = await self.db.execute(select(ranked, CanvasSaveReceipt.request_id.label('receipt')).outerjoin(
-            CanvasSaveReceipt, (CanvasSaveReceipt.canvas_id == ranked.c.canvas_id)
-            & (CanvasSaveReceipt.request_id == literal('storyboard:') + ranked.c.id),
-        ).where(ranked.c.rank == 1).order_by(
-            ranked.c.priority, ranked.c.admission_order.desc(), ranked.c.created_at.desc(), ranked.c.id.desc()))
+        original_task = aliased(Task)
+        rows = await self.db.execute(select(
+            Task.id, Task.status, Task.stage, Task.error_message, Task.retry_of_task_id, ranked.c.canvas_id,
+            Task.input_snapshot['reextract_canvas_id'].as_string().label('reextract_target'),
+            original_task.input_snapshot['reextract_canvas_id'].as_string().label('original_target'),
+            Task.result['base_revision'].as_integer().label('base_revision'),
+            Task.result['review_state'].as_string().label('review_state'),
+            Task.input_snapshot['review_retry_from'].as_string().label('review_retry_from'),
+            CanvasSaveReceipt.request_id.label('receipt'),
+        ).select_from(ranked).join(Task, Task.id == ranked.c.id)
+            .join(original_task, original_task.id == ranked.c.original_task_id)
+            .outerjoin(CanvasSaveReceipt, (CanvasSaveReceipt.canvas_id == ranked.c.canvas_id)
+                       & (CanvasSaveReceipt.request_id == literal('storyboard:') + ranked.c.id))
+            .where(ranked.c.rank == 1)
+            .order_by(priority, SCENE_TASK_ORDER.desc(), Task.created_at.desc(), Task.id.desc()))
         latest, candidates = {}, {}
         for row in rows:
             latest.setdefault(row.canvas_id, row)
