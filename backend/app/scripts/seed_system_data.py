@@ -46,7 +46,7 @@ def _seed_statements() -> list[str]:
     statements: list[str] = []
     for statement in _split_sql_statements(SYSTEM_SEED.read_text(encoding="utf-8")):
         normalized = statement.lstrip().upper()
-        if normalized.startswith(("DELETE", "INSERT")):
+        if normalized.startswith("INSERT"):
             statements.append(statement)
     return statements
 

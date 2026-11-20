@@ -140,6 +140,7 @@ export class StudioPromptsService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                409: `请先将同类别的其他模板设为默认`,
                 422: `Validation Error`,
             },
         });

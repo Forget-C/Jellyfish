@@ -13,7 +13,7 @@ const template = {
   id: 'custom', category: 'video_prompt', name: '创作模板', preview: '简短的内容简介',
   content: Array.from({ length: 70 }, (_, index) => `第 ${index + 1} 行：请描述 {{subject}} 的动作。`).join('\n'),
   variables: ['subject'], variable_defaults: { subject: '主角' }, version: 1,
-  is_default: false, is_system: false, created_at: '2026-11-10', updated_at: '2026-11-10',
+  is_default: true, is_system: false, created_at: '2026-11-10', updated_at: '2026-11-10',
 }
 let browser
 let listFails = false
@@ -24,7 +24,7 @@ let patches = 0
 let deletes = 0
 let lastPage = 1
 const listRequests = []
-const system = { ...template, id: 'system', name: '系统模板', is_system: true }
+const system = { ...template, id: 'system', name: '系统模板', is_system: true, is_default: false }
 const lateMatch = { ...template, id: 'late-match', name: '后续页模板', preview: '只在后续页简介出现的关键字' }
 const allTemplates = [template, system, ...Array.from({ length: 10 }, (_, i) => ({ ...template, id: `extra-${i}`, name: i === 9 ? '长模板名称'.repeat(18) : `其他模板 ${i}`, category: 'bgm' })), ...Array.from({ length: 88 }, (_, i) => ({ ...template, id: `more-${i}`, name: `补充模板 ${i}` })), lateMatch]
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -51,7 +51,10 @@ try {
       patches += 1
       const data = route.request().postDataJSON()
       assert.equal(data.preview, '编辑后的简介')
-      if (saveFails) return route.fulfill({ status: 500, json: { message: '保存失败' } })
+      if (saveFails) {
+        assert.equal(data.is_default, false)
+        return route.fulfill({ status: 409, json: { message: '请先将同类别的其他模板设为默认' } })
+      }
       Object.assign(template, data)
       return respond(template)
     }
@@ -59,6 +62,7 @@ try {
       patches += 1
       assert.deepEqual(route.request().postDataJSON(), { is_default: true })
       if (restoreFails) return route.fulfill({ status: 500, json: { message: '恢复失败' } })
+      template.is_default = false
       system.is_default = true
       return respond(system)
     }
@@ -134,10 +138,12 @@ try {
   await reader.getByRole('button', { name: /编\s*辑/ }).click()
   const edit = page.getByRole('dialog', { name: '编辑提示词' })
   await edit.getByRole('textbox', { name: '预览文案' }).fill('编辑后的简介')
+  await edit.getByRole('switch').click()
   await edit.getByRole('button', { name: /保\s*存/ }).click()
-  await page.getByText('更新提示词失败', { exact: true }).waitFor()
+  await page.getByText('请先将同类别的其他模板设为默认', { exact: true }).waitFor()
   assert.equal(await edit.getByRole('textbox', { name: '预览文案' }).inputValue(), '编辑后的简介')
   saveFails = false
+  await edit.getByRole('switch').click()
   await edit.getByRole('button', { name: /保\s*存/ }).click()
   await edit.waitFor({ state: 'hidden' })
   await reader.getByText('编辑后的简介', { exact: true }).waitFor()

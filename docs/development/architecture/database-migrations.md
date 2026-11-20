@@ -12,7 +12,7 @@ MySQL 就绪后，Compose 先运行 `backend-migrate`，随后运行 `backend-se
 
 ## 系统种子
 
-`app.scripts.seed_system_data` 在同一事务执行 `backend/sql/001-init-prompt-template.sql`。缺失时创建 `model_settings.id = 1`，已有默认模型及设置不被覆盖。固定 ID 的四条内置提示词模板可重复初始化。替换仅作用于系统记录。已有用户模板保留，若占用系统保留 ID，种子失败并回滚，请检查冲突来源。
+`app.scripts.seed_system_data` 在同一事务执行 `backend/sql/001-init-prompt-template.sql`。缺失时创建 `model_settings.id = 1`，已有默认模型及设置不被覆盖。首次初始化为演员、角色、道具、服装各创建一个可生成的默认模板。重复初始化只补缺失的系统模板，保留已有模板的版本、显式引用和类别默认选择。已有用户模板保留，若占用系统保留 ID，种子失败并回滚，请检查冲突来源。
 
 ## 存储取舍
 

@@ -75,3 +75,25 @@ def test_empty_database_is_migrated_and_seeded_without_replacing_user_data(tmp_p
             ).scalar_one() == "Custom content"
     finally:
         engine.dispose()
+
+
+def test_reseed_preserves_system_template_selection_and_version(tmp_path):
+    path = tmp_path / "prompts.db"
+    env = {**os.environ, "DATABASE_URL": f"sqlite+aiosqlite:///{path}"}
+
+    def run(module):
+        subprocess.run([sys.executable, "-m", f"app.scripts.{module}"], cwd=BACKEND, env=env, check=True)
+
+    run("migrate_database")
+    run("seed_system_data")
+    engine = sa.create_engine(f"sqlite:///{path}")
+    try:
+        with engine.begin() as db:
+            db.exec_driver_sql("UPDATE prompt_templates SET is_default=0, version=3 WHERE id='system_actor_image'")
+        run("seed_system_data")
+        with engine.connect() as db:
+            assert db.exec_driver_sql(
+                "SELECT is_default, version FROM prompt_templates WHERE id='system_actor_image'"
+            ).one() == (0, 3)
+    finally:
+        engine.dispose()

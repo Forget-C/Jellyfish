@@ -1,3 +1,4 @@
+import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FC } from 'react'
@@ -346,7 +347,7 @@ const PromptTemplateManager: FC = () => {
       void loadTemplates(page, query)
     } catch (error) {
       if (error && typeof error === 'object' && 'errorFields' in error) return
-      message.error(modalMode === 'create' ? '添加提示词失败' : '更新提示词失败')
+      message.error(apiErrorMessage(error))
     } finally {
       submittingRef.current = false
       setSubmitting(false)
