@@ -14,4 +14,3 @@ export type PaginatedData_PromptTemplateSummary_ = {
      */
     pagination: Pagination;
 };
-

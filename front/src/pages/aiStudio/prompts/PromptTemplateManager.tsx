@@ -1,6 +1,6 @@
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FC } from 'react'
 import { Alert, Skeleton, Input, Tag, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
 import './prompt-manager.css'
@@ -141,13 +141,13 @@ const PromptTemplateManager: FC = () => {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [detailError, setDetailError] = useState(false)
 
-  const clearDetail = () => {
+  const clearDetail = useCallback(() => {
     activeDetail.current = null
     setDetailId(null)
     detailRequest.current += 1
     setSelected(null)
     setDetailError(false)
-  }
+  }, [])
 
   const loadDetail = async (id: string) => {
     const request = ++detailRequest.current
@@ -164,7 +164,7 @@ const PromptTemplateManager: FC = () => {
     }
   }
 
-  const loadTemplates = async (nextPage: number, nextQuery: string) => {
+  const loadTemplates = useCallback(async (nextPage: number, nextQuery: string) => {
     const requestId = ++requestIdRef.current
     setLoading(true)
     setLoadError(false)
@@ -194,7 +194,7 @@ const PromptTemplateManager: FC = () => {
         setLoading(false)
       }
     }
-  }
+  }, [clearDetail])
 
   const loadCategories = async () => {
     try {
@@ -226,7 +226,7 @@ const PromptTemplateManager: FC = () => {
     let current = true
     queueMicrotask(() => { if (current) void loadTemplates(page, query) })
     return () => { current = false; requestIdRef.current += 1 }
-  }, [page, query])
+  }, [loadTemplates, page, query])
 
   const templateGroups = useMemo(() => {
     const grouped = new Map<(typeof groupOrder)[number], PromptTemplateSummary[]>()

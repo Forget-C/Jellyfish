@@ -102,7 +102,7 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
     let live = true
     const request = FilmService.getTaskStatusApiV1FilmTasksTaskIdStatusGet({ taskId: statusTaskId })
     void request.then(({ data }) => {
-      if (live && data?.started_at_ts != null) setLastStartedAt(data.started_at_ts * 1000)
+      if (live && typeof data?.started_at_ts === 'number') setLastStartedAt(data.started_at_ts * 1000)
     }).catch(() => undefined)
     return () => { live = false; request.cancel() }
   }, [statusTaskId, status])

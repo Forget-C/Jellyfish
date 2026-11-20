@@ -93,7 +93,7 @@ export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, 
         void readDetail(row)
       }
     }
-  }, [data, details, expanded, readDetail])
+  }, [data, details, errors, expanded, readDetail])
   const renderDetail = (row: DivisionHistoryEntry) => {
     const key = `${row.kind}:${row.id}`, selection = details[key]
     if (errors[key]) return <Alert type="error" message={errors[key]} action={<Button onClick={() => void readDetail(row)}>重试详情</Button>} />
@@ -141,7 +141,7 @@ export function DivisionHistoryDrawer({ open, projectId, chapterId, refreshKey, 
         { title: '来源', dataIndex: 'origin', responsive: ['md'], render: value => origins[value] || value },
         { title: '创建时间', dataIndex: 'created_at', responsive: ['lg'], render: value => new Date(value).toLocaleString() },
         { title: '场次数', dataIndex: 'sequence_count', responsive: ['md'], render: value => value ?? '展开查看' },
-        { title: '状态', render: (_, row) => <span>{statusLabel(row)}{row.progress != null && ['queued', 'running'].includes(row.status) ? ` ${row.progress}%` : ''}</span> },
+        { title: '状态', render: (_, row) => <span>{statusLabel(row)}{typeof row.progress === 'number' && ['queued', 'running'].includes(row.status) ? ` ${row.progress}%` : ''}</span> },
         { title: '操作', render: (_, row) => ['queued', 'running'].includes(row.status) ? <Button size="small" onClick={async () => {
           try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: row.id, requestBody: { reason: '用户取消' } }); setRetry(value => value + 1) }
           catch (cause) { setError(apiErrorMessage(cause)) }

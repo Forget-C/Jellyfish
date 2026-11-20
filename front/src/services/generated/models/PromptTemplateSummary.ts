@@ -11,4 +11,3 @@ export type PromptTemplateSummary = {
     category: PromptCategory;
     name: string;
 };
-

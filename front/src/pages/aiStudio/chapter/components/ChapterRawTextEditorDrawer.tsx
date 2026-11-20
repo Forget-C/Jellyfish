@@ -407,14 +407,14 @@ export function ChapterRawTextEditorDrawer({
     void request.then(({ data }) => {
       const latest = data?.items[0]
       const time = latest?.started_at_ts ?? latest?.finished_at_ts
-      if (live && time != null) setLastCheckAt(previous => Math.max(previous ?? time, time))
+      if (live && typeof time === 'number') setLastCheckAt(previous => Math.max(previous ?? time, time))
     }).catch(() => undefined)
     return () => { live = false; request.cancel() }
   }, [chapterId, open])
   useEffect(() => {
     if (consistencySettledTask?.status !== 'succeeded') return
     const time = consistencySettledTask.startedAtTs ?? consistencySettledTask.finishedAtTs
-    if (time != null) setLastCheckAt(previous => Math.max(previous ?? time, time))
+    if (typeof time === 'number') setLastCheckAt(previous => Math.max(previous ?? time, time))
   }, [consistencySettledTask])
 
   const { task: simplifyTask, settledTask: simplifySettledTask, trackTaskData: trackSimplifyTaskData, applyCancelData: applySimplifyCancelData, setTrackedTask: setTrackedSimplifyTask } = useCancelableRelationTask({
