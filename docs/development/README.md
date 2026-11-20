@@ -70,7 +70,6 @@
 - [旧场次版本 graph 契约与接入参考](guides/canvas-graph.md)
 - [运行与排查异步任务](guides/task-operations.md)
 - [数据库升级与回退](guides/database-upgrade.md)
-- [接入章节划分历史](guides/chapter-division-history-import.md)
 - [身份参考存量整理](guides/identity-reference-cleanup.md)
 - [转换场次对象的旧单图准备](guides/convert-scene-object-selections.md)
 - [资产结构化切换](guides/structured-asset-switch.md)

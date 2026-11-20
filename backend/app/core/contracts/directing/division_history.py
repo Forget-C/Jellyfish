@@ -14,7 +14,7 @@ class DivisionHistoryEntry(Contract):
     """保存版本和未关联分析共用列表，任务状态不占正式版本号。"""
 
     id: Identity
-    kind: Literal['version', 'analysis', 'receipt']
+    kind: Literal['version', 'analysis']
     number: int | None
     origin: str
     created_at: datetime
@@ -23,7 +23,7 @@ class DivisionHistoryEntry(Contract):
     progress: int | None
     is_current: bool
     source_task_id: Identity | None
-    save_relation: Literal['saved', 'unsaved', 'unknown', 'not_applicable'] = 'not_applicable'
+    save_relation: Literal['saved', 'unsaved', 'not_applicable'] = 'not_applicable'
 
 
 class DivisionHistoryPage(Contract):
@@ -58,11 +58,3 @@ class DivisionAnalysisDetail(Contract):
     baseline_changed: bool
     issues: list[str]
     saved_versions: list[DivisionVersionRef]
-
-
-class DivisionReceiptDetail(Contract):
-    """未接入的旧回执仅供核对；资料不完整时保留原因而不拼造快照。"""
-
-    request_id: Identity
-    chapter: ChapterSequences | None
-    issues: list[str]

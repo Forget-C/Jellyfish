@@ -30,7 +30,7 @@ async def test_final_snapshot_single_edits_and_noop_keep_history(tmp_path):
             version = await db.get(DivisionVersion, saved.chapter.current_version.id)
             assert version.snapshot['sequences'][0]['title'] == '最终人工修改'
             assert version.base_revision_id == original.id and version.origin == 'manual'
-            assert version.request_id == request.request_id
+            assert (await service.division_receipt('ch1', request.request_id)).chapter.current_version.id == version.id
             assert version.mapping['lineage'] == [row.model_dump(mode='json') for row in draft.lineage]
             assert version.snapshot['task_ids'] == []
             assert original.snapshot == snapshot
@@ -80,24 +80,6 @@ async def test_version_head_or_receipt_failure_rolls_back_all(tmp_path, statemen
             assert await db.get(DivisionCommit, ('ch1', 'fail-version')) is None
             result = await service.save_division('ch1', body)
             assert result.chapter.current_version.number == 3
-
-
-@pytest.mark.asyncio
-async def test_old_receipt_without_version_remains_readable(tmp_path):
-    async with database(tmp_path) as sessions:
-        async with sessions.begin() as db:
-            service = DivisionService(db, 'p1')
-            draft = await setup_two(service)
-            draft.members[0].title = '旧回执'
-            saved, _ = await save(service, draft)
-            receipt = await db.get(DivisionCommit, ('ch1', 'save-1'))
-            response = deepcopy(receipt.response)
-            response['chapter'].pop('current_version')
-            receipt.response = response
-            await db.flush()
-            restored = await service.division_receipt('ch1', 'save-1')
-            assert restored.chapter.current_version is None
-            assert restored.chapter.sequences == saved.chapter.sequences
 
 
 @pytest.mark.asyncio
@@ -151,25 +133,3 @@ async def test_restore_historical_identity_keeps_design_and_advances_versions(tm
             assert (await db.get(DirectingRevision, design.id)).sequence_id == old.sequence_id
             assert (await service.save_division('ch1', request)) == restored
             assert not (await db.get(Sequence, new_id, populate_existing=True)).is_current
-
-
-@pytest.mark.asyncio
-async def test_pre_version_request_hash_can_replay_without_accepting_new_restore_fields(tmp_path):
-    from app.services.directing.division import digest
-    async with database(tmp_path) as sessions:
-        async with sessions.begin() as db:
-            service = DivisionService(db, 'p1')
-            draft = await setup_two(service)
-            draft.members[0].title = '旧客户端保存'
-            saved, request = await save(service, draft)
-            receipt = await db.get(DivisionCommit, ('ch1', request.request_id))
-            legacy = request.model_dump(mode='json')
-            for field in ('source_revision_id', 'restored_baseline', 'history_reconfirmed'):
-                legacy['draft'].pop(field)
-            receipt.request_hash = digest(legacy)
-            await db.flush()
-            assert await service.save_division('ch1', request) == saved
-            changed = request.model_copy(deep=True)
-            changed.draft.source_revision_id = saved.chapter.current_version.id
-            with pytest.raises(RevisionConflict, match='另一份划分'):
-                await service.save_division('ch1', changed)

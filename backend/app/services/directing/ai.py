@@ -308,8 +308,7 @@ class DirectingAIService(WorkspaceService):
             args["revision_context"]["task_identity"] = args["task_identity"]
         return await TaskService(self.db).submit(
             kind=kind, title={"directing_divide": "分析章节场次", "directing_design": "生成导演方案", "directing_review": "六部门审稿", "directing_review_revision": "生成检查修改方案"}[kind],
-            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args,
-                      **({'division_versioning': 1} if kind == 'directing_divide' else {})},
+            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args},
             provider_id=provider.id, project_id=self.project_id,
             target_type="directing_sequence" if sequence_id else "directing_chapter", target_id=sequence_id or chapter_id,
         )

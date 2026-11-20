@@ -520,61 +520,6 @@ async def test_mysql_division_later_failure_rolls_back(isolation):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
-async def test_mysql_legacy_import_is_atomic_and_idempotent(isolation):
-    """两个持旧读快照的连接同时接入同一回执，只生成一个版本及一个当前指向。"""
-    from uuid import uuid4
-    from sqlalchemy import delete
-    from app.core.contracts.directing.division import DivisionDraft, DivisionSave
-    from app.models.directing import DivisionHead, DivisionVersion
-    from app.services.directing.division import DivisionService
-    from app.services.directing.division_import import DivisionImportService
-    from app.services.directing.division_history import DivisionHistoryService
-    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
-    if not value:
-        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
-    url = make_url(value)
-    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
-        raise ValueError('only an isolated directing validation database is allowed')
-    engine = create_async_engine(value, isolation_level=isolation)
-    sessions = async_sessionmaker(engine, expire_on_commit=False)
-    project_id, chapter_id = 'p-' + uuid4().hex, 'ch-' + uuid4().hex
-    try:
-        async with sessions.begin() as db:
-            db.add(Project(id=project_id, name='旧记录接入', style='真人'))
-            await db.flush()
-            db.add(Chapter(id=chapter_id, project_id=project_id, index=1, title='章节', raw_text='甲乙丙丁'))
-            await db.flush()
-            service = DivisionService(db, project_id)
-            chapter = await service.list_sequences(chapter_id)
-            draft = DivisionDraft(source_version=chapter.source_version, baseline=[], members=[
-                {'key': 'old', 'title': '保存内容', 'span': {'start': 0, 'end': 4}}], lineage=[], exited_sequence_ids=[])
-            preview = await service.preview_division(chapter_id, draft)
-            saved = await service.save_division(chapter_id, DivisionSave(request_id='legacy', draft=draft, preview_token=preview.preview_token))
-            await db.execute(delete(DivisionHead).where(DivisionHead.chapter_id == chapter_id))
-            await db.execute(delete(DivisionVersion).where(DivisionVersion.chapter_id == chapter_id))
-        barrier = asyncio.Barrier(2)
-        async def importing():
-            async with sessions.begin() as db:
-                importer = DivisionImportService(db, project_id)
-                await importer.list_sequences(chapter_id)
-                await barrier.wait()
-                return await importer.import_history(chapter_id)
-        results = await asyncio.wait_for(asyncio.gather(importing(), importing()), 15)
-        assert sum(row['imported'] for row in results) == 1
-        assert sum(row['skipped'] for row in results) == 1
-        async with sessions.begin() as db:
-            assert await db.scalar(select(func.count()).select_from(DivisionVersion).where(DivisionVersion.chapter_id == chapter_id)) == 1
-            current = await DivisionService(db, project_id).list_sequences(chapter_id)
-            assert current.current_version.number == 1 and current.sequences == saved.chapter.sequences
-            history = await DivisionHistoryService(db, project_id).history(chapter_id)
-            assert history.total == 1 and history.items[0].is_current
-    finally:
-        await engine.dispose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_mysql_version_migration_with_existing_production_data():
     """有快照时拒绝降级；从前序结构升级不会改写已有成果和回执。"""
     from alembic.operations import Operations
