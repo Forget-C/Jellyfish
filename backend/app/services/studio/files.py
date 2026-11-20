@@ -262,7 +262,7 @@ async def delete_file(
         return
     if file_item.is_project_cover:
         raise HTTPException(status_code=409, detail="请在项目设置中管理封面")
-    await _ensure_file_is_unreferenced(db, file_id=file_id)
+    await _ensure_file_is_unreferenced(db, file_id=file_id, name=file_item.name)
     file_item.delete_requested_at = datetime.now(UTC).replace(tzinfo=None)
     await db.flush()
 
@@ -284,8 +284,11 @@ async def require_available_file(
     return file
 
 
-async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str, ignored_usage_ids: tuple[int, ...] = ()) -> None:
+async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str, name: str, ignored_usage_ids: tuple[int, ...] = ()) -> None:
     """历史任务引用不阻止删除字节；活动任务与实际业务采用关系必须保护。"""
+    from app.services.studio.resource_references import require_no_saved_references
+
+    await require_no_saved_references(db, {"file_id": file_id}, label=f"图片「{name}」")
     for model in (FileUsage, ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage):
         conditions = [model.file_id == file_id]
         if model is FileUsage and ignored_usage_ids:
@@ -302,12 +305,12 @@ async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str, ignore
 
 async def release_upload_retention(db: AsyncSession, *, file_id: str, project_id: str) -> None:
     """显式释放本项目的画布上传保留；其他真实引用存在时拒绝，文件删除仍需单独请求。"""
-    await require_available_file(db, file_id=file_id)
+    file = await require_available_file(db, file_id=file_id)
     ids = tuple((await db.scalars(select(FileUsage.id).where(
         FileUsage.file_id == file_id, FileUsage.project_id == project_id,
         FileUsage.usage_kind == 'generation_upload'))).all())
     if not ids:
         raise HTTPException(404, 'Upload retention not found')
-    await _ensure_file_is_unreferenced(db, file_id=file_id, ignored_usage_ids=ids)
+    await _ensure_file_is_unreferenced(db, file_id=file_id, name=file.name, ignored_usage_ids=ids)
     await db.execute(delete(FileUsage).where(FileUsage.id.in_(ids)))
     await db.flush()

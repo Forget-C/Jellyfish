@@ -291,3 +291,35 @@ async def test_new_project_reads_current_canvas_assets_and_production(baseline_c
             await check_production(client, worker, f'{directing}/sequences/{sequence_id}', text_id, video_id, reference)
         finally:
             worker.text_pool.shutdown(wait=True)
+
+
+@pytest.mark.asyncio
+async def test_saved_asset_reference_delete_race(baseline_client, image_storage):
+    client, sessions = baseline_client
+    project = uuid4().hex
+    await data(client.post(STUDIO + '/projects', json={'id': project, 'name': '参考保护', 'style': '真人都市'}), 201)
+    for order in ('save', 'delete', 'race'):
+        owner = uuid4().hex
+        path = STUDIO + '/entities/scene/' + owner
+        await data(client.post(STUDIO + '/entities/scene', json={'id': owner, 'name': owner, 'project_id': project}), 201)
+        image = await data(client.post(STUDIO + '/files/upload', files={'file': ('ref.png', b'image', 'image/png')},
+            data={'project_id': project, 'usage_kind': 'generation_upload'}), 201)
+        url = STUDIO + '/files/' + image['id']
+        release = url + '/upload-retention'
+        async def save():
+            return await client.patch(path, json={'references': [{'role': 'design', 'file_id': image['id']}]})
+        if order == 'save':
+            assert (await save()).status_code == 200
+            denial = await client.delete(release, params={'project_id': project})
+            assert denial.status_code == 409 and owner in denial.json()['message'] and '参考保护' in denial.json()['message']
+            assert (await client.delete(url)).status_code == 409
+            assert (await client.patch(path, json={'references': []})).status_code == 200
+        await data(client.delete(release, params={'project_id': project}))
+        if order == 'race':
+            if sessions.kw['bind'].dialect.name != 'mysql':
+                continue
+            put, remove = await asyncio.gather(save(), client.delete(url))
+            assert (put.status_code, remove.status_code) in {(200, 409), (410, 200)}
+        else:
+            await data(client.delete(url))
+            assert (await save()).status_code == 410

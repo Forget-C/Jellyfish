@@ -156,7 +156,7 @@ async def create_entity(
                 raise HTTPException(status_code=400, detail="Chapter does not belong to the same project")
 
     from app.services.studio.resource_references import validate_resource_references
-    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []))
+    await validate_resource_references(db, entity_type_norm, link_project_id, data.get("references", []), saving=True)
     obj = spec.model(**data)
     db.add(obj)
     await flush_resource(db)
@@ -252,7 +252,7 @@ async def update_entity(
         raise HTTPException(422, "设定创建对象需要保留风格")
     if "references" in update_data:
         from app.services.studio.resource_references import validate_resource_references
-        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"])
+        await validate_resource_references(db, entity_type_norm, obj.project_id, update_data["references"], saving=True)
 
     for key, value in update_data.items():
         setattr(obj, key, value)
@@ -275,16 +275,11 @@ async def delete_entity(
 ) -> None:
     entity_type = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type)
-    obj = await db.get(spec.model, entity_id)
+    obj = await db.get(spec.model, entity_id, with_for_update=True, populate_existing=True)
     if obj is None:
         return
-    if obj.origin != "created" and obj.project_id is None:
-        for kind in ("actor", "character", "scene", "prop", "costume"):
-            model = entity_spec(kind).model
-            configurations = await db.scalars(select(model.references))
-            if any(reference.get("source_kind") == entity_type and reference.get("source_id") == entity_id
-                   for references in configurations for reference in references):
-                raise HTTPException(409, "演员仍被对象直接参考，请先解除参考")
+    from app.services.studio.resource_references import require_no_saved_references
+    await require_no_saved_references(db, {"source_kind": entity_type, "source_id": entity_id}, label=f"来源对象「{obj.name}」")
     if obj.project_id is None:
         # 删除独立副本后，原项目对象可再次明确入库。
         for kind in (("actor", "character") if entity_type == "actor" else (entity_type,)):
