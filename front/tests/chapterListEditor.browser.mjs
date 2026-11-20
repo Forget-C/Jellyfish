@@ -18,6 +18,9 @@ chapters[3].condensed_text = ''
 const writes = [], requests = [], errors = []
 const taskResults = { simplify: { simplified_script_text: '智能精简内容。' }, check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: " 她推开门。优化后的原文。\n" } }
 let checkCount = 0, simplifyCount = 0
+const previousCheckStartedAt = Date.parse('2026-11-18T06:44:00Z') / 1000
+const newCheckStartedAt = Date.parse('2026-11-19T02:30:00Z') / 1000
+let lastChapterOneCheck = previousCheckStartedAt
 let holdSimplify = false
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
 let browser, page
@@ -48,11 +51,16 @@ try {
     if (path.endsWith('/script-processing/simplify-script-async')) return respond({ task_id: `simplify${++simplifyCount}`, status: 'queued' })
     const cancelled = path.match(/\/film\/tasks\/(simplify\d+)\/cancel$/)
     if (cancelled) return respond({ task_id: cancelled[1], status: 'cancelled', effective_immediately: true })
+    if (path.endsWith('/film/tasks') && url.searchParams.get('target_type') === 'consistency_check'
+      && url.searchParams.get('target_id') === 'ch1' && url.searchParams.get('statuses') === 'succeeded') {
+      return respond({ items: [{ status: 'succeeded', started_at_ts: lastChapterOneCheck }], total: 1 })
+    }
     const taskPath = path.match(/\/film\/tasks\/(check\d+|optimize|simplify\d+)\/(status|result)$/)
     if (taskPath) {
       const key = taskPath[1].replace(/\d+$/, '')
       if (key === 'simplify' && holdSimplify) return respond({ task_id: taskPath[1], status: 'running', progress: 30 })
-      return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, result: taskResults[key] })
+      if (taskPath[1] === 'check1') lastChapterOneCheck = newCheckStartedAt
+      return respond({ task_id: taskPath[1], status: 'succeeded', progress: 100, started_at_ts: newCheckStartedAt, result: taskResults[key] })
     }
     if (path.endsWith('/projects/p1')) return respond({ id: 'p1', name: '章节管理测试', stats: {} })
     if (path.endsWith('/chapters')) {
@@ -209,7 +217,9 @@ try {
   holdSave = false; releaseSave()
   await editor.getByRole('button', { name: '查看本章场次并核对', exact: true }).waitFor()
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门？' })
+  await editor.getByText('上次检查 2026/11/18 14:44', { exact: true }).waitFor()
   await editor.getByRole('button', { name: '原文一致性检查', exact: true }).click()
+  await editor.getByText('上次检查 2026/11/19 10:30', { exact: true }).waitFor()
   await editor.getByRole('combobox', { name: '问题1性质' }).click()
   await page.getByText('原文异常，需要修复', { exact: true }).click()
   await editor.getByRole('button', { name: '生成修复建议', exact: true }).click()
@@ -264,6 +274,7 @@ try {
   assert.deepEqual(writes.at(-1), { raw_text: '她推开门。新的一天！' })
   await page.getByRole('textbox', { name: '搜索章节', exact: true }).fill('')
   await page.getByRole('button', { name: '1. 第一章重命名 · 编辑章节', exact: true }).click()
+  await editor.getByText('上次检查 2026/11/19 10:30', { exact: true }).waitFor()
   await currentRaw.fill('待放弃原文')
   await openResult()
   await resultText.fill('待放弃精简')

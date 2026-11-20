@@ -161,6 +161,7 @@
 }
 .chapter-editor-existing .chapter-editor-field { flex: 1 1 100%; }
 .chapter-editor-tasks { justify-content: flex-end; margin-inline-start: auto; }
+.chapter-editor-check-time { color: var(--app-muted, #536174); font-size: 13px; white-space: nowrap; }
 .chapter-source-card {
   --chapter-source-card-padding: 16px;
   display: grid;

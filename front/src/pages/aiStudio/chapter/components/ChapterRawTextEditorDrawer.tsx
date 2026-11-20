@@ -9,7 +9,7 @@ import {
   SaveOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
-import { ScriptProcessingService, StudioChaptersService } from '../../../../services/generated'
+import { FilmService, ScriptProcessingService, StudioChaptersService } from '../../../../services/generated'
 import type { ChapterCreate, SourceExplanation, SourceSpan } from '../../../../services/generated'
 import { SourceExplanationsEditor, sourceVersion, SOURCE_POLICY_VERSION } from './SourceExplanationsEditor'
 import type { ScriptConsistencyCheckResult } from './scriptConsistencyResult'
@@ -37,6 +37,11 @@ import './chapter-editor.css'
 export type ChapterDraft = Pick<ChapterCreate, 'title' | 'raw_text' | 'condensed_text' | 'source_explanations'>
 
 type EditorMode = 'raw' | 'condensed' | 'compare'
+
+const checkTime = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+})
 
 type HistoryItem = {
   id: string
@@ -391,6 +396,26 @@ export function ChapterRawTextEditorDrawer({
     relationEntityId: chapterId,
     onTaskSettled: applyConsistencyTaskResult,
   })
+
+  const [lastCheckAt, setLastCheckAt] = useState<number>()
+  useEffect(() => {
+    if (!open || !chapterId) return
+    let live = true
+    const request = FilmService.listTasksApiV1FilmTasksGet({
+      targetType: CONSISTENCY_CHECK_RELATION_TYPE, targetId: chapterId, statuses: ['succeeded'], limit: 1,
+    })
+    void request.then(({ data }) => {
+      const latest = data?.items[0]
+      const time = latest?.started_at_ts ?? latest?.finished_at_ts
+      if (live && time != null) setLastCheckAt(previous => Math.max(previous ?? time, time))
+    }).catch(() => undefined)
+    return () => { live = false; request.cancel() }
+  }, [chapterId, open])
+  useEffect(() => {
+    if (consistencySettledTask?.status !== 'succeeded') return
+    const time = consistencySettledTask.startedAtTs ?? consistencySettledTask.finishedAtTs
+    if (time != null) setLastCheckAt(previous => Math.max(previous ?? time, time))
+  }, [consistencySettledTask])
 
   const { task: simplifyTask, settledTask: simplifySettledTask, trackTaskData: trackSimplifyTaskData, applyCancelData: applySimplifyCancelData, setTrackedTask: setTrackedSimplifyTask } = useCancelableRelationTask({
     enabled: open && !!chapterId,
@@ -806,10 +831,15 @@ export function ChapterRawTextEditorDrawer({
         {!loading && !loadError && <div className="chapter-editor-name-row">
           <label className="chapter-editor-field">章节名称<Input aria-label="章节名称" value={chapterTitle} disabled={actionsLoading} onChange={event => setChapterTitle(event.target.value)} /></label>
           {!creating && <Space wrap className="chapter-editor-tasks" aria-label="原文工具" role="group">
-            <Button icon={<ReloadOutlined aria-hidden />} loading={checkingConsistency || !!consistencyTask}
-              disabled={actionsLoading || !rawText.trim()} onClick={() => void handleCheckConsistency()}>
-              {checkingConsistency || consistencyTask ? '检查中' : '原文一致性检查'}
-            </Button>
+            <Space wrap>
+              {lastCheckAt !== undefined && <span className="chapter-editor-check-time">
+                上次检查 <time dateTime={new Date(lastCheckAt * 1000).toISOString()}>{checkTime.format(lastCheckAt * 1000)}</time>
+              </span>}
+              <Button icon={<ReloadOutlined aria-hidden />} loading={checkingConsistency || !!consistencyTask}
+                disabled={actionsLoading || !rawText.trim()} onClick={() => void handleCheckConsistency()}>
+                {checkingConsistency || consistencyTask ? '检查中' : '原文一致性检查'}
+              </Button>
+            </Space>
             {consistencyTask && <Button danger disabled={consistencyTask.cancelRequested} onClick={() => void handleCancelConsistencyTask()}>
               {consistencyTask.cancelRequested ? '正在取消' : '取消检查'}
             </Button>}
