@@ -301,6 +301,7 @@ export class StudioEntitiesService {
                 'entity_id': entityId,
             },
             errors: {
+                409: `来源仍被长期参考使用，请先更换或解除参考`,
                 422: `Validation Error`,
             },
         });
@@ -398,6 +399,7 @@ export class StudioEntitiesService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                409: `来源仍被长期参考使用，请先更换或解除参考`,
                 422: `Validation Error`,
             },
         });
@@ -425,6 +427,7 @@ export class StudioEntitiesService {
                 'image_id': imageId,
             },
             errors: {
+                409: `来源仍被长期参考使用，请先更换或解除参考`,
                 422: `Validation Error`,
             },
         });

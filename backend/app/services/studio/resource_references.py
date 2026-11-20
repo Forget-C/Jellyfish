@@ -17,15 +17,22 @@ async def validate_resource_references(db, kind, project_id, references, *, savi
         "prop": {"prop", "design", "style"},
         "costume": {"costume", "design", "style"},
     }
+    canonical_sources = {}
     if saving:
         sources = sorted({(item["source_kind"], item["source_id"]) for item in references if item.get("source_kind")})
         for source_kind, source_id in sources:
-            if await db.get(entity_spec(source_kind).model, source_id, with_for_update=True, populate_existing=True) is None:
+            source = await db.get(entity_spec(source_kind).model, source_id, with_for_update=True, populate_existing=True)
+            if source is None:
                 raise HTTPException(400, "参考来源对象不存在")
+            canonical_sources[source_kind, source_id] = source.id
     for reference in sorted(references, key=lambda item: item["file_id"]):
         if reference["role"] not in allowed_roles[kind]:
             raise HTTPException(400, "参考用途不适用于当前对象类别")
-        await require_available_file(db, file_id=reference["file_id"], expected_type="image")
+        file = await require_available_file(db, file_id=reference["file_id"], expected_type="image")
+        if saving:
+            reference["file_id"] = file.id
+            if reference.get("source_kind"):
+                reference["source_id"] = canonical_sources[reference["source_kind"], reference["source_id"]]
         source_kind, source_id = reference.get("source_kind"), reference.get("source_id")
         if bool(source_kind) != bool(source_id):
             raise HTTPException(400, "参考来源类别和对象必须同时提供")
@@ -71,7 +78,7 @@ async def require_no_saved_references(db, match, *, label):
     from sqlalchemy import exists, func
     from app.models.studio import Project
 
-    owners = []
+    owners = {}
     for kind, title in (("actor", "演员"), ("character", "角色"), ("scene", "场所"), ("prop", "道具"), ("costume", "服装")):
         model = entity_spec(kind).model
         if db.get_bind().dialect.name == "sqlite":
@@ -81,10 +88,12 @@ async def require_no_saved_references(db, match, *, label):
             )).correlate(model))
         else:
             contains = func.json_contains(model.references, json.dumps(match))
-        query = select(Project.name, model.name).select_from(model).outerjoin(
+        query = select(Project.name, model.name, model.project_id, model.id).select_from(model).outerjoin(
             Project, Project.id == model.project_id).where(contains).order_by(model.project_id, model.id)
-        for project, name in (await db.execute(query)).all():
+        for project, name, project_id, owner_id in (await db.execute(query)).all():
             scope = f"项目《{project}》" if project is not None else "共享库"
-            owners.append(f"{scope} › {title}「{name}」")
+            owners.setdefault(f"{scope} › {title}「{name}」", []).append((project_id, owner_id))
     if owners:
-        raise HTTPException(409, f"{label}仍被 {len(owners)} 个对象用作长期参考：{'、'.join(owners)}。请先在对象的参考区更换或移除图片。")
+        labels = [text if len(ids) == 1 else f"{text}（项目 {project_id}，对象 {owner_id}）"
+                  for text, ids in owners.items() for project_id, owner_id in ids]
+        raise HTTPException(409, f"{label}仍被 {len(labels)} 个对象用作长期参考：{'、'.join(labels)}。请先在对象的参考区更换或移除图片。")

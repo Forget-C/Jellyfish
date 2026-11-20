@@ -106,7 +106,7 @@ async def update_entity_image(
     if update_data.get("file_id") is not None:
         await require_available_file(db, file_id=update_data["file_id"], expected_type="image")
     if obj.file_id and "file_id" in update_data and update_data["file_id"] != obj.file_id:
-        await require_no_saved_references(db, {"source_kind": normalize_entity_type(entity_type), "source_id": entity_id, "source_image_id": image_id},
+        await require_no_saved_references(db, {"source_kind": normalize_entity_type(entity_type), "source_id": getattr(obj, spec.id_field), "source_image_id": image_id},
                                           label="来源图片")
     if "file_id" in update_data:
         # 手动采用或清空使旧生成任务的自动采用失效。
@@ -135,7 +135,7 @@ async def delete_entity_image(
     if obj is None or getattr(obj, spec.id_field) != entity_id:
         return
     if obj.file_id:
-        await require_no_saved_references(db, {"source_kind": normalize_entity_type(entity_type), "source_id": entity_id, "source_image_id": image_id},
+        await require_no_saved_references(db, {"source_kind": normalize_entity_type(entity_type), "source_id": getattr(obj, spec.id_field), "source_image_id": image_id},
                                           label="来源图片")
     await db.delete(obj)
     await db.flush()

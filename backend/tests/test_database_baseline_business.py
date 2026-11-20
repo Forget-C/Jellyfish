@@ -304,10 +304,12 @@ async def test_saved_asset_reference_delete_race(baseline_client, image_storage)
         await data(client.post(STUDIO + '/entities/scene', json={'id': owner, 'name': owner, 'project_id': project}), 201)
         image = await data(client.post(STUDIO + '/files/upload', files={'file': ('ref.png', b'image', 'image/png')},
             data={'project_id': project, 'usage_kind': 'generation_upload'}), 201)
-        url = STUDIO + '/files/' + image['id']
+        mysql = sessions.kw['bind'].dialect.name == 'mysql'
+        file_id = image['id']
+        url = STUDIO + '/files/' + (file_id.upper() if mysql and order == 'save' else file_id)
         release = url + '/upload-retention'
         async def save():
-            return await client.patch(path, json={'references': [{'role': 'design', 'file_id': image['id']}]})
+            return await client.patch(path, json={'references': [{'role': 'design', 'file_id': file_id.upper() if mysql else file_id}]})
         if order == 'save':
             assert (await save()).status_code == 200
             denial = await client.delete(release, params={'project_id': project})
@@ -316,10 +318,69 @@ async def test_saved_asset_reference_delete_race(baseline_client, image_storage)
             assert (await client.patch(path, json={'references': []})).status_code == 200
         await data(client.delete(release, params={'project_id': project}))
         if order == 'race':
-            if sessions.kw['bind'].dialect.name != 'mysql':
+            if not mysql:
                 continue
             put, remove = await asyncio.gather(save(), client.delete(url))
             assert (put.status_code, remove.status_code) in {(200, 409), (410, 200)}
         else:
             await data(client.delete(url))
             assert (await save()).status_code == 410
+
+
+@pytest.mark.asyncio
+async def test_saved_asset_reference_scope_and_atomic_replace(baseline_client, image_storage):
+    client, _ = baseline_client
+    async def upload(name):
+        row = await data(client.post(STUDIO + '/files/upload', files={'file': (name, b'image', 'image/png')}), 201)
+        return row['id']
+    first, second = await upload('old.png'), await upload('new.png')
+    url = STUDIO + '/files/'
+    refs = [{'role': role, 'file_id': first} for role in ('design', 'style')]
+    paths = []
+    projects = []
+    for kind in ('scene', 'scene', 'actor', 'prop', 'costume', 'character'):
+        project, identity = uuid4().hex, uuid4().hex
+        projects.append(project)
+        await data(client.post(STUDIO + '/projects', json={'id': project, 'name': '同名项目', 'style': '真人都市'}), 201)
+        prefix = STUDIO + '/entities/' + kind
+        await data(client.post(prefix, json={'id': identity, 'name': '同名对象', 'project_id': project, 'references': refs}), 201)
+        paths.append(prefix + '/' + identity)
+    denied = await client.delete(url + first)
+    assert denied.status_code == 409
+    message = denied.json()['message']
+    assert '6 个对象' in message and all(p in message for p in projects[:2])
+    assert (await client.get(url + first + '/download')).content == b'image'
+    new_refs = [{'role': 'design', 'file_id': second}]
+    failed = await client.patch(paths[0], json={'references': [*new_refs, {'role': 'design', 'file_id': 'missing'}]})
+    assert failed.status_code == 404
+    saved = await data(client.get(paths[0]))
+    assert [r['file_id'] for r in saved['references']] == [first, first]
+    await data(client.patch(paths[0], json={'references': new_refs}))
+    assert (await client.delete(url + second)).status_code == 409
+    for path in paths[1:]:
+        assert (await client.delete(url + first)).status_code == 409
+        await data(client.delete(path))
+    assert (await client.get(url + first + '/download')).content == b'image'
+    await data(client.delete(url + first))
+
+@pytest.mark.asyncio
+async def test_saved_asset_reference_member_survives_replacement_and_deletion_attempts(baseline_client, image_storage):
+    client, _ = baseline_client
+    source, owner = uuid4().hex, uuid4().hex
+    base = "/api/v1/studio"
+    files = []
+    for name in ("first", "second"):
+        response = await client.post(base + "/files/upload", files={"file": (name + ".png", b"img", "image/png")})
+        files.append(response.json()["data"]["id"])
+    path = base + "/entities/scene"
+    assert (await client.post(path, json={"id": source, "name": source})).status_code == 201
+    image = (await client.post(f"{path}/{source}/images", json={"file_id": files[0], "view_angle": "LEFT"})).json()["data"]
+    member = f"{path}/{source}/images/" + str(image["id"])
+    reference = {"file_id": files[0], "role": "design", "source_kind": "scene", "source_id": source, "source_image_id": image["id"]}
+    assert (await client.post(path, json={"id": owner, "name": owner, "references": [reference]})).status_code == 201
+    assert (await client.patch(member, json={"file_id": files[1]})).status_code == 409
+    assert (await client.delete(member)).status_code == 409
+    assert (await client.delete(f"{path}/{source}")).status_code == 409
+    assert (await client.patch(member, json={"is_primary": True})).status_code == 200
+    assert (await client.delete(f"{path}/{owner}")).status_code == 200
+    assert (await client.patch(member, json={"file_id": files[1]})).status_code == 200

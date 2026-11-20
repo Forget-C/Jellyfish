@@ -162,6 +162,14 @@ try {
   await independent.getByRole('button', { name: '从素材中选择', exact: true }).click()
   modal = page.getByRole('dialog', { name: '项目文件库', exact: true })
   cleanupRow = modal.getByText('cleanup', { exact: true }).locator('../..')
+  const owners = api + '/api/v1/studio/entities/scene'
+  const owner = await fetch(owners, { method: 'POST', headers: json, body: JSON.stringify({
+    id: 'retention-owner', name: '参考场所', references: [{ file_id: uploadedId, role: 'design' }],
+  }) })
+  assert.equal(owner.status, 201, await owner.text())
+  await cleanupRow.getByRole('button', { name: '释放上传保留', exact: true }).click()
+  await modal.getByRole('alert').filter({ hasText: '共享库 › 场所「参考场所」' }).waitFor()
+  assert.equal((await fetch(owners + '/retention-owner', { method: 'DELETE' })).status, 200)
   await page.route('**/files/' + uploadedId + '/upload-retention?*', async route => { await route.fetch(); await route.abort('failed') }, { times: 1 })
   await cleanupRow.getByRole('button', { name: '释放上传保留', exact: true }).click()
   await modal.getByRole('alert').filter({ hasText: '清理结果未确认' }).waitFor()

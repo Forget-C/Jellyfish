@@ -279,7 +279,7 @@ async def delete_entity(
     if obj is None:
         return
     from app.services.studio.resource_references import require_no_saved_references
-    await require_no_saved_references(db, {"source_kind": entity_type, "source_id": entity_id}, label=f"来源对象「{obj.name}」")
+    await require_no_saved_references(db, {"source_kind": entity_type, "source_id": obj.id}, label=f"来源对象「{obj.name}」")
     if obj.project_id is None:
         # 删除独立副本后，原项目对象可再次明确入库。
         for kind in (("actor", "character") if entity_type == "actor" else (entity_type,)):

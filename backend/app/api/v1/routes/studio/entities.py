@@ -181,7 +181,7 @@ async def update_entity(
     return success_response(payload)
 
 
-@router.delete("/{entity_type}/{entity_id}", response_model=ApiResponse[None], summary="统一删除实体")
+@router.delete("/{entity_type}/{entity_id}", response_model=ApiResponse[None], responses={409: {"model": ApiResponse[None], "description": "来源仍被长期参考使用，请先更换或解除参考"}}, summary="统一删除实体")
 async def delete_entity(entity_type: str, entity_id: str, db: AsyncSession = Depends(get_db)) -> ApiResponse[None]:
     service = StudioEntitiesService(db)
     await service.delete_entity(entity_type=entity_type, entity_id=entity_id)
@@ -234,6 +234,7 @@ async def create_entity_image(
 @router.patch(
     "/{entity_type}/{entity_id}/images/{image_id}",
     response_model=ApiResponse[dict[str, Any]],
+    responses={409: {"model": ApiResponse[None], "description": "来源仍被长期参考使用，请先更换或解除参考"}},
     summary="统一更新实体图片",
 )
 async def update_entity_image(
@@ -256,6 +257,7 @@ async def update_entity_image(
 @router.delete(
     "/{entity_type}/{entity_id}/images/{image_id}",
     response_model=ApiResponse[None],
+    responses={409: {"model": ApiResponse[None], "description": "来源仍被长期参考使用，请先更换或解除参考"}},
     summary="统一删除实体图片",
 )
 async def delete_entity_image(

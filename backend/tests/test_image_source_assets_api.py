@@ -407,26 +407,8 @@ async def test_saved_reference_blocks_file_deletion_until_last_owner_releases(cl
     assert all(word in response.text for word in ("屋内", "屋外", "共享库", "reference"))
     assert (await client.patch(path + "/屋内", json={"references": []})).status_code == 200
     assert (await client.delete(delete_url)).status_code == 409
-    assert (await client.delete(path + "/屋外")).status_code == 200
+    deleted = await client.delete(path + "/屋外")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"code": 200, "message": "success", "data": None, "meta": None}
+    assert (await client.get(path + "/屋外")).status_code == 404
     assert (await client.delete(delete_url)).status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_saved_source_member_survives_replacement_and_deletion_attempts(client):
-    base = "/api/v1/studio"
-    files = []
-    for name in ("first", "second"):
-        response = await client.post(base + "/files/upload", files={"file": (name + ".png", b"img", "image/png")})
-        files.append(response.json()["data"]["id"])
-    path = base + "/entities/scene"
-    assert (await client.post(path, json={"id": "source", "name": "来源"})).status_code == 201
-    image = (await client.post(path + "/source/images", json={"file_id": files[0], "view_angle": "LEFT"})).json()["data"]
-    member = path + "/source/images/" + str(image["id"])
-    reference = {"file_id": files[0], "role": "design", "source_kind": "scene", "source_id": "source", "source_image_id": image["id"]}
-    assert (await client.post(path, json={"id": "owner", "name": "使用方", "references": [reference]})).status_code == 201
-    assert (await client.patch(member, json={"file_id": files[1]})).status_code == 409
-    assert (await client.delete(member)).status_code == 409
-    assert (await client.delete(path + "/source")).status_code == 409
-    assert (await client.patch(member, json={"is_primary": True})).status_code == 200
-    assert (await client.delete(path + "/owner")).status_code == 200
-    assert (await client.patch(member, json={"file_id": files[1]})).status_code == 200
