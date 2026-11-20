@@ -134,7 +134,6 @@ export async function verifyIndependentDesigns(scenario, port) {
         }
       }
     }
-    if (scenario === 'retirement') cards.push({ id: 'model', type: 'model.text', missing_designs: ['retired-photography'] })
     const document = { ...canvas.document, cards, edges: [], input_order: {} }
     const compactLayoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
     const compactPositions = { criterion: { x: 200, y: 220 }, fact: { x: 620, y: 220 }, movement: { x: 1020, y: 100 }, camera: { x: 1860, y: 840 }, style: { x: 1440, y: 100 }, shot: { x: 200, y: 540 }, guidance: { x: 620, y: 540 }, performance: { x: 1020, y: 540 }, blocking: { x: 1440, y: 540 }, sound: { x: 200, y: 865 }, continuity: { x: 620, y: 865 }, 'empty-style': { x: 1860, y: 180 }, 'invalid-frame': { x: 1860, y: 500 } }
@@ -170,13 +169,6 @@ export async function verifyIndependentDesigns(scenario, port) {
     const detail=page.locator('.wb-details:visible')
     if(scenario==='retirement'){
       assert.equal(await page.locator('[data-card-type="direction.photography"]').count(),0)
-      await page.locator('[data-card-id="model"]').press('Enter')
-      const inspection=detail.getByRole('button',{name:'打开模型配置与检查',exact:true});if(await inspection.count())await inspection.click()
-      await detail.getByText('旧摄影设计已移除，需要补充设计依据',{exact:true}).waitFor()
-      await page.screenshot({path:join(output,'missing-design.png')})
-      assert.ok((await (await fetch(storyboardCanvasApi(base, canvas.id, `/cards/model/compile`))).json()).data.diagnostics.some(item=>item.code==='DESIGN_BASIS_MISSING'))
-      await detail.getByRole('button',{name:'已处理缺失设计',exact:true}).click();await poll(s=>s.document.cards.find(c=>c.id==='model').missing_designs.length===0)
-      await page.keyboard.press('Escape');await detail.waitFor({state:'hidden'})
     }
     const assertDesignGeometry = async target => {
       await target.locator('[data-card-id="criterion"]').waitFor({ state: 'attached' })

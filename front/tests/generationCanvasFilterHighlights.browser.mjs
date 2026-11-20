@@ -38,7 +38,7 @@ try {
   const document={...canvas.document,cards:[
     {id:'source',type:'content.text',text:'独立采用内容'},
     {id:'image',type:'content.image',file_id:null},
-    {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[{id:'reference',kind:'reference',source}]},config:{}},
+    {id:'model',type:'model.text',model_id:'canvas-runtime-text',input_bindings:[{id:'source',input_port:'text',source}],prompt:{segments:[{id:'reference',kind:'reference',binding_id:'source'}]},config:{}},
     {id:'stacktext',type:'content.text',text:'堆叠内说明'},
     {id:'audio',type:'content.audio',file_id:null},
   ],

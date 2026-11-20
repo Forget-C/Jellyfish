@@ -1,4 +1,5 @@
 """人物、物件和场所经画布 HTTP 保存并发布明确出口。"""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.generation_canvas_reference_fixtures import reference_image_sources
@@ -55,7 +56,7 @@ async def test_incomplete_objects_publish_only_literal_description_and_models_ad
                     {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'place', 'port_id': 'text', 'position': 0}}]}}]
     doc['edges'] = [{'id': 'edge', 'source_card': 'place', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}]
     doc['input_order'] = {'model': {'text': ['edge']}}
-    saved = await client.put(url, json={'request_id': 'incomplete', 'expected_revision': 0, 'document': doc})
+    saved = await client.put(url, json={'request_id': 'incomplete', 'expected_revision': 0, 'document': bind_document_prompts(doc)})
     assert saved.status_code == 200, saved.text
     outputs = (await client.get(url + '/cards/place/outputs')).json()['data']['outputs']
     assert len(outputs) == 1
@@ -63,7 +64,7 @@ async def test_incomplete_objects_publish_only_literal_description_and_models_ad
     assert compiled['text'] == '空屋里有张三'
     doc['cards'][0].update(object_id='room', name='空屋')
     doc['edges'][0]['source_port'] = 'object'
-    rejected = await client.put(url, json={'request_id': 'wrong-purpose', 'expected_revision': 1, 'document': doc})
+    rejected = await client.put(url, json={'request_id': 'wrong-purpose', 'expected_revision': 1, 'document': bind_document_prompts(doc)})
     assert rejected.status_code == 422
     assert rejected.json()['detail']['code'] == 'INCOMPATIBLE_PORT'
 
@@ -79,13 +80,13 @@ async def test_structural_categories_and_description_binding_protection(canvas_c
     doc['cards'] = [source, {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'item', 'port_id': 'text', 'position': 0}}]}}]
     doc['edges'] = [{'id': 'edge', 'source_card': 'item', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}]
     doc['input_order'] = {'model': {'text': ['edge']}}
-    assert (await client.put(url, json={'request_id': 'item', 'expected_revision': 0, 'document': doc})).status_code == 200
+    assert (await client.put(url, json={'request_id': 'item', 'expected_revision': 0, 'document': bind_document_prompts(doc)})).status_code == 200
     source['name'] = '改名物件'
-    assert (await client.put(url, json={'request_id': 'rename', 'expected_revision': 1, 'document': doc})).status_code == 200
+    assert (await client.put(url, json={'request_id': 'rename', 'expected_revision': 1, 'document': bind_document_prompts(doc)})).status_code == 200
     outputs = (await client.get(url + '/cards/item/outputs')).json()['data']['outputs']
     assert outputs[1]['payload'] == {'kind': 'object_reference', 'object_id': 'item-one', 'name': '改名物件', 'category': category}
     removed = {**doc, 'cards': doc['cards'][1:], 'edges': [], 'input_order': {}}
-    rejection = await client.put(url, json={'request_id': 'remove', 'expected_revision': 2, 'document': removed})
+    rejection = await client.put(url, json={'request_id': 'remove', 'expected_revision': 2, 'document': bind_document_prompts(removed)})
     assert rejection.status_code == 422
     assert rejection.json()['detail']['code'] == 'REFERENCE_IN_USE'
 
@@ -119,7 +120,7 @@ async def test_adopted_description_executes_with_its_own_identity_without_privat
         'canvas_id': runtime.canvas_id, 'card_id': 'person', 'port_id': 'text', 'position': 0}}]}
     runtime.document['edges'] = [{'id': 'edge', 'source_card': 'person', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}]
     runtime.document['input_order'] = {'m': {'text': ['edge']}}
-    saved = await runtime.client.put(runtime.url, json={'request_id': 'description', 'expected_revision': 1, 'document': runtime.document})
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'description', 'expected_revision': 1, 'document': bind_document_prompts(runtime.document)})
     assert saved.status_code == 200, saved.text
     accepted, _ = await accept(runtime)
     received = []

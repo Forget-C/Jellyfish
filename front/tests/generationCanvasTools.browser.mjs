@@ -38,7 +38,7 @@ try {
   const canvas=(await response.json()).data
   const source={canvas_id:canvas.id,card_id:'source',port_id:'text',position:0}
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'被隐藏但明确采用的内容'},
-    {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[{id:'reference',kind:'reference',source}]},config:{}}],
+    {id:'model',type:'model.text',model_id:'canvas-runtime-text',input_bindings:[{id:'source',input_port:'text',source}],prompt:{segments:[{id:'reference',kind:'reference',binding_id:'source'}]},config:{}}],
     edges:[{id:'candidate',source_card:'source',source_port:'text',target_card:'model',target_port:'text'}],input_order:{model:{text:['candidate']}}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok,await seed.clone().text())

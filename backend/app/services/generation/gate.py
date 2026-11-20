@@ -59,17 +59,12 @@ class GenerationEntityGate:
         if command.target.kind == GenerationTargetKind.canvas_node:
             from app.models.generation_canvas import CanvasRunNode
             node = await db.get(CanvasRunNode, command.target.entity_id)
-            private = node.execution_snapshot or {}
-            if private.get('execution_config'):
-                frozen = FrozenGenerationConfig.model_validate(private['execution_config'])
+            private = node.execution_snapshot
+            if not private or not private.get('execution_config'):
+                raise HTTPException(422, 'canvas_execution_config_missing')
+            frozen = FrozenGenerationConfig.model_validate(private['execution_config'])
         model = None if frozen else await self._resolve_model(db, command)
         await self._validate_media(db, command.request.media)
-        if frozen is None and command.target.kind == GenerationTargetKind.canvas_node:
-            from app.services.llm.provider_resolver import resolve_provider_config_from_provider
-            provider = await db.get(Provider, model.provider_id)
-            cfg = resolve_provider_config_from_provider(provider=provider, category=model.category)
-            frozen = FrozenGenerationConfig(model_name=model.name, model_params=model.params or {}, provider_id=provider.id,
-                provider_key=cfg.provider_key, api_key=cfg.api_key, base_url=cfg.base_url)
         return ResolvedGenerationSnapshot(
             execution_config=frozen,
             model_id=command.request.model_id if frozen else model.id,
