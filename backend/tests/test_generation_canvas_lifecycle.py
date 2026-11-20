@@ -1,4 +1,5 @@
 """Public file/canvas deletion through actual media generation and history."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import seed_scene_canvas, canvas_params, canvas_url
 import asyncio
 import base64
@@ -114,7 +115,7 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
                 for source in ('image', 'known')]}}]
         doc['edges'] = [{'id': source + '-B', 'source_card': source, 'source_port': 'image', 'target_card': 'B', 'target_port': 'image'} for source in ('image', 'known')]
         doc['input_order'] = {'B': {'image': ['image-B', 'known-B']}}
-        await save(runtime, doc)
+        await save(runtime, bind_document_prompts(doc))
         await run(runtime, 'image')
         await drain(worker)
         accepted, _ = await run(runtime, 'B')
@@ -132,6 +133,7 @@ async def test_single_consumer_retains_uploaded_input_until_canvas_history_remov
         assert (await runtime.client.delete('/projects/' + runtime.project_id)).status_code == 409
         doc['cards'] = [card for card in doc['cards'] if card['id'] != 'known']
         doc['cards'][1]['prompt']['segments'] = [doc['cards'][1]['prompt']['segments'][0]]
+        doc['cards'][1]['input_bindings'] = [doc['cards'][1]['input_bindings'][0]]
         doc['edges'] = [doc['edges'][0]]
         doc['input_order']['B']['image'] = ['image-B']
         await save(runtime, doc)

@@ -1,4 +1,5 @@
 """Actual canvas HTTP → submitter → worker image requests and archived results."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 import asyncio
 import base64
 import json
@@ -96,7 +97,7 @@ async def test_actual_image_subset_uses_identity_order_and_never_replaces_litera
     runtime.document['input_order'] = {'image': {'image': ['one', 'two', 'three', 'alias']}}
     runtime.document['cards'][0]['prompt']['segments'] = [{'kind': 'text', 'id': 'literal', 'text': '普通图片3 [media:1] '}] + [
         {'kind': 'reference', 'id': str(index), 'source': {'canvas_id': runtime.canvas_id, 'card_id': name, 'port_id': 'image', 'position': 0}} for index, name in enumerate(sources)]
-    assert (await runtime.client.put(runtime.url, json={'request_id': 'refs', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'refs', 'expected_revision': 2, 'document': bind_document_prompts(runtime.document)})).status_code == 200
     _, preview = await accept(runtime)
     calls = []
     def provider(request):
@@ -130,7 +131,7 @@ async def test_image_precheck_reports_actual_reference_capacity_without_truncati
     runtime.document['edges'] = [{'id': name, 'source_card': name, 'source_port': 'image', 'target_card': 'image', 'target_port': 'image'} for name in ('a', 'b')]
     runtime.document['input_order'] = {'image': {'image': ['a', 'b']}}
     runtime.document['cards'][0]['prompt']['segments'] = [{'kind': 'reference', 'id': name, 'source': {'canvas_id': runtime.canvas_id, 'card_id': name, 'port_id': 'image', 'position': 0}} for name in ('a', 'b')]
-    assert (await runtime.client.put(runtime.url, json={'request_id': 'capacity', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'capacity', 'expected_revision': 2, 'document': bind_document_prompts(runtime.document)})).status_code == 200
     register_image_model_capability(provider='openai', model_prefix='image-model', capability=ImageModelCapability(max_reference_images=1, supports_duplicate_reference_images=False))
     try:
         preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'image'})).json()['data']
@@ -138,7 +139,8 @@ async def test_image_precheck_reports_actual_reference_capacity_without_truncati
         assert {'REFERENCE_COUNT_EXCEEDED', 'DUPLICATE_MEDIA_UNSUPPORTED'} <= {item['code'] for item in preview['diagnostics']}
         assert len(preview['input']['media']) == 2
         runtime.document['cards'][0]['prompt']['segments'].pop()
-        assert (await runtime.client.put(runtime.url, json={'request_id': 'subset-capacity', 'expected_revision': 3, 'document': runtime.document})).status_code == 200
+        runtime.document['cards'][0]['input_bindings'].pop()
+        assert (await runtime.client.put(runtime.url, json={'request_id': 'subset-capacity', 'expected_revision': 3, 'document': bind_document_prompts(runtime.document)})).status_code == 200
         valid = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'image'})).json()['data']
         assert valid['can_run'] and len(valid['input']['media']) == 1
     finally:
@@ -321,7 +323,7 @@ async def test_downstream_image_three_request_contains_only_the_third_model_resu
             'prompt': {'segments': [{'kind': 'text', 'id': 'literal', 'text': '图片3 [media:1] '}, {'kind': 'reference', 'id': 'third', 'source': reference}, {'kind': 'reference', 'id': 'third-again', 'source': reference}]}})
         runtime.document['edges'] = [{'id': 'models', 'source_card': 'image', 'source_port': 'image', 'target_card': 'consumer', 'target_port': 'image'}]
         runtime.document['input_order'] = {'consumer': {'image': ['models']}}
-        assert (await runtime.client.put(runtime.url, json={'request_id': 'downstream', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+        assert (await runtime.client.put(runtime.url, json={'request_id': 'downstream', 'expected_revision': 2, 'document': bind_document_prompts(runtime.document)})).status_code == 200
         preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
         assert preview['can_run'] and len(preview['input']['media']) == 1
         assert preview['input']['mapping'][0]['token'] == '@图片3'

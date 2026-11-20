@@ -63,7 +63,6 @@ class CanvasRun(Base, TimestampMixin):
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     lifecycle: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    scope: Mapped[list] = mapped_column(JSON, nullable=False)
 
 
 class CanvasRunNode(Base):
@@ -128,8 +127,6 @@ class CanvasPreview(Base):
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     card_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False, default='single')
-    card_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     basis_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[Any] = mapped_column(DateTime, nullable=False)

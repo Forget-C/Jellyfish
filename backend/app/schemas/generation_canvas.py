@@ -10,7 +10,7 @@ from app.core.contracts.video_generation import AudioCapability
 from app.core.contracts.generation_canvas import DesignMediaUse, CompositionDesignFields, DesignFrameTarget, DesignMediaOrigin, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
-from app.core.contracts.photography import PhotographyTextPayload, ImageFrameTarget
+from app.core.contracts.photography import ImageFrameTarget
 
 
 class CardDefinition(BaseModel):
@@ -99,7 +99,7 @@ class PromptReference(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1)
     kind: Literal['reference'] = Field(json_schema_extra={'enum': ['reference']})
-    binding_id: str | None = None
+    binding_id: str = Field(min_length=1)
     source: OutputIdentity | None = Field(default=None, exclude=True)
 
 
@@ -144,61 +144,28 @@ class ModelCard(CardDefinition):
     model_id: str | None = None
     show_result_cards: bool = Field(default=False, exclude_if=lambda value: not value, description='在画布展开正式结果，仅控制显示')
     detached_results: list[CanvasDetachedResult] = Field(default_factory=list, exclude_if=lambda value: not value)
-    missing_designs: list[str] = Field(default_factory=list, description='已移除设计的稳定身份，补充或明确处理前阻塞运行')
     prompt: PromptDocument = Field(default_factory=PromptDocument)
     input_bindings: list[InputBinding] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def resolve_prompt_bindings(self):
-        """读取旧文档时规范化来源；写出的提示词只保留绑定身份。"""
+        """验证稳定绑定，并为编译器取得同一份来源。"""
         positions = [result.position for result in self.detached_results]
         if len(positions) != len(set(positions)):
             raise ValueError('同一输出位置只能保留最后一次固定记录')
         bindings = {binding.id: binding for binding in self.input_bindings}
-        legacy_groups = {binding.id for binding in self.input_bindings if 'subject_name' not in binding.model_fields_set}
         if len(bindings) != len(self.input_bindings):
             raise ValueError('输入绑定身份必须唯一')
         # after 校验器收到的是 PromptDocument；Pylint 误将默认工厂推断为 FieldInfo。
         for segment in self.prompt.segments:  # pylint: disable=no-member
             refs = [segment] if isinstance(segment, PromptReference) else segment.references if isinstance(segment, PromptInstruction) else []
-            port = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}.get(
-                getattr(segment, 'command', ''), None)
             for ref in refs:
-                subject_name = segment.parameters.get('name', '').strip() if isinstance(segment, PromptInstruction) and segment.command == '主体参考' else None
-                if ref.binding_id is None:
-                    if ref.source is None:
-                        raise ValueError('引用缺少输入绑定')
-                    actual_port = port or ref.source.port_id
-                    if self.type == 'model.video' and actual_port in ('image', 'video'):
-                        actual_port = 'subject_' + actual_port
-                    if actual_port == 'subject_image' and ref.source.port_id == 'video':
-                        actual_port = 'subject_video'
-                    existing = next((binding for binding in bindings.values()
-                        if binding.source == ref.source and binding.input_port == actual_port and binding.subject_name == subject_name), None)
-                    binding = existing or InputBinding(id='input-' + ref.id, source=ref.source, input_port=actual_port, subject_name=subject_name)
-                    bindings[binding.id] = binding
-                    ref.binding_id = binding.id
                 binding = bindings.get(ref.binding_id)
                 if binding is None:
                     raise ValueError('引用的输入绑定不存在')
                 if ref.source is not None and ref.source != binding.source:
                     raise ValueError('引用来源与输入绑定不一致')
-                # 旧 v2 跨主体复用绑定；规范化时拆开用途，不能静默任选第一个主体。
-                if subject_name is not None and binding.id in legacy_groups and binding.subject_name not in (None, subject_name):
-                    grouped = next((value for value in bindings.values() if value.source == binding.source
-                        and value.input_port == binding.input_port and value.subject_name == subject_name), None)
-                    if grouped is None:
-                        identifier = 'input-' + ref.id
-                        while identifier in bindings:
-                            identifier += '-group'
-                        grouped = binding.model_copy(update={'id': identifier, 'subject_name': subject_name})
-                        bindings[grouped.id] = grouped
-                    binding = grouped
-                    ref.binding_id = binding.id
-                if subject_name is not None and binding.subject_name is None:
-                    binding.subject_name = subject_name
                 ref.source = binding.source
-        self.input_bindings = list(bindings.values())
         return self
 
 
@@ -998,7 +965,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: Literal['text', 'image', 'video', 'audio']
-    payload: Annotated[BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload | PhotographyTextPayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -1017,7 +984,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (BasisTextOutputPayload, DialogueReferencePayload, ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload, CriterionReferencePayload, PhotographyTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (BasisTextOutputPayload, DialogueReferencePayload, ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload, CriterionReferencePayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self

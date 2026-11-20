@@ -217,18 +217,6 @@ class TaskWorker:
                 task = await self._load(task_id)
                 if task is None:
                     return
-                if task.target_type == 'canvas_node':
-                    async with self.sessions() as db:
-                        from app.models.generation_canvas import CanvasRunNode
-                        from app.services.generation_canvas.snapshot_support import require_supported_snapshot
-                        node = await db.get(CanvasRunNode, task.target_id)
-                        if node:
-                            from fastapi import HTTPException
-                            try:
-                                require_supported_snapshot(node.execution_snapshot or {})
-                            except HTTPException as error:
-                                await self._fail(task.id, error.detail['code'], error.detail['message'])
-                                return
                 if task.kind == AUTO_CHECK_DISPATCH:
                     from app.services.generation_canvas.automatic_checks import dispatch_automatic_checks
                     async with self.sessions.begin() as db:

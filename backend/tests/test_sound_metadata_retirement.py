@@ -4,9 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 import sqlalchemy as sa
 import pytest
-from fastapi import HTTPException
 from app.schemas.generation_canvas import DialogueCard, SoundArrangementCard
-from app.services.generation_canvas.snapshot_support import require_supported_snapshot
 
 
 @pytest.mark.parametrize('model,fields', [(DialogueCard, {'dialogue_id': 'line', 'version': 3}), (SoundArrangementCard, {'production': 'postproduction'})])
@@ -14,14 +12,6 @@ def test_current_contract_rejects_retired_sound_fields(model, fields):
     """New edits cannot silently restore retired semantics."""
     with pytest.raises(ValueError):
         model(id='card', **fields)
-
-
-def test_legacy_sound_snapshot_requires_fresh_submission():
-    snapshot = {'document': {'cards': [{'type': 'direction.dialogue', 'version': 3}]}}
-    with pytest.raises(HTTPException) as error:
-        require_supported_snapshot(snapshot)
-    assert error.value.detail['code'] == 'LEGACY_SOUND_SNAPSHOT'
-    assert snapshot['document']['cards'][0]['version'] == 3
 
 
 def test_migration_backs_up_only_changed_current_documents():

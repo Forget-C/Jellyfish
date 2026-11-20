@@ -62,7 +62,9 @@ try {
   for (const [source, target] of [['A', 'B'], ['B', 'C']]) {
     document.edges.push({ id: source + target, source_card: source, source_port: 'text', target_card: target, target_port: 'text' })
     document.input_order[target] = { text: [source + target] }
-    document.cards.find(card => card.id === target).prompt.segments = [{ kind: 'reference', id: target + 'ref', source: { canvas_id: canvas.id, card_id: source, port_id: 'text', position: 0 } }]
+    const card = document.cards.find(card => card.id === target)
+    card.input_bindings = [{ id: target + 'input', input_port: 'text', source: { canvas_id: canvas.id, card_id: source, port_id: 'text', position: 0 } }]
+    card.prompt.segments = [{ kind: 'reference', id: target + 'ref', binding_id: target + 'input' }]
   }
   await request('', { request_id: 'bind-existing', expected_revision: 1, document }, 'PUT')
   await control({ release: 2 })

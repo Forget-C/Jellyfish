@@ -1,4 +1,5 @@
 """Explicit model stages through HTTP, real submission and the actual Worker."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from copy import deepcopy
 from types import SimpleNamespace
 import asyncio
@@ -45,7 +46,7 @@ async def chain(state, monkeypatch):
     doc = deepcopy(state.document)
     doc['cards'] = [{'id': name, 'type': 'model.text', 'model_id': state.model_id,
         'prompt': {'segments': [{'id': 'body' + name, 'kind': 'text', 'text': name}]}} for name in ['A', 'B', 'C', 'X', 'Y']]
-    await save(state, doc)
+    await save(state, bind_document_prompts(doc))
     for name in ['A', 'B', 'C', 'X', 'Y']:
         await run(state, name)
         await drain(worker)
@@ -55,7 +56,7 @@ async def chain(state, monkeypatch):
         card = next(item for item in doc['cards'] if item['id'] == target)
         card['prompt']['segments'] = [{'kind': 'reference', 'id': 'ref' + target,
             'source': {'canvas_id': state.canvas_id, 'card_id': source, 'port_id': 'text', 'position': 0}}]
-    await save(state, doc)
+    await save(state, bind_document_prompts(doc))
     calls.clear()
     return doc, calls, worker
 
@@ -138,7 +139,7 @@ async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned
     doc['cards'] = [{'id': name, 'type': 'model.image', 'model_id': runtime.model_id,
         'config': {'count': 2, 'target_ratio': '1:1', 'resolution_profile': 'standard'},
         'prompt': {'segments': [{'kind': 'text', 'id': name, 'text': name}]}} for name in ['A', 'B', 'C']]
-    await save(runtime, doc)
+    await save(runtime, bind_document_prompts(doc))
     calls = []
     def provider(request):
         body = json.loads(request.content)
@@ -161,7 +162,7 @@ async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned
         doc['input_order']['B']['image'].append('knownB')
         doc['cards'][1]['prompt']['segments'].append({'kind': 'reference', 'id': 'knownRef',
             'source': {'canvas_id': runtime.canvas_id, 'card_id': 'known', 'port_id': 'image', 'position': 0}})
-        await save(runtime, doc)
+        await save(runtime, bind_document_prompts(doc))
         # Refresh the producer explicitly. Its new single image withdraws position 1.
         await run(runtime, 'A')
         await drain(worker)
@@ -173,8 +174,8 @@ async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned
         assert state['current_outputs']['C'][0]['file_id']
         # Rebind a valid current position, then admit B alone. Its known file is
         # pinned by the accepted request even if current edits remove the input.
-        doc['cards'][1]['prompt']['segments'][1]['source']['position'] = 0
-        await save(runtime, doc)
+        doc['cards'][1]['input_bindings'][0]['source']['position'] = 0
+        await save(runtime, bind_document_prompts(doc))
         accepted, preview = await run(runtime, 'B')
         assert preview['execution_nodes'] == ['B'] and len(accepted['task_ids']) == 1
         from app.api.v1.routes.studio.files import router as files_router
@@ -183,10 +184,11 @@ async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned
         assert any(item['usage_kind'] == 'canvas_run' for item in detail['usages'])
         assert (await runtime.client.delete('/files/known')).status_code == 409
         doc['cards'][1]['prompt']['segments'] = [item for item in doc['cards'][1]['prompt']['segments'] if item['id'] != 'knownRef']
+        doc['cards'][1]['input_bindings'] = [item for item in doc['cards'][1]['input_bindings'] if item['id'] != 'input-knownRef']
         doc['cards'] = [item for item in doc['cards'] if item['id'] != 'known']
         doc['edges'] = [item for item in doc['edges'] if item['id'] != 'knownB']
         doc['input_order']['B']['image'].remove('knownB')
-        await save(runtime, doc)
+        await save(runtime, bind_document_prompts(doc))
         detail = (await runtime.client.get('/files/known')).json()['data']
         assert any(item['usage_kind'] == 'canvas_run' for item in detail['usages'])
         calls.clear()

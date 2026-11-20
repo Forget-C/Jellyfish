@@ -1,4 +1,5 @@
 """画布公共 HTTP 边界：真实数据库与服务。"""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import append_canvas_path, canvas_params, canvas_url, seed_scene_canvas
 import asyncio
 import httpx
@@ -449,14 +450,15 @@ async def test_reference_protects_disconnect_but_final_document_cleanup_saves_on
     doc['edges'] = [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'receiver', 'target_port': 'text'}]
     doc['input_order'] = {'receiver': {'text': ['edge']}}
     url = canvas_url(f"/canvases/p/{canvas['id']}")
-    assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
+    assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': bind_document_prompts(doc)})).status_code == 200
     doc['edges'] = []
     doc['input_order'] = {}
-    blocked = await client.put(url, json={'request_id': 'blocked', 'expected_revision': 1, 'document': doc})
+    blocked = await client.put(url, json={'request_id': 'blocked', 'expected_revision': 1, 'document': bind_document_prompts(doc)})
     assert blocked.status_code == 422
     assert blocked.json()['detail']['code'] == 'REFERENCE_IN_USE'
     doc['cards'][1]['prompt']['segments'] = []
-    assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': doc})).status_code == 200
+    doc['cards'][1]['input_bindings'] = []
+    assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': bind_document_prompts(doc)})).status_code == 200
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
@@ -489,18 +491,19 @@ async def test_real_http_compile_preserves_mapping_and_locates_disconnect(canvas
            'edges': [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
            'input_order': {'model': {'text': ['edge']}}}
     url = canvas_url(f"/api/v1/studio/generation-canvases/p/{canvas['id']}")
-    assert (await client.put(url, json={'request_id': 'seed', 'expected_revision': 0, 'document': doc})).status_code == 200
+    assert (await client.put(url, json={'request_id': 'seed', 'expected_revision': 0, 'document': bind_document_prompts(doc)})).status_code == 200
     compiled = (await client.get((url + f'/cards/model/compile'))).json()['data']
     assert compiled['revision'] == 1
     assert compiled['text'] == 'literal @图片1' and compiled['can_run']
-    assert compiled['mapping'] == [{'token': '@文本1', 'source': ref['source'], 'media_position': None}]
+    assert compiled['mapping'] == [{'token': '@文本1', 'source': doc['cards'][1]['input_bindings'][0]['source'], 'media_position': None}]
     doc['edges'] = []
     doc['input_order'] = {}
-    blocked = await client.put(url, json={'request_id': 'disconnect', 'expected_revision': 1, 'document': doc})
+    blocked = await client.put(url, json={'request_id': 'disconnect', 'expected_revision': 1, 'document': bind_document_prompts(doc)})
     assert blocked.json()['data']['target'] == {'card_id': 'model', 'segment_id': 'reference', 'path': ['prompt', 'segments', 'reference']}
     assert blocked.json()['data']['blocks'] == ['save']
     doc['cards'][1]['prompt']['segments'] = []
-    assert (await client.put(url, json={'request_id': 'clear-and-disconnect', 'expected_revision': 1, 'document': doc})).status_code == 200
+    doc['cards'][1]['input_bindings'] = []
+    assert (await client.put(url, json={'request_id': 'clear-and-disconnect', 'expected_revision': 1, 'document': bind_document_prompts(doc)})).status_code == 200
 
 @pytest.mark.asyncio
 async def test_duplicate_prompt_segment_identity_cannot_save(canvas_client):

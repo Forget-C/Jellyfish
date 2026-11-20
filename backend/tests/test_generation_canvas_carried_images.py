@@ -1,4 +1,5 @@
 """Design-carried images use real save, compile and worker boundaries."""
+from tests.canvas_prompt_fixtures import bind_document_prompts
 from tests.canvas_urls import canvas_url, seed_scene_canvas
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -157,7 +158,7 @@ async def test_unconnected_direct_reference_is_not_granted_by_carried_media(canv
     client = canvas_client
     url, doc, _ = await carried_document(client)
     doc['cards'][-1]['prompt'] = {'segments': [{'id': 'forged', 'kind': 'reference', 'source': {'canvas_id': doc['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}}]}
-    response = await client.put(url, json={'request_id': 'forged', 'expected_revision': 0, 'document': doc})
+    response = await client.put(url, json={'request_id': 'forged', 'expected_revision': 0, 'document': bind_document_prompts(doc)})
     assert response.status_code == 200, response.text
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
     assert 'SOURCE_NOT_CONNECTED' in {item['code'] for item in compiled['diagnostics']}

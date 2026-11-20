@@ -190,7 +190,7 @@ try {
           { id: 'other', type: 'content.image', file_id: mediaFile.id },
           { id: 'spare', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'ready', kind: 'text', text: '三张完整图片' }] }, config: { count: 3, target_ratio: '1:1', resolution_profile: 'standard' } },
           { id: 'note', type: 'content.text', text: '编辑输入测试' },
-          { id: 'dependent', type: 'model.text', prompt: { segments: [{ id: 'ref', kind: 'reference', source: { canvas_id: canvas.id, card_id: 'note', port_id: 'text', position: 0 } }] } }
+          { id: 'dependent', type: 'model.text', input_bindings: [{ id: 'note-input', input_port: 'text', source: { canvas_id: canvas.id, card_id: 'note', port_id: 'text', position: 0 } }], prompt: { segments: [{ id: 'ref', kind: 'reference', binding_id: 'note-input' }] } }
         ], edges: [
           { id: 'image-candidate', source_card: 'other', source_port: 'image', target_card: 'spare', target_port: 'image' },
           { id: 'note-input', source_card: 'note', source_port: 'text', target_card: 'dependent', target_port: 'text' }
