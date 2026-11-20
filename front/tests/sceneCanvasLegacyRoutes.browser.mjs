@@ -37,7 +37,7 @@ try {
   assert.ok(data)
   const sequence = data.sequences[0]
   const versions = `${directing}/sequences/${sequence.id}/versions`
-  const { delivery_id: deliveryId, version_id: versionId, file_id: fileId } = await request(`${api}/browser-test/legacy-delivery/${sequence.id}`, 'POST')
+  const versionId = 'retired-version'
   assert.equal((await fetch(versions)).status, 404)
   assert.equal((await fetch(`${versions}/${versionId}`)).status, 404)
   const chapters = `${origin}/projects/${project}?tab=chapters`
@@ -91,10 +91,7 @@ try {
   assert.equal(await management.getByRole('heading', { name: sequence.title, exact: true }).count(), 0)
   assert.equal((await fetch(`${directing}/chapters/${chapter}/deliveries`)).status, 404)
   assert.equal((await fetch(`${directing}/sequences/${sequence.id}/deliveries`)).status, 404)
-  const file = await request(`${api}/api/v1/studio/files/${fileId}`)
-  assert.deepEqual(file.usages.map(usage => usage.source_ref), ['scene-delivery:' + deliveryId])
-  assert.equal((await fetch(`${api}/api/v1/studio/files/${fileId}`, { method: 'DELETE' })).status, 409)
-  console.log('management routes and retained file protection verified', output)
+  console.log('management and retired routes verified', output)
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})
   throw error

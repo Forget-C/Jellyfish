@@ -1,6 +1,4 @@
-"""固定整场验收的共享比较与快照查询；不读取完整版本。"""
-from sqlalchemy import or_, select
-from app.models.directing import SceneCutReviewRecord
+"""旧迁移使用的整场验收依据。"""
 from app.services.directing.review_basis_key import review_basis_key
 
 
@@ -19,16 +17,3 @@ def scene_cut_review_basis(content):
 def cut_review_basis_key(content):
     """索引与原画面验收依据共用规范化入口。"""
     return review_basis_key(scene_cut_review_basis(content))
-
-
-def cut_review_query(version_id, inherited):
-    """只消费当前版本与明确复制的记录，不追随源版本后来记录。"""
-    return select(SceneCutReviewRecord).where(or_(SceneCutReviewRecord.version_id == version_id,
-        SceneCutReviewRecord.id.in_(inherited))).order_by(SceneCutReviewRecord.created_at.desc(), SceneCutReviewRecord.id.desc())
-
-
-def scene_frame_basis(clip):
-    """原素材落幅不受时间线位置或输出构图影响，身份和源区间必须相同。"""
-    if clip is None or clip.kind != 'media':
-        return None
-    return clip.model_dump(mode='json', exclude={'timeline_start_ms', 'fit'})

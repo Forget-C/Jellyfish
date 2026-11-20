@@ -26,3 +26,17 @@ status: accepted
 移除旧场次版本专属的整场设计、单元组织、指令生成和指令检查执行逻辑，并禁止提交退役任务。保留 Worker 对存量旧任务的终止路径。排队旧任务仍可被领取并终止，已有供应商任务 ID 的旧视频在发送供应商查询前结束，保留原任务和远端 ID。仍由生产计划接口提交的 `directing_design` 继续执行，旧场次版本任务按快照中的 `scene_design` 标记识别。
 
 保留项目级 `GET /directing/tasks/{task_id}` 中 `scene_design`、`scene_instruction`、`instruction_check` 的类型化历史结果，以及通用任务历史、已生成文件和文件引用保护。验收同时验证存量旧任务在调用供应商前终止，以及已完成旧任务的结果仍可读取。
+
+## 从空库初始化的新基线
+
+上述历史保留决定适用于当时已有数据的部署。新基线从空库初始化，旧四画布的版本、任务、生成成品、交付记录和专属文件引用均不迁移。新库也不再提供旧任务识别、终止和历史结果投影。现有数据库与存储不参与新库初始化。
+
+| 移除的专属表 | 原用途 | 现行读写路径 |
+| --- | --- | --- |
+| `directing_scene_versions`、`directing_scene_copy_origins` | 旧场次版本正文及另存来源 | 分镜画布使用独立画布与修订，现行生产计划使用 `directing_revisions` 固定设计与计划 |
+| `directing_scene_unit_identities`、`directing_instruction_bases` | 旧版本中的单元身份和指令确认依据 | 现行生产计划的单元及已确认指令由生产计划修订和依赖表示 |
+| `directing_scene_video_executions`、`directing_scene_takes` | 旧指令画布执行与候选素材 | 现行批次和拍摄使用 `directing_batches`、`directing_batch_items` 与通用任务，素材从 `directing_takes`、任务产物及文件读取 |
+| `directing_scene_take_reviews`、`directing_scene_cut_reviews`、`directing_scene_seam_reviews`、`directing_scene_end_frames` | 旧版本的审查证据与尾帧记录 | 现行生产链保留 Take 标注、剪辑修订、`directing_seam_reviews` 和 `directing_cut_frames` |
+| `directing_scene_deliveries`、`directing_scene_delivery_uses` | 旧交付快照和采用指向 | 旧提交及查询均已退役。现行剪辑通过剪辑修订、`directing_active_cuts` 和 `directing_cut_take_references` 读取采用的素材 |
+
+现行素材和文件仍由当前任务、生产计划与画布的引用约束保护。旧共享资产转换工具随新基线退出，其工作是迁移旧记录。现行资产导入仍创建独立项目副本。

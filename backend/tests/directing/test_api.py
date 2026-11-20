@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import inspect
 
 from app.api.v1.routes.studio.directing import router
 from app.api.v1.routes.studio.files import router as file_router
@@ -20,6 +21,32 @@ from app.services.directing.store import DirectingStore
 from app.task_worker import TaskWorker
 from tests.directing.samples import design_sample, plan_sample
 from tests.directing.test_store import database, frozen, setup_story
+
+
+@pytest.mark.asyncio
+async def test_production_take_media_works_without_retired_tables(tmp_path):
+    """现行 Take 从任务产物取得文件，新库没有旧四画布专属表。"""
+    from tests.directing.test_store import output
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            connection = await db.connection()
+            tables = await connection.run_sync(lambda conn: set(inspect(conn).get_table_names()))
+            assert not tables & {
+                'directing_scene_versions', 'directing_scene_copy_origins', 'directing_scene_unit_identities',
+                'directing_instruction_bases', 'directing_scene_video_executions', 'directing_scene_takes',
+                'directing_scene_take_reviews', 'directing_scene_cut_reviews', 'directing_scene_seam_reviews',
+                'directing_scene_end_frames', 'directing_scene_deliveries', 'directing_scene_delivery_uses',
+            }
+            store, sequence_id, _, _, prompts = await setup_story(db)
+            await output(db, prompts[0])
+            take = await store.register_take(prompt_revision_id=prompts[0], task_id='task1', output_ordinal=0)
+        path = f'/api/v1/studio/projects/p1/directing/sequences/{sequence_id}/takes/{take.id}/media'
+        response = await client.get(path)
+        assert response.status_code == 200
+        assert response.json()['data']['file_id'] == 'video1'
+        assert response.json()['data']['url'] == '/api/v1/studio/files/video1/download'
+        assert (await client.delete('/api/v1/studio/files/video1')).status_code == 409
 
 
 @pytest.mark.asyncio
