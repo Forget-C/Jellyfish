@@ -13,11 +13,11 @@ async def test_management_search(baseline_client):
     client, sessions = baseline_client
     path = STUDIO + "/prompts"
     prefix = uuid4().hex
-    term = prefix + "Café%_\\"
+    term = prefix + "CAFÉ%_\\"
     async with sessions.begin() as db:
         for index in reversed(range(28)):
             name = term if index < 5 else prefix
-            preview = term if index < 24 else (term.replace("é", "e"), term.replace("%", "X"),
+            preview = term if index < 24 else (term.replace("É", "E"), term.replace("%", "X"),
                                                      term.replace("_", "X"), term.rstrip(chr(92)))[index - 24]
             db.add(PromptTemplate(id=f"{prefix}-{index:02}", category="video_prompt", name=name,
                                   preview=preview, content=term, created_at=datetime(2026, 1, 1)))

@@ -79,7 +79,27 @@ try {
   await page.getByRole('textbox', { name: '搜索模板名称或简介' }).waitFor()
   await page.getByText('选择模板阅读正文', { exact: true }).waitFor()
   const name = page.getByRole('button', { name: template.name, exact: true })
+  const other = page.getByRole('button', { name: system.name, exact: true })
+  let releaseDetail
+  const heldDetail = new Promise(resolve => { releaseDetail = resolve })
+  await page.route('**/prompts/custom', async route => {
+    await heldDetail
+    await route.fulfill({ json: { code: 200, data: template } })
+  })
+  const detailStarted = page.waitForRequest(request => request.url().endsWith('/prompts/custom'))
   await name.press('Enter')
+  await detailStarted
+  await other.click()
+  await page.getByRole('heading', { name: system.name, exact: true }).waitFor()
+  const detailFinished = page.waitForEvent('requestfinished', request => request.url().endsWith('/prompts/custom'))
+  releaseDetail()
+  await detailFinished
+  await page.getByRole('heading', { name: system.name, exact: true }).waitFor()
+  await page.unroute('**/prompts/custom')
+  await page.route('**/prompts/custom', route => route.fulfill({ status: 503, json: {} }), { times: 1 })
+  await name.press('Enter')
+  await page.getByText('无法读取模板详情').waitFor()
+  await page.getByRole('alert').getByRole('button').click()
   const reader = page.getByRole('region', { name: '模板阅读' })
   await reader.getByRole('heading', { name: template.name }).waitFor()
   assert.equal(await page.getByRole('dialog').count(), 0)

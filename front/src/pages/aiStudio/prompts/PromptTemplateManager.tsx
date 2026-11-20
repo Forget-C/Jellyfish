@@ -390,7 +390,7 @@ const PromptTemplateManager: FC = () => {
             setTotal(previous => previous === undefined ? undefined : Math.max(0, previous - 1))
           }
           message.success('提示词已删除')
-          if (selected?.id === template.id) {
+          if (activeDetail.current === template.id) {
             clearDetail()
             selectedButton.current = null
             setReaderOpen(false)
@@ -424,7 +424,7 @@ const PromptTemplateManager: FC = () => {
           })
           if (!res.data) throw new Error('缺少更新结果')
           message.success('已恢复系统默认模板')
-          setSelected(res.data)
+          if (activeDetail.current === template.id) setSelected(res.data)
           void loadTemplates(page, query)
         } catch (error) {
           message.error('恢复系统默认模板失败')

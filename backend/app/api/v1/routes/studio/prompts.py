@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
@@ -25,6 +25,7 @@ from app.schemas.studio.prompts import (
     PromptTemplateSummary,
 )
 from app.services.common import entity_not_found
+from app.services.studio.template_search import search_template_summaries
 from app.services.studio.template_defaults import apply_template_changes, create_template, editable_template
 
 router = APIRouter()
@@ -104,19 +105,8 @@ async def list_prompt_summaries(
     page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100),
 ) -> ApiResponse[PaginatedData[PromptTemplateSummary]]:
     """对名称与简介做字面包含匹配，先稳定分页再交由界面分组。"""
-    filters = []
-    if keyword := q.strip():
-        def matches(column):
-            if db.get_bind().dialect.name == "mysql":
-                return func.instr(column.collate("utf8mb4_0900_as_ci"), keyword) > 0
-            return func.instr(func.lower(column), keyword.lower()) > 0
-        filters.append(or_(matches(PromptTemplate.name), matches(PromptTemplate.preview)))
-    total = await db.scalar(select(func.count()).select_from(PromptTemplate).where(*filters))
-    stmt = select(PromptTemplate.id, PromptTemplate.category, PromptTemplate.name).where(*filters)
-    rows = await db.execute(stmt.order_by(PromptTemplate.created_at, PromptTemplate.id)
-                            .offset((page - 1) * page_size).limit(page_size))
-    return paginated_response([PromptTemplateSummary.model_validate(row) for row in rows.mappings()],
-                              page=page, page_size=page_size, total=total or 0)
+    items, total = await search_template_summaries(db, q=q, page=page, page_size=page_size)
+    return paginated_response(items, page=page, page_size=page_size, total=total)
 
 
 @router.get(
