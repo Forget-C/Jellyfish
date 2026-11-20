@@ -23,7 +23,8 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
   const entering = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  const taskId = candidateId ?? canvas.latest_storyboard?.task_id
+  const displayedTask = !candidateId || candidateId === canvas.latest_storyboard?.task_id ? canvas.latest_storyboard : undefined
+  const taskId = candidateId ?? displayedTask?.task_id
   useEffect(() => {
     if (!taskId) return
     let active = true
@@ -32,7 +33,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
     void request.then(({ data }) => { if (active && data) setTask(data) })
       .catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, taskId, canvas.latest_storyboard?.status, canvas.latest_storyboard?.stage, refresh])
+  }, [projectId, chapterId, sequenceId, taskId, displayedTask?.status, displayedTask?.stage, refresh])
   const task = loadedTask?.task_id === taskId ? loadedTask : undefined
   const ownership = editor.ownership
   const matched = editor.current?.scene?.chapter_id === chapterId && editor.current.scene.sequence_id === sequenceId
@@ -105,7 +106,7 @@ export function WorkbenchStoryboardReview({ projectId, chapterId, sequenceId, ca
       {editor.current?.document.storyboard && !editor.recovery && <Button onClick={() => {
         editor.handoffStoryboardApplication(); onEnter()
       }}>进入当前画布</Button>}
-      {!candidateId && <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
+      {displayedTask && <WorkbenchStoryboardRetry inline actionHost={actionHost} {...{ projectId, chapterId, sequenceId, canvas, historical, onReviewSource }}
         onAccepted={onChange} onSubmissionChange={onSubmissionChange} />}
     </Space>
     </div>

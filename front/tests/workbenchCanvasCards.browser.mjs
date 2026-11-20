@@ -124,10 +124,23 @@ try {
   await page.getByRole('button', { name: '暂不处理', exact: true }).click()
   await control({ storyboard_release: 2, storyboard_fail_on: 2 })
   await card('新分镜方案').getByRole('button', { name: '处理提取问题', exact: true }).waitFor()
-  const selected = page.waitForRequest(req => req.url().endsWith('/storyboards/' + task.task_id))
-  await card('新分镜方案').getByRole('button', { name: '查看并采用分镜', exact: true }).click()
-  await selected
+  await Promise.all([page.waitForRequest(req => req.url().endsWith('/storyboards/' + later.task_id)),
+    card('新分镜方案').getByRole('button', { name: '处理提取问题', exact: true }).click()])
+  await page.getByRole('button', { name: '暂不处理', exact: true }).click()
+  const running = await data(sceneApi + '/canvases/' + task.canvas_id + '/storyboards', 'POST', {
+    request_id: 'cards-running', mode: 'faithful', text_model_id: modelId,
+  })
+  await page.reload()
+  await progress.waitFor()
+  await Promise.all([page.waitForRequest(req => req.url().endsWith('/storyboards/' + task.task_id)),
+    card('新分镜方案').getByRole('button', { name: '查看并采用分镜', exact: true }).click()])
   await page.locator('[data-card-type="direction.shot"]').first().waitFor()
+  await control({ storyboard_release: 3 })
+  await page.waitForFunction(async ({ path, canvasId, appliedId, candidateId }) => {
+    const response = await fetch(path)
+    const canvas = (await response.json()).data.canvases.find(row => row.id === canvasId)
+    return canvas?.applied_storyboard_task_id === appliedId && canvas.candidate_storyboard_task_id === candidateId
+  }, { path: new URL(sceneApi + '/canvases').pathname, canvasId: task.canvas_id, appliedId: task.task_id, candidateId: running.task_id })
   await page.goBack()
   await card('新分镜方案').getByText('最近打开', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'desktop.png') })
@@ -169,7 +182,7 @@ try {
   await card('旧空白方案').waitFor()
   assert.deepEqual(await ordering(), ['新分镜方案', '旧空白方案'])
 
-  await control({ storyboard_release: 3, storyboard_fail_on: 3 })
+  await control({ storyboard_release: 4, storyboard_fail_on: 4 })
   const failed = await data(sceneApi + '/storyboards', 'POST', {
     request_id: 'cards-fail', name: '失败后保留的方案', mode: 'faithful', text_model_id: modelId,
   })
