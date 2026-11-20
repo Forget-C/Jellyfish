@@ -1,23 +1,23 @@
 hero:
   title: "让故事，走向画面。"
-  subtitle: "Jellyfish AI 短剧创作工作台，从剧本、资产到生成与剪辑。"
+  subtitle: "Jellyfish AI 短剧创作工作台，从剧本、参考素材到分镜与画面生成。"
 showcase:
-  - title: "剧本与分镜"
-    screen: "导演设计 / 第一场"
-    description: "把章节变成场次，逐步组织镜头设计。"
-    labels: ["镜头 01 · 远景", "镜头 02 · 中景", "镜头 03 · 特写"]
-  - title: "角色与资产"
-    screen: "资产资料 / 雾海来信"
-    description: "集中维护角色、场景与参考素材。"
-    labels: ["角色 · 林夏", "场景 · 海边站台", "道具 · 旧信封"]
-  - title: "生成与审片"
-    screen: "候选素材 / 第一场"
-    description: "查看生成候选，人工决定采用片段。"
-    labels: ["候选 A · 待审查", "候选 B · 待审查", "候选 C · 待审查"]
-  - title: "剪辑与导出"
-    screen: "剪辑画布 / 第一场"
-    description: "组织已采用片段，交付章节或导出整场视频。"
-    labels: ["已选片段 01", "已选片段 02", "已选片段 03"]
+  - title: "分镜画布"
+    image: "images/screenshots/home/storyboard.webp"
+    alt: "海边站台的分镜画布，包含固定原文、人物与场景参考图、镜头描述和图片模型卡"
+    description: "在一张画布上组织镜头描述、参考素材和生成任务。"
+  - title: "场次划分"
+    image: "images/screenshots/home/scene-division.webp"
+    alt: "第一集《末班车之后》的章节原文和海边站台、堤岸晨光两个场次"
+    description: "从章节原文选定范围，将故事拆成可制作的场次。"
+  - title: "对象参考"
+    image: "images/screenshots/home/object-references.webp"
+    alt: "海边站台场次中已选用参考图的角色林夏、海边站台和旧信封"
+    description: "为同一场次选用角色、场所和道具的参考图。"
+  - title: "生成结果"
+    image: "images/screenshots/home/generation-preview.webp"
+    alt: "画布中的图片生成结果预览，林夏在站台灯下打开旧信封"
+    description: "在画布中查看镜头的图片输出。"
 workflow:
   - title: "构思"
     subtitle: "组织故事与镜头"
@@ -26,8 +26,8 @@ workflow:
     subtitle: "准备资产，生成候选"
     description: "把角色、场景与参考素材带进创作。"
   - title: "完成"
-    subtitle: "人工审片，剪辑导出"
-    description: "选用合适的片段，组织最终画面。"
+    subtitle: "检查生成结果"
+    description: "预览输出，选用合适的素材继续创作。"
 projects:
   - title: "山海之间"
     genre: "古风"

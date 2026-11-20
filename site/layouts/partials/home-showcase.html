@@ -6,21 +6,12 @@
   </div>
   {{ range $index, $item := site.Data.homepage.showcase }}
     <div class="jf-preview" id="preview-{{ $index }}" data-preview>
-      <div class="jf-studio">
-        <div class="jf-studio-bar"><span>Jellyfish Studio / 雾海来信</span><span>概念界面 · 虚拟数据</span></div>
-        <div class="jf-studio-body">
-          <aside class="jf-studio-nav" aria-label="概念界面目录"><strong>雾海来信</strong><span>项目与章节</span><span>场次创作</span><span>资产资料</span><span>生成记录</span></aside>
-          <div class="jf-studio-main">
-            <div class="jf-studio-heading"><h2>{{ .screen }}</h2><span>示意画面</span></div>
-            <div class="jf-preview-frames jf-preview-frames-{{ $index }}">
-              {{ range $i, $label := .labels }}
-                <figure><div class="jf-landscape jf-landscape-{{ $i }}" role="img" aria-label="{{ $label }}，抽象占位图"><span aria-hidden="true"></span></div><figcaption>{{ $label }}</figcaption></figure>
-              {{ end }}
-            </div>
-            {{ if ne $index 1 }}<div class="jf-preview-timeline" aria-hidden="true"><span></span><span></span><span></span><span></span></div>{{ end }}
-          </div>
-        </div>
-      </div>
+      <figure class="jf-screenshot">
+        <figcaption><span>雾海来信 · {{ .title }}</span><span>真实界面 · 演示数据</span></figcaption>
+        <a href="{{ .image | relURL }}" aria-label="查看{{ .title }}原图">
+          <img src="{{ .image | relURL }}" alt="{{ .alt }}" width="1440" height="900" decoding="async"{{ if $index }} loading="lazy"{{ else }} fetchpriority="high"{{ end }}>
+        </a>
+      </figure>
       <p class="jf-preview-caption">{{ .description }}</p>
     </div>
   {{ end }}

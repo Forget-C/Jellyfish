@@ -48,28 +48,10 @@ body { background: var(--jf-bg); color: var(--jf-text); }
 .jf-preview-button:hover { background: var(--jf-surface); }
 .jf-preview-button[aria-pressed=true] { color: var(--jf-accent); background: var(--jf-surface); border-color: var(--jf-line); }
 .jf-preview + .jf-preview { margin-top: 24px; }
-.jf-studio { text-align: left; border-radius: 16px; overflow: hidden; background: #111522; color: #f4f5fa; border: 1px solid #34394c; box-shadow: 0 20px 50px #090c1915; }
-.jf-studio-bar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 15px 22px; border-bottom: 1px solid #34394c; font-size: 12px; color: #b6bed2; }
-.jf-studio-body { display: grid; grid-template-columns: 175px minmax(0,1fr); min-height: 330px; }
-.jf-studio-nav { display: flex; flex-direction: column; gap: 22px; padding: 28px 22px; border-right: 1px solid #34394c; color: #aab4cb; font-size: 13px; }
-.jf-studio-nav strong { color: #edf0f8; margin-bottom: 8px; }
-.jf-studio-main { padding: 26px; min-width: 0; }
-.jf-studio-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-.jf-studio-heading h2 { font-size: 16px; letter-spacing: 0; }
-.jf-studio-heading > span { font-size: 12px; color: #aab4cb; }
-.jf-preview-frames { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
-.jf-landscape { position: relative; height: 165px; overflow: hidden; background: linear-gradient(150deg,#25384c,#879396 60%,#d6b78b); }
-.jf-landscape::before { content: ''; position: absolute; inset: 40% -20% -60%; border-radius: 40%; background: linear-gradient(120deg,#202e41,#516b77); transform: rotate(-24deg); }
-.jf-landscape::after { content: ''; position: absolute; width: 36px; height: 36px; border-radius: 50%; background: #e8d7b9; top: 20px; right: 24px; }
-.jf-landscape-1 { background: linear-gradient(130deg,#2a334f,#827f98 60%,#e0bac0); }
-.jf-landscape-2 { background: linear-gradient(135deg,#293f4c,#8baca4 65%,#d2ddcb); }
-.jf-preview-frames-1 .jf-landscape { border-radius: 45% 45% 8px 8px; }
-.jf-preview-frames-2 .jf-landscape { filter: hue-rotate(40deg); }
-.jf-preview-frames-3 .jf-landscape { filter: hue-rotate(-25deg); }
-.jf-preview-frames figcaption { font-size: 12px; padding-top: 10px; color: #c3cadd; }
-.jf-preview-timeline { display: flex; gap: 6px; margin-top: 24px; }
-.jf-preview-timeline span { height: 20px; flex: 1; border-radius: 3px; background: #6554a8; }
-.jf-preview-timeline span:nth-child(even) { flex: 1.7; background: #427c87; }
+.jf-screenshot { padding: 0 12px 12px; border-radius: 16px; background: #111522; color: #d5dbea; border: 1px solid #34394c; box-shadow: 0 20px 50px #090c1915; }
+.jf-screenshot figcaption { display: flex; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 12px 4px; font-size: 13px; text-align: left; }
+.jf-screenshot a { display: block; border-radius: 8px; }
+.jf-screenshot img { display: block; width: 100%; height: auto; border-radius: inherit; }
 .jf-preview-caption { color: var(--jf-muted); padding-top: 20px; line-height: 1.7; }
 .jf-section { margin-top: 88px; padding-top: 54px; border-top: 1px solid var(--jf-line); }
 .jf-heading .jf-kicker { margin-bottom: 12px; }
@@ -99,7 +81,6 @@ body { background: var(--jf-bg); color: var(--jf-text); }
 .jf-card-copy { color: var(--jf-muted); line-height: 1.8; }
 @media (max-width: 1024px) {
   .jf-static-toc { display: none !important; }
-  .jf-studio-body { grid-template-columns: 145px minmax(0,1fr); }
   .jf-project { height: 250px; padding: 20px; }
 }
 @media (max-width: 768px) {
@@ -108,12 +89,6 @@ body { background: var(--jf-bg); color: var(--jf-text); }
   .jf-lead { font-size: 16px; }
   .jf-preview-controls { gap: 4px; }
   .jf-preview-button { padding: 9px 10px; font-size: 14px; }
-  .jf-studio-body { grid-template-columns: 1fr; min-height: 290px; }
-  .jf-studio-nav { display: none; }
-  .jf-studio-main { padding: 18px; }
-  .jf-landscape { height: 130px; }
-  .jf-preview-frames { gap: 8px; }
-  .jf-preview-frames figcaption { font-size: 11px; }
   .jf-section { margin-top: 52px; padding-top: 36px; }
   .jf-process,.jf-projects,.jf-landing-grid { grid-template-columns: 1fr; gap: 24px; }
   .jf-section-heading,.jf-community { align-items: start; flex-direction: column; }
