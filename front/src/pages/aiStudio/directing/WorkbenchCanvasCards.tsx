@@ -71,7 +71,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
   const previousPage = useRef<{ size: number; start: number; firstId?: string }>()
   const restoredScroll = useRef(false)
   useEffect(() => { saveManagementBrowse(browseKey, { query }) }, [browseKey, query])
-  const [quickEntry, setQuickEntry] = useState(false)
+  const [candidateSelection, setCandidateSelection] = useState<{ id: string; quickEntry: boolean }>()
   const [reviewCanvas, setReviewCanvas] = useState<string>()
   const [acceptedReviewTask, setAcceptedReviewTask] = useState<string>()
   const [submittingReviewTask, setSubmittingReviewTask] = useState<StoryboardTaskSummary>()
@@ -106,7 +106,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
   const detailCard = canvases?.find(canvas => canvas.id === (detail ?? taskDetail?.canvas_id))
   const detailTask = detail ? detailCard?.latest_storyboard : detailCard && taskDetail
   const reviewCard = canvases?.find(canvas => canvas.id === reviewCanvas)
-  const linkedReviewTask = linked?.task?.canvas_id === reviewCard?.id ? linked?.task : undefined
+  const linkedReviewTask = !candidateSelection && linked?.task?.canvas_id === reviewCard?.id ? linked?.task : undefined
   const latestReviewTaskId = reviewCard?.latest_storyboard?.task_id
   const reviewTaskChanged = linkedReviewTask && linkedReviewTask.task_id !== latestReviewTaskId &&
     (!acceptedReviewTask || acceptedReviewTask !== latestReviewTaskId)
@@ -287,7 +287,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
     setPage(Math.floor((matchIndex < 0 ? fullIndex : matchIndex) / pageSize) + 1)
     setCanvasToReveal({ id, focus: returningCanvas ? 'name' : linked?.task ? undefined : 'card' })
     if (linked?.task && canvases[fullIndex].latest_storyboard?.task_id === linked.task.task_id) {
-      setQuickEntry(false)
+      setCandidateSelection(undefined)
       setReviewCanvas(id)
     }
   }, [browseKey, canvases, filterHost, linked, locationKey, matches, pageSize, panel, returningCanvas, targetId, targetWarning])
@@ -393,9 +393,14 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
                 </div>
 
                 <div className="management-canvas-actions">
-                  {(candidateId || task && task.task_id !== adoptedId) && <Button type="link" onClick={() => { setQuickEntry(!canvas.storyboard_review_required); setReviewCanvas(canvas.id) }}>
-                    {candidateId ? canvas.storyboard_review_required ? '核对分镜' : '查看并采用分镜' : activeTask(task) ? '查看提取进度' : task?.status === 'failed' || task?.status === 'cancelled' ? '处理提取问题' : '查看任务结果'}
-                  </Button>}
+                  {candidateId && <Button type="link" onClick={() => {
+                    setCandidateSelection({ id: candidateId, quickEntry: !canvas.storyboard_review_required })
+                    setReviewCanvas(canvas.id)
+                  }}>{canvas.storyboard_review_required ? '核对分镜' : '查看并采用分镜'}</Button>}
+                  {task && task.task_id !== adoptedId && !currentTaskIsCandidate && <Button type="link" onClick={() => {
+                    setCandidateSelection(undefined)
+                    setReviewCanvas(canvas.id)
+                  }}>{activeTask(task) ? '查看提取进度' : failed ? '处理提取问题' : '查看任务结果'}</Button>}
                 </div>
               </Card>
             </li>
@@ -406,11 +411,14 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
     <CardListPagination label="本场画布分页" page={currentPage} pageSize={pageSize} total={matchCount}
       compact={compact} disabled={false} onChange={setPage} />
     {activeReview && <WorkbenchStoryboardReview key={activeReview.id}
-      {...{ projectId, chapterId, sequenceId, historical }} quickEntry={quickEntry} canvas={activeReview}
+      {...{ projectId, chapterId, sequenceId, historical }} candidateId={candidateSelection?.id} quickEntry={candidateSelection?.quickEntry} canvas={activeReview}
       onClose={() => { setReviewCanvas(undefined); setRevision(value => value + 1); if (taskTarget) onCloseTask(activeReview.id) }}
       onChange={acceptedTaskId => {
         if (currentEntry.current !== routeEntry) return
-        if (acceptedTaskId) setAcceptedReviewTask(acceptedTaskId)
+        if (acceptedTaskId) {
+          setCandidateSelection(undefined)
+          setAcceptedReviewTask(acceptedTaskId)
+        }
         setRevision(value => value + 1)
         onChange()
       }}
