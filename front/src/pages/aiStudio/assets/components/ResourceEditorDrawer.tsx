@@ -511,6 +511,8 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   }, [currentReferences])
   const referenceSection = (temporary = false) => {
     const current = temporary ? editingGeneration.references ?? references : references
+    const purposeLabel = (value: 'subject' | 'costume' | 'prop') =>
+      uiText("选择参考{{value1}}", { value1: value === 'subject' ? uiText("主体") : value === 'costume' ? uiText("服装") : uiText("道具") })
     if (temporary) {
       const disabled = busy || generating || analysisBusy || loadFailed
       const defaults = defaultReferences()
@@ -519,7 +521,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       return <>
         <div className="asset-reference-heading"><h3>{uiText("本次参考 ·")} {current.length} {uiText("张")}</h3><Tooltip title={uiText("恢复默认参考")}><Button type="text" aria-label={uiText("重置")} icon={<ReloadOutlined />} disabled={disabled || resetDisabled} onClick={() => setEditingGeneration(value => ({ ...value, references: defaults }))}>{uiText("重置")}</Button></Tooltip></div>
         <div className="asset-reference-row">
-          <Dropdown trigger={['click']} menu={{ items: (['subject', ...(kind === 'character' ? ['costume', 'prop'] : [])] as ('subject' | 'costume' | 'prop')[]).map(value => ({ key: value, label: uiText("选择参考{{value1}}", { value1: value === 'subject' ? uiText("主体") : value === 'costume' ? uiText("服装") : uiText("道具") }) })), onClick: ({ key }) => { setPurpose(key as 'subject' | 'costume' | 'prop'); setPickerReturn('generation'); setPage('references') } }}><Button className="asset-reference-add" aria-label={uiText("添加参考图片")} icon={<PlusOutlined />} disabled={disabled} /></Dropdown>
+          <Dropdown trigger={['click']} menu={{ items: (['subject', ...(kind === 'character' ? ['costume', 'prop'] : [])] as ('subject' | 'costume' | 'prop')[]).map(value => ({ key: value, label: purposeLabel(value) })), onClick: ({ key }) => { setPurpose(key as 'subject' | 'costume' | 'prop'); setPickerReturn('generation'); setPage('references') } }}><Button className="asset-reference-add" aria-label={uiText("添加参考图片")} icon={<PlusOutlined />} disabled={disabled} /></Dropdown>
           <div className="asset-reference-strip">{!current.length && <span className="asset-reference-empty">{uiText("添加参考图片")}</span>}{current.map((reference, index) => {
             const referenceName = referenceNames[`${reference.source_kind}:${reference.source_id}`] ?? referenceNames[reference.file_id] ?? (images.some(image => image.file_id === reference.file_id) ? name : uiText("未命名参考"))
             return <div className="asset-reference-item" key={`${reference.file_id}:${reference.role}:${index}`}>
@@ -534,7 +536,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
     return <div className="resource-editor-fields">{<Space wrap>
       {(['subject', ...(kind === 'character' ? ['costume', 'prop'] : [])] as ('subject' | 'costume' | 'prop')[]).map(value =>
         <Button key={value} disabled={busy || generating || analysisBusy || loadFailed} onClick={() => { setPurpose(value); setPickerReturn('editor'); setPage('references') }}>
-          {uiText("选择参考")}{value === 'subject' ? uiText("主体") : value === 'costume' ? uiText("服装") : uiText("道具")}
+          {purposeLabel(value)}
         </Button>)}
     </Space>}{current.map((reference, index) => <Space key={`${reference.file_id}:${reference.role}:${index}`} wrap>
       <Image width={64} height={64} src={buildFileDownloadUrl(reference.file_id)} />
