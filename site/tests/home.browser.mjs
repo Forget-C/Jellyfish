@@ -50,11 +50,8 @@ try {
       assert.equal(await graph.locator('svg path.is-active[d]').getAttribute('data-from'), source)
     }
     for (const video of await home.locator('video').all()) {
-      await video.evaluate(el => el.play())
-      await video.evaluate(el => new Promise(resolve => {
-        if (el.currentTime > 0) resolve()
-        else el.addEventListener('timeupdate', resolve, { once: true })
-      }))
+      await video.evaluate(el => { void el.play() })
+      await page.waitForFunction(el => el.currentTime > 0, await video.elementHandle(), { timeout: 5000 })
       await video.evaluate(el => el.pause())
     }
     assert.equal(await home.locator('video').count(), 2)
