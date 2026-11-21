@@ -112,6 +112,8 @@ try {
     await detail.getByRole('textbox', { name: kind === 'character' ? '角色设定' : '补充信息', exact: true }).fill('上传后的独立详情')
     await detail.getByRole('button', { name: '保存设定', exact: true }).click()
     await detail.getByRole('button', { name: '返回', exact: true }).click()
+    await detail.waitFor({ state: 'hidden' })
+    await region.getByRole('button', { name: `编辑${storyName}资源`, exact: true }).and(page.locator(':focus')).waitFor()
     assert.equal((await request(`${studio}/entities/${kind}/${selected.asset_id}`)).details_editable, true)
     assert.equal(creations, 1)
     await page.unroute(`**/entities/${kind}/image-source`)
@@ -129,6 +131,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
   await typeFilter.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('全部类型', { exact: true }).click()
+  await page.getByRole('region', { name: '工作台管理', exact: true }).getByTitle('全部类型', { exact: true }).waitFor()
   await page.setViewportSize({ width: 1440, height: 960 })
   const extraction = await request(objectsUrl + '/extractions', 'POST', { request_id: 'upload-scene-extract' })
   let candidate
