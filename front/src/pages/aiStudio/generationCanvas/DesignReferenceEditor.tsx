@@ -55,22 +55,23 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   if ('examples' in card) for (const example of card.examples || []) if (!sources.some(item => sourceKey(item.source) === sourceKey(example.source))) sources.push({ source: example.source, file_id: example.file_id, modality: example.source.port_id === 'video' ? 'video' : example.source.port_id === 'audio' ? 'audio' : 'image', available: false })
   sources = includeConnectedSources(document, card.id, sources)
   const labels = referenceLabels(document, sources, card.id, isFlatDesign(card))
-  const labelFor = (item: CanvasResolvedOutput) => item.token ? labels.get(sourceKey(item.source)) || item.token : cardDefinitions[document.cards?.find(source => source.id === item.source.card_id)?.type || '']?.title || '@缺失来源'
+  const labelFor = (item: CanvasResolvedOutput) => item.token ? labels.get(sourceKey(item.source)) || item.token : cardDefinitions[document.cards?.find(source => source.id === item.source.card_id)?.type || '']?.title || uiText("@缺失来源")
   const candidates: Candidate[] = sources.filter(item => document.cards?.find(source => source.id === item.source.card_id)?.type !== 'direction.criterion').map(item => {
     const source = document.cards?.find(value => value.id === item.source.card_id)
     const connected = item.source.canvas_id === document.id && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
     const identityOnly = isFlatDesign(card) && !['text', 'image', 'video', 'audio', 'anchor'].includes(item.source.port_id)
-    const reason = card.type === 'direction.dialogue' && (item.modality !== 'text' || item.source.port_id !== 'text') ? '对白正文仅支持文本引用，媒体仅作本地参考' : identityOnly ? '请明确选择关联用途' : item.modality === 'audio' ? '本期不支持音频字段引用与携带' : item.source.port_id === 'anchor' && !isFlatDesign(card) ? '设计正文不支持互相引用' : undefined
+    const reason = card.type === 'direction.dialogue' && (item.modality !== 'text' || item.source.port_id !== 'text') ? uiText("对白正文仅支持文本引用，媒体仅作本地参考") : identityOnly ? uiText("请明确选择关联用途") : item.modality === 'audio' ? uiText("本期不支持音频字段引用与携带") : item.source.port_id === 'anchor' && !isFlatDesign(card) ? uiText("设计正文不支持互相引用") : undefined
     const forbidden = !!reason
-    return { source: item.source, token: item.token || '@缺失来源', displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? reason : !connected ? '来源未连接' : item.available === false ? '来源输出缺失' : undefined }
+    return { source: item.source, token: item.token || uiText("@缺失来源"), displayLabel: labelFor(item), available: item.available !== false && !!connected && !forbidden, fileId: item.modality === 'image' ? item.file_id : undefined, name: source && 'name' in source && source.name || labelFor(item), disabledReason: forbidden ? reason : !connected ? uiText("来源未连接") : item.available === false ? uiText("来源输出缺失") : undefined }
   })
   const usageFor = (key: string) => {
     const definition = cardDefinitions[card.type!]
-    const roles = bindings.filter(binding => sourceKey(binding.source) === key).map(binding => '已用作' + (definition.inputs.find(port => port.id === binding.input_port)?.label || binding.input_port))
+    const roles = bindings.filter(binding => sourceKey(binding.source) === key).map(binding => uiText("已用作{{label}}", { label: uiText(definition.inputs.find(port => port.id === binding.input_port)?.label || binding.input_port) }))
     const fields = designReferences(card).filter(item => sourceKey(item.reference.source) === key).map(item => {
       const value = designFieldEntries(card).find(([field]) => field === item.field)?.[1]
-      const label = definition.fields.find(field => field.id === item.field)?.label || ('phases' in card ? card.phases?.find(phase => 'phase:' + phase.id === item.field)?.name : undefined) || item.field
-      return `已引用于${label}${['empty', 'not_applicable'].includes(value?.state || 'empty') ? ' · 未生效' : ''}`
+      const schemaField = definition.fields.find(field => field.id === item.field)
+      const label = (schemaField && uiText(schemaField.label)) || ('phases' in card ? card.phases?.find(phase => 'phase:' + phase.id === item.field)?.name : undefined) || item.field
+      return uiText("已引用于{{label}}", { label }) + (['empty', 'not_applicable'].includes(value?.state || 'empty') ? uiText(" · 未生效") : '')
     })
     return [...new Set([...roles, ...fields])]
   }
@@ -84,9 +85,9 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     const target = composition?.frame_target?.card_id === source?.id
     const inUse = !!example || !!target || entry.outputs.some(output => used.has(sourceKey(output.source)))
     const empty = source && !inUse && entry.outputs.every(output => output.available === false)
-    const issue = empty ? source.type?.startsWith('model.') ? '尚无生成结果' : '暂无可用内容' : [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
+    const issue = empty ? source.type?.startsWith('model.') ? uiText("尚无生成结果") : uiText("暂无可用内容") : [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
     return { ...entry, label: source && 'name' in source && source.name || (entry.kind === 'design' ? cardDefinitions[source?.type || '']?.title : undefined) || labelFor(entry.outputs[0]),
-      description: uiText("候选 {{value1}} · {{value2}}", { value1: entry.kind === 'design' ? `${cardDefinitions[source?.type || '']?.title || ''} ${name}`.trim() : name, value2: usages.length ? usages.join('；') : inUse ? '使用中' : '候选' }),
+      description: uiText("候选 {{value1}} · {{value2}}", { value1: entry.kind === 'design' ? `${cardDefinitions[source?.type || '']?.title || ''} ${name}`.trim() : name, value2: usages.length ? usages.join('；') : inUse ? uiText("使用中") : uiText("候选") }),
       used: inUse, issue,
     }
   })
@@ -105,9 +106,9 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
       const frameCandidate = card.type === 'direction.composition' && (!!movement || composition!.frame_target?.card_id === item.source.card_id)
       const target = frameCandidate && composition!.frame_target?.card_id === item.source.card_id ? composition!.frame_target : undefined
       const frameLabel = target ? movementFrameOptions(movement).find(option => option.value === target.state_id)?.label : undefined
-      const usages = [...usageFor(key), ...(target ? [frameLabel ? '已定位 · ' + frameLabel : '定位失效'] : [])]
+      const usages = [...usageFor(key), ...(target ? [frameLabel ? '已定位 · ' + frameLabel : uiText("定位失效")] : [])]
       const marked = card.type === 'direction.anchor' && 'markers' in card && 'examples' in card && card.markers?.some(marker => card.examples?.some(example => example.id === marker.example_id && sourceKey(example.source) === key))
-      const state = marked ? '本地参考 · 已标记' : usages.length ? usages.join('；') : localExample ? '本地示例' : '候选'
+      const state = marked ? uiText("本地参考 · 已标记") : usages.length ? usages.join('；') : localExample ? uiText("本地示例") : uiText("候选")
       const reference = <WorkbenchButton disabled={disabled || !advanced || !focused.current?.current || !candidate.available} onClick={() => {
         close(false)
         focused.current?.current?.insertReference(item.source)
@@ -152,7 +153,7 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
   const onChange = (next: EditorPromptDocument) => {
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])
-    const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || '@缺失来源').join('')
+    const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || uiText("@缺失来源")).join('')
     // The editor drops empty text nodes on blur. Locating an empty field must not become an edit.
     const content = (parts: NonNullable<DesignFieldDocument['segments']>) => parts.filter(part => part.kind === 'reference' || part.text).map(part => part.kind === 'reference' ? ['reference', part.source] : ['text', part.text])
     if (JSON.stringify(content(segments)) === JSON.stringify(content(prompt.segments as NonNullable<DesignFieldDocument['segments']> || []))) return

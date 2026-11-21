@@ -61,6 +61,7 @@ try {
   await languagePage.getByRole('button', { name: '用户与语言设置' }).click()
   await languagePage.getByRole('menuitem', { name: 'English', exact: true }).click()
   await page.reload()
+  await page.locator('[data-card-id="english-named"]').getByText('手绘水彩',{exact:true}).first().waitFor()
   await page.locator('[data-card-id="english-style"]').press('Enter')
   const englishWatercolor = detail.getByRole('button', { name: 'Preview Watercolor', exact: true })
   await englishWatercolor.click()

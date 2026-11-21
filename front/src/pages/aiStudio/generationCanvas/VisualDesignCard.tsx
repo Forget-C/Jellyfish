@@ -32,7 +32,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
     const status = uiText(states[field.state || 'empty'])
     const detail = [size, text].filter(Boolean).join(' · ')
     if (field.authorship === 'user') return detail
-    if (field.state === 'empty' || !field.state) return detail ? `未填写（保留内容）` : '未填写（已配置元信息）'
+    if (field.state === 'empty' || !field.state) return detail ? uiText("未填写（保留内容）") : uiText("未填写（已配置元信息）")
     return [status, detail || field.source_locator?.trim() || (field.purpose === 'constraint' ? '约束' : field.purpose === 'background' ? '背景' : '')].filter(Boolean).join('：')
   }
   const fieldOrder = kind === 'movement'
@@ -47,18 +47,18 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
     const { card_id, state_id } = card.frame_target
     const movement = document.cards?.find((source): source is MovementCard => source.type === 'direction.movement' && source.id === card_id)
     const target = movementFrameOptions(movement).find(option => option.value === state_id)
-    let text = state_id ? '定位画面已失效' : '目标待选择'
+    let text = state_id ? uiText("定位画面已失效") : uiText("目标待选择")
     if (target) text = target.value.startsWith('phase:') ? `运镜阶段 · ${target.label}` : `运镜${target.label}`
     const primaryCount = rows.filter(row => row.key === 'shot_size' || row.key === 'composition').length
     summary.splice(primaryCount, 0, { label: uiText("画面目标"), text })
   }
-  if ('phases' in card) for (const phase of card.phases || []) summary.push({ label: phase.name?.trim() || uiText("运镜阶段"), text: describe(phase.frame) || '阶段待填写' })
+  if ('phases' in card) for (const phase of card.phases || []) summary.push({ label: phase.name?.trim() || uiText("运镜阶段"), text: describe(phase.frame) || uiText("阶段待填写") })
   if (card.scope?.description?.trim()) summary.push({ label: uiText("内容适用范围"), text: card.scope.description.trim() })
   if (card.scope?.phase) summary.push({ label: uiText("制作阶段"), text: designPhaseLabel(card.scope.phase) })
   if (card.scope?.condition?.trim()) summary.push({ label: uiText("适用条件"), text: card.scope.condition.trim() })
   if (card.source_locator?.trim()) summary.push({ label: uiText("卡片原始来源"), text: card.source_locator.trim() })
-  for (const binding of card.input_bindings || []) summary.push({ label: relationLabels[binding.input_port] || uiText("关联关系"), text: sourceName(binding.source) })
-  if (!rows.length && summary.length) summary.unshift({ label: uiText("核心内容"), text: `尚未填写${titleOf(kind)}` })
+  for (const binding of card.input_bindings || []) summary.push({ label: uiText(relationLabels[binding.input_port] || "关联关系"), text: sourceName(binding.source) })
+  if (!rows.length && summary.length) summary.unshift({ label: uiText("核心内容"), text: uiText("尚未填写{{title}}", { title: uiText(titleOf(kind)) }) })
   const visible = summary.slice(0, 3)
   // Give longer values two lines where possible, within four lines for the whole card.
   return visible.map((row, index) => ({ ...row, lines: index < 4 - visible.length ? 2 : 1 }))

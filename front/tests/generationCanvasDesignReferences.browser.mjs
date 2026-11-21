@@ -137,6 +137,17 @@ try {
   }
   assert.equal((await read()).revision,revision)
   await observer.close()
+  const languagePage=await context.newPage()
+  await languagePage.goto('http://127.0.0.1:4666/canvases')
+  await languagePage.getByRole('button',{name:'用户与语言设置'}).click()
+  await languagePage.getByRole('menuitem',{name:'English',exact:true}).click()
+  await page.reload()
+  await page.locator('[data-card-id="style"]').press('Enter')
+  const englishNotes=detail.getByRole('textbox',{name:'Custom notes content',exact:true})
+  await englishNotes.waitFor()
+  assert.ok((await englishNotes.innerText()).includes('@'))
+  assert.deepEqual((await read()).document.cards.find(c=>c.id==='style').fields,beforePreset)
+  await languagePage.close()
   assert.deepEqual(errors,[])
   console.log('Six designs: candidate inspect/insert, cross-field use, inactive retained refs, reload, add and mobile passed:',output)
 } catch(error) { await debugPage?.screenshot({path:join(output,'failure.png'),animations:'disabled'}); throw error } finally { await cleanup() }

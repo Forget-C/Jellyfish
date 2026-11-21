@@ -17,7 +17,7 @@ export function AcceptanceBasisDetails({ current, receiverId, document, disabled
   const text = current.standard?.document ? current.standard.document.segments?.map(part => part.kind === 'text' ? part.text : '@' + (() => { const source = document.cards?.find(source => source.id === part.source.card_id); return source && 'name' in source && source.name || part.source.card_id })()).join('') : current.standard?.text
   const metadata = designFieldMetadataParts(current.standard, { purpose: 'constraint' })
   const edge = document.edges?.find(item => item.source_card === current.id && item.target_card === receiverId && item.target_port === 'acceptance_basis')
-  return <section className="acceptance-detail" aria-label={uiText("验收要求详情")}><h4>{current.name || uiText("未命名验收要求")}</h4><strong>{uiText("可观察判断标准")}</strong><CanvasTextPreview text={text || '标准尚未填写'} label={uiText("验收标准")} />
+  return <section className="acceptance-detail" aria-label={uiText("验收要求详情")}><h4>{current.name || uiText("未命名验收要求")}</h4><strong>{uiText("可观察判断标准")}</strong><CanvasTextPreview text={text || uiText("标准尚未填写")} label={uiText("验收标准")} />
         <DesignMetadataLine items={metadata} />
         {current.scope?.description && <p>{uiText("内容适用范围：")}{current.scope.description}</p>}
         {current.scope?.phase && <p>{uiText("制作阶段：")}{designPhaseLabel(current.scope.phase)}</p>}
