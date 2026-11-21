@@ -40,7 +40,7 @@
       <a href="{{ $frame }}"><img loading="lazy" src="{{ $frame }}" alt="灯下拾信这一镜的候选画面"></a>
       <figcaption>手里的旧信与林夏的目光同框。</figcaption>
     </figure>
-    <div class="sea-production">
+    {{ partial "home-shot-flow.html" . }}
       <section class="sea-record">
         <h3>在画布中查看镜头</h3>
         <video controls playsinline preload="none" poster="{{ "images/sea-letter/canvas-poster.webp" | relURL }}" aria-label="真实画布录屏，从镜头描述选到图片模型，再打开完整图片">
@@ -49,13 +49,6 @@
         </video>
         <p class="sea-meta">画布实录 · 选中镜头描述，打开图片模型的输出。</p>
       </section>
-      <section class="sea-assets">
-        <h3>本场参考</h3>
-        <div>{{ range slice (slice "character" "人物" "林夏") (slice "scene" "场所" "海边站台") (slice "prop" "道具" "旧信封") }}
-          <a href="{{ "docs/guide/scene-references/" | relURL }}"><img loading="lazy" src="{{ printf "images/docs/assets/samples/%s.jpg" (index . 0) | relURL }}" alt=""><span><small>{{ index . 1 }}</small><strong>{{ index . 2 }}</strong></span><i aria-hidden="true">↗</i></a>
-        {{ end }}</div>
-      </section>
-    </div>
     <a class="sea-link" href="{{ "product/workflow/" | relURL }}">查看完整创作流程 <span aria-hidden="true">→</span></a>
   </section>
   <section class="sea-section sea-more">

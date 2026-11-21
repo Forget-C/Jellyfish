@@ -40,8 +40,24 @@ try {
       assert.equal(await button.getAttribute('aria-pressed'), 'true')
       assert.ok(await page.locator('#' + await button.getAttribute('aria-controls')).isVisible())
     }
-    await home.locator('video').evaluate(el => el.play())
-    await page.waitForFunction(() => document.querySelector('video').currentTime > 0)
+    const graph = home.getByRole('region', { name: '这一镜是怎样生成的' })
+    assert.ok(await graph.isVisible())
+    for (const [name, source] of [[/角色 林夏/, 'references'], [/分镜描述/, 'description'], [/选作首帧/, 'candidate']]) {
+      const node = graph.getByRole('button', { name })
+      await node.focus()
+      await page.keyboard.press('Enter')
+      assert.equal(await node.getAttribute('aria-pressed'), 'true')
+      assert.equal(await graph.locator('svg path.is-active[d]').getAttribute('data-from'), source)
+    }
+    for (const video of await home.locator('video').all()) {
+      await video.evaluate(el => el.play())
+      await video.evaluate(el => new Promise(resolve => {
+        if (el.currentTime > 0) resolve()
+        else el.addEventListener('timeupdate', resolve, { once: true })
+      }))
+      await video.evaluate(el => el.pause())
+    }
+    assert.equal(await home.locator('video').count(), 2)
     for (const dark of [false, true]) {
       await page.evaluate(value => document.documentElement.classList.toggle('dark', value), dark)
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)

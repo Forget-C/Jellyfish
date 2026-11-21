@@ -1,0 +1,39 @@
+<section class="shot-flow" id="shot-flow" aria-labelledby="flow-title">
+  <h3 id="flow-title">这一镜是怎样生成的</h3>
+  <div class="flow-board">
+    <svg class="flow-wires" aria-hidden="true" focusable="false">
+      <path data-from="references" data-to="candidate"></path>
+      <path data-from="description" data-to="candidate"></path>
+      <path data-from="candidate" data-to="trial"></path>
+    </svg>
+    <div class="flow-card flow-input" id="references">
+      <h4>选为本场参考</h4>
+      <div class="flow-refs">
+        {{ range slice (slice "character" "角色" "林夏" "选用林夏的角色图，为镜头提供人物外观参考。角色图可上传或生成。") (slice "scene" "场所" "海边站台" "选用站台参考图，保留海雾与站灯的位置。") (slice "prop" "道具" "旧信封" "选用旧信封参考图，让道具的形状和质感有据可依。") }}
+          <button type="button" data-note="{{ index . 3 }}" aria-pressed="false">
+            <img loading="lazy" width="160" height="110" src="{{ printf "images/docs/assets/samples/%s.jpg" (index . 0) | relURL }}" alt="">
+            <small>{{ index . 1 }}</small>{{ index . 2 }}
+          </button>
+        {{ end }}
+      </div>
+    </div>
+    <button type="button" class="flow-card" id="description" data-note="分镜描述确定要拍的动作，和本场参考一起用于生成候选画面。" aria-pressed="false">
+      <small>分镜描述</small>林夏低头，辨认信上的字迹。
+    </button>
+    <button type="button" class="flow-card" id="candidate" data-note="从候选画面中选定「灯下拾信」，将这张图作为视频试拍的首帧。" aria-pressed="false">
+      <small>生成候选画面</small>
+      <img loading="lazy" width="836" height="470" src="{{ "images/docs/labs/letter-frame.jpg" | relURL }}" alt="暖色站灯下的林夏与旧信">
+      <strong>选作首帧 →</strong>
+    </button>
+    <figure class="flow-card" id="trial">
+      <figcaption><small>视频试拍</small><strong>灯下拾信 · 慢推镜</strong></figcaption>
+      <video controls playsinline preload="none" aria-label="灯下拾信三秒本地试拍" poster="{{ "images/docs/labs/letter-frame.jpg" | relURL }}">
+        <source src="{{ "images/sea-letter/letter-push-in.mp4" | relURL }}" type="video/mp4">
+      </video>
+      <small>3 秒 · 本地演示</small>
+    </figure>
+  </div>
+  <div class="flow-caption"><p aria-live="polite">参考图与分镜描述汇入候选画面，选定一张作为试拍首帧。</p>
+    <a class="sea-link" href="{{ "docs/guide/scene-references/" | relURL }}">本场参考指南 →</a>
+  </div>
+</section>
