@@ -1,0 +1,27 @@
+{{ $slots := site.Data.placements }}
+{{ if or $slots.sponsors $slots.contact }}
+<section class="sea-placement" aria-label="项目赞助">
+  {{ with $slots.sponsors }}
+    <h2>项目赞助</h2>
+    <ul>{{ range . }}
+      <li>
+        {{ with .url }}<a href="{{ . | relURL }}">{{ end }}
+        {{ with .logo }}<img src="{{ . | relURL }}" alt="" loading="lazy">{{ end }}
+        <span>{{ .name }}</span>
+        {{ with .url }}</a>{{ end }}
+      </li>
+    {{ end }}</ul>
+  {{ else }}
+    <h2>支持 Jellyfish 开发</h2>
+    <a href="{{ $slots.contact | relURL }}">联系赞助</a>
+  {{ end }}
+</section>
+{{ end }}
+{{ with $slots.ad }}
+  {{ if and .title .url }}
+  <section class="sea-placement" aria-label="广告">
+    <h2>广告</h2>
+    <a href="{{ .url | relURL }}">{{ with .image }}<img src="{{ . | relURL }}" alt="" loading="lazy">{{ end }}{{ .title }}</a>
+  </section>
+  {{ end }}
+{{ end }}

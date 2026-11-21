@@ -1,6 +1,6 @@
 ---
 title: "参与贡献"
-weight: 1
+weight: 2
 description: "反馈问题、提出建议或参与 Jellyfish 的代码与文档协作。"
 ---
 

@@ -47,7 +47,7 @@ menu:
         icon: github
 
 params:
-  description: "从剧本到分镜、资产、视频生成与剪辑的一站式 AI 短剧生产平台。"
+  description: "组织章节原文、场次参考和分镜画面，试验文本、图片与视频生成的 AI 短剧创作工作台。"
   keywords:
     - AI短剧
     - AI短剧工厂

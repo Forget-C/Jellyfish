@@ -1,10 +1,62 @@
 {{ define "main" }}
-  <div id="content" class="jf-home">
-    {{ partial "home-hero.html" . }}
-    {{ partial "home-features.html" . }}
-    {{ partial "home-workflow.html" . }}
-    {{ partial "home-scenarios.html" . }}
-    {{ partial "home-screenshots.html" . }}
-    {{ partial "home-cta.html" . }}
-  </div>
+{{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
+{{ $frame := "images/sea-letter/platform.webp" | relURL }}
+{{ $board := "images/screenshots/home/storyboard.webp" | relURL }}
+{{ $crop := "images/sea-letter/board-detail.webp" | relURL }}
+{{ $css := resources.Get "css/sea-letter.css" | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+<main id="content" class="sea">
+  <section class="sea-hero" aria-labelledby="shot-title">
+    <div class="sea-copy">
+      <p class="sea-meta">Jellyfish AI 短剧创作工作台</p>
+      <h1 id="shot-title">雾海来信</h1>
+      <p class="sea-lead">没有对白，怎样拍出林夏认得这封信？</p>
+    </div>
+    <figure class="sea-plate">
+      <a href="{{ $frame }}"><img src="{{ $frame }}" alt="站灯下，林夏低头读着手中的旧信" fetchpriority="high"></a>
+      <figcaption><span>海边站台 · 灯下拾信</span><span>镜头结果</span></figcaption>
+    </figure>
+    <div class="sea-actions">
+      <a class="sea-primary" href="#shot-process">看这一镜怎么做 <span aria-hidden="true">↓</span></a>
+      <a href="{{ "docs/getting-started/installation/" | relURL }}">本地部署 <span aria-hidden="true">→</span></a>
+    </div>
+  </section>
+  <section class="sea-section" id="shot-process" aria-labelledby="process-title">
+    <div class="sea-heading">
+      <h2 id="process-title">从原文到这一镜</h2>
+      <div class="sea-tabs" role="group" aria-label="选择创作环节">
+        {{ range $i,$name := slice "章节原文" "分镜画布" "镜头结果" }}<button type="button" data-select="{{ $i }}" aria-controls="stage-{{ $i }}" aria-pressed="{{ eq $i 0 }}">{{ $name }}</button>{{ end }}
+      </div>
+    </div>
+    <figure class="sea-panel sea-manuscript" id="stage-0" data-stage="0">
+      <img loading="lazy" src="{{ "images/docs/assets/samples/scene.jpg" | relURL }}" alt="雾中的海边站台">
+      <figcaption><span class="sea-meta">第一集 · 章节原文节选</span><blockquote>她发现一只旧信封，封口留着一枚褪色的邮戳。<mark>她拿起信，在灯下认出熟悉的字迹。</mark></blockquote></figcaption>
+    </figure>
+    <figure class="sea-panel" id="stage-1" data-stage="1" hidden>
+      <a href="{{ $board }}"><picture><source media="(max-width: 700px)" srcset="{{ $crop }}"><img loading="lazy" src="{{ $board }}" alt="镜头描述与参考图连接到图片模型卡，点按查看完整画布"></picture></a>
+      <figcaption>镜头停在被海雾打湿的邮戳。</figcaption>
+    </figure>
+    <figure class="sea-panel" id="stage-2" data-stage="2" hidden>
+      <a href="{{ $frame }}"><img loading="lazy" src="{{ $frame }}" alt="灯下拾信这一镜的候选画面"></a>
+      <figcaption>手里的旧信与林夏的目光同框。</figcaption>
+    </figure>
+    {{ partial "home-shot-flow.html" . }}
+      <section class="sea-record">
+        <h3>在画布中查看镜头</h3>
+        <video controls playsinline preload="none" poster="{{ "images/sea-letter/canvas-poster.webp" | relURL }}" aria-label="真实画布录屏，从镜头描述选到图片模型，再打开完整图片">
+          <source media="(max-width: 700px)" src="{{ "images/sea-letter/canvas-walkthrough-mobile.mp4" | relURL }}" type="video/mp4">
+          <source src="{{ "images/sea-letter/canvas-walkthrough.mp4" | relURL }}" type="video/mp4">
+        </video>
+        <p class="sea-meta">画布实录 · 选中镜头描述，打开图片模型的输出。</p>
+      </section>
+    <a class="sea-link" href="{{ "product/workflow/" | relURL }}">查看完整创作流程 <span aria-hidden="true">→</span></a>
+  </section>
+  <section class="sea-section sea-more">
+    <h2>更多短剧题材</h2>
+    <div>{{ range after 1 site.Data.homepage.projects }}<figure><img loading="lazy" src="{{ .cover | relURL }}" alt=""><figcaption><small>{{ .genre }}</small><h3>{{ .title }}</h3></figcaption></figure>{{ end }}</div>
+  </section>
+  {{ partial "home-placements.html" . }}
+  <footer>{{ range slice (slice "blog/" "更新日志") (slice "docs/community/contributing/" "参与社区") (slice "docs/getting-started/installation/" "本地部署") }}<a href="{{ index . 0 | relURL }}">{{ index . 1 }}</a>{{ end }}<a href="{{ site.Params.social.github }}">GitHub ↗</a></footer>
+</main>
+{{ $js := resources.Get "js/sea-letter.js" | minify | fingerprint }}<script defer src="{{ $js.RelPermalink }}"></script>
 {{ end }}

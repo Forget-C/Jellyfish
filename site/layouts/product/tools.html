@@ -1,0 +1,24 @@
+{{ define "main" }}
+  {{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
+  <main id="content" class="jf-home jf-product-page">
+    <header class="jf-tools-heading">
+      <a class="jf-detail-link" href="{{ "product/" | relURL }}">← 产品</a>
+      <h1>{{ .Title }}</h1>
+      <p class="jf-lead">{{ .Description }}</p>
+    </header>
+    <div class="jf-tool-grid">
+      {{ range .Params.tools }}
+        <section class="jf-tool">
+          <img src="{{ printf "images/screenshots/home/%s" .image | relURL }}" width="1440" height="900" loading="lazy" alt="{{ .alt }}">
+          <div>
+            <h2>{{ .title }}</h2>
+            <p>{{ .benefit }}</p>
+            <a class="jf-detail-link" href="{{ relref $ .guide }}{{ with .anchor }}#{{ . }}{{ end }}">{{ .label }} →</a>
+          </div>
+        </section>
+      {{ end }}
+    </div>
+    <section class="jf-section content">{{ .Content }}</section>
+    <a class="jf-detail-link" href="{{ "product/workflow/" | relURL }}">看《雾海来信》如何使用这些工具 →</a>
+  </main>
+{{ end }}

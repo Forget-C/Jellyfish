@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="{{ site.Language.LanguageCode }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ .Page.Title }}</title>
+  <link rel="canonical" href="{{ .Permalink }}">
+  <meta name="robots" content="noindex">
+  {{ if eq .Page.Section "docs" }}
+    {{ $redirect := resources.Get "js/doc-alias.js" | minify | fingerprint }}
+    <script src="{{ $redirect.RelPermalink }}"></script>
+  {{ end }}
+  <meta http-equiv="refresh" content="0; url={{ .Permalink }}">
+</head>
+<body><a href="{{ .Permalink }}">{{ .Page.Title }}</a></body>
+</html>

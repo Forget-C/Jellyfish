@@ -1,9 +1,11 @@
 ---
-title: "快速开始"
+title: "安装与配置"
 weight: 1
-description: "安装、部署或开始开发 Jellyfish。"
+description: "获取项目、启动 Jellyfish，并接入生成所需的模型。"
 ---
 
-使用产品时，先阅读[安装说明](installation/)并按 [Docker 部署](docker/)启动。
+1. [准备安装环境]({{< relref "installation" >}})。安装 Git、Docker 和 Compose，取得项目代码。
+2. [启动并检查服务]({{< relref "docker" >}})。用 Compose 启动工作台，确认前端可打开、API 健康检查成功。
+3. [配置生成模型]({{< relref "model-setup" >}})。登记供应商和需要使用的模型，再到实验室做一次小规模试验。
 
-修改代码时，使用[开发快速开始](local-dev/)。
+只想先熟悉项目管理，可以从[创建项目与第一章]({{< relref "/docs/guide/first-project" >}})开始，第一次生成前再配置模型。修改应用代码请使用[本地开发环境]({{< relref "/docs/community/local-dev" >}})。

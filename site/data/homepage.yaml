@@ -1,78 +1,47 @@
 hero:
-  title: "Jellyfish AI 短剧工厂"
-  subtitle: "面向短剧生产的 AI 工作台，从剧本拆解到分镜、资产、生成与剪辑，一站完成。"
-  primary:
-    text: "查看文档"
-    link: "docs/"
-  secondary:
-    text: "访问 GitHub"
-    link: "https://github.com/Forget-C/Jellyfish"
-
-features:
-  - title: "一致性资产管理"
-    description: "统一角色、场景、道具与服装，减少 AI 生成中的风格漂移。"
-  - title: "工业化创作流程"
-    description: "从脚本处理、分镜编辑到任务生成与剪辑，形成完整工作流。"
-  - title: "分镜级精细控制"
-    description: "支持镜头语言、对白、帧图、提示词与关联资产的细粒度编辑。"
-  - title: "多模型与 Agent 协同"
-    description: "统一管理不同供应商模型，并用 Agent 工作流承接 AI 能力。"
-
-scenarios:
-  - eyebrow: "Studio"
-    title: "AI 影视工作室"
-    description: "适合把角色、场景、镜头和生成流程做成团队可复用的生产资产。"
-  - eyebrow: "Creator"
-    title: "短剧内容创作者"
-    description: "适合需要把脚本、分镜和素材组织起来，而不是只靠零散提示词创作的人。"
-  - eyebrow: "Team"
-    title: "品牌与内容团队"
-    description: "适合把剧情化视频生产流程工具化，减少多人协作时的信息断层。"
-  - eyebrow: "Lab"
-    title: "AI 产品验证"
-    description: "适合希望快速验证短剧工作流、Agent 编排和模型接入能力的团队。"
-
-highlights:
-  - label: "工作台主轴"
-    value: "项目 → 章节 → 场次"
-  - label: "场次创作"
-    value: "导演设计、拍摄、审片与剪辑"
-  - label: "独立生成"
-    value: "文本、图片与视频模型"
-  - label: "本地部署"
-    value: "Compose 拉起前后端、MySQL、RustFS"
-
+  title: "让故事，走向画面。"
+  subtitle: "Jellyfish AI 短剧创作工作台，从剧本、参考素材到分镜与画面生成。"
+showcase:
+  - title: "分镜画布"
+    image: "images/screenshots/home/storyboard.webp"
+    alt: "海边站台的分镜画布，包含固定原文、人物与场景参考图、镜头描述和图片模型卡"
+    description: "在一张画布上组织镜头描述、参考素材和生成任务。"
+  - title: "场次划分"
+    image: "images/screenshots/home/scene-division.webp"
+    alt: "第一集《末班车之后》的章节原文和海边站台、堤岸晨光两个场次"
+    description: "从章节原文选定范围，将故事拆成可制作的场次。"
+  - title: "对象参考"
+    image: "images/screenshots/home/object-references.webp"
+    alt: "海边站台场次中已选用参考图的角色林夏、海边站台和旧信封"
+    description: "为同一场次选用角色、场所和道具的参考图。"
+  - title: "生成结果"
+    image: "images/screenshots/home/generation-preview.webp"
+    alt: "画布中的图片生成结果预览，林夏在站台灯下打开旧信封"
+    description: "在画布中查看镜头的图片输出。"
+  - title: "对话式生成"
+    image: "images/screenshots/home/conversation.webp"
+    alt: "文本实验室的两轮对话：先将站台开场拆成三个无对白镜头，再改写林夏认出字迹的特写"
+    description: "先把站台开场拆成三个镜头，再追问一句，让林夏用一个动作认出旧信。"
 workflow:
-  title: "一条龙的短剧生产流程"
-  steps:
-    - "剧本输入"
-    - "章节划分场次"
-    - "导演设计与资产准备"
-    - "准备单元与拍摄"
-    - "审片与人工采用"
-    - "剪辑、交付与导出"
-
-screenshots:
-  title: "核心界面预览"
-  items:
-    - title: "项目概览"
-      image: "images/screenshots/project.png"
-      alt: "Jellyfish 项目概览"
-    - title: "资产管理"
-      image: "images/screenshots/assets.png"
-      alt: "Jellyfish 资产管理"
-
-cta:
-  title: "开始使用 Jellyfish"
-  description: "获取项目，按部署说明启动应用，再跟随使用指南完成创作。"
-  primary:
-    text: "安装说明"
-    link: "docs/getting-started/installation/"
-  secondary:
-    text: "Docker 部署"
-    link: "docs/getting-started/docker/"
-
-quickstart:
-  title: "快速开始"
-  command: "docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build"
-  note: "首次部署前，请按部署说明准备配置。已有部署应保留现有配置和数据卷。"
+  - title: "构思"
+    subtitle: "组织故事与镜头"
+    description: "从章节原文开始，确认场次与导演设计。"
+  - title: "制作"
+    subtitle: "准备资产，生成候选"
+    description: "把角色、场景与参考素材带进创作。"
+  - title: "完成"
+    subtitle: "检查生成结果"
+    description: "预览输出，选用合适的素材继续创作。"
+projects:
+  - title: "雾海来信"
+    genre: "海滨悬疑"
+    cover: "images/projects/sea-letter.webp"
+    synopsis: "末班车开走后，林夏在站台捡到一封旧信。信封上，是她认得的笔迹。"
+  - title: "山海之间"
+    genre: "古装冒险"
+    cover: "images/projects/mountain-pass.webp"
+    synopsis: "山洪冲断驿道，年轻驿卒循着父亲留下的舆图，寻找通往海港的最后一条山路。"
+  - title: "第七次日出"
+    genre: "科幻悬疑"
+    cover: "images/projects/seventh-dawn.webp"
+    synopsis: "连续六个清晨，山顶观测站都收到了明天的天气报告。第七天，电台里传来值班员自己的呼救声。"

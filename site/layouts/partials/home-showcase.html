@@ -1,0 +1,20 @@
+<section id="product-preview" class="jf-showcase" aria-label="产品功能预览">
+  <div class="jf-preview-controls" hidden>
+    {{ range $index, $item := site.Data.homepage.showcase }}
+      <button type="button" class="jf-preview-button" aria-pressed="{{ if eq $index 0 }}true{{ else }}false{{ end }}" aria-controls="preview-{{ $index }}">{{ .title }}</button>
+    {{ end }}
+  </div>
+  {{ range $index, $item := site.Data.homepage.showcase }}
+    <div class="jf-preview" id="preview-{{ $index }}" data-preview>
+      <figure class="jf-screenshot">
+        <figcaption><span>雾海来信 · {{ .title }}</span><span>真实界面 · 演示数据</span></figcaption>
+        <a href="{{ .image | relURL }}" aria-label="查看{{ .title }}原图">
+          <img src="{{ .image | relURL }}" alt="{{ .alt }}" width="1440" height="900" decoding="async"{{ if $index }} loading="lazy"{{ else }} fetchpriority="high"{{ end }}>
+        </a>
+      </figure>
+      <p class="jf-preview-caption">{{ .description }}</p>
+    </div>
+  {{ end }}
+  <p class="jf-sr-only" data-preview-status aria-live="polite" aria-atomic="true"></p>
+  <a class="jf-detail-link" href="{{ "product/features/" | relURL }}">浏览创作工具 <span aria-hidden="true">↗</span></a>
+</section>

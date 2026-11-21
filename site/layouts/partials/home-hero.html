@@ -1,51 +1,10 @@
 {{ $hero := site.Data.homepage.hero }}
-{{ $highlights := site.Data.homepage.highlights }}
-<section class="jf-hero">
-  <div>
-    <div class="jf-badge">
-      AI Short Drama Studio
-    </div>
-    <h1>{{ $hero.title }}</h1>
-    <p class="jf-lead">{{ $hero.subtitle }}</p>
-    <div class="jf-actions">
-      <a class="jf-btn jf-btn-primary" href="{{ $hero.primary.link | relURL }}">
-        {{ $hero.primary.text }}
-      </a>
-      <a class="jf-btn jf-btn-secondary" href="{{ $hero.secondary.link | relURL }}">
-        {{ $hero.secondary.text }}
-      </a>
-    </div>
-    <div class="jf-highlight-grid">
-      {{ range $highlights }}
-        <div class="jf-card">
-          <div class="jf-card-label">{{ .label }}</div>
-          <div class="jf-card-value">{{ .value }}</div>
-        </div>
-      {{ end }}
-    </div>
-  </div>
-  <div class="jf-panel">
-    <div class="jf-panel-grid">
-      <div class="jf-panel-item">
-        <div class="jf-panel-kicker">Studio</div>
-        <h3>项目 / 章节 / 场次</h3>
-        <p>围绕短剧制作链路组织业务工作台。</p>
-      </div>
-      <div class="jf-panel-item">
-        <div class="jf-panel-kicker">AI</div>
-        <h3>内容 / 模型 / 任务</h3>
-        <p>把文本理解与图片视频生成接入生产流。</p>
-      </div>
-      <div class="jf-panel-item">
-        <div class="jf-panel-kicker">Canvas</div>
-        <h3>独立生成画布</h3>
-        <p>组织素材、模型和结果，按需检查输入与产物。</p>
-      </div>
-      <div class="jf-panel-item">
-        <div class="jf-panel-kicker">Deploy</div>
-        <h3>Compose 一键启动</h3>
-        <p>本地可快速拉起前端、后端、数据库与对象存储。</p>
-      </div>
-    </div>
+<section class="jf-hero" aria-labelledby="home-title">
+  <div class="jf-kicker">AI Short Drama Studio</div>
+  <h1 id="home-title">{{ $hero.title }}</h1>
+  <p class="jf-lead">{{ $hero.subtitle }}</p>
+  <div class="jf-actions">
+    <a class="jf-btn jf-btn-primary" href="{{ "docs/getting-started/installation/" | relURL }}">开始部署</a>
+    <a class="jf-btn jf-btn-secondary" href="#product-preview">探索产品 <span aria-hidden="true">↓</span></a>
   </div>
 </section>

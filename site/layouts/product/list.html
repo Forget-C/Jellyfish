@@ -1,12 +1,35 @@
 {{ define "main" }}
-  {{ partial "content-layout.html" (dict
-    "context" .
-    "sidebar" (dict "context" .)
-    "tocPartial" "product-toc.html"
-    "breadcrumbEnabled" false
-    "showContextMenu" false
-    "showLastUpdated" true
-    "showPagination" false
-    "showComments" true
-  ) }}
+  {{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
+  <main id="content" class="jf-home jf-product-page">
+    <section class="jf-product-hero">
+      <div>
+        <p class="jf-kicker">Jellyfish 短剧创作工作台</p>
+        <h1>从剧本里的一句话，到镜头里的一个动作。</h1>
+        <p class="jf-lead">{{ .Description }}</p>
+        <a class="jf-btn jf-btn-primary" href="{{ "product/workflow/" | relURL }}">看《雾海来信》的创作流程</a>
+      </div>
+      <figure>
+        <img src="{{ "images/projects/sea-letter.webp" | relURL }}" width="900" height="600" alt="海边站台上，林夏俯身拾起一封旧信">
+        <figcaption>《雾海来信》 · 第一集《末班车之后》示例封面</figcaption>
+      </figure>
+    </section>
+    <section class="jf-section">
+      <h2>没有对白，怎样拍出她认得这封信？</h2>
+      <div class="jf-product-stages">
+        {{ range .Params.stages }}
+          <div>
+            <h3>{{ .title }}</h3>
+            <blockquote>{{ .excerpt }}</blockquote>
+            <p>{{ .detail }}</p>
+            <a class="jf-detail-link" href="{{ "product/workflow/" | relURL }}#{{ .link }}">查看这一幕<span class="jf-sr-only">：{{ .title }}</span> →</a>
+          </div>
+        {{ end }}
+      </div>
+    </section>
+    <section class="jf-section jf-community">
+      <div><h2>找到适合你的创作工具</h2><p>为一场戏组织分镜，或单独试写提示词、生成素材。</p></div>
+      <a class="jf-btn jf-btn-secondary" href="{{ "product/features/" | relURL }}">浏览创作工具</a>
+      <a class="jf-detail-link" href="{{ "docs/getting-started/" | relURL }}">安装 Jellyfish →</a>
+    </section>
+  </main>
 {{ end }}

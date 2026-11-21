@@ -1,0 +1,15 @@
+<section class="jf-section" aria-labelledby="projects-title">
+  <div class="jf-section-heading"><h2 id="projects-title">短剧创作示例</h2></div>
+  <div class="jf-projects">
+    {{ range site.Data.homepage.projects }}
+      <figure class="jf-project">
+        <img src="{{ .cover | relURL }}" alt="" width="900" height="600" loading="lazy" decoding="async">
+        <figcaption>
+          <span>{{ .genre }}</span>
+          <h3>{{ .title }}</h3>
+          <p>{{ .synopsis }}</p>
+        </figcaption>
+      </figure>
+    {{ end }}
+  </div>
+</section>
