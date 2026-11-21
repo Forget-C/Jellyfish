@@ -14,7 +14,7 @@ url: "/docs/guide/asset-images/"
 
 打开资产详情，保存设定。在「图片」区域点击「生成图片」，选择图片模型、目标视角和本次要求。需要参考时，选入与本次生成对应的主体、服装或道具。生成完成后打开图片集合核对画面。
 
-![林夏的角色详情显示当前主图和视角缩略图](../../../images/docs/assets/view.webp)
+[![林夏的角色详情显示当前主图和视角缩略图](../../../images/docs/assets/view.webp)](../../../images/docs/assets/view.webp)
 
 《雾海来信》的示例从「海边站台」进入林夏的项目角色详情。项目角色与资产库演员各自保存图片；核对页头名称后再操作。
 
@@ -24,12 +24,12 @@ url: "/docs/guide/asset-images/"
 
    > 保留林夏深蓝色大衣和站台背景，把构图收近至肩部。
 
-   ![局部修改弹窗已填写修改要求并选择图片模型](../../../images/docs/assets/edit.webp)
+   [![局部修改弹窗已填写修改要求并选择图片模型](../../../images/docs/assets/edit.webp)](../../../images/docs/assets/edit.webp)
 
 2. 分别预览两张图，核对服装、背景与构图。要让新图排在该视角首位，在图片集合中点击「设为正面默认图」，检查「视角默认」标记。
 3. 要让场次使用这个项目角色的新图，再点击这张图的「设为主图」，确认「主图」标记落在新图上。单纯切换预览或设置视角默认都不会替换角色主图。
 
-   ![林夏的正面图片集合，新图同时标有主图和视角默认](../../../images/docs/assets/primary.webp)
+   [![林夏的正面图片集合，新图同时标有主图和视角默认](../../../images/docs/assets/primary.webp)](../../../images/docs/assets/primary.webp)
 
 图中结果采用本地演示媒体。回到[本场对象参考]({{< relref "/docs/guide/scene-references" >}}#为场次准备对象参考)，核对「林夏」缩略图，再继续制作分镜。
 

@@ -54,6 +54,21 @@ try {
         const crumb = page.locator('#content > div').first()
         assert.deepEqual(await crumb.locator('a').allTextContents(), ['文档中心', group], title)
         assert.ok((await crumb.innerText()).endsWith(title))
+        for (const image of await page.locator('main .content img').all()) {
+          await image.scrollIntoViewIfNeeded()
+          const media = await image.evaluate(async element => {
+            await element.decode()
+            return {
+              alt: element.alt,
+              original: element.closest('a')?.href,
+              url: element.currentSrc,
+              width: element.getBoundingClientRect().width,
+            }
+          })
+          assert.ok(media.alt && media.width > 0 && media.width <= width, title)
+          assert.equal(media.original, media.url, title + ' provides the original for ' + media.alt)
+          assert.ok(media.url.startsWith(new URL(base).href), media.url)
+        }
         await openMenu()
         const names = (await menu.locator('a:visible').allTextContents()).map(s => s.trim())
         assert.ok(!names.includes('旧版场次工作台'), '目录仅列出现行工作区')
@@ -62,6 +77,19 @@ try {
         assert.deepEqual((await menu.locator('.hextra-sidebar-active-item:visible').allTextContents()).map(s => s.trim()), [title])
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, title)
       }
+    }
+
+    await page.goto(new URL('docs/getting-started/installation/', base).href)
+    for (const [link, title] of [
+      ['Docker 部署', '启动并检查服务'],
+      ['配置生成模型', '配置生成模型'],
+      ['创建项目与第一章', '创建项目与第一章'],
+      ['从原文划分场次', '从原文划分场次'],
+      ['为本场选参考图', '为本场选参考图'],
+      ['生成分镜与查看候选画面', '生成分镜与查看候选画面'],
+    ]) {
+      await page.locator('main .content').getByRole('link', { name: link, exact: true }).click()
+      await page.getByRole('heading', { level: 1, name: title, exact: true }).waitFor()
     }
 
     await page.goto(new URL('product/workflow/', base).href)
