@@ -1,3 +1,5 @@
+import { currentLanguage } from '../../i18n'
+import { useUiText } from '../../uiText'
 import { useEffect, useState } from 'react'
 import { ArrowRightOutlined, MessageOutlined, PictureOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { HomeRecentFeedback } from './HomeRecentList'
@@ -11,7 +13,7 @@ const sessionTypes = {
   video: { label: '视频', icon: <VideoCameraOutlined /> },
 }
 
-const dateFormat = new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+const dateFormat = () => new Intl.DateTimeFormat(currentLanguage(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 type SessionActivity = { sessions: ExperimentSessionRead[]; failedTypes: number }
 
@@ -29,6 +31,7 @@ async function readRecentSessions(): Promise<SessionActivity> {
 }
 
 export function HomeRecentSessions() {
+  const uiText = useUiText()
   const [activity, setActivity] = useState<SessionActivity>()
   const [retry, setRetry] = useState(0)
 
@@ -42,48 +45,48 @@ export function HomeRecentSessions() {
   const sessions = activity?.sessions ?? []
   return <section aria-labelledby="home-recent-sessions">
     <header className="home-section-heading">
-      <h2 id="home-recent-sessions">最近实验室会话</h2>
+      <h2 id="home-recent-sessions">{uiText("最近实验室会话")}</h2>
     </header>
     <div className="home-activity-surface">
       <div className="home-activity-scroll">
         <div className="home-slot-frame">
           {activity && activity.failedTypes > 0 && <div className="home-feedback home-feedback-error" role="alert" data-partial={sessions.length > 0 || undefined}>
-            <span>{activity.failedTypes === 3 ? '读取实验室会话失败' : '部分实验室会话读取失败'}</span>
-            <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>重试</button>
+            <span>{activity.failedTypes === 3 ? uiText("读取实验室会话失败") : uiText("部分实验室会话读取失败")}</span>
+            <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</button>
           </div>}
           <ul className="home-activity-list">
             {sessions.map(session => {
               const type = sessionTypes[session.lab_type]
               const date = Date.parse(session.updated_at)
-              const preview = session.last_message_preview?.trim() || '暂无摘要'
+              const preview = session.last_message_preview?.trim() || uiText('暂无摘要')
               return <li key={session.id}>
                 <Link className="home-session-row" to={`/lab?session=${encodeURIComponent(session.id)}`}>
                   <span className="home-activity-icon" aria-hidden="true">{type.icon}</span>
                   <div className="home-activity-copy">
                     <span className="home-activity-title" title={session.title}>{session.title}</span>
-                    <p className="home-session-preview" title={preview}>{type.label} · {preview}</p>
+                    <p className="home-session-preview" title={preview}>{uiText(type.label)} · {preview}</p>
                   </div>
-                  {Number.isFinite(date) ? <time className="home-session-time" dateTime={session.updated_at}>{dateFormat.format(date)}</time>
-                    : <span className="home-session-time">更新时间未知</span>}
+                  {Number.isFinite(date) ? <time className="home-session-time" dateTime={session.updated_at}>{dateFormat().format(date)}</time>
+                    : <span className="home-session-time">{uiText("更新时间未知")}</span>}
                 </Link>
               </li>
             })}
             <HomePlaceholders kind="activity" filled={sessions.length} loading={!activity} />
           </ul>
           {!sessions.length && !activity?.failedTypes && <HomeRecentFeedback status={activity ? 'ready' : 'loading'}
-            label="实验室会话" onRetry={() => setRetry(value => value + 1)} />}
+            label={uiText("实验室会话")} onRetry={() => setRetry(value => value + 1)} />}
         </div>
       </div>
       <div className="home-activity-footer home-session-footer">
-        <div className="home-quick-links" role="group" aria-label="新建实验">
-          <span>新建：</span>
+        <div className="home-quick-links" role="group" aria-label={uiText("新建实验")}>
+          <span>{uiText("新建：")}</span>
           {Object.entries(sessionTypes).map(([mode, type]) => (
-            <Link key={mode} className="home-text-action" aria-label={`新建${type.label}实验`} to={`/lab?mode=${mode}`}>
-              <span aria-hidden="true">{type.icon}</span>{type.label}
+            <Link key={mode} className="home-text-action" aria-label={uiText("新建{{label}}实验", { label: uiText(type.label) })} to={`/lab?mode=${mode}`}>
+              <span aria-hidden="true">{type.icon}</span>{uiText(type.label)}
             </Link>
           ))}
         </div>
-        <Link className="home-text-action" to="/lab">打开实验室<ArrowRightOutlined aria-hidden /></Link>
+        <Link className="home-text-action" to="/lab">{uiText("打开实验室")}<ArrowRightOutlined aria-hidden /></Link>
       </div>
     </div>
   </section>

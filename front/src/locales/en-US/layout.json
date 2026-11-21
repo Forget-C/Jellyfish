@@ -3,6 +3,8 @@
   "subtitle": "AI Short-form Studio",
   "welcome": "Welcome to Jellyfish",
   "brandHome": "Jellyfish Home",
+  "accountMenu": "User and language settings",
+  "languageMenu": "Language",
   "primaryNavigation": "Main navigation",
   "appearance": {
     "label": "Appearance",

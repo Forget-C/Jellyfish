@@ -1,3 +1,4 @@
+import { uiText } from './uiText'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConfigProvider } from 'antd'
@@ -8,11 +9,11 @@ import 'antd/dist/reset.css'
 import './index.css'
 import './i18n'
 import { initOpenAPI } from './services/openapi'
-import { useAppStore } from './store/useAppStore'
+import { useTranslation } from 'react-i18next'
 
 const RootApp: React.FC = () => {
-  const language = useAppStore((state) => state.language)
-  const antdLocale = language === 'en-US' ? enUS : zhCN
+  const { i18n } = useTranslation()
+  const antdLocale = i18n.resolvedLanguage === 'en-US' ? enUS : zhCN
 
   return (
     <ConfigProvider
@@ -52,7 +53,7 @@ class AppErrorBoundary extends React.Component<
     if (this.state.hasError && this.state.error) {
       return (
         <div style={{ padding: 24, fontFamily: 'sans-serif' }}>
-          <h2>页面加载出错</h2>
+          <h2>{uiText("页面加载出错")}</h2>
           <pre style={{ color: '#c00', overflow: 'auto' }}>
             {this.state.error.message}
           </pre>

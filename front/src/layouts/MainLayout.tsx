@@ -30,20 +30,13 @@ function OrdinaryLayout() {
   const projectId = useMatches().find(match => match.id === 'project-navigation')?.params.projectId
   const navigate = useNavigate()
   const user = useAppStore(state => state.user)
-  const language = useAppStore(state => state.language)
-  const setLanguage = useAppStore(state => state.setLanguage)
+  const language = i18n.resolvedLanguage ?? 'zh-CN'
   const appearance = useAppStore(state => state.appearance)
   const setAppearance = useAppStore(state => state.setAppearance)
   const accountButton = useRef<HTMLButtonElement>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const titles = useNavigationTitles()
   const projectIndex = !!projectId && pathname.split('/').filter(Boolean).length === 2
-  useEffect(() => {
-    const resolved = i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
-    setLanguage(resolved)
-    document.documentElement.lang = resolved === 'en-US' ? 'en' : 'zh-CN'
-  }, [i18n.resolvedLanguage, setLanguage])
-
   const activeNavigation = activeMainNavigation(pathname)
   const lastManagementPage = useLastManagementPage(pathname)
   const [lastProjectQuery, setLastProjectQuery] = useState(() => {
@@ -77,7 +70,7 @@ function OrdinaryLayout() {
         <div className="app-global-actions">
           <TaskCenter />
           <Dropdown overlayClassName="app-context-menu" trigger={['click']} placement="bottomRight" autoFocus open={accountOpen} onOpenChange={setAccountOpen} menu={{ selectable: true, selectedKeys: [language, appearance], onClick: () => setAccountOpen(false), items: [
-            { key: 'user', label: `${user.name} · ${user.role}`, disabled: true },
+            { key: 'user', label: `${user.name} · ${t(`settings:roleOptions.${user.role}`)}`, disabled: true },
             { key: 'settings', label: t('user.profile'), onClick: () => navigate('/settings') },
             { type: 'divider' },
             { type: 'group', key: 'appearance', label: t('appearance.label'), children: appearances.map(value => ({
@@ -95,11 +88,11 @@ function OrdinaryLayout() {
               },
             })) },
             { type: 'divider' },
-            { type: 'group', key: 'language', label: language === 'zh-CN' ? '语言' : 'Language', children: [
-              { key: 'zh-CN', label: '简体中文', onClick: () => { setLanguage('zh-CN'); void i18n.changeLanguage('zh-CN'); window.localStorage.setItem('jellyfish_language', 'zh-CN'); document.documentElement.lang = 'zh-CN' } },
-              { key: 'en-US', label: 'English', onClick: () => { setLanguage('en-US'); void i18n.changeLanguage('en-US'); window.localStorage.setItem('jellyfish_language', 'en-US'); document.documentElement.lang = 'en' } },
+            { type: 'group', key: 'language', label: t('languageMenu'), children: [
+              { key: 'zh-CN', label: t('lang.zh'), onClick: () => void i18n.changeLanguage('zh-CN') },
+              { key: 'en-US', label: t('lang.en'), onClick: () => void i18n.changeLanguage('en-US') },
             ] },
-          ] }}><Button ref={accountButton} type="text" className="app-account" aria-label="用户与语言设置" aria-haspopup="menu" aria-expanded={accountOpen}><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
+          ] }}><Button ref={accountButton} type="text" className="app-account" aria-label={t('accountMenu')} aria-haspopup="menu" aria-expanded={accountOpen}><Avatar size={28} icon={<UserOutlined />} /></Button></Dropdown>
         </div>
       </header>
       {projectId ? <div className="app-project-frame">

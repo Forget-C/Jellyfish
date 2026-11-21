@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { SupportedLanguage } from '../i18n'
 
 export const appearances = ['mist', 'solid'] as const
 export type Appearance = typeof appearances[number]
@@ -30,21 +29,18 @@ interface UserInfo {
 
 interface AppState {
   user: UserInfo
-  language: SupportedLanguage
   canvasAppearance: CanvasAppearance
   setCanvasAppearance: (value: CanvasAppearance) => void
   appearance: Appearance
   setUser: (user: Partial<UserInfo>) => void
-  setLanguage: (lang: SupportedLanguage) => void
   setAppearance: (appearance: Appearance) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
   user: {
     name: 'Admin',
-    role: '系统管理员',
+    role: 'admin',
   },
-  language: 'zh-CN',
   appearance: readAppearance(),
   canvasAppearance: readCanvasAppearance(),
   setCanvasAppearance: (canvasAppearance) => {
@@ -58,7 +54,6 @@ export const useAppStore = create<AppState>((set) => ({
         ...user,
       },
     })),
-  setLanguage: (lang) => set(() => ({ language: lang })),
   setAppearance: (appearance) => {
     set({ appearance })
     try {

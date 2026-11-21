@@ -1,3 +1,4 @@
+import { useUiText } from '../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { PictureOutlined } from '@ant-design/icons'
 import { StudioHomeService } from '../../services/generated'
@@ -37,12 +38,13 @@ function CanvasCover({ fileId }: { fileId: string | null }) {
 }
 
 export function HomeRecentCanvases() {
+  const uiText = useUiText()
   const { result, retry } = useHomeRecentList(StudioHomeService.homeRecentCanvases)
   const canvases = result.status === 'ready' ? result.items : []
 
   return <section aria-labelledby="home-recent-canvases">
     <header className="home-section-heading">
-      <h2 id="home-recent-canvases">最近更新的画布</h2>
+      <h2 id="home-recent-canvases">{uiText("最近更新的画布")}</h2>
     </header>
     <div className="home-slot-frame">
       <div className="home-canvas-grid">
@@ -52,15 +54,15 @@ export function HomeRecentCanvases() {
             <h3 title={canvas.name}>{canvas.name}</h3>
             <p>
               <span className="home-canvas-source" title={canvas.project_name ?? undefined}>
-                {canvas.kind === 'free' ? '独立画布' : canvas.project_name}
+                {canvas.kind === 'free' ? uiText("独立画布") : canvas.project_name}
               </span>
-              <time dateTime={canvas.updated_at}>{homeUpdatedAtFormat.format(new Date(canvas.updated_at))}</time>
+              <time dateTime={canvas.updated_at}>{homeUpdatedAtFormat().format(new Date(canvas.updated_at))}</time>
             </p>
           </div>
         </article>)}
         <HomePlaceholders kind="canvas" filled={canvases.length} loading={result.status === 'loading'} />
       </div>
-      {!canvases.length && <HomeRecentFeedback status={result.status} label="画布" onRetry={retry} />}
+      {!canvases.length && <HomeRecentFeedback status={result.status} label={uiText("画布")} onRetry={retry} />}
     </div>
   </section>
 }

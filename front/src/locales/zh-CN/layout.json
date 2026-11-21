@@ -3,6 +3,8 @@
   "subtitle": "AI 短剧工作台",
   "welcome": "欢迎使用 Jellyfish",
   "brandHome": "Jellyfish 首页",
+  "accountMenu": "用户与语言设置",
+  "languageMenu": "语言",
   "primaryNavigation": "主导航",
   "appearance": {
     "label": "外观",

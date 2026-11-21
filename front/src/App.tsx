@@ -1,3 +1,4 @@
+import { uiText, useUiText } from './uiText'
 import type React from 'react'
 import { lazy, Suspense } from 'react'
 import { Alert } from 'antd'
@@ -31,6 +32,7 @@ import './App.css'
 
 /** 章节抽屉链接在初始化项目页之前重定向。 */
 function ProjectEntry() {
+  useUiText()
   const location = useLocation()
   const { projectId } = useParams()
   const params = new URLSearchParams(location.search)
@@ -40,7 +42,7 @@ function ProjectEntry() {
     return <Navigate replace to={legacyChapterManagementLocation(projectId, chapterId, params)}
       state={assembly ? chapterCompositionRetired : undefined} />
   }
-  if (projectId && assembly) return <Alert type="error" showIcon message="章节组合已停用，旧链接缺少章节标识。" />
+  if (projectId && assembly) return <Alert type="error" showIcon message={uiText("章节组合已停用，旧链接缺少章节标识。")} />
   return <ProjectWorkbench key={projectId} />
 }
 
@@ -76,7 +78,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
-          {WorkbenchExamples && <Route path="/dev/workbench-ui" element={<Suspense fallback={<p>加载组件示例…</p>}><WorkbenchExamples /></Suspense>} />}
+          {WorkbenchExamples && <Route path="/dev/workbench-ui" element={<Suspense fallback={<p>{uiText("加载组件示例…")}</p>}><WorkbenchExamples /></Suspense>} />}
       </>
 ))
 

@@ -4,6 +4,7 @@ import { chapterProduction } from './chapterProduction'
 
 export type ProjectStageSummary = {
   key: 'edit_raw' | 'sequences' | 'create_first_chapter'
+  chapter?: { index: number; title: string }
   chapterLabel?: string
   sequenceCount?: number
   status: string
@@ -26,6 +27,7 @@ export function summarizeProjectChapters(projectId: string, chapters: ChapterPre
   const production = chapterProduction({ rawText: chapter.raw_text, sequenceCount })
   return {
     key: production.target === 'edit' ? 'edit_raw' : 'sequences',
+    chapter: { index: chapter.index, title: chapter.title },
     chapterLabel: `第 ${chapter.index} 章 · ${chapter.title}`,
     sequenceCount,
     status: production.state,

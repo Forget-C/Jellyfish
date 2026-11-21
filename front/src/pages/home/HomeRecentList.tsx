@@ -1,3 +1,5 @@
+import { currentLanguage } from '../../i18n'
+import { useUiText } from '../../uiText'
 import { useEffect, useState } from 'react'
 import type { CancelablePromise } from '../../services/generated'
 
@@ -5,7 +7,7 @@ type RecentList<T> =
   | { status: 'loading' | 'error' }
   | { status: 'ready'; items: T[] }
 
-export const homeUpdatedAtFormat = new Intl.DateTimeFormat('zh-CN', {
+export const homeUpdatedAtFormat = () => new Intl.DateTimeFormat(currentLanguage(), {
   month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai',
 })
 
@@ -37,9 +39,10 @@ export function HomeRecentFeedback({ status, label, onRetry }: {
   label: string
   onRetry: () => void
 }) {
+  const uiText = useUiText()
   if (status === 'error') return <div className="home-feedback home-feedback-error" role="alert">
-    <span>读取{label}失败</span>
-    <button type="button" className="home-text-action" onClick={onRetry}>重试</button>
+    <span>{uiText("读取{{label}}失败", { label })}</span>
+    <button type="button" className="home-text-action" onClick={onRetry}>{uiText("重试")}</button>
   </div>
-  return <p className="home-feedback" role="status">{status === 'loading' ? `正在读取${label}…` : `暂无${label}`}</p>
+  return <p className="home-feedback" role="status">{status === 'loading' ? uiText("正在读取{{label}}…", { label }) : uiText("暂无{{label}}", { label })}</p>
 }

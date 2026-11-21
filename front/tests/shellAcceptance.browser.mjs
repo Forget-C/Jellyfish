@@ -279,7 +279,7 @@ try {
     await page.getByRole('menuitem', { name: 'English', exact: true }).click()
     await page.getByRole('heading', { name: 'System Settings', exact: true }).waitFor()
     await page.reload()
-    await page.getByRole('button', { name: '用户与语言设置' }).click()
+    await page.getByRole('button', { name: 'User and language settings' }).click()
     assert.ok((await page.getByRole('menuitem', { name: 'English', exact: true }).getAttribute('class')).includes('selected'))
     await page.getByRole('menuitem', { name: '简体中文', exact: true }).focus()
     await page.keyboard.press('Enter')

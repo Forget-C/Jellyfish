@@ -17,7 +17,7 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 900 } })
+  const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 900 } })
   page = await context.newPage()
   page.setDefaultTimeout(8000)
   const errors = []
@@ -40,6 +40,7 @@ try {
           { id: sceneCanvas.id, name: sceneCanvas.name, can_open: true },
         ] })
       }
+      if (pathname.endsWith('/home/recent-canvases')) return respond([{ id: 'recent', name: '画布一', kind: 'free', updated_at: '2024-11-08T00:00:00Z' }])
       const canvasRequest = pathname.match(/^\/api\/v1\/studio\/generation-canvases\/([^/]+)(.*)$/)
       if (canvasRequest) {
         const [, id, operation] = canvasRequest
@@ -59,6 +60,40 @@ try {
     })
   }
   await installFixtures(page)
+  await page.goto(origin)
+  await page.getByRole('heading', { name: '工作概览' }).waitFor()
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.getByRole('heading', { name: 'Work overview' }).waitFor()
+  await page.reload()
+  await page.getByRole('heading', { name: 'Work overview' }).waitFor()
+  assert.match(await page.locator('time').first().innerText(), /Nov/)
+  const invalid = await browser.newContext({ locale: 'en-US' })
+  await invalid.addInitScript(() => localStorage.setItem('jellyfish_language', 'fr-FR'))
+  const invalidPage = await invalid.newPage()
+  await installFixtures(invalidPage)
+  await invalidPage.goto(origin)
+  await invalidPage.getByRole('heading', { name: '工作概览' }).waitFor()
+  await invalid.close()
+  const direct = await context.newPage()
+  await installFixtures(direct)
+  await direct.goto(origin + canvases[0].path)
+  await direct.getByRole('button', { name: 'Canvas appearance', exact: true }).waitFor()
+  await direct.getByRole('button', { name: 'Canvas appearance', exact: true }).click()
+  await direct.getByRole('menuitemradio', { name: 'Classic dark', exact: true }).waitFor()
+  assert.equal(await direct.locator('html').getAttribute('lang'), 'en-US')
+  await direct.close()
+  await page.goto(origin + '/settings')
+  await page.getByText('Administrator', { exact: true }).first().waitFor()
+  await page.getByRole('textbox', { name: 'Nickname' }).waitFor()
+  await page.goto(origin + '/missing-i18n-page')
+  await page.getByRole('button', { name: 'Back Home' }).click()
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
+  await page.reload()
+  await page.getByRole('heading', { name: '工作概览' }).waitFor()
+  await page.goto(origin + '/missing-i18n-page')
+  await page.getByRole('button', { name: '返回首页' }).click()
   const background = target => target.getByRole('banner').evaluate(header => {
     const { backgroundColor, backgroundImage, color } = getComputedStyle(header.parentElement)
     return { backgroundColor, backgroundImage, color }
@@ -231,7 +266,7 @@ try {
     for (const method of ['getItem', 'setItem']) {
       const original = Storage.prototype[method]
       Storage.prototype[method] = function (key, ...args) {
-        if (key === 'jellyfish_appearance' || key === 'jellyfish_canvas_appearance') throw new DOMException('Appearance storage disabled', 'SecurityError')
+        if (['jellyfish_appearance', 'jellyfish_canvas_appearance', 'jellyfish_language'].includes(key)) throw new DOMException('Appearance storage disabled', 'SecurityError')
         return original.call(this, key, ...args)
       }
     }

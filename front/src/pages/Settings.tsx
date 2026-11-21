@@ -48,12 +48,12 @@ const Settings: React.FC = () => {
         >
           <Select
             options={[
-              { label: t('settings:roleOptions.admin'), value: t('settings:roleOptions.admin') },
+              { label: t('settings:roleOptions.admin'), value: 'admin' },
               {
                 label: t('settings:roleOptions.operator'),
-                value: t('settings:roleOptions.operator'),
+                value: 'operator',
               },
-              { label: t('settings:roleOptions.guest'), value: t('settings:roleOptions.guest') },
+              { label: t('settings:roleOptions.guest'), value: 'guest' },
             ]}
           />
         </Form.Item>

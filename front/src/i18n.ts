@@ -1,6 +1,5 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import LanguageDetector from 'i18next-browser-languagedetector'
 import zhLayout from './locales/zh-CN/layout.json'
 import zhCommon from './locales/zh-CN/common.json'
 import zhSettings from './locales/zh-CN/settings.json'
@@ -9,6 +8,7 @@ import enLayout from './locales/en-US/layout.json'
 import enCommon from './locales/en-US/common.json'
 import enSettings from './locales/en-US/settings.json'
 import enNotFound from './locales/en-US/notFound.json'
+import enUi from './locales/en-US/ui.json'
 
 export type SupportedLanguage = 'zh-CN' | 'en-US'
 
@@ -24,26 +24,40 @@ const resources = {
     layout: enLayout,
     settings: enSettings,
     notFound: enNotFound,
+    ui: enUi,
   },
 }
 
+function storedLanguage(): SupportedLanguage {
+  try {
+    return localStorage.getItem('jellyfish_language') === 'en-US' ? 'en-US' : 'zh-CN'
+  } catch {
+    return 'zh-CN'
+  }
+}
+
+i18n.on('languageChanged', language => {
+  try { localStorage.setItem('jellyfish_language', language) } catch { /* Storage may be unavailable. */ }
+  if (typeof document !== 'undefined') document.documentElement.lang = language
+})
+
 i18n
-  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
     fallbackLng: 'zh-CN',
     supportedLngs: ['zh-CN', 'en-US'],
-    ns: ['common', 'layout', 'settings', 'notFound'],
+    ns: ['common', 'layout', 'settings', 'notFound', 'ui'],
     defaultNS: 'layout',
     interpolation: {
       escapeValue: false,
     },
-    detection: {
-      order: ['localStorage', 'navigator', 'htmlTag'],
-      lookupLocalStorage: 'jellyfish_language',
-    },
+    lng: storedLanguage(),
   })
+
+export function currentLanguage(): SupportedLanguage {
+  return i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
+}
 
 export default i18n
 
