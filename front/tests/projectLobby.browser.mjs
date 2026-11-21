@@ -113,13 +113,18 @@ try {
   await card.waitFor()
   await page.getByRole('button', { name: '用户与语言设置' }).click()
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()
-  for (const width of [375, 768, 1024, 1440]) {
-    await page.setViewportSize({ width, height: 900 })
-    await card.locator('.project-lobby-status').waitFor()
+  for (const sequenceCount of [0, undefined, 12]) {
+    chapters.p1.sequence_count = sequenceCount
+    await page.reload()
     const counts = card.locator('.project-lobby-count-item > span:last-child')
+    await card.locator('.project-lobby-status').waitFor()
     assert.equal(await counts.count(), 2)
-    assert.ok(await counts.evaluateAll(items => items.every(item => item.scrollWidth <= item.clientWidth + 1)), `Full project counts at ${width}px`)
+    for (const width of [375, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.ok(await counts.evaluateAll(items => items.every(item => item.scrollWidth <= item.clientWidth + 1)), `Full project counts for ${sequenceCount} at ${width}px`)
+    }
   }
+  chapters.p1.sequence_count = 0
   await page.getByRole('button', { name: 'User and language settings' }).click()
   await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   await page.goto(`${origin}/projects/p1?tab=settings`)

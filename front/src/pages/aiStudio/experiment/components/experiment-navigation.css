@@ -94,7 +94,7 @@
 
 @media (max-width: 480px) {
   .experiment-toolbar .experiment-navigation-label { display: none; }
-  .experiment-toolbar button[aria-expanded] { min-width: 44px; }
+  .experiment-toolbar .experiment-navigation-trigger { min-width: 44px; min-height: 44px; }
 }
 
 @media (pointer: coarse) {

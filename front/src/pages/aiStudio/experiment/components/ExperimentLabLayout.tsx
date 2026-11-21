@@ -50,7 +50,7 @@ export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar
         {wide && sidebar(closeNavigation)}
         <section className="app-lab-main" aria-label={title}>
           <PageToolbar className="experiment-toolbar" title={<>{title}<span className="experiment-session-title" title={sessionTitle}> · {sessionTitle ?? uiText("新会话")}</span></>}>
-            {!wide && <Button ref={sidebarTrigger} type="text" icon={<MenuOutlined />}
+            {!wide && <Button className="experiment-navigation-trigger" ref={sidebarTrigger} type="text" icon={<MenuOutlined />}
               title={uiText("会话导航")} aria-label={uiText("会话导航")} aria-expanded={sessionsOpen} onClick={() => setSessionsOpen(true)}><span className="experiment-navigation-label">{uiText("会话导航")}</span></Button>}
             <Dropdown trigger={['click']} menu={{ items: [{
               key: 'clear',
