@@ -1,8 +1,15 @@
 <section class="jf-section" aria-labelledby="projects-title">
-  <div class="jf-section-heading"><h2 id="projects-title">下一段故事，由你开始。</h2><p>虚拟项目 · 封面为抽象占位图</p></div>
+  <div class="jf-section-heading"><h2 id="projects-title">短剧创作示例</h2></div>
   <div class="jf-projects">
-    {{ range $index, $project := site.Data.homepage.projects }}
-      <figure class="jf-project jf-project-{{ $index }}"><div class="jf-project-art" aria-hidden="true"></div><figcaption><span>{{ .genre }} / 示例项目</span><h3>{{ .title }}</h3></figcaption></figure>
+    {{ range site.Data.homepage.projects }}
+      <figure class="jf-project">
+        <img src="{{ .cover | relURL }}" alt="" width="900" height="600" loading="lazy" decoding="async">
+        <figcaption>
+          <span>{{ .genre }}</span>
+          <h3>{{ .title }}</h3>
+          <p>{{ .synopsis }}</p>
+        </figcaption>
+      </figure>
     {{ end }}
   </div>
 </section>
