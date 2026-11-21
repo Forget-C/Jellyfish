@@ -1,4 +1,4 @@
-import { useUiText } from '../../../uiText'
+import { uiText, useUiText } from '../../../uiText'
 import { Form, Select } from 'antd'
 
 export type ProjectVisualStyleChoice = '现实' | '动漫'
@@ -28,6 +28,12 @@ const DEFAULT_VISUAL_STYLE_OPTIONS: OptionItem[] = [
   { value: '现实', label: '现实' },
   { value: '动漫', label: '动漫' },
 ]
+const builtInStyleValues = new Set([...DEFAULT_VISUAL_STYLE_OPTIONS, ...Object.values(PROJECT_STYLE_OPTIONS_BY_VISUAL).flat()].map(option => option.value))
+
+export function projectStyleLabel(value: string, label = value) {
+  return builtInStyleValues.has(value) ? uiText(label) : label
+}
+
 const DEFAULT_STYLE_BY_VISUAL: Record<string, string> = {
   现实: PROJECT_STYLE_OPTIONS_BY_VISUAL['现实']?.[0]?.value ?? '',
   动漫: PROJECT_STYLE_OPTIONS_BY_VISUAL['动漫']?.[0]?.value ?? '',
@@ -78,7 +84,7 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
   const disabled = props.disabled
   const resolvedOptions = resolveOptions(props.options)
 
-  const labels = (items: OptionItem[]) => items.map(item => ({ ...item, label: uiText(item.label) }))
+  const labels = (items: OptionItem[]) => items.map(item => ({ ...item, label: projectStyleLabel(item.value, item.label) }))
 
   if ('form' in props) {
     const { form } = props

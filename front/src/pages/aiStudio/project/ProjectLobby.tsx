@@ -15,6 +15,7 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../com
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
 import type { ProjectRead } from '../../../services/generated'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { projectStyleLabel } from './ProjectVisualStyleAndStyleFields'
 import { ProjectCover } from './ProjectCover'
 import { summarizeProjectChapters, type ProjectStageSummary } from './projectStageSummary'
 import { ProjectCreateDrawer } from './ProjectCreateDrawer'
@@ -360,6 +361,7 @@ function ProjectLobby() {
                 {projects.map(project => {
                   const summary = projectStageMap[project.id]
                   const stage = typeof summary === 'object' ? summary : undefined
+                  const styleLabel = project.style && projectStyleLabel(project.style)
                   const noChapter = stage?.key === 'create_first_chapter'
                   const statusText = uiText(summary === 'error' ? '读取失败' : '读取中')
                   const chapterText = stage ? (stage.chapter ? uiText("第 {{index}} 章 · {{title}}", stage.chapter) : uiText("未创建章节")) : statusText
@@ -379,7 +381,7 @@ function ProjectLobby() {
                           )}
                         </h2>
                         <div className="project-lobby-card-row">
-                          <span className="project-lobby-style" title={project.style}>{project.style ?? uiText("未设置类型")}</span>
+                          <span className="project-lobby-style" title={styleLabel}>{styleLabel ?? uiText("未设置类型")}</span>
                           {project.updatedAt && (
                             <span className="project-lobby-meta project-lobby-truncate" title={uiText("更新于 {{updatedAt}}", { updatedAt: project.updatedAt })}>
                               {uiText("更新于")} {project.updatedAt}

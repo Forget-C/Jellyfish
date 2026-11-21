@@ -190,5 +190,7 @@
   "共 {{count}} 章": "Chapters: {{count}}",
   "工作台管理": "Manage workbench",
   "确定删除「{{name}}」？此操作不可恢复。": "Permanently delete “{{name}}”?",
-  "已选 {{count}} 个项目": "Selected: {{count}}"
+  "已选 {{count}} 个项目": "Selected: {{count}}",
+  "上一页": "Previous page",
+  "下一页": "Next page"
 }

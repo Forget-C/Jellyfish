@@ -61,7 +61,10 @@ try {
       }})
     }
     if(path.endsWith('/projects/settings-project'))return respond(saved)
-    if(path.endsWith('/studio/projects'))return respond({ items: [saved], pagination: { total: 1 } })
+    if(path.endsWith('/studio/projects')) {
+      const items = new URL(request.url()).searchParams.get('q') === 'no-match' ? [] : [saved]
+      return respond({ items, pagination: { total: items.length } })
+    }
     if(path.endsWith('/chapters'))return respond({items:[],pagination:{total:0}})
     if(path.endsWith('/video-generation-options'))return respond({allowed_ratios:['16:9','9:16'],default_ratio:'16:9'})
     return respond({items:[]})
@@ -192,14 +195,22 @@ try {
   }
   assert.deepEqual(bilingualRequests[0], bilingualRequests[1])
   assert.equal(bilingualRequests[1].visual_style, '现实')
-  await page.goto(origin + '/projects?q=Morning&sort=name&direction=asc')
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
+  await page.goto(origin + '/projects?q=Morning&stage=edit_raw&sort=name&direction=asc')
   await page.getByRole('link', { name: '晨光 Morning' }).click()
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
   await page.getByRole('link', { name: 'Project overview' }).click()
   await page.getByRole('heading', { name: 'Project overview' }).waitFor()
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Projects' }).click()
   assert.equal(await page.getByRole('textbox', { name: 'Search projects' }).inputValue(), 'Morning')
   assert.equal(new URL(page.url()).searchParams.get('sort'), 'name')
   assert.equal(new URL(page.url()).searchParams.get('direction'), 'asc')
+  assert.equal(new URL(page.url()).searchParams.get('stage'), 'edit_raw')
+  await page.getByText('Live-action urban', { exact: true }).waitFor()
+  await page.getByRole('textbox', { name: 'Search projects' }).fill('no-match')
+  await page.getByText('No matching projects', { exact: true }).waitFor()
   assert.deepEqual(errors,[])
   console.log('PASS project settings groups, scoped toolbar, failed-save recovery, saving lock and saved cancel baseline')
 } finally { await cleanup() }
