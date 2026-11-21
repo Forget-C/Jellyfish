@@ -45,10 +45,3 @@ projects:
     genre: "科幻悬疑"
     cover: "images/projects/seventh-dawn.webp"
     synopsis: "连续六个清晨，山顶观测站都收到了明天的天气报告。第七天，电台里传来值班员自己的呼救声。"
-placements:
-  - label: "广告预留位"
-    title: "广告展示空间"
-    description: "预留横幅位置，广告内容待上线。"
-  - label: "赞助预留位"
-    title: "与 Jellyfish 一起成长"
-    description: "预留赞助展示位置，赞助信息待公布。"

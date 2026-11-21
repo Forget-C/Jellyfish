@@ -88,3 +88,13 @@ body:has(.sea) {
   .sea-more img { aspect-ratio: 1.55; }
   .sea footer { gap: 14px; }
 }
+.sea-placement { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 32px; border-top: 1px solid var(--jf-line); padding: 20px 0; }
+.sea-placement h2 { line-height: 1.5; font-family: inherit; font-size: 16px; letter-spacing: normal; }
+.sea-placement ul { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; padding: 0; }
+.sea-placement :is(li,a) { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; overflow-wrap: anywhere; }
+.sea-placement a { color: var(--sea-ink); min-height: 44px; }
+.sea-placement a:hover { text-decoration: underline; }
+.sea-placement img { width: auto; max-width: 96px; height: 32px; object-fit: contain; }
+@media (max-width: 700px) {
+  .sea-placement { align-items: flex-start; flex-direction: column; gap: 6px; }
+}

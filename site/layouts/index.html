@@ -62,6 +62,7 @@
     <h2>更多短剧题材</h2>
     <div>{{ range after 1 site.Data.homepage.projects }}<figure><img loading="lazy" src="{{ .cover | relURL }}" alt=""><figcaption><small>{{ .genre }}</small><h3>{{ .title }}</h3></figcaption></figure>{{ end }}</div>
   </section>
+  {{ partial "home-placements.html" . }}
   <footer>{{ range slice (slice "blog/" "更新日志") (slice "docs/community/contributing/" "参与社区") (slice "docs/getting-started/installation/" "本地部署") }}<a href="{{ index . 0 | relURL }}">{{ index . 1 }}</a>{{ end }}<a href="{{ site.Params.social.github }}">GitHub ↗</a></footer>
 </main>
 {{ $js := resources.Get "js/sea-letter.js" | minify | fingerprint }}<script defer src="{{ $js.RelPermalink }}"></script>
