@@ -15,13 +15,13 @@ cascade:
 
 | 进度 | 从这里开始 | 完成标志 |
 | --- | --- | --- |
-| 启动工作台 | [安装与配置]({{< relref "/docs/getting-started" >}}) | 浏览器可以打开工作台，API 健康检查通过 |
+| <span id="安装与部署">启动工作台</span> | [安装与配置]({{< relref "/docs/getting-started" >}}) | 浏览器可以打开工作台，API 健康检查通过 |
 | 准备生成 | [配置供应商与模型]({{< relref "/docs/getting-started/model-setup" >}}) | 实验室能选择已登记的对应类别模型 |
-| 建立项目 | [创建《雾海来信》与第一章]({{< relref "/docs/guide/first-project" >}}) | 章节列表中出现《末班车之后》 |
-| 制作第一场戏 | [项目与场次创作]({{< relref "/docs/guide" >}}) | 在分镜画布上看到「海边站台」的候选画面 |
+| <span id="产品使用">建立项目</span> | [创建《雾海来信》与第一章]({{< relref "/docs/guide/first-project" >}}) | 章节列表中出现《末班车之后》 |
+| 制作第一场戏 | [制作第一场戏]({{< relref "/docs/guide" >}}) | 在分镜画布上看到「海边站台」的候选画面 |
 
 ## 已经在使用？
 
-- 要试写提示词、组合模型输入或找回生成任务，进入[独立生成与任务]({{< relref "/docs/tools" >}})。
-- 要继续旧版素材的审片与交付，查看[旧版场次记录]({{< relref "/docs/guide/sequence-workflow" >}}#使用旧版场次记录)。
-- 要在本地修改应用或反馈问题，进入[开发与贡献]({{< relref "/docs/community" >}})。
+- 要试写提示词、组合模型输入或找回生成任务，进入[独立工具与任务]({{< relref "/docs/tools" >}})。
+- 要继续旧版素材的审片与交付，查看[旧版场次记录]({{< relref "/docs/legacy/versions" >}}#使用旧版场次记录)。
+- <span id="开发与贡献"></span>要在本地修改应用或反馈问题，进入[开发与贡献]({{< relref "/docs/community" >}})。

@@ -1,6 +1,6 @@
 ---
 title: "开发与贡献"
-weight: 4
+weight: 5
 description: "启动本地开发环境，反馈问题或参与项目协作。"
 ---
 

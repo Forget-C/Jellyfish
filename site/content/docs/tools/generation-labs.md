@@ -1,7 +1,7 @@
 ---
 title: 使用生成实验室
 description: 使用已登记模型试验文本、图片和视频生成，查看结果与历史。
-weight: 1
+weight: 2
 url: "/docs/guide/generation-labs/"
 ---
 

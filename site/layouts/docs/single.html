@@ -9,5 +9,9 @@
     "showPagination" true
     "showComments" true
   ) }}
+  {{ if .HasShortcode "moved-section" }}
+    {{ $script := resources.Get "js/moved-sections.js" | minify | fingerprint }}
+    <script defer src="{{ $script.RelPermalink }}"></script>
+  {{ end }}
 {{ end }}
 

@@ -1,6 +1,6 @@
 # 生成画布架构与执行边界
 
-本页记录当前实现。用户操作见[使用指南](../../../site/content/docs/guide/generation-canvas.md)。已确认范围见[独立生成画布](../adr/0001-independent-generation-canvas.md)、[协议边界](../adr/0002-generation-canvas-protocol-boundaries.md)、[检查卡职责](../adr/0003-generation-canvas-check-cards.md)、[声音设计职责](../adr/0004-sound-design-and-generation-responsibilities.md)及[首版检查项目录](../design/generation-canvas-check-catalog.md)。设计范围不等同于当前执行入口。
+本页记录当前实现。用户操作见[使用指南](../../../site/content/docs/tools/generation-canvas.md)。已确认范围见[独立生成画布](../adr/0001-independent-generation-canvas.md)、[协议边界](../adr/0002-generation-canvas-protocol-boundaries.md)、[检查卡职责](../adr/0003-generation-canvas-check-cards.md)、[声音设计职责](../adr/0004-sound-design-and-generation-responsibilities.md)及[首版检查项目录](../design/generation-canvas-check-catalog.md)。设计范围不等同于当前执行入口。
 
 ## 独立入口与共同画布交互
 

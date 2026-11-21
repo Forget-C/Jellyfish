@@ -1,0 +1,3 @@
+{{ $anchor := .Get 0 }}
+{{ $target := .Page.GetPage (.Get 1) }}
+<span class="jf-moved-section" id="{{ $anchor }}"><a data-moved-section href="{{ $target.RelPermalink }}#{{ $anchor }}">继续阅读「{{ $target.Title }}」对应章节 →</a></span>

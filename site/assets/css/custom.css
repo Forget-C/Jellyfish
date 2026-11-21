@@ -311,3 +311,6 @@ body { background: var(--jf-bg); color: var(--jf-text); }
 @media (max-width: 768px) {
   .jf-product-hero,.jf-tool-grid,.jf-product-stages { grid-template-columns: 1fr; }
 }
+
+.jf-moved-section { display: none; }
+.jf-moved-section:target { display: block; }
