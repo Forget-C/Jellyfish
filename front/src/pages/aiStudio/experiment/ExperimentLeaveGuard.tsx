@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { Alert, Button, Modal, Space } from 'antd'
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
@@ -21,6 +22,7 @@ export function useExperimentLeaveStatus(dirty: boolean, run?: TextRun) {
 
 /** The same confirmation gates explicit session actions and router links/history. */
 export function useExperimentLeaveGuard() {
+  const uiText = useUiText()
   const readers = useRef(new Set<ReadStatus>())
   const [, refresh] = useState(0)
   const register = useCallback<Register>(read => {
@@ -95,23 +97,23 @@ export function useExperimentLeaveGuard() {
   }
   const dialog = <Modal
     zIndex={2000}
-    title={run ? '文本正在生成' : dirty ? '有未发送内容' : '离开实验室？'}
+    title={run ? uiText("文本正在生成") : dirty ? uiText("有未发送内容") : uiText("离开实验室？")}
     open={Boolean(transition)}
     onCancel={cancel}
     closable={!busy}
     keyboard={!busy}
     maskClosable={false}
     footer={<Space wrap>
-      <Button disabled={busy} onClick={cancel}>{run ? '继续等待' : '继续编辑'}</Button>
+      <Button disabled={busy} onClick={cancel}>{run ? uiText("继续等待") : uiText("继续编辑")}</Button>
       <Button danger type="primary" loading={busy} disabled={Boolean(run && (!run.ready || run.stopping))}
-        onClick={() => void confirm()}>{run ? '停止生成并离开' : dirty ? '放弃未发送内容并离开' : '离开'}</Button>
+        onClick={() => void confirm()}>{run ? uiText("停止生成并离开") : dirty ? uiText("放弃未发送内容并离开") : uiText("离开")}</Button>
     </Space>}
   >
     <p>{run
-      ? dirty ? '离开将停止本轮文本生成，并放弃当前未发送内容。' : '离开将停止本轮文本生成。'
-      : dirty ? '当前未发送的提示词或配置将被放弃。' : '本轮文本运行已结束，可以继续离开。'}</p>
-    {run && !run.ready && <p role="status">等待服务端接收后可请求停止。</p>}
-    {run && failed && <Alert type="error" message="停止生成请求失败，已保留当前会话。请重试或继续等待。" showIcon />}
+      ? dirty ? uiText("离开将停止本轮文本生成，并放弃当前未发送内容。") : uiText("离开将停止本轮文本生成。")
+      : dirty ? uiText("当前未发送的提示词或配置将被放弃。") : uiText("本轮文本运行已结束，可以继续离开。")}</p>
+    {run && !run.ready && <p role="status">{uiText("等待服务端接收后可请求停止。")}</p>}
+    {run && failed && <Alert type="error" message={uiText("停止生成请求失败，已保留当前会话。请重试或继续等待。")} showIcon />}
   </Modal>
 
   return { register, request, allowNavigation, dialog, dirty, textRunActive: Boolean(run), isTextRunActive: () => Boolean(readStatus().run), pendingNavigation: Boolean(transition) }

@@ -140,14 +140,21 @@ try {
   await history.getByText('排队', { exact: true }).waitFor()
   await history.getByText('状态暂不可用', { exact: true }).waitFor()
   assert.equal(await history.getByText('失败', { exact: true }).count(), 0)
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  const englishHistory = page.getByRole('region', { name: 'Session messages' })
+  await englishHistory.getByText('Queued', { exact: true }).waitFor()
   imageStatus = 'running'
-  await history.getByRole('button', { name: '重试读取状态' }).click()
-  await history.getByText('生成中 38%', { exact: true }).waitFor()
+  await englishHistory.getByRole('button', { name: 'Retry loading status' }).click()
+  await englishHistory.getByText('Generating 38%', { exact: true }).waitFor()
   imageReadsFail = true
   imageStatus = 'succeeded'
-  await history.getByText('已完成', { exact: true }).waitFor()
-  await history.getByText('会话消息刷新失败', { exact: true }).waitFor()
-  await history.getByText('图片实验原始提示词', { exact: true }).waitFor()
+  await englishHistory.getByText('Completed', { exact: true }).waitFor()
+  await englishHistory.getByText('Could not refresh session messages', { exact: true }).waitFor()
+  await englishHistory.getByText('图片实验原始提示词', { exact: true }).waitFor()
+  await englishHistory.getByText('Could not load Image 2', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   assert.equal(await history.getByText(/正在等待生成结果/).count(), 0)
   await history.getByText('图片 2 加载失败', { exact: true }).waitFor()
   failPortrait = false

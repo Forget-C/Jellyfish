@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, LoadingOutlined, StopOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
 
@@ -18,16 +19,17 @@ type ExperimentTaskStatusProps = {
 
 /** 状态使用任务已知值，读取失败不会改写最后一次可靠状态。 */
 export function ExperimentTaskStatus({ status, progress, unavailable, onRetry }: ExperimentTaskStatusProps) {
+  const uiText = useUiText()
   const key = status === 'pending' ? 'queued' : status
   const state = key && Object.prototype.hasOwnProperty.call(states, key) ? states[key as keyof typeof states] : undefined
   const showProgress = key === 'running' && typeof progress === 'number' && Number.isFinite(progress) && progress >= 0 && progress <= 100
   return <>
     {state ? <span className={`experiment-task-status experiment-task-status-${state.tone}`} role="status">
-      <state.icon aria-hidden="true" /> {state.label}{showProgress ? ` ${progress}%` : ''}
+      <state.icon aria-hidden="true" /> {uiText(state.label)}{showProgress ? ` ${progress}%` : ''}
     </span> : null}
     {unavailable || !state ? <span className="experiment-task-read-state">
-      <span role="status">状态暂不可用</span>
-      {onRetry ? <Button type="link" size="small" onClick={onRetry}>重试读取状态</Button> : null}
+      <span role="status">{uiText("状态暂不可用")}</span>
+      {onRetry ? <Button type="link" size="small" onClick={onRetry}>{uiText("重试读取状态")}</Button> : null}
     </span> : null}
   </>
 }

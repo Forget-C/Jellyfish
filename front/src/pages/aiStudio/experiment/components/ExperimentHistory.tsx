@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Button, Spin } from 'antd'
 import { ArrowDownOutlined } from '@ant-design/icons'
@@ -14,6 +15,7 @@ type ExperimentHistoryProps = {
 
 /** 管理历史读取状态及滚动。向前分页时保持首条可见消息的屏幕位置。 */
 export function ExperimentHistory({ history, messageCount, emptyDescription, children }: ExperimentHistoryProps) {
+  const uiText = useUiText()
   const { error, errorOnLoadMore, hasLoadedHistory, hasMoreHistory, loading, loadingMore, refresh, loadMore } = history
   const viewportRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -69,7 +71,7 @@ export function ExperimentHistory({ history, messageCount, emptyDescription, chi
   }
 
   return <div className="experiment-history-panel">
-    <WorkspaceScrollPanel ref={viewportRef} className="app-lab-history" role="region" aria-label="会话消息" tabIndex={0}
+    <WorkspaceScrollPanel ref={viewportRef} className="app-lab-history" role="region" aria-label={uiText("会话消息")} tabIndex={0}
       onScroll={(event) => {
         const viewport = event.currentTarget
         const away = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > 24
@@ -77,20 +79,20 @@ export function ExperimentHistory({ history, messageCount, emptyDescription, chi
         setShowLatest(away)
       }}>
       <div ref={listRef} className="experiment-history-list">
-        {loading && firstRead ? <div className="experiment-history-loading" role="status"><Spin size="small" /> 正在读取会话消息</div> : null}
+        {loading && firstRead ? <div className="experiment-history-loading" role="status"><Spin size="small" /> {uiText("正在读取会话消息")}</div> : null}
         {error ? <Alert
           type="error"
           showIcon
-          message={errorOnLoadMore ? '更早消息读取失败' : firstRead ? '会话消息读取失败' : '会话消息刷新失败'}
+          message={errorOnLoadMore ? uiText("更早消息读取失败") : firstRead ? uiText("会话消息读取失败") : uiText("会话消息刷新失败")}
           action={<Button size="small" onClick={errorOnLoadMore ? readEarlier : () => void refresh()}>
-            {errorOnLoadMore ? '重试加载更早消息' : '重试读取消息'}
+            {errorOnLoadMore ? uiText("重试加载更早消息") : uiText("重试读取消息")}
           </Button>}
         /> : null}
-        {hasMoreHistory && !errorOnLoadMore ? <Button size="small" loading={loadingMore} disabled={loading} onClick={readEarlier}>加载更早消息</Button> : null}
+        {hasMoreHistory && !errorOnLoadMore ? <Button size="small" loading={loadingMore} disabled={loading} onClick={readEarlier}>{uiText("加载更早消息")}</Button> : null}
         {!messageCount && !loading && !error ? <ExperimentEmptyState description={emptyDescription} /> : null}
         {children}
       </div>
     </WorkspaceScrollPanel>
-    {showLatest ? <Button className="experiment-history-jump" icon={<ArrowDownOutlined aria-hidden="true" />} onClick={jumpToLatest}>回到最新</Button> : null}
+    {showLatest ? <Button className="experiment-history-jump" icon={<ArrowDownOutlined aria-hidden="true" />} onClick={jumpToLatest}>{uiText("回到最新")}</Button> : null}
   </div>
 }

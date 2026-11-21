@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useLayoutEffect, useRef, useState } from 'react'
 import {
   ApiError,
@@ -48,6 +49,7 @@ function hasTaskReceipt(
  * The first draft may become its server session without invalidating its in-flight attempt.
  */
 export function useExperimentSubmission(sessionId: string | undefined, history: ExperimentHistoryState, input: string) {
+  const uiText = useUiText()
   const initialInput = useRef(input)
   const attemptRef = useRef<Attempt>()
   const currentInput = useRef(input)
@@ -112,7 +114,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
         sessionId: uncertain.sessionId, page: 1, pageSize: 50,
       })
       if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
-      if (!Array.isArray(response.data)) throw new Error('未返回会话历史')
+      if (!Array.isArray(response.data)) throw new Error(uiText("未返回会话历史"))
       const messages: ExperimentMessageRead[] = response.data.filter(item => item.session_id === uncertain.sessionId)
       history.adoptCanonicalMessages(uncertain.sessionId, messages)
       // History alone cannot correlate identical prompts from separate submissions.

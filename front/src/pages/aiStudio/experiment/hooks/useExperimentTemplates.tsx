@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useRef, useState } from 'react'
 import { Modal } from 'antd'
 import { StudioPromptsService, type PromptCategory, type PromptTemplateRead } from '../../../../services/generated'
@@ -9,6 +10,7 @@ export function useExperimentTemplates(
   draft: string,
   setDraft: (draft: string) => void,
 ) {
+  const uiText = useUiText()
   const [templates, setTemplates] = useState<PromptTemplateRead[]>()
   const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplateRead | null>(null)
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
@@ -76,10 +78,10 @@ export function useExperimentTemplates(
     applyFreeInput,
     replacementDialog: (
       <Modal
-        title="替换当前输入？"
+        title={uiText("替换当前输入？")}
         open={Boolean(replacement)}
-        okText="替换"
-        cancelText="取消"
+        okText={uiText("替换")}
+        cancelText={uiText("取消")}
         maskClosable={false}
         onCancel={() => setReplacement(null)}
         onOk={() => {
@@ -87,7 +89,7 @@ export function useExperimentTemplates(
           setReplacement(null)
         }}
       >
-        <p>继续后将替换当前提示词或相关配置。</p>
+        <p>{uiText("继续后将替换当前提示词或相关配置。")}</p>
       </Modal>
     ),
   }

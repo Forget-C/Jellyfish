@@ -4,6 +4,7 @@
  * 模态只处理文本历史的呈现、文本生成和输入配置；会话选择、URL 与页面布局
  * 仍由统一实验室页面负责，从而避免文本实验室重新成为独立页面。
  */
+import { useUiText } from '../../../../uiText'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, message } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
@@ -106,6 +107,7 @@ export function TextExperimentMode({
   onSubmittingChange,
   render,
 }: TextExperimentModeProps) {
+  const uiText = useUiText()
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
   const {
@@ -167,15 +169,15 @@ export function TextExperimentMode({
   const handleSubmit = async () => {
     if (stopPending.current) return
     if (sessionId && historyState.loading) {
-      message.info('正在加载会话历史，请稍后再发送')
+      message.info(uiText("正在加载会话历史，请稍后再发送"))
       return
     }
     if (!modelId) {
-      message.warning('请选择文本模型')
+      message.warning(uiText("请选择文本模型"))
       return
     }
     if (!currentPrompt) {
-      message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入提示词')
+      message.warning(selectedTemplate ? uiText("请填写模板变量，生成有效提示词") : uiText("请输入提示词"))
       return
     }
 
@@ -211,7 +213,7 @@ export function TextExperimentMode({
         }
         if (event.event === 'accepted') {
           if (acceptedTaskId || event.data.user_message.session_id !== session.id) {
-            throw new Error('文本接收回执与本轮会话不符')
+            throw new Error(uiText("文本接收回执与本轮会话不符"))
           }
           acceptedTaskId = event.data.task_id
           streamTaskIdRef.current = acceptedTaskId
@@ -222,7 +224,7 @@ export function TextExperimentMode({
           continue
         }
         if (!acceptedTaskId || event.data.task_id !== acceptedTaskId) {
-          throw new Error('文本流未返回可核对的任务身份')
+          throw new Error(uiText("文本流未返回可核对的任务身份"))
         }
         if (event.event === 'delta') {
           setLocalMessages(current => current.map(item => (
@@ -233,7 +235,7 @@ export function TextExperimentMode({
             item.id === assistantId ? { ...item, progress: event.data.progress } : item
           )))
         } else if (event.event === 'completed') {
-          if (event.data.assistant_message.session_id !== session.id) throw new Error('文本结果与本轮会话不符')
+          if (event.data.assistant_message.session_id !== session.id) throw new Error(uiText("文本结果与本轮会话不符"))
           terminal = true
           terminalRunRef.current = acceptedTaskId
           historyState.adoptCanonicalMessages(session.id, [event.data.assistant_message])
@@ -272,7 +274,7 @@ export function TextExperimentMode({
       if (targetSessionId && !isRejectedSubmission(error)) {
         await submission.checkOutcome(attempt, targetSessionId, () => {})
       } else {
-        submission.reject(attempt, defaultTaskActionErrorMessage(error, '文本请求提交失败，请检查模型配置'))
+        submission.reject(attempt, defaultTaskActionErrorMessage(error, uiText("文本请求提交失败，请检查模型配置")))
       }
     } finally {
       if (controller && streamAbortRef.current === controller) {
@@ -288,7 +290,7 @@ export function TextExperimentMode({
   const handleStop = async () => {
     const taskId = streamTaskIdRef.current
     const activeSessionId = streamSessionIdRef.current
-    if (!taskId || !activeSessionId || stopPending.current) throw new Error('当前还不能停止生成')
+    if (!taskId || !activeSessionId || stopPending.current) throw new Error(uiText("当前还不能停止生成"))
     if (terminalRunRef.current === taskId || stopState === 'requested') return
     stopPending.current = true
     setStopState('requesting')
@@ -301,7 +303,7 @@ export function TextExperimentMode({
       if (terminalRunRef.current === taskId) { setStopState('idle'); return }
       const result = response.data
       if (result?.task_id !== taskId || !['cancelled', 'succeeded'].includes(result.status)) {
-        throw new Error('停止请求未得到确认')
+        throw new Error(uiText("停止请求未得到确认"))
       }
       setStopState('requested')
     } catch (error) {
@@ -335,27 +337,27 @@ export function TextExperimentMode({
       applyFreeInput(snapshot.prompt)
       setModelId(snapshot.model_id ?? undefined)
       focusExperimentPromptEditor()
-      if (snapshot.model_id) message.success('已回填历史输入，可修改后重新发送')
-      else message.info('已回填提示词；请重新选择模型后发送')
+      if (snapshot.model_id) message.success(uiText("已回填历史输入，可修改后重新发送"))
+      else message.info(uiText("已回填提示词；请重新选择模型后发送"))
     })
   }
 
   return render({
     clearContent: sessionId && localMessages.length && !submitting ? handleClearSession : undefined,
     history: (
-      <ExperimentHistory key={sessionId ?? 'draft'} history={historyState} messageCount={localMessages.length || Number(submitting)} emptyDescription="选择模型并输入提示词，开始一轮文本实验">
+      <ExperimentHistory key={sessionId ?? 'draft'} history={historyState} messageCount={localMessages.length || Number(submitting)} emptyDescription={uiText("选择模型并输入提示词，开始一轮文本实验")}>
         {localMessages.map((item) => (
           <ExperimentMessageBubble
             key={item.id}
             footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={submitting} onRestore={() => restoreUserMessage(item)} /> : undefined}
-            identity={item.role === 'user' ? '你' : '模型'}
+            identity={item.role === 'user' ? uiText("你") : uiText("模型")}
             status={item.status ? <ExperimentTaskStatus status={item.status} progress={item.progress} /> : null}
             tone={item.role === 'user' ? 'user' : 'assistant'}
           >
-            {item.partial ? <><div>{item.content}</div><p className="experiment-result-note">流连接中断前收到的部分回复</p></> : item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
+            {item.partial ? <><div>{item.content}</div><p className="experiment-result-note">{uiText("流连接中断前收到的部分回复")}</p></> : item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
           </ExperimentMessageBubble>
         ))}
-        {liveRun && !streamTaskIdRef.current ? <p className="experiment-history-loading" role="status">正在发送…</p> : null}
+        {liveRun && !streamTaskIdRef.current ? <p className="experiment-history-loading" role="status">{uiText("正在发送…")}</p> : null}
       </ExperimentHistory>
     ),
     composer: (
@@ -374,7 +376,7 @@ export function TextExperimentMode({
         templatesFailed={templatesFailed}
         onRefreshTemplates={() => void loadTemplates(true)}
         disabled={submitting}
-        modelLabel="文本模型"
+        modelLabel={uiText("文本模型")}
         onModelChange={setModelId}
         onTemplateChange={selectTemplate}
         onModelOpenChange={(open) => { if (open) void loadModels() }}
@@ -385,22 +387,22 @@ export function TextExperimentMode({
             secondaryAction={liveRun ? <Button icon={<StopOutlined aria-hidden="true" />} danger
               loading={stopState === 'requesting'}
               disabled={!streamTaskIdRef.current || stopState === 'requested'}
-              onClick={() => { void handleStop().catch(() => {}) }}>停止</Button> : null}
+              onClick={() => { void handleStop().catch(() => {}) }}>{uiText("停止")}</Button> : null}
             submitting={submitting}
             submitDisabled={submitting || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
             onSubmit={() => void handleSubmit()}
             options={modelControl} addAction={addControl}
           >
             {replacementDialog}
-            {liveRun && stopState === 'requested' && <p role="status">已请求停止，等待本轮结束。</p>}
-            {liveRun && stopState === 'failed' && <p role="alert">停止生成请求失败，请重试。</p>}
+            {liveRun && stopState === 'requested' && <p role="status">{uiText("已请求停止，等待本轮结束。")}</p>}
+            {liveRun && stopState === 'failed' && <p role="alert">{uiText("停止生成请求失败，请重试。")}</p>}
             <ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} />
             <ExperimentPromptEditor
               template={selectedTemplate}
               templateValues={templateValues}
               draft={draft}
-              placeholder="输入提示词；Shift + Enter 换行"
-              label="文本提示词"
+              placeholder={uiText("输入提示词；Shift + Enter 换行")}
+              label={uiText("文本提示词")}
               disabled={submitting}
               submitOnEnter
               onDraftChange={setDraft}

@@ -4,6 +4,7 @@
  * 该 Hook 只管理会话数据和当前选择，不耦合 URL 或页面跳转，
  * 让统一实验室页面能够自行决定如何映射会话选择到路由。
  */
+import { useUiText } from '../../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   StudioExperimentSessionsService,
@@ -39,6 +40,7 @@ function sortSessions(sessions: ExperimentSessionRead[]): ExperimentSessionRead[
  * @returns 会话列表、当前选择，以及供页面壳和模态组件调用的操作。
  */
 export function useExperimentSessions(options: UseExperimentSessionsOptions = {}) {
+  const uiText = useUiText()
   const { initialSessionId, initialLabType } = options
   const [sessions, setSessions] = useState<ExperimentSessionRead[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string>()
@@ -131,7 +133,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
       })
       .then((response) => {
         const session = response.data
-        if (!session) throw new Error('创建实验室会话失败')
+        if (!session) throw new Error(uiText("创建实验室会话失败"))
         setSessions((current) => sortSessions([session, ...current.filter((item) => item.id !== session.id)]))
         if (selection === selectionRevision.current) {
           selectionRevision.current += 1
@@ -146,7 +148,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
 
     creatingSessionsRef.current[labType] = { selection, promise: creation }
     return creation
-  }, [selectedSession])
+  }, [uiText, selectedSession])
 
   /** 更新会话标题，并使用服务端返回的更新时间重新排序。 */
   const renameSession = useCallback(async (sessionId: string, title: string): Promise<ExperimentSessionRead | undefined> => {

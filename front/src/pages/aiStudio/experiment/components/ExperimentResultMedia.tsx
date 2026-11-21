@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useRef, useState, type MouseEvent, type RefObject } from 'react'
 import { PlayCircleFilled } from '@ant-design/icons'
 import { Button, Modal, Spin } from 'antd'
@@ -14,12 +15,13 @@ type MediaFrameProps = {
 }
 
 function ExperimentMediaFrame({ kind, src, label, onOpen, playerRef }: MediaFrameProps) {
+  const uiText = useUiText()
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [attempt, setAttempt] = useState(0)
   const media = kind === 'image'
     ? <img key={attempt} src={src} alt={onOpen ? '' : label} onLoad={() => setState('ready')} onError={() => setState('failed')} />
     : <video key={attempt} ref={playerRef} src={src} controls={!onOpen} muted={Boolean(onOpen)} playsInline
-        preload="metadata" aria-label={onOpen ? undefined : '视频播放器'} aria-hidden={onOpen ? true : undefined}
+        preload="metadata" aria-label={onOpen ? undefined : uiText("视频播放器")} aria-hidden={onOpen ? true : undefined}
         tabIndex={onOpen ? -1 : undefined}
         onLoadedMetadata={(event) => {
           setState('ready')
@@ -30,14 +32,14 @@ function ExperimentMediaFrame({ kind, src, label, onOpen, playerRef }: MediaFram
 
   return <div className="experiment-result-frame">
     {onOpen ? <button type="button" className="experiment-result-open"
-      aria-label={kind === 'image' ? `查看${label}` : '播放视频'} disabled={state !== 'ready'} onClick={onOpen}>
+      aria-label={kind === 'image' ? uiText("查看{{label}}", { label }) : uiText("播放视频")} disabled={state !== 'ready'} onClick={onOpen}>
       {state !== 'failed' ? media : null}
-      {kind === 'video' && state === 'ready' ? <span className="experiment-result-play"><PlayCircleFilled aria-hidden="true" /> 播放</span> : null}
+      {kind === 'video' && state === 'ready' ? <span className="experiment-result-play"><PlayCircleFilled aria-hidden="true" /> {uiText("播放")}</span> : null}
     </button> : state !== 'failed' ? media : null}
-    {state === 'loading' ? <div className="experiment-result-placeholder" role="status"><Spin size="small" /> 正在加载{label}</div> : null}
+    {state === 'loading' ? <div className="experiment-result-placeholder" role="status"><Spin size="small" /> {uiText("正在加载{{label}}", { label })}</div> : null}
     {state === 'failed' ? <div className="experiment-result-placeholder">
-      <span role="status">{label} 加载失败</span>
-      <Button size="small" onClick={() => { setState('loading'); setAttempt((current) => current + 1) }}>重新加载{label}</Button>
+      <span role="status">{uiText("{{label}} 加载失败", { label })}</span>
+      <Button size="small" onClick={() => { setState('loading'); setAttempt((current) => current + 1) }}>{uiText("重新加载{{label}}", { label })}</Button>
     </div> : null}
   </div>
 }
@@ -49,6 +51,7 @@ type ExperimentResultMediaProps = {
 
 /** 列表媒体共用加载和重试状态；查看层仅播放当前结果。 */
 export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps) {
+  const uiText = useUiText()
   const [index, setIndex] = useState<number>()
   const playerRef = useRef<HTMLVideoElement>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
@@ -66,7 +69,7 @@ export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps
         key={`${url}-${itemIndex}`}
         kind={kind}
         src={url}
-        label={isImage ? `图片 ${itemIndex + 1}` : '视频'}
+        label={isImage ? uiText("图片 {{value1}}", { value1: itemIndex + 1 }) : uiText("视频")}
         onOpen={(event) => {
           triggerRef.current = event.currentTarget
           setIndex(itemIndex)
@@ -74,7 +77,7 @@ export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps
       />)}
     </div>
     <Modal
-      title={isImage ? '图片预览' : '视频预览'}
+      title={isImage ? uiText("图片预览") : uiText("视频预览")}
       open={Boolean(activeUrl)}
       onCancel={close}
       focusTriggerAfterClose={false}
@@ -86,12 +89,12 @@ export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps
       width="min(900px, calc(100vw - 24px))"
       className="experiment-result-dialog"
       footer={isImage && urls.length > 1 && index !== undefined ? <div className="experiment-result-pagination">
-        <Button onClick={() => move(-1)}>上一张</Button>
+        <Button onClick={() => move(-1)}>{uiText("上一张")}</Button>
         <span role="status">{index + 1} / {urls.length}</span>
-        <Button onClick={() => move(1)}>下一张</Button>
+        <Button onClick={() => move(1)}>{uiText("下一张")}</Button>
       </div> : null}
     >
-      {activeUrl ? <ExperimentMediaFrame key={activeUrl} src={activeUrl} kind={kind} label={isImage ? `图片 ${index! + 1}` : '视频'} playerRef={playerRef} /> : null}
+      {activeUrl ? <ExperimentMediaFrame key={activeUrl} src={activeUrl} kind={kind} label={isImage ? uiText("图片 {{value1}}", { value1: index! + 1 }) : uiText("视频")} playerRef={playerRef} /> : null}
     </Modal>
   </>
 }

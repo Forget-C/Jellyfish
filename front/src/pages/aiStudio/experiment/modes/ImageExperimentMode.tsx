@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 图片实验室模态。
@@ -115,6 +116,7 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
  * 首次创建会话后，页面壳回写会话 ID；正式任务消息由历史 Hook 接管。
  */
 export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: ImageExperimentModeProps) {
+  const uiText = useUiText()
   const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('image')
   const [modelId, setModelId] = useState<string>()
   const [draft, setDraft] = useState('')
@@ -142,8 +144,8 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
 
   /** 在首条有效输入前创建会话，再经固定统一入口提交图片异步任务。 */
   const handleSubmit = async () => {
-    if (!modelId) return message.warning('请选择图片模型')
-    if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入图片提示词')
+    if (!modelId) return message.warning(uiText("请选择图片模型"))
+    if (!currentPrompt) return message.warning(selectedTemplate ? uiText("请填写模板变量，生成有效提示词") : uiText("请输入图片提示词"))
     if (disabled) return
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
@@ -164,9 +166,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       onAccept: (attempt, targetSessionId) => {
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))
         if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
-        message.success('图片生成任务已创建')
+        message.success(uiText("图片生成任务已创建"))
       },
-      failureMessage: '创建图片生成任务失败，请检查模型、参考图和服务配置',
+      failureMessage: uiText("创建图片生成任务失败，请检查模型、参考图和服务配置"),
     })
   }
 
@@ -187,25 +189,25 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       setModelId(snapshot.model_id ?? undefined)
       setReferenceFileIds(item.referenceFileIds ?? [])
       focusExperimentPromptEditor()
-      message.success('已回填历史输入，可修改后重新发送')
+      message.success(uiText("已回填历史输入，可修改后重新发送"))
     }, referenceFileIds.length > 0)
   }
 
   const disabled = submitting || Boolean(runningTaskId)
   const clearContent = messages.length && !disabled && clearSessionMessages ? handleClear : undefined
-  const historyContent = <ExperimentHistory key={sessionId ?? 'draft'} history={history} messageCount={messages.length} emptyDescription="选择图片模型并输入提示词，开始一轮图片实验">
+  const historyContent = <ExperimentHistory key={sessionId ?? 'draft'} history={history} messageCount={messages.length} emptyDescription={uiText("选择图片模型并输入提示词，开始一轮图片实验")}>
     <div className="space-y-4">
       {messages.map((item) => {
         const isUser = item.role === 'user'
         return <ExperimentMessageBubble
           key={item.id}
           footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
-          identity={isUser ? '你' : '图片生成'}
+          identity={isUser ? uiText("你") : uiText("图片生成")}
           status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
           tone={isUser ? 'user' : 'assistant'}
         >
             {isUser || item.content !== '图片生成任务已提交，正在等待生成结果。' ? item.content : null}
-            {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: '参考图' }))} /> : null}
+            {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: uiText("参考图") }))} /> : null}
             {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
             {item.resultUrls?.length ? <ExperimentResultMedia kind="image" urls={item.resultUrls} /> : null}
         </ExperimentMessageBubble>
@@ -213,7 +215,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     </div>
   </ExperimentHistory>
   const referencePicker = useRef<ExperimentReferenceHandle>(null)
-  const composer = <ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel="图片模型" onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: "添加参考图", onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer
+  const composer = <ExperimentOptionBar models={models.map((model) => ({ id: model.id, name: model.name }))} templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: imagePromptCategoryLabels[template.category] }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("图片模型")} onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("添加参考图"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer
       submitting={disabled} submitDisabled={disabled || submission.outcomePending} onSubmit={() => void handleSubmit()}
       options={modelControl} addAction={addControl}
       contextActions={<ImageExperimentReferences ref={referencePicker}
@@ -226,6 +228,6 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         onUploaded={onUploaded}
         disabled={disabled}
       />}
-    >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的图片；Shift + Enter 换行" label="图片提示词" disabled={disabled} submitOnEnter onSubmit={() => void handleSubmit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
+    >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder={uiText("描述你想生成的图片；Shift + Enter 换行")} label={uiText("图片提示词")} disabled={disabled} submitOnEnter onSubmit={() => void handleSubmit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
   return render({ history: historyContent, composer, clearContent, overlays: null, disabled })
 }

@@ -1,4 +1,5 @@
 /** Shared template-variable or free-text prompt editor for experiment laboratories. */
+import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { Button, Drawer, Input, Modal } from 'antd'
 import { useCallback, useId, useState, useSyncExternalStore } from 'react'
@@ -85,6 +86,7 @@ type TemplateVariableEditorProps = {
 
 /** Panel edits stay local until the user applies them or confirms conversion. */
 function TemplateVariableEditor({ template, values, disabled, onApply, onUseFreeInput }: TemplateVariableEditorProps) {
+  const uiText = useUiText()
   const [panelValues, setPanelValues] = useState<Record<string, string> | null>(null)
   const [converting, setConverting] = useState(false)
   useExperimentLeaveStatus(panelValues !== null && getPromptTemplateVariables(template).some(variable => panelValues[variable] !== values[variable]))
@@ -121,13 +123,13 @@ function TemplateVariableEditor({ template, values, disabled, onApply, onUseFree
           <div className="experiment-template-summary-name" title={template.name}>{template.name}</div>
           <div className="experiment-template-summary-meta">
             <span>v{template.version}</span>
-            <span>{variables.length ? `已填 ${filledCount}／共 ${variables.length} 个变量` : '无需填写变量'}</span>
+            <span>{variables.length ? uiText("已填 {{filledCount}}／共 {{length}} 个变量", { filledCount, length: variables.length }) : uiText("无需填写变量")}</span>
           </div>
         </div>
-        <Button disabled={disabled} onClick={() => setPanelValues({ ...values })}>编辑变量</Button>
+        <Button disabled={disabled} onClick={() => setPanelValues({ ...values })}>{uiText("编辑变量")}</Button>
       </div>
       <Drawer
-        title={<span ref={labelDialog} id={titleId}>编辑模板变量</span>}
+        title={<span ref={labelDialog} id={titleId}>{uiText("编辑模板变量")}</span>}
         rootClassName="experiment-template-drawer app-detail-drawer"
         width="var(--experiment-template-drawer-width)"
         open={panelValues !== null}
@@ -135,8 +137,8 @@ function TemplateVariableEditor({ template, values, disabled, onApply, onUseFree
         keyboard={!converting}
         maskClosable={!converting}
         footer={<div className="experiment-template-drawer-actions">
-          <Button onClick={closePanel}>取消</Button>
-          <Button type="primary" disabled={disabled} onClick={apply}>应用</Button>
+          <Button onClick={closePanel}>{uiText("取消")}</Button>
+          <Button type="primary" disabled={disabled} onClick={apply}>{uiText("应用")}</Button>
         </div>}
       >
         <PromptTemplateForm
@@ -148,14 +150,14 @@ function TemplateVariableEditor({ template, values, disabled, onApply, onUseFree
         />
       </Drawer>
       <Modal
-        title="转为自由输入？"
+        title={uiText("转为自由输入？")}
         open={converting}
-        okText="转换"
+        okText={uiText("转换")}
         onOk={convert}
         onCancel={() => setConverting(false)}
         okButtonProps={{ disabled }}
       >
-        <p>将当前变量渲染成可编辑的提示词，替换当前输入并退出模板模式。</p>
+        <p>{uiText("将当前变量渲染成可编辑的提示词，替换当前输入并退出模板模式。")}</p>
       </Modal>
     </>
   )

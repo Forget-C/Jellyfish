@@ -1,4 +1,5 @@
 /** 历史输入回填操作，避免整块消息气泡成为容易误触的交互区域。 */
+import { useUiText } from '../../../../uiText'
 import { RedoOutlined } from '@ant-design/icons'
 import { Button, Tooltip } from 'antd'
 
@@ -14,10 +15,11 @@ type ExperimentHistoryRestoreButtonProps = {
  * 原有行为使用；仅明确点击该操作时才会恢复编辑草稿。
  */
 export function ExperimentHistoryRestoreButton({ disabled = false, onRestore }: ExperimentHistoryRestoreButtonProps) {
+  const uiText = useUiText()
   return (
-    <Tooltip title="回填到输入框">
+    <Tooltip title={uiText("回填到输入框")}>
       <Button
-        aria-label="回填到输入框"
+        aria-label={uiText("回填到输入框")}
         className="opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         disabled={disabled}
         icon={<RedoOutlined />}

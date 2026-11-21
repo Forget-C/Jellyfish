@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useCallback, useId, type ReactNode } from 'react'
 import { Button, Drawer, Space } from 'antd'
 import './experiment-reference.css'
@@ -18,6 +19,7 @@ type ExperimentReferencePanelProps = {
 
 /** 图片与视频共用的参考配置抽屉。各模态保留自己的临时选择和角色校验。 */
 export function ExperimentReferencePanel({ open, title, applyLabel, applyDisabled, previewOpen, onApply, onCancel, onAfterClose, children }: ExperimentReferencePanelProps) {
+  const uiText = useUiText()
   const titleId = useId()
   // 当前 Drawer 版本不会将标题关联到 role="dialog"。
   const labelPanel = useCallback((node: HTMLSpanElement | null) => {
@@ -33,7 +35,7 @@ export function ExperimentReferencePanel({ open, title, applyLabel, applyDisable
     onClose={onCancel}
     afterOpenChange={visible => { if (!visible) onAfterClose?.() }}
     footer={<Space className="experiment-reference-footer">
-      <Button onClick={onCancel} aria-label="取消参考配置">取消</Button>
+      <Button onClick={onCancel} aria-label={uiText("取消参考配置")}>{uiText("取消")}</Button>
       <Button type="primary" disabled={applyDisabled} onClick={onApply}>{applyLabel}</Button>
     </Space>}
   >

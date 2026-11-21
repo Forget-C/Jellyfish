@@ -237,10 +237,17 @@ try {
   await page.getByRole('button', { name: /验收图片模型/ }).waitFor()
   await page.keyboard.press('Escape')
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('应用已上传的参考图')
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  assert.equal(await page.getByRole('textbox', { name: 'Image prompt', exact: true }).inputValue(), '应用已上传的参考图')
+  await page.getByRole('button', { name: 'View all media (6)', exact: true }).waitFor()
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/image-a/tasks')),
-    page.getByRole('button', { name: /^发\s*送$/, exact: true }).click(),
+    page.getByRole('button', { name: 'Send', exact: true }).click(),
   ])
+  assert.equal(submissions[1].body.execution_prompt, '应用已上传的参考图')
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   assert.deepEqual(submissions[1].body.media.references, [
     { file_id: 'file-2', media_kind: 'image', ordinal: 0 },
     { file_id: 'file-1', media_kind: 'image', ordinal: 1 },

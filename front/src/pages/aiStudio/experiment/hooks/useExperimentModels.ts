@@ -1,8 +1,10 @@
+import { useUiText } from '../../../../uiText'
 import { useRef, useState } from 'react'
 import { LlmService, type ModelRead } from '../../../../services/generated'
 
 /** An unsuccessful refresh keeps the last model list and never changes the applied model. */
 export function useExperimentModels(category: 'text' | 'image' | 'video', onOnlyModel: (modelId: string) => void) {
+  const uiText = useUiText()
   const [models, setModels] = useState<ModelRead[]>()
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsFailed, setModelsFailed] = useState(false)
@@ -20,7 +22,7 @@ export function useExperimentModels(category: 'text' | 'image' | 'video', onOnly
         category, page: 1, pageSize: 100, order: 'updated_at', isDesc: true,
       })
       const items = data?.items
-      if (!Array.isArray(items)) throw new Error('未返回模型列表')
+      if (!Array.isArray(items)) throw new Error(uiText("未返回模型列表"))
       setModels(items)
       if (items.length === 1) applyOnlyModel.current(items[0].id)
     } catch {

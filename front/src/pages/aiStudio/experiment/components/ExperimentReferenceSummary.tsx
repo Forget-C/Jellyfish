@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useState, useSyncExternalStore } from 'react'
 import { Button, Tooltip } from 'antd'
 import { PlayCircleOutlined, VideoCameraOutlined } from '@ant-design/icons'
@@ -38,13 +39,14 @@ export function ExperimentReferenceSummary({ items, label, disabled, onPreview, 
   onPreview: (item: ReferenceSummaryItem, trigger: HTMLElement) => void
   onOpen: (trigger: HTMLElement) => void
 }) {
+  const uiText = useUiText()
   const limit = useSyncExternalStore(subscribe, summaryLimit)
   if (!items.length) return null
   return <div className="experiment-reference-summary-bar">
     {limit > 0 && <ul className="experiment-reference-summary" aria-label={label}>
       {items.slice(0, limit).map(item => <li key={item.key}>
         <Tooltip title={item.label} trigger={['hover', 'focus']}>
-          <button type="button" className="experiment-summary-thumb" aria-label={`预览${item.label}`} onClick={event => onPreview(item, event.currentTarget)}>
+          <button type="button" className="experiment-summary-thumb" aria-label={uiText("预览{{label}}", { label: item.label })} onClick={event => onPreview(item, event.currentTarget)}>
             <span className="experiment-summary-visual">
               {item.kind === 'image' ? <ExperimentReferenceImage id={item.id} name={item.name} /> : <VideoThumbnail key={item.thumbnail} item={item} />}
               {item.badge && <span className="experiment-summary-badge">{item.badge}</span>}
@@ -54,6 +56,6 @@ export function ExperimentReferenceSummary({ items, label, disabled, onPreview, 
       </li>)}
     </ul>}
     {items.length > limit && <Button type="text" className="experiment-summary-more" disabled={disabled}
-      aria-label={`查看全部 ${items.length} 项素材`} onClick={event => onOpen(event.currentTarget)}>{limit ? `+${items.length - limit}` : `素材 ${items.length}`}</Button>}
+      aria-label={uiText("查看全部 {{length}} 项素材", { length: items.length })} onClick={event => onOpen(event.currentTarget)}>{limit ? `+${items.length - limit}` : uiText("素材 {{length}}", { length: items.length })}</Button>}
   </div>
 }

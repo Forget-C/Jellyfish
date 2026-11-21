@@ -1,4 +1,5 @@
 /** 统一实验室页面：负责会话与路由，模态组件仅负责各自的生成能力。 */
+import { useUiText } from '../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -19,6 +20,7 @@ type LabSlots = { history: ReactNode; composer: ReactNode; clearContent?: () => 
 
 /** 将会话选择写入唯一实验室路由，同时使草稿态保持显式模态。 */
 export default function ExperimentLabPage() {
+  const uiText = useUiText()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialSessionId = useRef(searchParams.get('session') ?? undefined).current
   const lastRouteKeyRef = useRef(searchParams.toString())
@@ -91,7 +93,7 @@ export default function ExperimentLabPage() {
   /** 删除后恢复全局最新会话；没有历史时回到文本草稿。 */
   const handleDeleteSession = async (sessionId: string) => {
     const deletingCurrent = sessionId === selectedSessionId
-    if (deletingCurrent && isTextRunActive()) throw new Error('文本生成中，不能删除当前会话')
+    if (deletingCurrent && isTextRunActive()) throw new Error(uiText("文本生成中，不能删除当前会话"))
     const next = await deleteSession(sessionId)
     if (!deletingCurrent) return
     if (next) handleSelectSession(next)
@@ -135,10 +137,10 @@ export default function ExperimentLabPage() {
 
   return <ExperimentLeaveStatusContext.Provider value={register}>
     {selectedLabType === 'image'
-      ? <ImageExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('实验室 · 图片')} />
+      ? <ImageExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout(uiText("实验室 · 图片"))} />
       : selectedLabType === 'video'
-        ? <VideoExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('实验室 · 视频')} />
-        : <TextExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('实验室 · 文本')} />}
+        ? <VideoExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout(uiText("实验室 · 视频"))} />
+        : <TextExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout(uiText("实验室 · 文本"))} />}
     {dialog}
   </ExperimentLeaveStatusContext.Provider>
 }

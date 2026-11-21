@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useEffect, useState, type ReactNode, type RefObject } from 'react'
 import { Button, Drawer, Dropdown } from 'antd'
 import { MenuOutlined, MoreOutlined } from '@ant-design/icons'
@@ -19,6 +20,7 @@ type ExperimentLabLayoutProps = {
 
 /** 实验室类型与会话共用同一侧栏，输入区独立于会话和消息滚动。 */
 export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar, sidebarTrigger, history, composer, overlays }: ExperimentLabLayoutProps) {
+  const uiText = useUiText()
   const { key } = useLocation()
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [clearTarget, setClearTarget] = useState<{ title: string; run: () => Promise<void> }>()
@@ -47,19 +49,19 @@ export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar
       <div className="app-lab-layout">
         {wide && sidebar(closeNavigation)}
         <section className="app-lab-main" aria-label={title}>
-          <PageToolbar className="experiment-toolbar" title={<>{title}<span className="experiment-session-title" title={sessionTitle}> · {sessionTitle ?? '新会话'}</span></>}>
+          <PageToolbar className="experiment-toolbar" title={<>{title}<span className="experiment-session-title" title={sessionTitle}> · {sessionTitle ?? uiText("新会话")}</span></>}>
             {!wide && <Button ref={sidebarTrigger} type="text" icon={<MenuOutlined />}
-              aria-label="会话导航" aria-expanded={sessionsOpen} onClick={() => setSessionsOpen(true)}>会话导航</Button>}
+              aria-label={uiText("会话导航")} aria-expanded={sessionsOpen} onClick={() => setSessionsOpen(true)}>{uiText("会话导航")}</Button>}
             <Dropdown trigger={['click']} menu={{ items: [{
               key: 'clear',
-              label: '清空会话内容',
+              label: uiText("清空会话内容"),
               danger: true,
               disabled: !clearContent,
               onClick: () => {
-                if (clearContent) setClearTarget({ title: sessionTitle ?? '当前会话', run: clearContent })
+                if (clearContent) setClearTarget({ title: sessionTitle ?? uiText("当前会话"), run: clearContent })
               },
             }] }}>
-              <Button type="text" className="experiment-icon-action" icon={<MoreOutlined />} aria-label="更多会话操作" />
+              <Button type="text" className="experiment-icon-action" icon={<MoreOutlined />} aria-label={uiText("更多会话操作")} />
             </Dropdown>
           </PageToolbar>
           <div className="app-lab-content">
@@ -68,13 +70,13 @@ export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar
           </div>
         </section>
       </div>
-      {!wide && <Drawer title="会话导航" placement="left" width="min(272px, 100vw)"
+      {!wide && <Drawer title={uiText("会话导航")} placement="left" width="min(272px, 100vw)"
         open={sessionsOpen} onClose={closeNavigation}>{sidebar(closeNavigation)}</Drawer>}
       <ExperimentSessionConfirmation
-        title="清空会话内容"
-        description={`将清空“${clearTarget?.title}”的历史消息，保留会话本身。此操作无法撤销。`}
+        title={uiText("清空会话内容")}
+        description={uiText("将清空“{{title}}”的历史消息，保留会话本身。此操作无法撤销。", { title: clearTarget?.title })}
         run={clearTarget?.run}
-        failure="清空会话失败；含生成任务的会话不可清空"
+        failure={uiText("清空会话失败；含生成任务的会话不可清空")}
         onClose={() => setClearTarget(undefined)}
       />
       {overlays}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 /** Shared composer frame for submitting prompts in every experiment modality. */
 import type { ReactNode } from 'react'
 import { Button } from 'antd'
@@ -35,8 +36,9 @@ export function ExperimentComposer({
   submitting = false,
   submitDisabled = false,
   onSubmit,
-  submitLabel = '发送',
+  submitLabel,
 }: ExperimentComposerProps) {
+  const uiText = useUiText()
   const workbench = appearance === 'workbench'
   if (!workbench) return (
     <div className="experiment-composer">
@@ -46,7 +48,7 @@ export function ExperimentComposer({
         <div className="experiment-composer-submit">
           {contextActions}
           {addAction}
-          {secondaryAction ?? <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</Button>}
+          {secondaryAction ?? <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel ?? uiText("发送")}</Button>}
         </div>
       </div>
       {feedback && <div className="experiment-composer-feedback">{feedback}</div>}
@@ -64,7 +66,7 @@ export function ExperimentComposer({
           {options}
           {contextActions}
         </div>
-        <WorkbenchButton variant="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</WorkbenchButton>
+        <WorkbenchButton variant="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel ?? uiText("发送")}</WorkbenchButton>
       </div>
     </div>
   )

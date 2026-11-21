@@ -1,4 +1,5 @@
 /** Form-based rendering of a reusable prompt template's declared variables. */
+import { useUiText } from '../../../../uiText'
 import { useId } from 'react'
 import { Button, Collapse, Form, Input, Typography } from 'antd'
 import { EditOutlined } from '@ant-design/icons'
@@ -40,6 +41,7 @@ export function createPromptTemplateValues(template: PromptTemplateDefaults): Re
 
 /** Provides a non-destructive form editor for template variables and a final rendered-prompt preview. */
 export function PromptTemplateForm({ template, values, disabled = false, onValuesChange, onUseFreeInput }: PromptTemplateFormProps) {
+  const uiText = useUiText()
   const prefix = useId()
   const variables = getPromptTemplateVariables(template)
   const renderedPrompt = renderPromptTemplate(template.content, values)
@@ -53,7 +55,7 @@ export function PromptTemplateForm({ template, values, disabled = false, onValue
           {template.preview ? <Typography.Paragraph type="secondary" className="mb-0 mt-1 text-xs">{template.preview}</Typography.Paragraph> : null}
         </div>
         <Button icon={<EditOutlined aria-hidden="true" />} disabled={disabled} onClick={onUseFreeInput}>
-          转为自由输入
+          {uiText("转为自由输入")}
         </Button>
       </div>
       {variables.length > 0 ? (
@@ -63,7 +65,7 @@ export function PromptTemplateForm({ template, values, disabled = false, onValue
               <Input.TextArea
                 id={`${prefix}-${index}`}
                 value={values[variable] ?? ''}
-                placeholder={`填写 ${variable}`}
+                placeholder={uiText("填写 {{variable}}", { variable })}
                 autoSize={{ minRows: 1, maxRows: 4 }}
                 disabled={disabled}
                 onChange={(event) => onValuesChange({ ...values, [variable]: event.target.value })}
@@ -72,11 +74,11 @@ export function PromptTemplateForm({ template, values, disabled = false, onValue
           ))}
         </Form>
       ) : (
-        <Typography.Paragraph type="secondary">该模板没有可配置变量，将按下方最终提示词直接发送。</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">{uiText("该模板没有可配置变量，将按下方最终提示词直接发送。")}</Typography.Paragraph>
       )}
       <Collapse
         size="small"
-        items={[{ key: 'rendered', label: '查看最终提示词', children: <Typography.Paragraph className="mb-0 whitespace-pre-wrap">{renderedPrompt || '模板渲染后为空'}</Typography.Paragraph> }]}
+        items={[{ key: 'rendered', label: uiText("查看最终提示词"), children: <Typography.Paragraph className="mb-0 whitespace-pre-wrap">{renderedPrompt || uiText("模板渲染后为空")}</Typography.Paragraph> }]}
       />
     </div>
   )

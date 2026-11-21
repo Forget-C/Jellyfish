@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useEffect, useState } from 'react'
 import { FilmService, type TaskResultRead } from '../../../../services/generated'
 
@@ -12,6 +13,7 @@ function isTerminal(status?: string) {
 export function useExperimentTaskResults<T extends TaskMessage>(
   messages: T[], refreshHistory: () => Promise<void>, projectMedia: (message: T, result: TaskResultRead) => T,
 ) {
+  const uiText = useUiText()
   const [reads, setReads] = useState<Record<string, TaskRead>>({})
   const [retry, setRetry] = useState(0)
   const runningTaskId = messages.find((message) => {
@@ -32,7 +34,7 @@ export function useExperimentTaskResults<T extends TaskMessage>(
         request = FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
         const { data } = await request
         if (cancelled) return
-        if (!data || data.task_id !== taskId) throw new Error('任务状态不可用')
+        if (!data || data.task_id !== taskId) throw new Error(uiText("任务状态不可用"))
         setReads((current) => ({ ...current, [taskId]: { result: data, unavailable: false } }))
         if (isTerminal(data.status)) {
           void refreshHistory()
@@ -51,7 +53,7 @@ export function useExperimentTaskResults<T extends TaskMessage>(
       window.clearTimeout(timer)
       request?.cancel()
     }
-  }, [refreshHistory, retry, runningTaskId])
+  }, [uiText, refreshHistory, retry, runningTaskId])
 
   // 历史已确认终态时，旧的轮询进度和读取失败不再代表当前状态。
   const currentReads = { ...reads }

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   StudioExperimentSessionsService,
@@ -72,6 +73,7 @@ export function useExperimentHistory(
   sessionId?: string,
   { pageSize = 50 }: UseExperimentHistoryOptions = {},
 ): ExperimentHistoryState {
+  const uiText = useUiText()
   const [messages, setMessages] = useState<ExperimentMessageRead[]>([])
   const [historyPage, setHistoryPage] = useState(1)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
@@ -154,11 +156,11 @@ export function useExperimentHistory(
       }
     } catch (reason) {
       if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
-      setError(reason instanceof Error ? reason : new Error('加载实验室历史失败'))
+      setError(reason instanceof Error ? reason : new Error(uiText("加载实验室历史失败")))
     } finally {
       if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoading(false)
     }
-  }, [clearLocalHistory, pageSize, sessionId])
+  }, [uiText, clearLocalHistory, pageSize, sessionId])
 
   /** 读取当前会话更早的一页消息，并按服务端序号合并到本地历史。 */
   const loadMore = useCallback(async () => {
@@ -186,11 +188,11 @@ export function useExperimentHistory(
     } catch (reason) {
       if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
       setErrorOnLoadMore(true)
-      setError(reason instanceof Error ? reason : new Error('加载更早实验室历史失败'))
+      setError(reason instanceof Error ? reason : new Error(uiText("加载更早实验室历史失败")))
     } finally {
       if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoadingMore(false)
     }
-  }, [hasMoreHistory, historyPage, loading, loadingMore, pageSize, sessionId])
+  }, [uiText, hasMoreHistory, historyPage, loading, loadingMore, pageSize, sessionId])
 
   useEffect(() => {
     historySessionIdRef.current = sessionId
