@@ -23,5 +23,4 @@ cascade:
 ## 已经在使用？
 
 - 要试写提示词、组合模型输入或找回生成任务，进入[独立工具与任务]({{< relref "/docs/tools" >}})。
-- 要继续旧版素材的审片与交付，查看[旧版场次记录]({{< relref "/docs/legacy/versions" >}}#使用旧版场次记录)。
 - <span id="开发与贡献"></span>要在本地修改应用或反馈问题，进入[开发与贡献]({{< relref "/docs/community" >}})。

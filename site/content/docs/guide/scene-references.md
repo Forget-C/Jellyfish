@@ -1,4 +1,7 @@
 ---
+aliases:
+  - /docs/guide/sequence-asset-to-shoot/
+  - /docs/legacy/unit-shooting/
 title: "为本场选参考图"
 weight: 3
 ---
@@ -19,3 +22,8 @@ weight: 3
 ![对象参考页中，林夏、海边站台和旧信封分别有已选参考图](../../../images/screenshots/home/object-references.webp)
 
 接下来[生成分镜与查看候选画面]({{< relref "sequence-workflow" >}})。
+
+{{< moved-section "建立资产与场次关联" "/docs/guide/scene-references" "为场次准备对象参考" >}}
+{{< moved-section "准备单元" "/docs/guide/scene-references" "为场次准备对象参考" >}}
+{{< moved-section "指令与拍摄" "/docs/guide/sequence-workflow" "在工作台生成和编辑分镜" >}}
+{{< moved-section "从设计进入拍摄" "/docs/guide/sequence-workflow" "在工作台生成和编辑分镜" >}}

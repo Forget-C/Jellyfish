@@ -8,16 +8,22 @@ const groups = {
   安装与配置: ['准备安装环境', '启动并检查服务', '配置生成模型'],
   制作第一场戏: ['创建项目与第一章', '从原文划分场次', '为本场选参考图', '生成分镜与查看候选画面'],
   独立工具与任务: ['管理资产图片', '使用生成实验室', '使用生成画布', '查看与处理任务'],
-  旧版场次工作台: ['打开已有场次版本', '准备单元与拍摄', '审片、剪辑与交付'],
   开发与贡献: ['开发快速开始', '参与贡献'],
 }
 const bookmarks = [
-  ['sequence-workflow', '为场次准备对象参考', '为本场选参考图'],
-  ['sequence-workflow', '使用旧版场次记录', '打开已有场次版本'],
-  ['sequence-workflow', '从设计进入拍摄', '准备单元与拍摄'],
-  ['sequence-workflow', '审片采用和剪辑', '审片、剪辑与交付'],
-  ['sequence-workflow', '用于章节和整场导出', '审片、剪辑与交付'],
-  ['chapter-and-scene-versions', '管理旧版场次版本', '打开已有场次版本'],
+  ['guide/sequence-workflow', '为场次准备对象参考', '为本场选参考图', '为场次准备对象参考'],
+  ['guide/sequence-workflow', '使用旧版场次记录', '从原文划分场次', '查看或恢复历史划分'],
+  ['guide/sequence-workflow', '从设计进入拍摄', '生成分镜与查看候选画面', '在工作台生成和编辑分镜'],
+  ['guide/sequence-workflow', '审片采用和剪辑', '生成分镜与查看候选画面', '预览分镜生成的候选图'],
+  ['guide/sequence-workflow', '用于章节和整场导出', '生成分镜与查看候选画面', '预览分镜生成的候选图'],
+  ['guide/chapter-and-scene-versions', '管理旧版场次版本', '从原文划分场次', '查看或恢复历史划分'],
+  ['guide/sequence-asset-to-shoot', '', '为本场选参考图', ''],
+  ['guide/sequence-asset-to-shoot', '指令与拍摄', '生成分镜与查看候选画面', '在工作台生成和编辑分镜'],
+  ['legacy/versions', '管理旧版场次版本', '从原文划分场次', '查看或恢复历史划分'],
+  ['legacy/edit-delivery', '用于章节和整场导出', '生成分镜与查看候选画面', '预览分镜生成的候选图'],
+  ['legacy', '', '制作第一场戏', ''],
+  ['legacy/versions', '', '从原文划分场次', ''],
+  ['legacy/edit-delivery', '', '生成分镜与查看候选画面', ''],
 ]
 
 const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -50,6 +56,7 @@ try {
         assert.ok((await crumb.innerText()).endsWith(title))
         await openMenu()
         const names = (await menu.locator('a:visible').allTextContents()).map(s => s.trim())
+        assert.ok(!names.includes('旧版场次工作台'), '目录仅列出现行工作区')
         assert.deepEqual(names.filter(name => Object.hasOwn(groups, name)), Object.keys(groups))
         assert.deepEqual(names.filter(name => titles.includes(name)), titles, group)
         assert.deepEqual((await menu.locator('.hextra-sidebar-active-item:visible').allTextContents()).map(s => s.trim()), [title])
@@ -66,14 +73,16 @@ try {
     await page.locator('main a[title="' + title + '"]').click()
     await page.getByRole('heading', { level: 1, name: title }).waitFor()
 
-    for (const [slug, anchor, destination] of bookmarks) {
-      await page.goto(new URL('docs/guide/' + slug + '/#' + anchor, base).href)
+    for (const [slug, anchor, destination, target] of bookmarks) {
+      await page.goto(new URL('docs/' + slug + '/#' + anchor, base).href)
       await page.getByRole('heading', { name: destination, level: 1, exact: true }).waitFor()
-      assert.ok(await page.locator('h2 [id="' + anchor + '"]').count(), anchor)
-      assert.equal(decodeURIComponent(new URL(page.url()).hash.slice(1)), anchor)
+      if (target) {
+        await page.waitForURL(url => decodeURIComponent(url.hash.slice(1)) === target)
+        assert.ok(await page.locator('h2 [id="' + target + '"]').count(), target)
+      }
     }
     assert.deepEqual(errors, [])
-    console.log(base, width, 'five section menus, all article links, breadcrumbs, pager and bookmarks passed')
+    console.log(base, width, 'section menus, all article links, breadcrumbs, pager and bookmarks passed')
     await page.close()
   }
 } finally {
