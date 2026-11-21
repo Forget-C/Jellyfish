@@ -1,4 +1,3 @@
-import { uiText } from '../../../uiText'
 export type WorkbenchManagementStep = 'division' | 'objects' | 'storyboard'
 export const chapterCompositionRetired = { chapterCompositionRetired: true }
 
@@ -67,10 +66,10 @@ export function sceneCanvasLocation(projectId: string, chapterId: string, sequen
 
 /** 未知字段不能当作空章；数量入口仍允许查看缺少原文的历史场次。 */
 export function chapterAction(chapter: { rawText?: string; sequenceCount?: number }, count = false): { label: string; target: 'edit' | 'source' | 'manage' } {
-  if (count && chapter.sequenceCount !== undefined && chapter.sequenceCount > 0) return { label: uiText("场次管理"), target: 'manage' }
-  if (chapter.rawText !== undefined && !chapter.rawText.trim()) return { label: uiText("填写原文"), target: 'edit' }
-  if (chapter.rawText === undefined || chapter.sequenceCount === undefined) return { label: uiText("查看场次"), target: 'manage' }
-  return chapter.sequenceCount > 0 ? { label: uiText("场次管理"), target: 'manage' } : { label: uiText("划分场次"), target: 'source' }
+  if (count && chapter.sequenceCount !== undefined && chapter.sequenceCount > 0) return { label: '场次管理', target: 'manage' }
+  if (chapter.rawText !== undefined && !chapter.rawText.trim()) return { label: '填写原文', target: 'edit' }
+  if (chapter.rawText === undefined || chapter.sequenceCount === undefined) return { label: '查看场次', target: 'manage' }
+  return chapter.sequenceCount > 0 ? { label: '场次管理', target: 'manage' } : { label: '划分场次', target: 'source' }
 }
 
 /** 继续制作入口与章节列表共享定位，编辑原文留在项目中，场次操作进入工作台管理。 */

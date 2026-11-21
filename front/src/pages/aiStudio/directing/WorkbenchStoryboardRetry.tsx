@@ -185,7 +185,7 @@ export function WorkbenchStoryboardRetry({ projectId, chapterId, sequenceId, can
           {preview.review_diff && <section aria-label={uiText("本次合并方案")}>
             <h4>{uiText("本次候选与当前画布的合并变化")}</h4>
             {(['added', 'modified', 'removed', 'orphaned'] as const).map((kind, index) => <div key={kind}>
-              <strong>{['新增', '更新', '移除', '引用受影响'][index]}</strong>
+              <strong>{uiText(['新增', '更新', '移除', '引用受影响'][index])}</strong>
               <ul>{preview.review_diff?.[kind].map(card => <li key={card.id}>{card.type_name} · {card.name}</li>)}</ul>
             </div>)}
           </section>}
