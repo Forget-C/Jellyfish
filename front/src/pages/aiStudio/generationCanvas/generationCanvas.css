@@ -111,6 +111,7 @@
 .generation-browse .canvas-filter-fields { max-width: 100%; }
 .generation-browse .canvas-filters { box-sizing: border-box; }
 .generation-browse .canvas-filter-fields { flex: 1 1 auto; }
+.generation-browse .canvas-filter-fields .ant-select { width: auto; min-width: 120px; max-width: 100%; }
 
 /* 视图工具与内容历史使用工作台同一位置，业务历史保持独立。 */
 .generation-view-tools { font-size: 12px; color: var(--wb-muted); gap: 4px; }

@@ -521,7 +521,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               },
             })),
           }}>
-            <Button icon={<DownOutlined />}>{uiText("排序：")}{uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '')}</Button>
+            <Button icon={<DownOutlined />}>{uiText("排序：{{label}}", { label: uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '') })}</Button>
           </Dropdown>
           <Button ref={defaultTrigger} aria-label={uiText("默认模型")} icon={<SettingOutlined />} onClick={() => {
             setDefaultOptionsLoading(true)

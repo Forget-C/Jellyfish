@@ -110,6 +110,18 @@ try {
   const projectCard = name => page.getByRole('article').filter({ has: page.getByRole('heading', { name, exact: true }) })
   await visitProjects()
   const card = projectCard('长安夜行')
+  await card.waitFor()
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  for (const width of [375, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await card.locator('.project-lobby-status').waitFor()
+    const counts = card.locator('.project-lobby-count-item > span:last-child')
+    assert.equal(await counts.count(), 2)
+    assert.ok(await counts.evaluateAll(items => items.every(item => item.scrollWidth <= item.clientWidth + 1)), `Full project counts at ${width}px`)
+  }
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   await page.goto(`${origin}/projects/p1?tab=settings`)
   const name = page.getByRole('textbox', { name: '项目名称' })
   await name.waitFor()

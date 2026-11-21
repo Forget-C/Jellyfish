@@ -92,6 +92,11 @@
   .experiment-toolbar .ant-btn:not(.experiment-icon-action) { padding-inline: 4px; }
 }
 
+@media (max-width: 480px) {
+  .experiment-toolbar .experiment-navigation-label { display: none; }
+  .experiment-toolbar button[aria-expanded] { min-width: 44px; }
+}
+
 @media (pointer: coarse) {
   .experiment-toolbar .experiment-icon-action,
   .experiment-navigation .experiment-icon-action.ant-btn {

@@ -47,6 +47,12 @@ try {
     await page.getByRole('textbox', { name: t('搜索画布', 'Search canvases') }).fill(name)
     await page.getByRole('link', { name, exact: true }).click()
     await page.getByLabel(t('生成画布视口', 'Generation canvas viewport'), { exact: true }).waitFor()
+    for (const width of [375, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 1000 })
+      const values = page.locator('.generation-browse .ant-select-selection-item')
+      assert.equal(await values.count(), 2)
+      assert.ok(await values.evaluateAll(items => items.every(item => item.scrollWidth <= item.clientWidth + 1)), `Full canvas filters at ${width}px`)
+    }
     await page.getByRole('button', { name: t('基础卡', 'Basic cards'), exact: true }).click()
     const list = page.getByRole('navigation', { name: t('添加卡片', 'Add card') })
     await list.getByRole('searchbox').fill(t('文本卡', 'text card'))

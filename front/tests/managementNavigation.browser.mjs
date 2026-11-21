@@ -135,6 +135,11 @@ try {
   }
   await page.getByRole('button', { name: '用户与语言设置' }).click()
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.goto(origin + '/models')
+  for (const name of ['Provider', 'Model']) {
+    await page.getByRole('tab', { name, exact: true }).click()
+    await page.getByRole('button').getByText('Sort: Recently updated', { exact: true }).waitFor()
+  }
   await page.getByRole('button', { name: 'Open management navigation' }).click()
   const englishNav = page.getByRole('navigation', { name: 'Management navigation' })
   for (const name of ['Model management', 'Prompt templates', 'Agent management', 'File manager', 'Asset library']) {

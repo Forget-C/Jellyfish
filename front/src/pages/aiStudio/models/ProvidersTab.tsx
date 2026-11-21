@@ -344,7 +344,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
               })),
             }}
           >
-            <Button icon={<DownOutlined />}>{uiText("排序：")}{uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '')}</Button>
+            <Button icon={<DownOutlined />}>{uiText("排序：{{label}}", { label: uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '') })}</Button>
           </Dropdown>
           {result && <span className="management-count">
             {result.total === undefined ? uiText("已加载 {{length}} 个供应商", { length: result.providers.length }) : uiText("共 {{total}} 个供应商", { total: result.total })}
