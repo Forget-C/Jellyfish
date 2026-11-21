@@ -18,6 +18,10 @@ showcase:
     image: "images/screenshots/home/generation-preview.webp"
     alt: "画布中的图片生成结果预览，林夏在站台灯下打开旧信封"
     description: "在画布中查看镜头的图片输出。"
+  - title: "对话式生成"
+    image: "images/screenshots/home/conversation.webp"
+    alt: "文本实验室的两轮对话：先将站台开场拆成三个无对白镜头，再改写林夏认出字迹的特写"
+    description: "先把站台开场拆成三个镜头，再追问一句，让林夏用一个动作认出旧信。"
 workflow:
   - title: "构思"
     subtitle: "组织故事与镜头"
