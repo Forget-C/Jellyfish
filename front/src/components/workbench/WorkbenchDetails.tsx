@@ -1,3 +1,4 @@
+import { useUiText } from '../../uiText'
 import { WorkbenchReadingContext } from './WorkbenchReadingContext'
 import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
@@ -24,6 +25,7 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
   focusTarget?: { fieldId: string; serial: number }
   title: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement; children: ReactNode; initialExpanded?: boolean; closeDisabled?: boolean; onDeactivate?: () => void;
 }) {
+  const uiText = useUiText()
   const desktop = useWorkbenchDesktop()
   const modal = !desktop || closeDisabled
   const [expanded, setExpanded] = useState(initialExpanded)
@@ -113,8 +115,8 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
     aria-modal={modal ? true : undefined} aria-labelledby={titleId}
     className="canvas-workbench-dialog wb-details" data-expanded={expanded}>
     <header className="wb-details-header"><div><h2 id={titleId}>{title}</h2>{status && <small role="status">{status}</small>}</div>
-      <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value => !value)} />
-      <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} disabled={closeDisabled} onClick={() => close.current()} />
+      <WorkbenchIconButton variant="quiet" label={expanded ? uiText("收起详情") : uiText("展开详情")} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value => !value)} />
+      <WorkbenchIconButton variant="quiet" label={uiText("关闭详情")} icon={<CloseOutlined />} disabled={closeDisabled} onClick={() => close.current()} />
     </header>
     <div className="wb-details-body"><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></div>
   </section>, document.body)

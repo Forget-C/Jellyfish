@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { CanvasCatalog, CanvasContinuitySuspension, CanvasDocument, CanvasModelCapability, CanvasRunRead, ImageContentCard, PromptInstruction, PromptReference, VideoModelCard } from '../../../services/generated'
 import type { GenerationCard } from '../generationCanvas/graphRules'
 import { createGraphRules } from '../generationCanvas/graphRules'
@@ -27,7 +28,7 @@ export function continuityResults(document: CanvasDocument, targetId: string, ru
     const shotName = shotCard && 'name' in shotCard && shotCard.name || `镜头 ${index + 1}`
     return node.outputs.flatMap((output, position) => output.modality === 'video' && output.file_id && output.available !== false ? [{
       id: `${node.id}:${position}`, resultSetId: node.result_set_id, index, recommended: index === target - 1,
-      label: `${shotName} · 运行 ${run.id.slice(0, 8)} · 成果 ${position + 1}`,
+      label: uiText("{{shotName}} · 运行 {{value2}} · 成果 {{value3}}", { shotName, value2: run.id.slice(0, 8), value3: position + 1 }),
       source: { source_card_id: node.card_id, source_file_id: output.file_id,
         result: { run_id: run.id, node_id: node.id, position } } satisfies VideoFrameSource,
     }] : [])
@@ -68,7 +69,7 @@ export function visualContinuitySources(card: GenerationCard, document: CanvasDo
   const sourceIndex = storyboardShotIndex(document, origin.source_card_id)
   const missing = sourceIndex < 0 || sourceIndex >= storyboardShotIndex(document, card.id) ||
     !document.cards?.some(item => item.id === origin.source_card_id)
-  return [{ source: { card_id: origin.source_card_id }, label: '来源视频', fileId: origin.source_file_id, position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
+  return [{ source: { card_id: origin.source_card_id }, label: uiText("来源视频"), fileId: origin.source_file_id, position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
     missing, issue: missing ? '来源卡片已删除或不可用' : undefined }]
 }
 
@@ -110,7 +111,7 @@ export function planSubjectSuspension(model: VideoModelCard) {
 export function subjectSuspensionLabels(document: CanvasDocument, card: VideoModelCard, plan: CanvasContinuitySuspension) {
   return [...Object.values(plan.input_bindings || {}), ...Object.values(plan.design_media_uses || {})].map(item => {
     const source = document.cards?.find(candidate => candidate.id === item.source.card_id)
-    const label = source && 'name' in source && source.name || `来源卡片 ${item.source.card_id.slice(0, 8)}`
+    const label = source && 'name' in source && source.name || uiText("来源卡片 {{value1}}", { value1: item.source.card_id.slice(0, 8) })
     const referenceLabels = Array.from(new Set(bindingReferences(card, item.id).map(ref => ref.label)))
     const purpose = item.input_port === 'subject_video' ? '主体视频' : '主体图片'
     return [item.subject_name || '未命名主体', purpose, label, ...referenceLabels].join(' · ')
@@ -124,15 +125,15 @@ export function applyVisualContinuity(document: CanvasDocument, catalog: CanvasC
   const source = frame.frame_origin && storyboardShotIndex(document, frame.frame_origin.source_card_id)
   const index = storyboardShotIndex(document, targetId)
   if (!document.storyboard || target?.type !== 'model.video' || target.model_id !== capability.model_id ||
-    typeof source !== 'number' || source < 0 || source >= index) throw new Error('当前镜头或模型已变化，请重新选择来源')
+    typeof source !== 'number' || source < 0 || source >= index) throw new Error(uiText("当前镜头或模型已变化，请重新选择来源"))
   const existing = activeVisualContinuity(document, targetId)
-  if (existing && (existing.binding.input_port !== port || suspension)) throw new Error('重新采用时须保留当前参考用途')
+  if (existing && (existing.binding.input_port !== port || suspension)) throw new Error(uiText("重新采用时须保留当前参考用途"))
   const previous = document.storyboard.visual_continuity?.[targetId]
   if (suspension && previous?.suspended && !previous.restored)
-    throw new Error('请先核对当前已停用的主体参考')
+    throw new Error(uiText("请先核对当前已停用的主体参考"))
   const plan = suspension ? planSubjectSuspension(target) : undefined
   if (suspension && (!plan || JSON.stringify(suspension) !== JSON.stringify(plan.suspension)))
-    throw new Error('主体参考已变化，请重新核对后确认切换')
+    throw new Error(uiText("主体参考已变化，请重新核对后确认切换"))
   const next = plan?.card ?? target
   const rules = createGraphRules(catalog)
   const operations = createCanvasOperations(rules)

@@ -64,12 +64,35 @@ try {
   const front = page.getByRole('region', { name: '阿同 · 前门的阿同', exact: true })
   const back = page.getByRole('region', { name: '阿同 · 后门的阿同', exact: true })
   await front.waitFor()
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Production steps' }).waitFor()
+  await page.getByRole('heading', { name: 'Object references', exact: true }).waitFor()
+  await front.getByRole('button', { name: 'Select', exact: true }).click()
+  const englishPicker = page.getByRole('dialog', { name: 'Select project asset' })
+  await englishPicker.getByRole('button', { name: 'Select 已有角色', exact: true }).click()
+  // Intercept this first attempt so both languages submit from the same revision.
+  let englishChoice
+  const objectUrl = objectsUrl + '/' + (await read()).objects.find(item => item.excerpt === '前门的阿同').id
+  await page.route('**' + new URL(objectUrl).pathname, route => {
+    englishChoice = route.request().postDataJSON()
+    return route.fulfill({ status: 503, json: { detail: 'Fixture unavailable' } })
+  }, { times: 1 })
+  await englishPicker.getByRole('button', { name: 'Confirm selection' }).click()
+  await englishPicker.getByRole('button', { name: 'Back', exact: true }).click()
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   await front.getByRole('button', { name: '选用', exact: true }).click()
   const picker = page.getByRole('dialog', { name: '选用项目资源', exact: true })
   await picker.waitFor()
   await picker.getByRole('button', { name: '选择已有角色', exact: true }).click()
   assert.equal((await read()).objects.find(item => item.excerpt === '前门的阿同').asset_id, null)
-  await picker.getByRole('button', { name: '确认选用', exact: true }).click()
+  const [chineseChoice] = await Promise.all([
+    page.waitForRequest(req => req.method() === 'PUT' && new URL(req.url()).pathname === new URL(objectUrl).pathname),
+    picker.getByRole('button', { name: '确认选用', exact: true }).click(),
+  ])
+  assert.deepEqual(chineseChoice.postDataJSON(), englishChoice)
+  assert.equal(englishChoice.asset_id, 'object-browser-character')
   await picker.waitFor({ state: 'hidden' })
   await front.getByRole('button', { name: '编辑阿同资源', exact: true }).waitFor()
   assert.equal((await read()).objects.find(item => item.excerpt === '前门的阿同').asset_id, 'object-browser-character')

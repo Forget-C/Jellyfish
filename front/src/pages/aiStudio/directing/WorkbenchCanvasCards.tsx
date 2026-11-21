@@ -1,3 +1,5 @@
+import { currentLanguage } from '../../../i18n'
+import { uiText, useUiText } from '../../../uiText'
 import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowRightOutlined, MoreOutlined, PictureOutlined } from '@ant-design/icons'
@@ -26,18 +28,18 @@ function activeTask(task?: StoryboardTaskSummary | null) {
 }
 
 function taskLabel(task: StoryboardTaskSummary) {
-  if (task.status === 'queued') return '分镜排队中'
-  if (task.stage === 'writing_video_prompts') return '正在编写视频提示词'
-  if (task.stage === 'reviewing_storyboard') return '正在审查分镜连续性'
-  if (task.stage === 'repairing_storyboard') return '正在定向修正分镜'
-  if (task.stage === 'rechecking_storyboard') return '正在复核分镜连续性'
-  if (task.review_state === 'incomplete') return '分镜审查未完成，草案已保留'
-  if (task.review_state === 'conflict') return '分镜存在设计冲突'
-  if (task.review_state === 'warning') return '部分连续性依据不足'
-  if (task.status === 'running') return task.stage === 'assembling_storyboard' ? '正在校验并组装画布' : '正在提取分镜'
-  if (task.status === 'failed') return '分镜失败'
-  if (task.status === 'cancelled') return '分镜已取消'
-  return '分镜生成成功'
+  if (task.status === 'queued') return uiText("分镜排队中")
+  if (task.stage === 'writing_video_prompts') return uiText("正在编写视频提示词")
+  if (task.stage === 'reviewing_storyboard') return uiText("正在审查分镜连续性")
+  if (task.stage === 'repairing_storyboard') return uiText("正在定向修正分镜")
+  if (task.stage === 'rechecking_storyboard') return uiText("正在复核分镜连续性")
+  if (task.review_state === 'incomplete') return uiText("分镜审查未完成，草案已保留")
+  if (task.review_state === 'conflict') return uiText("分镜存在设计冲突")
+  if (task.review_state === 'warning') return uiText("部分连续性依据不足")
+  if (task.status === 'running') return task.stage === 'assembling_storyboard' ? uiText("正在校验并组装画布") : uiText("正在提取分镜")
+  if (task.status === 'failed') return uiText("分镜失败")
+  if (task.status === 'cancelled') return uiText("分镜已取消")
+  return uiText("分镜生成成功")
 }
 
 /** 按本场读取轻量画布卡；任务完成只更新卡片，打开画布仍由用户发起。 */
@@ -48,6 +50,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
   sceneNotices: ReactNode
   onReviewSource: (canvasId?: string) => void
 }) {
+  useUiText()
   const navigate = useNavigate()
   const { state, key: locationKey } = useLocation()
   const [notices, noticeContext] = message.useMessage()
@@ -98,8 +101,8 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
   const mismatched = !!(targetCanvas && linked?.task && linked.task.canvas_id !== targetCanvas)
   const targetId = !mismatched && !linked?.error && (!taskTarget || linked) ? targetCanvas ?? linked?.task?.canvas_id : undefined
   const invalidCanvas = !!(targetId && canvases && !canvases.some(canvas => canvas.id === targetId))
-  const targetWarning = linked?.error ?? (mismatched ? '此分镜任务不属于指定画布' :
-    invalidCanvas && !returningCanvas ? '此画布不属于当前场次或已不可用' : undefined)
+  const targetWarning = linked?.error ?? (mismatched ? uiText("此分镜任务不属于指定画布") :
+    invalidCanvas && !returningCanvas ? uiText("此画布不属于当前场次或已不可用") : undefined)
   const taskCard = canvases?.find(canvas => canvas.id === linked?.task?.canvas_id)
   const linkedSummary = taskCard?.latest_storyboard?.task_id === linked?.task?.task_id ? taskCard?.latest_storyboard : linked?.task
   const taskDetail = !mismatched && !invalidCanvas ? linkedSummary : undefined
@@ -133,7 +136,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
     let active = true
     const request = StudioDirectingService.directingStoryboardGet({ projectId, chapterId, sequenceId, taskId: taskTarget })
     void request.then(response => {
-      if (!response.data) throw new Error('分镜任务结果未返回')
+      if (!response.data) throw new Error(uiText("分镜任务结果未返回"))
       if (active) setLinkedTask({ id: taskTarget, entry: locationKey, task: response.data })
     }).catch(cause => {
       if (active) setLinkedTask({ id: taskTarget, entry: locationKey,
@@ -147,14 +150,14 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
     const request = StudioDirectingService.directingSceneCanvases({ projectId, chapterId, sequenceId })
     void request.then(response => {
       if (!current) return
-      if (!response.data) throw new Error('无法读取本场画布')
+      if (!response.data) throw new Error(uiText("无法读取本场画布"))
       const previous = new Set(lastRead.current?.flatMap(canvas =>
         activeTask(canvas.latest_storyboard) ? [canvas.latest_storyboard?.task_id] : []))
       for (const canvas of response.data.canvases) {
         const task = canvas.latest_storyboard
         if (task && !activeTask(task) && previous.has(task.task_id)) {
           const label = canvas.candidate_storyboard_task_id === task.task_id
-            ? canvas.storyboard_review_required ? '分镜需要核对' : '分镜已就绪'
+            ? canvas.storyboard_review_required ? uiText("分镜需要核对") : uiText("分镜已就绪")
             : taskLabel(task)
           void notices.info(`${canvas.name}：${label}`)
         }
@@ -326,8 +329,8 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
       onChange()
     }} />
     {filterHost && createPortal(<div className="management-canvas-toolbar">
-      <span id="management-canvas-list-title" className="management-list-count" role="status">{canvases ? `${keyword ? '匹配 ' : ''}${matchCount} 张画布` : '画布数量未确认'}</span>
-      <Input disabled={!canvases} ref={searchInput} aria-label="搜索画布" placeholder="按名称搜索画布" allowClear value={query}
+      <span id="management-canvas-list-title" className="management-list-count" role="status">{canvases ? uiText("{{value1}}{{matchCount}} 张画布", { value1: keyword ? '匹配 ' : '', matchCount }) : uiText("画布数量未确认")}</span>
+      <Input disabled={!canvases} ref={searchInput} aria-label={uiText("搜索画布")} placeholder={uiText("按名称搜索画布")} allowClear value={query}
         onChange={event => changeQuery(event.target.value)} />
     </div>, filterHost)}
     <div className="management-canvas-page-body">
@@ -339,17 +342,17 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
       }}>
         {sceneNotices}
         {error && <Alert showIcon type="error" message={error} action={<Button size="small"
-          onClick={() => setRevision(value => value + 1)}>重试读取画布</Button>} />}
-        {returnMissing && <Alert showIcon type="info" message="原画布无法在当前列表中定位" />}
+          onClick={() => setRevision(value => value + 1)}>{uiText("重试读取画布")}</Button>} />}
+        {returnMissing && <Alert showIcon type="info" message={uiText("原画布无法在当前列表中定位")} />}
         {targetWarning && <Alert showIcon type="warning" message={targetWarning} />}
         {deleteError && <Alert showIcon type="warning" message={deleteError} />}
-        {loading && !canvases && !error && <Spin aria-label="正在读取本场画布" />}
+        {loading && !canvases && !error && <Spin aria-label={uiText("正在读取本场画布")} />}
         {!error && !keyword && matchCount === 0 && canvases && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={historical ? '此历史场次没有画布' : '本场尚无画布，可生成新分镜画布开始设计'} />}
-        {!error && keyword && matches?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的画布">
-          <Button onClick={() => { changeQuery(''); searchInput.current?.focus() }}>清除搜索</Button>
+          description={historical ? uiText("此历史场次没有画布") : uiText("本场尚无画布，可生成新分镜画布开始设计")} />}
+        {!error && keyword && matches?.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={uiText("没有匹配的画布")}>
+          <Button onClick={() => { changeQuery(''); searchInput.current?.focus() }}>{uiText("清除搜索")}</Button>
         </Empty>}
-        {!!shown?.length && <ul ref={collection} className="management-card-grid" aria-label="本场画布">
+        {!!shown?.length && <ul ref={collection} className="management-card-grid" aria-label={uiText("本场画布")}>
           {shown.map(canvas => {
             const task = canvas.latest_storyboard
             const candidateId = canvas.candidate_storyboard_task_id
@@ -362,45 +365,45 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
 
             return <li key={canvas.id} data-canvas-id={canvas.id} tabIndex={-1}>
               <Card size="small" bordered={false} className={canvas.id === created || located ? 'management-canvas-surface management-canvas-created' : 'management-canvas-surface'}>
-                <div className="management-canvas-cover" role="img" aria-label="画布默认封面"><PictureOutlined aria-hidden /></div>
+                <div className="management-canvas-cover" role="img" aria-label={uiText("画布默认封面")}><PictureOutlined aria-hidden /></div>
                 <div className="management-canvas-card-heading">
                   <h4>{canOpenStoryboardCanvas(canvas) ? <Button type="link" className="management-canvas-name" onClick={() => openCanvas(canvas.id)} title={canvas.name}>{canvas.name}<ArrowRightOutlined aria-hidden /></Button> : <span title={canvas.name}>{canvas.name}</span>}</h4>
                   <Dropdown trigger={['click']} open={menuOpen === canvas.id} onOpenChange={open => setMenuOpen(open ? canvas.id : undefined)} menu={{ items: [
-                    { key: 'rename', label: '更名', onClick: () => menuAction(() => setRename({ id: canvas.id, name: canvas.name })) },
-                    ...(task ? [{ key: 'detail', label: '查看任务详情', onClick: () => menuAction(() => { detailTrigger.current = menuButtons.current.get(canvas.id); setDetail(canvas.id) }) }] : []),
-                    { key: 'delete', label: '删除画布', danger: true, onClick: () => menuAction(() => drafts.transition(() => {
+                    { key: 'rename', label: uiText("更名"), onClick: () => menuAction(() => setRename({ id: canvas.id, name: canvas.name })) },
+                    ...(task ? [{ key: 'detail', label: uiText("查看任务详情"), onClick: () => menuAction(() => { detailTrigger.current = menuButtons.current.get(canvas.id); setDetail(canvas.id) }) }] : []),
+                    { key: 'delete', label: uiText("删除画布"), danger: true, onClick: () => menuAction(() => drafts.transition(() => {
                       setDeleteError('')
                       setDeleteTarget(canvas.id)
                     })) },
                   ] }}>
-                    <Button type="text" icon={<MoreOutlined />} aria-label={`${canvas.name}更多操作`} ref={element => {
+                    <Button type="text" icon={<MoreOutlined />} aria-label={uiText("{{name}}更多操作", { name: canvas.name })} ref={element => {
                       if (element) menuButtons.current.set(canvas.id, element)
                       else menuButtons.current.delete(canvas.id)
                     }} />
                   </Dropdown>
                 </div>
                 <div className="management-canvas-status">
-                  {adoptedId ? <Tag color="success">当前已采用</Tag> : canOpenStoryboardCanvas(canvas) ? <Tag>可打开</Tag> : <Tag>{candidateId ? '待采用' : '尚不可打开'}</Tag>}
-                  {failed || activeTask(task) ? taskStatus : candidateId ? <Tag color={canvas.storyboard_review_required ? 'warning' : 'success'}>{currentTaskIsCandidate && (task?.review_state === 'conflict' || task?.review_state === 'warning') ? taskLabel(task) : canvas.storyboard_review_required ? '需要核对' : '分镜已就绪'}</Tag>
-                    : canvas.source_changed ? <Tag color="warning">原文已变化</Tag> : task?.review_state === 'warning' ? <Tag color="warning">{taskLabel(task)}</Tag> : taskStatus}
+                  {adoptedId ? <Tag color="success">{uiText("当前已采用")}</Tag> : canOpenStoryboardCanvas(canvas) ? <Tag>{uiText("可打开")}</Tag> : <Tag>{candidateId ? uiText("待采用") : uiText("尚不可打开")}</Tag>}
+                  {failed || activeTask(task) ? taskStatus : candidateId ? <Tag color={canvas.storyboard_review_required ? 'warning' : 'success'}>{currentTaskIsCandidate && (task?.review_state === 'conflict' || task?.review_state === 'warning') ? taskLabel(task) : canvas.storyboard_review_required ? uiText("需要核对") : uiText("分镜已就绪")}</Tag>
+                    : canvas.source_changed ? <Tag color="warning">{uiText("原文已变化")}</Tag> : task?.review_state === 'warning' ? <Tag color="warning">{taskLabel(task)}</Tag> : taskStatus}
                 </div>
-                {canvas.source_changed && (failed || activeTask(task) || candidateId) && <details className="management-canvas-other"><summary>其他提示</summary><span>原文已变化</span></details>}
-                <div className="management-canvas-metadata"><span title="镜头数量暂不可用">— 镜头</span><time dateTime={canvas.created_at}>创建于 {new Date(canvas.created_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</time></div>
+                {canvas.source_changed && (failed || activeTask(task) || candidateId) && <details className="management-canvas-other"><summary>{uiText("其他提示")}</summary><span>{uiText("原文已变化")}</span></details>}
+                <div className="management-canvas-metadata"><span title={uiText("镜头数量暂不可用")}>{uiText("— 镜头")}</span><time dateTime={canvas.created_at}>{uiText("创建于")} {new Date(canvas.created_at).toLocaleDateString(currentLanguage(), { month: 'numeric', day: 'numeric' })}</time></div>
                 <div className="management-canvas-markers">
-                  {canvas.id === recentCanvas && <Tag>最近打开</Tag>}
-                  {located && <Tag color="processing">当前定位</Tag>}
-                  {canvas.id === created && <Tag color="processing">刚创建</Tag>}
+                  {canvas.id === recentCanvas && <Tag>{uiText("最近打开")}</Tag>}
+                  {located && <Tag color="processing">{uiText("当前定位")}</Tag>}
+                  {canvas.id === created && <Tag color="processing">{uiText("刚创建")}</Tag>}
                 </div>
 
                 <div className="management-canvas-actions">
                   {candidateId && <Button type="link" onClick={() => {
                     setCandidateSelection({ id: candidateId, quickEntry: !canvas.storyboard_review_required })
                     setReviewCanvas(canvas.id)
-                  }}>{canvas.storyboard_review_required ? '核对分镜' : '查看并采用分镜'}</Button>}
+                  }}>{canvas.storyboard_review_required ? uiText("核对分镜") : uiText("查看并采用分镜")}</Button>}
                   {task && task.task_id !== adoptedId && !currentTaskIsCandidate && <Button type="link" onClick={() => {
                     setCandidateSelection(undefined)
                     setReviewCanvas(canvas.id)
-                  }}>{activeTask(task) ? '查看提取进度' : failed ? '处理提取问题' : '查看任务结果'}</Button>}
+                  }}>{activeTask(task) ? uiText("查看提取进度") : failed ? uiText("处理提取问题") : uiText("查看任务结果")}</Button>}
                 </div>
               </Card>
             </li>
@@ -408,7 +411,7 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
         </ul>}
       </WorkspaceScrollPanel>
     </div>
-    <CardListPagination label="本场画布分页" page={currentPage} pageSize={pageSize} total={matchCount}
+    <CardListPagination label={uiText("本场画布分页")} page={currentPage} pageSize={pageSize} total={matchCount}
       compact={compact} disabled={false} onChange={setPage} />
     {activeReview && <WorkbenchStoryboardReview key={activeReview.id}
       {...{ projectId, chapterId, sequenceId, historical }} candidateId={candidateSelection?.id} quickEntry={candidateSelection?.quickEntry} canvas={activeReview}
@@ -428,18 +431,18 @@ export function WorkbenchCanvasCards({ projectId, chapterId, sequenceId, sceneNa
       onEnter={() => openCanvas(activeReview.id)} onReviewSource={() => onReviewSource(activeReview.id)} />}
     {rename && <WorkbenchCanvasRename {...{ projectId, chapterId, sequenceId }} canvasId={rename.id}
       initialName={rename.name} onClose={closeRename} />}
-    <Modal className="management-canvas-dialog" title="分镜任务详情" afterClose={restoreDetailFocus} open={!!detailTask && !activeReview && (!!detail || detailTask.task_id !== detailCard?.latest_storyboard?.task_id)} onCancel={closeDetail}
-      footer={<Space wrap><Button aria-label="关闭分镜任务详情" onClick={closeDetail}>关闭</Button>
-        {detailCard && <Button type="primary" onClick={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard', { canvas: detailCard.id, storyboardTask: detailCard.latest_storyboard?.task_id }), { state })}>查看最新处理结果</Button>}
+    <Modal className="management-canvas-dialog" title={uiText("分镜任务详情")} afterClose={restoreDetailFocus} open={!!detailTask && !activeReview && (!!detail || detailTask.task_id !== detailCard?.latest_storyboard?.task_id)} onCancel={closeDetail}
+      footer={<Space wrap><Button aria-label={uiText("关闭分镜任务详情")} onClick={closeDetail}>{uiText("关闭")}</Button>
+        {detailCard && <Button type="primary" onClick={() => navigate(workbenchManagementLocation(projectId, chapterId, sequenceId, 'storyboard', { canvas: detailCard.id, storyboardTask: detailCard.latest_storyboard?.task_id }), { state })}>{uiText("查看最新处理结果")}</Button>}
       </Space>}>
-      {detailTask && detailCard?.latest_storyboard?.task_id !== detailTask.task_id && <Alert type="info" message="已有后续处理结果；此历史任务仅供查看。" />}
+      {detailTask && detailCard?.latest_storyboard?.task_id !== detailTask.task_id && <Alert type="info" message={uiText("已有后续处理结果；此历史任务仅供查看。")} />}
       {detailTask && detailCard && <Descriptions column={1} size="small" items={[
-        { key: 'canvas', label: '画布', children: detailCard.name },
-        { key: 'status', label: '任务状态', children: taskLabel(detailTask) },
-        { key: 'task', label: '任务身份', children: detailTask.task_id },
+        { key: 'canvas', label: uiText("画布"), children: detailCard.name },
+        { key: 'status', label: uiText("任务状态"), children: taskLabel(detailTask) },
+        { key: 'task', label: uiText("任务身份"), children: detailTask.task_id },
         ...(detailCard.applied_storyboard_task_id
-          ? [{ key: 'adopted', label: '当前采用任务', children: detailCard.applied_storyboard_task_id }] : []),
-        ...(detailTask.error ? [{ key: 'error', label: '原因', children: detailTask.error }] : []),
+          ? [{ key: 'adopted', label: uiText("当前采用任务"), children: detailCard.applied_storyboard_task_id }] : []),
+        ...(detailTask.error ? [{ key: 'error', label: uiText("原因"), children: detailTask.error }] : []),
       ]} />}
     </Modal>
     {deleteTarget && <SceneCanvasDeletion key={deleteTarget} {...{ projectId }} canvasId={deleteTarget}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Badge, Button as MainButton, Card, Segmented, Dropdown, Drawer, Empty, Grid, Image, Modal, Select, Space, Spin, message } from 'antd'
@@ -35,19 +36,20 @@ function activeTask(data?: SceneObjectsRead) {
 }
 
 function ReferenceImage({ name, fileId, unavailable, controls }: { name: string; fileId?: string; unavailable?: boolean; controls?: ReactNode }) {
+  const uiText = useUiText()
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   return <>
     <div className="management-reference-frame">
       {controls && <div className="management-reference-angle">{controls}</div>}
-      {unavailable && <div className="management-reference-failed">参考图不可用</div>}
-      {failed && <div role="status" className="management-reference-failed"><Badge status="warning" text="图片加载失败" /><MainButton type="text" icon={<ReloadOutlined />} aria-label="重试参考图" onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
-      {fileId && !failed && <button type="button" aria-label={`预览${name}参考图`} onClick={event => {
+      {unavailable && <div className="management-reference-failed">{uiText("参考图不可用")}</div>}
+      {failed && <div role="status" className="management-reference-failed"><Badge status="warning" text={uiText("图片加载失败")} /><MainButton type="text" icon={<ReloadOutlined />} aria-label={uiText("重试参考图")} onClick={() => { setFailed(false); setRetry(value => value + 1) }} /></div>}
+      {fileId && !failed && <button type="button" aria-label={uiText("预览{{name}}参考图", { name })} onClick={event => {
         // 预览浮层通过 portal 挂载，关闭操作不会重新触发卡面预览。
         if (event.currentTarget.contains(event.target as Node)) setPreviewOpen(true)
       }}>
-        <Image key={retry} alt={`${name}已选参考图`} src={buildFileDownloadUrl(fileId)} onError={() => setFailed(true)}
+        <Image key={retry} alt={uiText("{{name}}已选参考图", { name })} src={buildFileDownloadUrl(fileId)} onError={() => setFailed(true)}
           preview={{ visible: previewOpen, onVisibleChange: setPreviewOpen, mask: false }} />
       </button>}
     </div>
@@ -59,6 +61,7 @@ function ReferenceImage({ name, fileId, unavailable, controls }: { name: string;
 export function SceneObjectPreparation({ projectId, chapterId, sequenceId, editable, management }: Scope & {
   editable: boolean; management?: ManagementActions;
 }) {
+  const uiText = useUiText()
   const mobile = !Grid.useBreakpoint().md
   const [filterWidth, setFilterWidth] = useState(0)
   useEffect(() => {
@@ -109,7 +112,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   const focusNeighbor = useCallback((position: number) => {
     const rows = panel.current?.querySelectorAll<HTMLElement>('[data-management-object]')
     const index = Math.min(Math.max(position, 0), (rows?.length ?? 0) - 1)
-    const button = rows?.[index]?.querySelector<HTMLElement>('button[aria-label="对象更多操作"]')
+    const button = rows?.[index]?.querySelector<HTMLElement>('button[data-object-menu]')
     if (button) button.focus()
     else focusFilter()
   }, [focusFilter, panel])
@@ -146,7 +149,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     try {
       const response = await StudioDirectingService.directingSceneObjects({ projectId, chapterId, sequenceId })
       if (generation !== loadVersion.current) return
-      if (!response.data) throw new Error('对象准备读取失败')
+      if (!response.data) throw new Error(uiText("对象准备读取失败"))
       accept(response.data)
       return response.data
     } catch (cause) {
@@ -154,7 +157,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     } finally {
       if (generation === loadVersion.current) setLoading(false)
     }
-  }, [projectId, chapterId, sequenceId, accept])
+  }, [uiText, projectId, chapterId, sequenceId, accept])
   const invalidateRead = useCallback(() => { loadVersion.current++ }, [])
   useEffect(() => {
     void read()
@@ -182,7 +185,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     }
     try {
       const response = await StudioDirectingService.directingSceneObjectExtract({ ...scope, requestBody: { request_id: requestId } })
-      if (!response.data) throw new Error('提取提交结果待核实，请使用原请求重试')
+      if (!response.data) throw new Error(uiText("提取提交结果待核实，请使用原请求重试"))
       clear()
       const task = response.data
       setData(previous => previous && { ...previous, task })
@@ -203,7 +206,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
       requestBody: { expected_revision: current.revision, asset_id: assetId ?? null,
         },
     })
-    if (!response.data) throw new Error('保存结果待核实，请刷新对象准备')
+    if (!response.data) throw new Error(uiText("保存结果待核实，请刷新对象准备"))
     loadVersion.current++; accept(response.data)
   }
   const reportChoiceError = (objectId: string, message: string, retry?: ObjectChoice) => {
@@ -257,10 +260,10 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
   }, [inManagement, read])
   const confirmExtraction = () => {
     if (pendingRequest) { void extract(); return }
-    Modal.confirm({ title: '确认提取对象？', content: '将调用 AI 提取本场角色、场所和道具。已有对象准备会保留，重新提取的差异需核对后应用。', okText: '开始提取', cancelText: '取消', onOk: extract })
+    Modal.confirm({ title: uiText("确认提取对象？"), content: uiText("将调用 AI 提取本场角色、场所和道具。已有对象准备会保留，重新提取的差异需核对后应用。"), okText: uiText("开始提取"), cancelText: uiText("取消"), onOk: extract })
   }
-  const action = data?.task?.status === 'failed' || data?.task?.status === 'cancelled' ? '重试提取对象'
-    : data?.revision ? '重新提取对象' : '提取对象'
+  const action = data?.task?.status === 'failed' || data?.task?.status === 'cancelled' ? uiText('重试提取对象')
+    : data?.revision ? uiText('重新提取对象') : uiText('提取对象')
 
   const sameNameKey = JSON.stringify(data?.objects.filter(object => !object.asset_id).map(object => [object.id, object.kind, object.name]) ?? [])
   useEffect(() => {
@@ -280,7 +283,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
 
   const disabled = !editable || saving
   const extractionDisabled = disabled || loading || running && !pendingRequest
-  const extractionLabel = pendingRequest ? '核实提取请求' : action
+  const extractionLabel = pendingRequest ? uiText("核实提取请求") : action
   const candidateTask = !pendingRequest ? data?.candidate_task_id : undefined
   const retryRead = () => void read()
   const filtered = useMemo(() => {
@@ -325,7 +328,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     const frame = requestAnimationFrame(() => {
       if (index < 0) {
         if (assetReturn.mainImageSaved && data?.objects.some(object => object.id === assetReturn.objectId)) {
-          void message.info('已保存，该对象已移出当前筛选')
+          void message.info(uiText("已保存，该对象已移出当前筛选"))
           focusNeighbor(assetReturn.index - start)
         } else focusFilter()
       }
@@ -333,14 +336,14 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         if (panel.current && targetPage === assetReturn.page) panel.current.scrollTop = assetReturn.top
         const card = panel.current?.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(assetReturn.objectId)}"]`)
         const trigger = assetReturn.trigger?.isConnected && card?.contains(assetReturn.trigger)
-          ? assetReturn.trigger : card?.querySelector<HTMLElement>('.management-object-title-row h4 button, button[aria-label="对象更多操作"]')
+          ? assetReturn.trigger : card?.querySelector<HTMLElement>('.management-object-title-row h4 button, button[data-object-menu]')
         if (trigger) trigger.focus()
         else focusFilter()
       }
       setAssetReturn(undefined)
     })
     return () => cancelAnimationFrame(frame)
-  }, [assetReturn, data, filtered, focusFilter, focusNeighbor, lastPage, listReady, page, pageSize, panel, start])
+  }, [uiText, assetReturn, data, filtered, focusFilter, focusNeighbor, lastPage, listReady, page, pageSize, panel, start])
   const changeFilters = (next: { kind?: typeof kindFilter; association?: string; reference?: string }) => {
     const nextKind = next.kind ?? kindFilter
     const nextAssociation = next.association ?? association
@@ -361,12 +364,12 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     const focused = refreshFocus.current
     refreshFocus.current = undefined
     if (previous && !filtered.some(object => object.id === previous.id)) {
-      void message.info('已保存，该对象已移出当前筛选')
+      void message.info(uiText("已保存，该对象已移出当前筛选"))
       requestAnimationFrame(() => focusNeighbor(previous.index - start))
     } else if (focused && !focused.isConnected && document.activeElement === document.body) {
       focusFilter()
     }
-  }, [filtered, focusFilter, focusNeighbor, listReady, saving, start])
+  }, [uiText, filtered, focusFilter, focusNeighbor, listReady, saving, start])
   const choiceErrorOnCard = choiceError && shown.some(object => object.id === choiceError.objectId)
   const associationTarget = data?.objects.find(object => object.id === associationObject)
   const openAssociation = (id: string, sameName: boolean, trigger: HTMLElement) => {
@@ -375,35 +378,35 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     setAssociationObject(id)
   }
   const attachUploadedResource = async (objectId: string, resourceId: string) => {
-    if (!await save(objectId, resourceId)) throw new Error('资源已创建，选用尚未完成，请重试')
+    if (!await save(objectId, resourceId)) throw new Error(uiText("资源已创建，选用尚未完成，请重试"))
   }
   const pendingChoice = choiceError?.retry
   const retryChoice = pendingChoice && <MainButton size="small" disabled={disabled} onClick={() => void save(
-    pendingChoice.objectId, pendingChoice.assetId)}>核对后重试选择</MainButton>
+    pendingChoice.objectId, pendingChoice.assetId)}>{uiText("核对后重试选择")}</MainButton>
   const closeDescription = () => {
     const id = descriptionObject?.id
     setDescriptionObject(undefined)
     requestAnimationFrame(() => {
-      const button = panel.current?.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(id ?? '')}"] button[aria-label="对象更多操作"]:not([disabled])`)
+      const button = panel.current?.querySelector<HTMLElement>(`[data-management-object="${CSS.escape(id ?? '')}"] button[data-object-menu]:not([disabled])`)
       if (button) button.focus()
       else focusFilter()
     })
   }
-  const descriptionContent = descriptionObject && <div className="management-object-description-content"><p>{descriptionObject.description || '未填写描述'}</p><p>出处：{descriptionObject.excerpt || '暂无出处'}</p></div>
+  const descriptionContent = descriptionObject && <div className="management-object-description-content"><p>{descriptionObject.description || uiText("未填写描述")}</p><p>{uiText("出处：")}{descriptionObject.excerpt || uiText("暂无出处")}</p></div>
   const listContent = <>
-    {!management && <p>选用对象可暂时无图，动态画布在实际生产时读取当前资源。</p>}
-    {loading && <Spin aria-label="正在读取对象准备" />}
+    {!management && <p>{uiText("选用对象可暂时无图，动态画布在实际生产时读取当前资源。")}</p>}
+    {loading && <Spin aria-label={uiText("正在读取对象准备")} />}
     {(error || choiceError && !choiceErrorOnCard) && <Alert type="error" showIcon message={error || choiceError?.message} action={management
       ? <Space wrap>
-        <MainButton onClick={retryRead}>刷新对象准备</MainButton>
+        <MainButton onClick={retryRead}>{uiText("刷新对象准备")}</MainButton>
         {!choiceErrorOnCard && retryChoice}
-      </Space> : <Button onClick={retryRead}>刷新对象准备</Button>} />}
-    {running && <p role="status">{data?.task?.status === 'queued' ? '对象提取排队中' : '正在提取对象'}</p>}
-    {data?.task?.status === 'failed' && <Alert type="warning" showIcon message="对象提取失败，已保留此前准备"
+      </Space> : <Button onClick={retryRead}>{uiText("刷新对象准备")}</Button>} />}
+    {running && <p role="status">{data?.task?.status === 'queued' ? uiText("对象提取排队中") : uiText("正在提取对象")}</p>}
+    {data?.task?.status === 'failed' && <Alert type="warning" showIcon message={uiText("对象提取失败，已保留此前准备")}
       description={data.task.error} />}
-    {data?.task?.status === 'cancelled' && <Alert type="warning" message="对象提取已取消，已保留此前准备" />}
-    {data?.source_changed && <Alert type="warning" showIcon message="场次原文已变更，请重新提取对象后核对参考。" />}
-    {data?.candidate_task_id && <Alert type="info" showIcon message="对象候选已就绪，当前准备仍可使用。" action={!management && <Button onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>核对对象差异</Button>} />}
+    {data?.task?.status === 'cancelled' && <Alert type="warning" message={uiText("对象提取已取消，已保留此前准备")} />}
+    {data?.source_changed && <Alert type="warning" showIcon message={uiText("场次原文已变更，请重新提取对象后核对参考。")} />}
+    {data?.candidate_task_id && <Alert type="info" showIcon message={uiText("对象候选已就绪，当前准备仍可使用。")} action={!management && <Button onClick={() => setLocalReview(data.candidate_task_id ?? undefined)}>{uiText("核对对象差异")}</Button>} />}
     {reviewTaskId && <SceneObjectCandidateReview key={reviewTaskId} {...scope} taskId={reviewTaskId} editable={editable} management={!!management}
       onClose={() => {
         setLocalReview(undefined)
@@ -411,69 +414,69 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         void read()
       }} />}
     {data && !data.objects.length && !error && (management
-      ? <p>{data.revision ? '本场未提取到对象，可以继续分镜。' : '尚未提取对象，可提取后准备参考，也可直接继续。'}</p>
-      : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.revision ? '本场未提取到对象' : '尚未提取对象'} />)}
+      ? <p>{data.revision ? uiText("本场未提取到对象，可以继续分镜。") : uiText("尚未提取对象，可提取后准备参考，也可直接继续。")}</p>
+      : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.revision ? uiText("本场未提取到对象") : uiText("尚未提取对象")} />)}
     {management?.filterHost && !assetEditor && createPortal(<div ref={filterControl} className="management-object-filters">
-      {compact ? <Select disabled={!data} aria-label="对象类型" value={kindFilter} onChange={kind => changeFilters({ kind })} options={[{value:'all',label:'全部类型'},...Object.entries(kinds).map(([value,label])=>({value,label}))]} /> : <Segmented disabled={!data} aria-label="对象类型" value={kindFilter} onChange={kind => changeFilters({ kind: kind as typeof kindFilter })} options={[{ value: 'all', label: '全部' }, ...Object.entries(kinds).map(([value, label]) => ({ value, label }))]} />}
-      <Select disabled={!data} aria-label="选用状态" value={association} onChange={association => changeFilters({ association })} options={[{value:'all',label:'全部选用状态'},{value:'unassociated',label:'未选用'},{value:'associated',label:'已选用'},{value:'unavailable',label:'选用失效'}]} />
+      {compact ? <Select disabled={!data} aria-label={uiText("对象类型")} value={kindFilter} onChange={kind => changeFilters({ kind })} options={[{value:'all',label:uiText("全部类型")},...Object.entries(kinds).map(([value,label])=>({value,label: uiText(label)}))]} /> : <Segmented disabled={!data} aria-label={uiText("对象类型")} value={kindFilter} onChange={kind => changeFilters({ kind: kind as typeof kindFilter })} options={[{ value: 'all', label: uiText("全部") }, ...Object.entries(kinds).map(([value, label]) => ({ value, label: uiText(label) }))]} />}
+      <Select disabled={!data} aria-label={uiText("选用状态")} value={association} onChange={association => changeFilters({ association })} options={[{value:'all',label:uiText("全部选用状态")},{value:'unassociated',label:uiText("未选用")},{value:'associated',label:uiText("已选用")},{value:'unavailable',label:uiText("选用失效")}]} />
       <Dropdown trigger={['click']} menu={{ selectable: true, selectedKeys: [reference], onClick: ({ key }) => changeFilters({ reference: key }),
-        items: Object.entries(referenceFilters).map(([key, label]) => ({ key, label })) }}>
-        <MainButton disabled={!data} type="text" aria-label={`参考状态 ${referenceFilters[reference as keyof typeof referenceFilters]}`}>
-          {referenceFilters[reference as keyof typeof referenceFilters]}
+        items: Object.entries(referenceFilters).map(([key, label]) => ({ key, label: uiText(label) })) }}>
+        <MainButton disabled={!data} type="text" aria-label={uiText("参考状态 {{value1}}", { value1: uiText(referenceFilters[reference as keyof typeof referenceFilters]) })}>
+          {uiText(referenceFilters[reference as keyof typeof referenceFilters])}
         </MainButton>
       </Dropdown>
-      <span role="status">{data ? `${kindFilter !== 'all' || association !== 'all' || reference !== 'all' ? '匹配 ' : ''}${filtered.length} 个对象` : '对象数量未确认'}</span>
-      <span title="选用对象可暂时无图，动态画布在实际生产时读取当前资源。" tabIndex={0}><InfoCircleOutlined aria-hidden /></span>
+      <span role="status">{data ? uiText("{{value1}}{{length}} 个对象", { value1: kindFilter !== 'all' || association !== 'all' || reference !== 'all' ? '匹配 ' : '', length: filtered.length }) : uiText("对象数量未确认")}</span>
+      <span title={uiText("选用对象可暂时无图，动态画布在实际生产时读取当前资源。")} tabIndex={0}><InfoCircleOutlined aria-hidden /></span>
     </div>, management.filterHost)}
-    {management && !!data?.objects.length && !filtered.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的对象">
-      <MainButton onClick={() => { focusFilter(); changeFilters({ kind: 'all', association: 'all', reference: 'all' }) }}>清除筛选</MainButton>
+    {management && !!data?.objects.length && !filtered.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={uiText("没有匹配的对象")}>
+      <MainButton onClick={() => { focusFilter(); changeFilters({ kind: 'all', association: 'all', reference: 'all' }) }}>{uiText("清除筛选")}</MainButton>
     </Empty>}
     {(management ? ['all' as const] : Object.keys(kinds) as Array<keyof typeof kinds>).map(group => {
       const rows = group === 'all' ? shown : filtered.filter(object => object.kind === group)
       if (!rows.length) return null
-      return <section key={group} className={management ? 'management-object-kind' : 'scene-object-kind'} aria-label={group === 'all' ? '场次对象' : kinds[group]}>
-        {group !== 'all' && <h3>{kinds[group]}</h3>}
+      return <section key={group} className={management ? 'management-object-kind' : 'scene-object-kind'} aria-label={group === 'all' ? uiText("场次对象") : uiText(kinds[group])}>
+        {group !== 'all' && <h3>{uiText(kinds[group])}</h3>}
         <ul className={management ? 'management-card-grid' : 'scene-object-list'}>{rows.map(object => {
           const kind = object.kind
           const asset = data?.assets.find(item => item.kind === kind && item.id === object.asset_id)
           const options = (data?.assets ?? []).filter(item => item.kind === kind).map(item => ({
-            value: item.id, label: item.name + (item.id === object.suggested_asset_id ? '（提取建议）' : ''),
+            value: item.id, label: item.name + (item.id === object.suggested_asset_id ? uiText("（提取建议）") : ''),
           }))
-          if (object.asset_id && !asset) options.push({ value: object.asset_id, label: '关联资产不可用' })
-          const assetSelect = <Select aria-label="关联资产" allowClear placeholder="关联已有资产" value={object.asset_id ?? undefined}
+          if (object.asset_id && !asset) options.push({ value: object.asset_id, label: uiText("关联资产不可用") })
+          const assetSelect = <Select aria-label={uiText("关联资产")} allowClear placeholder={uiText("关联已有资产")} value={object.asset_id ?? undefined}
             disabled={disabled} options={options} onChange={id => void save(object.id, id)} />
           const referenceFileId = object.reference_state === 'ready' ? object.image_file_id ?? undefined : undefined
           const openCreate = () => {
             setDraft({ object, name: object.name, description: object.description })
           }
-          const assetAction = asset ? { key: 'prepare', label: '准备图片', onClick: () => openAsset(asset, object.id) }
-            : { key: 'create', label: '新建并关联', onClick: openCreate }
+          const assetAction = asset ? { key: 'prepare', label: uiText("准备图片"), onClick: () => openAsset(asset, object.id) }
+            : { key: 'create', label: uiText("新建并关联"), onClick: openCreate }
           if (management) {
                         const cardActions = [
-              { key: 'description', label: '描述与出处', onClick: () => setDescriptionObject(object) },
-              ...(object.asset_id ? [{ key: 'clear', label: '清空', disabled: !editable, onClick: () => Modal.confirm({ title: '清空对象选用？',
-                content: '保留对象名称、描述与出处、资源和图片。沿用本场对象的画布将不再有可用资源；已受理任务不变。',
-                okText: '清空', cancelText: '取消', onOk: async () => { if (!await save(object.id)) throw new Error('清空失败，请重试') } }) }] : [])]
+              { key: 'description', label: uiText("描述与出处"), onClick: () => setDescriptionObject(object) },
+              ...(object.asset_id ? [{ key: 'clear', label: uiText("清空"), disabled: !editable, onClick: () => Modal.confirm({ title: uiText("清空对象选用？"),
+                content: uiText("保留对象名称、描述与出处、资源和图片。沿用本场对象的画布将不再有可用资源；已受理任务不变。"),
+                okText: uiText("清空"), cancelText: uiText("取消"), onOk: async () => { if (!await save(object.id)) throw new Error(uiText("清空失败，请重试")) } }) }] : [])]
             return <li key={object.id} data-management-object={object.id}>
               <section aria-label={`${object.name} · ${object.excerpt}`}>
                 <Card size="small" className="management-object-card">
                   <ReferenceImage key={referenceFileId ?? ''} name={object.name} fileId={referenceFileId} unavailable={object.reference_state === 'unavailable'} />
                   <div className="management-object-body">
-                    <div className="management-object-title-row"><h4 title={object.name}>{asset ? <MainButton type="link" aria-label={`编辑${object.name}资源`} onClick={() => openAsset(asset, object.id)}>{object.name}</MainButton> : object.name}</h4><small>{kinds[kind]}</small>
+                    <div className="management-object-title-row"><h4 title={object.name}>{asset ? <MainButton type="link" aria-label={uiText("编辑{{name}}资源", { name: object.name })} onClick={() => openAsset(asset, object.id)}>{object.name}</MainButton> : object.name}</h4><small>{uiText(kinds[kind])}</small>
                       <Dropdown autoFocus trigger={['click']} disabled={saving} menu={{ items: cardActions }}>
-                        <MainButton type="text" icon={<MoreOutlined />} aria-label="对象更多操作" disabled={saving} />
+                        <MainButton type="text" icon={<MoreOutlined />} data-object-menu aria-label={uiText("对象更多操作")} disabled={saving} />
                       </Dropdown>
                     </div>
-                    <div className="management-object-excerpt" title={object.description || '未填写描述'}>{object.description || '未填写描述'}</div>
+                    <div className="management-object-excerpt" title={object.description || uiText("未填写描述")}>{object.description || uiText("未填写描述")}</div>
                     <div className="management-object-actions-row">
-                      {!object.asset_id && sameNames[object.id] && <MainButton type="primary" aria-label="选用同名" disabled={disabled} onClick={event => openAssociation(object.id, true, event.currentTarget)}>选用同名</MainButton>}
-                      <MainButton aria-label={object.asset_id ? '重新选用' : '选用'} disabled={disabled} onClick={event => openAssociation(object.id, false, event.currentTarget)}>{object.asset_id ? '重新选用' : '选用'}</MainButton>
+                      {!object.asset_id && sameNames[object.id] && <MainButton type="primary" aria-label={uiText("选用同名")} disabled={disabled} onClick={event => openAssociation(object.id, true, event.currentTarget)}>{uiText("选用同名")}</MainButton>}
+                      <MainButton aria-label={object.asset_id ? uiText("重新选用") : uiText("选用")} disabled={disabled} onClick={event => openAssociation(object.id, false, event.currentTarget)}>{object.asset_id ? uiText("重新选用") : uiText("选用")}</MainButton>
                       <ResourceCreateButton kind={kind} projectId={projectId} projectUpload onCreate={openCreate} onOpenUploads={() => setUploadObject(object)}
                         onCreated={resourceId => attachUploadedResource(object.id, resourceId)}>
                         <MainButton type={!object.asset_id && sameNames[object.id] ? 'default' : 'primary'} data-object-create
-                          aria-label={object.asset_id ? '重新创建' : '创建'} disabled={disabled}>{object.asset_id ? '重新创建' : '创建'}</MainButton>
+                          aria-label={object.asset_id ? uiText("重新创建") : uiText("创建")} disabled={disabled}>{object.asset_id ? uiText("重新创建") : uiText("创建")}</MainButton>
                       </ResourceCreateButton>
-                      {!object.asset_id && sameNames[object.id] === undefined && <small role="status">{sameNameError ? <MainButton type="text" onClick={() => setSameNameRetry(value => value + 1)}>重试同名查询</MainButton> : '同名查询中'}</small>}
+                      {!object.asset_id && sameNames[object.id] === undefined && <small role="status">{sameNameError ? <MainButton type="text" onClick={() => setSameNameRetry(value => value + 1)}>{uiText("重试同名查询")}</MainButton> : uiText("同名查询中")}</small>}
                     </div>
                   </div>
                   {choiceError?.objectId === object.id && <Alert type="error" showIcon message={choiceError.message}
@@ -485,17 +488,17 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
           return <li key={object.id} data-management-object={object.id}>
             <section className="scene-object-row" aria-label={`${object.name} · ${object.excerpt}`}>
               <div className="scene-object-identity">
-                {referenceFileId && <img alt={`${object.name}已选参考图`} src={buildFileDownloadUrl(referenceFileId)} />}
-                <div><strong>{object.name}</strong><CanvasTextPreview label="对象描述" text={object.description} lines={2} />
-                  <small>出处：{object.excerpt}</small></div>
+                {referenceFileId && <img alt={uiText("{{name}}已选参考图", { name: object.name })} src={buildFileDownloadUrl(referenceFileId)} />}
+                <div><strong>{object.name}</strong><CanvasTextPreview label={uiText("对象描述")} text={object.description} lines={2} />
+                  <small>{uiText("出处：")}{object.excerpt}</small></div>
               </div>
               <div className="scene-object-choices">
                 {assetSelect}
-                {asset && <Button disabled={disabled} onClick={() => openAsset(asset, object.id)}>编辑对象参考</Button>}
+                {asset && <Button disabled={disabled} onClick={() => openAsset(asset, object.id)}>{uiText("编辑对象参考")}</Button>}
                 <Space wrap>
                   {[assetAction]
                     .map(({ key, label, onClick }) => <Button key={key} disabled={disabled} onClick={onClick}>{label}</Button>)}
-                  <small>{referenceLabels[object.reference_state]}</small>
+                  <small>{uiText(referenceLabels[object.reference_state])}</small>
                 </Space>
               </div>
             </section>
@@ -505,22 +508,22 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     })}
   </>
   return <>
-    {compact ? <Drawer className="app-detail-drawer" aria-label="描述与出处" title="描述与出处" placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
-      : <Modal title="描述与出处" open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
+    {compact ? <Drawer className="app-detail-drawer" aria-label={uiText("描述与出处")} title={uiText("描述与出处")} placement="bottom" height="min(400px, 80dvh)" open={!!descriptionObject} onClose={closeDescription}>{descriptionContent}</Drawer>
+      : <Modal title={uiText("描述与出处")} open={!!descriptionObject} footer={null} onCancel={closeDescription}>{descriptionContent}</Modal>}
     <section hidden={!!assetEditor} className={management ? 'management-object-preparation' : undefined} aria-labelledby="scene-object-preparation-title">
     {management ? <>
-      <h3 className="management-accessible-heading" ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">场次对象与参考</h3>
+      <h3 className="management-accessible-heading" ref={listHeading} tabIndex={-1} id="scene-object-preparation-title">{uiText("场次对象与参考")}</h3>
       {management.host && !assetEditor && createPortal(<>
         <MainButton type="primary" icon={candidateTask ? <DiffOutlined aria-hidden /> : <ScanOutlined aria-hidden />} loading={submitting} disabled={candidateTask ? loading || submitting || saving : extractionDisabled}
           onClick={() => candidateTask ? setLocalReview(candidateTask) : confirmExtraction()}>
-          {candidateTask ? '核对对象差异' : extractionLabel}
+          {candidateTask ? uiText("核对对象差异") : extractionLabel}
         </MainButton>
         {candidateTask && <Dropdown trigger={['click']} menu={{ items: [
           { key: 'extract', label: action, disabled: extractionDisabled, onClick: confirmExtraction },
-        ] }}><MainButton type="text" icon={<MoreOutlined />} aria-label="对象步骤更多操作" /></Dropdown>}
+        ] }}><MainButton type="text" icon={<MoreOutlined />} aria-label={uiText("对象步骤更多操作")} /></Dropdown>}
       </>, management.host)}
     </> : <div className="scene-canvas-list-header">
-      <h2 id="scene-object-preparation-title">场次对象与参考</h2>
+      <h2 id="scene-object-preparation-title">{uiText("场次对象与参考")}</h2>
       <Button variant="primary" loading={submitting} disabled={extractionDisabled} onClick={confirmExtraction}>{extractionLabel}</Button>
     </div>}
     {management && <div className="app-card-list-content management-object-list-content">
@@ -546,7 +549,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
         {listContent}
       </WorkspaceScrollPanel>
     </div>}
-    {management ? <CardListPagination label="本场对象分页" page={currentPage} pageSize={pageSize} total={filtered.length}
+    {management ? <CardListPagination label={uiText("本场对象分页")} page={currentPage} pageSize={pageSize} total={filtered.length}
       compact={compactPager} disabled={saving} onChange={setPage} /> : listContent}
     {associationTarget && <ObjectAssociationEditor key={associationTarget.id} open projectId={projectId} kind={associationTarget.kind}
       objectName={associationTarget.name} sameName={sameNameOnly} assetId={associationTarget.asset_id} disabled={disabled}
@@ -574,7 +577,7 @@ export function SceneObjectPreparation({ projectId, chapterId, sequenceId, edita
     {draft && <ResourceEditorDrawer open kind={draft.object.kind} projectId={projectId} seed={createSeed}
       onClose={() => { setDraft(undefined); void read() }} onSaved={async resource => {
         const current = lastRead.current?.objects.find(object => object.id === draft.object.id)
-        if (current?.asset_id !== resource.id && !await save(draft.object.id, resource.id)) throw new Error('对象已保存，场次关联尚未完成，请重试')
+        if (current?.asset_id !== resource.id && !await save(draft.object.id, resource.id)) throw new Error(uiText("对象已保存，场次关联尚未完成，请重试"))
       }} />}
     </section>
     {assetEditor && <div className="management-inline-asset"><ResourceEditorDrawer inline fullDetails open kind={assetEditor.kind} assetId={assetEditor.id} projectId={projectId}

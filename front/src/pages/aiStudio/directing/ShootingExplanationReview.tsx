@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useState } from 'react'
 import { Alert, Button, Checkbox, Input, Modal, Select, Space, Tag } from 'antd'
 import type { ShootingCheckRead, ShootingIssue, ShootingNote, SourceSpan } from '../../../services/generated'
@@ -26,6 +27,7 @@ export function ShootingExplanationReview({ check, notes, readOnly, handled, onC
   check: ShootingCheckRead; notes: ShootingNote[]; readOnly: boolean; handled: string[]
   onClose: () => void; onDiscard: () => void; onApply: (notes: ShootingNote[], issueIds: string[], keepOpen: boolean) => void
 }) {
+  const uiText = useUiText()
   const text = check.source_text
   const [rows, setRows] = useState<Row[]>(() => (check.report?.issues || []).filter(issue => !handled.includes(issue.id)).map(issue => {
     const target = issue.proposed_change === 'update' ? notes.find(note => note.id === issue.note_id) : undefined
@@ -67,14 +69,14 @@ export function ShootingExplanationReview({ check, notes, readOnly, handled, onC
     onApply(result, ids, keepOpen)
   }
   return <Modal open centered width={840} zIndex={1980} className="management-scene-dialog shooting-review-modal"
-    title="核对 AI 拍摄解释" onCancel={onClose} maskClosable={false}
-    footer={<WorkbenchDialogActions secondary={<Space wrap><Button onClick={onClose}>返回解释</Button>
-      {!readOnly && <Button type="text" danger onClick={onDiscard}>丢弃剩余结果</Button>}</Space>}>
-      {!readOnly && <Button type="primary" disabled={!applicable.length} onClick={apply}>将选中项加入草稿（{applicable.length}）</Button>}
+    title={uiText("核对 AI 拍摄解释")} onCancel={onClose} maskClosable={false}
+    footer={<WorkbenchDialogActions secondary={<Space wrap><Button onClick={onClose}>{uiText("返回解释")}</Button>
+      {!readOnly && <Button type="text" danger onClick={onDiscard}>{uiText("丢弃剩余结果")}</Button>}</Space>}>
+      {!readOnly && <Button type="primary" disabled={!applicable.length} onClick={apply}>{uiText("将选中项加入草稿（{{count}}）", { count: applicable.length })}</Button>}
     </WorkbenchDialogActions>}>
     <div className="shooting-stack">
       {selected.length > applicable.length && <Alert showIcon type="info"
-        message={`${selected.length - applicable.length} 个已选项仍需补充内容或确认范围`} />}
+        message={uiText("{{value1}} 个已选项仍需补充内容或确认范围", { value1: selected.length - applicable.length })} />}
       {rows.map(row => {
         const { issue, target, scope } = row
         const already = handled.includes(issue.id)
@@ -84,17 +86,17 @@ export function ShootingExplanationReview({ check, notes, readOnly, handled, onC
         const overlaps = conflicts(row)
         const matches = issue.excerpt ? excerptMatches(text, issue.excerpt) : []
         const location = matches.length === 1 ? matches[0] : !issue.excerpt ? previous?.scope : undefined
-        const locationOptions = matches.map(span => ({ value: span.start, label: `第 ${span.start + 1} 字附近 · ${sourceSlice(text, { start: Math.max(0, span.start - 12), end: span.end + 12 })}` }))
+        const locationOptions = matches.map(span => ({ value: span.start, label: uiText("第 {{value1}} 字附近 · {{value2}}", { value1: span.start + 1, value2: sourceSlice(text, { start: Math.max(0, span.start - 12), end: span.end + 12 }) }) }))
         return <section className="shooting-card" key={issue.id}>
           <Space wrap>
-            {selectable && <Checkbox aria-label={`采用建议：${issue.problem}`} checked={row.selected} onChange={event => update(issue.id, { selected: event.target.checked })}>采用本项</Checkbox>}
-            <Tag>{already ? '已加入草稿' : candidate(row) ? target ? '建议修改' : '新增' : '待判断'}</Tag>
-            <Tag>{kinds[issue.kind]}</Tag>
+            {selectable && <Checkbox aria-label={uiText("采用建议：{{problem}}", { problem: issue.problem })} checked={row.selected} onChange={event => update(issue.id, { selected: event.target.checked })}>{uiText("采用本项")}</Checkbox>}
+            <Tag>{already ? uiText("已加入草稿") : candidate(row) ? target ? uiText("建议修改") : uiText("新增") : uiText("待判断")}</Tag>
+            <Tag>{uiText(kinds[issue.kind])}</Tag>
           </Space>
           <p><strong>{issue.problem}</strong></p>
           {issue.excerpt && <blockquote>{issue.excerpt}</blockquote>}
-          {location && <div><Button type="link" onClick={() => setLocated({ id: issue.id, span: location })}>定位原文</Button></div>}
-          {matches.length > 1 && <Select aria-label="选择引文位置" placeholder="选择引文位置" options={locationOptions}
+          {location && <div><Button type="link" onClick={() => setLocated({ id: issue.id, span: location })}>{uiText("定位原文")}</Button></div>}
+          {matches.length > 1 && <Select aria-label={uiText("选择引文位置")} placeholder={uiText("选择引文位置")} options={locationOptions}
             onChange={start => {
               const span = matches.find(item => item.start === start)
               if (!span) return
@@ -106,32 +108,32 @@ export function ShootingExplanationReview({ check, notes, readOnly, handled, onC
             <mark>{sourceSlice(text, located.span)}</mark>
             {sourceSlice(text, { start: located.span.end, end: located.span.end + 30 })}
           </blockquote>}
-          {changed && <Alert showIcon type="warning" message={target ? '分析后原解释已有改动，请核对最新文字' : '原解释已不在当前草稿中'} />}
+          {changed && <Alert showIcon type="warning" message={target ? uiText("分析后原解释已有改动，请核对最新文字") : uiText("原解释已不在当前草稿中")} />}
           {(target || row.text) && <div className="shooting-review-compare">
-            <div><strong>当前解释</strong><p>{target?.text || '暂无'}</p></div>
-            <div><strong>AI 建议</strong>{selectable ? <Input.TextArea aria-label={`编辑建议：${issue.problem}`} autoSize={{ minRows: 2, maxRows: 6 }}
+            <div><strong>{uiText("当前解释")}</strong><p>{target?.text || uiText("暂无")}</p></div>
+            <div><strong>{uiText("AI 建议")}</strong>{selectable ? <Input.TextArea aria-label={uiText("编辑建议：{{problem}}", { problem: issue.problem })} autoSize={{ minRows: 2, maxRows: 6 }}
               value={row.text} onChange={event => update(issue.id, { text: event.target.value })} /> : <p>{row.text}</p>}</div>
           </div>}
           {selectable && <>
-            <p>{scope ? `适用范围：${sourceSlice(text, scope)}` : scope === null ? '适用范围：全章' : '请选择适用范围'}</p>
-            {overlaps.length > 0 && <Alert type="warning" showIcon message="所选文字与已有选段相交" />}
+            <p>{scope ? uiText("适用范围：{{value1}}", { value1: sourceSlice(text, scope) }) : scope === null ? uiText("适用范围：全章") : uiText("请选择适用范围")}</p>
+            {overlaps.length > 0 && <Alert type="warning" showIcon message={uiText("所选文字与已有选段相交")} />}
             <Space wrap>
-              {overlaps.length > 0 && <Select aria-label="使用已有选段" placeholder="使用已有选段"
+              {overlaps.length > 0 && <Select aria-label={uiText("使用已有选段")} placeholder={uiText("使用已有选段")}
                 options={overlaps.map(span => ({ value: `${span.start}:${span.end}`, label: sourceSlice(text, span) }))}
                 onChange={key => update(issue.id, { scope: overlaps.find(span => `${span.start}:${span.end}` === key) })} />}
-              <Button onClick={() => { setPicking(issue.id); setPicked(undefined) }}>{scope ? '重新选择' : '选择原文'}</Button>
-              {scope !== null && <Button onClick={() => update(issue.id, { scope: null })}>适用全章</Button>}
+              <Button onClick={() => { setPicking(issue.id); setPicked(undefined) }}>{scope ? uiText("重新选择") : uiText("选择原文")}</Button>
+              {scope !== null && <Button onClick={() => update(issue.id, { scope: null })}>{uiText("适用全章")}</Button>}
             </Space>
             {picking === issue.id && <div className="shooting-stack">
-              <Input.TextArea aria-label="建议适用原文选区" readOnly value={text} rows={4}
+              <Input.TextArea aria-label={uiText("建议适用原文选区")} readOnly value={text} rows={4}
                 onSelect={event => setPicked(textareaSpan(text, event.currentTarget.selectionStart, event.currentTarget.selectionEnd))} />
-              <Space wrap><Button disabled={!picked} onClick={() => { update(issue.id, { scope: picked }); setPicking(undefined) }}>使用所选文字</Button>
-                <Button onClick={() => setPicking(undefined)}>取消选择</Button></Space>
+              <Space wrap><Button disabled={!picked} onClick={() => { update(issue.id, { scope: picked }); setPicking(undefined) }}>{uiText("使用所选文字")}</Button>
+                <Button onClick={() => setPicking(undefined)}>{uiText("取消选择")}</Button></Space>
             </div>}
           </>}
         </section>
       })}
-      {rows.length === 0 && <p>本次分析没有发现需要确认的内容。</p>}
+      {rows.length === 0 && <p>{uiText("本次分析没有发现需要确认的内容。")}</p>}
     </div>
   </Modal>
 }

@@ -1,3 +1,4 @@
+import { uiText, useUiText } from '../../../uiText'
 import { useRef, useState } from 'react'
 import { Alert, Space } from 'antd'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
@@ -20,7 +21,7 @@ async function previewRemoval(before: CanvasRead, target: string) {
     modelId ? Canvases.canvasModelCapability({ projectId, canvasId, modelId }).then(response => response.data ?? undefined)
       .catch(() => undefined) : Promise.resolve(undefined),
   ])
-  if (latest.data?.revision !== before.revision) throw new Error('画布已有新修订，请重新打开后核对')
+  if (latest.data?.revision !== before.revision) throw new Error(uiText("画布已有新修订，请重新打开后核对"))
   const relation = document.storyboard?.visual_continuity?.[target]
   const suspension = !relation?.restored ? relation?.suspended : undefined
   const inputs = [...Object.values(suspension?.input_bindings || {}), ...Object.values(suspension?.design_media_uses || {})]
@@ -40,6 +41,7 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
   onComplete: () => void
   onBusy: (busy: boolean) => void
 }) {
+  useUiText()
   const active = activeVisualContinuity(document, card.id)
   const record = document.storyboard?.visual_continuity?.[card.id]
   const [offer, setOffer] = useState<Offer>()
@@ -50,9 +52,9 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
   if (!active && (!record?.suspended || record.restored)) return null
   const read = async () => {
     const before = await prepare()
-    if (!before) throw new Error('请先保存当前画布，再核对承接')
+    if (!before) throw new Error(uiText("请先保存当前画布，再核对承接"))
     const next = await previewRemoval(before, card.id)
-    if (!next) throw new Error('视觉承接已变化，请重新打开后核对')
+    if (!next) throw new Error(uiText("视觉承接已变化，请重新打开后核对"))
     return next
   }
   const verify = async (restore?: boolean) => {
@@ -65,21 +67,21 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
       if (restore === undefined) return
       if (!offer || offer.revision !== next.revision || JSON.stringify([offer.capability, offer.sourceFiles]) !==
         JSON.stringify([next.capability, next.sourceFiles])) {
-        setError('模型或输入已变化，请重新确认')
+        setError(uiText("模型或输入已变化，请重新确认"))
         return
       }
       const planned = restore ? next.plan.restored : next.plan.without
-      if (!planned) throw new Error('当前参考无法按已核对的方式处理')
+      if (!planned) throw new Error(uiText("当前参考无法按已核对的方式处理"))
       const pending = requestId.current
       const id = pending?.restore === restore && pending.revision === next.revision ? pending.id : crypto.randomUUID()
       requestId.current = { restore, revision: next.revision, id }
       if (await commit(next.revision, id, (saved) => {
         const current = planVisualContinuityRemoval(saved, card.id, next.capability, next.sourceFiles.includes(null))
         const candidate = restore ? current?.restored : current?.without
-        if (!candidate) throw new Error('视觉承接已变化，请重新核对')
+        if (!candidate) throw new Error(uiText("视觉承接已变化，请重新核对"))
         return candidate
       })) onComplete()
-      else setError('操作尚未确认，请核对画布保存状态后重试')
+      else setError(uiText("操作尚未确认，请核对画布保存状态后重试"))
     } catch (cause) {
       setError(apiErrorMessage(cause))
     } finally {
@@ -89,21 +91,21 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
   }
   return <>
     {!offer && <Button disabled={disabled} loading={busy} onClick={() => void verify()}>
-      {active ? '移除承接' : '核对并恢复原参考'}
+      {active ? uiText("移除承接") : uiText("核对并恢复原参考")}
     </Button>}
-    {offer && <section aria-label="移除视觉承接">
-      <p>选帧素材与历史视频将保留。</p>
-      {!!offer.plan.labels.length && <><p>拟恢复的主体参考</p><ul>{offer.plan.labels.map((label, index) => <li key={index}>{label}</li>)}</ul></>}
+    {offer && <section aria-label={uiText("移除视觉承接")}>
+      <p>{uiText("选帧素材与历史视频将保留。")}</p>
+      {!!offer.plan.labels.length && <><p>{uiText("拟恢复的主体参考")}</p><ul>{offer.plan.labels.map((label, index) => <li key={index}>{label}</li>)}</ul></>}
       {offer.plan.removalIssue && <Alert type="warning" message={offer.plan.removalIssue} />}
-      {!!offer.plan.restoreIssues.length && <Alert type="warning" message="当前无法恢复原参考"
+      {!!offer.plan.restoreIssues.length && <Alert type="warning" message={uiText("当前无法恢复原参考")}
         description={<ul>{offer.plan.restoreIssues.map(issue => <li key={issue}>{issue}</li>)}</ul>} />}
       <Space wrap>
-        <Button disabled={busy} onClick={() => { setOffer(undefined); setError('') }}>{offer.plan.active ? '取消移除' : '取消恢复'}</Button>
+        <Button disabled={busy} onClick={() => { setOffer(undefined); setError('') }}>{offer.plan.active ? uiText("取消移除") : uiText("取消恢复")}</Button>
         {offer.plan.active && <Button disabled={disabled || busy || !offer.plan.without} onClick={() => void verify(false)}>
-          仅移除承接
+          {uiText("仅移除承接")}
         </Button>}
         {!!offer.plan.labels.length && <Button variant="primary" disabled={disabled || busy || !offer.plan.restored} onClick={() => void verify(true)}>
-          {offer.plan.active ? '移除并恢复原参考' : '确认恢复原参考'}
+          {offer.plan.active ? uiText("移除并恢复原参考") : uiText("确认恢复原参考")}
         </Button>}
       </Space>
     </section>}

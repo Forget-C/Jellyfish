@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useState } from 'react'
 import { Button } from 'antd'
 import { CanvasDeletionDialog } from '../generationCanvas/CanvasDeletionDialog'
@@ -8,6 +9,7 @@ import { generationCanvasEditScope, useCanvasEditOwnership } from '../generation
 export function SceneCanvasDeletion({ projectId, canvasId, onClose, onDeleted, onFailure, onOpen }: {
   projectId: string; canvasId: string; onClose: () => void; onDeleted: () => void; onFailure: (reason: string) => void; onOpen: () => void
 }) {
+  const uiText = useUiText()
   const ownership = useCanvasEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [recoveryBlocked, setRecoveryBlocked] = useState(false)
   const checking = ownership.state === 'checking'
@@ -18,12 +20,12 @@ export function SceneCanvasDeletion({ projectId, canvasId, onClose, onDeleted, o
     if (!ownership.canEdit()) return false
     let hasDraft: boolean
     try { hasDraft = localStorage.getItem(canvasRecoveryKey(projectId, canvasId)) !== null }
-    catch { throw new Error('无法核实本地恢复记录，请先打开画布处理。') }
+    catch { throw new Error(uiText("无法核实本地恢复记录，请先打开画布处理。")) }
     setRecoveryBlocked(hasDraft)
-    if (hasDraft) throw new Error('画布有未保存的本地内容，请先打开画布处理。')
+    if (hasDraft) throw new Error(uiText("画布有未保存的本地内容，请先打开画布处理。"))
     return true
   }
   return <CanvasDeletionDialog {...{ projectId, canvasId, onClose, onDeleted, onFailure, checking, blockedReason }}
     canDelete={canDelete} errorAction={recoveryBlocked &&
-      <Button onClick={() => { onClose(); onOpen() }}>打开画布处理</Button>} />
+      <Button onClick={() => { onClose(); onOpen() }}>{uiText("打开画布处理")}</Button>} />
 }

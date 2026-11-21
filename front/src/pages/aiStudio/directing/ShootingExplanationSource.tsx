@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import type { ShootingNote, SourceSpan } from '../../../services/generated'
 import { readSourceSelection, sameSpan } from './sourceSelection'
@@ -21,6 +22,7 @@ export function ShootingExplanationSource({ text, notes, focused, selection, onS
   onSelect: (scope: SourceSpan) => void; onMark: (position: number) => void
   returnFocus: MutableRefObject<HTMLElement | null>
 }) {
+  const uiText = useUiText()
   const root = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const pickedByPointer = useRef(false)
@@ -76,7 +78,7 @@ export function ShootingExplanationSource({ text, notes, focused, selection, onS
       return <span key={piece.start} data-source-position={piece.start}
         className={[piece.marked && 'is-marked', piece.focused && 'is-focused', piece.selected && 'is-selection', piece.first && 'is-start', piece.last && 'is-end'].filter(Boolean).join(' ')}
         role={piece.marked ? 'button' : undefined} tabIndex={piece.marked ? 0 : undefined}
-        aria-label={piece.marked ? `查看此处拍摄解释：${piece.text}` : undefined}
+        aria-label={piece.marked ? uiText("查看此处拍摄解释：{{text}}", { text: piece.text }) : undefined}
         onClick={piece.marked ? event => { if (!pickedByPointer.current) activate(event.currentTarget) } : undefined}
         onKeyDown={piece.marked ? event => {
           if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event.currentTarget) }

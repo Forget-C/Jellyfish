@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import { useEffect, useRef } from 'react'
 import { StudioEntitiesService } from '../../../services/generated'
 import { ResourceSelectionDrawer } from '../assets/components/ResourceSelectionDrawer'
@@ -20,7 +21,7 @@ export function ObjectAssociationEditor({ projectId, kind, objectName, sameName,
           importedId.current = requestId
         }
         const complete = await onSave(importedId.current ?? choice.id)
-        return { complete, created: !!importedId.current, error: importedId.current ? '资源已导入，选用未完成。重试将使用已创建的副本，不会重复导入。' : '选用未完成，请核对后重试。' }
+        return { complete, created: !!importedId.current, error: uiText(importedId.current ? '资源已导入，选用未完成。重试将使用已创建的副本，不会重复导入。' : '选用未完成，请核对后重试。') }
       } catch (cause) { return { complete: false, created: !!importedId.current, error: apiErrorMessage(cause) } }
     }} />
 }

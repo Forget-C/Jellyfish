@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { withoutRunTarget } from '../generationCanvas/navigation'
 import { CheckArchive } from '../generationCanvas/CheckArchive'
 import { persistSceneChange } from './sceneCanvasPersistence'
@@ -29,6 +30,7 @@ const videoActionLabels: Record<string, string> = {
 
 /** 打开经过场次归属核对的共同画布，返回时带上当前画布和任务。 */
 function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope & { canvasId: string }) {
+  const uiText = useUiText()
   const [query, setQuery] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -43,7 +45,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
     const request = StudioDirectingService.directingSceneCanvases({ projectId, chapterId, sequenceId })
     void request.then(response => {
       if (!active) return
-      if (!response.data) throw new Error('无法读取本场画布')
+      if (!response.data) throw new Error(uiText("无法读取本场画布"))
       setScene(response.data)
     }).catch(cause => {
       if (!active) return
@@ -51,7 +53,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       if (cause instanceof ApiError && cause.status === 404) setScene(undefined)
     }).finally(() => { if (active) setLoading(false) })
     return () => { active = false; request.cancel() }
-  }, [projectId, chapterId, sequenceId, canvasId, refresh])
+  }, [uiText, projectId, chapterId, sequenceId, canvasId, refresh])
   useEffect(() => {
     const reload = () => setRefresh(value => value + 1)
     window.addEventListener('focus', reload)
@@ -62,7 +64,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       saveChapterBrowse(projectId, chapterId, { managementCanvas: canvas.id })
     }
   }, [projectId, chapterId, sequenceId])
-  const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试读取场次</Button>
+  const retry = <Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>{uiText("重试读取场次")}</Button>
   const management = (step: 'division' | 'storyboard' = 'storyboard', taskId = selectedTaskId) => navigate(workbenchManagementLocation(
     projectId, chapterId, sequenceId, step, step === 'storyboard' ? { canvas: canvasId, storyboardTask: taskId } : undefined),
   { state: location.state })
@@ -77,7 +79,7 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       layoutPolicy={storyboardCanvasLayout}
       hostError={loadError} hostErrorAction={loadError ? retry : undefined}
       onCanvasRead={rememberOpened}
-      back={{ label: '返回工作台管理', onClick: () => management() }}
+      back={{ label: uiText("返回工作台管理"), onClick: () => management() }}
       renderModelCardMenu={context => <StoryboardVisualContinuity {...context} />}
       modelCardSources={visualContinuitySources}
       renderModelCardAction={({ card, document, runs, runStatus, disabled, checking, precheck }) => {
@@ -86,16 +88,16 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
         if (!shot) return null
         const shotCard = document.cards?.find(item => item.id === shot.card_id)
         const name = shotCard && 'name' in shotCard && shotCard.name || '镜头'
-        const label = shot.model_card_ids.length > 1 ? `${name} · 片段 ${shot.model_card_ids.indexOf(card.id) + 1}` : name
+        const label = shot.model_card_ids.length > 1 ? uiText("{{name}} · 片段 {{value2}}", { name, value2: shot.model_card_ids.indexOf(card.id) + 1 }) : name
         const laterShot = storyboardShotIndex(document, card.id) > 0
         const adopted = activeVisualContinuity(document, card.id)
         const updated = adopted && newContinuityResult(continuityResults(document, card.id, runs), adopted.origin, runs)
         return <><span title={label}>{label}</span>
-          {updated ? <span role="status" title="来源镜头有新结果。当前仍使用原选帧。">来源镜头有新结果</span>
-            : adopted ? <span>已采用前镜画面</span> : laterShot &&
-              <span title="未采用前镜画面，直接生成可能出现画面不连续">未采用前镜画面</span>}
+          {updated ? <span role="status" title={uiText("来源镜头有新结果。当前仍使用原选帧。")}>{uiText("来源镜头有新结果")}</span>
+            : adopted ? <span>{uiText("已采用前镜画面")}</span> : laterShot &&
+              <span title={uiText("未采用前镜画面，直接生成可能出现画面不连续")}>{uiText("未采用前镜画面")}</span>}
           <Button size="small" variant="primary" disabled={disabled} loading={checking} onClick={event => precheck(event.currentTarget)}>
-            {videoActionLabels[runStatus ?? ''] || '生成视频'}
+            {videoActionLabels[runStatus ?? ''] || uiText("生成视频")}
           </Button></>
       }}
       renderSceneActions={({ current, document, editable, requestLeave, saving, prepareReview, applyReview, reloadReview }) => {
@@ -130,14 +132,14 @@ function SceneCanvasHost({ projectId, chapterId, sequenceId, canvasId }: Scope &
       }} />
   }
   return <WorkbenchTheme adaptive>
-    <WorkspaceLayout className="workbench-ui storyboard-canvas-fallback" aria-label="工作台画布">
-      <PageToolbar title="工作台画布">
-        <Space wrap><Button onClick={() => management()}>返回工作台管理</Button><TaskCenter workbench /></Space>
+    <WorkspaceLayout className="workbench-ui storyboard-canvas-fallback" aria-label={uiText("工作台画布")}>
+      <PageToolbar title={uiText("工作台画布")}>
+        <Space wrap><Button onClick={() => management()}>{uiText("返回工作台管理")}</Button><TaskCenter workbench /></Space>
       </PageToolbar>
       <WorkspaceScrollPanel>
         {loadError ? <Alert type="error" showIcon message={loadError} action={retry} /> : loading
-          ? <Spin aria-label="正在读取本场画布" />
-          : <Alert type="error" showIcon message="此画布不属于当前场次或已不可用" />}
+          ? <Spin aria-label={uiText("正在读取本场画布")} />
+          : <Alert type="error" showIcon message={uiText("此画布不属于当前场次或已不可用")} />}
       </WorkspaceScrollPanel>
     </WorkspaceLayout>
   </WorkbenchTheme>

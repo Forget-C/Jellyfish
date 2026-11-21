@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ComponentProps, ReactNode } from 'react'
@@ -18,15 +19,16 @@ function ReviewButton({ light, variant, ...props }: ComponentProps<typeof Button
 function Changes({ title, cards, selected, choose }: {
   title: string; cards: StoryboardDiffCard[]; selected: string[]; choose: (id: string, overwrite: boolean) => void;
 }) {
+  const uiText = useUiText()
   const types = new Map<string, number>()
   for (const card of cards) types.set(card.type_name, (types.get(card.type_name) || 0) + 1)
   return <section>
-    <h3>{title} {cards.length} 张</h3>
+    <h3>{title} {cards.length} {uiText("张")}</h3>
     {!!cards.length && <>
       <small>{[...types].map(([type, count]) => `${type} ${count}`).join(' · ')}</small>
       <ul>{cards.map(card => <li key={card.id}>
         {card.name} {card.manually_edited && <Checkbox checked={selected.includes(card.id)}
-          aria-label={`覆盖${card.name}`} onChange={event => choose(card.id, event.target.checked)}>覆盖人工修改</Checkbox>}
+          aria-label={uiText("覆盖{{name}}", { name: card.name })} onChange={event => choose(card.id, event.target.checked)}>{uiText("覆盖人工修改")}</Checkbox>}
       </li>)}</ul>
     </>}
   </section>
@@ -35,14 +37,15 @@ function Changes({ title, cards, selected, choose }: {
 export function StoryboardReviewFindings({ report, candidate, action, compact = false }: {
   compact?: boolean; report: StoryboardReviewReport; candidate?: StoryboardCandidate | null; action?: (issue: StoryboardReviewIssue) => ReactNode
 }) {
+  const uiText = useUiText()
   const storyboard = candidate?.document.storyboard
   const names = new Map(storyboard?.shots.map((shot, index) => [
     storyboard.origins[shot.card_id]?.semantic_key?.replace(/^shot:/, ''), '镜头 ' + String(index + 1).padStart(2, '0'),
   ]))
   const issues = compact ? [...report.issues].sort((a, b) => Number(b.kind === 'conflict') - Number(a.kind === 'conflict')) : report.issues
-  return <>{compact && <p role="status">待处理冲突 {issues.filter(issue => issue.kind === 'conflict').length} 项 · 提醒 {issues.filter(issue => issue.kind !== 'conflict').length} 项</p>}
+  return <>{compact && <p role="status">{uiText("待处理冲突")} {issues.filter(issue => issue.kind === 'conflict').length} {uiText("项 · 提醒")} {issues.filter(issue => issue.kind !== 'conflict').length} {uiText("项")}</p>}
     <ul>{issues.map((issue, index) => {
-      const title = <strong>{issue.kind === 'conflict' ? '设计冲突' : '依据不足'} · {issue.shot_ids.map(id => names.get(id) ?? id).join('、')}</strong>
+      const title = <strong>{issue.kind === 'conflict' ? uiText("设计冲突") : uiText("依据不足")} · {issue.shot_ids.map(id => names.get(id) ?? id).join('、')}</strong>
       const body = <><p>{issue.requirements}</p><p>{issue.suggestion}</p>{action?.(issue)}</>
       return <li key={index}>{compact ? <details open={index === 0}><summary>{title}</summary>{body}</details> : <>{title}{body}</>}</li>
     })}</ul></>
@@ -63,6 +66,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
   savedCheck?: boolean;
   reviewedOverwrite?: string[];
 }) {
+  const uiText = useUiText()
   const [baseline, setBaseline] = useState<number>()
   const [opening, setOpening] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
@@ -84,11 +88,11 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     let active = true
     setError('')
     void request.then(response => {
-      if (!response.data) throw new Error('无法读取分镜差异')
+      if (!response.data) throw new Error(uiText("无法读取分镜差异"))
       if (active) setReview({ choice, diff: response.data })
     }).catch(cause => { if (active) setError(apiErrorMessage(cause)) })
     return () => { active = false; request.cancel() }
-  }, [baseline, selected, projectId, chapterId, sequenceId, taskId])
+  }, [uiText, baseline, selected, projectId, chapterId, sequenceId, taskId])
   const open = async (refresh = false) => {
     setOpening(true); setError('')
     const prepared = await prepare()
@@ -99,7 +103,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     } else if (prepared && (!refresh || await reload())) {
       if (refresh) setReview(undefined)
       setBaseline(refresh ? (await prepare())?.revision : prepared.revision); setSelected(reviewedOverwrite ?? []); setAccepted([])
-    } else setError('请先解决画布保存问题，再核对提取差异。')
+    } else setError(uiText("请先解决画布保存问题，再核对提取差异。"))
     setOpening(false)
   }
   const close = () => {
@@ -128,7 +132,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
           onRepaired(result)
         } else if (result.status === 'failed' || result.status === 'cancelled') {
           setRepairTask(undefined)
-          setError(result.error || '分镜审查未完成，请在工作台管理中查看任务。')
+          setError(result.error || uiText("分镜审查未完成，请在工作台管理中查看任务。"))
           if (inline) onRepaired(result)
         } else if (result.stage !== repairTask.stage) {
           setRepairTask(result)
@@ -137,18 +141,18 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
     }
     const timer = window.setInterval(() => void read(), 700)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [repairTask, projectId, chapterId, sequenceId, onRepaired, inline])
+  }, [uiText, repairTask, projectId, chapterId, sequenceId, onRepaired, inline])
 
   const submitReview = async (intent: StoryboardRetry) => {
     if (inline) {
       try { localStorage.setItem(repairKey, JSON.stringify(intent)) }
-      catch { setError('无法保存修正请求，请检查浏览器存储后重试。'); return }
+      catch { setError(uiText("无法保存修正请求，请检查浏览器存储后重试。")); return }
     }
     setRepairing(true); setRepairIntent(intent); setError('')
     onRepairSubmissionChange?.(true)
     try {
       const response = await Directing.directingStoryboardRetry({ projectId, chapterId, sequenceId, taskId, requestBody: intent })
-      if (!response.data) throw new Error('审查提交待核实')
+      if (!response.data) throw new Error(uiText("审查提交待核实"))
       setRepairTask(response.data); setRepairIntent(undefined)
       onRepairAccepted?.(response.data.task_id)
       if (inline) localStorage.removeItem(repairKey)
@@ -183,7 +187,7 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
       choice.accepted_conflict_ids = accepted.filter(id => conflicts.some(conflict => conflict.id === id))
     }
     if (await apply(choice)) close()
-    else setError('应用尚未完成。请核对画布提示；结果未知时使用原选择再次核实。')
+    else setError(uiText("应用尚未完成。请核对画布提示；结果未知时使用原选择再次核实。"))
   }
   const choose = (id: string, overwrite: boolean) => {
     if (busy || repairIntent) return
@@ -194,41 +198,41 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
   useEffect(() => {
     if (inline && editable && !opened.current) { opened.current = true; void open() }
   })
-  const actions = <WorkbenchDialogActions secondary={!inline && <ReviewButton light={inline} variant="quiet" disabled={busy} onClick={close}>暂不应用</ReviewButton>}>
+  const actions = <WorkbenchDialogActions secondary={!inline && <ReviewButton light={inline} variant="quiet" disabled={busy} onClick={close}>{uiText("暂不应用")}</ReviewButton>}>
     <ReviewButton light={inline} variant="primary" loading={applying} disabled={!review || !ready || !editable || busy || !!repairIntent || !!manualStacks.length || blocked}
-      onClick={() => void applyReview()}>{inline ? '应用并进入画布' : automaticStacks.length ? '应用并解除受影响的堆叠' : '应用分镜'}</ReviewButton>
+      onClick={() => void applyReview()}>{inline ? uiText("应用并进入画布") : automaticStacks.length ? uiText("应用并解除受影响的堆叠") : uiText("应用分镜")}</ReviewButton>
   </WorkbenchDialogActions>
   const content = <>
-    {!!structureIssues?.length && <details><summary>已完成结构纠错，查看原问题</summary>
+    {!!structureIssues?.length && <details><summary>{uiText("已完成结构纠错，查看原问题")}</summary>
       <ul>{structureIssues.map((issue, index) => <li key={index}>{issue}</li>)}</ul></details>}
     {repairDetails && <details>
-      <summary>{inline && `已解决 ${repairDetails.before_review.issues.filter(before => !report?.issues.some(after => after.kind === before.kind && after.requirements === before.requirements && after.shot_ids.join() === before.shot_ids.join())).length} 项 · `}{repairDetails.status === 'applied' ? `已修正 ${repairDetails.changes?.length ?? 0} 个字段` : '查看修正结果'} · 剩余 {report?.issues.filter(issue => issue.kind === 'conflict').length ?? 0} 项冲突</summary>
+      <summary>{inline && uiText("已解决 {{length}} 项 · ", { length: repairDetails.before_review.issues.filter(before => !report?.issues.some(after => after.kind === before.kind && after.requirements === before.requirements && after.shot_ids.join() === before.shot_ids.join())).length })}{repairDetails.status === 'applied' ? uiText("已修正 {{value1}} 个字段", { value1: repairDetails.changes?.length ?? 0 }) : uiText("查看修正结果")} {uiText("· 剩余")} {report?.issues.filter(issue => issue.kind === 'conflict').length ?? 0} {uiText("项冲突")}</summary>
       <p>{repairDetails.reason}</p>
       {repairDetails.changes?.map((change, index) => <div key={index}>
-        <strong>{change.shot_id || '共享设计'} · {change.design_id} · {change.field_id}</strong>
-        <p>修改前：{change.before}</p><p>修改后：{change.after}</p>
+        <strong>{change.shot_id || uiText("共享设计")} · {change.design_id} · {change.field_id}</strong>
+        <p>{uiText("修改前：")}{change.before}</p><p>{uiText("修改后：")}{change.after}</p>
       </div>)}
-      <details><summary>修正前的审查意见</summary><StoryboardReviewFindings report={repairDetails.before_review} candidate={candidate} /></details>
+      <details><summary>{uiText("修正前的审查意见")}</summary><StoryboardReviewFindings report={repairDetails.before_review} candidate={candidate} /></details>
     </details>}
-    {!inline && (savedCheck ? <ReviewButton light={inline} disabled={!editable} loading={opening} onClick={() => void open()}>核对检查差异</ReviewButton> :
+    {!inline && (savedCheck ? <ReviewButton light={inline} disabled={!editable} loading={opening} onClick={() => void open()}>{uiText("核对检查差异")}</ReviewButton> :
     <Alert type="warning" showIcon message={baseline === undefined && error ? error :
-      hasConflicts ? '分镜存在设计冲突，现有画布内容已保留。' : '分镜结果待应用，现有画布内容已保留。'}
-      action={<ReviewButton light={inline} disabled={!editable} loading={opening} onClick={() => void open()}>核对差异</ReviewButton>} />)}
-    {inline ? <div>{reviewBody()}</div> : <WorkbenchModal title="核对分镜差异" open={baseline !== undefined} width={640}
+      hasConflicts ? uiText("分镜存在设计冲突，现有画布内容已保留。") : uiText("分镜结果待应用，现有画布内容已保留。")}
+      action={<ReviewButton light={inline} disabled={!editable} loading={opening} onClick={() => void open()}>{uiText("核对差异")}</ReviewButton>} />)}
+    {inline ? <div>{reviewBody()}</div> : <WorkbenchModal title={uiText("核对分镜差异")} open={baseline !== undefined} width={640}
       closable={!busy} keyboard={!busy} maskClosable={!busy} onCancel={close}
       footer={actions}>{reviewBody()}</WorkbenchModal>}
   </>
   function reviewBody() { return <>
       {error && <Alert type="warning" showIcon message={saveError || error} action={<ReviewButton light={inline} disabled={applying} loading={opening}
-        onClick={() => void open(true)}>核对最新画布</ReviewButton>} />}
-      {!diff && !error && <Spin aria-label="正在核对差异" />}
-      {continuity?.stale && <Alert type="warning" showIcon message="相关分镜内容已变化，请重新审查。"
+        onClick={() => void open(true)}>{uiText("核对最新画布")}</ReviewButton>} />}
+      {!diff && !error && <Spin aria-label={uiText("正在核对差异")} />}
+      {continuity?.stale && <Alert type="warning" showIcon message={uiText("相关分镜内容已变化，请重新审查。")}
         action={continuity.can_review_plan && <ReviewButton light={inline} disabled={!editable || !ready || busy || !!repairIntent?.targeted_repair}
-          onClick={recheckPlan}>{repairIntent?.review_plan ? '核实方案审查' : '审查当前方案'}</ReviewButton>} />}
+          onClick={recheckPlan}>{repairIntent?.review_plan ? uiText("核实方案审查") : uiText("审查当前方案")}</ReviewButton>} />}
       {repairTask && <p role="status">{repairTask.stage === 'repairing_storyboard'
-        ? '正在定向修正分镜' : '正在复核分镜连续性'}</p>}
+        ? uiText("正在定向修正分镜") : uiText("正在复核分镜连续性")}</p>}
       {!!report?.issues.length && <Alert type={hasConflicts ? 'error' : 'warning'} showIcon
-        message={hasConflicts ? '设计冲突待处理' : '部分连续性依据不足'}
+        message={hasConflicts ? uiText("设计冲突待处理") : uiText("部分连续性依据不足")}
         description={<StoryboardReviewFindings compact={inline} report={report} candidate={candidate} action={issue => {
           const conflict = conflicts.find(item => item.issue.requirements === issue.requirements &&
             item.issue.shot_ids.join() === issue.shot_ids.join())
@@ -236,36 +240,36 @@ export function SceneStoryboardReview({ scope, editable, prepare, reload, apply,
           return <>
             <Checkbox checked={conflict.previously_accepted || accepted.includes(conflict.id)}
               disabled={!editable || busy || !!repairIntent || !!continuity?.stale || conflict.previously_accepted}
-              aria-label={`接受风险：${issue.requirements}`} onChange={event => setAccepted(values => event.target.checked
+              aria-label={uiText("接受风险：{{requirements}}", { requirements: issue.requirements })} onChange={event => setAccepted(values => event.target.checked
                 ? [...values, conflict.id] : values.filter(id => id !== conflict.id))}>
-              {conflict.previously_accepted ? '已接受此风险' : '保留当前设计并接受此风险'}
+              {conflict.previously_accepted ? uiText("已接受此风险") : uiText("保留当前设计并接受此风险")}
             </Checkbox>
             {conflict.can_repair && <ReviewButton light={inline} variant="quiet" disabled={!editable || busy || !!continuity?.stale ||
               !!repairIntent && repairIntent.targeted_repair?.conflict_id !== conflict.id} onClick={() => void repair(conflict)}>
-              {repairIntent?.targeted_repair?.conflict_id === conflict.id ? '核实定向修正' : '定向修正'}
+              {repairIntent?.targeted_repair?.conflict_id === conflict.id ? uiText("核实定向修正") : uiText("定向修正")}
             </ReviewButton>}
           </>
         }} />} />}
       {diff && <>
-        {diff.source_changed && <p>应用时将采用本次已确认的原文。仍被引用的旧原文依据会保留。</p>}
-        <p>人工新增的卡片会保留。勾选后才会覆盖相应的人工修改或移除这些卡片。</p>
+        {diff.source_changed && <p>{uiText("应用时将采用本次已确认的原文。仍被引用的旧原文依据会保留。")}</p>}
+        <p>{uiText("人工新增的卡片会保留。勾选后才会覆盖相应的人工修改或移除这些卡片。")}</p>
         {!!manualStacks.length && <section>
-          <Alert type="warning" showIcon message="请先返回画布手动解除这些堆叠，再重新核对差异。"
-            action={onOpenCanvas && <ReviewButton light={inline} onClick={onOpenCanvas}>前往当前画布处理</ReviewButton>}
+          <Alert type="warning" showIcon message={uiText("请先返回画布手动解除这些堆叠，再重新核对差异。")}
+            action={onOpenCanvas && <ReviewButton light={inline} onClick={onOpenCanvas}>{uiText("前往当前画布处理")}</ReviewButton>}
             description={<ul>{manualStacks.map(stack => <li key={stack.id}>{stack.name}</li>)}</ul>} />
         </section>}
-        {!!automaticStacks.length && <section><h3>应用后解除的自动堆叠</h3>
+        {!!automaticStacks.length && <section><h3>{uiText("应用后解除的自动堆叠")}</h3>
           <ul>{automaticStacks.map(stack => <li key={stack.id}>{stack.name}</li>)}</ul>
         </section>}
-        {!!diff.visual_continuity_impacts?.length && <section><h3>视觉承接影响</h3>
+        {!!diff.visual_continuity_impacts?.length && <section><h3>{uiText("视觉承接影响")}</h3>
           <ul>{diff.visual_continuity_impacts.map(message => <li key={message}>{message}</li>)}</ul>
         </section>}
-        {!!diff.orphaned.length && <section><h3>失去引用的保留卡片</h3>
-          <ul>{diff.orphaned.map(card => <li key={card.id}>{card.name} 将失去 {card.lost_targets?.join('、')}</li>)}</ul>
+        {!!diff.orphaned.length && <section><h3>{uiText("失去引用的保留卡片")}</h3>
+          <ul>{diff.orphaned.map(card => <li key={card.id}>{card.name} {uiText("将失去")} {card.lost_targets?.join('、')}</li>)}</ul>
         </section>}
-        <Changes title="新增" cards={diff.added} selected={selected} choose={choose} />
-        <Changes title="修改" cards={diff.modified} selected={selected} choose={choose} />
-        <Changes title="移除" cards={diff.removed} selected={selected} choose={choose} />
+        <Changes title={uiText("新增")} cards={diff.added} selected={selected} choose={choose} />
+        <Changes title={uiText("修改")} cards={diff.modified} selected={selected} choose={choose} />
+        <Changes title={uiText("移除")} cards={diff.removed} selected={selected} choose={choose} />
 
       </>}
     {inline && (actionHost ? createPortal(actions, actionHost) : actions)}

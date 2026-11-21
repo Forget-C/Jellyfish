@@ -1,3 +1,5 @@
+import { currentLanguage } from '../../../i18n'
+import { useUiText } from '../../../uiText'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Select, Space, Spin } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
@@ -13,7 +15,7 @@ import '../assets/components/resourceEditor.css'
 import './shooting-explanation.css'
 
 const choices = [{ value: 'adopt', label: '采用为参考' }, { value: 'delegate', label: '交由生成设计' }, { value: 'skip', label: '暂不处理' }, { value: 'review', label: '待复核' }]
-const analysisTime = new Intl.DateTimeFormat('zh-CN', {
+const analysisTime = () => new Intl.DateTimeFormat(currentLanguage(), {
   timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', hour12: false,
 })
@@ -35,6 +37,7 @@ type Props = {
 
 /** Read the selected basis before allowing edits. */
 export function ShootingExplanationDrawer(props: Props) {
+  const uiText = useUiText()
   const { projectId, chapterId, sourceVersion, onClose } = props
   const id = useId()
   const [value, setValue] = useState<ShootingExplanationRead>()
@@ -43,18 +46,19 @@ export function ShootingExplanationDrawer(props: Props) {
   useEffect(() => {
     let live = true
     void StudioDirectingService.directingShootingExplanations({ projectId, chapterId, sourceVersion }).then(response => {
-      if (!response.data) throw new Error('拍摄解释读取失败')
+      if (!response.data) throw new Error(uiText("拍摄解释读取失败"))
       if (live) setValue(response.data)
     }).catch(cause => { if (live) setError(apiErrorMessage(cause)) })
     return () => { live = false }
-  }, [projectId, chapterId, sourceVersion, attempt])
+  }, [uiText, projectId, chapterId, sourceVersion, attempt])
   if (value) return <ShootingExplanationEditor {...props} id={id} value={value} />
-  return <ResourceEditorFrame id={id} open drawer drawerWidth={840} title="本章拍摄解释" backLabel="返回" onClose={onClose} actions={null}>
-    {error ? <Alert showIcon type="error" message={error} action={<Button onClick={() => { setError(''); setAttempt(current => current + 1) }}>重试</Button>} /> : <div className="shooting-explanation-loading" role="status" aria-label="读取拍摄解释"><Spin /></div>}
+  return <ResourceEditorFrame id={id} open drawer drawerWidth={840} title={uiText("本章拍摄解释")} backLabel={uiText("返回")} onClose={onClose} actions={null}>
+    {error ? <Alert showIcon type="error" message={error} action={<Button onClick={() => { setError(''); setAttempt(current => current + 1) }}>{uiText("重试")}</Button>} /> : <div className="shooting-explanation-loading" role="status" aria-label={uiText("读取拍摄解释")}><Spin /></div>}
   </ResourceEditorFrame>
 }
 
 function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourceVersion, isLatest, value, readOnly, onClose }: Props & { id: string; value: ShootingExplanationRead }) {
+  const uiText = useUiText()
   const [baseline, setBaseline] = useState(value)
   const [conflict, setConflict] = useState<ShootingExplanationRead>()
   const [preparation, setPreparation] = useState(value.preparation)
@@ -114,14 +118,14 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
       try {
         const response = await StudioDirectingService.directingShootingCheckRead({ projectId, chapterId, taskId: checkId })
         if (!live) return
-        if (!response.data) throw new Error('检查状态读取失败')
+        if (!response.data) throw new Error(uiText("检查状态读取失败"))
         setCheck(response.data); setError('')
         if (['queued', 'running'].includes(response.data.status)) timer = setTimeout(() => void read(), 1200)
       } catch (cause) { if (live) { setError(apiErrorMessage(cause)); timer = setTimeout(() => void read(), 3000) } }
     }
     void read()
     return () => { live = false; clearTimeout(timer) }
-  }, [projectId, chapterId, checkId])
+  }, [uiText, projectId, chapterId, checkId])
   useEffect(() => {
     if (!check?.report || autoReview.current !== check.task_id) return
     autoReview.current = undefined
@@ -130,7 +134,7 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
   const dirty = !!editing || JSON.stringify(preparation) !== JSON.stringify(baseline.preparation)
   const close = () => {
     if (busy || uncertain || review) return
-    if (!readOnly && dirty) Modal.confirm({ zIndex: 2000, title: '放弃未保存的拍摄解释？', okText: '放弃修改', cancelText: '继续编辑', onOk: onClose })
+    if (!readOnly && dirty) Modal.confirm({ zIndex: 2000, title: uiText("放弃未保存的拍摄解释？"), okText: uiText("放弃修改"), cancelText: uiText("继续编辑"), onOk: onClose })
     else onClose()
   }
   const start = async () => {
@@ -139,7 +143,7 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
     try {
       const response = await StudioDirectingService.directingShootingCheckSubmit({ projectId, chapterId, requestBody: {
         request_id: crypto.randomUUID(), source_version: sourceVersion, preparation } })
-      if (!response.data) throw new Error('未收到检查任务')
+      if (!response.data) throw new Error(uiText("未收到检查任务"))
       submittedHere.current = true
       setDiscoveredId(response.data.task_id)
       autoReview.current = response.data.task_id
@@ -149,13 +153,13 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
   const save = async () => {
     if (conflict || editing || review) return false
     intervened.current = true
-    if ((preparation.notes || []).some(note => !note.text.trim())) { setError('请填写说明内容，或删除空条目'); return false }
+    if ((preparation.notes || []).some(note => !note.text.trim())) { setError(uiText("请填写说明内容，或删除空条目")); return false }
     setBusy(true); setError('')
     try {
       if (!frozenSave.current) frozenSave.current = { request_id: crypto.randomUUID(), preparation: { ...preparation, check_task_id: checkId || preparation.check_task_id } }
       const response = await StudioDirectingService.directingShootingExplanationsSave({ projectId, chapterId, requestBody: {
         ...frozenSave.current, source_version: sourceVersion, expected_version: baseline.version } })
-      if (!response.data) throw new Error('未收到保存结果')
+      if (!response.data) throw new Error(uiText("未收到保存结果"))
       if (checkId && handled[checkId]?.length) markReviewed(checkId, handled[checkId])
       frozenSave.current = undefined; setUncertain(false); onClose(); return true
     } catch (cause) {
@@ -228,97 +232,97 @@ function ShootingExplanationEditor({ id, projectId, chapterId, sourceText, sourc
   const noteCard = (note: ShootingNote) => {
     const index = notes.findIndex(item => item.id === note.id)
     return <div key={note.id} className="shooting-card">
-      <Input.TextArea aria-label="说明内容" value={note.text} readOnly={readOnly} disabled={!readOnly && editingLocked} autoSize={{ minRows: 2, maxRows: 8 }}
+      <Input.TextArea aria-label={uiText("说明内容")} value={note.text} readOnly={readOnly} disabled={!readOnly && editingLocked} autoSize={{ minRows: 2, maxRows: 8 }}
         onChange={event => setNote(index, { text: event.target.value })} />
       <div className="shooting-meta">
-        {note.scope ? <Button type="link" className="shooting-scope-link" onClick={() => revealScope(note.scope!)}>适用范围：{sourceSlice(sourceText, note.scope)}</Button>
-          : <p>{note.previous_scope_text ? `原选段待重新定位：${note.previous_scope_text}` : '适用范围：全章'}</p>}
-        {note.excerpt && <p>引用依据：{note.excerpt}</p>}
+        {note.scope ? <Button type="link" className="shooting-scope-link" onClick={() => revealScope(note.scope!)}>{uiText("适用范围：")}{sourceSlice(sourceText, note.scope)}</Button>
+          : <p>{note.previous_scope_text ? uiText("原选段待重新定位：{{previous_scope_text}}", { previous_scope_text: note.previous_scope_text }) : uiText("适用范围：全章")}</p>}
+        {note.excerpt && <p>{uiText("引用依据：")}{note.excerpt}</p>}
       </div>
       <Space wrap>
-        {!readOnly && <Button disabled={editingLocked || !!editing} onClick={() => begin(undefined, note.id)}>{note.previous_scope_text ? '重新选段' : '调整范围'}</Button>}
-        {!readOnly && selection && !editing && <Button disabled={editingLocked} onClick={() => setNote(index, { excerpt: sourceSlice(sourceText, selection) })}>用选区设依据</Button>}
-        {!readOnly && note.excerpt && <Button disabled={editingLocked} onClick={() => setNote(index, { excerpt: '' })}>移除引用</Button>}
-        <Select aria-label="说明采用方式" value={note.choice || 'adopt'} options={choices} disabled={editingLocked} onChange={choice => setNote(index, { choice })} />
-        {!readOnly && <Button type="text" danger disabled={editingLocked || !!editing} onClick={() => setPreparation(current => ({ ...current, notes: notes.filter(item => item.id !== note.id) }))}>删除说明</Button>}
+        {!readOnly && <Button disabled={editingLocked || !!editing} onClick={() => begin(undefined, note.id)}>{note.previous_scope_text ? uiText("重新选段") : uiText("调整范围")}</Button>}
+        {!readOnly && selection && !editing && <Button disabled={editingLocked} onClick={() => setNote(index, { excerpt: sourceSlice(sourceText, selection) })}>{uiText("用选区设依据")}</Button>}
+        {!readOnly && note.excerpt && <Button disabled={editingLocked} onClick={() => setNote(index, { excerpt: '' })}>{uiText("移除引用")}</Button>}
+        <Select aria-label={uiText("说明采用方式")} value={note.choice || 'adopt'} options={choices} disabled={editingLocked} onChange={choice => setNote(index, { choice })} />
+        {!readOnly && <Button type="text" danger disabled={editingLocked || !!editing} onClick={() => setPreparation(current => ({ ...current, notes: notes.filter(item => item.id !== note.id) }))}>{uiText("删除说明")}</Button>}
       </Space>
     </div>
   }
   return <>
     <ResourceEditorFrame id={id} className="shooting-explanation-drawer" drawerWidth={840}
-      title="本章拍摄解释" backLabel="返回" open drawer onClose={close}
-      actions={readOnly ? null : <Button aria-label="保存" type="primary" loading={busy} disabled={!!conflict || !!editing} onClick={() => void save()}>保存</Button>}>
+      title={uiText("本章拍摄解释")} backLabel={uiText("返回")} open drawer onClose={close}
+      actions={readOnly ? null : <Button aria-label={uiText("保存")} type="primary" loading={busy} disabled={!!conflict || !!editing} onClick={() => void save()}>{uiText("保存")}</Button>}>
       <div className="shooting-drawer-body" onPointerDownCapture={() => { intervened.current = true }}
         onKeyDownCapture={() => { intervened.current = true }} onInputCapture={() => { intervened.current = true }}>
-        <section className="shooting-drawer-section" ref={sourcePanel} aria-label="章节原文">
+        <section className="shooting-drawer-section" ref={sourcePanel} aria-label={uiText("章节原文")}>
           <div className="shooting-heading">
-            <div><h3>章节原文</h3><p className="shooting-meta">{isLatest ? '当前使用最新原文' : '当前使用历史版本原文'}</p></div>
+            <div><h3>{uiText("章节原文")}</h3><p className="shooting-meta">{isLatest ? uiText("当前使用最新原文") : uiText("当前使用历史版本原文")}</p></div>
             <Space wrap>
               {lastStartedAt !== undefined && <span className="shooting-meta">
-                上次分析 <time dateTime={new Date(lastStartedAt).toISOString()}>{analysisTime.format(lastStartedAt)}</time>
+                {uiText("上次分析")} <time dateTime={new Date(lastStartedAt).toISOString()}>{analysisTime().format(lastStartedAt)}</time>
               </span>}
-              {pendingIds.length > 0 ? <Button disabled={busy || uncertain} onClick={() => setReview(true)}>查看分析结果（{pendingIds.length}）</Button>
-                : !readOnly && <Button loading={active} disabled={editingLocked || active || !!editing || !sourceText.trim() || notes.some(note => !note.text.trim())} onClick={() => void start()}>AI 分析全文</Button>}
-              {!readOnly && <Button icon={<PlusOutlined aria-hidden />} disabled={editingLocked || !!editing} onClick={() => begin(selection)}>选段添加解释</Button>}
+              {pendingIds.length > 0 ? <Button disabled={busy || uncertain} onClick={() => setReview(true)}>{uiText("查看分析结果（{{count}}）", { count: pendingIds.length })}</Button>
+                : !readOnly && <Button loading={active} disabled={editingLocked || active || !!editing || !sourceText.trim() || notes.some(note => !note.text.trim())} onClick={() => void start()}>{uiText("AI 分析全文")}</Button>}
+              {!readOnly && <Button icon={<PlusOutlined aria-hidden />} disabled={editingLocked || !!editing} onClick={() => begin(selection)}>{uiText("选段添加解释")}</Button>}
             </Space>
           </div>
-          {check?.error && <Alert type="warning" showIcon message={`分析失败：${check.error}`} />}
-          {editing && <p role="status" className="shooting-meta">请选择连续原文，或在下方设为全章。</p>}
+          {check?.error && <Alert type="warning" showIcon message={uiText("分析失败：{{error}}", { error: check.error })} />}
+          {editing && <p role="status" className="shooting-meta">{uiText("请选择连续原文，或在下方设为全章。")}</p>}
           <div className="shooting-section-scroll">
             <ShootingExplanationSource text={sourceText} notes={notes} focused={focused} selection={editing?.preview || selection}
               returnFocus={returnFocus} onSelect={scope => { setSelection(scope); if (editing) proposeScope(scope) }}
               onMark={offset => { if (!editing) { setSelection(undefined); showExplanation(offset) } }} />
           </div>
         </section>
-        <section className="shooting-drawer-section" ref={explanationList} tabIndex={-1} aria-label="拍摄解释">
+        <section className="shooting-drawer-section" ref={explanationList} tabIndex={-1} aria-label={uiText("拍摄解释")}>
           <div className="shooting-heading">
-            <h3>{position === undefined ? '拍摄解释' : '此处的解释'}</h3>
+            <h3>{position === undefined ? uiText("拍摄解释") : uiText("此处的解释")}</h3>
             <Space wrap>
-              {position !== undefined && <><Button onClick={() => { setPosition(undefined); setFocused(undefined) }}>全部解释</Button>
+              {position !== undefined && <><Button onClick={() => { setPosition(undefined); setFocused(undefined) }}>{uiText("全部解释")}</Button>
                 <Button className="shooting-return-source" onClick={() => {
                   const target = returnFocus.current?.isConnected ? returnFocus.current : sourcePanel.current?.querySelector<HTMLElement>('[data-source-position]')
                   target?.scrollIntoView({ block: 'nearest' }); target?.focus({ preventScroll: true })
-                }}>返回原文</Button></>}
+                }}>{uiText("返回原文")}</Button></>}
             </Space>
           </div>
           <div className="shooting-section-scroll shooting-stack">
-            {uncertain && <Alert type="warning" showIcon message="保存结果尚未确认，请再次点击保存以核对同一提交。" />}
+            {uncertain && <Alert type="warning" showIcon message={uiText("保存结果尚未确认，请再次点击保存以核对同一提交。")} />}
             {error && <Alert type="error" showIcon message={error} />}
-            {conflict && <Alert type="warning" showIcon message="核对其他编辑保存的内容" description={<div className="shooting-stack">
+            {conflict && <Alert type="warning" showIcon message={uiText("核对其他编辑保存的内容")} description={<div className="shooting-stack">
               {(conflict.preparation.notes || []).map(note => <p key={note.id}>{note.text}</p>)}
               <Space wrap><Button onClick={() => {
                 setBaseline(conflict); setPreparation(conflict.preparation); setConflict(undefined); setError(''); setPosition(undefined)
-              }}>载入最新内容</Button><Button onClick={() => {
+              }}>{uiText("载入最新内容")}</Button><Button onClick={() => {
                 setBaseline(conflict); setConflict(undefined); setError('')
-              }}>保留我的内容，继续编辑</Button></Space>
+              }}>{uiText("保留我的内容，继续编辑")}</Button></Space>
             </div>} />}
             {editing && <div className="shooting-card" ref={editorCard}>
-              <strong>{editing.id ? '调整解释范围' : '添加拍摄解释'}</strong>
-              <p>{editing.scope === null ? '适用范围：全章' : editing.preview ? sourceSlice(sourceText, editing.preview) : '尚未选择原文'}</p>
-              {conflicts.length > 0 && <Alert type="warning" showIcon message="所选文字与已有选段相交" description={<Space wrap>
+              <strong>{editing.id ? uiText("调整解释范围") : uiText("添加拍摄解释")}</strong>
+              <p>{editing.scope === null ? uiText("适用范围：全章") : editing.preview ? sourceSlice(sourceText, editing.preview) : uiText("尚未选择原文")}</p>
+              {conflicts.length > 0 && <Alert type="warning" showIcon message={uiText("所选文字与已有选段相交")} description={<Space wrap>
                 {conflicts.map(scope => <Button key={scope.start + ':' + scope.end} className="shooting-range-option"
-                  onClick={() => setEditing({ ...editing, scope, preview: scope })}>使用已有选段 · {sourceSlice(sourceText, { start: scope.start, end: Math.min(scope.end, scope.start + 32) })}{scope.end - scope.start > 32 ? '…' : ''}</Button>)}
-                <Button onClick={() => { setEditing({ ...editing, scope: undefined, preview: undefined }); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>重新选择</Button>
+                  onClick={() => setEditing({ ...editing, scope, preview: scope })}>{uiText("使用已有选段 ·")} {sourceSlice(sourceText, { start: scope.start, end: Math.min(scope.end, scope.start + 32) })}{scope.end - scope.start > 32 ? '…' : ''}</Button>)}
+                <Button onClick={() => { setEditing({ ...editing, scope: undefined, preview: undefined }); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{uiText("重新选择")}</Button>
               </Space>} />}
-              {!editing.id && <Input.TextArea aria-label="新增解释内容" placeholder="补充人物路线、具体动作或空间关系" autoSize={{ minRows: 2, maxRows: 6 }}
+              {!editing.id && <Input.TextArea aria-label={uiText("新增解释内容")} placeholder={uiText("补充人物路线、具体动作或空间关系")} autoSize={{ minRows: 2, maxRows: 6 }}
                 value={editing.text} onChange={event => setEditing({ ...editing, text: event.target.value })} />}
-              <Space wrap><Button onClick={() => setEditing({ ...editing, scope: null, preview: undefined })}>适用全章</Button>
+              <Space wrap><Button onClick={() => setEditing({ ...editing, scope: null, preview: undefined })}>{uiText("适用全章")}</Button>
                 <Button className="shooting-return-source" onClick={() => {
                   const offset = editing.preview?.start ?? 0
                   sourcePanel.current?.querySelector(`[data-source-position="${offset}"]`)?.scrollIntoView({ block: 'center' })
-                }}>返回原文</Button>
-                <Button onClick={() => { setEditing(undefined); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>取消本次选择</Button>
-                <Button disabled={editing.scope === undefined || (!editing.id && !editing.text.trim())} onClick={confirmEdit}>确认解释</Button></Space>
+                }}>{uiText("返回原文")}</Button>
+                <Button onClick={() => { setEditing(undefined); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{uiText("取消本次选择")}</Button>
+                <Button disabled={editing.scope === undefined || (!editing.id && !editing.text.trim())} onClick={confirmEdit}>{uiText("确认解释")}</Button></Space>
             </div>}
             {position !== undefined && !readOnly && !editing && visibleNotes.length > 0 && <Button
-              disabled={editingLocked} onClick={() => begin(visibleNotes[0].scope || undefined)}>在此添加解释</Button>}
+              disabled={editingLocked} onClick={() => begin(visibleNotes[0].scope || undefined)}>{uiText("在此添加解释")}</Button>}
             {visibleNotes.length ? <>
               {visibleNotes.filter(note => !note.scope || !legacyScopes.some(scope => sameSpan(scope, note.scope))).map(noteCard)}
               {visibleNotes.some(note => legacyScopes.some(scope => sameSpan(scope, note.scope))) && <div className="shooting-stack">
-                <strong>需整理的选段</strong>
+                <strong>{uiText("需整理的选段")}</strong>
                 {visibleNotes.filter(note => legacyScopes.some(scope => sameSpan(scope, note.scope))).map(noteCard)}
               </div>}
-            </> : !editing && <p className="shooting-meta">暂无拍摄解释</p>}
+            </> : !editing && <p className="shooting-meta">{uiText("暂无拍摄解释")}</p>}
           </div>
         </section>
       </div>
