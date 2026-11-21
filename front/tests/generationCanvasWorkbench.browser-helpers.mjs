@@ -348,8 +348,15 @@ export async function enterStoryboardCanvas(page) {
   const workspace = page.getByRole('region', { name: '生成画布工作台', exact: true })
   const apply = page.getByRole('dialog', { name: '处理分镜提取结果', exact: true })
     .getByRole('button', { name: '应用并进入画布', exact: true })
+    .and(page.locator(':enabled'))
   await Promise.race([workspace.waitFor(), apply.waitFor()])
-  if (await apply.isVisible()) await apply.click()
+  if (await workspace.isVisible()) return
+  try {
+    await apply.click()
+  } catch (error) {
+    // A successful automatic application can close the drawer during the click.
+    if (!await workspace.isVisible()) throw error
+  }
   await workspace.waitFor()
 }
 
