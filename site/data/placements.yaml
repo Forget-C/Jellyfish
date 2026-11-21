@@ -1,6 +1,6 @@
 # sponsors 列表项必填 name，可选 logo（站点图片路径）、url。
 sponsors: []
 # 没有赞助方时显示的招募联系地址。
-contact: ""
+contact: "https://github.com/Forget-C/Jellyfish"
 # 独立广告位，填写 title、url，可另配 image。
 ad: {}
