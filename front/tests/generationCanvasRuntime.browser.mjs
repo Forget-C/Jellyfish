@@ -206,8 +206,11 @@ try {
   const task = page.locator('.app-task-card').filter({ hasText: '流式文本' }).first()
   await task.getByRole('button', { name: /查看/ }).click()
   await page.waitForURL(url => url.pathname === '/canvases/' + canvas.id && url.searchParams.has('run') && url.searchParams.has('node'))
-  await openCanvasCard(page, 'm')
-  await runStatus('失败 · 未完成').waitFor()
+  const target = new URL(page.url()).searchParams
+  const history = page.getByRole('region', { name: '画布运行历史' })
+  const node = history.locator(`[data-history-run="${target.get('run')}"] [data-history-node="${target.get('node')}"]`)
+  await node.getByRole('status').filter({ hasText: '失败 · 未完成' }).waitFor()
+  await waitText(node.getByRole('region', { name: '历史累计正文' }).locator('p').first(), '第一段第二段')
   console.log(JSON.stringify({ output, success: true, calls: (await control()).calls.length }))
 } catch (reason) {
   if (page) { console.log((await page.locator('body').innerText()).slice(-9000)); await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }) }
