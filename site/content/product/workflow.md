@@ -47,5 +47,3 @@ aliases:
 ![分镜画布里的图片生成结果，林夏在站灯下打开信封](../../images/screenshots/home/generation-preview.webp)
 
 [操作指南 · 预览分镜生成的候选图]({{< relref "/docs/guide/sequence-workflow" >}}#预览分镜生成的候选图)
-
-本例展示到单张候选画面。已有旧版场次素材的项目，可以继续[审片、剪辑与交付章节]({{< relref "/docs/legacy/edit-delivery" >}}#审片采用和剪辑)。
