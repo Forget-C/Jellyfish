@@ -261,7 +261,7 @@ export const VideoExperimentReferences = forwardRef<ExperimentReferenceHandle, P
           {libraryState === 'failed' && <Alert type="error" message={uiText("视频参考资料库读取失败")} action={<Button size="small" onClick={onRetryLibrary}>{uiText("重试读取")}</Button>} />}
           {libraryState === 'ready' && !targetFiles.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={uiText("资料库中暂无{{value1}}", { value1: uiText(kindLabel[target.kind]) })} />}
           <ul className="experiment-reference-list">{targetFiles.map(file => <li key={file.id} className="experiment-reference-row">
-            {thumbnail(file, `资料库${uiText(kindLabel[target.kind])}`)}
+            {thumbnail(file, uiText("资料库{{kind}}", { kind: uiText(kindLabel[target.kind]) }))}
             <Button type="text" className="experiment-video-file-choice" title={file.name} aria-pressed={selectedIds.includes(file.id)}
               disabled={disabled || uploading}
               onClick={() => toggle(target, file.id, !selectedIds.includes(file.id))}>{file.name}</Button>
@@ -309,11 +309,11 @@ export const VideoExperimentReferences = forwardRef<ExperimentReferenceHandle, P
               <div className="experiment-video-reference-actions">
                 {(['image', 'video'] as const).map(kind => <Button key={kind} size="small"
                   disabled={(kind === 'image' ? capability?.supports_subject_image_reference : capability?.supports_subject_video_reference) === false}
-                  onClick={event => openLibrary({ subjectId: subject.id, kind }, event.currentTarget)}>{uiText("选择主体")}{index + 1}{uiText(kindLabel[kind])}</Button>)}
+                  onClick={event => openLibrary({ subjectId: subject.id, kind }, event.currentTarget)}>{uiText("选择主体{{index}}{{kind}}", { index: index + 1, kind: uiText(kindLabel[kind]) })}</Button>)}
               </div>
               {capability?.supports_subject_image_reference === false && !subject.media.some(item => item.kind === 'image') && <p className="experiment-reference-hint">{uiText("当前模型不支持主体图片")}</p>}
               {capability?.supports_subject_video_reference === false && !subject.media.some(item => item.kind === 'video') && <p className="experiment-reference-hint">{uiText("当前模型不支持主体视频")}</p>}
-              <ul className="experiment-reference-list">{subject.media.map(({ id, kind }, mediaIndex) => row(id, `主体${index + 1}${uiText(kindLabel[kind])}`, () => toggle({ subjectId: subject.id, kind }, id, false), `主体 ${subject.name} · 第 ${mediaIndex + 1} 项`))}</ul>
+              <ul className="experiment-reference-list">{subject.media.map(({ id, kind }, mediaIndex) => row(id, uiText("主体{{index}}{{kind}}", { index: index + 1, kind: uiText(kindLabel[kind]) }), () => toggle({ subjectId: subject.id, kind }, id, false), uiText("主体 {{name}} · 第 {{index}} 项", { name: subject.name, index: mediaIndex + 1 })))}</ul>
               {subjectIssues(subject, draft.subjects, capability).map(issue => <p key={issue} role="alert" className="experiment-video-reference-issue">{issue}</p>)}
             </fieldset>)}
           </section>
