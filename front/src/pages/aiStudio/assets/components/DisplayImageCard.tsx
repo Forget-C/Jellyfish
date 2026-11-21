@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Card, Modal } from 'antd'
@@ -45,6 +46,7 @@ export function DisplayImageCard({
   hoverable = true,
   imageHeightClassName = 'h-44',
 }: DisplayImageCardProps) {
+  const uiText = useUiText()
   const previewTrigger = useRef<HTMLButtonElement>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -68,7 +70,7 @@ export function DisplayImageCard({
   if (variant === 'project') {
     const content = displayUrl
       ? <img loading={lazyImage ? 'lazy' : undefined} src={displayUrl} alt={imageAlt} style={{ objectFit: imageFit }} onError={() => setImgError(true)} />
-      : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />图片加载失败</> : onImageClick ? placeholder : <><PictureOutlined aria-hidden />暂无封面</>}</span>
+      : <span className="project-resource-placeholder">{imgError ? <><PictureOutlined aria-hidden />{uiText("图片加载失败")}</> : onImageClick ? placeholder : <><PictureOutlined aria-hidden />{uiText("暂无封面")}</>}</span>
     const canOpen = (!!onImageClick && (!requireImageForClick || !!displayUrl)) || !!(enablePreview && displayUrl)
     return <>
       <article className={`project-resource-card${selection ? ' project-resource-selectable' : ''}`}
@@ -76,7 +78,7 @@ export function DisplayImageCard({
         aria-disabled={selection?.disabled} tabIndex={selection ? (selection.disabled ? -1 : 0) : undefined}
         onClick={selection ? () => { if (!selection.disabled) selection.onSelect() } : undefined}
         onKeyDown={selection ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!selection.disabled) selection.onSelect() } } : undefined}>
-        {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" title="放大预览" aria-label={`预览${imageAlt}`} onClick={handleImageClick}>{content}</button>
+        {canOpen ? <button ref={previewTrigger} type="button" className="project-resource-cover" title={uiText("放大预览")} aria-label={uiText("预览{{imageAlt}}", { imageAlt })} onClick={handleImageClick}>{content}</button>
           : <div className="project-resource-cover">{content}</div>}
         <div className="project-resource-card-body">
           <div className="project-resource-title-row"><h2>{title}</h2>{extra}</div>

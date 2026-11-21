@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Empty, Modal, Select, Space, Spin, Tag, Tooltip } from 'antd'
 import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined } from '@ant-design/icons'
@@ -27,6 +28,7 @@ function batchOpenDownloads(urls: string[]) {
 }
 
 export function FilesTab() {
+  const uiText = useUiText()
   const navigate = useNavigate()
   const { projectId } = useParams<{ projectId: string }>()
 
@@ -86,14 +88,14 @@ export function FilesTab() {
       setTotal(count ?? 0)
       setHasMore(items.length > 0 && ((count === undefined || count === null) ? items.length === PAGE_SIZE : nextPage * PAGE_SIZE < count))
     } catch {
-      if (requestGeneration === generation.current) setError('读取项目文件失败，请重试')
+      if (requestGeneration === generation.current) setError(uiText("读取项目文件失败，请重试"))
     } finally {
       if (requestGeneration === generation.current) {
         loading.current = false
         setFilesLoading(false)
       }
     }
-  }, [projectId, chapterTitle])
+  }, [uiText, projectId, chapterTitle])
 
   useEffect(() => {
     generation.current += 1
@@ -154,27 +156,27 @@ export function FilesTab() {
       <div ref={pageRoot} className="project-resource-page project-files-page">
       <ProjectContentToolbar>
         <div className="project-content-toolbar-leading">
-          <h1 className="app-page-title">项目文件</h1>
-          <Select className="project-files-filter" aria-label="按章节筛选文件" allowClear placeholder="全部章节" style={{ width: 200, maxWidth: '100%' }}
-            value={chapterTitle} options={chapters.map(c => ({ value: c.title, label: `${c.title}（第${c.index}章）` }))}
+          <h1 className="app-page-title">{uiText("项目文件")}</h1>
+          <Select className="project-files-filter" aria-label={uiText("按章节筛选文件")} allowClear placeholder={uiText("全部章节")} style={{ width: 200, maxWidth: '100%' }}
+            value={chapterTitle} options={chapters.map(c => ({ value: c.title, label: uiText("{{title}}（第{{index}}章）", { title: c.title, index: c.index }) }))}
             onChange={value => { setChapterTitle(value ?? undefined) }} loading={chaptersLoading} />
         </div>
         <Space wrap>
-          <span className="project-files-count">已加载 {files.length}{total > 0 ? ` / 共 ${total}` : ''} 个文件</span>
-          {batchMode && <Button onClick={() => setSelectedIds(new Set(files.map(file => file.id)))}>选择已加载文件</Button>}
-          {batchMode && <Button type="primary" aria-label={`批量下载（${selectedIds.size}）`} icon={<DownloadOutlined />} disabled={selectedIds.size === 0}
-            onClick={handleBatchDownload}>批量下载（{selectedIds.size}）</Button>}
+          <span className="project-files-count">{uiText("已加载")} {files.length}{total > 0 ? uiText(" / 共 {{total}}", { total }) : ''} {uiText("个文件")}</span>
+          {batchMode && <Button onClick={() => setSelectedIds(new Set(files.map(file => file.id)))}>{uiText("选择已加载文件")}</Button>}
+          {batchMode && <Button type="primary" aria-label={uiText("批量下载（{{size}}）", { size: selectedIds.size })} icon={<DownloadOutlined />} disabled={selectedIds.size === 0}
+            onClick={handleBatchDownload}>{uiText("批量下载（{{size}}）", { size: selectedIds.size })}</Button>}
           <Button onClick={() => { setBatchMode(value => !value); setSelectedIds(new Set()) }}>
-            {batchMode ? '退出批量选择' : '批量选择'}
+            {batchMode ? uiText("退出批量选择") : uiText("批量选择")}
           </Button>
-          <Button type="link" onClick={() => navigate('/files')}>前往文件管理</Button>
+          <Button type="link" onClick={() => navigate('/files')}>{uiText("前往文件管理")}</Button>
         </Space>
       </ProjectContentToolbar>
-      {error && files.length === 0 && <Alert type="error" showIcon message={error} action={<Button onClick={() => void loadFiles()}>重试读取文件</Button>} />}
+      {error && files.length === 0 && <Alert type="error" showIcon message={error} action={<Button onClick={() => void loadFiles()}>{uiText("重试读取文件")}</Button>} />}
         <Spin spinning={filesLoading && files.length === 0}>
           {files.length === 0 && !filesLoading && !error ? (
             <Empty
-              description="暂无文件（仅展示已在项目中产生过关联记录的文件）"
+              description={uiText("暂无文件（仅展示已在项目中产生过关联记录的文件）")}
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           ) : (
@@ -193,7 +195,7 @@ export function FilesTab() {
                       title={
                         <div className="flex items-start gap-2 pr-1 min-w-0">
                           {batchMode && <Checkbox
-                            aria-label={`选择${file.name}`}
+                            aria-label={uiText("选择{{name}}", { name: file.name })}
                             checked={checked}
                             onChange={(e) => {
                               e.stopPropagation()
@@ -214,16 +216,16 @@ export function FilesTab() {
                         isAudio ? <SoundOutlined className="text-4xl" /> : isVideo ? (
                           <span className="flex flex-col items-center gap-1">
                             <VideoCameraOutlined className="text-4xl" />
-                            <span className="text-xs">点击预览</span>
+                            <span className="text-xs">{uiText("点击预览")}</span>
                           </span>
                         ) : (
                           <FileImageOutlined className="text-5xl" />
                         )
                       }
-                      meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? '视频' : isAudio ? '音频' : '图片'}</Tag>}
+                      meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? uiText("视频") : isAudio ? uiText("音频") : uiText("图片")}</Tag>}
                       extra={
-                        <Tooltip title={`下载${file.name}`}>
-                          <Button type="text" icon={<DownloadOutlined />} aria-label={`下载${file.name}`}
+                        <Tooltip title={uiText("下载{{name}}", { name: file.name })}>
+                          <Button type="text" icon={<DownloadOutlined />} aria-label={uiText("下载{{name}}", { name: file.name })}
                             onClick={() => downloadOne(file)} />
                         </Tooltip>
                       }
@@ -235,9 +237,9 @@ export function FilesTab() {
         </Spin>
 
         <div ref={sentinel} className="project-files-load-status" role="status">
-          {error && files.length > 0 && <Alert type="error" showIcon message={error} action={<Button onClick={() => void loadFiles()}>重试读取文件</Button>} />}
-          {filesLoading ? '正在加载文件…' : error ? null : hasMore ?
-            <Button onClick={() => void loadFiles()}>加载更多</Button> : files.length > 0 ? `已显示全部 ${files.length} 个文件` : null}
+          {error && files.length > 0 && <Alert type="error" showIcon message={error} action={<Button onClick={() => void loadFiles()}>{uiText("重试读取文件")}</Button>} />}
+          {filesLoading ? uiText("正在加载文件…") : error ? null : hasMore ?
+            <Button onClick={() => void loadFiles()}>{uiText("加载更多")}</Button> : files.length > 0 ? uiText("已显示全部 {{length}} 个文件", { length: files.length }) : null}
         </div>
       </div>
 
@@ -246,22 +248,22 @@ export function FilesTab() {
         className="project-resource-dialog"
         focusTriggerAfterClose={false}
         afterClose={() => { const panel = pageRoot.current?.closest('.project-workbench-content'); if (panel) panel.scrollTop = previewScroll.current; mediaTrigger.current?.focus({ preventScroll: true }) }}
-        title={previewVideo?.name ?? '媒体预览'}
+        title={previewVideo?.name ?? uiText("媒体预览")}
         open={previewVideo !== null}
         footer={null}
         width={720}
         onCancel={() => { setFocusedId(previewVideo?.id); setPreviewVideo(null) }}
         destroyOnClose
       >
-        {previewVideo?.type === 'image' ? <img className="project-resource-preview" alt={previewVideo.name} src={buildFileDownloadUrl(previewVideo.id)} /> : previewVideo?.type === 'audio' ? <audio aria-label="音频预览" src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
+        {previewVideo?.type === 'image' ? <img className="project-resource-preview" alt={previewVideo.name} src={buildFileDownloadUrl(previewVideo.id)} /> : previewVideo?.type === 'audio' ? <audio aria-label={uiText("音频预览")} src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
           <video
-            aria-label="视频预览"
+            aria-label={uiText("视频预览")}
             className="w-full max-h-[70vh] bg-black rounded"
             src={buildFileDownloadUrl(previewVideo.id)}
             controls
             playsInline
           >
-            您的浏览器不支持视频播放
+            {uiText("您的浏览器不支持视频播放")}
           </video>
         ) : null}
       </Modal>

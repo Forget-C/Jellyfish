@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect } from 'react'
 import { Tabs } from 'antd'
 import { PageToolbar, WorkspaceLayout } from '../../../components'
@@ -13,6 +14,7 @@ function isValidTab(tab: string | null): tab is LibraryAssetType {
 }
 
 export default function AssetManager() {
+  const uiText = useUiText()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
   const activeTab = isValidTab(tabFromUrl) ? tabFromUrl : 'actor'
@@ -34,11 +36,11 @@ export default function AssetManager() {
         next.delete('focusAsset')
         setSearchParams(next, { replace: true })
       }}
-      renderTabBar={(props, TabBar) => <PageToolbar title="资产库" className="management-heading">
+      renderTabBar={(props, TabBar) => <PageToolbar title={uiText("资产库")} className="management-heading">
         <TabBar {...props} />
       </PageToolbar>}
       items={(Object.keys(assetLibraryTypes) as LibraryAssetType[]).map(key => ({
-        key, label: assetLibraryTypes[key].label, children: <AssetLibraryTab assetType={key} active={key === activeTab} />,
+        key, label: uiText(assetLibraryTypes[key].label), children: <AssetLibraryTab assetType={key} active={key === activeTab} />,
       }))}
     />
   </WorkspaceLayout>

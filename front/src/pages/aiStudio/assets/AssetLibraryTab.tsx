@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Input, Modal, Skeleton, message, type InputRef } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
@@ -25,7 +26,9 @@ type CreateSeed = { name: string; description: string; visual_style?: '现实' |
 
 /** 四类资产共享列表、分页与危险操作，创建表单沿用各实体的原业务规则。 */
 export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAssetType; active: boolean }) {
-  const { label, route } = assetLibraryTypes[assetType]
+  const uiText = useUiText()
+  const { route } = assetLibraryTypes[assetType]
+  const label = uiText(assetLibraryTypes[assetType].label)
   const [params, setParams] = useSearchParams()
   const { key: locationKey } = useLocation()
   const navigationType = useNavigationType()
@@ -107,7 +110,7 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
     void request.then(response => {
       if (!current) return
       const data = response.data
-      if (!data || !Array.isArray(data.items)) throw new Error('资产列表缺失')
+      if (!data || !Array.isArray(data.items)) throw new Error(uiText("资产列表缺失"))
       const reportedTotal = data.pagination?.total
       const total = Number.isSafeInteger(reportedTotal) && reportedTotal >= data.items.length ? reportedTotal : undefined
       if (total !== undefined) {
@@ -126,7 +129,7 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
       }
     })
     return () => { current = false; request.cancel() }
-  }, [active, assetType, page, pageSize, query, restoringSearch, revision, setPage])
+  }, [uiText, active, assetType, page, pageSize, query, restoringSearch, revision, setPage])
 
   // The offset anchors the old first item while capacity changes.
   useEffect(() => {
@@ -235,7 +238,7 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
         total: previous.total === undefined ? undefined : Math.max(0, previous.total - 1),
       } : previous)
       setDeleteTarget(undefined)
-      message.success(`已删除${label}`)
+      message.success(uiText("已删除{{label}}", { label }))
       reload()
     } catch (cause) {
       setDeleteError(apiErrorMessage(cause))
@@ -249,12 +252,12 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
   return <>
     <PageToolbar className="management-toolbar">
       <div className="management-tools">
-        <Input.Search ref={searchInput} aria-label={`搜索${label}`} placeholder={`搜索${label}名称或描述`} allowClear
+        <Input.Search ref={searchInput} aria-label={uiText("搜索{{label}}", { label })} placeholder={uiText("搜索{{label}}名称或描述", { label })} allowClear
           value={search} onChange={event => setSearch(event.target.value)} onSearch={searchAssets} />
-        <Button aria-label="刷新" icon={<ReloadOutlined aria-hidden="true" />} loading={loading && Boolean(result)} onClick={reload}>刷新</Button>
-        {result && <span className="management-count">{result.total === undefined ? `已加载 ${result.assets.length} 项` : `${result.query ? '匹配' : '共'} ${result.total} 项`}</span>}
+        <Button aria-label={uiText("刷新")} icon={<ReloadOutlined aria-hidden="true" />} loading={loading && Boolean(result)} onClick={reload}>{uiText("刷新")}</Button>
+        {result && <span className="management-count">{result.total === undefined ? uiText("已加载 {{length}} 项", { length: result.assets.length }) : uiText("{{value1}} {{total}} 项", { value1: result.query ? '匹配' : '共', total: result.total })}</span>}
       </div>
-      <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button className="management-primary" type="primary" icon={<PlusOutlined aria-hidden="true" />}>新建{label}</Button></ResourceCreateButton>
+      <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button className="management-primary" type="primary" icon={<PlusOutlined aria-hidden="true" />}>{uiText("新建{{label}}", { label })}</Button></ResourceCreateButton>
     </PageToolbar>
     <div className="app-card-list-content">
       <div ref={measureGrid} className="asset-library-measure app-card-list-measure" aria-hidden="true">
@@ -264,9 +267,9 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
         </div>
       </div>
       <WorkspaceScrollPanel ref={panel} className="management-panel asset-library-scroll">
-        {failed && <Alert type="error" showIcon message={result ? resultIsCurrent ? '刷新资产失败，保留已显示的数据' : '读取当前请求失败，仍显示上一次结果' : `读取${label}资产失败`}
-          action={<Button size="small" aria-label="重试" onClick={reload}>重试</Button>} />}
-        {!result && loading && <div className="asset-library-grid" role="status" aria-label="正在读取资产">
+        {failed && <Alert type="error" showIcon message={result ? resultIsCurrent ? uiText("刷新资产失败，保留已显示的数据") : uiText("读取当前请求失败，仍显示上一次结果") : uiText("读取{{label}}资产失败", { label })}
+          action={<Button size="small" aria-label={uiText("重试")} onClick={reload}>{uiText("重试")}</Button>} />}
+        {!result && loading && <div className="asset-library-grid" role="status" aria-label={uiText("正在读取资产")}>
           {Array.from({ length: 4 }, (_, index) => <div key={index} className="asset-library-card asset-library-skeleton">
             <Skeleton.Image active /><Skeleton active title paragraph={{ rows: 2 }} />
           </div>)}
@@ -275,13 +278,13 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
           {result.assets.map(asset => <AssetImageCard key={asset.id} asset={asset} assetType={assetType} label={label}
             editPath={assetEditPath(asset.id)} onOpen={() => rememberAssetReturn(asset.id)}
             onDelete={() => { setDeleteFailed(false); setDeleteTarget(asset) }} />)}
-        </div> : !failed && !loading && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query ? '无匹配资产' : `暂无${label}资产`}>
-          {query ? <Button onClick={() => { setSearch(''); searchAssets('') }}>清除搜索</Button>
-            : <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button type="primary">新建{label}</Button></ResourceCreateButton>}
+        </div> : !failed && !loading && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query ? uiText("无匹配资产") : uiText("暂无{{label}}资产", { label })}>
+          {query ? <Button onClick={() => { setSearch(''); searchAssets('') }}>{uiText("清除搜索")}</Button>
+            : <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button type="primary">{uiText("新建{{label}}", { label })}</Button></ResourceCreateButton>}
         </Empty>)}
       </WorkspaceScrollPanel>
     </div>
-    <CardListPagination label={`${label}资产分页`} page={result?.page ?? page} pageSize={result?.pageSize ?? pageSize}
+    <CardListPagination label={uiText("{{label}}资产分页", { label })} page={result?.page ?? page} pageSize={result?.pageSize ?? pageSize}
       total={result?.total ?? 0} compact={compact} disabled={loading || failed || deleting || !resultIsCurrent}
       onChange={nextPage => {
         panel.current?.scrollTo(0, 0)
@@ -290,12 +293,12 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
 
     <ResourceEditorDrawer key={assetType} open={createOpen} kind={assetType} seed={createSeed}
       onClose={closeCreate} onSaved={async () => { refreshCreated() }} />
-    <Modal title={deleteTarget ? `删除${label}「${deleteTarget.name}」？` : undefined} open={Boolean(deleteTarget)} className="asset-library-delete"
-      okText="删除" cancelText="取消" okButtonProps={{ danger: true }} confirmLoading={deleting}
+    <Modal title={deleteTarget ? uiText("删除{{label}}「{{name}}」？", { label, name: deleteTarget.name }) : undefined} open={Boolean(deleteTarget)} className="asset-library-delete"
+      okText={uiText("删除")} cancelText={uiText("取消")} okButtonProps={{ danger: true }} confirmLoading={deleting}
       cancelButtonProps={{ disabled: deleting }} closable={!deleting} keyboard={!deleting} maskClosable={!deleting}
       onCancel={() => { if (!deleteInFlight.current) setDeleteTarget(undefined) }} onOk={() => void deleteAsset()}>
-      <p>删除后无法恢复。已关联的资产仍受现有引用限制。</p>
-      {deleteFailed && <Alert type="error" message={deleteError || `删除${label}失败，请重试`} />}
+      <p>{uiText("删除后无法恢复。已关联的资产仍受现有引用限制。")}</p>
+      {deleteFailed && <Alert type="error" message={deleteError || uiText("删除{{label}}失败，请重试", { label })} />}
     </Modal>
   </>
 }

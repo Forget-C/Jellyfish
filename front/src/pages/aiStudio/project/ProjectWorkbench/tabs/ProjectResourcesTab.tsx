@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Dropdown, Empty, Input, Modal, Popover, Radio, Space, Spin, message } from 'antd'
 import { ArrowRightOutlined, FilterOutlined, MoreOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
@@ -46,6 +47,7 @@ function readListState(key: string): ListState {
 }
 
 function ResourceFilters({ kind, value, onApply }: { kind: Kind; value: Filters; onApply: (filters: Filters) => void }) {
+  const uiText = useUiText()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -63,30 +65,31 @@ function ResourceFilters({ kind, value, onApply }: { kind: Kind; value: Filters;
     content={<div ref={panel} tabIndex={-1} className="project-resource-filter-panel" onKeyDown={event => {
       if (event.key === 'Escape') close()
     }}>
-      <fieldset><legend>来源</legend>
+      <fieldset><legend>{uiText("来源")}</legend>
         <Checkbox.Group value={draft.source} onChange={source => setDraft(previous => ({ ...previous, source: source as Source[] }))}
           options={Object.entries(sources).filter(([source]) => source !== 'role_conversion' || kind === 'actor')
-            .map(([value, label]) => ({ label, value }))} />
+            .map(([value, label]) => ({ label: uiText(label), value }))} />
       </fieldset>
-      <fieldset><legend>封面状态</legend>
+      <fieldset><legend>{uiText("封面状态")}</legend>
         <Radio.Group value={draft.cover} onChange={event => setDraft(previous => ({ ...previous, cover: event.target.value }))}
-          options={[{ label: '全部', value: 'all' }, { label: '有封面', value: 'present' }, { label: '待补封面', value: 'missing' }]} />
+          options={[{ label: uiText("全部"), value: 'all' }, { label: uiText("有封面"), value: 'present' }, { label: uiText("待补封面"), value: 'missing' }]} />
       </fieldset>
-      <Space><Button onClick={() => apply(emptyFilters)}>清除筛选</Button><Button type="primary" onClick={() => apply(draft)}>应用</Button></Space>
+      <Space><Button onClick={() => apply(emptyFilters)}>{uiText("清除筛选")}</Button><Button type="primary" onClick={() => apply(draft)}>{uiText("应用")}</Button></Space>
     </div>}>
     <Button ref={trigger} aria-expanded={open} icon={<FilterOutlined aria-hidden />} onKeyDown={event => {
       if (open && event.key === 'Escape') close()
-    }}>{count ? `筛选（${count}）` : '筛选'}</Button>
+    }}>{count ? uiText("筛选（{{count}}）", { count }) : uiText("筛选")}</Button>
   </Popover>
 }
 
 export function ProjectResourcesTab({ projectId, kind, resultCache }: {
   projectId: string; kind: Kind; resultCache: Map<string, ProjectResourcePageResult>
 }) {
+  const uiText = useUiText()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const role = kind === 'character'
-  const label = labels[kind]
+  const label = uiText(labels[kind])
   const storageKey = `jellyfish:project-resources:${projectId}:${kind}`
   const [state, setState] = useState(() => readListState(storageKey))
   const [input, setInput] = useState(state.query)
@@ -142,7 +145,7 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
     try {
       const { data } = await StudioEntitiesService.listEntitiesApiV1StudioEntitiesEntityTypeGet({ ...options, page, pageSize })
       if (epoch !== requestEpoch.current) return
-      if (!data?.items || data.items.some(item => item.project_id !== projectId)) throw new Error('项目资源列表读取失败')
+      if (!data?.items || data.items.some(item => item.project_id !== projectId)) throw new Error(uiText("项目资源列表读取失败"))
       const total = data.pagination?.total
       const knownTotal = Number.isSafeInteger(total) && total >= data.items.length ? total : undefined
       const lastPage = knownTotal === undefined ? page : Math.max(1, Math.ceil(knownTotal / pageSize))
@@ -165,7 +168,7 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
               ...options, exactName: created.name, page: 1, pageSize: 1,
             })
             if (epoch === requestEpoch.current && match.data && !match.data.items.some(item => item.id === createdId)) {
-              message.info('资源已保存，未出现在当前查询结果中')
+              message.info(uiText("资源已保存，未出现在当前查询结果中"))
             }
           } catch { /* Keep the successful save when match verification is unavailable. */ }
         }
@@ -173,7 +176,7 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
     } catch {
       if (epoch === requestEpoch.current) { setFailed(true); setLoading(false) }
     }
-  }, [cover, filterCount, kind, page, pageSize, projectId, query, resultCache, source, storageKey])
+  }, [uiText, cover, filterCount, kind, page, pageSize, projectId, query, resultCache, source, storageKey])
 
   useEffect(() => {
     void load()
@@ -225,7 +228,7 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
         setResult(next)
       }
       setDeleteTarget(undefined)
-      message.success('已删除')
+      message.success(uiText("已删除"))
       await load()
     } catch (reason) { setDeleteError(apiErrorMessage(reason)) }
     finally { deletePending.current = false; setDeleting(false) }
@@ -233,9 +236,9 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
 
   return <>
     {detailView || <ProjectContentToolbar>
-      <h1 className="app-page-title">项目{label}</h1>
+      <h1 className="app-page-title">{uiText("项目{{label}}", { label })}</h1>
       <div className="project-resource-tools">
-        <Input.Search aria-label="搜索项目资源" placeholder="搜索名称或描述" data-project-resource-search allowClear value={input}
+        <Input.Search aria-label={uiText("搜索项目资源")} placeholder={uiText("搜索名称或描述")} data-project-resource-search allowClear value={input}
           onChange={event => setInput(event.target.value)} onSearch={value => {
             const next = value.trim()
             setInput(next)
@@ -246,15 +249,15 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
           panel.current?.scrollTo(0, 0)
           setState(previous => ({ ...previous, ...filters, offset: 0 }))
         }} />
-        <Button aria-label="刷新" icon={<ReloadOutlined />} onClick={() => void load()} loading={loading && !!result} />
-        {result && <span role="status" className="management-count">{result.total === undefined ? `已加载 ${result.items.length} 项`
-          : `${result.query || result.filterCount ? '匹配' : '共'} ${result.total} 项`}</span>}
+        <Button aria-label={uiText("刷新")} icon={<ReloadOutlined />} onClick={() => void load()} loading={loading && !!result} />
+        {result && <span role="status" className="management-count">{result.total === undefined ? uiText("已加载 {{length}} 项", { length: result.items.length })
+          : uiText("{{value1}} {{total}} 项", { value1: uiText(result.query || result.filterCount ? '匹配' : '共'), total: result.total })}</span>}
       </div>
       <Space size="small" wrap className="project-resource-create">
         <ResourceCreateButton kind={kind} projectId={projectId} onCreate={() => { setSeed(undefined); setCreateOpen(true) }} onCreated={onCreated}>
-          <Button ref={createTrigger} aria-label={role ? '新建角色' : '新建'} type="primary" icon={<PlusOutlined />}>{role ? '新建角色' : '新建'}</Button>
+          <Button ref={createTrigger} aria-label={role ? uiText("新建角色") : uiText("新建")} type="primary" icon={<PlusOutlined />}>{role ? uiText("新建角色") : uiText("新建")}</Button>
         </ResourceCreateButton>
-        {!role && <Button type="link" onClick={goToLibrary}>查看资产库</Button>}
+        {!role && <Button type="link" onClick={goToLibrary}>{uiText("查看资产库")}</Button>}
       </Space>
     </ProjectContentToolbar>}
     <div className="project-resource-page" hidden={!!detailView}>
@@ -266,11 +269,11 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
           </div></div>
         </div>
         <WorkspaceScrollPanel ref={panel} className="project-resource-scroll">
-          {failed && <Alert type="error" showIcon message={result ? '读取项目资源失败，仍显示上一次结果' : '读取项目资源失败'}
-            action={<Button aria-label="重试" onClick={() => void load()}>重试</Button>} />}
-          {!result && loading && <Spin aria-label="正在读取项目资源" />}
+          {failed && <Alert type="error" showIcon message={result ? uiText("读取项目资源失败，仍显示上一次结果") : uiText("读取项目资源失败")}
+            action={<Button aria-label={uiText("重试")} onClick={() => void load()}>{uiText("重试")}</Button>} />}
+          {!result && loading && <Spin aria-label={uiText("正在读取项目资源")} />}
           {result?.items.length === 0 && !failed && !loading && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={query || filterCount ? '无匹配资源' : `暂无项目${label}`} />}
+            description={query || filterCount ? uiText("无匹配资源") : uiText("暂无项目{{label}}", { label })} />}
           {!detailView && !!result?.items.length && <div className="project-resource-grid" aria-busy={loading}>{result.items.map(asset => {
             const thumbnail = resolveAssetUrl(asset.thumbnail)
             return <DisplayImageCard key={asset.id} variant="project" imageFit={kind === 'scene' ? 'cover' : 'contain'}
@@ -279,28 +282,28 @@ export function ProjectResourcesTab({ projectId, kind, resultCache }: {
                 <span>{asset.name}</span><ArrowRightOutlined aria-hidden />
               </button>}
               extra={<Dropdown trigger={['click']} menu={{ items: [
-                { key: 'edit', label: '编辑', onClick: () => openResource(asset.id) },
-                { key: 'delete', danger: true, label: role ? '删除角色' : '删除项目对象', onClick: () => {
+                { key: 'edit', label: uiText("编辑"), onClick: () => openResource(asset.id) },
+                { key: 'delete', danger: true, label: role ? uiText("删除角色") : uiText("删除项目对象"), onClick: () => {
                   setDeleteError(''); setDeleteTarget(asset)
                 } },
-              ] }}><Button type="text" icon={<MoreOutlined />} aria-label={`${asset.name}更多操作`}
+              ] }}><Button type="text" icon={<MoreOutlined />} aria-label={uiText("{{name}}更多操作", { name: asset.name })}
                 onClick={event => { deleteTrigger.current = event.currentTarget }} /></Dropdown>}
-              meta={<><ResourceCardMetadata asset={asset} /><div className="project-resource-description" title={asset.description || undefined}>{asset.description?.trim() || '未填写简介'}</div></>} />
+              meta={<><ResourceCardMetadata asset={asset} /><div className="project-resource-description" title={asset.description || undefined}>{asset.description?.trim() || uiText("未填写简介")}</div></>} />
           })}</div>}
         </WorkspaceScrollPanel>
       </div>
-      <CardListPagination label={`项目${label}分页`} page={result?.page ?? page} pageSize={result?.pageSize ?? pageSize}
+      <CardListPagination label={uiText("项目{{label}}分页", { label })} page={result?.page ?? page} pageSize={result?.pageSize ?? pageSize}
         total={result?.total ?? 0} compact={compact} disabled={loading || failed || deleting || !activeResult} onChange={setPage} />
     </div>
     <ResourceEditorDrawer open={createOpen} kind={kind} projectId={projectId} seed={seed}
       onClose={() => { setCreateOpen(false); setSeed(undefined) }} onSaved={resource => onCreated(resource.id)} />
     <Modal className="project-resource-dialog" title={deleteTarget ? `${role ? '删除角色' : '删除项目对象'}「${deleteTarget.name}」？` : undefined}
       open={!!deleteTarget} onCancel={() => { if (!deletePending.current) setDeleteTarget(undefined) }}
-      onOk={() => void confirmDelete()} okText={role ? '删除角色' : '删除项目对象'} cancelText="取消"
+      onOk={() => void confirmDelete()} okText={role ? uiText("删除角色") : uiText("删除项目对象")} cancelText={uiText("取消")}
       confirmLoading={deleting} okButtonProps={{ danger: true, disabled: deleting }} cancelButtonProps={{ disabled: deleting }}
       closable={!deleting} keyboard={!deleting} maskClosable={!deleting} focusTriggerAfterClose={false}
       afterClose={() => (deleteTrigger.current?.isConnected ? deleteTrigger.current : createTrigger.current)?.focus({ preventScroll: true })}>
-      <p>{role ? '删除角色将移除该项目角色配置，不会删除曾作为参考的资产。' : '删除此项目对象及其图片关联，已入库的独立副本继续保留。'}</p>
+      <p>{role ? uiText("删除角色将移除该项目角色配置，不会删除曾作为参考的资产。") : uiText("删除此项目对象及其图片关联，已入库的独立副本继续保留。")}</p>
       {deleteError && <Alert type="error" showIcon message={deleteError} />}
     </Modal>
   </>

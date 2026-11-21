@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useCallback, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Modal, Spin } from 'antd'
 import { ArrowRightOutlined, MoreOutlined, PictureOutlined } from '@ant-design/icons'
@@ -46,6 +47,7 @@ export function AssetImageCard({ asset, assetType, label, editPath, onOpen, onDe
   onOpen: () => void
   onDelete: () => void
 }) {
+  const uiText = useUiText()
   const adapter = assetAdapters[assetType]
   const thumbnailUrl = resolveAssetUrl(asset.thumbnail)
   const [brokenCover, setBrokenCover] = useState<string>()
@@ -82,13 +84,13 @@ export function AssetImageCard({ asset, assetType, label, editPath, onOpen, onDe
   const coverAvailable = Boolean(thumbnailUrl && thumbnailUrl !== brokenCover)
   const description = asset.description?.trim()
   const coverPlaceholder = <span className="asset-library-cover-placeholder">
-    <PictureOutlined aria-hidden="true" />{thumbnailUrl ? '图片加载失败' : '暂无封面'}
+    <PictureOutlined aria-hidden="true" />{thumbnailUrl ? uiText("图片加载失败") : uiText("暂无封面")}
   </span>
 
   return <>
     <article className="asset-library-card">
       {coverAvailable ? <button type="button" className="asset-library-cover" ref={coverTrigger}
-        title="放大预览" aria-label={`预览${asset.name}`} onClick={openPreview}>
+        title={uiText("放大预览")} aria-label={uiText("预览{{name}}", { name: asset.name })} onClick={openPreview}>
         <img style={{ objectFit: assetType === 'scene' ? 'cover' : 'contain' }} src={thumbnailUrl} alt={asset.name} loading="lazy" onError={() => setBrokenCover(thumbnailUrl)} />
       </button> : <div className="asset-library-cover">{coverPlaceholder}</div>}
       <div className="asset-library-card-content">
@@ -98,29 +100,29 @@ export function AssetImageCard({ asset, assetType, label, editPath, onOpen, onDe
             <span title={asset.name}>{asset.name}</span><ArrowRightOutlined aria-hidden="true" />
           </Link>
         </h2>
-          <Dropdown menu={{ items: [{ key: 'delete', label: '删除', danger: true, onClick: onDelete }] }} trigger={['click']}>
-            <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={`${asset.name}更多操作`} />
+          <Dropdown menu={{ items: [{ key: 'delete', label: uiText("删除"), danger: true, onClick: onDelete }] }} trigger={['click']}>
+            <Button type="text" size="small" icon={<MoreOutlined aria-hidden="true" />} aria-label={uiText("{{name}}更多操作", { name: asset.name })} />
           </Dropdown>
         </div>
         <ResourceCardMetadata asset={asset} />
-        <p className="asset-library-description" title={description}>{description || '未填写简介'}</p>
+        <p className="asset-library-description" title={description}>{description || uiText("未填写简介")}</p>
       </div>
     </article>
 
-    <Modal title={`${asset.name} · 图片预览`} open={previewOpen} footer={null}
+    <Modal title={uiText("{{name}} · 图片预览", { name: asset.name })} open={previewOpen} footer={null}
       width="min(960px, calc(100vw - 24px))" className="asset-library-preview"
       onCancel={() => setPreviewOpen(false)} afterClose={() => coverTrigger.current?.focus({ preventScroll: true })}>
       {imagesLoading ? <div className="asset-library-preview-image"><Spin /></div> : imagesFailed
-        ? <Alert type="error" message={`加载${label}图片失败`} action={<Button onClick={() => void loadImages()}>重试</Button>} />
+        ? <Alert type="error" message={uiText("加载{{label}}图片失败", { label })} action={<Button onClick={() => void loadImages()}>{uiText("重试")}</Button>} />
         : <>
           <div className="asset-library-preview-image">
             {previewUrl && previewUrl !== failedPreview ? <img src={previewUrl} alt={asset.name} onError={() => setFailedPreview(previewUrl)} />
-              : <span>{previewUrl ? '图片加载失败' : '暂未生成任何视角图片'}</span>}
+              : <span>{previewUrl ? uiText("图片加载失败") : uiText("暂未生成任何视角图片")}</span>}
           </div>
           {generatedImages.length > 0 && <div className="asset-library-preview-angles">
             {generatedImages.map(image => <Button key={image.id} type={selectedImage?.id === image.id ? 'primary' : 'default'}
               aria-pressed={selectedImage?.id === image.id} onClick={() => setSelectedImageId(image.id)}>
-              {ANGLE_LABELS[image.view_angle ?? ''] ?? image.view_angle ?? '图片'}
+              {ANGLE_LABELS[image.view_angle ?? ''] ?? image.view_angle ?? uiText("图片")}
             </Button>)}
           </div>}
         </>}

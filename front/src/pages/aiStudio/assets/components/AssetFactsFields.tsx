@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { Input } from 'antd'
 
 export type StructuredAssetType = 'actor' | 'scene' | 'prop' | 'costume'
@@ -67,6 +68,7 @@ export function AssetFactsFields({ type, value, onChange, supplementaryInfo, dis
   section?: 'all' | 'overview' | 'details'
   expandLongFields?: boolean
 }) {
+  const uiText = useUiText()
   const fields = ASSET_FIELDS[type].filter(({ key }) => section === 'all'
     || OVERVIEW_FIELDS[type].includes(key) === (section === 'overview'))
   // 详细设定先排列短属性，空间、结构等长描述按字段定义占满一行。
@@ -74,26 +76,26 @@ export function AssetFactsFields({ type, value, onChange, supplementaryInfo, dis
 
   return (
     <div className="space-y-3">
-      {section === 'all' ? <div className="text-sm text-gray-600">分类设定（未确定的项目可留空）</div> : null}
+      {section === 'all' ? <div className="text-sm text-gray-600">{uiText("分类设定（未确定的项目可留空）")}</div> : null}
       <div className={section === 'all' ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'asset-dossier-fields'}>
         {fields.map(({ key, label, maxLength, fullWidth }) => (
           <label key={key} className={`block min-w-0 text-sm text-gray-600 ${section === 'details' && (fullWidth || (expandLongFields && maxLength > 200)) ? 'col-span-full' : ''}`}>
-            {label}
+            {uiText(label)}
             <Input.TextArea
               className="mt-1"
               autoSize={{ minRows: 1, maxRows: 4 }}
               value={value[key] ?? ''}
               maxLength={maxLength}
               disabled={disabled}
-              placeholder={section === 'all' ? undefined : '未设定'}
+              placeholder={section === 'all' ? undefined : uiText("未设定")}
               onChange={(event) => onChange({ ...value, [key]: event.target.value || null })}
             />
           </label>
         ))}
       </div>
       {section === 'all' ? <details className="text-sm text-gray-500">
-        <summary>完整描述预览</summary>
-        <div className="whitespace-pre-wrap mt-2">{previewAssetDescription(type, value, supplementaryInfo) || '尚未填写设定'}</div>
+        <summary>{uiText("完整描述预览")}</summary>
+        <div className="whitespace-pre-wrap mt-2">{previewAssetDescription(type, value, supplementaryInfo) || uiText("尚未填写设定")}</div>
       </details> : null}
     </div>
   )

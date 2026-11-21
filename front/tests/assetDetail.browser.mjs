@@ -163,7 +163,21 @@ try {
   await page.getByRole('alert').filter({ hasText: '测试失败' }).waitFor()
   assert.equal(await name.inputValue(), '修改后的演员')
   failSave = false
-  await save.click()
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), '修改后的演员')
+  await page.getByRole('textbox', { name: 'Additional information', exact: true }).fill('混合语言 · Blue')
+  const [savedProfile] = await Promise.all([
+    page.waitForResponse(response => response.request().method() === 'PATCH' && response.ok()),
+    page.getByRole('button', { name: 'Save settings', exact: true }).click(),
+  ])
+  assert.equal(savedProfile.request().postDataJSON().supplementary_info, '混合语言 · Blue')
+  await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
+  await page.reload()
+  await page.getByRole('textbox', { name: 'Name', exact: true }).and(page.locator('[value="修改后的演员"]')).waitFor()
+  assert.equal(await page.getByRole('textbox', { name: 'Additional information', exact: true }).inputValue(), '混合语言 · Blue')
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('.resource-editor-page .ant-btn-loading'))
   assert.equal(assets.actor.name, '修改后的演员')
   assert.equal(await page.getByRole('button',{name:'预览侧面图片 1',exact:true}).count(),0)

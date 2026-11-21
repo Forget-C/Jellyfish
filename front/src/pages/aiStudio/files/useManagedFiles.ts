@@ -1,3 +1,4 @@
+import { uiText, useUiText } from '../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StudioFilesService, type FileRead } from '../../../services/generated'
 import api from '../../../services/aiStudioApi'
@@ -5,19 +6,20 @@ import api from '../../../services/aiStudioApi'
 export type FileEntry = Omit<FileRead, 'tags'> & { tags: string[]; createdAt?: string }
 export const DEMO_MODE = import.meta.env.VITE_USE_MOCK === 'true'
 const normalize = (items: FileRead[]): FileEntry[] => {
-  if (!Array.isArray(items) || items.some(file => !file || typeof file.id !== 'string' || !file.id)) throw new Error('文件列表响应无效')
+  if (!Array.isArray(items) || items.some(file => !file || typeof file.id !== 'string' || !file.id)) throw new Error(uiText("文件列表响应无效"))
   return items.map(file => ({ ...file, name: typeof file.name === 'string' ? file.name : '', tags: [...new Set((Array.isArray(file.tags) ? file.tags : []).filter(tag => typeof tag === 'string' && tag.trim()))] }))
 }
 
 /** Reads bounded search rounds. Refresh commits atomically so failures preserve the old list. */
 export function useManagedFiles(query: string, tag: string | undefined, onReset: () => void) {
+  useUiText()
   const [files, setFiles] = useState<FileEntry[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [total, setTotal] = useState<number>()
   const [scanned, setScanned] = useState(0)
   const [more, setMore] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<'' | 'load' | 'refresh'>('')
   const cursor = useRef({ page: 0, scanned: 0, more: true })
   const epoch = useRef(0)
   const working = useRef(false)
@@ -42,7 +44,7 @@ export function useManagedFiles(query: string, tag: string | undefined, onReset:
         request.current = pending
         const data = demo ? { items: demo.slice(next.page * 24, (next.page + 1) * 24), pagination: { total: demo.length } } : (await pending)?.data
         if (generation !== epoch.current) return
-        if (!data) throw new Error('缺少文件列表')
+        if (!data) throw new Error(uiText("缺少文件列表"))
         const items = normalize(data.items)
         latestTotal = data.pagination?.total
         next = { page: next.page + 1, scanned: next.scanned + items.length, more: items.length > 0 && (latestTotal === undefined ? items.length === 24 : (next.page + 1) * 24 < latestTotal) }
@@ -70,7 +72,7 @@ export function useManagedFiles(query: string, tag: string | undefined, onReset:
         reset.current()
       }
     } catch {
-      if (generation === epoch.current) setError(refresh ? '刷新文件失败，仍显示上次结果' : '读取文件失败')
+      if (generation === epoch.current) setError(refresh ? 'refresh' : 'load')
     } finally {
       if (generation === epoch.current) { working.current = false; setBusy(false) }
     }
