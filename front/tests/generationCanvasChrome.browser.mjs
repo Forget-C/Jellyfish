@@ -171,6 +171,7 @@ try {
   await page.getByRole('status').filter({ hasText: '无法定位原位置' }).waitFor()
   assert.equal(await page.getByRole('tab', { name: '起始', exact: true }).getAttribute('aria-selected'), 'true')
   await closeCanvasDetails(page)
+  await page.getByRole('button',{name:'适应全部',exact:true}).click()
   await (await openCanvasCard(page, modelId)).getByRole('button', { name: '预检运行', exact: true }).click()
   const deletedIssue = precheck.getByRole('alert').filter({ hasText: '原设计卡已删除' })
   assert.equal(await deletedIssue.getByRole('button').count(), 0, 'a deleted card has no action')

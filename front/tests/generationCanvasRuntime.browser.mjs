@@ -112,7 +112,9 @@ try {
   await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isDisabled(), true)
 
+  await page.getByRole('button', { name: '更多操作', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '删除画布', exact: true }).isDisabled(), true)
+  await page.keyboard.press('Escape')
   assert.equal((await control()).calls.length, 1)
   assert.equal((await control()).calls[0].text, '固定输入正文')
   await page.reload()
@@ -164,6 +166,7 @@ try {
   await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isEnabled(), true, 'terminal failure releases card activity guard')
 
+  await page.getByRole('button', { name: '更多操作', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '删除画布', exact: true }).isEnabled(), true, 'terminal failure releases canvas activity guard')
   assert.equal(await prompt.textContent(), '运行期间的后续编辑')
   assert.equal((await control()).calls[1].text, '固定输入正文', 'accepted run keeps the frozen input')

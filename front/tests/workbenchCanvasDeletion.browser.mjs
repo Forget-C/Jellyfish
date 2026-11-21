@@ -90,6 +90,7 @@ try {
     await page.getByRole('menuitem', { name: '删除画布' }).click()
   }
   const freeDelete = async () => {
+    await page.getByRole('button', { name: '更多操作', exact: true }).click()
     await page.getByRole('button', { name: '删除画布', exact: true }).click()
   }
   const dialog = page.getByRole('dialog', { name: '删除画布' })

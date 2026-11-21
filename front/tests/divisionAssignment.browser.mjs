@@ -161,9 +161,11 @@ try {
     const response = await route.fetch()
     const value = await response.json()
     value.data.sequences[1].source_changed = true
+    value.data.sequences[1].source_text = '旧版独有片段'
     await route.fulfill({ response, json: value })
   })
   await page.reload()
+  await page.getByRole('dialog', { name: '原文有变动，是否使用最新原文' }).getByRole('button', { name: '使用最新原文', exact: true }).click()
   await reader.getByRole('radio', { name: '键盘／触屏选择', exact: true }).locator('xpath=ancestor::label').click()
   await select(0, 1)
   await reader.getByRole('button', { name: '新建场次', exact: true }).click()
@@ -185,6 +187,7 @@ try {
     await route.fulfill({ response, json: value })
   })
   await page.reload()
+  await page.getByRole('dialog', { name: '原文有变动，是否使用最新原文' }).getByRole('button', { name: '使用最新原文', exact: true }).click()
   await page.getByText('核对来源与关联', { exact: true }).click()
   const changeIdentity = async () => {
     await page.getByRole('combobox', { name: '保留场次身份', exact: true }).press('ArrowDown')

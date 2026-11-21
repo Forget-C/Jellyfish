@@ -128,7 +128,8 @@ try {
   await control({ release: 2 })
   await record.getByRole('status').filter({ hasText: '已取消 · 未完成' }).waitFor()
   assert.equal((await control()).calls.length, 3)
-  await openCanvasCard(page, 'm')
+  await page.locator('[data-card-id="m"]').press('Enter')
+  await card.locator('.generation-material-runtime').filter({ hasText: '已取消' }).waitFor()
   await openModelInspection(page)
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }), '第一段第二段第三段')
   // Save a validated independent copy while editing continues during DTO loading.

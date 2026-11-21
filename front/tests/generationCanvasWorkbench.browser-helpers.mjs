@@ -273,18 +273,19 @@ export async function prepareCanvasCard(page, id) {
 }
 
 /** Wait for fonts, actual media loading and stable geometry, then clip the page without locator auto-scroll. */
-export async function captureCanvasRegion(page, region, path) {
+export async function captureCanvasRegion(page, region, path, { sourceInspectionOpen = false } = {}) {
+  const tooltips = sourceInspectionOpen ? '[role="tooltip"]:not(.canvas-association-inspect, .canvas-association-inspect *)' : '[role="tooltip"]'
   await page.mouse.move(1, 1)
   // 保留的编辑器可能保留旧 hover 状态；真实移入触发器再移出，不隐藏或删除浮层。
-  const hovered = await page.evaluate(() => [...document.querySelectorAll('[role="tooltip"]')].filter(tooltip => tooltip.getClientRects().length && getComputedStyle(tooltip).visibility !== 'hidden').flatMap(tooltip => {
+  const hovered = await page.evaluate(selector => [...document.querySelectorAll(selector)].filter(tooltip => tooltip.getClientRects().length && getComputedStyle(tooltip).visibility !== 'hidden').flatMap(tooltip => {
     const labelled = [...document.querySelectorAll('button[aria-label]')].filter(element => element.getAttribute('aria-label') === tooltip.textContent.trim() && element.getClientRects().length)
     const trigger = tooltip.id && [...document.querySelectorAll('[aria-describedby]')].find(element => element.getAttribute('aria-describedby').split(' ').includes(tooltip.id)) || (labelled.length === 1 ? labelled[0] : undefined)
     if (!trigger) return []
     const box = trigger.getBoundingClientRect()
     return box.width && box.height && box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight ? [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] : []
-  }))
+  }), tooltips)
   for (const point of hovered) { await page.mouse.move(point.x, point.y); await page.mouse.move(1, 1) }
-  await page.waitForFunction(() => [...document.querySelectorAll('[role="tooltip"]')].every(element => !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden'), undefined, { timeout: 2000 })
+  await page.waitForFunction(selector => [...document.querySelectorAll(selector)].every(element => !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden'), tooltips, { timeout: 2000 })
   const handle = await region.elementHandle()
   await page.waitForFunction(element => document.fonts.status === 'loaded' && [...element.querySelectorAll('img')].every(image => image.complete && image.naturalWidth > 0), handle, { timeout: 5000 })
   await region.evaluate(element => new Promise((resolve, reject) => {

@@ -121,7 +121,7 @@ try {
   }
   const role = await uploadInto(front, '阿同', 'character', '上传阿同')
   await page.setViewportSize({ width: 390, height: 844 })
-  const typeFilter = page.getByRole('combobox', { name: '对象类型' })
+  const typeFilter = page.getByRole('combobox', { name: '对象类型', exact: true })
   await typeFilter.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('道具', { exact: true }).click()
   const prop = page.getByRole('region', { name: '信封 · 拿着信封', exact: true })
